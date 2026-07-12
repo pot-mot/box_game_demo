@@ -20,8 +20,8 @@ export interface PhysicsBox {
     config: BoxConfig
     /** 灰色边缘线（始终存在） */
     edges: LineSegments
-    /** 选中线框（null = 未选中） */
-    wireframe: LineSegments | null
+    /** 选中线框（undefined = 未选中） */
+    wireframe: LineSegments | undefined
 }
 
 /** 物理子系统对外暴露的公共 API */
@@ -43,11 +43,11 @@ export interface PhysicsContext {
     /** 获取所有箱子的 Mesh 数组（用于 Raycaster 检测） */
     getBoxMeshes: () => Mesh[]
     /** 选中/取消选中箱子（切换青色线框） */
-    selectBox: (id: number | null) => PhysicsBox | null
+    selectBox: (id: number | undefined) => PhysicsBox | undefined
     /** 获取当前选中的箱子 */
-    getSelected: () => PhysicsBox | null
+    getSelected: () => PhysicsBox | undefined
     /** 当前选中的箱子 ID */
-    selectedId: number | null
+    selectedId: number | undefined
     /** 步进物理世界（由主循环每帧调用） */
     step: (dt: number) => void
 }

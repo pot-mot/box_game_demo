@@ -9,12 +9,12 @@ const DEFAULT_CONFIG = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3} a
  * 指针事件交互：左键点击选中/取消选中箱子，右键生成默认箱子。
  * 使用 pointer 事件而非 click 事件，配合 CLICK_THRESHOLD 区分点击与拖拽。
  */
-export function setupPointerInteraction(
+export const setupPointerInteraction = (
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
     physics: PhysicsContext,
     panel: PanelContext,
-): void {
+): void => {
     const raycaster = new Raycaster()
     const pointer = new Vector2()
     const forward = new Vector3()
@@ -54,7 +54,7 @@ export function setupPointerInteraction(
             }
         }
         // 点击空白区域 → 取消选中
-        physics.selectBox(null)
+        physics.selectBox(undefined)
         panel.hide()
     })
 

@@ -6,7 +6,7 @@ import {
 } from './constants.ts'
 
 /** 创建 Three.js 场景、相机、渲染器 */
-export function createRenderContext(parent: HTMLElement): RenderContext {
+export const createRenderContext = (parent: HTMLElement): RenderContext => {
     const scene = new Scene()
     const camera = new PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, NEAR, FAR)
     camera.position.y = CAMERA_Y
@@ -18,7 +18,7 @@ export function createRenderContext(parent: HTMLElement): RenderContext {
 }
 
 /** 添加地面网格辅助线 */
-export function addGridHelper(scene: Scene): void {
+export const addGridHelper = (scene: Scene): void => {
     const grid = new GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_CENTER_COLOR, GRID_LINE_COLOR)
     grid.position.y = 0
     scene.add(grid)

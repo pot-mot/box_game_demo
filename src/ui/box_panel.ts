@@ -2,7 +2,7 @@ import type {BoxConfig, PhysicsContext} from '../types/physics.ts'
 import type {PanelContext} from '../types/ui.ts'
 
 /** 创建箱子编辑面板（浮动在右下角），默认隐藏 */
-export function setupBoxControlPanel(physics: PhysicsContext): PanelContext {
+export const setupBoxControlPanel = (physics: PhysicsContext): PanelContext => {
     const el = document.createElement('div')
     el.id = 'box-control'
     el.style.cssText = [

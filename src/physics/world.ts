@@ -29,7 +29,7 @@ import {
 } from './constants.ts'
 
 /** 初始化 cannon-es 物理世界并返回箱子管理 API */
-export function setupPhysicsWorld(scene: Scene): PhysicsContext {
+export const setupPhysicsWorld = (scene: Scene): PhysicsContext => {
     // --- 物理世界 ---
     const world = new World()
     world.gravity.set(0, GRAVITY, 0)
@@ -52,7 +52,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
 
     const boxes: PhysicsBox[] = []
     let nextId = 1
-    let selectedId: number | null = null
+    let selectedId: number | undefined
 
     /** 垂直扫描已有箱子，找到一个不与任何箱子重叠的 Y 位置 */
     const findNonOverlappingY = (config: BoxConfig, x: number, y: number, z: number): number => {
@@ -105,7 +105,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
         body.position.set(x, adjustedY, z)
         world.addBody(body)
 
-        const pb: PhysicsBox = {id, mesh, body, config: {...config}, edges, wireframe: null}
+        const pb: PhysicsBox = {id, mesh, body, config: {...config}, edges, wireframe: undefined}
         boxes.push(pb)
         return pb
     }
@@ -115,7 +115,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
         const idx = boxes.findIndex(b => b.id === id)
         if (idx === -1) return
         const pb = boxes[idx]
-        if (selectedId === id) selectBox(null)
+        if (selectedId === id) selectBox(undefined)
         scene.remove(pb.mesh)
         disposeBoxMesh(pb)
         world.removeBody(pb.body)
@@ -184,19 +184,19 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
     }
 
     /** 选中/取消选中箱子，同步切换青色线框 */
-    const selectBox = (id: number | null): PhysicsBox | null => {
+    const selectBox = (id: number | undefined): PhysicsBox | undefined => {
         // 清除旧选中线框
-        if (selectedId !== null) {
+        if (selectedId !== undefined) {
             const prev = boxes.find(b => b.id === selectedId)
             if (prev && prev.wireframe) {
                 prev.mesh.remove(prev.wireframe)
                 disposeWireframe(prev.wireframe)
-                prev.wireframe = null
+                prev.wireframe = undefined
             }
         }
         selectedId = id
         // 为新选中箱子添加青色线框
-        if (id !== null) {
+        if (id !== undefined) {
             const pb = boxes.find(b => b.id === id)
             if (pb) {
                 const line = createWireframe(pb.mesh.geometry)
@@ -205,12 +205,12 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
                 return pb
             }
         }
-        return null
+        return undefined
     }
 
-    const getSelected = (): PhysicsBox | null => {
-        if (selectedId === null) return null
-        return boxes.find(b => b.id === selectedId) ?? null
+    const getSelected = (): PhysicsBox | undefined => {
+        if (selectedId === undefined) return undefined
+        return boxes.find(b => b.id === selectedId)
     }
 
     /** 直接设置箱子的位置和旋转（角度制），mesh 与 body 同时更新 */

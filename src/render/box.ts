@@ -14,10 +14,10 @@ import {
     TEX_SIZE, TEX_DIV, TEX_FILL, TEX_GRID, TEX_ACCENT,
 } from './constants.ts'
 
-let _gridTex: CanvasTexture | null = null
+let _gridTex: CanvasTexture | undefined
 
 /** 生成棋盘格 CanvasTexture 单例，所有箱子共享 */
-export function gridTexture(): CanvasTexture {
+export const gridTexture = (): CanvasTexture => {
     if (_gridTex) return _gridTex
     const canvas = document.createElement('canvas')
     canvas.width = TEX_SIZE
@@ -40,13 +40,13 @@ export function gridTexture(): CanvasTexture {
 }
 
 /** 从 BufferGeometry 和颜色创建 EdgesGeometry + LineSegments */
-function makeEdgeLines(geo: BufferGeometry, color: number): LineSegments {
+const makeEdgeLines = (geo: BufferGeometry, color: number): LineSegments => {
     const e = new EdgesGeometry(geo)
     return new LineSegments(e, new LineBasicMaterial({color}))
 }
 
 /** 为箱子创建 Three.js 网格 + 灰色边缘线（作为 mesh 子对象） */
-export function createBoxMesh(config: BoxConfig): { mesh: Mesh, edges: LineSegments } {
+export const createBoxMesh = (config: BoxConfig): { mesh: Mesh, edges: LineSegments } => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
     const mesh = new Mesh(geo, new MeshBasicMaterial({map: gridTexture()}))
     const edges = makeEdgeLines(geo, EDGE_COLOR)
@@ -55,7 +55,7 @@ export function createBoxMesh(config: BoxConfig): { mesh: Mesh, edges: LineSegme
 }
 
 /** 更新箱子网格的几何体尺寸并重建边缘线 */
-export function updateBoxMeshSize(pb: PhysicsBox, config: BoxConfig): void {
+export const updateBoxMeshSize = (pb: PhysicsBox, config: BoxConfig): void => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
     pb.mesh.geometry.dispose()
     pb.mesh.geometry = geo
@@ -69,7 +69,7 @@ export function updateBoxMeshSize(pb: PhysicsBox, config: BoxConfig): void {
 }
 
 /** 销毁箱子的网格几何体、材质及边缘线 */
-export function disposeBoxMesh(pb: PhysicsBox): void {
+export const disposeBoxMesh = (pb: PhysicsBox): void => {
     pb.mesh.geometry.dispose()
     ;(pb.mesh.material as MeshBasicMaterial).dispose()
     pb.mesh.remove(pb.edges)
@@ -78,18 +78,17 @@ export function disposeBoxMesh(pb: PhysicsBox): void {
 }
 
 /** 创建选中状态的青色线框 */
-export function createWireframe(geo: BufferGeometry): LineSegments {
-    return makeEdgeLines(geo, SELECTED_EDGE_COLOR)
-}
+export const createWireframe = (geo: BufferGeometry): LineSegments =>
+    makeEdgeLines(geo, SELECTED_EDGE_COLOR)
 
 /** 销毁选中线框的几何体和材质 */
-export function disposeWireframe(wireframe: LineSegments): void {
+export const disposeWireframe = (wireframe: LineSegments): void => {
     wireframe.geometry.dispose()
     ;(wireframe.material as LineBasicMaterial).dispose()
 }
 
 /** 将 cannon-es Body 的位置/旋转同步到 Three.js Mesh（每帧调用） */
-export function syncBodyToMesh(pb: PhysicsBox): void {
+export const syncBodyToMesh = (pb: PhysicsBox): void => {
     pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
     pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)
 }

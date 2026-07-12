@@ -32,7 +32,7 @@ setupPointerInteraction(camera, renderer, physics, panel)
 // --- 单 RAF 循环：协调所有子系统 ---
 let lastTime = performance.now()
 
-function tick(time: number): void {
+const tick = (time: number): void => {
     requestAnimationFrame(tick)
     // 计算帧间隔，防止卡顿时 delta 过大
     const delta = Math.min((time - lastTime) / 1000, MAX_DT)

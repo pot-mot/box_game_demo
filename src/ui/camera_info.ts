@@ -4,7 +4,7 @@ import {type PerspectiveCamera} from 'three'
  * 创建相机位置/旋转/缩放信息的 HUD 面板。
  * 返回 updater 函数，由主循环每帧调用更新内容。
  */
-export function setupCameraInfo(camera: PerspectiveCamera): () => void {
+export const setupCameraInfo = (camera: PerspectiveCamera): () => void => {
     const el = document.createElement('div')
     el.id = 'camera-info'
     el.style.cssText = [

@@ -20,7 +20,7 @@ Three.js + cannon-es 物理箱子交互演示。
 
 3. **缩进** — 4 个空格。
 
-4. **函数风格** — 拒绝非必要的 `class`、`function` 声明、`this`，尽可能使用 `const` 箭头函数。导出的入口函数使用 `export function` 以便提升。
+4. **函数风格** — 拒绝非必要的 `class`、`function` 声明、`this`，尽可能使用 `const` 箭头函数，包括导出函数。
 
 ### Import / Export
 
