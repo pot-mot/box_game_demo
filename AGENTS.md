@@ -8,17 +8,15 @@ Three.js + cannon-es 物理箱子交互演示。
 - `pnpm build` — `tsc && vite build`（必须先检查类型再打包）
 - `pnpm preview` — 预览构建产物
 
-## 架构
+## 规范
 
-`src/main.ts` 串联 5 个模块，无框架路由：
+1. 要求任何位置都严格类型检查，禁止使用 `any`。
 
-| 模块 | 职责 |
-|---|---|
-| `renderer.ts` | 场景/相机/渲染器 + 第一人称鼠标旋转（`camera.rotation.order = 'YXZ'`） |
-| `camera_info_panel.ts` | WASD/QE 移动 + 左上角位置/旋转信息 |
-| `physics_world.ts` | cannon-es 物理世界、箱子 CRUD、网格地面、选中高亮（亮青色线框） |
-| `box_interaction.ts` | 左键射线拾取、右键生成箱子、点击空白取消选中 |
-| `box_control_panel.ts` | 底部右侧控制面板（Pos/Rot/Size/Mass/Friction + Apply/Delete） |
+2. 4格空格缩进。
+
+3. 拒绝非必要的 class、function、this，尽可能使用 const 箭头函数。
+
+4. 尽可能使用 undefined 而不是 null，且严格区分 null 和 undefined，不要在任何地方使用 == 或 !=，一定要用 === / !==。
 
 ## 陷阱
 
