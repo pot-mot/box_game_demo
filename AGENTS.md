@@ -16,6 +16,15 @@ Three.js + cannon-es 物理箱子交互演示。
 
 2. **`null`/`undefined`** — 优先使用 `undefined`，严格区分两者，禁止 `==`/`!=`，一律用 `===`/`!==`。
 
+3. **`readonly`** — 尽可能使用 `const` 显式声明常量，针对类型，尽可能使用 `DeepReadonly`。
+
+4. **枚举** - 禁止使用 `enum`，尽可能使用常量 + 索引类型推导的形式：
+   ```ts
+   const EnumType_CONTANTS = ['A', 'B'] as const
+   type EnumType = typeof EnumType_CONTANTS[number]
+   ```
+   保证运行时也能取到枚举值，以便于类型检查。
+
 ### 代码风格
 
 3. **缩进** — 4 个空格。
