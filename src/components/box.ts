@@ -17,7 +17,7 @@ export const setupBox = (parent: HTMLElement) => {
     const cube = new Mesh(geometry, material)
     scene.add(cube)
 
-    function animate() {
+    const animate = () => {
         requestAnimationFrame(animate)
         controls.update()
         renderer.render(scene, camera)
