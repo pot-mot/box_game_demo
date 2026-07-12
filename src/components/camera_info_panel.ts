@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Vector3 } from 'three'
+import {PerspectiveCamera, Vector3} from 'three'
 
 const MOVE_STEP = 0.04
 
@@ -15,8 +15,12 @@ export const setupCameraInfoPanel = (camera: PerspectiveCamera) => {
     document.body.appendChild(el)
 
     const keys: Record<string, boolean> = {}
-    window.addEventListener('keydown', e => { keys[e.code] = true })
-    window.addEventListener('keyup', e => { keys[e.code] = false })
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true
+    })
+    window.addEventListener('keyup', e => {
+        keys[e.code] = false
+    })
 
     const toDeg = (v: number) => (v * 180 / Math.PI).toFixed(1)
 
