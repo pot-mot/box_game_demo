@@ -1,19 +1,19 @@
-import {PerspectiveCamera, WebGLRenderer, Raycaster, Vector2, Vector3} from 'three'
+import {Raycaster, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type Mesh} from 'three'
 import type {PhysicsContext} from '../types/physics.ts'
-import type {PanelContext} from './box_control_panel.ts'
+import type {PanelContext} from '../types/ui.ts'
+import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 
-export const setupBoxInteraction = (
+const DEFAULT_CONFIG = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3} as const
+
+export function setupPointerInteraction(
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
     physics: PhysicsContext,
     panel: PanelContext,
-) => {
+): void {
     const raycaster = new Raycaster()
     const pointer = new Vector2()
     const forward = new Vector3()
-    const SPAWN_DIST = 4
-    const CLICK_THRESHOLD = 5
-
     let pointerDownPos = {x: 0, y: 0}
 
     renderer.domElement.addEventListener('pointerdown', (e: PointerEvent) => {
@@ -32,12 +32,10 @@ export const setupBoxInteraction = (
         pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
         raycaster.setFromCamera(pointer, camera)
 
-        const meshes = physics.getBoxMeshes()
-        const hits = raycaster.intersectObjects(meshes, false)
+        const hits = raycaster.intersectObjects(physics.getBoxMeshes(), false)
         if (hits.length > 0) {
-            const hitMesh = hits[0].object as import('three').Mesh
-            const boxes = physics.getBoxes()
-            const pb = boxes.find(b => b.mesh === hitMesh)
+            const hitMesh = hits[0].object as Mesh
+            const pb = physics.getBoxes().find(b => b.mesh === hitMesh)
             if (pb) {
                 physics.selectBox(pb.id)
                 const rotDeg = {
@@ -49,7 +47,6 @@ export const setupBoxInteraction = (
                 return
             }
         }
-        // click on empty space → deselect
         physics.selectBox(null)
         panel.hide()
     })
@@ -58,11 +55,6 @@ export const setupBoxInteraction = (
         e.preventDefault()
         camera.getWorldDirection(forward)
         const spawnPos = new Vector3().copy(camera.position).add(forward.clone().multiplyScalar(SPAWN_DIST))
-        physics.addBox(
-            {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3},
-            spawnPos.x,
-            spawnPos.y,
-            spawnPos.z,
-        )
+        physics.addBox(DEFAULT_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
     })
 }

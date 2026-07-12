@@ -32,4 +32,5 @@ export interface PhysicsContext {
     selectBox: (id: number | null) => PhysicsBox | null
     getSelected: () => PhysicsBox | null
     selectedId: number | null
+    step: (dt: number) => void
 }

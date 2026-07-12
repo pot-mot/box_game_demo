@@ -1,48 +1,39 @@
-import type {BoxConfig} from '../types/physics.ts'
-import type {PhysicsContext} from '../types/physics.ts'
+import type {BoxConfig, PhysicsContext} from '../types/physics.ts'
+import type {PanelContext} from '../types/ui.ts'
 
-export interface PanelContext {
-    showForBox: (config: BoxConfig, pos: { x: number; y: number; z: number }, rotDeg: {
-        x: number;
-        y: number;
-        z: number
-    }) => void
-    hide: () => void
-}
-
-export const setupBoxControlPanel = (physics: PhysicsContext): PanelContext => {
+export function setupBoxControlPanel(physics: PhysicsContext): PanelContext {
     const el = document.createElement('div')
     el.id = 'box-control'
-    el.style.cssText = `
-    position: fixed; bottom: 24px; right: 24px;
-    background: rgba(0,0,0,.75); color: #fff;
-    font: 13px/1.5 monospace; padding: 16px 20px;
-    border-radius: 10px; min-width: 230px;
-    user-select: none; display: none;
-  `
-    el.innerHTML = `
-    <div style="font-weight:700;margin-bottom:8px;font-size:14px">Box Control</div>
-    <div style="border-top:1px solid #555;padding:4px 0">Pos</div>
-    <label>X <input type="number" step="0.01"></label>
-    <label>Y <input type="number" step="0.01"></label>
-    <label>Z <input type="number" step="0.01"></label>
-    <div style="border-top:1px solid #555;padding:4px 0">Rot (°)</div>
-    <label>X <input type="number" step="0.1"></label>
-    <label>Y <input type="number" step="0.1"></label>
-    <label>Z <input type="number" step="0.1"></label>
-    <div style="border-top:1px solid #555;padding:4px 0">Size</div>
-    <label>X <input type="number" min="0.1" step="0.1" value="1"></label>
-    <label>Y <input type="number" min="0.1" step="0.1" value="1"></label>
-    <label>Z <input type="number" min="0.1" step="0.1" value="1"></label>
-    <div style="border-top:1px solid #555;padding:4px 0">
-      <label>Mass <input type="number" min="0" step="0.1" value="0" style="width:80px"></label>
-    </div>
-    <label>Friction <input type="number" min="0" max="1" step="0.01" value="0.3" style="width:80px"></label>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button id="bc-apply" style="flex:1">Apply</button>
-      <button id="bc-delete" style="flex:1">Delete</button>
-    </div>
-  `
+    el.style.cssText = [
+        'position: fixed; bottom: 24px; right: 24px;',
+        'background: rgba(0,0,0,.75); color: #fff;',
+        'font: 13px/1.5 monospace; padding: 16px 20px;',
+        'border-radius: 10px; min-width: 230px;',
+        'user-select: none; display: none;',
+    ].join(' ')
+    el.innerHTML = [
+        '<div style="font-weight:700;margin-bottom:8px;font-size:14px">Box Control</div>',
+        '<div style="border-top:1px solid #555;padding:4px 0">Pos</div>',
+        '<label>X <input type="number" step="0.01"></label>',
+        '<label>Y <input type="number" step="0.01"></label>',
+        '<label>Z <input type="number" step="0.01"></label>',
+        '<div style="border-top:1px solid #555;padding:4px 0">Rot (°)</div>',
+        '<label>X <input type="number" step="0.1"></label>',
+        '<label>Y <input type="number" step="0.1"></label>',
+        '<label>Z <input type="number" step="0.1"></label>',
+        '<div style="border-top:1px solid #555;padding:4px 0">Size</div>',
+        '<label>X <input type="number" min="0.1" step="0.1" value="1"></label>',
+        '<label>Y <input type="number" min="0.1" step="0.1" value="1"></label>',
+        '<label>Z <input type="number" min="0.1" step="0.1" value="1"></label>',
+        '<div style="border-top:1px solid #555;padding:4px 0">',
+        '  <label>Mass <input type="number" min="0" step="0.1" value="0" style="width:80px"></label>',
+        '</div>',
+        '<label>Friction <input type="number" min="0" max="1" step="0.01" value="0.3" style="width:80px"></label>',
+        '<div style="display:flex;gap:8px;margin-top:8px">',
+        '  <button id="bc-apply" style="flex:1">Apply</button>',
+        '  <button id="bc-delete" style="flex:1">Delete</button>',
+        '</div>',
+    ].join('')
     document.body.appendChild(el)
 
     const inputs = el.querySelectorAll<HTMLInputElement>('input[type="number"]')
@@ -57,17 +48,15 @@ export const setupBoxControlPanel = (physics: PhysicsContext): PanelContext => {
     applyBtn.addEventListener('click', () => {
         const sel = physics.getSelected()
         if (!sel) return
-        const pos = {
+        physics.setBoxTransform(sel.id, {
             x: parseFloat(iPos[0].value),
             y: parseFloat(iPos[1].value),
             z: parseFloat(iPos[2].value),
-        }
-        const rotDeg = {
+        }, {
             x: parseFloat(iRot[0].value),
             y: parseFloat(iRot[1].value),
             z: parseFloat(iRot[2].value),
-        }
-        physics.setBoxTransform(sel.id, pos, rotDeg)
+        })
         physics.updateBox(sel.id, {
             width: parseFloat(iSize[0].value),
             height: parseFloat(iSize[1].value),

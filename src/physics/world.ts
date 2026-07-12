@@ -1,17 +1,4 @@
-import {
-    Scene,
-    PerspectiveCamera,
-    WebGLRenderer,
-    BoxGeometry,
-    BufferGeometry,
-    MeshBasicMaterial,
-    Mesh,
-    GridHelper,
-    EdgesGeometry,
-    LineBasicMaterial,
-    LineSegments,
-    CanvasTexture,
-} from 'three'
+import {type Scene} from 'three'
 import {
     World,
     Body,
@@ -21,57 +8,36 @@ import {
     Vec3,
     Material as CannonMaterial,
     ContactMaterial,
-    SAPBroadphase
+    SAPBroadphase,
 } from 'cannon-es'
 import type {BoxConfig, PhysicsBox, PhysicsContext} from '../types/physics.ts'
+import {
+    createBoxMesh,
+    updateBoxMeshSize,
+    disposeBoxMesh,
+    createWireframe,
+    disposeWireframe,
+} from '../render/box.ts'
+import {
+    GRAVITY,
+    FIXED_TIME_STEP,
+    MAX_SUB_STEPS,
+    GROUND_Y,
+    BOX_BOX_FRICTION,
+    BOX_GROUND_FRICTION,
+    OVERLAP_MAX_ATTEMPTS,
+} from './constants.ts'
 
-const GROUND_Y = 0
-
-let _gridTex: CanvasTexture | null = null
-
-function gridTexture(): CanvasTexture {
-    if (_gridTex) return _gridTex
-    const size = 256
-    const div = 4
-    const canvas = document.createElement('canvas')
-    canvas.width = size
-    canvas.height = size
-    const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = '#777777'
-    ctx.fillRect(0, 0, size, size)
-    ctx.strokeStyle = '#999999'
-    ctx.lineWidth = 1
-    const step = size / div
-    for (let i = 0; i <= div; i++) {
-        ctx.beginPath(); ctx.moveTo(i * step, 0); ctx.lineTo(i * step, size); ctx.stroke()
-        ctx.beginPath(); ctx.moveTo(0, i * step); ctx.lineTo(size, i * step); ctx.stroke()
-    }
-    ctx.strokeStyle = '#bbbbbb'
-    ctx.lineWidth = 2
-    ctx.strokeRect(0, 0, size, size)
-    _gridTex = new CanvasTexture(canvas)
-    return _gridTex
-}
-
-function makeEdgeLines(geo: BufferGeometry, color: number): LineSegments {
-    const e = new EdgesGeometry(geo)
-    return new LineSegments(e, new LineBasicMaterial({color}))
-}
-
-export const setupPhysicsWorld = (
-    scene: Scene,
-    camera: PerspectiveCamera,
-    renderer: WebGLRenderer,
-): PhysicsContext => {
+export function setupPhysicsWorld(scene: Scene): PhysicsContext {
     const world = new World()
-    world.gravity.set(0, -9.82, 0)
+    world.gravity.set(0, GRAVITY, 0)
     world.broadphase = new SAPBroadphase(world)
     world.allowSleep = true
 
     const boxMat = new CannonMaterial('box')
     const groundMat = new CannonMaterial('ground')
-    const boxGroundContact = new ContactMaterial(boxMat, groundMat, {friction: 0.3})
-    world.addContactMaterial(new ContactMaterial(boxMat, boxMat, {friction: 0.5}))
+    const boxGroundContact = new ContactMaterial(boxMat, groundMat, {friction: BOX_GROUND_FRICTION})
+    world.addContactMaterial(new ContactMaterial(boxMat, boxMat, {friction: BOX_BOX_FRICTION}))
     world.addContactMaterial(boxGroundContact)
 
     const groundBody = new Body({mass: 0, type: BODY_TYPES.STATIC})
@@ -79,10 +45,6 @@ export const setupPhysicsWorld = (
     groundBody.position.set(0, GROUND_Y, 0)
     groundBody.quaternion.setFromAxisAngle(new Vec3(1, 0, 0), -Math.PI / 2)
     world.addBody(groundBody)
-
-    const grid = new GridHelper(64, 64, 0x888888, 0x444444)
-    grid.position.y = GROUND_Y
-    scene.add(grid)
 
     const boxes: PhysicsBox[] = []
     let nextId = 1
@@ -92,7 +54,7 @@ export const setupPhysicsWorld = (
         let py = y
         const halfH = config.height / 2
         if (py - halfH < GROUND_Y) py = GROUND_Y + halfH
-        for (let attempt = 0; attempt < 50; attempt++) {
+        for (let attempt = 0; attempt < OVERLAP_MAX_ATTEMPTS; attempt++) {
             let overlap = false
             const hx = config.width / 2
             const hz = config.depth / 2
@@ -121,14 +83,9 @@ export const setupPhysicsWorld = (
         const hh = config.height / 2
         const hd = config.depth / 2
 
-        const geo = new BoxGeometry(config.width, config.height, config.depth)
-        const mat = new MeshBasicMaterial({map: gridTexture()})
-        const mesh = new Mesh(geo, mat)
+        const {mesh, edges} = createBoxMesh(config)
         mesh.position.set(x, adjustedY, z)
         scene.add(mesh)
-
-        const edges = makeEdgeLines(geo, 0x333333)
-        mesh.add(edges)
 
         const body = new Body({
             mass: config.mass,
@@ -144,59 +101,22 @@ export const setupPhysicsWorld = (
         return pb
     }
 
-    const syncBodyToMesh = () => {
-        for (const pb of boxes) {
-            pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
-            pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)
-        }
-    }
-
-    const lastTime: { value: number } = {value: performance.now()}
-    const tick = (time: number) => {
-        requestAnimationFrame(tick)
-        const delta = Math.min((time - lastTime.value) / 1000, 0.05)
-        lastTime.value = time
-        world.step(1 / 60, delta, 3)
-        syncBodyToMesh()
-        renderer.render(scene, camera)
-    }
-    tick(performance.now())
-
-    const removeBox = (id: number) => {
+    const removeBox = (id: number): void => {
         const idx = boxes.findIndex(b => b.id === id)
         if (idx === -1) return
         const pb = boxes[idx]
         if (selectedId === id) selectBox(null)
         scene.remove(pb.mesh)
-        pb.mesh.geometry.dispose()
-        ;(pb.mesh.material as MeshBasicMaterial).dispose()
-        pb.mesh.remove(pb.edges)
-        pb.edges.geometry.dispose()
-        ;(pb.edges.material as LineBasicMaterial).dispose()
+        disposeBoxMesh(pb)
         world.removeBody(pb.body)
         if (pb.wireframe) {
             pb.mesh.remove(pb.wireframe)
-            pb.wireframe.geometry.dispose()
-            ;(pb.wireframe.material as LineBasicMaterial).dispose()
+            disposeWireframe(pb.wireframe)
         }
         boxes.splice(idx, 1)
     }
 
-    const updateWireframe = (pb: PhysicsBox) => {
-        if (pb.wireframe) {
-            pb.mesh.remove(pb.wireframe)
-            pb.wireframe.geometry.dispose()
-            ;(pb.wireframe.material as LineBasicMaterial).dispose()
-            pb.wireframe = null
-        }
-        if (selectedId === pb.id) {
-            const line = makeEdgeLines(pb.mesh.geometry, 0x00ffcc)
-            pb.mesh.add(line)
-            pb.wireframe = line
-        }
-    }
-
-    const updateBox = (id: number, partial: Partial<BoxConfig>) => {
+    const updateBox = (id: number, partial: Partial<BoxConfig>): void => {
         const pb = boxes.find(b => b.id === id)
         if (!pb) return
         const old = pb.config
@@ -206,13 +126,11 @@ export const setupPhysicsWorld = (
         const changedFriction = partial.friction !== undefined && partial.friction !== old.friction
 
         if (changedSize) {
-            const hw = cfg.width / 2
             const hh = cfg.height / 2
-            const hd = cfg.depth / 2
-            pb.mesh.geometry.dispose()
-            pb.mesh.geometry = new BoxGeometry(cfg.width, cfg.height, cfg.depth)
+            updateBoxMeshSize(pb, cfg)
+
             while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
-            pb.body.addShape(new Box(new Vec3(hw, hh, hd)))
+            pb.body.addShape(new Box(new Vec3(cfg.width / 2, hh, cfg.depth / 2)))
             pb.body.updateMassProperties()
 
             const oldBottom = pb.body.position.y - old.height / 2
@@ -223,13 +141,12 @@ export const setupPhysicsWorld = (
                 pb.mesh.position.y = target + hh
             }
 
-            pb.mesh.remove(pb.edges)
-            pb.edges.geometry.dispose()
-            ;(pb.edges.material as LineBasicMaterial).dispose()
-            pb.edges = makeEdgeLines(pb.mesh.geometry, 0x333333)
-            pb.mesh.add(pb.edges)
-
-            updateWireframe(pb)
+            if (pb.wireframe) {
+                pb.mesh.remove(pb.wireframe)
+                disposeWireframe(pb.wireframe)
+                pb.wireframe = createWireframe(pb.mesh.geometry)
+                pb.mesh.add(pb.wireframe)
+            }
         }
 
         if (changedMass) {
@@ -256,8 +173,7 @@ export const setupPhysicsWorld = (
             const prev = boxes.find(b => b.id === selectedId)
             if (prev && prev.wireframe) {
                 prev.mesh.remove(prev.wireframe)
-                prev.wireframe.geometry.dispose()
-                ;(prev.wireframe.material as LineBasicMaterial).dispose()
+                disposeWireframe(prev.wireframe)
                 prev.wireframe = null
             }
         }
@@ -265,7 +181,7 @@ export const setupPhysicsWorld = (
         if (id !== null) {
             const pb = boxes.find(b => b.id === id)
             if (pb) {
-                const line = makeEdgeLines(pb.mesh.geometry, 0x00ffcc)
+                const line = createWireframe(pb.mesh.geometry)
                 pb.mesh.add(line)
                 pb.wireframe = line
                 return pb
@@ -283,7 +199,7 @@ export const setupPhysicsWorld = (
         id: number,
         pos: { x: number; y: number; z: number },
         rotDeg: { x: number; y: number; z: number },
-    ) => {
+    ): void => {
         const pb = boxes.find(b => b.id === id)
         if (!pb) return
         pb.mesh.position.set(pos.x, pos.y, pos.z)
@@ -312,5 +228,6 @@ export const setupPhysicsWorld = (
         selectBox,
         getSelected,
         selectedId,
+        step: (dt: number) => world.step(FIXED_TIME_STEP, dt, MAX_SUB_STEPS),
     }
 }
