@@ -11,7 +11,7 @@ export const setupBoxInteraction = (
     const raycaster = new Raycaster()
     const pointer = new Vector2()
     const forward = new Vector3()
-    const SPAWN_DIST = 10
+    const SPAWN_DIST = 4
     const CLICK_THRESHOLD = 5
 
     let pointerDownPos = {x: 0, y: 0}
@@ -59,7 +59,7 @@ export const setupBoxInteraction = (
         camera.getWorldDirection(forward)
         const spawnPos = new Vector3().copy(camera.position).add(forward.clone().multiplyScalar(SPAWN_DIST))
         physics.addBox(
-            {width: 1, height: 1, depth: 1, mass: 0, friction: 0.3},
+            {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3},
             spawnPos.x,
             spawnPos.y,
             spawnPos.z,

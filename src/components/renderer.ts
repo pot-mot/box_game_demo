@@ -6,7 +6,7 @@ const SENSITIVITY = 0.002
 export const setupRenderer = (parent: HTMLElement): RenderContext => {
     const scene = new Scene()
     const camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
-    camera.position.z = 5
+    camera.position.y = 2
     camera.rotation.order = 'YXZ'
 
     const renderer = new WebGLRenderer()
