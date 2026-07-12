@@ -16,6 +16,7 @@ import {
 
 let _gridTex: CanvasTexture | null = null
 
+/** 生成棋盘格 CanvasTexture 单例，所有箱子共享 */
 export function gridTexture(): CanvasTexture {
     if (_gridTex) return _gridTex
     const canvas = document.createElement('canvas')
@@ -38,11 +39,13 @@ export function gridTexture(): CanvasTexture {
     return _gridTex
 }
 
+/** 从 BufferGeometry 和颜色创建 EdgesGeometry + LineSegments */
 function makeEdgeLines(geo: BufferGeometry, color: number): LineSegments {
     const e = new EdgesGeometry(geo)
     return new LineSegments(e, new LineBasicMaterial({color}))
 }
 
+/** 为箱子创建 Three.js 网格 + 灰色边缘线（作为 mesh 子对象） */
 export function createBoxMesh(config: BoxConfig): { mesh: Mesh, edges: LineSegments } {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
     const mesh = new Mesh(geo, new MeshBasicMaterial({map: gridTexture()}))
@@ -51,11 +54,13 @@ export function createBoxMesh(config: BoxConfig): { mesh: Mesh, edges: LineSegme
     return {mesh, edges}
 }
 
+/** 更新箱子网格的几何体尺寸并重建边缘线 */
 export function updateBoxMeshSize(pb: PhysicsBox, config: BoxConfig): void {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
     pb.mesh.geometry.dispose()
     pb.mesh.geometry = geo
 
+    // 重建边缘线（几何体已变）
     pb.mesh.remove(pb.edges)
     pb.edges.geometry.dispose()
     ;(pb.edges.material as LineBasicMaterial).dispose()
@@ -63,6 +68,7 @@ export function updateBoxMeshSize(pb: PhysicsBox, config: BoxConfig): void {
     pb.mesh.add(pb.edges)
 }
 
+/** 销毁箱子的网格几何体、材质及边缘线 */
 export function disposeBoxMesh(pb: PhysicsBox): void {
     pb.mesh.geometry.dispose()
     ;(pb.mesh.material as MeshBasicMaterial).dispose()
@@ -71,15 +77,18 @@ export function disposeBoxMesh(pb: PhysicsBox): void {
     ;(pb.edges.material as LineBasicMaterial).dispose()
 }
 
+/** 创建选中状态的青色线框 */
 export function createWireframe(geo: BufferGeometry): LineSegments {
     return makeEdgeLines(geo, SELECTED_EDGE_COLOR)
 }
 
+/** 销毁选中线框的几何体和材质 */
 export function disposeWireframe(wireframe: LineSegments): void {
     wireframe.geometry.dispose()
     ;(wireframe.material as LineBasicMaterial).dispose()
 }
 
+/** 将 cannon-es Body 的位置/旋转同步到 Three.js Mesh（每帧调用） */
 export function syncBodyToMesh(pb: PhysicsBox): void {
     pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
     pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)

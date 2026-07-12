@@ -28,18 +28,22 @@ import {
     OVERLAP_MAX_ATTEMPTS,
 } from './constants.ts'
 
+/** 初始化 cannon-es 物理世界并返回箱子管理 API */
 export function setupPhysicsWorld(scene: Scene): PhysicsContext {
+    // --- 物理世界 ---
     const world = new World()
     world.gravity.set(0, GRAVITY, 0)
     world.broadphase = new SAPBroadphase(world)
     world.allowSleep = true
 
+    // --- 接触材质（箱-箱、箱-地面） ---
     const boxMat = new CannonMaterial('box')
     const groundMat = new CannonMaterial('ground')
     const boxGroundContact = new ContactMaterial(boxMat, groundMat, {friction: BOX_GROUND_FRICTION})
     world.addContactMaterial(new ContactMaterial(boxMat, boxMat, {friction: BOX_BOX_FRICTION}))
     world.addContactMaterial(boxGroundContact)
 
+    // --- 静态地面（Plane 绕 X 轴旋转使其法线朝上） ---
     const groundBody = new Body({mass: 0, type: BODY_TYPES.STATIC})
     groundBody.addShape(new Plane())
     groundBody.position.set(0, GROUND_Y, 0)
@@ -50,6 +54,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
     let nextId = 1
     let selectedId: number | null = null
 
+    /** 垂直扫描已有箱子，找到一个不与任何箱子重叠的 Y 位置 */
     const findNonOverlappingY = (config: BoxConfig, x: number, y: number, z: number): number => {
         let py = y
         const halfH = config.height / 2
@@ -62,6 +67,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
                 const ohx = other.config.width / 2
                 const ohy = other.config.height / 2
                 const ohz = other.config.depth / 2
+                // AABB 重叠检测
                 const dx = Math.abs(py - other.mesh.position.y)
                 const dy = Math.abs(x - other.mesh.position.x)
                 const dz = Math.abs(z - other.mesh.position.z)
@@ -76,6 +82,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
         return py
     }
 
+    /** 创建一个新箱子（自动避让重叠） */
     const addBox = (config: BoxConfig, x: number, y: number, z: number): PhysicsBox => {
         const id = nextId++
         const adjustedY = findNonOverlappingY(config, x, y, z)
@@ -83,10 +90,12 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
         const hh = config.height / 2
         const hd = config.depth / 2
 
+        // 网格
         const {mesh, edges} = createBoxMesh(config)
         mesh.position.set(x, adjustedY, z)
         scene.add(mesh)
 
+        // 刚体
         const body = new Body({
             mass: config.mass,
             type: config.mass === 0 ? BODY_TYPES.STATIC : BODY_TYPES.DYNAMIC,
@@ -101,6 +110,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
         return pb
     }
 
+    /** 删除箱子并清理所有 GPU 资源 */
     const removeBox = (id: number): void => {
         const idx = boxes.findIndex(b => b.id === id)
         if (idx === -1) return
@@ -116,6 +126,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
         boxes.splice(idx, 1)
     }
 
+    /** 部分更新箱子属性（尺寸/质量/摩擦系数），必要时重建几何体和碰撞体 */
     const updateBox = (id: number, partial: Partial<BoxConfig>): void => {
         const pb = boxes.find(b => b.id === id)
         if (!pb) return
@@ -129,10 +140,12 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
             const hh = cfg.height / 2
             updateBoxMeshSize(pb, cfg)
 
+            // 重建 cannon 碰撞体
             while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
             pb.body.addShape(new Box(new Vec3(cfg.width / 2, hh, cfg.depth / 2)))
             pb.body.updateMassProperties()
 
+            // 防止箱底陷入地面：调高后若底部低于原底部或地面，向上抬升
             const oldBottom = pb.body.position.y - old.height / 2
             const newBottom = pb.body.position.y - hh
             if (newBottom < oldBottom || newBottom < GROUND_Y) {
@@ -141,6 +154,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
                 pb.mesh.position.y = target + hh
             }
 
+            // 刷新选中线框（几何体已变）
             if (pb.wireframe) {
                 pb.mesh.remove(pb.wireframe)
                 disposeWireframe(pb.wireframe)
@@ -149,6 +163,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
             }
         }
 
+        // 质量变化：0 → STATIC，非 0 → DYNAMIC
         if (changedMass) {
             if (cfg.mass === 0) {
                 pb.body.type = BODY_TYPES.STATIC
@@ -168,7 +183,9 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
         pb.config = cfg
     }
 
+    /** 选中/取消选中箱子，同步切换青色线框 */
     const selectBox = (id: number | null): PhysicsBox | null => {
+        // 清除旧选中线框
         if (selectedId !== null) {
             const prev = boxes.find(b => b.id === selectedId)
             if (prev && prev.wireframe) {
@@ -178,6 +195,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
             }
         }
         selectedId = id
+        // 为新选中箱子添加青色线框
         if (id !== null) {
             const pb = boxes.find(b => b.id === id)
             if (pb) {
@@ -195,6 +213,7 @@ export function setupPhysicsWorld(scene: Scene): PhysicsContext {
         return boxes.find(b => b.id === selectedId) ?? null
     }
 
+    /** 直接设置箱子的位置和旋转（角度制），mesh 与 body 同时更新 */
     const setBoxTransform = (
         id: number,
         pos: { x: number; y: number; z: number },

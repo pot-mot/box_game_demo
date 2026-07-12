@@ -11,28 +11,38 @@ import {MAX_DT} from './physics/constants.ts'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
+// --- 渲染系统 ---
 const {scene, camera, renderer} = createRenderContext(app)
 addGridHelper(scene)
+
+// --- 输入系统 ---
 setupMouseOrbit(camera, renderer.domElement)
 
+// --- 物理系统 ---
 const physics = setupPhysicsWorld(scene)
+
+// --- 控制系统（每帧 updater） ---
 const keyboardUpdate = setupKeyboardCamera(camera)
 const cameraInfoUpdate = setupCameraInfo(camera)
+
+// --- UI 面板 + 指针交互 ---
 const panel = setupBoxControlPanel(physics)
 setupPointerInteraction(camera, renderer, physics, panel)
 
+// --- 单 RAF 循环：协调所有子系统 ---
 let lastTime = performance.now()
 
 function tick(time: number): void {
     requestAnimationFrame(tick)
+    // 计算帧间隔，防止卡顿时 delta 过大
     const delta = Math.min((time - lastTime) / 1000, MAX_DT)
     lastTime = time
 
-    physics.step(delta)
-    physics.getBoxes().forEach(syncBodyToMesh)
-    keyboardUpdate()
-    cameraInfoUpdate()
-    renderer.render(scene, camera)
+    physics.step(delta)                         // 1. 步进物理世界
+    physics.getBoxes().forEach(syncBodyToMesh)  // 2. 同步 body → mesh
+    keyboardUpdate()                            // 3. 键盘移动相机
+    cameraInfoUpdate()                          // 4. 更新 HUD
+    renderer.render(scene, camera)              // 5. 渲染场景
 }
 
 tick(performance.now())

@@ -5,6 +5,10 @@ import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 
 const DEFAULT_CONFIG = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3} as const
 
+/**
+ * 指针事件交互：左键点击选中/取消选中箱子，右键生成默认箱子。
+ * 使用 pointer 事件而非 click 事件，配合 CLICK_THRESHOLD 区分点击与拖拽。
+ */
 export function setupPointerInteraction(
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
@@ -24,6 +28,7 @@ export function setupPointerInteraction(
 
     renderer.domElement.addEventListener('pointerup', (e: PointerEvent) => {
         if (e.button !== 0) return
+        // 超过阈值则为拖拽（用于轨道旋转），不触发放射检测
         const dx = e.clientX - pointerDownPos.x
         const dy = e.clientY - pointerDownPos.y
         if (Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD) return
@@ -32,6 +37,7 @@ export function setupPointerInteraction(
         pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
         raycaster.setFromCamera(pointer, camera)
 
+        // recursive = false 防止检测到 LineSegments 子对象
         const hits = raycaster.intersectObjects(physics.getBoxMeshes(), false)
         if (hits.length > 0) {
             const hitMesh = hits[0].object as Mesh
@@ -47,10 +53,12 @@ export function setupPointerInteraction(
                 return
             }
         }
+        // 点击空白区域 → 取消选中
         physics.selectBox(null)
         panel.hide()
     })
 
+    // 右键在相机前方生成一个默认尺寸的箱子
     renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault()
         camera.getWorldDirection(forward)

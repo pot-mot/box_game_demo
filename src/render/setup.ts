@@ -5,17 +5,19 @@ import {
     GRID_SIZE, GRID_DIVISIONS, GRID_CENTER_COLOR, GRID_LINE_COLOR,
 } from './constants.ts'
 
+/** 创建 Three.js 场景、相机、渲染器 */
 export function createRenderContext(parent: HTMLElement): RenderContext {
     const scene = new Scene()
     const camera = new PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, NEAR, FAR)
     camera.position.y = CAMERA_Y
-    camera.rotation.order = 'YXZ'
+    camera.rotation.order = 'YXZ' // 先偏航、后俯仰，避免万向锁
     const renderer = new WebGLRenderer()
     renderer.setSize(window.innerWidth, window.innerHeight)
     parent.appendChild(renderer.domElement)
     return {scene, camera, renderer}
 }
 
+/** 添加地面网格辅助线 */
 export function addGridHelper(scene: Scene): void {
     const grid = new GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_CENTER_COLOR, GRID_LINE_COLOR)
     grid.position.y = 0

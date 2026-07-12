@@ -1,6 +1,7 @@
 import type {BoxConfig, PhysicsContext} from '../types/physics.ts'
 import type {PanelContext} from '../types/ui.ts'
 
+/** 创建箱子编辑面板（浮动在右下角），默认隐藏 */
 export function setupBoxControlPanel(physics: PhysicsContext): PanelContext {
     const el = document.createElement('div')
     el.id = 'box-control'
@@ -36,6 +37,7 @@ export function setupBoxControlPanel(physics: PhysicsContext): PanelContext {
     ].join('')
     document.body.appendChild(el)
 
+    // inputs[0..2]=Pos, [3..5]=Rot, [6..8]=Size, [9]=Mass, [10]=Friction
     const inputs = el.querySelectorAll<HTMLInputElement>('input[type="number"]')
     const iPos = [inputs[0], inputs[1], inputs[2]]
     const iRot = [inputs[3], inputs[4], inputs[5]]

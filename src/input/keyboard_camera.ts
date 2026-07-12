@@ -1,6 +1,10 @@
 import {PerspectiveCamera, Vector3} from 'three'
 import {MOVE_STEP} from './constants.ts'
 
+/** 
+ * WASD+EQ 第一人称相机移动。
+ * 返回 updater 函数，由主循环每帧调用，不再自行启动 RAF。
+ */
 export function setupKeyboardCamera(camera: PerspectiveCamera): () => void {
     const keys: Record<string, boolean> = {}
     const forward = new Vector3()
