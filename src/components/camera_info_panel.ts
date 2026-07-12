@@ -29,10 +29,10 @@ export const setupCameraInfoPanel = (camera: PerspectiveCamera) => {
         camera.getWorldDirection(forward)
         right.crossVectors(forward, camera.up).normalize()
 
-        if (keys['ArrowUp'] ?? keys['KeyW']) camera.position.add(forward.clone().multiplyScalar(MOVE_STEP))
-        if (keys['ArrowDown'] ?? keys['KeyS']) camera.position.add(forward.clone().multiplyScalar(-MOVE_STEP))
-        if (keys['ArrowLeft'] ?? keys['KeyA']) camera.position.add(right.clone().multiplyScalar(-MOVE_STEP))
-        if (keys['ArrowRight'] ?? keys['KeyD']) camera.position.add(right.clone().multiplyScalar(MOVE_STEP))
+        if (keys['KeyW']) camera.position.add(forward.clone().multiplyScalar(MOVE_STEP))
+        if (keys['KeyS']) camera.position.add(forward.clone().multiplyScalar(-MOVE_STEP))
+        if (keys['KeyA']) camera.position.add(right.clone().multiplyScalar(-MOVE_STEP))
+        if (keys['KeyD']) camera.position.add(right.clone().multiplyScalar(MOVE_STEP))
         if (keys['KeyE']) camera.position.add(camera.up.clone().multiplyScalar(MOVE_STEP))
         if (keys['KeyQ']) camera.position.add(camera.up.clone().multiplyScalar(-MOVE_STEP))
 

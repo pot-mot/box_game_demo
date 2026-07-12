@@ -211,12 +211,36 @@ export const setupPhysicsWorld = (
     return boxes.find(b => b.id === selectedId) ?? null
   }
 
+  const setBoxTransform = (
+    id: number,
+    pos: { x: number; y: number; z: number },
+    rotDeg: { x: number; y: number; z: number },
+  ) => {
+    const pb = boxes.find(b => b.id === id)
+    if (!pb) return
+    pb.mesh.position.set(pos.x, pos.y, pos.z)
+    pb.body.position.set(pos.x, pos.y, pos.z)
+    pb.mesh.rotation.set(
+      rotDeg.x * Math.PI / 180,
+      rotDeg.y * Math.PI / 180,
+      rotDeg.z * Math.PI / 180,
+    )
+    pb.body.quaternion.set(
+      pb.mesh.quaternion.x,
+      pb.mesh.quaternion.y,
+      pb.mesh.quaternion.z,
+      pb.mesh.quaternion.w,
+    )
+    if (pb.body.type === BODY_TYPES.DYNAMIC) pb.body.wakeUp()
+  }
+
   return {
     addBox,
     removeBox,
     updateBox,
     getBoxes: () => boxes,
     getBoxMeshes: () => boxes.map(b => b.mesh),
+    setBoxTransform,
     selectBox,
     getSelected,
     selectedId,

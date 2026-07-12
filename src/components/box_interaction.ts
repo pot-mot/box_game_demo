@@ -40,13 +40,18 @@ export const setupBoxInteraction = (
       const pb = boxes.find(b => b.mesh === hitMesh)
       if (pb) {
         physics.selectBox(pb.id)
-        panel.loadBox(pb.config)
+        const rotDeg = {
+          x: pb.mesh.rotation.x * 180 / Math.PI,
+          y: pb.mesh.rotation.y * 180 / Math.PI,
+          z: pb.mesh.rotation.z * 180 / Math.PI,
+        }
+        panel.showForBox(pb.config, pb.mesh.position, rotDeg)
         return
       }
     }
     // click on empty space → deselect
     physics.selectBox(null)
-    panel.clearSelection()
+    panel.hide()
   })
 
   renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => {

@@ -1,9 +1,9 @@
 import { Scene, PerspectiveCamera, WebGLRenderer } from 'three'
-import type { BoxContext } from '../types/context.ts'
+import type { RenderContext } from '../types/render.ts'
 
 const SENSITIVITY = 0.002
 
-export const setupBox = (parent: HTMLElement): BoxContext => {
+export const setupRenderer = (parent: HTMLElement): RenderContext => {
   const scene = new Scene()
   const camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
   camera.position.z = 5
@@ -13,7 +13,7 @@ export const setupBox = (parent: HTMLElement): BoxContext => {
   renderer.setSize(window.innerWidth, window.innerHeight)
   parent.appendChild(renderer.domElement)
 
-  const ctx: BoxContext = { scene, camera, renderer }
+  const ctx: RenderContext = { scene, camera, renderer }
 
   let yaw = 0
   let pitch = 0
