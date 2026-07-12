@@ -215,6 +215,14 @@ export const setupPhysicsWorld = (
             pb.body.addShape(new Box(new Vec3(hw, hh, hd)))
             pb.body.updateMassProperties()
 
+            const oldBottom = pb.body.position.y - old.height / 2
+            const newBottom = pb.body.position.y - hh
+            if (newBottom < oldBottom || newBottom < GROUND_Y) {
+                const target = Math.max(oldBottom, GROUND_Y)
+                pb.body.position.y = target + hh
+                pb.mesh.position.y = target + hh
+            }
+
             pb.mesh.remove(pb.edges)
             pb.edges.geometry.dispose()
             ;(pb.edges.material as LineBasicMaterial).dispose()
