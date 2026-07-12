@@ -1,26 +1,42 @@
 import type {BoxConfig, PhysicsContext} from '../types/physics.ts'
 import type {PanelContext} from '../types/ui.ts'
+import type {DeepReadonly} from '../types/readonly.ts'
 
-// ── Input factory ──────────────────────────────────────────────
+// ── Number Input factory ──────────────────────────────────────────────
 
-type InputAttrs = Partial<Omit<HTMLInputElement, 'style'>> & {style?: string}
+type NumberInputAttrs = DeepReadonly<{
+    step?: string
+    min?: string
+    max?: string
+    value?: string
+    style?: string
+}>
 
-const INPUT_DEFAULTS: InputAttrs = {
-    type: 'number',
-    step: '0.01',
-}
+const DEFAULT_STEP = '0.01'
 
-const createInput = (attrs: InputAttrs = {}): HTMLInputElement => {
+const createNumberInput = (attrs: NumberInputAttrs = {}): HTMLInputElement => {
     const input = document.createElement('input')
-    Object.assign(input, INPUT_DEFAULTS, attrs)
-    if (attrs.style) {
-        input.style.cssText = attrs.style
-    }
+    input.type = 'number'
+    input.step = attrs.step ?? DEFAULT_STEP
+    if (attrs.min !== undefined) input.min = attrs.min
+    if (attrs.max !== undefined) input.max = attrs.max
+    if (attrs.value !== undefined) input.value = attrs.value
+    if (attrs.style) input.style.cssText = attrs.style
+
+    input.addEventListener('change', () => {
+        const val = parseFloat(input.value)
+        if (isNaN(val)) return
+        const min = attrs.min !== undefined ? parseFloat(attrs.min) : undefined
+        const max = attrs.max !== undefined ? parseFloat(attrs.max) : undefined
+        if (min !== undefined && val < min) input.value = attrs.min!
+        if (max !== undefined && val > max) input.value = attrs.max!
+    })
+
     return input
 }
 
-const createLabeledInput = (parent: HTMLElement, label: string, attrs: InputAttrs = {}): HTMLInputElement => {
-    const input = createInput(attrs)
+const createLabeledNumberInput = (parent: HTMLElement, label: string, attrs: NumberInputAttrs = {}): HTMLInputElement => {
+    const input = createNumberInput(attrs)
     const labelEl = document.createElement('label')
     labelEl.textContent = label + ' '
     labelEl.appendChild(input)
@@ -58,34 +74,34 @@ export const setupBoxControlPanel = (physics: PhysicsContext): PanelContext => {
 
     // Position
     el.appendChild(createSection('Pos'))
-    const posX = createLabeledInput(el, 'X', {step: '0.01'})
-    const posY = createLabeledInput(el, 'Y', {step: '0.01'})
-    const posZ = createLabeledInput(el, 'Z', {step: '0.01'})
+    const posX = createLabeledNumberInput(el, 'X', {step: '0.01'} as const)
+    const posY = createLabeledNumberInput(el, 'Y', {step: '0.01'} as const)
+    const posZ = createLabeledNumberInput(el, 'Z', {step: '0.01'} as const)
 
     // Rotation (degrees, clamped to ±360)
     el.appendChild(createSection('Rot (°)'))
-    const rotX = createLabeledInput(el, 'X', {min: '-360', max: '360', step: '0.1'})
-    const rotY = createLabeledInput(el, 'Y', {min: '-360', max: '360', step: '0.1'})
-    const rotZ = createLabeledInput(el, 'Z', {min: '-360', max: '360', step: '0.1'})
+    const rotX = createLabeledNumberInput(el, 'X', {min: '-360', max: '360', step: '0.1'} as const)
+    const rotY = createLabeledNumberInput(el, 'Y', {min: '-360', max: '360', step: '0.1'} as const)
+    const rotZ = createLabeledNumberInput(el, 'Z', {min: '-360', max: '360', step: '0.1'} as const)
 
     // Size (positive, max 100)
     el.appendChild(createSection('Size'))
-    const sizeX = createLabeledInput(el, 'X', {min: '0.1', max: '100', step: '0.1', value: '1'})
-    const sizeY = createLabeledInput(el, 'Y', {min: '0.1', max: '100', step: '0.1', value: '1'})
-    const sizeZ = createLabeledInput(el, 'Z', {min: '0.1', max: '100', step: '0.1', value: '1'})
+    const sizeX = createLabeledNumberInput(el, 'X', {min: '0.1', max: '100', step: '0.1', value: '1'} as const)
+    const sizeY = createLabeledNumberInput(el, 'Y', {min: '0.1', max: '100', step: '0.1', value: '1'} as const)
+    const sizeZ = createLabeledNumberInput(el, 'Z', {min: '0.1', max: '100', step: '0.1', value: '1'} as const)
 
     // Mass (label inside the section divider)
     const massSection = document.createElement('div')
     massSection.style.cssText = 'border-top:1px solid #555;padding:4px 0'
     const massLabel = document.createElement('label')
     massLabel.textContent = 'Mass '
-    const mass = createInput({min: '0', step: '0.1', value: '0', style: 'width:80px'})
+    const mass = createNumberInput({min: '0', step: '0.1', value: '0', style: 'width:80px'} as const)
     massLabel.appendChild(mass)
     massSection.appendChild(massLabel)
     el.appendChild(massSection)
 
     // Friction
-    const friction = createLabeledInput(el, 'Friction', {min: '0', max: '1', step: '0.01', value: '0.3', style: 'width:80px'})
+    const friction = createLabeledNumberInput(el, 'Friction', {min: '0', max: '1', step: '0.01', value: '0.3', style: 'width:80px'} as const)
 
     // Buttons
     const btnRow = document.createElement('div')
