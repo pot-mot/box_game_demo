@@ -33,7 +33,7 @@ export const setupBoxInteraction = (
         raycaster.setFromCamera(pointer, camera)
 
         const meshes = physics.getBoxMeshes()
-        const hits = raycaster.intersectObjects(meshes)
+        const hits = raycaster.intersectObjects(meshes, false)
         if (hits.length > 0) {
             const hitMesh = hits[0].object as import('three').Mesh
             const boxes = physics.getBoxes()

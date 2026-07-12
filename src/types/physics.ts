@@ -1,4 +1,4 @@
-import type {Mesh, Line} from 'three'
+import type {Mesh, LineSegments} from 'three'
 import type {Body} from 'cannon-es'
 
 export interface BoxConfig {
@@ -14,7 +14,8 @@ export interface PhysicsBox {
     mesh: Mesh
     body: Body
     config: BoxConfig
-    wireframe: Line | null
+    edges: LineSegments
+    wireframe: LineSegments | null
 }
 
 export interface PhysicsContext {

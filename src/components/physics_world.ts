@@ -3,13 +3,14 @@ import {
     PerspectiveCamera,
     WebGLRenderer,
     BoxGeometry,
+    BufferGeometry,
     MeshBasicMaterial,
     Mesh,
-    PlaneGeometry,
-    DoubleSide,
+    GridHelper,
     EdgesGeometry,
     LineBasicMaterial,
-    Line
+    LineSegments,
+    CanvasTexture,
 } from 'three'
 import {
     World,
@@ -25,6 +26,37 @@ import {
 import type {BoxConfig, PhysicsBox, PhysicsContext} from '../types/physics.ts'
 
 const GROUND_Y = 0
+
+let _gridTex: CanvasTexture | null = null
+
+function gridTexture(): CanvasTexture {
+    if (_gridTex) return _gridTex
+    const size = 256
+    const div = 4
+    const canvas = document.createElement('canvas')
+    canvas.width = size
+    canvas.height = size
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#777777'
+    ctx.fillRect(0, 0, size, size)
+    ctx.strokeStyle = '#999999'
+    ctx.lineWidth = 1
+    const step = size / div
+    for (let i = 0; i <= div; i++) {
+        ctx.beginPath(); ctx.moveTo(i * step, 0); ctx.lineTo(i * step, size); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(0, i * step); ctx.lineTo(size, i * step); ctx.stroke()
+    }
+    ctx.strokeStyle = '#bbbbbb'
+    ctx.lineWidth = 2
+    ctx.strokeRect(0, 0, size, size)
+    _gridTex = new CanvasTexture(canvas)
+    return _gridTex
+}
+
+function makeEdgeLines(geo: BufferGeometry, color: number): LineSegments {
+    const e = new EdgesGeometry(geo)
+    return new LineSegments(e, new LineBasicMaterial({color}))
+}
 
 export const setupPhysicsWorld = (
     scene: Scene,
@@ -48,12 +80,9 @@ export const setupPhysicsWorld = (
     groundBody.quaternion.setFromAxisAngle(new Vec3(1, 0, 0), -Math.PI / 2)
     world.addBody(groundBody)
 
-    const groundGeo = new PlaneGeometry(20, 20)
-    const groundMatVis = new MeshBasicMaterial({color: 0x444444, side: DoubleSide, transparent: true, opacity: 0.5})
-    const groundMesh = new Mesh(groundGeo, groundMatVis)
-    groundMesh.rotation.x = -Math.PI / 2
-    groundMesh.position.y = GROUND_Y
-    scene.add(groundMesh)
+    const grid = new GridHelper(64, 64, 0x888888, 0x444444)
+    grid.position.y = GROUND_Y
+    scene.add(grid)
 
     const boxes: PhysicsBox[] = []
     let nextId = 1
@@ -93,10 +122,13 @@ export const setupPhysicsWorld = (
         const hd = config.depth / 2
 
         const geo = new BoxGeometry(config.width, config.height, config.depth)
-        const mat = new MeshBasicMaterial({color: 0x888888})
+        const mat = new MeshBasicMaterial({map: gridTexture()})
         const mesh = new Mesh(geo, mat)
         mesh.position.set(x, adjustedY, z)
         scene.add(mesh)
+
+        const edges = makeEdgeLines(geo, 0x333333)
+        mesh.add(edges)
 
         const body = new Body({
             mass: config.mass,
@@ -107,7 +139,7 @@ export const setupPhysicsWorld = (
         body.position.set(x, adjustedY, z)
         world.addBody(body)
 
-        const pb: PhysicsBox = {id, mesh, body, config: {...config}, wireframe: null}
+        const pb: PhysicsBox = {id, mesh, body, config: {...config}, edges, wireframe: null}
         boxes.push(pb)
         return pb
     }
@@ -138,6 +170,9 @@ export const setupPhysicsWorld = (
         scene.remove(pb.mesh)
         pb.mesh.geometry.dispose()
         ;(pb.mesh.material as MeshBasicMaterial).dispose()
+        pb.mesh.remove(pb.edges)
+        pb.edges.geometry.dispose()
+        ;(pb.edges.material as LineBasicMaterial).dispose()
         world.removeBody(pb.body)
         if (pb.wireframe) {
             pb.mesh.remove(pb.wireframe)
@@ -155,9 +190,7 @@ export const setupPhysicsWorld = (
             pb.wireframe = null
         }
         if (selectedId === pb.id) {
-            const edges = new EdgesGeometry(pb.mesh.geometry)
-            const lineMat = new LineBasicMaterial({color: 0xffffff})
-            const line = new Line(edges, lineMat)
+            const line = makeEdgeLines(pb.mesh.geometry, 0x00ffcc)
             pb.mesh.add(line)
             pb.wireframe = line
         }
@@ -181,6 +214,13 @@ export const setupPhysicsWorld = (
             while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
             pb.body.addShape(new Box(new Vec3(hw, hh, hd)))
             pb.body.updateMassProperties()
+
+            pb.mesh.remove(pb.edges)
+            pb.edges.geometry.dispose()
+            ;(pb.edges.material as LineBasicMaterial).dispose()
+            pb.edges = makeEdgeLines(pb.mesh.geometry, 0x333333)
+            pb.mesh.add(pb.edges)
+
             updateWireframe(pb)
         }
 
@@ -217,9 +257,7 @@ export const setupPhysicsWorld = (
         if (id !== null) {
             const pb = boxes.find(b => b.id === id)
             if (pb) {
-                const edges = new EdgesGeometry(pb.mesh.geometry)
-                const lineMat = new LineBasicMaterial({color: 0xffffff})
-                const line = new Line(edges, lineMat)
+                const line = makeEdgeLines(pb.mesh.geometry, 0x00ffcc)
                 pb.mesh.add(line)
                 pb.wireframe = line
                 return pb
