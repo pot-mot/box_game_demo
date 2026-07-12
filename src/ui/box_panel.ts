@@ -1,7 +1,44 @@
 import type {BoxConfig, PhysicsContext} from '../types/physics.ts'
 import type {PanelContext} from '../types/ui.ts'
 
-/** 创建箱子编辑面板（浮动在右下角），默认隐藏 */
+// ── Input factory ──────────────────────────────────────────────
+
+type InputAttrs = Partial<Omit<HTMLInputElement, 'style'>> & {style?: string}
+
+const INPUT_DEFAULTS: InputAttrs = {
+    type: 'number',
+    step: '0.01',
+}
+
+const createInput = (attrs: InputAttrs = {}): HTMLInputElement => {
+    const input = document.createElement('input')
+    Object.assign(input, INPUT_DEFAULTS, attrs)
+    if (attrs.style) {
+        input.style.cssText = attrs.style
+    }
+    return input
+}
+
+const createLabeledInput = (parent: HTMLElement, label: string, attrs: InputAttrs = {}): HTMLInputElement => {
+    const input = createInput(attrs)
+    const labelEl = document.createElement('label')
+    labelEl.textContent = label + ' '
+    labelEl.appendChild(input)
+    parent.appendChild(labelEl)
+    return input
+}
+
+// ── Section helper ─────────────────────────────────────────────
+
+const createSection = (title: string): HTMLDivElement => {
+    const div = document.createElement('div')
+    div.style.cssText = 'border-top:1px solid #555;padding:4px 0'
+    div.textContent = title
+    return div
+}
+
+// ── Panel ──────────────────────────────────────────────────────
+
 export const setupBoxControlPanel = (physics: PhysicsContext): PanelContext => {
     const el = document.createElement('div')
     el.id = 'box-control'
@@ -12,59 +49,81 @@ export const setupBoxControlPanel = (physics: PhysicsContext): PanelContext => {
         'border-radius: 10px; min-width: 230px;',
         'user-select: none; display: none;',
     ].join(' ')
-    el.innerHTML = [
-        '<div style="font-weight:700;margin-bottom:8px;font-size:14px">Box Control</div>',
-        '<div style="border-top:1px solid #555;padding:4px 0">Pos</div>',
-        '<label>X <input type="number" step="0.01"></label>',
-        '<label>Y <input type="number" step="0.01"></label>',
-        '<label>Z <input type="number" step="0.01"></label>',
-        '<div style="border-top:1px solid #555;padding:4px 0">Rot (°)</div>',
-        '<label>X <input type="number" step="0.1"></label>',
-        '<label>Y <input type="number" step="0.1"></label>',
-        '<label>Z <input type="number" step="0.1"></label>',
-        '<div style="border-top:1px solid #555;padding:4px 0">Size</div>',
-        '<label>X <input type="number" min="0.1" step="0.1" value="1"></label>',
-        '<label>Y <input type="number" min="0.1" step="0.1" value="1"></label>',
-        '<label>Z <input type="number" min="0.1" step="0.1" value="1"></label>',
-        '<div style="border-top:1px solid #555;padding:4px 0">',
-        '  <label>Mass <input type="number" min="0" step="0.1" value="0" style="width:80px"></label>',
-        '</div>',
-        '<label>Friction <input type="number" min="0" max="1" step="0.01" value="0.3" style="width:80px"></label>',
-        '<div style="display:flex;gap:8px;margin-top:8px">',
-        '  <button id="bc-apply" style="flex:1">Apply</button>',
-        '  <button id="bc-delete" style="flex:1">Delete</button>',
-        '</div>',
-    ].join('')
+
+    // Header
+    const header = document.createElement('div')
+    header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px'
+    header.textContent = 'Box Control'
+    el.appendChild(header)
+
+    // Position
+    el.appendChild(createSection('Pos'))
+    const posX = createLabeledInput(el, 'X', {step: '0.01'})
+    const posY = createLabeledInput(el, 'Y', {step: '0.01'})
+    const posZ = createLabeledInput(el, 'Z', {step: '0.01'})
+
+    // Rotation (degrees, clamped to ±360)
+    el.appendChild(createSection('Rot (°)'))
+    const rotX = createLabeledInput(el, 'X', {min: '-360', max: '360', step: '0.1'})
+    const rotY = createLabeledInput(el, 'Y', {min: '-360', max: '360', step: '0.1'})
+    const rotZ = createLabeledInput(el, 'Z', {min: '-360', max: '360', step: '0.1'})
+
+    // Size (positive, max 100)
+    el.appendChild(createSection('Size'))
+    const sizeX = createLabeledInput(el, 'X', {min: '0.1', max: '100', step: '0.1', value: '1'})
+    const sizeY = createLabeledInput(el, 'Y', {min: '0.1', max: '100', step: '0.1', value: '1'})
+    const sizeZ = createLabeledInput(el, 'Z', {min: '0.1', max: '100', step: '0.1', value: '1'})
+
+    // Mass (label inside the section divider)
+    const massSection = document.createElement('div')
+    massSection.style.cssText = 'border-top:1px solid #555;padding:4px 0'
+    const massLabel = document.createElement('label')
+    massLabel.textContent = 'Mass '
+    const mass = createInput({min: '0', step: '0.1', value: '0', style: 'width:80px'})
+    massLabel.appendChild(mass)
+    massSection.appendChild(massLabel)
+    el.appendChild(massSection)
+
+    // Friction
+    const friction = createLabeledInput(el, 'Friction', {min: '0', max: '1', step: '0.01', value: '0.3', style: 'width:80px'})
+
+    // Buttons
+    const btnRow = document.createElement('div')
+    btnRow.style.cssText = 'display:flex;gap:8px;margin-top:8px'
+    const applyBtn = document.createElement('button')
+    applyBtn.id = 'bc-apply'
+    applyBtn.style.flex = '1'
+    applyBtn.textContent = 'Apply'
+    const deleteBtn = document.createElement('button')
+    deleteBtn.id = 'bc-delete'
+    deleteBtn.style.flex = '1'
+    deleteBtn.textContent = 'Delete'
+    btnRow.appendChild(applyBtn)
+    btnRow.appendChild(deleteBtn)
+    el.appendChild(btnRow)
+
     document.body.appendChild(el)
 
-    // inputs[0..2]=Pos, [3..5]=Rot, [6..8]=Size, [9]=Mass, [10]=Friction
-    const inputs = el.querySelectorAll<HTMLInputElement>('input[type="number"]')
-    const iPos = [inputs[0], inputs[1], inputs[2]]
-    const iRot = [inputs[3], inputs[4], inputs[5]]
-    const iSize = [inputs[6], inputs[7], inputs[8]]
-    const iMass = inputs[9]
-    const iFriction = inputs[10]
-    const applyBtn = el.querySelector('#bc-apply') as HTMLButtonElement
-    const deleteBtn = el.querySelector('#bc-delete') as HTMLButtonElement
+    // ── Event handlers ───────────────────────────────────────────
 
     applyBtn.addEventListener('click', () => {
         const sel = physics.getSelected()
         if (!sel) return
         physics.setBoxTransform(sel.id, {
-            x: parseFloat(iPos[0].value),
-            y: parseFloat(iPos[1].value),
-            z: parseFloat(iPos[2].value),
+            x: parseFloat(posX.value),
+            y: parseFloat(posY.value),
+            z: parseFloat(posZ.value),
         }, {
-            x: parseFloat(iRot[0].value),
-            y: parseFloat(iRot[1].value),
-            z: parseFloat(iRot[2].value),
+            x: parseFloat(rotX.value),
+            y: parseFloat(rotY.value),
+            z: parseFloat(rotZ.value),
         })
         physics.updateBox(sel.id, {
-            width: parseFloat(iSize[0].value),
-            height: parseFloat(iSize[1].value),
-            depth: parseFloat(iSize[2].value),
-            mass: parseFloat(iMass.value),
-            friction: parseFloat(iFriction.value),
+            width: parseFloat(sizeX.value),
+            height: parseFloat(sizeY.value),
+            depth: parseFloat(sizeZ.value),
+            mass: parseFloat(mass.value),
+            friction: parseFloat(friction.value),
         })
     })
 
@@ -76,23 +135,25 @@ export const setupBoxControlPanel = (physics: PhysicsContext): PanelContext => {
         }
     })
 
+    // ── Show / Hide ──────────────────────────────────────────────
+
     const showForBox = (
         config: BoxConfig,
         pos: { x: number; y: number; z: number },
         rotDeg: { x: number; y: number; z: number },
     ) => {
         el.style.display = 'block'
-        iPos[0].value = pos.x.toFixed(2)
-        iPos[1].value = pos.y.toFixed(2)
-        iPos[2].value = pos.z.toFixed(2)
-        iRot[0].value = rotDeg.x.toFixed(1)
-        iRot[1].value = rotDeg.y.toFixed(1)
-        iRot[2].value = rotDeg.z.toFixed(1)
-        iSize[0].value = String(config.width)
-        iSize[1].value = String(config.height)
-        iSize[2].value = String(config.depth)
-        iMass.value = String(config.mass)
-        iFriction.value = String(config.friction)
+        posX.value = pos.x.toFixed(2)
+        posY.value = pos.y.toFixed(2)
+        posZ.value = pos.z.toFixed(2)
+        rotX.value = rotDeg.x.toFixed(1)
+        rotY.value = rotDeg.y.toFixed(1)
+        rotZ.value = rotDeg.z.toFixed(1)
+        sizeX.value = String(config.width)
+        sizeY.value = String(config.height)
+        sizeZ.value = String(config.depth)
+        mass.value = String(config.mass)
+        friction.value = String(config.friction)
     }
 
     const hide = () => {
