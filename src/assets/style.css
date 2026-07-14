@@ -18,3 +18,11 @@ body {
     width: 100%;
     height: 100%;
 }
+
+/* element panel rows */
+.ep-row:hover {
+    background: rgba(255, 255, 255, .1);
+}
+.ep-sel {
+    background: rgba(100, 180, 255, .25);
+}

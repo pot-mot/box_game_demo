@@ -1,9 +1,7 @@
 import {type PerspectiveCamera} from 'three'
 
-/**
- * 创建相机位置/旋转/缩放信息的 HUD 面板。
- * 返回 updater 函数，由主循环每帧调用更新内容。
- */
+const toDeg = (v: number) => (v * 180 / Math.PI).toFixed(1)
+
 export const setupCameraInfo = (camera: PerspectiveCamera): () => void => {
     const el = document.createElement('div')
     el.id = 'camera-info'
@@ -16,13 +14,16 @@ export const setupCameraInfo = (camera: PerspectiveCamera): () => void => {
     ].join(' ')
     document.body.appendChild(el)
 
-    const toDeg = (v: number) => (v * 180 / Math.PI).toFixed(1)
+    const posSpan = document.createElement('div')
+    const rotSpan = document.createElement('div')
+    const zoomSpan = document.createElement('div')
+    el.appendChild(posSpan)
+    el.appendChild(rotSpan)
+    el.appendChild(zoomSpan)
 
     return () => {
-        el.innerHTML = [
-            `pos: ${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)}`,
-            `rot: ${toDeg(camera.rotation.x)}°, ${toDeg(camera.rotation.y)}°, ${toDeg(camera.rotation.z)}°`,
-            `zoom: ${camera.zoom.toFixed(2)}`,
-        ].join('\n')
+        posSpan.textContent = `pos: ${camera.position.x.toFixed(2)}, ${camera.position.y.toFixed(2)}, ${camera.position.z.toFixed(2)}`
+        rotSpan.textContent = `rot: ${toDeg(camera.rotation.x)}°, ${toDeg(camera.rotation.y)}°, ${toDeg(camera.rotation.z)}°`
+        zoomSpan.textContent = `zoom: ${camera.zoom.toFixed(2)}`
     }
 }

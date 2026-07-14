@@ -5,6 +5,7 @@ import {setupPhysicsWorld} from './physics/world.ts'
 import {syncBodyToMesh} from './render/box.ts'
 import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
+import {setupElementPanel} from './ui/element_panel.ts'
 import {setupBoxControlPanel} from './ui/box_panel.ts'
 import {setupPointerInteraction} from './input/pointer_interaction.ts'
 import {MAX_DT} from './physics/constants.ts'
@@ -28,6 +29,7 @@ const cameraInfoUpdate = setupCameraInfo(camera)
 // --- UI 面板 + 指针交互 ---
 const panel = setupBoxControlPanel(physics)
 setupPointerInteraction(camera, renderer, physics, panel)
+const elementPanelUpdate = setupElementPanel(physics, panel)
 
 // --- 单 RAF 循环：协调所有子系统 ---
 let lastTime = performance.now()
@@ -42,7 +44,8 @@ const tick = (time: number): void => {
     physics.getBoxes().forEach(syncBodyToMesh)  // 2. 同步 body → mesh
     keyboardUpdate()                            // 3. 键盘移动相机
     cameraInfoUpdate()                          // 4. 更新 HUD
-    renderer.render(scene, camera)              // 5. 渲染场景
+    elementPanelUpdate()                        // 5. 更新元素列表
+    renderer.render(scene, camera)              // 6. 渲染场景
 }
 
 tick(performance.now())
