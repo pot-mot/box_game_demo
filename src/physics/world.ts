@@ -116,6 +116,7 @@ export const setupPhysicsWorld = (scene: Scene): PhysicsContext => {
         if (idx === -1) return
         const pb = boxes[idx]
         if (selectedId === id) selectBox(undefined)
+
         scene.remove(pb.mesh)
         disposeBoxMesh(pb)
         world.removeBody(pb.body)
@@ -124,6 +125,13 @@ export const setupPhysicsWorld = (scene: Scene): PhysicsContext => {
             disposeWireframe(pb.wireframe)
         }
         boxes.splice(idx, 1)
+
+        // 唤醒所有剩余 dynamic body，使其在失去支撑后受重力下落
+        for (const b of boxes) {
+            if (b.body.type === BODY_TYPES.DYNAMIC) {
+                b.body.wakeUp()
+            }
+        }
     }
 
     /** 部分更新箱子属性（尺寸/质量/摩擦系数），必要时重建几何体和碰撞体 */
