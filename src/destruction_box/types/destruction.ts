@@ -8,8 +8,6 @@ export interface DestructibleConfig {
     mass: number
     friction: number
     maxHealth: number
-    fragmentSeedCount: number
-    ejectForce: number
 }
 
 export interface FragmentData {

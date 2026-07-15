@@ -4,18 +4,12 @@ import type {DestructionContext} from '../destruction_box/types/destruction.ts'
 import type {PanelContext} from '../types/ui.ts'
 import type {DestructionPanelContext} from '../ui/destruction_panel.ts'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
-import {
-    DEFAULT_MAX_HEALTH,
-    FRAGMENT_SEED_COUNT,
-    FRAGMENT_EJECT_FORCE,
-} from '../destruction_box/physics/constants.ts'
+import {DEFAULT_MAX_HEALTH} from '../destruction_box/physics/constants.ts'
 
 const COMMON_CONFIG = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3} as const
 const DESTR_CONFIG = {
     width: 1, height: 1, depth: 1, mass: 1, friction: 0.3,
     maxHealth: DEFAULT_MAX_HEALTH,
-    fragmentSeedCount: FRAGMENT_SEED_COUNT,
-    ejectForce: FRAGMENT_EJECT_FORCE,
 } as const
 
 export type SpawnMode = 'common' | 'destruction'

@@ -207,24 +207,6 @@ const seededRandom = (seed: number): () => number => {
     }
 }
 
-const generateSeeds = (count: number, boxSize: Vec3, seed: number): Vec3[] => {
-    const rng = seededRandom(seed)
-    const seeds: Vec3[] = []
-    const margin = 0.15
-    const hw = boxSize.x / 2 * (1 - margin)
-    const hh = boxSize.y / 2 * (1 - margin)
-    const hd = boxSize.z / 2 * (1 - margin)
-
-    for (let i = 0; i < count; i++) {
-        seeds.push(new Vec3(
-            (rng() * 2 - 1) * hw,
-            (rng() * 2 - 1) * hh,
-            (rng() * 2 - 1) * hd,
-        ))
-    }
-    return seeds
-}
-
 /** 对最多 3 个点做三角扇 */
 const triangleFanIndices = (faceVerts: number[]): number[] => {
     const tris: number[] = []
@@ -254,28 +236,16 @@ const computeVolume = (verts: Vec3[], faces: number[][]): number => {
     return Math.abs(vol)
 }
 
-/**
- * 基于三平面交点法计算 Voronoi 分形
- * @param boxSize 箱子尺寸 (width, height, depth)
- * @param seedCount 种子点数量
- * @param seed 随机种子
- */
-export const computeVoronoiFracture = (
-    boxSize: [number, number, number],
-    seedCount: number,
-    seed: number,
-): FragmentData[] => {
-    const bv = new Vec3(boxSize[0], boxSize[1], boxSize[2])
-    const seeds = generateSeeds(seedCount, bv, seed)
+/** 从种子数组构建碎片（内部复用逻辑） */
+const buildFragmentsFromSeeds = (seeds: Vec3[], boxSize: Vec3): FragmentData[] => {
     const fragments: FragmentData[] = []
 
     for (let si = 0; si < seeds.length; si++) {
-        const cell = computeVoronoiCell(si, seeds, bv)
+        const cell = computeVoronoiCell(si, seeds, boxSize)
         if (!cell) continue
 
         const {vertices, facePlaneIndices} = cell
 
-        // Build render mesh (triangulated)
         const allTris: number[] = []
         for (const face of facePlaneIndices) {
             const triFan = triangleFanIndices(face)
@@ -284,7 +254,6 @@ export const computeVoronoiFracture = (
 
         if (allTris.length < 3) continue
 
-        // Flatten vertices for Three.js
         const renderVerts = new Float32Array(vertices.length * 3)
         for (let i = 0; i < vertices.length; i++) {
             renderVerts[i * 3] = vertices[i].x
@@ -292,13 +261,8 @@ export const computeVoronoiFracture = (
             renderVerts[i * 3 + 2] = vertices[i].z
         }
 
-        // Compute centroid for each fragment
         const centroid = computeCentroid(vertices)
-
-        // Convex hull faces for cannon-es
         const hullFaces: number[][] = facePlaneIndices.map(face => [...face])
-
-        // Compute volume for mass ratio
         const vol = computeVolume(vertices, hullFaces)
 
         fragments.push({
@@ -311,16 +275,56 @@ export const computeVoronoiFracture = (
         })
     }
 
-    // Normalize mass ratios
     const totalVol = fragments.reduce((s, f) => s + f.massRatio, 0)
     if (totalVol > EPS) {
-        for (const f of fragments) {
-            f.massRatio /= totalVol
-        }
+        for (const f of fragments) { f.massRatio /= totalVol }
     } else {
-        const eq = 1 / fragments.length
+        const eq = 1 / Math.max(fragments.length, 1)
         for (const f of fragments) { f.massRatio = eq }
     }
 
     return fragments
+}
+
+/**
+ * 基于碰撞点实时计算 Voronoi 分形
+ * @param boxSize 箱子尺寸 (width, height, depth)
+ * @param seedPoints 碰撞点（本地坐标）
+ * @param minCount 最少种子数，不足时自动补充
+ */
+export const computeFractureFromPoints = (
+    boxSize: [number, number, number],
+    seedPoints: Vec3[],
+    minCount: number,
+): FragmentData[] => {
+    const bv = new Vec3(boxSize[0], boxSize[1], boxSize[2])
+    const seeds: Vec3[] = []
+
+    // 始终加入 box 中心
+    seeds.push(new Vec3(0, 0, 0))
+
+    // 添加碰撞点（去重）
+    for (const sp of seedPoints) {
+        const isDup = seeds.some(s => {
+            const dx = s.x - sp.x, dy = s.y - sp.y, dz = s.z - sp.z
+            return dx * dx + dy * dy + dz * dz < EPS
+        })
+        if (!isDup) seeds.push(new Vec3(sp.x, sp.y, sp.z))
+    }
+
+    // 不足时补充随机抖动种子
+    if (seeds.length < minCount) {
+        const rng = seededRandom(Date.now())
+        const pool = [...seeds]
+        while (seeds.length < minCount) {
+            const src = pool[Math.floor(rng() * pool.length)]
+            seeds.push(new Vec3(
+                Math.max(-bv.x / 2, Math.min(bv.x / 2, src.x + (rng() - 0.5) * bv.x * 0.3)),
+                Math.max(-bv.y / 2, Math.min(bv.y / 2, src.y + (rng() - 0.5) * bv.y * 0.3)),
+                Math.max(-bv.z / 2, Math.min(bv.z / 2, src.z + (rng() - 0.5) * bv.z * 0.3)),
+            ))
+        }
+    }
+
+    return buildFragmentsFromSeeds(seeds, bv)
 }

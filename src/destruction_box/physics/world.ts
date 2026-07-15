@@ -11,12 +11,16 @@ import {GROUND_Y} from '../../physics/constants.ts'
 import type {
     DestructibleConfig, DestructibleBox,
     DestructibleDebris, DestructionContext, CollisionRecord,
+    FragmentData,
 } from '../types/destruction.ts'
 import {
     IMPACT_FORCE_SCALE,
     DEBRIS_LIFETIME,
     OVERLAP_MAX_ATTEMPTS,
     COLLISION_COOLDOWN,
+    MIN_FRAGMENT_COUNT,
+    MAX_COLLISION_HISTORY,
+    EJECT_VELOCITY_SCALE,
 } from './constants.ts'
 import {
     createDestructibleBoxMesh,
@@ -24,7 +28,7 @@ import {
     applyCracks,
     createDebrisFromFragment,
 } from '../render/box.ts'
-import {computeVoronoiFracture} from '../geometry/voronoi_fracture.ts'
+import {computeFractureFromPoints} from '../geometry/voronoi_fracture.ts'
 
 let globalBoxId = 1
 
@@ -79,30 +83,24 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         body.position.set(x, py, z)
         world.addBody(body)
 
-        const fragments = computeVoronoiFracture(
-            [config.width, config.height, config.depth],
-            config.fragmentSeedCount,
-            id,
-        )
-
         const pb = {
             id, mesh, edges, cracks: undefined,
             body, config: {...config},
             health: config.maxHealth,
             vertexOffsets: undefined,
-            fragments,
+            fragments: [] as FragmentData[],
             destroyed: false,
             debris: undefined,
         }
 
         const collisions: CollisionRecord[] = []
+        const collisionHistory: CollisionRecord[] = []
         const cooldowns = new Map<number, number>()
         body.addEventListener('collide', (e: any) => {
             const contact = e.contact
             const isBi = contact.bi === body
             const otherBody = isBi ? contact.bj : contact.bi
 
-            // 冷却检查：同一来源碰撞不重复记录
             const otherId = otherBody.id
             if ((cooldowns.get(otherId) || 0) > 0) return
             cooldowns.set(otherId, COLLISION_COOLDOWN)
@@ -132,14 +130,21 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             }
             const relVel = Math.abs(vd.x * normal.x + vd.y * normal.y + vd.z * normal.z)
 
-            collisions.push({
+            const record: CollisionRecord = {
                 contactPoint: [point.x, point.y, point.z],
                 normal: [normal.x, normal.y, normal.z],
                 relativeVelocity: relVel,
-            })
+            }
+
+            collisions.push(record)
+            collisionHistory.push(record)
+            while (collisionHistory.length > MAX_COLLISION_HISTORY) {
+                collisionHistory.shift()
+            }
         })
 
         ;(pb as any)._collisions = collisions
+        ;(pb as any)._collisionHistory = collisionHistory
         ;(pb as any)._cooldowns = cooldowns
         boxes.push(pb as any)
         return pb
@@ -178,7 +183,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         return boxes.find(b => b.id === selectedId)
     }
 
-    const spawnDebris = (pb: DestructibleBox, collisionPoint: [number, number, number]): void => {
+    const spawnDebris = (pb: DestructibleBox, collisionPoint: [number, number, number], ejectForce: number): void => {
         if (pb.destroyed || pb.fragments.length === 0) return
 
         pb.destroyed = true
@@ -227,7 +232,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             const dirLen = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z)
             if (dirLen > 0.001) {
                 dir.x /= dirLen; dir.y /= dirLen; dir.z /= dirLen
-                const force = pb.config.ejectForce * frag.massRatio
+                const force = ejectForce * frag.massRatio
                 const impulse = new Vec3(dir.x * force, dir.y * force, dir.z * force)
                 body.applyImpulse(impulse, new Vec3(frag.centroid[0], frag.centroid[1], frag.centroid[2]))
             }
@@ -259,7 +264,34 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
 
             if (pb.health <= 0 && !pb.destroyed) {
                 const lastCol = cols[cols.length - 1]
-                spawnDebris(pb, lastCol ? lastCol.contactPoint : [0, 0, 0])
+                const history: CollisionRecord[] = (pb as any)._collisionHistory || []
+
+                // 将碰撞点转换到本地坐标
+                const invQuat = pb.body.quaternion.clone().inverse()
+                const localSeeds: Vec3[] = []
+                for (const h of history) {
+                    const offset = new Vec3(
+                        h.contactPoint[0] - pb.body.position.x,
+                        h.contactPoint[1] - pb.body.position.y,
+                        h.contactPoint[2] - pb.body.position.z,
+                    )
+                    localSeeds.push(invQuat.vmult(offset))
+                }
+
+                // 实时计算碎片
+                pb.fragments = computeFractureFromPoints(
+                    [pb.config.width, pb.config.height, pb.config.depth],
+                    localSeeds,
+                    MIN_FRAGMENT_COUNT,
+                )
+
+                // 弹射力 = 平均碰撞速度 × 换算系数
+                const avgSpeed = history.length > 0
+                    ? history.reduce((s, c) => s + c.relativeVelocity, 0) / history.length
+                    : 5
+                const dynamicEjectForce = avgSpeed * EJECT_VELOCITY_SCALE
+
+                spawnDebris(pb, lastCol ? lastCol.contactPoint : [0, 0, 0], dynamicEjectForce)
             }
             cols.length = 0
         }
