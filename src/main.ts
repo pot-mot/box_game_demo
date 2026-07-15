@@ -13,7 +13,7 @@ import {setupElementPanel} from './ui/element_panel.ts'
 import {setupBoxControlPanel} from './ui/box_panel.ts'
 import {setupDestructionPanel} from './ui/destruction_panel.ts'
 import {setupPointerInteraction, type SpawnMode} from './input/pointer_interaction.ts'
-import {MAX_DT} from './physics/constants.ts'
+import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
@@ -58,20 +58,25 @@ const elementPanelUpdate = setupElementPanel(common, commonPanel, destruction, d
 let lastTime = performance.now()
 
 const tick = (time: number): void => {
-    requestAnimationFrame(tick)
     const delta = Math.min((time - lastTime) / 1000, MAX_DT)
     lastTime = time
 
-    shared.world.step(1 / 60, delta, 3)    // 1. 步进物理世界
-    destruction.update(delta)                // 2. 伤害累计 + 破碎触发
-    common.getBoxes().forEach(syncCommon)   // 3. common box 同步
-    destruction.getBoxes().forEach(syncDestructibleBodyToMesh) // 4. destruction box 同步
-    destruction.getDebris().forEach(syncDebrisToMesh)           // 5. 碎片同步
-    gridUpdate()                            // 6. 网格跟随摄像机
-    keyboardUpdate()                        // 7. 键盘移动相机
-    cameraInfoUpdate()                      // 8. 更新 HUD
-    elementPanelUpdate()                    // 9. 更新元素列表
-    renderer.render(scene, camera)          // 10. 渲染场景
+    try {
+        shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)    // 1. 步进物理世界
+        destruction.update(delta)                // 2. 伤害累计 + 破碎触发
+        common.getBoxes().forEach(syncCommon)   // 3. common box 同步
+        destruction.getBoxes().forEach(syncDestructibleBodyToMesh) // 4. destruction box 同步
+        destruction.getDebris().forEach(syncDebrisToMesh)           // 5. 碎片同步
+        gridUpdate()                            // 6. 网格跟随摄像机
+        keyboardUpdate()                        // 7. 键盘移动相机
+        cameraInfoUpdate()                      // 8. 更新 HUD
+        elementPanelUpdate()                    // 9. 更新元素列表
+        renderer.render(scene, camera)          // 10. 渲染场景
+    } catch (e) {
+        console.warn('Frame update failed:', e)
+    }
+
+    requestAnimationFrame(tick)
 }
 
 tick(performance.now())
