@@ -1,6 +1,6 @@
 import {Scene, PerspectiveCamera, PlaneGeometry, ShaderMaterial, Mesh, Color, DoubleSide} from 'three'
 import {
-    GRID_CELL_SIZE, GRID_RADIUS, GRID_PLANE_SIZE, GRID_COLOR, GRID_CENTER_COLOR,
+    GRID_CELL_SIZE, GRID_RADIUS, GRID_PLANE_SIZE, GRID_COLOR, GRID_CENTER_COLOR, GRID_CENTER_MULTIPLIER, GRID_LINE_HALF_WIDTH,
 } from './constants.ts'
 
 const vertexShader = `
@@ -18,6 +18,7 @@ void main() {
 const fragmentShader = `
 uniform float uCellSize;
 uniform float uLineHalfWidth;
+uniform float uCenterWeight;
 uniform float uRadius;
 uniform vec3 uLineColor;
 uniform vec3 uCenterColor;
@@ -40,7 +41,7 @@ void main() {
 
     // --- Center axes (world X=0, Z=0, thicker & brighter) ---
     vec2 axisAa = fwidth(pos) * 0.5;
-    float axisHalfWidth = uLineHalfWidth * 3.0;
+    float axisHalfWidth = uLineHalfWidth * uCenterWeight;
     float centerX = 1.0 - smoothstep(axisHalfWidth - axisAa.x, axisHalfWidth + axisAa.x, abspos.x);
     float centerZ = 1.0 - smoothstep(axisHalfWidth - axisAa.y, axisHalfWidth + axisAa.y, abspos.y);
     float centerLine = max(centerX, centerZ);
@@ -64,7 +65,8 @@ export const setupInfiniteGrid = (scene: Scene, camera: PerspectiveCamera): () =
     const mat = new ShaderMaterial({
         uniforms: {
             uCellSize: {value: GRID_CELL_SIZE},
-            uLineHalfWidth: {value: 0.02},
+            uLineHalfWidth: {value: GRID_LINE_HALF_WIDTH},
+            uCenterWeight: {value: GRID_CENTER_MULTIPLIER},
             uRadius: {value: GRID_RADIUS},
             uLineColor: {value: new Color(GRID_COLOR)},
             uCenterColor: {value: new Color(GRID_CENTER_COLOR)},

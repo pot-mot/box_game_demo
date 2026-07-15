@@ -29,7 +29,11 @@ export const GRID_CELL_SIZE = 1
 export const GRID_RADIUS = 64
 /** PlaneGeometry 边长（= 2 × GRID_RADIUS） */
 export const GRID_PLANE_SIZE = GRID_RADIUS * 2
+/** 普通网格线半宽度（世界单位） */
+export const GRID_LINE_HALF_WIDTH = 0.02
 /** 普通网格线颜色 */
-export const GRID_COLOR = 0x888888
+export const GRID_COLOR = 0xbbbbbb
 /** 中心轴线颜色 */
 export const GRID_CENTER_COLOR = 0xcccccc
+/** 中心轴线宽度倍率（相对于普通网格线） */
+export const GRID_CENTER_MULTIPLIER = 1.5
