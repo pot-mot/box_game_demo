@@ -14,7 +14,7 @@ import {
     createWireframe,
     disposeWireframe,
 } from '../render/box.ts'
-import {GROUND_Y} from '../../physics/constants.ts'
+import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../physics/constants.ts'
 import {OVERLAP_MAX_ATTEMPTS} from './constants.ts'
 
 export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonContext => {
@@ -65,6 +65,8 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonConte
             mass: config.mass,
             type: config.mass === 0 ? BODY_TYPES.STATIC : BODY_TYPES.DYNAMIC,
             material: boxMat,
+            collisionFilterGroup: DEFAULT_COLLISION_GROUP,
+            collisionFilterMask: DEFAULT_COLLISION_MASK,
         })
         body.addShape(new Box(new Vec3(hw, hh, hd)))
         body.position.set(x, adjustedY, z)

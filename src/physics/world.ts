@@ -13,6 +13,8 @@ import {
     GROUND_Y,
     BOX_BOX_FRICTION,
     BOX_GROUND_FRICTION,
+    DEFAULT_COLLISION_GROUP,
+    DEFAULT_COLLISION_MASK,
 } from './constants.ts'
 
 export interface SharedWorld {
@@ -32,8 +34,13 @@ export const createSharedWorld = (): SharedWorld => {
     world.addContactMaterial(new ContactMaterial(boxMat, boxMat, {friction: BOX_BOX_FRICTION}))
     world.addContactMaterial(new ContactMaterial(boxMat, groundMat, {friction: BOX_GROUND_FRICTION}))
 
-    const groundBody = new Body({mass: 0, type: BODY_TYPES.STATIC})
-    groundBody.addShape(new Plane())
+const groundBody = new Body({
+    mass: 0,
+    type: BODY_TYPES.STATIC,
+    collisionFilterGroup: DEFAULT_COLLISION_GROUP,
+    collisionFilterMask: DEFAULT_COLLISION_MASK,
+})
+groundBody.addShape(new Plane())
     groundBody.position.set(0, GROUND_Y, 0)
     groundBody.quaternion.setFromAxisAngle(new Vec3(1, 0, 0), -Math.PI / 2)
     world.addBody(groundBody)

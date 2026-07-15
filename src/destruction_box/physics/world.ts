@@ -7,7 +7,7 @@ import {
     ConvexPolyhedron,
 } from 'cannon-es'
 import type {SharedWorld} from '../../physics/world.ts'
-import {GROUND_Y} from '../../physics/constants.ts'
+import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, DEBRIS_COLLISION_GROUP, DEBRIS_COLLISION_MASK} from '../../physics/constants.ts'
 import type {
     DestructibleConfig, DestructibleBox,
     DestructibleDebris, DestructionContext, CollisionRecord,
@@ -78,6 +78,8 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             mass: config.mass,
             type: config.mass === 0 ? BODY_TYPES.STATIC : BODY_TYPES.DYNAMIC,
             material: boxMat,
+            collisionFilterGroup: DEFAULT_COLLISION_GROUP,
+            collisionFilterMask: DEFAULT_COLLISION_MASK,
         })
         body.addShape(new Box(new Vec3(config.width / 2, halfH, config.depth / 2)))
         body.position.set(x, py, z)
@@ -213,6 +215,8 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             const body = new Body({
                 mass: Math.max(pb.config.mass * frag.massRatio, 0.01),
                 material: boxMat,
+                collisionFilterGroup: DEBRIS_COLLISION_GROUP,
+                collisionFilterMask: DEBRIS_COLLISION_MASK,
             })
 
             const hull = new ConvexPolyhedron({

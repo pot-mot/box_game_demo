@@ -9,8 +9,8 @@ export const OVERLAP_MAX_ATTEMPTS = 50
 /** 同一来源碰撞冷却时间（秒），防止短时间内重复碰撞导致快速破碎 */
 export const COLLISION_COOLDOWN = 0.5
 /** 碎片最小数量，碰撞点不足时自动补充随机种子 */
-export const MIN_FRAGMENT_COUNT = 4
+export const MIN_FRAGMENT_COUNT = 2
 /** 保留的最近碰撞记录数上限 */
-export const MAX_COLLISION_HISTORY = 8
+export const MAX_COLLISION_HISTORY = 3
 /** 平均碰撞速度 → 碎片弹射速度换算系数 */
-export const EJECT_VELOCITY_SCALE = 0.8
+export const EJECT_VELOCITY_SCALE = 0.2
