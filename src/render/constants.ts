@@ -7,11 +7,6 @@ export const FAR = 1000
 /** 相机初始 Y 高度 */
 export const CAMERA_Y = 2
 
-/** 箱子边缘线颜色 */
-export const EDGE_COLOR = 0x333333
-/** 选中线框颜色 */
-export const SELECTED_EDGE_COLOR = 0x00ffcc
-
 /** 纹理画布尺寸 */
 export const TEX_SIZE = 256
 /** 纹理网格划分数量 */

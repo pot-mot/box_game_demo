@@ -12,5 +12,3 @@ export const GROUND_Y = 0
 export const BOX_BOX_FRICTION = 0.5
 /** 箱子与地面的摩擦系数 */
 export const BOX_GROUND_FRICTION = 0.3
-/** 避让重叠时最大尝试次数 */
-export const OVERLAP_MAX_ATTEMPTS = 50

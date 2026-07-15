@@ -1,19 +1,26 @@
 import {Raycaster, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type Mesh} from 'three'
-import type {PhysicsContext} from '../types/physics.ts'
+import type {CommonContext} from '../common_box/types/physics.ts'
+import type {DestructionContext} from '../destruction_box/types/destruction.ts'
 import type {PanelContext} from '../types/ui.ts'
+import type {DestructionPanelContext} from '../ui/destruction_panel.ts'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 
-const DEFAULT_CONFIG = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3} as const
+const COMMON_CONFIG = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3} as const
+const DESTR_CONFIG = {
+    width: 1, height: 1, depth: 1, mass: 1, friction: 0.3,
+    maxHealth: 8, fragmentSeedCount: 8, ejectForce: 8,
+} as const
 
-/**
- * 指针事件交互：左键点击选中/取消选中箱子，右键生成默认箱子。
- * 使用 pointer 事件而非 click 事件，配合 CLICK_THRESHOLD 区分点击与拖拽。
- */
+export type SpawnMode = 'common' | 'destruction'
+
 export const setupPointerInteraction = (
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
-    physics: PhysicsContext,
-    panel: PanelContext,
+    common: CommonContext,
+    commonPanel: PanelContext,
+    destruction: DestructionContext,
+    destructionPanel: DestructionPanelContext,
+    getSpawnMode: () => SpawnMode,
 ): void => {
     const raycaster = new Raycaster()
     const pointer = new Vector2()
@@ -28,7 +35,6 @@ export const setupPointerInteraction = (
 
     renderer.domElement.addEventListener('pointerup', (e: PointerEvent) => {
         if (e.button !== 0) return
-        // 超过阈值则为拖拽（用于轨道旋转），不触发放射检测
         const dx = e.clientX - pointerDownPos.x
         const dy = e.clientY - pointerDownPos.y
         if (Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD) return
@@ -37,32 +43,58 @@ export const setupPointerInteraction = (
         pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
         raycaster.setFromCamera(pointer, camera)
 
-        // recursive = false 防止检测到 LineSegments 子对象
-        const hits = raycaster.intersectObjects(physics.getBoxMeshes(), false)
+        const allMeshes = [...common.getBoxMeshes(), ...destruction.getBoxMeshes()]
+        if (allMeshes.length === 0) {
+            common.selectBox(undefined)
+            destruction.select(undefined)
+            commonPanel.hide()
+            destructionPanel.hide()
+            return
+        }
+
+        const hits = raycaster.intersectObjects(allMeshes, false)
         if (hits.length > 0) {
             const hitMesh = hits[0].object as Mesh
-            const pb = physics.getBoxes().find(b => b.mesh === hitMesh)
+
+            const pb = common.getBoxes().find(b => b.mesh === hitMesh)
             if (pb) {
-                physics.selectBox(pb.id)
+                common.selectBox(pb.id)
+                destruction.select(undefined)
+                destructionPanel.hide()
                 const rotDeg = {
                     x: pb.mesh.rotation.x * 180 / Math.PI,
                     y: pb.mesh.rotation.y * 180 / Math.PI,
                     z: pb.mesh.rotation.z * 180 / Math.PI,
                 }
-                panel.showForBox(pb.config, pb.mesh.position, rotDeg)
+                commonPanel.showForBox(pb.config, pb.mesh.position, rotDeg)
+                return
+            }
+
+            const db = destruction.getBoxes().find(b => b.mesh === hitMesh)
+            if (db) {
+                destruction.select(db.id)
+                common.selectBox(undefined)
+                commonPanel.hide()
+                destructionPanel.showForBox(db.config, db.health, db.config.maxHealth)
                 return
             }
         }
-        // 点击空白区域 → 取消选中
-        physics.selectBox(undefined)
-        panel.hide()
+
+        common.selectBox(undefined)
+        destruction.select(undefined)
+        commonPanel.hide()
+        destructionPanel.hide()
     })
 
-    // 右键在相机前方生成一个默认尺寸的箱子
     renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault()
         camera.getWorldDirection(forward)
         const spawnPos = new Vector3().copy(camera.position).add(forward.clone().multiplyScalar(SPAWN_DIST))
-        physics.addBox(DEFAULT_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
+
+        if (getSpawnMode() === 'common') {
+            common.addBox(COMMON_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
+        } else {
+            destruction.add(DESTR_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
+        }
     })
 }

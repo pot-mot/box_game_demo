@@ -1,14 +1,23 @@
-import type {PhysicsContext} from '../types/physics.ts'
+import type {CommonContext} from '../common_box/types/physics.ts'
+import type {DestructionContext} from '../destruction_box/types/destruction.ts'
 import type {PanelContext} from '../types/ui.ts'
+import type {DestructionPanelContext} from './destruction_panel.ts'
 
 const ROW_STYLE = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer'
 const INFO_STYLE = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
 const DEL_STYLE = 'background:none;border:none;color:#f66;cursor:pointer;font:14px/1 monospace;padding:0 4px'
 
-const createRow = (id: number): HTMLElement => {
+const createRow = (id: number, type: string): HTMLElement => {
     const row = document.createElement('div')
     row.style.cssText = ROW_STYLE
     row.dataset.id = String(id)
+
+    const typeBadge = document.createElement('span')
+    typeBadge.style.cssText = 'font-size:10px;padding:1px 4px;border-radius:3px;margin-right:4px'
+    typeBadge.textContent = type
+    typeBadge.style.background = type === 'C' ? '#448' : '#844'
+    typeBadge.style.color = '#fff'
+    row.appendChild(typeBadge)
 
     const span = document.createElement('span')
     span.style.cssText = INFO_STYLE
@@ -27,7 +36,15 @@ const createRow = (id: number): HTMLElement => {
 const formatInfo = (id: number, p: {x: number; y: number; z: number}, c: {width: number; height: number; depth: number; mass: number}): string =>
     `#${id}  (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})  ${c.width}×${c.height}×${c.depth}  m:${c.mass}`
 
-export const setupElementPanel = (physics: PhysicsContext, panel: PanelContext): () => void => {
+const formatDestrInfo = (id: number, p: {x: number; y: number; z: number}, c: {width: number; height: number; depth: number; mass: number; maxHealth: number}, health: number): string =>
+    `#${id}  (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})  ${c.width}×${c.height}×${c.depth}  HP:${health.toFixed(0)}/${c.maxHealth}`
+
+export const setupElementPanel = (
+    common: CommonContext,
+    commonPanel: PanelContext,
+    destruction: DestructionContext,
+    destructionPanel: DestructionPanelContext,
+): () => void => {
     const el = document.createElement('div')
     el.id = 'element-panel'
     el.style.cssText = [
@@ -49,9 +66,17 @@ export const setupElementPanel = (physics: PhysicsContext, panel: PanelContext):
     list.style.cssText = 'display:flex;flex-direction:column;gap:2px'
     el.appendChild(list)
 
-    const rows = new Map<number, HTMLElement>()
+    const rows = new Map<string, HTMLElement>()
 
     let emptyEl: HTMLElement | undefined
+
+    const findBox = (id: number): {type: 'common' | 'destruction'; box: any} | undefined => {
+        const cb = common.getBoxes().find(b => b.id === id)
+        if (cb) return {type: 'common', box: cb}
+        const db = destruction.getBoxes().find(b => b.id === id)
+        if (db) return {type: 'destruction', box: db}
+        return undefined
+    }
 
     list.addEventListener('click', (e: MouseEvent) => {
         const target = e.target as HTMLElement
@@ -59,22 +84,38 @@ export const setupElementPanel = (physics: PhysicsContext, panel: PanelContext):
         if (!row) return
 
         const id = Number(row.dataset.id)
+        const found = findBox(id)
+        if (!found) return
 
         if (target.classList.contains('ep-del')) {
-            physics.removeBox(id)
-            if (!physics.getSelected()) panel.hide()
+            if (found.type === 'common') {
+                common.removeBox(id)
+                if (!common.getSelected()) commonPanel.hide()
+            } else {
+                destruction.remove(id)
+                if (!destruction.getSelected()) destructionPanel.hide()
+            }
             return
         }
 
-        const pb = physics.getBoxes().find(b => b.id === id)
-        if (!pb) return
-        physics.selectBox(pb.id)
-        const rotDeg = {
-            x: pb.mesh.rotation.x * 180 / Math.PI,
-            y: pb.mesh.rotation.y * 180 / Math.PI,
-            z: pb.mesh.rotation.z * 180 / Math.PI,
+        if (found.type === 'common') {
+            const pb = found.box
+            common.selectBox(pb.id)
+            destruction.select(undefined)
+            destructionPanel.hide()
+            const rotDeg = {
+                x: pb.mesh.rotation.x * 180 / Math.PI,
+                y: pb.mesh.rotation.y * 180 / Math.PI,
+                z: pb.mesh.rotation.z * 180 / Math.PI,
+            }
+            commonPanel.showForBox(pb.config, pb.mesh.position, rotDeg)
+        } else {
+            const db = found.box
+            destruction.select(db.id)
+            common.selectBox(undefined)
+            commonPanel.hide()
+            destructionPanel.showForBox(db.config, db.health, db.config.maxHealth)
         }
-        panel.showForBox(pb.config, pb.mesh.position, rotDeg)
     })
 
     let hoveredId: number | undefined
@@ -90,38 +131,52 @@ export const setupElementPanel = (physics: PhysicsContext, panel: PanelContext):
 
     document.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.key === 'Delete' && hoveredId !== undefined) {
-            physics.removeBox(hoveredId)
-            if (!physics.getSelected()) panel.hide()
+            const found = findBox(hoveredId)
+            if (found) {
+                if (found.type === 'common') {
+                    common.removeBox(hoveredId)
+                    if (!common.getSelected()) commonPanel.hide()
+                } else {
+                    destruction.remove(hoveredId)
+                    if (!destruction.getSelected()) destructionPanel.hide()
+                }
+            }
             hoveredId = undefined
         }
     })
 
     return () => {
-        const boxes = physics.getBoxes()
-        const selectedId = physics.selectedId
+        const cBoxes = common.getBoxes().map(b => ({type: 'common' as const, box: b}))
+        const dBoxes = destruction.getBoxes().map(b => ({type: 'destruction' as const, box: b}))
+        const allBoxes = [...cBoxes, ...dBoxes]
 
-        // 清除多余行
-        for (const [id, row] of rows) {
-            if (!boxes.some(b => b.id === id)) {
+        for (const [key, row] of rows) {
+            if (!allBoxes.some(b => key === `${b.type}-${b.box.id}`)) {
                 row.remove()
-                rows.delete(id)
+                rows.delete(key)
             }
         }
 
-        for (const b of boxes) {
-            let row = rows.get(b.id)
+        for (const entry of allBoxes) {
+            const key = `${entry.type}-${entry.box.id}`
+            let row = rows.get(key)
             if (!row) {
-                row = createRow(b.id)
+                row = createRow(entry.box.id, entry.type === 'common' ? 'C' : 'D')
                 list.appendChild(row)
-                rows.set(b.id, row)
+                rows.set(key, row)
             }
 
-            const span = row.firstElementChild!
-            span.textContent = formatInfo(b.id, b.mesh.position, b.config)
-            row.className = b.id === selectedId ? 'ep-row ep-sel' : 'ep-row'
+            const span = row.children[1] as HTMLElement
+            if (entry.type === 'common') {
+                span.textContent = formatInfo(entry.box.id, entry.box.mesh.position, entry.box.config)
+            } else {
+                span.textContent = formatDestrInfo(entry.box.id, entry.box.mesh.position, entry.box.config, (entry.box as any).health)
+            }
+            const selId = entry.type === 'common' ? common.selectedId : destruction.selectedId
+            row.className = entry.box.id === selId ? 'ep-row ep-sel' : 'ep-row'
         }
 
-        if (boxes.length === 0) {
+        if (allBoxes.length === 0) {
             if (!emptyEl) {
                 emptyEl = document.createElement('div')
                 emptyEl.style.cssText = 'color:#888;padding:4px 0'

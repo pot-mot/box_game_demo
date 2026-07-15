@@ -1,4 +1,4 @@
-import type {BoxConfig} from './physics.ts'
+import type {BoxConfig} from '../common_box/types/physics.ts'
 
 /** 箱子控制面板的公共 API */
 export interface PanelContext {

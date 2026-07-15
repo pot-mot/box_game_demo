@@ -1,4 +1,4 @@
-import type {BoxConfig, PhysicsContext} from '../types/physics.ts'
+import type {BoxConfig, CommonContext} from '../common_box/types/physics.ts'
 import type {PanelContext} from '../types/ui.ts'
 import type {DeepReadonly} from '../types/readonly.ts'
 
@@ -55,7 +55,7 @@ const createSection = (title: string): HTMLDivElement => {
 
 // ── Panel ──────────────────────────────────────────────────────
 
-export const setupBoxControlPanel = (physics: PhysicsContext): PanelContext => {
+export const setupBoxControlPanel = (physics: CommonContext): PanelContext => {
     const el = document.createElement('div')
     el.id = 'box-control'
     el.style.cssText = [
