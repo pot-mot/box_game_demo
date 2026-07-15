@@ -208,8 +208,6 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             if (frag.renderIndices.length < 3) continue
 
             const {mesh, edges} = createDebrisFromFragment(frag)
-            mesh.position.copy(pb.mesh.position)
-            mesh.quaternion.copy(pb.mesh.quaternion)
             scene.add(mesh)
 
             const body = new Body({
@@ -219,26 +217,35 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
                 collisionFilterMask: DEBRIS_COLLISION_MASK,
             })
 
+            // hull 和 render 顶点都已平移到质心；body 位置直接设到世界空间质心
             const hull = new ConvexPolyhedron({
                 vertices: frag.hullVertices,
                 faces: frag.hullFaces,
             })
             body.addShape(hull)
-            body.position.copy(pb.body.position)
+            const worldCentroid = new Vec3(
+                pb.body.position.x + frag.centroid[0],
+                pb.body.position.y + frag.centroid[1],
+                pb.body.position.z + frag.centroid[2],
+            )
+            body.position.copy(worldCentroid)
             body.quaternion.copy(pb.body.quaternion)
+            mesh.position.copy(body.position)
+            mesh.quaternion.copy(body.quaternion)
 
+            // 从碰撞点指向质心的弹射方向
             const cp = new Vec3(collisionPoint[0], collisionPoint[1], collisionPoint[2])
             const dir = new Vec3(
-                frag.centroid[0] - cp.x,
-                frag.centroid[1] - cp.y,
-                frag.centroid[2] - cp.z,
+                worldCentroid.x - cp.x,
+                worldCentroid.y - cp.y,
+                worldCentroid.z - cp.z,
             )
             const dirLen = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z)
             if (dirLen > 0.001) {
                 dir.x /= dirLen; dir.y /= dirLen; dir.z /= dirLen
                 const force = ejectForce * frag.massRatio
                 const impulse = new Vec3(dir.x * force, dir.y * force, dir.z * force)
-                body.applyImpulse(impulse, new Vec3(frag.centroid[0], frag.centroid[1], frag.centroid[2]))
+                body.applyImpulse(impulse, worldCentroid)
             }
 
             world.addBody(body)

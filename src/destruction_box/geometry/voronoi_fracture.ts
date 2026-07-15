@@ -246,6 +246,21 @@ const buildFragmentsFromSeeds = (seeds: Vec3[], boxSize: Vec3): FragmentData[] =
 
         const {vertices, facePlaneIndices} = cell
 
+        const centroid = computeCentroid(vertices)
+        const offX = centroid[0], offY = centroid[1], offZ = centroid[2]
+
+        // render + hull 顶点统一平移到质心，使 hull 关于原点居中以通过 cannon-es 的绕序检查
+        const renderVerts = new Float32Array(vertices.length * 3)
+        const hullVerts: Vec3[] = []
+        for (let i = 0; i < vertices.length; i++) {
+            const v = vertices[i]
+            const sx = v.x - offX, sy = v.y - offY, sz = v.z - offZ
+            renderVerts[i * 3] = sx
+            renderVerts[i * 3 + 1] = sy
+            renderVerts[i * 3 + 2] = sz
+            hullVerts.push(new Vec3(sx, sy, sz))
+        }
+
         const allTris: number[] = []
         for (const face of facePlaneIndices) {
             const triFan = triangleFanIndices(face)
@@ -254,21 +269,13 @@ const buildFragmentsFromSeeds = (seeds: Vec3[], boxSize: Vec3): FragmentData[] =
 
         if (allTris.length < 3) continue
 
-        const renderVerts = new Float32Array(vertices.length * 3)
-        for (let i = 0; i < vertices.length; i++) {
-            renderVerts[i * 3] = vertices[i].x
-            renderVerts[i * 3 + 1] = vertices[i].y
-            renderVerts[i * 3 + 2] = vertices[i].z
-        }
-
-        const centroid = computeCentroid(vertices)
         const hullFaces: number[][] = facePlaneIndices.map(face => [...face])
-        const vol = computeVolume(vertices, hullFaces)
+        const vol = computeVolume(hullVerts, hullFaces)
 
         fragments.push({
             renderVertices: renderVerts,
             renderIndices: allTris,
-            hullVertices: vertices.map(v => new Vec3(v.x, v.y, v.z)),
+            hullVertices: hullVerts,
             hullFaces,
             centroid,
             massRatio: vol,
