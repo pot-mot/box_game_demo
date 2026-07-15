@@ -16,6 +16,7 @@ import {
     IMPACT_FORCE_SCALE,
     DEBRIS_LIFETIME,
     OVERLAP_MAX_ATTEMPTS,
+    COLLISION_COOLDOWN,
 } from './constants.ts'
 import {
     createDestructibleBoxMesh,
@@ -95,9 +96,17 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         }
 
         const collisions: CollisionRecord[] = []
+        const cooldowns = new Map<number, number>()
         body.addEventListener('collide', (e: any) => {
             const contact = e.contact
             const isBi = contact.bi === body
+            const otherBody = isBi ? contact.bj : contact.bi
+
+            // 冷却检查：同一来源碰撞不重复记录
+            const otherId = otherBody.id
+            if ((cooldowns.get(otherId) || 0) > 0) return
+            cooldowns.set(otherId, COLLISION_COOLDOWN)
+
             const normal = isBi ? contact.ni.clone() : contact.ni.clone().negate()
 
             const point = new Vec3()
@@ -131,6 +140,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         })
 
         ;(pb as any)._collisions = collisions
+        ;(pb as any)._cooldowns = cooldowns
         boxes.push(pb as any)
         return pb
     }
@@ -252,6 +262,16 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
                 spawnDebris(pb, lastCol ? lastCol.contactPoint : [0, 0, 0])
             }
             cols.length = 0
+        }
+
+        // 冷却计时递减
+        for (const pb of boxes) {
+            const cooldowns: Map<number, number> = (pb as any)._cooldowns
+            for (const [key, val] of cooldowns) {
+                const next = val - dt
+                if (next <= 0) cooldowns.delete(key)
+                else cooldowns.set(key, next)
+            }
         }
 
         for (let i = allDebris.length - 1; i >= 0; i--) {
