@@ -1,8 +1,7 @@
-import {Scene, PerspectiveCamera, WebGLRenderer, GridHelper} from 'three'
+import {Scene, PerspectiveCamera, WebGLRenderer} from 'three'
 import type {RenderContext} from '../types/render.ts'
 import {
     FOV, NEAR, FAR, CAMERA_Y,
-    GRID_SIZE, GRID_DIVISIONS, GRID_CENTER_COLOR, GRID_LINE_COLOR,
 } from './constants.ts'
 
 /** 创建 Three.js 场景、相机、渲染器 */
@@ -17,9 +16,4 @@ export const createRenderContext = (parent: HTMLElement): RenderContext => {
     return {scene, camera, renderer}
 }
 
-/** 添加地面网格辅助线 */
-export const addGridHelper = (scene: Scene): void => {
-    const grid = new GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_CENTER_COLOR, GRID_LINE_COLOR)
-    grid.position.y = 0
-    scene.add(grid)
-}
+

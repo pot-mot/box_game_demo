@@ -23,11 +23,13 @@ export const TEX_GRID = '#999999'
 /** 纹理边框色 */
 export const TEX_ACCENT = '#bbbbbb'
 
-/** GridHelper 大小 */
-export const GRID_SIZE = 64
-/** GridHelper 细分数量 */
-export const GRID_DIVISIONS = 64
-/** GridHelper 中心线颜色 */
-export const GRID_CENTER_COLOR = 0x888888
-/** GridHelper 网格线颜色 */
-export const GRID_LINE_COLOR = 0x444444
+/** 无限网格单元尺寸 */
+export const GRID_CELL_SIZE = 1
+/** 无限网格有效渲染半径（超出此距离完全透明） */
+export const GRID_RADIUS = 64
+/** PlaneGeometry 边长（= 2 × GRID_RADIUS） */
+export const GRID_PLANE_SIZE = GRID_RADIUS * 2
+/** 普通网格线颜色 */
+export const GRID_COLOR = 0x888888
+/** 中心轴线颜色 */
+export const GRID_CENTER_COLOR = 0xcccccc

@@ -1,5 +1,6 @@
 import './assets/style.css'
-import {createRenderContext, addGridHelper} from './render/setup.ts'
+import {createRenderContext} from './render/setup.ts'
+import {setupInfiniteGrid} from './render/grid.ts'
 import {setupMouseOrbit} from './input/mouse_orbit.ts'
 import {setupPhysicsWorld} from './physics/world.ts'
 import {syncBodyToMesh} from './render/box.ts'
@@ -14,7 +15,9 @@ const app = document.querySelector<HTMLDivElement>('#app')!
 
 // --- 渲染系统 ---
 const {scene, camera, renderer} = createRenderContext(app)
-addGridHelper(scene)
+
+// --- 无限地面网格（跟随摄像机，半径 64 内有效） ---
+const gridUpdate = setupInfiniteGrid(scene, camera)
 
 // --- 输入系统 ---
 setupMouseOrbit(camera, renderer.domElement)
@@ -42,10 +45,11 @@ const tick = (time: number): void => {
 
     physics.step(delta)                         // 1. 步进物理世界
     physics.getBoxes().forEach(syncBodyToMesh)  // 2. 同步 body → mesh
-    keyboardUpdate()                            // 3. 键盘移动相机
-    cameraInfoUpdate()                          // 4. 更新 HUD
-    elementPanelUpdate()                        // 5. 更新元素列表
-    renderer.render(scene, camera)              // 6. 渲染场景
+    gridUpdate()                                // 3. 网格跟随摄像机
+    keyboardUpdate()                            // 4. 键盘移动相机
+    cameraInfoUpdate()                          // 5. 更新 HUD
+    elementPanelUpdate()                        // 6. 更新元素列表
+    renderer.render(scene, camera)              // 7. 渲染场景
 }
 
 tick(performance.now())
