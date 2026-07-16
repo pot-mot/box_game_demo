@@ -29,6 +29,7 @@ export const setupPointerInteraction = (
     let pointerDownPos = {x: 0, y: 0}
 
     renderer.domElement.addEventListener('pointerdown', (e: PointerEvent) => {
+        renderer.domElement.focus()
         if (e.button === 0) {
             pointerDownPos = {x: e.clientX, y: e.clientY}
         }

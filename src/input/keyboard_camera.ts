@@ -4,14 +4,20 @@ import {MOVE_STEP} from './constants.ts'
 /** 
  * WASD+EQ 第一人称相机移动。
  * 返回 updater 函数，由主循环每帧调用，不再自行启动 RAF。
+ * 事件绑定到 canvas 元素，仅在 canvas 聚焦时响应键盘输入。
  */
-export const setupKeyboardCamera = (camera: PerspectiveCamera): () => void => {
+export const setupKeyboardCamera = (camera: PerspectiveCamera, element: HTMLElement): () => void => {
     const keys: Record<string, boolean> = {}
     const forward = new Vector3()
     const right = new Vector3()
 
-    window.addEventListener('keydown', e => { keys[e.code] = true })
-    window.addEventListener('keyup', e => { keys[e.code] = false })
+    const onKeyDown = (e: KeyboardEvent) => { keys[e.code] = true }
+    const onKeyUp = (e: KeyboardEvent) => { keys[e.code] = false }
+    const onBlur = () => { for (const k in keys) keys[k] = false }
+
+    element.addEventListener('keydown', onKeyDown)
+    element.addEventListener('keyup', onKeyUp)
+    element.addEventListener('blur', onBlur)
 
     return () => {
         camera.getWorldDirection(forward)

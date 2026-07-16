@@ -45,7 +45,7 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
 const getSpawnMode = (): SpawnMode => spawnMode
 
 // --- 控制系统（每帧 updater） ---
-const keyboardUpdate = setupKeyboardCamera(camera)
+const keyboardUpdate = setupKeyboardCamera(camera, renderer.domElement)
 const cameraInfoUpdate = setupCameraInfo(camera, getSpawnMode)
 
 // --- UI 面板 + 指针交互 ---

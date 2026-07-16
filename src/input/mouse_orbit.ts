@@ -8,7 +8,7 @@ export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement)
     let isDown = false
 
     element.addEventListener('mousedown', (e: MouseEvent) => {
-        if (e.button === 0) isDown = true
+        if (e.button === 0) { isDown = true; element.focus() }
     })
     window.addEventListener('mouseup', () => {
         isDown = false

@@ -12,6 +12,8 @@ export const createRenderContext = (parent: HTMLElement): RenderContext => {
     camera.rotation.order = 'YXZ' // 先偏航、后俯仰，避免万向锁
     const renderer = new WebGLRenderer()
     renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.domElement.tabIndex = 0
+    renderer.domElement.style.outline = 'none'
     parent.appendChild(renderer.domElement)
     return {scene, camera, renderer}
 }
