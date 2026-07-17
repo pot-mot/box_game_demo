@@ -30,6 +30,7 @@ export const setupCameraInfo = (camera: PerspectiveCamera, getSpawnMode: () => S
         rotSpan.textContent = `rot: ${toDeg(camera.rotation.x)}°, ${toDeg(camera.rotation.y)}°, ${toDeg(camera.rotation.z)}°`
         zoomSpan.textContent = `zoom: ${camera.zoom.toFixed(2)}`
         const mode = getSpawnMode()
-        modeSpan.textContent = `[1] Common  [2] Destruction  (${mode === 'common' ? '>> Common <<' : '>> Destruction <<'})`
+        const modeLabel = mode === 'common' ? '>> Common <<' : mode === 'destruction' ? '>> Destruction <<' : '>> Water <<'
+        modeSpan.textContent = `[1] Common  [2] Destruction  [3] Water  (${modeLabel})`
     }
 }

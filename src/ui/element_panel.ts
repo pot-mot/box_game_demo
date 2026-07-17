@@ -2,6 +2,7 @@ import type {CommonContext} from '../common_box/types/physics.ts'
 import type {DestructionContext} from '../destruction_box/types/destruction.ts'
 import type {PanelContext} from '../types/ui.ts'
 import type {DestructionPanelContext} from './destruction_panel.ts'
+import type {WaterBoxContext, WaterPanelContext} from '../water_block/types/water.ts'
 
 const ROW_STYLE = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer'
 const INFO_STYLE = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
@@ -39,11 +40,16 @@ const formatInfo = (id: number, p: {x: number; y: number; z: number}, c: {width:
 const formatDestrInfo = (id: number, p: {x: number; y: number; z: number}, c: {width: number; height: number; depth: number; mass: number; maxHealth: number}, health: number): string =>
     `#${id}  (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})  ${c.width}×${c.height}×${c.depth}  HP:${health.toFixed(0)}/${c.maxHealth}`
 
+const formatWaterInfo = (id: number, p: {x: number; y: number; z: number}, c: {width: number; height: number; depth: number}): string =>
+    `#${id}  (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})  ${c.width}×${c.height}×${c.depth}`
+
 export const setupElementPanel = (
     common: CommonContext,
     commonPanel: PanelContext,
     destruction: DestructionContext,
     destructionPanel: DestructionPanelContext,
+    water: WaterBoxContext,
+    waterPanel: WaterPanelContext,
 ): () => void => {
     const el = document.createElement('div')
     el.id = 'element-panel'
@@ -70,11 +76,13 @@ export const setupElementPanel = (
 
     let emptyEl: HTMLElement | undefined
 
-    const findBox = (id: number): {type: 'common' | 'destruction'; box: any} | undefined => {
+    const findItem = (id: number): {type: 'common' | 'destruction' | 'water'; item: any} | undefined => {
         const cb = common.getBoxes().find(b => b.id === id)
-        if (cb) return {type: 'common', box: cb}
+        if (cb) return {type: 'common', item: cb}
         const db = destruction.getBoxes().find(b => b.id === id)
-        if (db) return {type: 'destruction', box: db}
+        if (db) return {type: 'destruction', item: db}
+        const wb = water.getBlocks().find(b => b.id === id)
+        if (wb) return {type: 'water', item: wb}
         return undefined
     }
 
@@ -84,37 +92,52 @@ export const setupElementPanel = (
         if (!row) return
 
         const id = Number(row.dataset.id)
-        const found = findBox(id)
+        const found = findItem(id)
         if (!found) return
 
         if (target.classList.contains('ep-del')) {
             if (found.type === 'common') {
                 common.removeBox(id)
                 if (!common.getSelected()) commonPanel.hide()
-            } else {
+            } else if (found.type === 'destruction') {
                 destruction.remove(id)
                 if (!destruction.getSelected()) destructionPanel.hide()
+            } else {
+                water.removeBlock(id)
+                if (!water.getSelected()) waterPanel.hide()
             }
             return
         }
 
         if (found.type === 'common') {
-            const pb = found.box
+            const pb = found.item
             common.selectBox(pb.id)
             destruction.select(undefined)
+            water.selectBlock(undefined)
             destructionPanel.hide()
+            waterPanel.hide()
             const rotDeg = {
                 x: pb.mesh.rotation.x * 180 / Math.PI,
                 y: pb.mesh.rotation.y * 180 / Math.PI,
                 z: pb.mesh.rotation.z * 180 / Math.PI,
             }
             commonPanel.showForBox(pb.config, pb.mesh.position, rotDeg)
-        } else {
-            const db = found.box
+        } else if (found.type === 'destruction') {
+            const db = found.item
             destruction.select(db.id)
             common.selectBox(undefined)
+            water.selectBlock(undefined)
             commonPanel.hide()
+            waterPanel.hide()
             destructionPanel.showForBox(db.config, db.health, db.config.maxHealth)
+        } else {
+            const wb = found.item
+            water.selectBlock(wb.id)
+            common.selectBox(undefined)
+            destruction.select(undefined)
+            commonPanel.hide()
+            destructionPanel.hide()
+            waterPanel.showForBox(wb.config, wb.mesh.position)
         }
     })
 
@@ -131,14 +154,17 @@ export const setupElementPanel = (
 
     document.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.key === 'Delete' && hoveredId !== undefined) {
-            const found = findBox(hoveredId)
+            const found = findItem(hoveredId)
             if (found) {
                 if (found.type === 'common') {
                     common.removeBox(hoveredId)
                     if (!common.getSelected()) commonPanel.hide()
-                } else {
+                } else if (found.type === 'destruction') {
                     destruction.remove(hoveredId)
                     if (!destruction.getSelected()) destructionPanel.hide()
+                } else {
+                    water.removeBlock(hoveredId)
+                    if (!water.getSelected()) waterPanel.hide()
                 }
             }
             hoveredId = undefined
@@ -148,20 +174,26 @@ export const setupElementPanel = (
     return () => {
         const cBoxes = common.getBoxes().map(b => ({type: 'common' as const, box: b}))
         const dBoxes = destruction.getBoxes().map(b => ({type: 'destruction' as const, box: b}))
-        const allBoxes = [...cBoxes, ...dBoxes]
+        const wBlocks = water.getBlocks().map(b => ({type: 'water' as const, box: b}))
+        const allItems = [...cBoxes, ...dBoxes, ...wBlocks]
 
         for (const [key, row] of rows) {
-            if (!allBoxes.some(b => key === `${b.type}-${b.box.id}`)) {
+            if (!allItems.some(b => key === `${b.type}-${b.box.id}`)) {
                 row.remove()
                 rows.delete(key)
             }
         }
 
-        for (const entry of allBoxes) {
+        for (const entry of allItems) {
             const key = `${entry.type}-${entry.box.id}`
             let row = rows.get(key)
             if (!row) {
-                row = createRow(entry.box.id, entry.type === 'common' ? 'C' : 'D')
+                const typeLabel = entry.type === 'common' ? 'C' : entry.type === 'destruction' ? 'D' : 'W'
+                row = createRow(entry.box.id, typeLabel)
+                if (entry.type === 'water') {
+                    const badge = row.children[0] as HTMLElement
+                    badge.style.background = '#484'
+                }
                 list.appendChild(row)
                 rows.set(key, row)
             }
@@ -169,14 +201,19 @@ export const setupElementPanel = (
             const span = row.children[1] as HTMLElement
             if (entry.type === 'common') {
                 span.textContent = formatInfo(entry.box.id, entry.box.mesh.position, entry.box.config)
-            } else {
+            } else if (entry.type === 'destruction') {
                 span.textContent = formatDestrInfo(entry.box.id, entry.box.mesh.position, entry.box.config, (entry.box as any).health)
+            } else {
+                span.textContent = formatWaterInfo(entry.box.id, entry.box.mesh.position, entry.box.config)
             }
-            const selId = entry.type === 'common' ? common.selectedId : destruction.selectedId
+            let selId: number | undefined
+            if (entry.type === 'common') selId = common.selectedId
+            else if (entry.type === 'destruction') selId = destruction.selectedId
+            else selId = water.selectedId
             row.className = entry.box.id === selId ? 'ep-row ep-sel' : 'ep-row'
         }
 
-        if (allBoxes.length === 0) {
+        if (allItems.length === 0) {
             if (!emptyEl) {
                 emptyEl = document.createElement('div')
                 emptyEl.style.cssText = 'color:#888;padding:4px 0'
