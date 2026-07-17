@@ -92,3 +92,5 @@ const tick = (time: number): void => {
 }
 
 tick(performance.now())
+
+renderer.domElement.focus()
