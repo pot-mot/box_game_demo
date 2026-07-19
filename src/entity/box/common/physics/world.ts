@@ -9,7 +9,7 @@ import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {CommonBoxConfig, CommonBox, CommonEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
-import {createEmitter} from '../../base/types/event_emitter'
+import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
 import {createCommonBoxMesh, updateCommonBoxMeshSize, disposeCommonBoxMesh} from '../render'
 import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
@@ -33,6 +33,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
     let nextId = 1
     let selectedId: number | undefined
     const panelInfo: EntityPanelInfo[] = []
+    const sourceEvents = createEmitter<SourceEventMap>()
 
     const rebuildPanelInfo = () => {
         panelInfo.length = 0
@@ -73,7 +74,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         body.addShape(new Box(new Vec3(hw, hh, hd)))
         body.position.set(x, adjustedY, z)
         world.addBody(body)
-        const emitter = createEmitter()
+        const emitter = createEmitter<EntityEventMap>()
         const pb: CommonBox = {id, mesh, body, config: {...config}, edges, wireframe: undefined, emitter, rowText: ''}
         refreshRowText(pb)
         emitter.on('infoUpdate', rebuildPanelInfo)
@@ -90,7 +91,10 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         const idx = boxes.findIndex(b => b.id === id)
         if (idx === -1) return
         const pb = boxes[idx]
-        if (selectedId === id) select(undefined)
+        const wasSelected = selectedId === id
+        // 在清空选中状态前 emit，让监听器能拿到 wasSelected
+        sourceEvents.emit('delete', id, wasSelected)
+        if (wasSelected) select(undefined)
         cleanupWireframe(pb)
         scene.remove(pb.mesh)
         disposeCommonBoxMesh(pb)
@@ -110,6 +114,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
             if (prev) cleanupWireframe(prev)
         }
         selectedId = id
+        sourceEvents.emit('select', id)
         if (id !== undefined) {
             const pb = boxes.find(b => b.id === id)
             if (pb) {
@@ -202,6 +207,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
 
     const ctx: CommonEntityContext = {
         type: TYPE,
+        events: sourceEvents,
         panelInfo,
         add,
         spawnAt,

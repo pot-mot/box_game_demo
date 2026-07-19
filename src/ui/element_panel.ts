@@ -34,6 +34,13 @@ const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElem
 export const setupElementPanel = (sources: EntityInfoSource[]): () => void => {
     const sourcesByType = new Map(sources.map(s => [s.type, s]))
 
+    // 订阅各数据源事件：当选中元素被删除时自动关闭面板
+    for (const source of sources) {
+        source.events.on('delete', (_id: number, wasSelected: boolean) => {
+            if (wasSelected) focusPanel(undefined)
+        })
+    }
+
     const el = document.createElement('div')
     el.id = 'element-panel'
     el.style.cssText = [
@@ -78,9 +85,7 @@ export const setupElementPanel = (sources: EntityInfoSource[]): () => void => {
         if (!entry) return
 
         if (target.classList.contains('ep-del')) {
-            const wasSelected = source.getSelectedId() === id
             source.remove(id)
-            if (wasSelected) focusPanel(undefined)
             return
         }
 
@@ -111,11 +116,7 @@ export const setupElementPanel = (sources: EntityInfoSource[]): () => void => {
     document.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.key === 'Delete' && hoveredId !== undefined && hoveredType !== undefined) {
             const source = sourcesByType.get(hoveredType as any)
-            if (source) {
-                const wasSelected = source.getSelectedId() === hoveredId
-                source.remove(hoveredId)
-                if (wasSelected) focusPanel(undefined)
-            }
+            if (source) source.remove(hoveredId)
             hoveredId = undefined
             hoveredType = undefined
         }

@@ -11,7 +11,7 @@ import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, DEBRIS_COLLIS
 import type {DestructibleConfig, DestructibleBox, DestructibleDebris, DestructionEntityContext, CollisionRecord} from '../types'
 import type {XYZ} from '../../base/types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
-import {createEmitter} from '../../base/types/event_emitter'
+import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
 import {clampHealth, clampHealthOnMaxChange} from '../../base/types/health'
 import {
     DEFAULT_DESTRUCTIBLE_CONFIG,
@@ -53,6 +53,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
     const allDebris: DestructibleDebris[] = []
     let selectedId: number | undefined
     const panelInfo: EntityPanelInfo[] = []
+    const sourceEvents = createEmitter<SourceEventMap>()
 
     const rebuildPanelInfo = () => {
         panelInfo.length = 0
@@ -147,7 +148,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
 
         body.addEventListener('collide', onCollide)
 
-        const emitter = createEmitter()
+        const emitter = createEmitter<EntityEventMap>()
         const pb: DestructibleBox = {
             id, mesh, edges, cracks: undefined, wireframe: undefined,
             body, config: {...config},
@@ -181,7 +182,9 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         const idx = boxes.findIndex(b => b.id === id)
         if (idx === -1) return
         const pb = boxes[idx]
-        if (selectedId === id) select(undefined)
+        const wasSelected = selectedId === id
+        sourceEvents.emit('delete', id, wasSelected)
+        if (wasSelected) select(undefined)
 
         cleanupWireframe(pb)
         if (pb._onCollide) pb.body.removeEventListener('collide', pb._onCollide)
@@ -210,6 +213,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             if (prev) cleanupWireframe(prev)
         }
         selectedId = id
+        sourceEvents.emit('select', id)
         if (id !== undefined) {
             const pb = boxes.find(b => b.id === id)
             if (pb) {
@@ -480,6 +484,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
 
     const ctx: DestructionEntityContext = {
         type: TYPE,
+        events: sourceEvents,
         panelInfo,
         add,
         spawnAt,

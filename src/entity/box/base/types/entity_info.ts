@@ -1,6 +1,7 @@
 import type {Mesh} from 'three'
 import type {EntityType} from '../../../constants'
 import type {PanelContext} from '../ui'
+import type {SourceEmitter} from './event_emitter'
 
 interface EntityPanelInfo {
     id: number
@@ -12,6 +13,7 @@ interface EntityPanelInfo {
 
 interface EntityInfoSource {
     readonly type: EntityType
+    readonly events: SourceEmitter
     panel: PanelContext
     readonly panelInfo: EntityPanelInfo[]
     getSelectedId: () => number | undefined

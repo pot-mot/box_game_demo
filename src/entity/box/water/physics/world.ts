@@ -1,7 +1,7 @@
 import {type Scene, ShaderMaterial} from 'three'
 import type {WaterBlockConfig, WaterBlock, WaterEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
-import {createEmitter} from '../../base/types/event_emitter'
+import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
 import {createWaterBlockMesh, updateWaterBlockMeshSize, disposeWaterBlockMesh} from '../render'
 import {createWireframe, cleanupWireframe} from '../../base/render'
 import {formatRowText, createWaterPanel} from '../ui'
@@ -22,6 +22,7 @@ export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
     let nextId = 1
     let selectedId: number | undefined
     const panelInfo: EntityPanelInfo[] = []
+    const sourceEvents = createEmitter<SourceEventMap>()
 
     const rebuildPanelInfo = () => {
         panelInfo.length = 0
@@ -48,7 +49,7 @@ export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
         const mesh = createWaterBlockMesh(config)
         mesh.position.set(x, y, z)
         scene.add(mesh)
-        const emitter = createEmitter()
+        const emitter = createEmitter<EntityEventMap>()
         const wb: WaterBlock = {id, config: {...config}, mesh, emitter, rowText: '', wireframe: undefined}
         refreshRowText(wb)
         emitter.on('infoUpdate', rebuildPanelInfo)
@@ -65,7 +66,9 @@ export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
         const idx = blocks.findIndex(b => b.id === id)
         if (idx === -1) return
         const wb = blocks[idx]
-        if (selectedId === id) select(undefined)
+        const wasSelected = selectedId === id
+        sourceEvents.emit('delete', id, wasSelected)
+        if (wasSelected) select(undefined)
         cleanupWireframe(wb)
         scene.remove(wb.mesh)
         disposeWaterBlockMesh(wb.mesh)
@@ -115,6 +118,7 @@ export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
             if (prev) cleanupWireframe(prev)
         }
         selectedId = id
+        sourceEvents.emit('select', id)
         if (id !== undefined) {
             const wb = blocks.find(b => b.id === id)
             if (wb) {
@@ -147,6 +151,7 @@ export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
 
     const ctx: WaterEntityContext = {
         type: TYPE,
+        events: sourceEvents,
         panelInfo,
         add,
         spawnAt,

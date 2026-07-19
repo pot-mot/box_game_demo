@@ -26,3 +26,9 @@ export const focusPanel = (panel: PanelContext | undefined): void => {
         c.style.display = 'none'
     }
 }
+
+document.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && currentPanel !== undefined) {
+        focusPanel(undefined)
+    }
+})
