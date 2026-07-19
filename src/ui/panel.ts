@@ -1,4 +1,4 @@
-import type {PanelContext} from '../entity/box/ui'
+import type {PanelContext} from '../entity/box/base/ui'
 
 let container: HTMLElement | undefined
 let currentPanel: PanelContext | undefined

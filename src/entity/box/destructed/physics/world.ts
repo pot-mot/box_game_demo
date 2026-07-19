@@ -26,7 +26,7 @@ import {
 import {findNonOverlappingY} from '../../base/physics'
 import {computeFractureFromPoints} from '../geometry/voronoi_fracture.ts'
 import {createDestructionPanel} from '../ui'
-import type {PanelContext} from '../../ui'
+import type {PanelContext} from '../../base/ui'
 
 let globalBoxId = 1
 

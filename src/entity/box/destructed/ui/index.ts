@@ -1,4 +1,4 @@
-import type {PanelContext} from '../../ui'
+import type {PanelContext} from '../../base/ui'
 import type {DestructionEntityContext} from '../types'
 
 export const createDestructionPanel = (ctx: DestructionEntityContext): PanelContext => {

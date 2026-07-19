@@ -2,7 +2,7 @@ import {type Scene} from 'three'
 import type {WaterBlockConfig, WaterBlock, WaterEntityContext} from '../types'
 import {createWaterBlockMesh, updateWaterBlockMeshSize, disposeWaterBlockMesh} from '../render'
 import {createWaterPanel} from '../ui'
-import type {PanelContext} from '../../ui'
+import type {PanelContext} from '../../base/ui'
 
 export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
     const blocks: WaterBlock[] = []

@@ -1,4 +1,4 @@
-import type {PanelContext} from '../../ui'
+import type {PanelContext} from '../../base/ui'
 import type {CommonEntityContext} from '../types'
 
 const DEFAULT_STEP = '0.01'

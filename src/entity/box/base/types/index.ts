@@ -1,6 +1,6 @@
 import type {Mesh} from 'three'
 import type {Body} from 'cannon-es'
-import type {PanelContext} from '../../ui'
+import type {PanelContext} from '../ui'
 
 export interface BoxSize {
     width: number

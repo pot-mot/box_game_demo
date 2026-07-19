@@ -11,7 +11,7 @@ import type {CommonBoxConfig, CommonBox, CommonEntityContext} from '../types'
 import {createCommonBoxMesh, updateCommonBoxMeshSize, disposeCommonBoxMesh, createWireframe, disposeWireframe} from '../render'
 import {findNonOverlappingY} from '../../base/physics'
 import {createCommonPanel} from '../ui'
-import type {PanelContext} from '../../ui'
+import type {PanelContext} from '../../base/ui'
 
 export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntityContext => {
     const {world, boxMat} = shared
