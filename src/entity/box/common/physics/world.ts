@@ -15,12 +15,12 @@ import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {formatRowText, createCommonPanel} from '../ui'
 import type {PanelContext} from '../../base/ui'
+import {DEFAULT_COMMON_CONFIG} from './constants.ts'
+import type {EntityType} from "../../../constants.ts";
 
 // ── 常量 ──
 
-const DEFAULT_CONFIG: CommonBoxConfig = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3}
-
-const TYPE = 'common' as const
+const TYPE: EntityType = 'common' as const
 const BADGE_LABEL = 'C'
 const BADGE_COLOR = '#448'
 
@@ -83,7 +83,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
     }
 
     const spawnAt = (x: number, y: number, z: number): void => {
-        add(DEFAULT_CONFIG, x, y, z)
+        add(DEFAULT_COMMON_CONFIG, x, y, z)
     }
 
     const remove = (id: number): void => {

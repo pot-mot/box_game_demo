@@ -12,7 +12,7 @@ import type {DestructibleConfig, DestructibleBox, DestructibleDebris, Destructio
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter} from '../../base/types/event_emitter'
 import {
-    DEFAULT_MAX_HEALTH,
+    DEFAULT_DESTRUCTIBLE_CONFIG,
     IMPACT_FORCE_SCALE,
     DEBRIS_LIFETIME,
     COLLISION_COOLDOWN,
@@ -31,15 +31,11 @@ import {findNonOverlappingY} from '../../base/physics'
 import {computeFractureFromPoints} from '../geometry/voronoi_fracture.ts'
 import {formatRowText, createDestructionPanel} from '../ui'
 import type {PanelContext} from '../../base/ui'
+import type {EntityType} from "../../../constants.ts";
 
 // ── 常量 ──
 
-const DEFAULT_CONFIG: DestructibleConfig = {
-    width: 1, height: 1, depth: 1, mass: 1, friction: 0.3,
-    maxHealth: DEFAULT_MAX_HEALTH,
-}
-
-const TYPE = 'destruction' as const
+const TYPE: EntityType = 'destruction' as const
 const BADGE_LABEL = 'D'
 const BADGE_COLOR = '#844'
 
@@ -172,7 +168,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
     }
 
     const spawnAt = (x: number, y: number, z: number): void => {
-        add(DEFAULT_CONFIG, x, y, z)
+        add(DEFAULT_DESTRUCTIBLE_CONFIG, x, y, z)
     }
 
     // ── 增删改查 ──

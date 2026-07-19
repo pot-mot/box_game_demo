@@ -7,10 +7,11 @@ import {createWireframe, cleanupWireframe} from '../../base/render'
 import {formatRowText, createWaterPanel} from '../ui'
 import type {PanelContext} from '../../base/ui'
 import {DEFAULT_WATER_CONFIG} from './constants.ts'
+import type {EntityType} from "../../../constants.ts";
 
 // ── 常量 ──
 
-const TYPE = 'water' as const
+const TYPE: EntityType = 'water' as const
 const BADGE_LABEL = 'W'
 const BADGE_COLOR = '#484'
 
