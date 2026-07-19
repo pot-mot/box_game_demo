@@ -264,6 +264,7 @@ const buildFragmentsFromSeeds = (seeds: Vec3[], boxSize: Vec3): FragmentData[] =
             hullFaces,
             centroid,
             massRatio: vol,
+            boxSize: [boxSize.x, boxSize.y, boxSize.z],
         })
     }
 

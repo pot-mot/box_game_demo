@@ -19,8 +19,6 @@ import {
 import {
     createDestructibleBoxMesh,
     updateDestructibleBoxMeshSize,
-    applyDeformation,
-    applyCracks,
 } from '../render'
 import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
@@ -136,11 +134,10 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld, fragme
 
         const emitter = createEmitter<EntityEventMap>()
         const pb: DestructibleBox = {
-            id, mesh, edges, cracks: undefined, wireframe: undefined,
+            id, mesh, edges, wireframe: undefined,
             body, config: {...config},
             health: config.maxHealth,
             maxHealth: config.maxHealth,
-            vertexOffsets: undefined,
             fragments: [],
             destroyed: false,
             _collisions,
@@ -177,11 +174,6 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld, fragme
         pb.mesh.remove(pb.edges)
         pb.edges.geometry.dispose()
         ;(pb.edges.material as LineBasicMaterial).dispose()
-        if (pb.cracks) {
-            pb.mesh.remove(pb.cracks)
-            pb.cracks.geometry.dispose()
-            ;(pb.cracks.material as LineBasicMaterial).dispose()
-        }
 
         world.removeBody(pb.body)
         boxes.splice(idx, 1)
@@ -288,11 +280,6 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld, fragme
         pb.mesh.remove(pb.edges)
         pb.edges.geometry.dispose()
         ;(pb.edges.material as LineBasicMaterial).dispose()
-        if (pb.cracks) {
-            pb.mesh.remove(pb.cracks)
-            pb.cracks.geometry.dispose()
-            ;(pb.cracks.material as LineBasicMaterial).dispose()
-        }
 
         for (let fi = 0; fi < pb.fragments.length; fi++) {
             const frag = pb.fragments[fi]
@@ -342,11 +329,6 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld, fragme
                 const impact = col.relativeVelocity * pb.config.mass * IMPACT_FORCE_SCALE
                 pb.health -= impact
                 healthChanged = true
-                if (pb.health > 0) {
-                    const intensity = 1 - pb.health / pb.config.maxHealth
-                    applyDeformation(pb, col.contactPoint, col.normal, intensity)
-                    applyCracks(pb, col.contactPoint, col.normal, intensity)
-                }
             }
 
             if (healthChanged) {

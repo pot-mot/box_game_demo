@@ -7,4 +7,5 @@ export interface FragmentData {
     hullFaces: number[][]
     centroid: [number, number, number]
     massRatio: number
+    boxSize: [number, number, number]
 }
