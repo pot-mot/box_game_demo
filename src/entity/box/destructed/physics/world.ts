@@ -303,6 +303,19 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
                 allDebris.splice(i, 1)
             }
         }
+
+        for (let i = boxes.length - 1; i >= 0; i--) {
+            const pb = boxes[i]
+            if (!pb.destroyed) continue
+            if (pb.debris) {
+                pb.debris = pb.debris.filter(d => allDebris.includes(d))
+            }
+            if (!pb.debris || pb.debris.length === 0) {
+                if (selectedId === pb.id) select(undefined)
+                if (pb._onCollide) pb.body.removeEventListener('collide', pb._onCollide)
+                boxes.splice(i, 1)
+            }
+        }
     }
 
     const ctx: DestructionEntityContext = {
