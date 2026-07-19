@@ -20,4 +20,4 @@ export const MIN_FRAGMENT_COUNT = 2
 /** 碰撞历史记录保留数量 */
 export const MAX_COLLISION_HISTORY = 3
 /** 碎片弹射速度缩放系数 */
-export const EJECT_VELOCITY_SCALE = 0.2
+export const EJECT_VELOCITY_SCALE = 0.05
