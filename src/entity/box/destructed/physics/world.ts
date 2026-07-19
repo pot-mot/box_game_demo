@@ -12,6 +12,7 @@ import type {DestructibleConfig, DestructibleBox, DestructibleDebris, Destructio
 import type {XYZ} from '../../base/types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter} from '../../base/types/event_emitter'
+import {clampHealth, clampHealthOnMaxChange} from '../../base/types/health'
 import {
     DEFAULT_DESTRUCTIBLE_CONFIG,
     IMPACT_FORCE_SCALE,
@@ -151,6 +152,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             id, mesh, edges, cracks: undefined, wireframe: undefined,
             body, config: {...config},
             health: config.maxHealth,
+            maxHealth: config.maxHealth,
             vertexOffsets: undefined,
             fragments: [],
             destroyed: false,
@@ -267,6 +269,10 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             }
         }
         pb.config = cfg
+        // maxHealth 缩小后同步下调 health，避免当前血量越界
+        if (partial.maxHealth !== undefined) {
+            clampHealthOnMaxChange(pb, cfg.maxHealth)
+        }
         refreshRowText(pb)
     }
 
@@ -284,7 +290,8 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
     const setHealth = (id: number, health: number): void => {
         const pb = boxes.find(b => b.id === id)
         if (!pb || pb.destroyed) return
-        pb.health = health
+        // 将 health 钳制在 [0, maxHealth] 区间内，防止面板手动输入越界
+        clampHealth(pb, health)
         refreshRowText(pb)
     }
 

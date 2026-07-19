@@ -2,6 +2,7 @@ import type {Mesh, LineSegments} from 'three'
 import type {Body, Vec3} from 'cannon-es'
 import type {BaseEntity, RigidBodyConfig, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
+import type {HealthComponent} from '../../base/types/health'
 
 export interface DestructibleConfig extends RigidBodyConfig {
     maxHealth: number
@@ -29,12 +30,11 @@ export interface CollisionRecord {
     relativeVelocity: number
 }
 
-export interface DestructibleBox extends BaseEntity<DestructibleConfig> {
+export interface DestructibleBox extends BaseEntity<DestructibleConfig>, HealthComponent {
     edges: LineSegments
     cracks: LineSegments | undefined
     wireframe: LineSegments | undefined
     body: Body
-    health: number
     vertexOffsets: Float32Array | undefined
     fragments: FragmentData[]
     destroyed: boolean
