@@ -3,20 +3,16 @@ import {createRenderContext} from './render/setup.ts'
 import {setupInfiniteGrid} from './render/grid.ts'
 import {setupMouseOrbit} from './input/mouse_orbit.ts'
 import {createSharedWorld} from './physics/world.ts'
-import {setupCommonBoxes} from './common_box/physics/world.ts'
-import {setupDestructibleBoxes} from './destruction_box/physics/world.ts'
-import {syncBodyToMesh as syncCommon} from './common_box/render/box.ts'
-import {syncDestructibleBodyToMesh, syncDebrisToMesh} from './destruction_box/render/box.ts'
+import {setupCommonBoxes} from './entity/box/common/physics/world.ts'
+import {setupDestructibleBoxes} from './entity/box/destructed/physics/world.ts'
+import {setupWaterBlocks} from './entity/box/water/physics/world.ts'
+import {setupWaterPhysics} from './entity/box/water/physics/forces.ts'
+import {syncBodyToMesh} from './entity/box/base/render'
+import {syncDebrisToMesh} from './entity/box/destructed/render'
 import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
 import {setupElementPanel} from './ui/element_panel.ts'
-import {setupBoxControlPanel} from './ui/box_panel.ts'
-import {setupDestructionPanel} from './ui/destruction_panel.ts'
 import {setupPointerInteraction, type SpawnMode} from './input/pointer_interaction.ts'
-import {setupWaterBlocks} from './water_block/world.ts'
-import {setupWaterPhysics} from './water_block/physics.ts'
-import {setupWaterPanel} from './ui/water_panel.ts'
-import type {WaterBoxContext} from './water_block/types/water.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
@@ -40,9 +36,11 @@ const common = setupCommonBoxes(scene, shared)
 const destruction = setupDestructibleBoxes(scene, shared)
 
 // --- 水方块子系统 ---
-const waterBlocks: WaterBoxContext = setupWaterBlocks(scene)
-const waterPhysicsUpdate = setupWaterPhysics(common, destruction, () => waterBlocks.getBlocks())
-const waterPanel = setupWaterPanel(waterBlocks)
+const water = setupWaterBlocks(scene)
+const waterPhysicsUpdate = setupWaterPhysics(
+    () => [...common.getAll().map(e => e.body), ...destruction.getAll().map(e => e.body), ...destruction.getDebris().map(d => d.body)],
+    () => water.getAll().map(w => ({config: w.config, position: w.mesh.position})),
+)
 
 // --- Spawn mode (1=common, 2=destruction, 3=water) ---
 let spawnMode: SpawnMode = 'common'
@@ -58,11 +56,9 @@ const getSpawnMode = (): SpawnMode => spawnMode
 const keyboardUpdate = setupKeyboardCamera(camera, renderer.domElement)
 const cameraInfoUpdate = setupCameraInfo(camera, getSpawnMode)
 
-// --- UI 面板 + 指针交互 ---
-const commonPanel = setupBoxControlPanel(common)
-const destructionPanel = setupDestructionPanel(destruction)
-setupPointerInteraction(camera, renderer, common, commonPanel, destruction, destructionPanel, waterBlocks, waterPanel, getSpawnMode)
-const elementPanelUpdate = setupElementPanel(common, commonPanel, destruction, destructionPanel, waterBlocks, waterPanel)
+// --- 指针交互 + 元素列表 ---
+setupPointerInteraction(camera, renderer, common, destruction, water, getSpawnMode)
+const elementPanelUpdate = setupElementPanel(common, destruction, water)
 
 // --- 单 RAF 循环 ---
 let lastTime = performance.now()
@@ -73,12 +69,12 @@ const tick = (time: number): void => {
 
     try {
         shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)    // 1. 步进物理世界
-        destruction.update(delta)                // 2. 伤害累计 + 破碎触发
+        destruction.updatePhysics(delta)         // 2. 伤害累计 + 破碎触发
         waterPhysicsUpdate()                     // 3. 水方块浮力计算
-        common.getBoxes().forEach(syncCommon)   // 4. common box 同步
-        destruction.getBoxes().forEach(syncDestructibleBodyToMesh) // 5. destruction box 同步
-        destruction.getDebris().forEach(syncDebrisToMesh)           // 6. 碎片同步
-        waterBlocks.update(time)                 // 7. 水面波浪动画
+        common.getAll().forEach(e => syncBodyToMesh(e.mesh, e.body))   // 4. common box 同步
+        destruction.getAll().forEach(e => syncBodyToMesh(e.mesh, e.body)) // 5. destruction box 同步
+        destruction.getDebris().forEach(syncDebrisToMesh)            // 6. 碎片同步
+        water.updateTime(time)                   // 7. 水面波浪动画
         gridUpdate()                            // 8. 网格跟随摄像机
         keyboardUpdate()                        // 9. 键盘移动相机
         cameraInfoUpdate()                      // 10. 更新 HUD

@@ -1,12 +1,11 @@
 import {Raycaster, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type Mesh} from 'three'
-import type {CommonContext} from '../common_box/types/physics.ts'
-import type {DestructionContext} from '../destruction_box/types/destruction.ts'
-import type {PanelContext} from '../types/ui.ts'
-import type {DestructionPanelContext} from '../ui/destruction_panel.ts'
-import type {WaterBoxContext, WaterPanelContext} from '../water_block/types/water.ts'
+import type {CommonEntityContext} from '../entity/box/common/types'
+import type {DestructionEntityContext} from '../entity/box/destructed/types'
+import type {WaterEntityContext} from '../entity/box/water/types'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
-import {DEFAULT_MAX_HEALTH} from '../destruction_box/physics/constants.ts'
-import {DEFAULT_WATER_CONFIG} from '../water_block/constants.ts'
+import {DEFAULT_MAX_HEALTH} from '../entity/box/destructed/physics/constants.ts'
+import {DEFAULT_WATER_CONFIG} from '../entity/box/water/physics/constants.ts'
+import {focusPanel} from '../ui/panel.ts'
 
 const COMMON_CONFIG = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3} as const
 const DESTR_CONFIG = {
@@ -19,12 +18,9 @@ export type SpawnMode = 'common' | 'destruction' | 'water'
 export const setupPointerInteraction = (
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
-    common: CommonContext,
-    commonPanel: PanelContext,
-    destruction: DestructionContext,
-    destructionPanel: DestructionPanelContext,
-    water: WaterBoxContext,
-    waterPanel: WaterPanelContext,
+    common: CommonEntityContext,
+    destruction: DestructionEntityContext,
+    water: WaterEntityContext,
     getSpawnMode: () => SpawnMode,
 ): void => {
     const raycaster = new Raycaster()
@@ -49,14 +45,12 @@ export const setupPointerInteraction = (
         pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
         raycaster.setFromCamera(pointer, camera)
 
-        const allMeshes = [...common.getBoxMeshes(), ...destruction.getBoxMeshes(), ...water.getBlockMeshes()]
+        const allMeshes = [...common.getMeshes(), ...destruction.getMeshes(), ...water.getMeshes()]
         if (allMeshes.length === 0) {
-            common.selectBox(undefined)
+            common.select(undefined)
             destruction.select(undefined)
-            water.selectBlock(undefined)
-            commonPanel.hide()
-            destructionPanel.hide()
-            waterPanel.hide()
+            water.select(undefined)
+            focusPanel(undefined)
             return
         }
 
@@ -64,51 +58,38 @@ export const setupPointerInteraction = (
         if (hits.length > 0) {
             const hitMesh = hits[0].object as Mesh
 
-            const wb = water.getBlocks().find(b => b.mesh === hitMesh)
+            const wb = water.getAll().find(b => b.mesh === hitMesh)
             if (wb) {
-                water.selectBlock(wb.id)
-                common.selectBox(undefined)
+                water.select(wb.id)
+                common.select(undefined)
                 destruction.select(undefined)
-                commonPanel.hide()
-                destructionPanel.hide()
-                waterPanel.showForBox(wb.config, wb.mesh.position)
+                focusPanel(water.panel)
                 return
             }
 
-            const pb = common.getBoxes().find(b => b.mesh === hitMesh)
+            const pb = common.getAll().find(b => b.mesh === hitMesh)
             if (pb) {
-                common.selectBox(pb.id)
+                common.select(pb.id)
                 destruction.select(undefined)
-                water.selectBlock(undefined)
-                destructionPanel.hide()
-                waterPanel.hide()
-                const rotDeg = {
-                    x: pb.mesh.rotation.x * 180 / Math.PI,
-                    y: pb.mesh.rotation.y * 180 / Math.PI,
-                    z: pb.mesh.rotation.z * 180 / Math.PI,
-                }
-                commonPanel.showForBox(pb.config, pb.mesh.position, rotDeg)
+                water.select(undefined)
+                focusPanel(common.panel)
                 return
             }
 
-            const db = destruction.getBoxes().find(b => b.mesh === hitMesh)
+            const db = destruction.getAll().find(b => b.mesh === hitMesh)
             if (db) {
                 destruction.select(db.id)
-                common.selectBox(undefined)
-                water.selectBlock(undefined)
-                commonPanel.hide()
-                waterPanel.hide()
-                destructionPanel.showForBox(db.config, db.health, db.config.maxHealth)
+                common.select(undefined)
+                water.select(undefined)
+                focusPanel(destruction.panel)
                 return
             }
         }
 
-        common.selectBox(undefined)
+        common.select(undefined)
         destruction.select(undefined)
-        water.selectBlock(undefined)
-        commonPanel.hide()
-        destructionPanel.hide()
-        waterPanel.hide()
+        water.select(undefined)
+        focusPanel(undefined)
     })
 
     renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => {
@@ -118,11 +99,11 @@ export const setupPointerInteraction = (
 
         const mode = getSpawnMode()
         if (mode === 'common') {
-            common.addBox(COMMON_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
+            common.add(COMMON_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
         } else if (mode === 'destruction') {
             destruction.add(DESTR_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
         } else {
-            water.addBlock(DEFAULT_WATER_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
+            water.add(DEFAULT_WATER_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
         }
     })
 }

@@ -22,7 +22,7 @@ export interface SharedWorld {
     boxMat: Material
 }
 
-/** 创建 cannon-es 物理世界（地面、接触材质），供 common_box 和 destruction_box 共享 */
+/** 创建 cannon-es 物理世界（地面、接触材质），供 entity/box 各实体共享 */
 export const createSharedWorld = (): SharedWorld => {
     const world = new World()
     world.gravity.set(0, GRAVITY, 0)
