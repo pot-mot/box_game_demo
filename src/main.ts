@@ -1,4 +1,5 @@
 import './assets/style.css'
+import {WebGLRenderTarget, ShaderMaterial} from 'three'
 import {createRenderContext} from './render/setup.ts'
 import {setupInfiniteGrid} from './render/grid.ts'
 import {setupMouseOrbit} from './input/mouse_orbit.ts'
@@ -18,6 +19,12 @@ const app = document.querySelector<HTMLDivElement>('#app')!
 
 // --- 渲染系统 ---
 const {scene, camera, renderer} = createRenderContext(app)
+
+// --- 折射背景渲染目标 ---
+const backgroundRT = new WebGLRenderTarget(window.innerWidth, window.innerHeight)
+window.addEventListener('resize', () => {
+    backgroundRT.setSize(window.innerWidth, window.innerHeight)
+})
 
 // --- 无限地面网格 ---
 const gridUpdate = setupInfiniteGrid(scene, camera)
@@ -81,9 +88,27 @@ const tick = (time: number): void => {
         water.updateTime(time)                   // 6. 水面波浪动画
         gridUpdate()                            // 7. 网格跟随摄像机
         keyboardUpdate()                        // 8. 键盘移动相机
+
+        // ── 双 Pass 渲染（Pass 1：背景到纹理，供折射使用）──
+        const allWater = water.getAll()
+        for (const wb of allWater) wb.mesh.visible = false
+        renderer.setRenderTarget(backgroundRT)
+        renderer.render(scene, camera)
+
+        // ── Pass 2：最终场景到屏幕（含水）──
+        for (const wb of allWater) {
+            wb.mesh.visible = true
+            const mat = wb.mesh.material as ShaderMaterial
+            if (mat.uniforms.uRefractionTex) {
+                mat.uniforms.uRefractionTex.value = backgroundRT.texture
+                mat.uniforms.uViewportSize.value.set(window.innerWidth, window.innerHeight)
+            }
+        }
+        renderer.setRenderTarget(null)
+        renderer.render(scene, camera)
+
         cameraInfoUpdate()                      // 9. 更新 HUD
         elementPanelUpdate()                    // 10. 更新元素列表
-        renderer.render(scene, camera)          // 11. 渲染场景
     } catch (e) {
         console.warn('Frame update failed:', e)
     }

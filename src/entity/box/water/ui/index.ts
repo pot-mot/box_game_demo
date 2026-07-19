@@ -5,7 +5,7 @@ import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'
 
 export const formatRowText = (box: WaterBlock): string =>
-    `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}`
+    `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  d:${box.config.density}`
 
 export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
     const el = document.createElement('div')
@@ -33,6 +33,9 @@ export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
     const sizeY = createLabeledNumberInput(el, 'Y', {min: '0.1', max: '100', step: '0.1', value: '2'})
     const sizeZ = createLabeledNumberInput(el, 'Z', {min: '0.1', max: '100', step: '0.1', value: '2'})
 
+    el.appendChild(createSection('Buoyancy'))
+    const density = createLabeledNumberInput(el, 'Density', {min: '0', max: '100', step: '0.1', value: '2'})
+
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
@@ -48,6 +51,7 @@ export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
             sizeX.value = String(sel.config.width)
             sizeY.value = String(sel.config.height)
             sizeZ.value = String(sel.config.depth)
+            density.value = String(sel.config.density)
 
             applyBtn.onclick = () => {
                 const cur = ctx.getSelected()
@@ -61,6 +65,7 @@ export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
                     width: parseFloat(sizeX.value),
                     height: parseFloat(sizeY.value),
                     depth: parseFloat(sizeZ.value),
+                    density: parseFloat(density.value),
                 })
             }
             deleteBtn.onclick = () => {

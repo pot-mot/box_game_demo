@@ -2,7 +2,9 @@ import type {LineSegments} from 'three'
 import type {BaseEntity, BoxSize} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
 
-export interface WaterBlockConfig extends BoxSize {}
+export interface WaterBlockConfig extends BoxSize {
+    density: number
+}
 
 export interface WaterBlock extends BaseEntity<WaterBlockConfig> {
     wireframe: LineSegments | undefined

@@ -1,13 +1,13 @@
 import {Vec3, type Body, type AABB} from 'cannon-es'
 import {GRAVITY} from '../../../../physics/constants.ts'
-import {WATER_DENSITY, DRAG_COEFFICIENT, ANGULAR_DRAG_COEFFICIENT} from './constants.ts'
+import {DRAG_COEFFICIENT, ANGULAR_DRAG_COEFFICIENT} from './constants.ts'
 import type {WaterBlockInfo} from '../types'
 
 const tempVec = new Vec3()
 
-const applyWaterForces = (body: Body, overlapVolume: number): void => {
+const applyWaterForces = (body: Body, overlapVolume: number, density: number): void => {
     if (overlapVolume <= 0 || body.mass <= 0) return
-    const buoyMag = WATER_DENSITY * Math.abs(GRAVITY) * overlapVolume
+    const buoyMag = density * Math.abs(GRAVITY) * overlapVolume
     body.applyForce(new Vec3(0, buoyMag, 0))
     const speed = Math.sqrt(body.velocity.x * body.velocity.x + body.velocity.y * body.velocity.y + body.velocity.z * body.velocity.z)
     if (speed > 0.01) {
@@ -41,7 +41,7 @@ const processBody = (body: Body, wbConfig: WaterBlockInfo['config'], wbX: number
         wbX - hw, wbY - hh, wbZ - hd,
         wbX + hw, wbY + hh, wbZ + hd,
     )
-    if (vol > 0) applyWaterForces(body, vol)
+    if (vol > 0) applyWaterForces(body, vol, wbConfig.density)
 }
 
 export const setupWaterPhysics = (
