@@ -1,6 +1,7 @@
 import type {Mesh, LineSegments} from 'three'
 import type {Body, Vec3} from 'cannon-es'
-import type {BaseEntity, EntityContext, RigidBodyConfig} from '../../base/types'
+import type {BaseEntity, RigidBodyConfig} from '../../base/types'
+import type {EntityInfoSource} from '../../base/types/entity_info'
 
 export interface DestructibleConfig extends RigidBodyConfig {
     maxHealth: number
@@ -43,7 +44,10 @@ export interface DestructibleBox extends BaseEntity<DestructibleConfig> {
     _onCollide: ((e: any) => void) | undefined
 }
 
-export interface DestructionEntityContext extends EntityContext<DestructibleConfig, DestructibleBox> {
+export interface DestructionEntityContext extends EntityInfoSource {
+    add: (config: DestructibleConfig, x: number, y: number, z: number) => DestructibleBox
+    getSelected: () => DestructibleBox | undefined
+    getAll: () => DestructibleBox[]
     getDebris: () => DestructibleDebris[]
     updatePhysics: (dt: number) => void
 }

@@ -7,7 +7,6 @@ import {setupCommonBoxes} from './entity/box/common/physics/world.ts'
 import {setupDestructibleBoxes} from './entity/box/destructed/physics/world.ts'
 import {setupWaterBlocks} from './entity/box/water/physics/world.ts'
 import {setupWaterPhysics} from './entity/box/water/physics/forces.ts'
-import {syncBodyToMesh} from './entity/box/base/render'
 import {syncDebrisToMesh} from './entity/box/destructed/render'
 import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
@@ -42,6 +41,9 @@ const waterPhysicsUpdate = setupWaterPhysics(
     () => water.getAll().map(w => ({config: w.config, position: w.mesh.position})),
 )
 
+// --- 统一 entity 列表 ---
+const sources = [common, destruction, water]
+
 // --- Spawn mode (1=common, 2=destruction, 3=water) ---
 let spawnMode: SpawnMode = 'common'
 window.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -57,8 +59,8 @@ const keyboardUpdate = setupKeyboardCamera(camera, renderer.domElement)
 const cameraInfoUpdate = setupCameraInfo(camera, getSpawnMode)
 
 // --- 指针交互 + 元素列表 ---
-setupPointerInteraction(camera, renderer, common, destruction, water, getSpawnMode)
-const elementPanelUpdate = setupElementPanel(common, destruction, water)
+setupPointerInteraction(camera, renderer, sources, getSpawnMode)
+const elementPanelUpdate = setupElementPanel(sources)
 
 // --- 单 RAF 循环 ---
 let lastTime = performance.now()
@@ -71,15 +73,14 @@ const tick = (time: number): void => {
         shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)    // 1. 步进物理世界
         destruction.updatePhysics(delta)         // 2. 伤害累计 + 破碎触发
         waterPhysicsUpdate()                     // 3. 水方块浮力计算
-        common.getAll().forEach(e => syncBodyToMesh(e.mesh, e.body))   // 4. common box 同步
-        destruction.getAll().forEach(e => syncBodyToMesh(e.mesh, e.body)) // 5. destruction box 同步
-        destruction.getDebris().forEach(syncDebrisToMesh)            // 6. 碎片同步
-        water.updateTime(time)                   // 7. 水面波浪动画
-        gridUpdate()                            // 8. 网格跟随摄像机
-        keyboardUpdate()                        // 9. 键盘移动相机
-        cameraInfoUpdate()                      // 10. 更新 HUD
-        elementPanelUpdate()                    // 11. 更新元素列表
-        renderer.render(scene, camera)          // 12. 渲染场景
+        sources.forEach(s => s.syncPositions())  // 4. body→mesh + rowText 同步
+        destruction.getDebris().forEach(syncDebrisToMesh)            // 5. 碎片同步
+        water.updateTime(time)                   // 6. 水面波浪动画
+        gridUpdate()                            // 7. 网格跟随摄像机
+        keyboardUpdate()                        // 8. 键盘移动相机
+        cameraInfoUpdate()                      // 9. 更新 HUD
+        elementPanelUpdate()                    // 10. 更新元素列表
+        renderer.render(scene, camera)          // 11. 渲染场景
     } catch (e) {
         console.warn('Frame update failed:', e)
     }

@@ -1,5 +1,8 @@
 import type {PanelContext} from '../../base/ui'
-import type {WaterEntityContext} from '../types'
+import type {WaterEntityContext, WaterBlock} from '../types'
+
+export const formatRowText = (box: WaterBlock): string =>
+    `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}`
 
 const DEFAULT_STEP = '0.01'
 

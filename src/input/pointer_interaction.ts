@@ -1,28 +1,17 @@
 import {Raycaster, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type Mesh} from 'three'
-import type {CommonEntityContext} from '../entity/box/common/types'
-import type {DestructionEntityContext} from '../entity/box/destructed/types'
-import type {WaterEntityContext} from '../entity/box/water/types'
+import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
-import {DEFAULT_MAX_HEALTH} from '../entity/box/destructed/physics/constants.ts'
-import {DEFAULT_WATER_CONFIG} from '../entity/box/water/physics/constants.ts'
 import {focusPanel} from '../ui/panel.ts'
-
-const COMMON_CONFIG = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3} as const
-const DESTR_CONFIG = {
-    width: 1, height: 1, depth: 1, mass: 1, friction: 0.3,
-    maxHealth: DEFAULT_MAX_HEALTH,
-} as const
 
 export type SpawnMode = 'common' | 'destruction' | 'water'
 
 export const setupPointerInteraction = (
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
-    common: CommonEntityContext,
-    destruction: DestructionEntityContext,
-    water: WaterEntityContext,
+    sources: EntityInfoSource[],
     getSpawnMode: () => SpawnMode,
 ): void => {
+    const sourcesByType = new Map(sources.map(s => [s.type, s]))
     const raycaster = new Raycaster()
     const pointer = new Vector2()
     const forward = new Vector3()
@@ -45,11 +34,9 @@ export const setupPointerInteraction = (
         pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
         raycaster.setFromCamera(pointer, camera)
 
-        const allMeshes = [...common.getMeshes(), ...destruction.getMeshes(), ...water.getMeshes()]
+        const allMeshes = sources.flatMap(s => s.getMeshes())
         if (allMeshes.length === 0) {
-            common.select(undefined)
-            destruction.select(undefined)
-            water.select(undefined)
+            sources.forEach(s => s.select(undefined))
             focusPanel(undefined)
             return
         }
@@ -58,37 +45,18 @@ export const setupPointerInteraction = (
         if (hits.length > 0) {
             const hitMesh = hits[0].object as Mesh
 
-            const wb = water.getAll().find(b => b.mesh === hitMesh)
-            if (wb) {
-                water.select(wb.id)
-                common.select(undefined)
-                destruction.select(undefined)
-                focusPanel(water.panel)
-                return
-            }
-
-            const pb = common.getAll().find(b => b.mesh === hitMesh)
-            if (pb) {
-                common.select(pb.id)
-                destruction.select(undefined)
-                water.select(undefined)
-                focusPanel(common.panel)
-                return
-            }
-
-            const db = destruction.getAll().find(b => b.mesh === hitMesh)
-            if (db) {
-                destruction.select(db.id)
-                common.select(undefined)
-                water.select(undefined)
-                focusPanel(destruction.panel)
-                return
+            for (const source of sources) {
+                const entity = source.getEntityList().find(e => e.mesh === hitMesh)
+                if (entity) {
+                    sources.forEach(s => s.select(undefined))
+                    source.select(entity.id)
+                    focusPanel(source.panel)
+                    return
+                }
             }
         }
 
-        common.select(undefined)
-        destruction.select(undefined)
-        water.select(undefined)
+        sources.forEach(s => s.select(undefined))
         focusPanel(undefined)
     })
 
@@ -98,12 +66,9 @@ export const setupPointerInteraction = (
         const spawnPos = new Vector3().copy(camera.position).add(forward.clone().multiplyScalar(SPAWN_DIST))
 
         const mode = getSpawnMode()
-        if (mode === 'common') {
-            common.add(COMMON_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
-        } else if (mode === 'destruction') {
-            destruction.add(DESTR_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
-        } else {
-            water.add(DEFAULT_WATER_CONFIG, spawnPos.x, spawnPos.y, spawnPos.z)
+        const source = sourcesByType.get(mode)
+        if (source) {
+            source.spawnAt(spawnPos.x, spawnPos.y, spawnPos.z)
         }
     })
 }

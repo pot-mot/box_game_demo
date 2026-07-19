@@ -1,26 +1,19 @@
-import type {CommonEntityContext, CommonBox} from '../entity/box/common/types'
-import type {DestructionEntityContext, DestructibleBox} from '../entity/box/destructed/types'
-import type {WaterEntityContext, WaterBlock} from '../entity/box/water/types'
+import type {EntityInfoSource, EntityPanelInfo} from '../entity/box/base/types/entity_info.ts'
 import {focusPanel} from './panel.ts'
-
-type EntityEntry =
-    | {type: 'common'; box: CommonBox}
-    | {type: 'destruction'; box: DestructibleBox}
-    | {type: 'water'; box: WaterBlock}
 
 const ROW_STYLE = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer'
 const INFO_STYLE = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
 const DEL_STYLE = 'background:none;border:none;color:#f66;cursor:pointer;font:14px/1 monospace;padding:0 4px'
 
-const createRow = (id: number, type: string): HTMLElement => {
+const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElement => {
     const row = document.createElement('div')
     row.style.cssText = ROW_STYLE
     row.dataset.id = String(id)
 
     const typeBadge = document.createElement('span')
     typeBadge.style.cssText = 'font-size:10px;padding:1px 4px;border-radius:3px;margin-right:4px'
-    typeBadge.textContent = type
-    typeBadge.style.background = type === 'C' ? '#448' : type === 'W' ? '#484' : '#844'
+    typeBadge.textContent = badgeLabel
+    typeBadge.style.background = badgeColor
     typeBadge.style.color = '#fff'
     row.appendChild(typeBadge)
 
@@ -38,44 +31,8 @@ const createRow = (id: number, type: string): HTMLElement => {
     return row
 }
 
-const formatInfo = (id: number, p: {x: number; y: number; z: number}, c: {width: number; height: number; depth: number; mass: number}): string =>
-    `#${id}  (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})  ${c.width}×${c.height}×${c.depth}  m:${c.mass}`
-
-const formatDestrInfo = (id: number, p: {x: number; y: number; z: number}, c: {width: number; height: number; depth: number; mass: number; maxHealth: number}, health: number): string =>
-    `#${id}  (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})  ${c.width}×${c.height}×${c.depth}  HP:${health.toFixed(0)}/${c.maxHealth}`
-
-const formatWaterInfo = (id: number, p: {x: number; y: number; z: number}, c: {width: number; height: number; depth: number}): string =>
-    `#${id}  (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})  ${c.width}×${c.height}×${c.depth}`
-
-const fillRow = (row: HTMLElement, entry: EntityEntry): void => {
-    const span = row.children[1] as HTMLElement
-    if (entry.type === 'common') {
-        span.textContent = formatInfo(entry.box.id, entry.box.mesh.position, entry.box.config)
-    } else if (entry.type === 'destruction') {
-        span.textContent = formatDestrInfo(entry.box.id, entry.box.mesh.position, entry.box.config, entry.box.health)
-    } else {
-        span.textContent = formatWaterInfo(entry.box.id, entry.box.mesh.position, entry.box.config)
-    }
-}
-
-const getSelId = (entry: EntityEntry): number | undefined => {
-    if (entry.type === 'common') return commonCtx.getSelectedId()
-    if (entry.type === 'destruction') return destrCtx.getSelectedId()
-    return waterCtx.getSelectedId()
-}
-
-let commonCtx: CommonEntityContext
-let destrCtx: DestructionEntityContext
-let waterCtx: WaterEntityContext
-
-export const setupElementPanel = (
-    common: CommonEntityContext,
-    destruction: DestructionEntityContext,
-    water: WaterEntityContext,
-): () => void => {
-    commonCtx = common
-    destrCtx = destruction
-    waterCtx = water
+export const setupElementPanel = (sources: EntityInfoSource[]): () => void => {
+    const sourcesByType = new Map(sources.map(s => [s.type, s]))
 
     const el = document.createElement('div')
     el.id = 'element-panel'
@@ -102,27 +59,10 @@ export const setupElementPanel = (
 
     let emptyEl: HTMLElement | undefined
 
-    const findEntry = (id: number): EntityEntry | undefined => {
-        const cb = common.getAll().find(b => b.id === id)
-        if (cb) return {type: 'common', box: cb}
-        const db = destruction.getAll().find(b => b.id === id)
-        if (db) return {type: 'destruction', box: db}
-        const wb = water.getAll().find(b => b.id === id)
-        if (wb) return {type: 'water', box: wb}
-        return undefined
-    }
+    const getRowKey = (entry: EntityPanelInfo): string => `${entry.type}-${entry.id}`
 
-    const focusEntry = (entry: EntityEntry): void => {
-        common.select(undefined)
-        destruction.select(undefined)
-        water.select(undefined)
-        if (entry.type === 'common') common.select(entry.box.id)
-        else if (entry.type === 'destruction') destruction.select(entry.box.id)
-        else water.select(entry.box.id)
-        focusPanel(entry.type === 'common' ? common.panel
-            : entry.type === 'destruction' ? destruction.panel
-            : water.panel)
-    }
+    const findSource = (entry: EntityPanelInfo): EntityInfoSource | undefined =>
+        sourcesByType.get(entry.type)
 
     list.addEventListener('click', (e: MouseEvent) => {
         const target = e.target as HTMLElement
@@ -130,73 +70,83 @@ export const setupElementPanel = (
         if (!row) return
 
         const id = Number(row.dataset.id)
-        const entry = findEntry(id)
+        const type = row.dataset.type as string
+        const source = sourcesByType.get(type as any)
+        if (!source) return
+
+        const entry = rows.get(`${type}-${id}`)
         if (!entry) return
 
         if (target.classList.contains('ep-del')) {
-            const wasSelected = getSelId(entry) === id
-            if (entry.type === 'common') common.remove(id)
-            else if (entry.type === 'destruction') destruction.remove(id)
-            else water.remove(id)
+            const wasSelected = source.getSelectedId() === id
+            source.remove(id)
             if (wasSelected) focusPanel(undefined)
             return
         }
 
-        focusEntry(entry)
+        sources.forEach(s => s.select(undefined))
+        source.select(id)
+        focusPanel(source.panel)
     })
 
     let hoveredId: number | undefined
+    let hoveredType: string | undefined
 
     list.addEventListener('mouseover', (e: MouseEvent) => {
         const row = (e.target as HTMLElement).closest<HTMLElement>('[data-id]')
-        hoveredId = row ? Number(row.dataset.id) : undefined
+        if (row) {
+            hoveredId = Number(row.dataset.id)
+            hoveredType = row.dataset.type
+        } else {
+            hoveredId = undefined
+            hoveredType = undefined
+        }
     })
 
     list.addEventListener('mouseout', () => {
         hoveredId = undefined
+        hoveredType = undefined
     })
 
     document.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.key === 'Delete' && hoveredId !== undefined) {
-            const entry = findEntry(hoveredId)
-            if (entry) {
-                const wasSelected = getSelId(entry) === hoveredId
-                if (entry.type === 'common') common.remove(hoveredId)
-                else if (entry.type === 'destruction') destruction.remove(hoveredId)
-                else water.remove(hoveredId)
+        if (e.key === 'Delete' && hoveredId !== undefined && hoveredType !== undefined) {
+            const source = sourcesByType.get(hoveredType as any)
+            if (source) {
+                const wasSelected = source.getSelectedId() === hoveredId
+                source.remove(hoveredId)
                 if (wasSelected) focusPanel(undefined)
             }
             hoveredId = undefined
+            hoveredType = undefined
         }
     })
 
     return () => {
-        const allItems: EntityEntry[] = [
-            ...common.getAll().map(b => ({type: 'common' as const, box: b})),
-            ...destruction.getAll().map(b => ({type: 'destruction' as const, box: b})),
-            ...water.getAll().map(b => ({type: 'water' as const, box: b})),
-        ]
+        const allItems: EntityPanelInfo[] = sources.flatMap(s => s.panelInfo)
 
         for (const [key, row] of rows) {
-            if (!allItems.some(e => key === `${e.type}-${e.box.id}`)) {
+            if (!allItems.some(e => getRowKey(e) === key)) {
                 row.remove()
                 rows.delete(key)
             }
         }
 
         for (const entry of allItems) {
-            const key = `${entry.type}-${entry.box.id}`
+            const key = getRowKey(entry)
             let row = rows.get(key)
             if (!row) {
-                const typeLabel = entry.type === 'common' ? 'C' : entry.type === 'destruction' ? 'D' : 'W'
-                row = createRow(entry.box.id, typeLabel)
+                row = createRow(entry.id, entry.badgeLabel, entry.badgeColor)
+                row.dataset.type = entry.type
                 list.appendChild(row)
                 rows.set(key, row)
             }
 
-            fillRow(row, entry)
-            const selId = getSelId(entry)
-            row.className = entry.box.id === selId ? 'ep-row ep-sel' : 'ep-row'
+            const span = row.children[1] as HTMLElement
+            span.textContent = entry.rowText
+
+            const source = findSource(entry)
+            const selId = source?.getSelectedId()
+            row.className = entry.id === selId ? 'ep-row ep-sel' : 'ep-row'
         }
 
         if (allItems.length === 0) {

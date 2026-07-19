@@ -1,5 +1,8 @@
 import type {PanelContext} from '../../base/ui'
-import type {CommonEntityContext} from '../types'
+import type {CommonEntityContext, CommonBox} from '../types'
+
+export const formatRowText = (box: CommonBox): string =>
+    `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  m:${box.config.mass}`
 
 const DEFAULT_STEP = '0.01'
 

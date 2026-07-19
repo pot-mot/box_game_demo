@@ -9,7 +9,10 @@ import {
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, DEBRIS_COLLISION_GROUP, DEBRIS_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {DestructibleConfig, DestructibleBox, DestructibleDebris, DestructionEntityContext, CollisionRecord} from '../types'
+import type {EntityPanelInfo} from '../../base/types/entity_info'
+import {createEmitter} from '../../base/types/event_emitter'
 import {
+    DEFAULT_MAX_HEALTH,
     IMPACT_FORCE_SCALE,
     DEBRIS_LIFETIME,
     COLLISION_COOLDOWN,
@@ -25,8 +28,17 @@ import {
 } from '../render'
 import {findNonOverlappingY} from '../../base/physics'
 import {computeFractureFromPoints} from '../geometry/voronoi_fracture.ts'
-import {createDestructionPanel} from '../ui'
+import {formatRowText, createDestructionPanel} from '../ui'
 import type {PanelContext} from '../../base/ui'
+
+const DEFAULT_CONFIG: DestructibleConfig = {
+    width: 1, height: 1, depth: 1, mass: 1, friction: 0.3,
+    maxHealth: DEFAULT_MAX_HEALTH,
+}
+
+const TYPE = 'destruction' as const
+const BADGE_LABEL = 'D'
+const BADGE_COLOR = '#844'
 
 let globalBoxId = 1
 
@@ -36,6 +48,25 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
     const boxes: DestructibleBox[] = []
     const allDebris: DestructibleDebris[] = []
     let selectedId: number | undefined
+    const panelInfo: EntityPanelInfo[] = []
+
+    const rebuildPanelInfo = () => {
+        panelInfo.length = 0
+        for (const b of boxes) {
+            panelInfo.push({
+                id: b.id,
+                type: TYPE,
+                badgeLabel: BADGE_LABEL,
+                badgeColor: BADGE_COLOR,
+                rowText: b.rowText,
+            })
+        }
+    }
+
+    const refreshRowText = (box: DestructibleBox): void => {
+        box.rowText = formatRowText(box)
+        box.emitter.emit('infoUpdate')
+    }
 
     const add = (config: DestructibleConfig, x: number, y: number, z: number): DestructibleBox => {
         const id = globalBoxId++
@@ -110,6 +141,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
 
         body.addEventListener('collide', onCollide)
 
+        const emitter = createEmitter()
         const pb: DestructibleBox = {
             id, mesh, edges, cracks: undefined,
             body, config: {...config},
@@ -122,9 +154,18 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             _collisionHistory,
             _cooldowns,
             _onCollide: onCollide,
+            emitter,
+            rowText: '',
         }
+        refreshRowText(pb)
+        emitter.on('infoUpdate', rebuildPanelInfo)
         boxes.push(pb)
+        rebuildPanelInfo()
         return pb
+    }
+
+    const spawnAt = (x: number, y: number, z: number): void => {
+        add(DEFAULT_CONFIG, x, y, z)
     }
 
     const remove = (id: number): void => {
@@ -148,6 +189,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
 
         world.removeBody(pb.body)
         boxes.splice(idx, 1)
+        rebuildPanelInfo()
     }
 
     const select = (id: number | undefined): DestructibleBox | undefined => {
@@ -239,14 +281,21 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             const cols = pb._collisions
             if (cols.length === 0) continue
 
+            let healthChanged = false
+
             for (const col of cols) {
                 const impact = col.relativeVelocity * pb.config.mass * IMPACT_FORCE_SCALE
                 pb.health -= impact
+                healthChanged = true
                 if (pb.health > 0) {
                     const intensity = 1 - pb.health / pb.config.maxHealth
                     applyDeformation(pb, col.contactPoint, col.normal, intensity)
                     applyCracks(pb, col.contactPoint, col.normal, intensity)
                 }
+            }
+
+            if (healthChanged) {
+                refreshRowText(pb)
             }
 
             if (pb.health <= 0 && !pb.destroyed) {
@@ -276,6 +325,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
                 const dynamicEjectForce = avgSpeed * EJECT_VELOCITY_SCALE
 
                 spawnDebris(pb, lastCol ? lastCol.contactPoint : [0, 0, 0], dynamicEjectForce)
+                rebuildPanelInfo()
             }
             cols.length = 0
         }
@@ -314,20 +364,36 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
                 if (selectedId === pb.id) select(undefined)
                 if (pb._onCollide) pb.body.removeEventListener('collide', pb._onCollide)
                 boxes.splice(i, 1)
+                rebuildPanelInfo()
             }
         }
     }
 
+    const syncPositions = (): void => {
+        for (const pb of boxes) {
+            if (pb.destroyed) continue
+            pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
+            pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)
+            pb.rowText = formatRowText(pb)
+        }
+        rebuildPanelInfo()
+    }
+
     const ctx: DestructionEntityContext = {
+        type: TYPE,
+        panelInfo,
         add,
+        spawnAt,
         remove,
         select,
         getSelected,
         getSelectedId,
         getAll: () => boxes,
+        getEntityList: () => boxes,
         getMeshes: () => boxes.map(b => b.mesh),
         getDebris: () => allDebris,
         updatePhysics,
+        syncPositions,
         panel: undefined as unknown as PanelContext,
     }
     ctx.panel = createDestructionPanel(ctx)

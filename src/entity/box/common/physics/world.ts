@@ -8,10 +8,18 @@ import {
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {CommonBoxConfig, CommonBox, CommonEntityContext} from '../types'
+import type {EntityPanelInfo} from '../../base/types/entity_info'
+import {createEmitter} from '../../base/types/event_emitter'
 import {createCommonBoxMesh, updateCommonBoxMeshSize, disposeCommonBoxMesh, createWireframe, disposeWireframe} from '../render'
 import {findNonOverlappingY} from '../../base/physics'
-import {createCommonPanel} from '../ui'
+import {formatRowText, createCommonPanel} from '../ui'
 import type {PanelContext} from '../../base/ui'
+
+const DEFAULT_CONFIG: CommonBoxConfig = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3}
+
+const TYPE = 'common' as const
+const BADGE_LABEL = 'C'
+const BADGE_COLOR = '#448'
 
 export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntityContext => {
     const {world, boxMat} = shared
@@ -19,6 +27,25 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
     const boxes: CommonBox[] = []
     let nextId = 1
     let selectedId: number | undefined
+    const panelInfo: EntityPanelInfo[] = []
+
+    const rebuildPanelInfo = () => {
+        panelInfo.length = 0
+        for (const b of boxes) {
+            panelInfo.push({
+                id: b.id,
+                type: TYPE,
+                badgeLabel: BADGE_LABEL,
+                badgeColor: BADGE_COLOR,
+                rowText: b.rowText,
+            })
+        }
+    }
+
+    const refreshRowText = (box: CommonBox): void => {
+        box.rowText = formatRowText(box)
+        box.emitter.emit('infoUpdate')
+    }
 
     const add = (config: CommonBoxConfig, x: number, y: number, z: number): CommonBox => {
         const id = nextId++
@@ -39,9 +66,17 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         body.addShape(new Box(new Vec3(hw, hh, hd)))
         body.position.set(x, adjustedY, z)
         world.addBody(body)
-        const pb: CommonBox = {id, mesh, body, config: {...config}, edges, wireframe: undefined}
+        const emitter = createEmitter()
+        const pb: CommonBox = {id, mesh, body, config: {...config}, edges, wireframe: undefined, emitter, rowText: ''}
+        refreshRowText(pb)
+        emitter.on('infoUpdate', rebuildPanelInfo)
         boxes.push(pb)
+        rebuildPanelInfo()
         return pb
+    }
+
+    const spawnAt = (x: number, y: number, z: number): void => {
+        add(DEFAULT_CONFIG, x, y, z)
     }
 
     const remove = (id: number): void => {
@@ -60,6 +95,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         for (const b of boxes) {
             if (b.body.type === BODY_TYPES.DYNAMIC) b.body.wakeUp()
         }
+        rebuildPanelInfo()
     }
 
     const select = (id: number | undefined): CommonBox | undefined => {
@@ -130,6 +166,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
             }
         }
         pb.config = cfg
+        refreshRowText(pb)
     }
 
     const setTransform = (
@@ -144,16 +181,31 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         pb.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
         pb.body.quaternion.set(pb.mesh.quaternion.x, pb.mesh.quaternion.y, pb.mesh.quaternion.z, pb.mesh.quaternion.w)
         if (pb.body.type === BODY_TYPES.DYNAMIC) pb.body.wakeUp()
+        refreshRowText(pb)
+    }
+
+    const syncPositions = (): void => {
+        for (const pb of boxes) {
+            pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
+            pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)
+            pb.rowText = formatRowText(pb)
+        }
+        rebuildPanelInfo()
     }
 
     const ctx: CommonEntityContext = {
+        type: TYPE,
+        panelInfo,
         add,
+        spawnAt,
         remove,
         select,
         getSelected,
         getSelectedId,
         getAll: () => boxes,
+        getEntityList: () => boxes,
         getMeshes: () => boxes.map(b => b.mesh),
+        syncPositions,
         updateConfig,
         setTransform,
         panel: undefined as unknown as PanelContext,

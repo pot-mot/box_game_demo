@@ -1,5 +1,6 @@
 import type {Mesh} from 'three'
 import type {Body} from 'cannon-es'
+import type {EventEmitter} from './event_emitter'
 import type {PanelContext} from '../ui'
 
 export interface BoxSize {
@@ -23,6 +24,8 @@ export interface BaseEntity<TConfig> {
     id: number
     config: TConfig
     mesh: Mesh
+    emitter: EventEmitter
+    rowText: string
 }
 
 export interface HasBody {

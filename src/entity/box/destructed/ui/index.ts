@@ -1,5 +1,8 @@
 import type {PanelContext} from '../../base/ui'
-import type {DestructionEntityContext} from '../types'
+import type {DestructionEntityContext, DestructibleBox} from '../types'
+
+export const formatRowText = (box: DestructibleBox): string =>
+    `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  HP:${box.health.toFixed(0)}/${box.config.maxHealth}`
 
 export const createDestructionPanel = (ctx: DestructionEntityContext): PanelContext => {
     const el = document.createElement('div')
