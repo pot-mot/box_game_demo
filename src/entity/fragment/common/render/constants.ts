@@ -1,0 +1,1 @@
+export const FRAGMENT_EDGE_COLOR = 0x222222

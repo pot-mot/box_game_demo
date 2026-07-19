@@ -8,10 +8,10 @@ import {
     LineSegments,
     BufferAttribute,
 } from 'three'
-import type {DestructibleConfig, DestructibleBox, DestructibleDebris, FragmentData} from '../types'
+import type {DestructibleConfig, DestructibleBox} from '../types'
 import {gridTexture} from '../../../../render/texture.ts'
 import {makeEdgeLines} from '../../base/render'
-import {EDGE_COLOR, CRACK_COLOR, DEFORMATION_FACTOR, FRAGMENT_EDGE_COLOR} from './constants.ts'
+import {EDGE_COLOR, CRACK_COLOR, DEFORMATION_FACTOR} from './constants.ts'
 
 // ── 网格 ──
 
@@ -166,46 +166,4 @@ export const applyCracks = (
     pb.mesh.add(pb.cracks)
 }
 
-// ── 碎片/残骸 ──
 
-export const createFragmentMesh = (data: FragmentData): Mesh => {
-    const geo = new BufferGeometry()
-    geo.setAttribute('position', new BufferAttribute(data.renderVertices, 3))
-    geo.setIndex(data.renderIndices)
-    geo.computeVertexNormals()
-    return new Mesh(geo, new MeshBasicMaterial({map: gridTexture()}))
-}
-
-export const createFragmentEdges = (data: FragmentData): LineSegments => {
-    const edgeSet = new Set<string>()
-    const edgePts: number[] = []
-    for (const face of data.hullFaces) {
-        for (let i = 0; i < face.length; i++) {
-            const a = face[i], b = face[(i + 1) % face.length]
-            const key = a < b ? `${a},${b}` : `${b},${a}`
-            if (!edgeSet.has(key)) {
-                edgeSet.add(key)
-                const v1 = data.hullVertices[a]
-                const v2 = data.hullVertices[b]
-                edgePts.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z)
-            }
-        }
-    }
-    const geo = new BufferGeometry()
-    geo.setAttribute('position', new BufferAttribute(new Float32Array(edgePts), 3))
-    return new LineSegments(geo, new LineBasicMaterial({color: FRAGMENT_EDGE_COLOR}))
-}
-
-export const createDebrisFromFragment = (data: FragmentData): {mesh: Mesh; edges: LineSegments} => {
-    const mesh = createFragmentMesh(data)
-    const edges = createFragmentEdges(data)
-    mesh.add(edges)
-    return {mesh, edges}
-}
-
-// ── 同步 ──
-
-export const syncDebrisToMesh = (d: DestructibleDebris): void => {
-    d.mesh.position.set(d.body.position.x, d.body.position.y, d.body.position.z)
-    d.mesh.quaternion.set(d.body.quaternion.x, d.body.quaternion.y, d.body.quaternion.z, d.body.quaternion.w)
-}

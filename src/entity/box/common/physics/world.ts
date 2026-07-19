@@ -20,7 +20,7 @@ import type {EntityType} from "../../../constants.ts";
 
 // ── 常量 ──
 
-const TYPE: EntityType = 'common' as const
+const TYPE: EntityType = 'box/common' as const
 const BADGE_LABEL = 'C'
 const BADGE_COLOR = '#448'
 

@@ -5,9 +5,9 @@ import {setupMouseOrbit} from './input/mouse_orbit.ts'
 import {createSharedWorld} from './physics/world.ts'
 import {setupCommonBoxes} from './entity/box/common/physics/world.ts'
 import {setupDestructibleBoxes} from './entity/box/destructed/physics/world.ts'
+import {setupFragmentEntities} from './entity/fragment/common/physics/world.ts'
 import {setupWaterBlocks} from './entity/box/water/physics/world.ts'
 import {setupWaterPhysics} from './entity/box/water/physics/forces.ts'
-import {syncDebrisToMesh} from './entity/box/destructed/render'
 import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
 import {setupElementPanel} from './ui/element_panel.ts'
@@ -31,25 +31,28 @@ const shared = createSharedWorld()
 // --- 普通箱子子系统 ---
 const common = setupCommonBoxes(scene, shared)
 
+// --- 碎块子系统（需在 destructed 前初始化）---
+const fragments = setupFragmentEntities(scene, shared)
+
 // --- 可破坏箱子子系统 ---
-const destruction = setupDestructibleBoxes(scene, shared)
+const destruction = setupDestructibleBoxes(scene, shared, fragments)
 
 // --- 水方块子系统 ---
 const water = setupWaterBlocks(scene)
 const waterPhysicsUpdate = setupWaterPhysics(
-    () => [...common.getAll().map(e => e.body), ...destruction.getAll().map(e => e.body), ...destruction.getDebris().map(d => d.body)],
+    () => [...common.getAll().map(e => e.body), ...destruction.getAll().map(e => e.body), ...fragments.getAll().map(f => f.body)],
     () => water.getAll().map(w => ({config: w.config, position: w.mesh.position})),
 )
 
 // --- 统一 entity 列表 ---
-const sources = [common, destruction, water]
+const sources = [common, destruction, fragments, water]
 
 // --- Spawn mode (1=common, 2=destruction, 3=water) ---
-let spawnMode: SpawnMode = 'common'
+let spawnMode: SpawnMode = 'box/common'
 window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.code === 'Digit1') spawnMode = 'common'
-    if (e.code === 'Digit2') spawnMode = 'destruction'
-    if (e.code === 'Digit3') spawnMode = 'water'
+    if (e.code === 'Digit1') spawnMode = 'box/common'
+    if (e.code === 'Digit2') spawnMode = 'box/destruction'
+    if (e.code === 'Digit3') spawnMode = 'box/water'
 })
 
 const getSpawnMode = (): SpawnMode => spawnMode
@@ -71,10 +74,10 @@ const tick = (time: number): void => {
 
     try {
         shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)    // 1. 步进物理世界
-        destruction.updatePhysics(delta)         // 2. 伤害累计 + 破碎触发
-        waterPhysicsUpdate()                     // 3. 水方块浮力计算
-        sources.forEach(s => s.syncPositions())  // 4. body→mesh + rowText 同步
-        destruction.getDebris().forEach(syncDebrisToMesh)            // 5. 碎片同步
+        destruction.updatePhysics(delta)         // 2. 伤害累计 → 破碎触发
+        fragments.updatePhysics(delta)           // 3. 碎块生命周期递减
+        waterPhysicsUpdate()                     // 4. 水方块浮力计算
+        sources.forEach(s => s.syncPositions())  // 5. body→mesh + rowText 同步
         water.updateTime(time)                   // 6. 水面波浪动画
         gridUpdate()                            // 7. 网格跟随摄像机
         keyboardUpdate()                        // 8. 键盘移动相机

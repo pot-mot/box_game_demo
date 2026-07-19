@@ -3,7 +3,7 @@ import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 import {focusPanel} from '../ui/panel.ts'
 
-export type SpawnMode = 'common' | 'destruction' | 'water'
+export type SpawnMode = 'box/common' | 'box/destruction' | 'box/water'
 
 export const setupPointerInteraction = (
     camera: PerspectiveCamera,
