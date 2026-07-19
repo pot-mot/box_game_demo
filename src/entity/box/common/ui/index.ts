@@ -1,43 +1,11 @@
 import type {PanelContext} from '../../base/ui'
 import type {CommonEntityContext, CommonBox} from '../types'
+import {createNumberInput, createLabeledNumberInput} from '../../../../ui/components/number_input.ts'
+import {createSection} from '../../../../ui/components/section.ts'
+import {createButtonRow} from '../../../../ui/components/button_row.ts'
 
 export const formatRowText = (box: CommonBox): string =>
     `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  m:${box.config.mass}`
-
-const DEFAULT_STEP = '0.01'
-
-const createNumberInput = (attrs: Record<string, string>): HTMLInputElement => {
-    const input = document.createElement('input')
-    input.type = 'number'
-    input.step = attrs.step ?? DEFAULT_STEP
-    if (attrs.min !== undefined) input.min = attrs.min
-    if (attrs.max !== undefined) input.max = attrs.max
-    if (attrs.value !== undefined) input.value = attrs.value
-    if (attrs.style) input.style.cssText = attrs.style
-    input.addEventListener('change', () => {
-        const val = parseFloat(input.value)
-        if (isNaN(val)) return
-        if (attrs.min !== undefined && val < parseFloat(attrs.min)) input.value = attrs.min
-        if (attrs.max !== undefined && val > parseFloat(attrs.max)) input.value = attrs.max
-    })
-    return input
-}
-
-const createLabeledNumberInput = (parent: HTMLElement, label: string, attrs: Record<string, string> = {}): HTMLInputElement => {
-    const input = createNumberInput(attrs)
-    const labelEl = document.createElement('label')
-    labelEl.textContent = label + ' '
-    labelEl.appendChild(input)
-    parent.appendChild(labelEl)
-    return input
-}
-
-const createSection = (title: string): HTMLDivElement => {
-    const div = document.createElement('div')
-    div.style.cssText = 'border-top:1px solid #555;padding:4px 0'
-    div.textContent = title
-    return div
-}
 
 export const createCommonPanel = (ctx: CommonEntityContext): PanelContext => {
     const el = document.createElement('div')
@@ -81,16 +49,7 @@ export const createCommonPanel = (ctx: CommonEntityContext): PanelContext => {
 
     const friction = createLabeledNumberInput(el, 'Friction', {min: '0', max: '1', step: '0.01', value: '0.3', style: 'width:80px'})
 
-    const btnRow = document.createElement('div')
-    btnRow.style.cssText = 'display:flex;gap:8px;margin-top:8px'
-    const applyBtn = document.createElement('button')
-    applyBtn.style.flex = '1'
-    applyBtn.textContent = 'Apply'
-    const deleteBtn = document.createElement('button')
-    deleteBtn.style.flex = '1'
-    deleteBtn.textContent = 'Delete'
-    btnRow.appendChild(applyBtn)
-    btnRow.appendChild(deleteBtn)
+    const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
     return {

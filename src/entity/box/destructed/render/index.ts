@@ -23,6 +23,26 @@ export const createDestructibleBoxMesh = (config: DestructibleConfig): {mesh: Me
     return {mesh, edges}
 }
 
+// ── 尺寸更新 ──
+
+export const updateDestructibleBoxMeshSize = (pb: DestructibleBox, config: DestructibleConfig): void => {
+    const geo = new BoxGeometry(config.width, config.height, config.depth)
+    pb.mesh.geometry.dispose()
+    pb.mesh.geometry = geo
+    pb.mesh.remove(pb.edges)
+    pb.edges.geometry.dispose()
+    ;(pb.edges.material as LineBasicMaterial).dispose()
+    pb.edges = makeEdgeLines(geo, EDGE_COLOR)
+    pb.mesh.add(pb.edges)
+    pb.vertexOffsets = undefined
+    if (pb.cracks) {
+        pb.mesh.remove(pb.cracks)
+        pb.cracks.geometry.dispose()
+        ;(pb.cracks.material as LineBasicMaterial).dispose()
+        pb.cracks = undefined
+    }
+}
+
 // ── 形变 ──
 
 export const applyDeformation = (

@@ -7,8 +7,9 @@ import {
     ConvexPolyhedron,
 } from 'cannon-es'
 import type {SharedWorld} from '../../../../physics/world.ts'
-import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, DEBRIS_COLLISION_GROUP, DEBRIS_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, DEBRIS_COLLISION_GROUP, DEBRIS_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {DestructibleConfig, DestructibleBox, DestructibleDebris, DestructionEntityContext, CollisionRecord} from '../types'
+import type {XYZ} from '../../base/types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter} from '../../base/types/event_emitter'
 import {
@@ -22,6 +23,7 @@ import {
 } from './constants.ts'
 import {
     createDestructibleBoxMesh,
+    updateDestructibleBoxMeshSize,
     applyDeformation,
     applyCracks,
     createDebrisFromFragment,
@@ -225,6 +227,67 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
 
     const getSelectedId = (): number | undefined => selectedId
 
+    // ── 配置更新 ──
+
+    const updateConfig = (id: number, partial: Partial<DestructibleConfig>): void => {
+        const pb = boxes.find(b => b.id === id)
+        if (!pb || pb.destroyed) return
+        const old = pb.config
+        const cfg: DestructibleConfig = {...old, ...partial}
+        const changedSize = partial.width !== undefined || partial.height !== undefined || partial.depth !== undefined
+        const changedMass = partial.mass !== undefined && partial.mass !== old.mass
+        if (changedSize) {
+            const hh = cfg.height / 2
+            updateDestructibleBoxMeshSize(pb, cfg)
+            while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
+            pb.body.addShape(new Box(new Vec3(cfg.width / 2, hh, cfg.depth / 2)))
+            pb.body.updateMassProperties()
+            const oldBottom = pb.body.position.y - old.height / 2
+            const newBottom = pb.body.position.y - hh
+            if (newBottom < oldBottom || newBottom < GROUND_Y) {
+                const target = Math.max(oldBottom, GROUND_Y)
+                pb.body.position.y = target + hh
+                pb.mesh.position.y = target + hh
+            }
+            if (pb.wireframe) {
+                cleanupWireframe(pb)
+                pb.wireframe = createWireframe(pb.mesh.geometry)
+                pb.mesh.add(pb.wireframe)
+            }
+        }
+        if (changedMass) {
+            if (cfg.mass === 0) {
+                pb.body.type = BODY_TYPES.STATIC
+                pb.body.mass = 0
+            } else {
+                pb.body.type = BODY_TYPES.DYNAMIC
+                pb.body.mass = cfg.mass
+                pb.body.updateMassProperties()
+                pb.body.wakeUp()
+            }
+        }
+        pb.config = cfg
+        refreshRowText(pb)
+    }
+
+    const setTransform = (id: number, pos: XYZ, rotDeg: XYZ): void => {
+        const pb = boxes.find(b => b.id === id)
+        if (!pb || pb.destroyed) return
+        pb.mesh.position.set(pos.x, pos.y, pos.z)
+        pb.body.position.set(pos.x, pos.y, pos.z)
+        pb.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
+        pb.body.quaternion.set(pb.mesh.quaternion.x, pb.mesh.quaternion.y, pb.mesh.quaternion.z, pb.mesh.quaternion.w)
+        if (pb.body.type === BODY_TYPES.DYNAMIC) pb.body.wakeUp()
+        refreshRowText(pb)
+    }
+
+    const setHealth = (id: number, health: number): void => {
+        const pb = boxes.find(b => b.id === id)
+        if (!pb || pb.destroyed) return
+        pb.health = health
+        refreshRowText(pb)
+    }
+
     // ── 销毁 ──
 
     const spawnDebris = (pb: DestructibleBox, collisionPoint: [number, number, number], ejectForce: number): void => {
@@ -421,6 +484,9 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         getEntityList: () => boxes,
         getMeshes: () => boxes.map(b => b.mesh),
         getDebris: () => allDebris,
+        updateConfig,
+        setTransform,
+        setHealth,
         updatePhysics,
         syncPositions,
         panel: undefined as unknown as PanelContext,

@@ -1,6 +1,6 @@
 import type {Mesh, LineSegments} from 'three'
 import type {Body, Vec3} from 'cannon-es'
-import type {BaseEntity, RigidBodyConfig} from '../../base/types'
+import type {BaseEntity, RigidBodyConfig, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
 
 export interface DestructibleConfig extends RigidBodyConfig {
@@ -50,5 +50,8 @@ export interface DestructionEntityContext extends EntityInfoSource {
     getSelected: () => DestructibleBox | undefined
     getAll: () => DestructibleBox[]
     getDebris: () => DestructibleDebris[]
+    updateConfig: (id: number, partial: Partial<DestructibleConfig>) => void
+    setTransform: (id: number, pos: XYZ, rotDeg: XYZ) => void
+    setHealth: (id: number, health: number) => void
     updatePhysics: (dt: number) => void
 }
