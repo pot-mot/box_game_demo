@@ -6,7 +6,7 @@ let currentPanel: PanelContext | undefined
 const getContainer = (): HTMLElement => {
     if (!container) {
         container = document.createElement('div')
-        container.id = 'entity-panel'
+        container.id = 'entity-control-panel'
         document.body.appendChild(container)
     }
     return container

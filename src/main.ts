@@ -11,7 +11,7 @@ import {setupWaterBlocks} from './entity/box/water/physics/world.ts'
 import {setupWaterPhysics} from './entity/box/water/physics/forces.ts'
 import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
-import {setupElementPanel} from './ui/element_panel.ts'
+import {setupElementListPanel} from './ui/element_list_panel.ts'
 import {setupPointerInteraction, type SpawnMode} from './input/pointer_interaction.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
 
@@ -70,7 +70,7 @@ const cameraInfoUpdate = setupCameraInfo(camera, getSpawnMode)
 
 // --- 指针交互 + 元素列表 ---
 setupPointerInteraction(camera, renderer, sources, getSpawnMode)
-const elementPanelUpdate = setupElementPanel(sources)
+const elementListPanelUpdate = setupElementListPanel(sources)
 
 // --- 单 RAF 循环 ---
 let lastTime = performance.now()
@@ -108,7 +108,7 @@ const tick = (time: number): void => {
         renderer.render(scene, camera)
 
         cameraInfoUpdate()                      // 9. 更新 HUD
-        elementPanelUpdate()                    // 10. 更新元素列表
+        elementListPanelUpdate()                // 10. 更新元素列表
     } catch (e) {
         console.warn('Frame update failed:', e)
     }

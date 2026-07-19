@@ -1,7 +1,7 @@
 import {Raycaster, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type Mesh} from 'three'
 import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
-import {focusPanel} from '../ui/panel.ts'
+import {focusPanel} from '../ui/entity_control_panel.ts'
 
 export type SpawnMode = 'box/common' | 'box/destruction' | 'box/water'
 

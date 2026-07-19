@@ -1,5 +1,5 @@
 import type {EntityInfoSource, EntityPanelInfo} from '../entity/box/base/types/entity_info.ts'
-import {focusPanel} from './panel.ts'
+import {focusPanel} from './entity_control_panel.ts'
 
 const ROW_STYLE = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer'
 const INFO_STYLE = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
@@ -31,7 +31,7 @@ const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElem
     return row
 }
 
-export const setupElementPanel = (sources: EntityInfoSource[]): () => void => {
+export const setupElementListPanel = (sources: EntityInfoSource[]): () => void => {
     const sourcesByType = new Map(sources.map(s => [s.type, s]))
 
     // 订阅各数据源事件：当选中元素被删除时自动关闭面板
@@ -42,7 +42,7 @@ export const setupElementPanel = (sources: EntityInfoSource[]): () => void => {
     }
 
     const el = document.createElement('div')
-    el.id = 'element-panel'
+    el.id = 'element-list-panel'
     el.style.cssText = [
         'position: fixed; top: 120px; left: 16px;',
         'background: rgba(0,0,0,.75); color: #fff;',
