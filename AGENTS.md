@@ -27,28 +27,30 @@ Three.js + cannon-es 物理箱子交互演示。
 
 ### 代码风格
 
-3. **缩进** — 4 个空格。
+1. **缩进** — 4 个空格。
 
-4. **函数风格** — 拒绝非必要的 `class`、`function` 声明、`this`，尽可能使用 `const` 箭头函数，包括导出函数。
+2. **函数风格** — 拒绝非必要的 `class`、`function` 声明、`this`，尽可能使用 `const` 箭头函数，包括导出函数。
+
+3. **注释语言** — 所有注释必须使用中文。
 
 ### Import / Export
 
-5. **`verbatimModuleSyntax`** — 类型专用的 import 必须用 `import type`。若同模块同时需要值和类型，使用内联修饰符：
+1. **`verbatimModuleSyntax`** — 类型专用的 import 必须用 `import type`。若同模块同时需要值和类型，使用内联修饰符：
    ```ts
    import {Value, type SomeType} from 'module'
    ```
 
-6. **`import type` + `as`** — 类型冲突时用 `import type {Material as CannonMaterial} from 'cannon-es'`，值类型冲突时用 `import {Material as CannonMaterial}` 并额外使用 `type` 修饰符。
+2. **`import type` + `as`** — 类型冲突时用 `import type {Material as CannonMaterial} from 'cannon-es'`，值类型冲突时用 `import {Material as CannonMaterial}` 并额外使用 `type` 修饰符。
 
-7. **路径后缀** — import 路径必须包含 `.ts` 扩展名。
+3. **路径后缀** — import 路径必须包含 `.ts` 扩展名。
 
-8. **命名导出** — 禁止 `export default`，全部使用命名导出。
+4. **命名导出** — 禁止 `export default`，全部使用命名导出。
 
 ### 模块约定
 
-9. **常量集中** — 每个分包（`physics/`、`render/`、`input/`）的 magic number 必须提取到各自的 `constants.ts`。
+1. **常量集中** — 每个分包（`physics/`、`render/`、`input/`）的 magic number 必须提取到各自的 `constants.ts`。
 
-10. **RAF 回调** — 需要在每帧执行的逻辑返回 `() => void` 类型的 updater 函数，由 `main.ts` 的单 RAF 循环统一调用。
+2. **RAF 回调** — 需要在每帧执行的逻辑返回 `() => void` 类型的 updater 函数，由 `main.ts` 的单 RAF 循环统一调用。
 
 ## 项目结构
 

@@ -10,16 +10,21 @@ import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../.
 import type {CommonBoxConfig, CommonBox, CommonEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter} from '../../base/types/event_emitter'
-import {createCommonBoxMesh, updateCommonBoxMeshSize, disposeCommonBoxMesh, createWireframe, disposeWireframe} from '../render'
+import {createCommonBoxMesh, updateCommonBoxMeshSize, disposeCommonBoxMesh} from '../render'
+import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {formatRowText, createCommonPanel} from '../ui'
 import type {PanelContext} from '../../base/ui'
+
+// ── 常量 ──
 
 const DEFAULT_CONFIG: CommonBoxConfig = {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3}
 
 const TYPE = 'common' as const
 const BADGE_LABEL = 'C'
 const BADGE_COLOR = '#448'
+
+// ── 初始化 ──
 
 export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntityContext => {
     const {world, boxMat} = shared
@@ -46,6 +51,8 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         box.rowText = formatRowText(box)
         box.emitter.emit('infoUpdate')
     }
+
+    // ── 增删改查 ──
 
     const add = (config: CommonBoxConfig, x: number, y: number, z: number): CommonBox => {
         const id = nextId++
@@ -84,13 +91,10 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         if (idx === -1) return
         const pb = boxes[idx]
         if (selectedId === id) select(undefined)
+        cleanupWireframe(pb)
         scene.remove(pb.mesh)
         disposeCommonBoxMesh(pb)
         world.removeBody(pb.body)
-        if (pb.wireframe) {
-            pb.mesh.remove(pb.wireframe)
-            disposeWireframe(pb.wireframe)
-        }
         boxes.splice(idx, 1)
         for (const b of boxes) {
             if (b.body.type === BODY_TYPES.DYNAMIC) b.body.wakeUp()
@@ -98,14 +102,12 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         rebuildPanelInfo()
     }
 
+    // ── 选中管理 ──
+
     const select = (id: number | undefined): CommonBox | undefined => {
         if (selectedId !== undefined) {
             const prev = boxes.find(b => b.id === selectedId)
-            if (prev && prev.wireframe) {
-                prev.mesh.remove(prev.wireframe)
-                disposeWireframe(prev.wireframe)
-                prev.wireframe = undefined
-            }
+            if (prev) cleanupWireframe(prev)
         }
         selectedId = id
         if (id !== undefined) {
@@ -126,6 +128,8 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
     }
 
     const getSelectedId = (): number | undefined => selectedId
+
+    // ── 配置更新 ──
 
     const updateConfig = (id: number, partial: Partial<CommonBoxConfig>): void => {
         const pb = boxes.find(b => b.id === id)
@@ -148,8 +152,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
                 pb.mesh.position.y = target + hh
             }
             if (pb.wireframe) {
-                pb.mesh.remove(pb.wireframe)
-                disposeWireframe(pb.wireframe)
+                cleanupWireframe(pb)
                 pb.wireframe = createWireframe(pb.mesh.geometry)
                 pb.mesh.add(pb.wireframe)
             }
@@ -184,6 +187,8 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         refreshRowText(pb)
     }
 
+    // ── 同步 ──
+
     const syncPositions = (): void => {
         for (const pb of boxes) {
             pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
@@ -192,6 +197,8 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
         }
         rebuildPanelInfo()
     }
+
+    // ── 上下文 ──
 
     const ctx: CommonEntityContext = {
         type: TYPE,

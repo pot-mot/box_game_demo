@@ -2,6 +2,8 @@ import {BoxGeometry, ShaderMaterial, Mesh, Color, DoubleSide} from 'three'
 import type {WaterBlockConfig} from '../types'
 import {WATER_COLOR_DEEP, WATER_COLOR_SHALLOW, WATER_OPACITY, WAVE_FREQUENCY, WAVE_SPEED, WAVE_STRENGTH} from './constants.ts'
 
+// ── 着色器 ──
+
 const vertexShader = `
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -61,6 +63,8 @@ void main() {
 }
 `
 
+// ── 网格 ──
+
 export const createWaterBlockMesh = (config: WaterBlockConfig): Mesh => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
     const mat = new ShaderMaterial({
@@ -85,12 +89,12 @@ export const updateWaterBlockMeshSize = (mesh: Mesh, config: WaterBlockConfig): 
     const oldGeo = mesh.geometry
     mesh.geometry = new BoxGeometry(config.width, config.height, config.depth)
     oldGeo.dispose()
-    const mat = mesh.material as unknown as {uniforms: Record<string, {value: unknown}>}
+    const mat = mesh.material as ShaderMaterial
     mat.uniforms.uSizeY.value = config.height
 }
 
 export const disposeWaterBlockMesh = (mesh: Mesh): void => {
     mesh.geometry.dispose()
-    const mat = mesh.material as unknown as {dispose: () => void}
+    const mat = mesh.material as ShaderMaterial
     mat.dispose()
 }

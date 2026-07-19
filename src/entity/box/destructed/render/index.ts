@@ -13,6 +13,8 @@ import {gridTexture} from '../../../../render/texture.ts'
 import {makeEdgeLines} from '../../base/render'
 import {EDGE_COLOR, CRACK_COLOR, DEFORMATION_FACTOR, FRAGMENT_EDGE_COLOR} from './constants.ts'
 
+// ── 网格 ──
+
 export const createDestructibleBoxMesh = (config: DestructibleConfig): {mesh: Mesh; edges: LineSegments} => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
     const mesh = new Mesh(geo, new MeshBasicMaterial({map: gridTexture()}))
@@ -20,6 +22,8 @@ export const createDestructibleBoxMesh = (config: DestructibleConfig): {mesh: Me
     mesh.add(edges)
     return {mesh, edges}
 }
+
+// ── 形变 ──
 
 export const applyDeformation = (
     pb: DestructibleBox,
@@ -66,6 +70,8 @@ export const applyDeformation = (
         pb.mesh.add(pb.cracks)
     }
 }
+
+// ── 裂纹渲染 ──
 
 const generateCrackSegments = (
     contactPoint: [number, number, number],
@@ -140,6 +146,8 @@ export const applyCracks = (
     pb.mesh.add(pb.cracks)
 }
 
+// ── 碎片/残骸 ──
+
 export const createFragmentMesh = (data: FragmentData): Mesh => {
     const geo = new BufferGeometry()
     geo.setAttribute('position', new BufferAttribute(data.renderVertices, 3))
@@ -174,6 +182,8 @@ export const createDebrisFromFragment = (data: FragmentData): {mesh: Mesh; edges
     mesh.add(edges)
     return {mesh, edges}
 }
+
+// ── 同步 ──
 
 export const syncDebrisToMesh = (d: DestructibleDebris): void => {
     d.mesh.position.set(d.body.position.x, d.body.position.y, d.body.position.z)

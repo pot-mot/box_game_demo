@@ -32,6 +32,7 @@ export interface CollisionRecord {
 export interface DestructibleBox extends BaseEntity<DestructibleConfig> {
     edges: LineSegments
     cracks: LineSegments | undefined
+    wireframe: LineSegments | undefined
     body: Body
     health: number
     vertexOffsets: Float32Array | undefined

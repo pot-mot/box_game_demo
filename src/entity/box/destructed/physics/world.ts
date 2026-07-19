@@ -1,4 +1,4 @@
-import {type Scene} from 'three'
+import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
 import {
     Body,
     BODY_TYPES,
@@ -26,10 +26,13 @@ import {
     applyCracks,
     createDebrisFromFragment,
 } from '../render'
+import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {computeFractureFromPoints} from '../geometry/voronoi_fracture.ts'
 import {formatRowText, createDestructionPanel} from '../ui'
 import type {PanelContext} from '../../base/ui'
+
+// ── 常量 ──
 
 const DEFAULT_CONFIG: DestructibleConfig = {
     width: 1, height: 1, depth: 1, mass: 1, friction: 0.3,
@@ -41,6 +44,8 @@ const BADGE_LABEL = 'D'
 const BADGE_COLOR = '#844'
 
 let globalBoxId = 1
+
+// ── 初始化 ──
 
 export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): DestructionEntityContext => {
     const {world, boxMat} = shared
@@ -67,6 +72,8 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         box.rowText = formatRowText(box)
         box.emitter.emit('infoUpdate')
     }
+
+    // ── 碰撞处理 ──
 
     const add = (config: DestructibleConfig, x: number, y: number, z: number): DestructibleBox => {
         const id = globalBoxId++
@@ -143,7 +150,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
 
         const emitter = createEmitter()
         const pb: DestructibleBox = {
-            id, mesh, edges, cracks: undefined,
+            id, mesh, edges, cracks: undefined, wireframe: undefined,
             body, config: {...config},
             health: config.maxHealth,
             vertexOffsets: undefined,
@@ -168,23 +175,26 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         add(DEFAULT_CONFIG, x, y, z)
     }
 
+    // ── 增删改查 ──
+
     const remove = (id: number): void => {
         const idx = boxes.findIndex(b => b.id === id)
         if (idx === -1) return
         const pb = boxes[idx]
         if (selectedId === id) select(undefined)
 
+        cleanupWireframe(pb)
         if (pb._onCollide) pb.body.removeEventListener('collide', pb._onCollide)
         scene.remove(pb.mesh)
         pb.mesh.geometry.dispose()
-        ;(pb.mesh.material as any).dispose()
+        ;(pb.mesh.material as MeshBasicMaterial).dispose()
         pb.mesh.remove(pb.edges)
         pb.edges.geometry.dispose()
-        ;(pb.edges.material as any).dispose()
+        ;(pb.edges.material as LineBasicMaterial).dispose()
         if (pb.cracks) {
             pb.mesh.remove(pb.cracks)
             pb.cracks.geometry.dispose()
-            ;(pb.cracks.material as any).dispose()
+            ;(pb.cracks.material as LineBasicMaterial).dispose()
         }
 
         world.removeBody(pb.body)
@@ -192,9 +202,23 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         rebuildPanelInfo()
     }
 
+    // ── 选中管理 ──
+
     const select = (id: number | undefined): DestructibleBox | undefined => {
+        if (selectedId !== undefined) {
+            const prev = boxes.find(b => b.id === selectedId)
+            if (prev) cleanupWireframe(prev)
+        }
         selectedId = id
-        if (id !== undefined) return boxes.find(b => b.id === id)
+        if (id !== undefined) {
+            const pb = boxes.find(b => b.id === id)
+            if (pb) {
+                const line = createWireframe(pb.mesh.geometry)
+                pb.mesh.add(line)
+                pb.wireframe = line
+                return pb
+            }
+        }
         return undefined
     }
 
@@ -205,21 +229,24 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
 
     const getSelectedId = (): number | undefined => selectedId
 
+    // ── 销毁 ──
+
     const spawnDebris = (pb: DestructibleBox, collisionPoint: [number, number, number], ejectForce: number): void => {
         if (pb.destroyed || pb.fragments.length === 0) return
 
         pb.destroyed = true
+        cleanupWireframe(pb)
         world.removeBody(pb.body)
         scene.remove(pb.mesh)
         pb.mesh.geometry.dispose()
-        ;(pb.mesh.material as any).dispose()
+        ;(pb.mesh.material as MeshBasicMaterial).dispose()
         pb.mesh.remove(pb.edges)
         pb.edges.geometry.dispose()
-        ;(pb.edges.material as any).dispose()
+        ;(pb.edges.material as LineBasicMaterial).dispose()
         if (pb.cracks) {
             pb.mesh.remove(pb.cracks)
             pb.cracks.geometry.dispose()
-            ;(pb.cracks.material as any).dispose()
+            ;(pb.cracks.material as LineBasicMaterial).dispose()
         }
 
         const debrisList: DestructibleDebris[] = []
@@ -249,8 +276,8 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             )
             body.position.copy(worldCentroid)
             body.quaternion.copy(pb.body.quaternion)
-            mesh.position.copy(body.position as any)
-            mesh.quaternion.copy(body.quaternion as any)
+            mesh.position.set(body.position.x, body.position.y, body.position.z)
+            mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w)
 
             const cp = new Vec3(collisionPoint[0], collisionPoint[1], collisionPoint[2])
             const dir = new Vec3(
@@ -274,6 +301,8 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         pb.debris = debrisList
         allDebris.push(...debrisList)
     }
+
+    // ── 物理更新 ──
 
     const updatePhysics = (dt: number): void => {
         for (const pb of boxes) {
@@ -345,10 +374,10 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
             if (d.lifetime <= 0) {
                 scene.remove(d.mesh)
                 d.mesh.geometry.dispose()
-                ;(d.mesh.material as any).dispose()
+                ;(d.mesh.material as MeshBasicMaterial).dispose()
                 d.mesh.remove(d.edges)
                 d.edges.geometry.dispose()
-                ;(d.edges.material as any).dispose()
+                ;(d.edges.material as LineBasicMaterial).dispose()
                 world.removeBody(d.body)
                 allDebris.splice(i, 1)
             }
@@ -369,6 +398,8 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         }
     }
 
+    // ── 同步 ──
+
     const syncPositions = (): void => {
         for (const pb of boxes) {
             if (pb.destroyed) continue
@@ -378,6 +409,8 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld): Destr
         }
         rebuildPanelInfo()
     }
+
+    // ── 上下文 ──
 
     const ctx: DestructionEntityContext = {
         type: TYPE,
