@@ -235,6 +235,11 @@ export const updateParticles = (
     boxSize: {width: number; height: number; depth: number},
     burnProgress: number,
 ): void => {
+    // 最后 20% 燃烧阶段粒子效果逐步衰减
+    const shrinkFactor = burnProgress > 0.8
+        ? 1.0 - 0.8 * (burnProgress - 0.8) / 0.2
+        : 1.0
+
     const posAttr = points.geometry.attributes.position as Float32BufferAttribute
     const colAttr = points.geometry.attributes.color as Float32BufferAttribute
     const sizeAttr = points.geometry.attributes.size as Float32BufferAttribute
@@ -287,8 +292,11 @@ export const updateParticles = (
         sizeAttr.array[i] = data.size[i]
     }
 
+    // 粒子材质全局大小随 shrinkFactor 缩放
+    ;(points.material as PointsMaterial).size = PARTICLE_SIZE_BASE * shrinkFactor
+
     // 生成新粒子
-    const spawnCount = Math.floor(PARTICLE_SPAWN_RATE * (0.5 + burnProgress * 1.5))
+    const spawnCount = Math.floor(PARTICLE_SPAWN_RATE * (0.5 + burnProgress * 1.5) * shrinkFactor)
     let spawned = 0
     for (let i = 0; i < MAX_PARTICLES && spawned < spawnCount; i++) {
         if (!data.active[i]) {
