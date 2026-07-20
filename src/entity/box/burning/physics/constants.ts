@@ -6,5 +6,5 @@ export const DEFAULT_BURNING_CONFIG: BurningBoxConfig = {
     depth: 1,
     mass: 1,
     friction: 0.3,
-    burnDuration: 10,
+    maxHealth: 10,
 }

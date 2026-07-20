@@ -1,22 +1,23 @@
 import {type Scene, ShaderMaterial} from 'three'
-import {
-    Body,
-    BODY_TYPES,
-    Box,
-    Vec3,
-} from 'cannon-es'
+import {Body, BODY_TYPES, Box, Vec3,} from 'cannon-es'
 import type {SharedWorld} from '../../../../physics/world.ts'
-import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
-import type {BurningBoxConfig, BurningBox, BurningEntityContext} from '../types'
+import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, GROUND_Y} from '../../../../physics/constants.ts'
+import type {BurningBox, BurningBoxConfig, BurningEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
+import {clampHealth, clampHealthOnMaxChange} from '../../base/types/health'
 import {
-    createBurningBoxMesh, updateBurningBoxMeshSize, disposeBurningBoxMesh,
-    createParticleData, createParticlePoints, updateParticles, disposeParticlePoints,
+    createBurningBoxMesh,
+    createParticleData,
+    createParticlePoints,
+    disposeBurningBoxMesh,
+    disposeParticlePoints,
+    updateBurningBoxMeshSize,
+    updateParticles,
 } from '../render'
-import {createWireframe, cleanupWireframe} from '../../base/render'
+import {cleanupWireframe, createWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
-import {formatRowText, createBurningPanel} from '../ui'
+import {createBurningPanel, formatRowText} from '../ui'
 import type {PanelContext} from '../../base/ui'
 import {DEFAULT_BURNING_CONFIG} from './constants.ts'
 import type {EntityType} from '../../../constants.ts'
@@ -82,7 +83,10 @@ export const setupBurningBoxes = (scene: Scene, shared: SharedWorld): BurningEnt
         const emitter = createEmitter<EntityEventMap>()
         const pb: BurningBox = {
             id, mesh, body, edges, wireframe: undefined,
-            config: {...config}, burnProgress: 0,
+            config: {...config},
+            health: config.maxHealth,
+            maxHealth: config.maxHealth,
+            burnProgress: 0,
             particles, particleData, emitter, rowText: '',
         }
         refreshRowText(pb)
@@ -178,6 +182,9 @@ export const setupBurningBoxes = (scene: Scene, shared: SharedWorld): BurningEnt
             }
         }
         pb.config = cfg
+        if (partial.maxHealth !== undefined) {
+            clampHealthOnMaxChange(pb, cfg.maxHealth)
+        }
         refreshRowText(pb)
     }
 
@@ -197,11 +204,19 @@ export const setupBurningBoxes = (scene: Scene, shared: SharedWorld): BurningEnt
         refreshRowText(pb)
     }
 
+    const setHealth = (id: number, health: number): void => {
+        const pb = boxes.find(b => b.id === id)
+        if (!pb) return
+        clampHealth(pb, health)
+        refreshRowText(pb)
+    }
+
     const updatePhysics = (dt: number): void => {
         for (let i = boxes.length - 1; i >= 0; i--) {
             const pb = boxes[i]
 
-            pb.burnProgress += dt / pb.config.burnDuration
+            clampHealth(pb, pb.health - dt)
+            pb.burnProgress = 1 - pb.health / pb.config.maxHealth
 
             const mat = pb.mesh.material as ShaderMaterial
             mat.uniforms.uBurnProgress.value = pb.burnProgress
@@ -221,7 +236,7 @@ export const setupBurningBoxes = (scene: Scene, shared: SharedWorld): BurningEnt
 
             refreshRowText(pb)
 
-            if (pb.burnProgress >= 1) {
+            if (pb.health <= 0) {
                 const wasSelected = selectedId === pb.id
                 sourceEvents.emit('delete', pb.id, wasSelected)
                 if (wasSelected) select(undefined)
@@ -265,6 +280,7 @@ export const setupBurningBoxes = (scene: Scene, shared: SharedWorld): BurningEnt
         syncPositions,
         updateConfig,
         setTransform,
+        setHealth,
         updatePhysics,
         panel: undefined as unknown as PanelContext,
     }

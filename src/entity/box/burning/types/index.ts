@@ -2,6 +2,7 @@ import type {LineSegments, Points} from 'three'
 import type {Body} from 'cannon-es'
 import type {BaseEntity, RigidBodyConfig, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
+import type {HealthComponent} from '../../base/types/health'
 
 export interface ParticleData {
     pos: Float32Array
@@ -14,10 +15,10 @@ export interface ParticleData {
 }
 
 export interface BurningBoxConfig extends RigidBodyConfig {
-    burnDuration: number
+    maxHealth: number
 }
 
-export interface BurningBox extends BaseEntity<BurningBoxConfig> {
+export interface BurningBox extends BaseEntity<BurningBoxConfig>, HealthComponent {
     body: Body
     edges: LineSegments
     wireframe: LineSegments | undefined
@@ -32,5 +33,6 @@ export interface BurningEntityContext extends EntityInfoSource {
     getAll: () => BurningBox[]
     updateConfig: (id: number, partial: Partial<BurningBoxConfig>) => void
     setTransform: (id: number, pos: XYZ, rotDeg: XYZ) => void
+    setHealth: (id: number, health: number) => void
     updatePhysics: (dt: number) => void
 }

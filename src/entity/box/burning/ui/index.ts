@@ -5,7 +5,7 @@ import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'
 
 export const formatRowText = (box: BurningBox): string =>
-    `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  m:${box.config.mass}  🔥${(box.burnProgress * 100).toFixed(0)}%`
+    `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  m:${box.config.mass}  HP:${box.health.toFixed(0)}/${box.config.maxHealth}`
 
 export const createBurningPanel = (ctx: BurningEntityContext): PanelContext => {
     const el = document.createElement('div')
@@ -23,9 +23,9 @@ export const createBurningPanel = (ctx: BurningEntityContext): PanelContext => {
     header.textContent = 'Burning Box'
     el.appendChild(header)
 
-    const progress = document.createElement('div')
-    progress.style.cssText = 'margin-bottom:8px;font-size:13px;color:#ff8800'
-    el.appendChild(progress)
+    el.appendChild(createSection('Health'))
+    const hpInput = createLabeledNumberInput(el, 'HP', {min: '0', step: '1', value: '10', style: 'width:70px'})
+    const maxHpInput = createLabeledNumberInput(el, 'Max', {min: '1', step: '1', value: '10', style: 'width:70px'})
 
     el.appendChild(createSection('Pos'))
     const posX = createLabeledNumberInput(el, 'X', {step: '0.01'})
@@ -62,7 +62,8 @@ export const createBurningPanel = (ctx: BurningEntityContext): PanelContext => {
             if (!sel) return
             container.appendChild(el)
             el.style.display = 'block'
-            progress.textContent = `Burn: ${(sel.burnProgress * 100).toFixed(1)}%`
+            hpInput.value = String(sel.health)
+            maxHpInput.value = String(sel.config.maxHealth)
             posX.value = sel.mesh.position.x.toFixed(2)
             posY.value = sel.mesh.position.y.toFixed(2)
             posZ.value = sel.mesh.position.z.toFixed(2)
@@ -86,7 +87,9 @@ export const createBurningPanel = (ctx: BurningEntityContext): PanelContext => {
                 ctx.updateConfig(cur.id, {
                     width: parseFloat(sizeX.value), height: parseFloat(sizeY.value), depth: parseFloat(sizeZ.value),
                     mass: parseFloat(mass.value), friction: parseFloat(friction.value),
+                    maxHealth: parseFloat(maxHpInput.value) || cur.config.maxHealth,
                 })
+                ctx.setHealth(cur.id, parseFloat(hpInput.value) || 0)
             }
             const onDelete = () => {
                 const cur = ctx.getSelected()
