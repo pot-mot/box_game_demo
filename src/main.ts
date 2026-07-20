@@ -8,9 +8,11 @@ import {setupCommonBoxes} from './entity/box/common/physics/world.ts'
 import {setupDestructibleBoxes} from './entity/box/destructed/physics/world.ts'
 import {setupFragmentEntities} from './entity/fragment/common/physics/world.ts'
 import {setupWaterBlocks} from './entity/box/water/physics/world.ts'
+import {setupBurningBoxes} from './entity/box/burning/physics/world.ts'
 import {setupWaterPhysics} from './entity/box/water/physics/forces.ts'
 import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
+import {setupSpawnModePanel} from './ui/spawn_mode_panel.ts'
 import {setupElementListPanel} from './ui/element_list_panel.ts'
 import {setupPointerInteraction, type SpawnMode} from './input/pointer_interaction.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
@@ -46,27 +48,44 @@ const destruction = setupDestructibleBoxes(scene, shared, fragments)
 
 // --- 水方块子系统 ---
 const water = setupWaterBlocks(scene)
+
+// --- 燃烧箱子子系统 ---
+const burning = setupBurningBoxes(scene, shared)
+
 const waterPhysicsUpdate = setupWaterPhysics(
     () => [...common.getAll().map(e => e.body), ...destruction.getAll().map(e => e.body), ...fragments.getAll().map(f => f.body)],
     () => water.getAll().map(w => ({config: w.config, position: w.mesh.position})),
 )
 
 // --- 统一 entity 列表 ---
-const sources = [common, destruction, fragments, water]
+const sources = [common, destruction, fragments, water, burning]
 
-// --- Spawn mode (1=common, 2=destruction, 3=water) ---
-let spawnMode: SpawnMode = 'box/common'
+// --- Spawn mode ---
+const SPAWN_MODES: SpawnMode[] = ['box/common', 'box/destruction', 'box/water', 'box/burning']
+let spawnModeIndex = 0
+let spawnMode: SpawnMode = SPAWN_MODES[spawnModeIndex]
+
+const cycleSpawnMode = (direction: -1 | 1): void => {
+    spawnModeIndex = (spawnModeIndex + direction + SPAWN_MODES.length) % SPAWN_MODES.length
+    spawnMode = SPAWN_MODES[spawnModeIndex]
+}
+
+const setSpawnMode = (mode: SpawnMode): void => {
+    spawnMode = mode
+    spawnModeIndex = SPAWN_MODES.indexOf(mode)
+}
+
 window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.code === 'Digit1') spawnMode = 'box/common'
-    if (e.code === 'Digit2') spawnMode = 'box/destruction'
-    if (e.code === 'Digit3') spawnMode = 'box/water'
+    if (e.code === 'ArrowUp') cycleSpawnMode(-1)
+    if (e.code === 'ArrowDown') cycleSpawnMode(1)
 })
 
 const getSpawnMode = (): SpawnMode => spawnMode
 
 // --- 控制系统（每帧 updater） ---
 const keyboardUpdate = setupKeyboardCamera(camera, renderer.domElement)
-const cameraInfoUpdate = setupCameraInfo(camera, getSpawnMode)
+const cameraInfoUpdate = setupCameraInfo(camera)
+const spawnModePanelUpdate = setupSpawnModePanel(getSpawnMode, setSpawnMode)
 
 // --- 指针交互 + 元素列表 ---
 setupPointerInteraction(camera, renderer, sources, getSpawnMode)
@@ -83,11 +102,12 @@ const tick = (time: number): void => {
         shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)    // 1. 步进物理世界
         destruction.updatePhysics(delta)         // 2. 伤害累计 → 破碎触发
         fragments.updatePhysics(delta)           // 3. 碎块生命周期递减
-        waterPhysicsUpdate()                     // 4. 水方块浮力计算
-        sources.forEach(s => s.syncPositions())  // 5. body→mesh + rowText 同步
-        water.updateTime(time)                   // 6. 水面波浪动画
-        gridUpdate()                            // 7. 网格跟随摄像机
-        keyboardUpdate()                        // 8. 键盘移动相机
+        burning.updatePhysics(delta)             // 4. 燃烧进度更新
+        waterPhysicsUpdate()                     // 5. 水方块浮力计算
+        sources.forEach(s => s.syncPositions())  // 6. body→mesh + rowText 同步
+        water.updateTime(time)                   // 7. 水面波浪动画
+        gridUpdate()                             // 8. 网格跟随摄像机
+        keyboardUpdate()                         // 9. 键盘移动相机
 
         // ── 双 Pass 渲染（Pass 1：背景到纹理，供折射使用）──
         const allWater = water.getAll()
@@ -107,8 +127,9 @@ const tick = (time: number): void => {
         renderer.setRenderTarget(null)
         renderer.render(scene, camera)
 
-        cameraInfoUpdate()                      // 9. 更新 HUD
-        elementListPanelUpdate()                // 10. 更新元素列表
+        cameraInfoUpdate()                      // 10. 更新 HUD
+        spawnModePanelUpdate()                  // 11. 更新生成模式面板
+        elementListPanelUpdate()                // 12. 更新元素列表
     } catch (e) {
         console.warn('Frame update failed:', e)
     }
