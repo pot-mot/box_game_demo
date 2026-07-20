@@ -1,95 +1,70 @@
 import './assets/style.css'
-import {WebGLRenderTarget, ShaderMaterial} from 'three'
+import {type Mesh} from 'three'
+import type {EntityInfoSource} from './entity/box/base/types/entity_info.ts'
+import type {EntityTickHandler} from './types/physics.ts'
 import {createRenderContext} from './render/setup.ts'
 import {setupInfiniteGrid} from './render/grid.ts'
+import {setupRefractionPass} from './render/refraction_pass.ts'
 import {setupMouseOrbit} from './input/mouse_orbit.ts'
+import {setupSpawnModeManager} from './input/spawn_mode.ts'
+import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {createSharedWorld} from './physics/world.ts'
+import {createPhysicsEnv} from './physics/env.ts'
 import {setupCommonBoxes} from './entity/box/common/physics/world.ts'
 import {setupDestructibleBoxes} from './entity/box/destructed/physics/world.ts'
 import {setupFragmentEntities} from './entity/fragment/common/physics/world.ts'
 import {setupWaterBlocks} from './entity/box/water/physics/world.ts'
 import {setupBurningBoxes} from './entity/box/burning/physics/world.ts'
-import {setupWaterPhysics} from './entity/box/water/physics/forces.ts'
-import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
 import {setupSpawnModePanel} from './ui/spawn_mode_panel.ts'
 import {setupElementListPanel} from './ui/element_list_panel.ts'
-import {setupPointerInteraction, type SpawnMode} from './input/pointer_interaction.ts'
+import {setupPointerInteraction} from './input/pointer_interaction.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
+
+type EntitySystem = EntityInfoSource & EntityTickHandler
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
 // --- 渲染系统 ---
 const {scene, camera, renderer} = createRenderContext(app)
-
-// --- 折射背景渲染目标 ---
-const backgroundRT = new WebGLRenderTarget(window.innerWidth, window.innerHeight)
-window.addEventListener('resize', () => {
-    backgroundRT.setSize(window.innerWidth, window.innerHeight)
-})
+const renderFrame = setupRefractionPass(scene, camera, renderer)
 
 // --- 无限地面网格 ---
 const gridUpdate = setupInfiniteGrid(scene, camera)
 
 // --- 输入系统 ---
 setupMouseOrbit(camera, renderer.domElement)
+const keyboardUpdate = setupKeyboardCamera(camera, renderer.domElement)
+const spawnMode = setupSpawnModeManager()
 
 // --- 共享物理世界 ---
 const shared = createSharedWorld()
 
-// --- 普通箱子子系统 ---
-const common = setupCommonBoxes(scene, shared)
+// --- 物理环境（body 收集器）---
+const physicsEnv = createPhysicsEnv()
 
-// --- 碎块子系统（需在 destructed 前初始化）---
+// --- Entity 子系统（按依赖顺序初始化）---
 const fragments = setupFragmentEntities(scene, shared)
-
-// --- 可破坏箱子子系统 ---
+const common = setupCommonBoxes(scene, shared)
 const destruction = setupDestructibleBoxes(scene, shared, fragments)
-
-// --- 水方块子系统 ---
-const water = setupWaterBlocks(scene)
-
-// --- 燃烧箱子子系统 ---
+const water = setupWaterBlocks(scene, physicsEnv)
 const burning = setupBurningBoxes(scene, shared)
 
-const waterPhysicsUpdate = setupWaterPhysics(
-    () => [...common.getAll().map(e => e.body), ...destruction.getAll().map(e => e.body), ...fragments.getAll().map(f => f.body)],
-    () => water.getAll().map(w => ({config: w.config, position: w.mesh.position})),
+// 注册 body provider，供 water 浮力等跨系统逻辑使用
+physicsEnv.bodyProviders.push(
+    () => fragments.getAll().map(f => f.body),
+    () => common.getAll().map(e => e.body),
+    () => destruction.getAll().map(e => e.body),
+    () => burning.getAll().map(e => e.body),
 )
 
-// --- 统一 entity 列表 ---
-const sources = [common, destruction, fragments, water, burning]
+const systems: EntitySystem[] = [common, destruction, fragments, water, burning]
 
-// --- Spawn mode ---
-const SPAWN_MODES: SpawnMode[] = ['box/common', 'box/destruction', 'box/water', 'box/burning']
-let spawnModeIndex = 0
-let spawnMode: SpawnMode = SPAWN_MODES[spawnModeIndex]
-
-const cycleSpawnMode = (direction: -1 | 1): void => {
-    spawnModeIndex = (spawnModeIndex + direction + SPAWN_MODES.length) % SPAWN_MODES.length
-    spawnMode = SPAWN_MODES[spawnModeIndex]
-}
-
-const setSpawnMode = (mode: SpawnMode): void => {
-    spawnMode = mode
-    spawnModeIndex = SPAWN_MODES.indexOf(mode)
-}
-
-window.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.code === 'ArrowUp') cycleSpawnMode(-1)
-    if (e.code === 'ArrowDown') cycleSpawnMode(1)
-})
-
-const getSpawnMode = (): SpawnMode => spawnMode
-
-// --- 控制系统（每帧 updater） ---
-const keyboardUpdate = setupKeyboardCamera(camera, renderer.domElement)
+// --- 指针交互 + UI ---
+setupPointerInteraction(camera, renderer, systems, spawnMode.getSpawnMode)
 const cameraInfoUpdate = setupCameraInfo(camera)
-const spawnModePanelUpdate = setupSpawnModePanel(getSpawnMode, setSpawnMode)
-
-// --- 指针交互 + 元素列表 ---
-setupPointerInteraction(camera, renderer, sources, getSpawnMode)
-const elementListPanelUpdate = setupElementListPanel(sources)
+const spawnModePanelUpdate = setupSpawnModePanel(spawnMode.getSpawnMode, spawnMode.setSpawnMode)
+const elementListPanelUpdate = setupElementListPanel(systems)
 
 // --- 单 RAF 循环 ---
 let lastTime = performance.now()
@@ -99,37 +74,21 @@ const tick = (time: number): void => {
     lastTime = time
 
     try {
-        shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)    // 1. 步进物理世界
-        destruction.updatePhysics(delta)         // 2. 伤害累计 → 破碎触发
-        fragments.updatePhysics(delta)           // 3. 碎块生命周期递减
-        burning.updatePhysics(delta)             // 4. 燃烧进度更新
-        waterPhysicsUpdate()                     // 5. 水方块浮力计算
-        sources.forEach(s => s.syncPositions())  // 6. body→mesh + rowText 同步
-        water.updateTime(time)                   // 7. 水面波浪动画
-        gridUpdate()                             // 8. 网格跟随摄像机
-        keyboardUpdate()                         // 9. 键盘移动相机
+        shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)
 
-        // ── 双 Pass 渲染（Pass 1：背景到纹理，供折射使用）──
-        const allWater = water.getAll()
-        for (const wb of allWater) wb.mesh.visible = false
-        renderer.setRenderTarget(backgroundRT)
-        renderer.render(scene, camera)
+        for (const s of systems) s.preSync?.(delta, time)
+        for (const s of systems) s.syncPositions()
 
-        // ── Pass 2：最终场景到屏幕（含水）──
-        for (const wb of allWater) {
-            wb.mesh.visible = true
-            const mat = wb.mesh.material as ShaderMaterial
-            if (mat.uniforms.uRefractionTex) {
-                mat.uniforms.uRefractionTex.value = backgroundRT.texture
-                mat.uniforms.uViewportSize.value.set(window.innerWidth, window.innerHeight)
-            }
-        }
-        renderer.setRenderTarget(null)
-        renderer.render(scene, camera)
+        gridUpdate()
+        keyboardUpdate()
 
-        cameraInfoUpdate()                      // 10. 更新 HUD
-        spawnModePanelUpdate()                  // 11. 更新生成模式面板
-        elementListPanelUpdate()                // 12. 更新元素列表
+        // ── 双 Pass 渲染（水方块折射）──
+        const waterMeshes: Mesh[] = water.getMeshes()
+        renderFrame(waterMeshes)
+
+        cameraInfoUpdate()
+        spawnModePanelUpdate()
+        elementListPanelUpdate()
     } catch (e) {
         console.warn('Frame update failed:', e)
     }
@@ -138,5 +97,4 @@ const tick = (time: number): void => {
 }
 
 tick(performance.now())
-
 renderer.domElement.focus()

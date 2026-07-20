@@ -406,6 +406,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld, fragme
         setTransform,
         setHealth,
         updatePhysics,
+        preSync: updatePhysics,
         syncPositions,
         panel: undefined as unknown as PanelContext,
     }

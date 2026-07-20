@@ -1,9 +1,11 @@
 import {type Scene, ShaderMaterial} from 'three'
 import type {WaterBlockConfig, WaterBlock, WaterEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
+import type {PhysicsEnv} from '../../../../physics/env.ts'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
 import {createWaterBlockMesh, updateWaterBlockMeshSize, disposeWaterBlockMesh} from '../render'
 import {createWireframe, cleanupWireframe} from '../../base/render'
+import {setupWaterPhysics} from './forces.ts'
 import {formatRowText, createWaterPanel} from '../ui'
 import type {PanelContext} from '../../base/ui'
 import {DEFAULT_WATER_CONFIG} from './constants.ts'
@@ -17,12 +19,17 @@ const BADGE_COLOR = '#484'
 
 // ── 初始化 ──
 
-export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
+export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEntityContext => {
     const blocks: WaterBlock[] = []
     let nextId = 1
     let selectedId: number | undefined
     const panelInfo: EntityPanelInfo[] = []
     const sourceEvents = createEmitter<SourceEventMap>()
+
+    const waterPhysicsUpdate = setupWaterPhysics(
+        () => physicsEnv.getAllBodies(),
+        () => blocks.map(w => ({config: w.config, position: w.mesh.position})),
+    )
 
     const rebuildPanelInfo = () => {
         panelInfo.length = 0
@@ -149,6 +156,10 @@ export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
 
     // ── 上下文 ──
 
+    const preSync = (_dt: number, _time: number): void => {
+        waterPhysicsUpdate()
+    }
+
     const ctx: WaterEntityContext = {
         type: TYPE,
         events: sourceEvents,
@@ -166,6 +177,7 @@ export const setupWaterBlocks = (scene: Scene): WaterEntityContext => {
         setPosition,
         updateTime,
         syncPositions,
+        preSync,
         panel: undefined as unknown as PanelContext,
     }
     ctx.panel = createWaterPanel(ctx)

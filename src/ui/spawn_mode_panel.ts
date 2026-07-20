@@ -1,4 +1,4 @@
-import type {SpawnMode} from '../input/pointer_interaction.ts'
+import type {SpawnMode} from '../types/spawnMode.ts'
 
 const MODES: SpawnMode[] = ['box/common', 'box/destruction', 'box/water', 'box/burning']
 const MODE_LABELS: Record<SpawnMode, string> = {

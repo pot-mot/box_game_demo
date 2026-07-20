@@ -22,4 +22,5 @@ export interface WaterEntityContext extends EntityInfoSource {
     resize: (id: number, partial: Partial<WaterBlockConfig>) => void
     setPosition: (id: number, pos: {x: number; y: number; z: number}) => void
     updateTime: (time: number) => void
+    preSync?(dt: number, time: number): void
 }

@@ -220,6 +220,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         updateConfig,
         setTransform,
         updatePhysics,
+        preSync: updatePhysics,
         panel: undefined as unknown as PanelContext,
     }
     ctx.panel = createFragmentPanel(ctx)

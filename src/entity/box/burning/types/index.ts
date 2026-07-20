@@ -35,4 +35,5 @@ export interface BurningEntityContext extends EntityInfoSource {
     setTransform: (id: number, pos: XYZ, rotDeg: XYZ) => void
     setHealth: (id: number, health: number) => void
     updatePhysics: (dt: number) => void
+    preSync?(dt: number, time: number): void
 }

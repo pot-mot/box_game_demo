@@ -282,6 +282,7 @@ export const setupBurningBoxes = (scene: Scene, shared: SharedWorld): BurningEnt
         setTransform,
         setHealth,
         updatePhysics,
+        preSync: updatePhysics,
         panel: undefined as unknown as PanelContext,
     }
     ctx.panel = createBurningPanel(ctx)

@@ -25,4 +25,5 @@ export interface FragmentEntityContext extends EntityInfoSource {
     updateConfig: (id: number, partial: Partial<FragmentConfig>) => void
     setTransform: (id: number, pos: XYZ, rotDeg: XYZ) => void
     updatePhysics: (dt: number) => void
+    preSync?(dt: number, time: number): void
 }
