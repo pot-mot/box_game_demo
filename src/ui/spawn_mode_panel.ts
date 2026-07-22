@@ -1,11 +1,12 @@
 import type {SpawnMode} from '../types/spawnMode.ts'
 
-const MODES: SpawnMode[] = ['box/common', 'box/destruction', 'box/water', 'box/burning']
+const MODES: SpawnMode[] = ['box/common', 'box/destruction', 'box/water', 'box/burning', 'box/magnet']
 const MODE_LABELS: Record<SpawnMode, string> = {
     'box/common': 'Common',
     'box/destruction': 'Destruction',
     'box/water': 'Water',
     'box/burning': 'Burning',
+    'box/magnet': 'Magnet',
 }
 
 export const setupSpawnModePanel = (getSpawnMode: () => SpawnMode, onSelectMode: (mode: SpawnMode) => void): () => void => {
