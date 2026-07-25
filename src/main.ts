@@ -16,6 +16,7 @@ import {setupFragmentEntities} from './entity/fragment/common/physics/world.ts'
 import {setupWaterBlocks} from './entity/box/water/physics/world.ts'
 import {setupBurningBoxes} from './entity/box/burning/physics/world.ts'
 import {setupMagnetBoxes} from './entity/box/magnet/physics/world.ts'
+import {setupElasticBoxes} from './entity/box/elasticity/physics/world.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
 import {setupSpawnModePanel} from './ui/spawn_mode_panel.ts'
 import {setupElementListPanel} from './ui/element_list_panel.ts'
@@ -51,6 +52,7 @@ const destruction = setupDestructibleBoxes(scene, shared, fragments)
 const water = setupWaterBlocks(scene, physicsEnv)
 const burning = setupBurningBoxes(scene, shared)
 const magnet = setupMagnetBoxes(scene, shared, physicsEnv)
+const elastic = setupElasticBoxes(scene, shared)
 
 // 注册 body provider，供 water 浮力等跨系统逻辑使用
 physicsEnv.bodyProviders.push(
@@ -59,9 +61,10 @@ physicsEnv.bodyProviders.push(
     () => destruction.getAll().map(e => e.body),
     () => burning.getAll().map(e => e.body),
     () => magnet.getAll().map(e => e.body),
+    () => elastic.getAll().map(e => e.body),
 )
 
-const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet]
+const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic]
 
 // --- 指针交互 + UI ---
 setupPointerInteraction(camera, renderer, systems, spawnMode.getSpawnMode)
