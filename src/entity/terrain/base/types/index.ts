@@ -6,6 +6,7 @@ import type {EntityInfoSource} from '../../../box/base/types/entity_info.ts'
 export interface BaseTerrainConfig {
     gridSize: number
     cellSize: number
+    minHeight: number
     maxHeight: number
     friction: number
     generatorId: string
@@ -25,7 +26,7 @@ export interface BaseTerrainEntity {
 export interface HeightGenerator {
     readonly id: string
     readonly label: string
-    generate(gridSize: number, cellSize: number, maxHeight: number): number[][]
+    generate(gridSize: number, cellSize: number, minHeight: number, maxHeight: number): number[][]
 }
 
 export interface TerrainSetupOptions {

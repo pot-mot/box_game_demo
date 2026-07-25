@@ -37,13 +37,13 @@ const fbm = (x: number, y: number, octaves: number): number => {
 const fbmNoiseGenerator: HeightGenerator = {
     id: 'fbm',
     label: 'FBM 噪声',
-    generate: (gridSize: number, _cellSize: number, maxHeight: number): number[][] => {
+    generate: (gridSize: number, _cellSize: number, minHeight: number, maxHeight: number): number[][] => {
         const heights: number[][] = []
         for (let x = 0; x < gridSize; x++) {
             const row: number[] = []
             for (let z = 0; z < gridSize; z++) {
                 const n = fbm(x * 0.08, z * 0.08, 4)
-                row.push(Math.round((n * maxHeight) * 100) / 100)
+                row.push(Math.round((minHeight + n * (maxHeight - minHeight)) * 100) / 100)
             }
             heights.push(row)
         }

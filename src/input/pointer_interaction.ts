@@ -61,36 +61,41 @@ export const setupPointerInteraction = (
         focusPanel(undefined)
     })
 
+    // 鼠标滚轮 = 雕刻地形（当前选中的是 terrain 即可）
+    renderer.domElement.addEventListener('wheel', (e: WheelEvent) => {
+        if (!terrainSources || terrainSources.length === 0) return
+        const hasTerrainSelected = terrainSources.some(ts => ts.getSelectedId() !== undefined)
+        if (!hasTerrainSelected) return
+        e.preventDefault()
+
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1
+        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
+        raycaster.setFromCamera(pointer, camera)
+
+        const terrainMeshes = terrainSources.flatMap(s => s.getMeshes())
+        if (terrainMeshes.length === 0) return
+
+        const hits = raycaster.intersectObjects(terrainMeshes, false)
+        if (hits.length === 0) return
+
+        const hitMesh = hits[0].object as Mesh
+        const hitPoint = hits[0].point
+
+        for (const ts of terrainSources) {
+            const entity = ts.getEntityList().find(e => e.mesh === hitMesh)
+            if (entity) {
+                const dir = e.deltaY > 0 ? -1 : 1
+                ts.sculpt(entity.id, hitPoint.x, hitPoint.z, dir as 1 | -1)
+                return
+            }
+        }
+    })
+
+    // 右键 = 始终生成实体（所有模式一致）
     renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault()
         const mode = getSpawnMode()
 
-        // 地形模式：优先尝试雕刻
-        if (mode === 'terrain' && terrainSources && terrainSources.length > 0) {
-            pointer.x = (e.clientX / window.innerWidth) * 2 - 1
-            pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
-            raycaster.setFromCamera(pointer, camera)
-
-            const terrainMeshes = terrainSources.flatMap(s => s.getMeshes())
-            if (terrainMeshes.length > 0) {
-                const hits = raycaster.intersectObjects(terrainMeshes, false)
-                if (hits.length > 0) {
-                    const hitMesh = hits[0].object as Mesh
-                    const hitPoint = hits[0].point
-
-                    for (const ts of terrainSources) {
-                        const entity = ts.getEntityList().find(e => e.mesh === hitMesh)
-                        if (entity) {
-                            const dir = e.shiftKey ? -1 : 1
-                            ts.sculpt(entity.id, hitPoint.x, hitPoint.z, dir as 1 | -1)
-                            return
-                        }
-                    }
-                }
-            }
-        }
-
-        // 默认：在标准距离生成
         camera.getWorldDirection(forward)
         const spawnPos = new Vector3().copy(camera.position).add(forward.clone().multiplyScalar(SPAWN_DIST))
 

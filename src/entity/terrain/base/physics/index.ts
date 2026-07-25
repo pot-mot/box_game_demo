@@ -38,7 +38,7 @@ export const createTerrainContextImpl = (
     }
 
     const formatRowText = (t: BaseTerrainEntity): string =>
-        `#${t.id}  (${t.mesh.position.x.toFixed(1)}, ${t.mesh.position.y.toFixed(1)}, ${t.mesh.position.z.toFixed(1)})  ${t.config.gridSize}×${t.config.gridSize}  h:${t.config.maxHeight}`
+        `#${t.id}  (${t.mesh.position.x.toFixed(1)}, ${t.mesh.position.y.toFixed(1)}, ${t.mesh.position.z.toFixed(1)})  ${t.config.gridSize}×${t.config.gridSize}  h:[${t.config.minHeight},${t.config.maxHeight}]`
 
     const halfSize = (gs: number, cs: number): number => ((gs - 1) * cs) / 2
 
@@ -47,7 +47,7 @@ export const createTerrainContextImpl = (
     const add = (config: BaseTerrainConfig, x: number, _y: number, z: number): BaseTerrainEntity => {
         const id = nextId++
         const generator = options.generators[config.generatorId]
-        const heights = generator.generate(config.gridSize, config.cellSize, config.maxHeight)
+        const heights = generator.generate(config.gridSize, config.cellSize, config.minHeight, config.maxHeight)
         const gs = config.gridSize
         const cs = config.cellSize
         const half = halfSize(gs, cs)
@@ -109,9 +109,10 @@ export const createTerrainContextImpl = (
         const t = entities.find(e => e.id === id)
         if (!t) return
         const cfg: BaseTerrainConfig = {...t.config, ...partial}
+        if (cfg.minHeight > cfg.maxHeight) [cfg.minHeight, cfg.maxHeight] = [cfg.maxHeight, cfg.minHeight]
         t.config = cfg
         const gen = options.generators[cfg.generatorId]
-        t.heights = gen.generate(cfg.gridSize, cfg.cellSize, cfg.maxHeight)
+        t.heights = gen.generate(cfg.gridSize, cfg.cellSize, cfg.minHeight, cfg.maxHeight)
         rebuildShape(t)
         liftBoxesOnTerrain(t, shared)
         t.rowText = formatRowText(t)
@@ -183,7 +184,7 @@ export const createTerrainContextImpl = (
                 if (dist <= BRUSH_RADIUS) {
                     const falloff = 1 - dist / BRUSH_RADIUS
                     t.heights[xi][zi] += direction * BRUSH_STRENGTH * falloff
-                    t.heights[xi][zi] = Math.max(0, Math.min(t.config.maxHeight, t.heights[xi][zi]))
+                    t.heights[xi][zi] = Math.max(t.config.minHeight, Math.min(t.config.maxHeight, t.heights[xi][zi]))
                 }
             }
         }

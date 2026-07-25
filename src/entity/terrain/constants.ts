@@ -9,6 +9,7 @@ export const TERRAIN_COLLISION_MASK = 1
 export const DEFAULT_TERRAIN_CONFIG: BaseTerrainConfig = {
     gridSize: 16,
     cellSize: 0.5,
+    minHeight: 0,
     maxHeight: 2.5,
     friction: 0.3,
     generatorId: 'fbm',

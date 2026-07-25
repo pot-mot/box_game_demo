@@ -1,4 +1,4 @@
-import {BufferGeometry, Float32BufferAttribute, Mesh, MeshBasicMaterial, LineBasicMaterial, LineSegments} from 'three'
+import {BufferGeometry, Float32BufferAttribute, Mesh, MeshBasicMaterial, LineBasicMaterial, LineSegments, DoubleSide} from 'three'
 import {gridTexture} from '../../../../render/texture.ts'
 import type {BaseTerrainConfig} from '../types'
 import {TERRAIN_EDGE_COLOR} from '../../constants.ts'
@@ -8,6 +8,7 @@ export const createTerrainMesh = (heights: number[][], config: BaseTerrainConfig
     const cs = config.cellSize
     const worldSize = (gs - 1) * cs
     const half = worldSize / 2
+    const range = config.maxHeight - config.minHeight
 
     const positions: number[] = []
     const uvs: number[] = []
@@ -22,7 +23,7 @@ export const createTerrainMesh = (heights: number[][], config: BaseTerrainConfig
             positions.push(px, py, pz)
             uvs.push(x / (gs - 1), z / (gs - 1))
 
-            const t = Math.max(0, Math.min(1, py / config.maxHeight))
+            const t = range > 0 ? (py - config.minHeight) / range : 0.5
             const cr = Math.round(lerp(139, 100, t))
             const cg = Math.round(lerp(115, 180, t))
             const cb = Math.round(lerp(85, 120, t))
@@ -45,7 +46,7 @@ export const createTerrainMesh = (heights: number[][], config: BaseTerrainConfig
     geo.setIndex(indices)
     geo.computeVertexNormals()
 
-    const mesh = new Mesh(geo, new MeshBasicMaterial({map: gridTexture(), vertexColors: true}))
+    const mesh = new Mesh(geo, new MeshBasicMaterial({map: gridTexture(), vertexColors: true, side: DoubleSide}))
 
     const edgeIndices: number[] = []
     for (let x = 0; x < gs; x += 4) {

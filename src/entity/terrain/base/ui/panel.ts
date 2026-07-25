@@ -36,10 +36,13 @@ export const createTerrainPanel = (ctx: TerrainContext, generatorOptions: {id: s
     }
     el.appendChild(genSelect)
 
+    el.appendChild(createSection('Height'))
+    const minH = createLabeledNumberInput(el, 'Min', {step: '0.1'})
+    const maxH = createLabeledNumberInput(el, 'Max', {step: '0.1'})
+
     el.appendChild(createSection('Size'))
     const gridSize = createLabeledNumberInput(el, 'Grid', {min: '4', max: '64', step: '1'})
     const cellSize = createLabeledNumberInput(el, 'Cell', {min: '0.1', step: '0.1'})
-    const maxH = createLabeledNumberInput(el, 'MaxH', {min: '0.1', step: '0.1'})
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
@@ -53,17 +56,22 @@ export const createTerrainPanel = (ctx: TerrainContext, generatorOptions: {id: s
             posX.value = sel.mesh.position.x.toFixed(2)
             posZ.value = sel.mesh.position.z.toFixed(2)
             genSelect.value = sel.config.generatorId
+            minH.value = String(sel.config.minHeight)
+            maxH.value = String(sel.config.maxHeight)
             gridSize.value = String(sel.config.gridSize)
             cellSize.value = String(sel.config.cellSize)
-            maxH.value = String(sel.config.maxHeight)
 
             applyBtn.onclick = () => {
+                let newMin = Number(minH.value)
+                let newMax = Number(maxH.value)
+                if (newMin > newMax) [newMin, newMax] = [newMax, newMin]
                 ctx.updatePosition(sel.id, Number(posX.value), Number(posZ.value))
                 ctx.updateConfig(sel.id, {
                     generatorId: genSelect.value,
+                    minHeight: newMin,
+                    maxHeight: newMax,
                     gridSize: Number(gridSize.value),
                     cellSize: Number(cellSize.value),
-                    maxHeight: Number(maxH.value),
                 })
             }
             deleteBtn.onclick = () => {
