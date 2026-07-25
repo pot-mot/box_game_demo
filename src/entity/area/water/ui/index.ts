@@ -1,5 +1,5 @@
-import type {PanelContext} from '../../../box/base/ui/index.ts'
-import type {WaterEntityContext, WaterBlock} from '../types/index.ts'
+import type {PanelContext} from '../../../box/base/ui'
+import type {WaterEntityContext, WaterBlock} from '../types'
 import {createLabeledNumberInput} from '../../../../ui/components/number_input.ts'
 import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'

@@ -3,7 +3,7 @@ import type {BoxSize} from '../types'
 
 export const OVERLAP_MAX_ATTEMPTS = 50
 
-interface OverlapBox {
+export interface OverlapBox {
     mesh: {position: {x: number; y: number; z: number}}
     config: BoxSize
 }
