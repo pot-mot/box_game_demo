@@ -3,7 +3,7 @@ import type {SpawnMode} from '../types/spawnMode.ts'
 const MODES: SpawnMode[] = [
     'box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity',
     'area/water',
-    'terrain/fbm', 'terrain/flat', 'terrain/sine', 'terrain/steps',
+    'terrain',
 ]
 const MODE_LABELS: Record<SpawnMode, string> = {
     'box/common': 'Common',
@@ -12,10 +12,7 @@ const MODE_LABELS: Record<SpawnMode, string> = {
     'box/magnet': 'Magnet',
     'box/elasticity': 'Elastic',
     'area/water': 'Water',
-    'terrain/fbm': 'Terrain FBM',
-    'terrain/flat': 'Terrain Flat',
-    'terrain/sine': 'Terrain Sine',
-    'terrain/steps': 'Terrain Steps',
+    'terrain': 'Terrain',
 }
 
 export const setupSpawnModePanel = (getSpawnMode: () => SpawnMode, onSelectMode: (mode: SpawnMode) => void): () => void => {

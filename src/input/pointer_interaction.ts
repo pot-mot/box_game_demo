@@ -66,7 +66,7 @@ export const setupPointerInteraction = (
         const mode = getSpawnMode()
 
         // 地形模式：优先尝试雕刻
-        if (mode.startsWith('terrain/') && terrainSources && terrainSources.length > 0) {
+        if (mode === 'terrain' && terrainSources && terrainSources.length > 0) {
             pointer.x = (e.clientX / window.innerWidth) * 2 - 1
             pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
             raycaster.setFromCamera(pointer, camera)

@@ -8,6 +8,7 @@ export interface BaseTerrainConfig {
     cellSize: number
     maxHeight: number
     friction: number
+    generatorId: string
 }
 
 export interface BaseTerrainEntity {
@@ -31,7 +32,7 @@ export interface TerrainSetupOptions {
     type: EntityType
     badgeLabel: string
     badgeColor: string
-    generator: HeightGenerator
+    generators: Record<string, HeightGenerator>
 }
 
 export interface TerrainHeightQuery {
@@ -46,4 +47,5 @@ export interface TerrainContext extends EntityInfoSource, TerrainHeightQuery {
     sculpt: (id: number, worldX: number, worldZ: number, direction: 1 | -1) => void
     getBody: (id: number) => Body | undefined
     updateConfig: (id: number, partial: Partial<BaseTerrainConfig>) => void
+    updatePosition: (id: number, x: number, z: number) => void
 }

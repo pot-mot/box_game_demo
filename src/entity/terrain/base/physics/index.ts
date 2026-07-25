@@ -8,11 +8,7 @@ import {createTerrainMesh, rebuildTerrainMesh} from '../render'
 import type {PanelContext} from '../../../box/base/ui'
 import {DEFAULT_TERRAIN_CONFIG, TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK, BRUSH_RADIUS, BRUSH_STRENGTH} from '../../constants.ts'
 import type {EntityType} from '../../../constants.ts'
-import type {BaseTerrainConfig, BaseTerrainEntity, TerrainSetupOptions, TerrainContext, HeightGenerator} from '../types'
-
-const heightsFromGenerator = (generator: HeightGenerator, config: BaseTerrainConfig): number[][] => {
-    return generator.generate(config.gridSize, config.cellSize, config.maxHeight)
-}
+import type {BaseTerrainConfig, BaseTerrainEntity, TerrainSetupOptions, TerrainContext} from '../types'
 
 const reverseZ = (heights: number[][]): number[][] => heights.map(col => [...col].reverse())
 
@@ -50,7 +46,8 @@ export const createTerrainContextImpl = (
 
     const add = (config: BaseTerrainConfig, x: number, _y: number, z: number): BaseTerrainEntity => {
         const id = nextId++
-        const heights = heightsFromGenerator(options.generator, config)
+        const generator = options.generators[config.generatorId]
+        const heights = generator.generate(config.gridSize, config.cellSize, config.maxHeight)
         const gs = config.gridSize
         const cs = config.cellSize
         const half = halfSize(gs, cs)
@@ -113,8 +110,25 @@ export const createTerrainContextImpl = (
         if (!t) return
         const cfg: BaseTerrainConfig = {...t.config, ...partial}
         t.config = cfg
-        t.heights = heightsFromGenerator(options.generator, cfg)
+        const gen = options.generators[cfg.generatorId]
+        t.heights = gen.generate(cfg.gridSize, cfg.cellSize, cfg.maxHeight)
         rebuildShape(t)
+        liftBoxesOnTerrain(t, shared)
+        t.rowText = formatRowText(t)
+        rebuildPanelInfo()
+    }
+
+    // ── 位置移动 ──
+
+    const updatePosition = (id: number, x: number, z: number): void => {
+        const t = entities.find(e => e.id === id)
+        if (!t) return
+        const gs = t.config.gridSize
+        const cs = t.config.cellSize
+        const half = halfSize(gs, cs)
+        t.mesh.position.set(x, 0, z)
+        t.body.position.set(x - half, 0, z + half)
+        t.body.aabbNeedsUpdate = true
         t.rowText = formatRowText(t)
         rebuildPanelInfo()
     }
@@ -279,6 +293,7 @@ export const createTerrainContextImpl = (
         getHeightAt,
         getBody,
         updateConfig,
+        updatePosition,
         panel: undefined as unknown as PanelContext,
     }
     return ctx

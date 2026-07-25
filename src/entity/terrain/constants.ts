@@ -11,6 +11,7 @@ export const DEFAULT_TERRAIN_CONFIG: BaseTerrainConfig = {
     cellSize: 0.5,
     maxHeight: 2.5,
     friction: 0.3,
+    generatorId: 'fbm',
 }
 
 /** 地形边缘线颜色 */

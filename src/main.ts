@@ -18,10 +18,7 @@ import {setupWaterBlocks} from './entity/area/water/physics/world.ts'
 import {setupBurningBoxes} from './entity/box/burning/physics/world.ts'
 import {setupMagnetBoxes} from './entity/box/magnet/physics/world.ts'
 import {setupElasticBoxes} from './entity/box/elasticity/physics/world.ts'
-import {setupFbmTerrain} from './entity/terrain/fbm/physics/world.ts'
-import {setupFlatTerrain} from './entity/terrain/flat/physics/world.ts'
-import {setupSineTerrain} from './entity/terrain/sine/physics/world.ts'
-import {setupStepsTerrain} from './entity/terrain/steps/physics/world.ts'
+import {setupTerrain} from './entity/terrain/common/physics/world.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
 import {setupSpawnModePanel} from './ui/spawn_mode_panel.ts'
 import {setupElementListPanel} from './ui/element_list_panel.ts'
@@ -54,20 +51,9 @@ const physicsEnv = createPhysicsEnv()
 const fragments = setupFragmentEntities(scene, shared)
 
 // Terrain 需要在 box 之前初始化，用于高度查询
-const terrainFbm = setupFbmTerrain(scene, shared)
-const terrainFlat = setupFlatTerrain(scene, shared)
-const terrainSine = setupSineTerrain(scene, shared)
-const terrainSteps = setupStepsTerrain(scene, shared)
-
-// 地形高度查询函数（所有地形合并）
-const allTerrainSources: TerrainContext[] = [terrainFbm, terrainFlat, terrainSine, terrainSteps]
-const getTerrainHeight = (x: number, z: number): number | undefined => {
-    for (const t of allTerrainSources) {
-        const h = t.getHeightAt(x, z)
-        if (h !== undefined) return h
-    }
-    return undefined
-}
+const terrainSource = setupTerrain(scene, shared)
+const allTerrainSources: TerrainContext[] = [terrainSource]
+const getTerrainHeight = (x: number, z: number): number | undefined => terrainSource.getHeightAt(x, z)
 
 const common = setupCommonBoxes(scene, shared, getTerrainHeight)
 const destruction = setupDestructibleBoxes(scene, shared, fragments, getTerrainHeight)
@@ -84,16 +70,13 @@ physicsEnv.bodyProviders.push(
     () => burning.getAll().map(e => e.body),
     () => magnet.getAll().map(e => e.body),
     () => elastic.getAll().map(e => e.body),
-    () => terrainFbm.getAll().map(e => e.body),
-    () => terrainFlat.getAll().map(e => e.body),
-    () => terrainSine.getAll().map(e => e.body),
-    () => terrainSteps.getAll().map(e => e.body),
+    () => terrainSource.getAll().map(e => e.body),
 )
 
-const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, ...allTerrainSources]
+const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, terrainSource]
 
-// 初始化生成一个 fbm 地形
-terrainFbm.spawnAt(0, 0, 0)
+// 初始化生成一个默认地形
+terrainSource.spawnAt(0, 0, 0)
 
 // --- 指针交互 + UI ---
 setupPointerInteraction(camera, renderer, systems, spawnMode.getSpawnMode, allTerrainSources)
