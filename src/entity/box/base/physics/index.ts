@@ -15,9 +15,22 @@ export const findNonOverlappingY = <T extends OverlapBox>(
     y: number,
     z: number,
     skipIf?: (box: T) => boolean,
+    getTerrainHeight?: (x: number, z: number) => number | undefined,
 ): number => {
     let py = y
     const halfH = config.height / 2
+
+    // 检查地形表面
+    if (getTerrainHeight) {
+        const th = getTerrainHeight(x, z)
+        if (th !== undefined) {
+            const minBottom = th + 0.01
+            if (py - halfH < minBottom) {
+                py = minBottom + halfH
+            }
+        }
+    }
+
     if (py - halfH < GROUND_Y) py = GROUND_Y + halfH
     const hx = config.width / 2
     const hz = config.depth / 2

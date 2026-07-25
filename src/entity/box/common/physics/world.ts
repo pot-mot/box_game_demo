@@ -26,7 +26,11 @@ const BADGE_COLOR = '#448'
 
 // ── 初始化 ──
 
-export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntityContext => {
+export const setupCommonBoxes = (
+    scene: Scene,
+    shared: SharedWorld,
+    getTerrainHeight?: (x: number, z: number) => number | undefined,
+): CommonEntityContext => {
     const {world, boxMat} = shared
 
     const boxes: CommonBox[] = []
@@ -57,7 +61,7 @@ export const setupCommonBoxes = (scene: Scene, shared: SharedWorld): CommonEntit
 
     const add = (config: CommonBoxConfig, x: number, y: number, z: number): CommonBox => {
         const id = nextId++
-        const adjustedY = findNonOverlappingY(boxes, config, x, y, z)
+        const adjustedY = findNonOverlappingY(boxes, config, x, y, z, undefined, getTerrainHeight)
         const hw = config.width / 2
         const hh = config.height / 2
         const hd = config.depth / 2

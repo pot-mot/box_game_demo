@@ -31,7 +31,12 @@ const _force = new Vec3()
 
 // ── 初始化 ──
 
-export const setupMagnetBoxes = (scene: Scene, shared: SharedWorld, physicsEnv: PhysicsEnv): MagnetEntityContext => {
+export const setupMagnetBoxes = (
+    scene: Scene,
+    shared: SharedWorld,
+    physicsEnv: PhysicsEnv,
+    getTerrainHeight?: (x: number, z: number) => number | undefined,
+): MagnetEntityContext => {
     const {world, boxMat} = shared
 
     const boxes: MagnetBox[] = []
@@ -62,7 +67,7 @@ export const setupMagnetBoxes = (scene: Scene, shared: SharedWorld, physicsEnv: 
 
     const add = (config: MagnetBoxConfig, x: number, y: number, z: number): MagnetBox => {
         const id = nextId++
-        const adjustedY = findNonOverlappingY(boxes, config, x, y, z)
+        const adjustedY = findNonOverlappingY(boxes, config, x, y, z, undefined, getTerrainHeight)
         const hw = config.width / 2
         const hh = config.height / 2
         const hd = config.depth / 2

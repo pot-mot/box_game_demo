@@ -1,6 +1,10 @@
 import {type SpawnMode} from '../types/spawnMode.ts'
 
-const SPAWN_MODES: SpawnMode[] = ['box/common', 'box/destruction', 'box/water', 'box/burning', 'box/magnet', 'box/elasticity']
+const SPAWN_MODES: SpawnMode[] = [
+    'box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity',
+    'area/water',
+    'terrain/fbm', 'terrain/flat', 'terrain/sine', 'terrain/steps',
+]
 
 export const setupSpawnModeManager = (): {
     getSpawnMode: () => SpawnMode

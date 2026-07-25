@@ -6,8 +6,6 @@ import {
     ENV_TOP_COLOR, ENV_BOTTOM_COLOR,
 } from './constants.ts'
 
-// ── 着色器 ──
-
 const vertexShader = `
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -47,7 +45,6 @@ void main() {
     vec3 N = normalize(vNormal);
     vec3 V = normalize(vViewDir);
 
-    // ── 8 层 Gerstner-like 波浪 ──
     vec2 waveDirs[8] = vec2[](
         vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(0.7, 0.7), vec2(-0.3, 0.9),
         vec2(0.9, -0.3), vec2(-0.8, -0.6), vec2(0.5, -0.8), vec2(-0.5, 0.5)
@@ -66,32 +63,26 @@ void main() {
         gradXZ += waveAmps[i] * waveFreqs[i] * waveDirs[i] * c;
     }
 
-    // ── 切线空间法线扰动 ──
     vec3 T = abs(N.y) > 0.99 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
     T = normalize(cross(N, T));
     vec3 B = normalize(cross(N, T));
     vec3 perturbedN = normalize(N + (T * gradXZ.x + B * gradXZ.y) * uWaveStrength);
 
-    // ── Fresnel（Schlick 近似）──
     float fresnel = pow(1.0 - max(dot(perturbedN, V), 0.0), 4.0);
 
-    // ── 折射 ──
     vec2 screenUV = gl_FragCoord.xy / uViewportSize;
     vec2 refrUV = screenUV + vec2(gradXZ.x, gradXZ.y) * uRefractionStrength;
     vec3 refrColor = texture2D(uRefractionTex, refrUV).rgb;
 
-    // ── 环境反射 ──
     vec3 reflectDir = reflect(-V, perturbedN);
     float envMix = reflectDir.y * 0.5 + 0.5;
     vec3 envColor = mix(uEnvBottomColor, uEnvTopColor, envMix);
 
-    // ── 水体颜色（深度渐变 + 波浪亮度调制）──
     float depthFactor = (vLocalPos.y / uSizeY) * 0.5 + 0.5;
     depthFactor = clamp(depthFactor, 0.0, 1.0);
     vec3 waterColor = mix(uColorDeep, uColorShallow, depthFactor);
     waterColor += height * uWaveHeightVisual;
 
-    // ── 混合 ──
     vec3 finalColor = mix(waterColor, refrColor, 0.5 * (1.0 - fresnel));
     finalColor += envColor * fresnel * 0.4;
 
@@ -101,8 +92,6 @@ void main() {
     gl_FragColor = vec4(finalColor, alpha);
 }
 `
-
-// ── 网格 ──
 
 export const createWaterBlockMesh = (config: WaterBlockConfig): Mesh => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)

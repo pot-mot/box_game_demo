@@ -1,23 +1,18 @@
 import {type Scene, ShaderMaterial} from 'three'
-import type {WaterBlockConfig, WaterBlock, WaterEntityContext} from '../types'
-import type {EntityPanelInfo} from '../../base/types/entity_info'
+import type {WaterBlockConfig, WaterBlock, WaterEntityContext} from '../types/index.ts'
+import type {EntityPanelInfo} from '../../../box/base/types/entity_info.ts'
 import type {PhysicsEnv} from '../../../../physics/env.ts'
-import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
-import {createWaterBlockMesh, updateWaterBlockMeshSize, disposeWaterBlockMesh} from '../render'
-import {createWireframe, cleanupWireframe} from '../../base/render'
+import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../../box/base/types/event_emitter.ts'
+import {createWaterBlockMesh, updateWaterBlockMeshSize, disposeWaterBlockMesh} from '../render/index.ts'
+import {createWireframe, cleanupWireframe} from '../../../box/base/render/index.ts'
 import {setupWaterPhysics} from './forces.ts'
-import {formatRowText, createWaterPanel} from '../ui'
-import type {PanelContext} from '../../base/ui'
+import {formatRowText, createWaterPanel} from '../ui/index.ts'
 import {DEFAULT_WATER_CONFIG} from './constants.ts'
-import type {EntityType} from "../../../constants.ts";
+import type {EntityType} from '../../../constants.ts'
 
-// ── 常量 ──
-
-const TYPE: EntityType = 'box/water' as const
+const TYPE: EntityType = 'area/water' as const
 const BADGE_LABEL = 'W'
 const BADGE_COLOR = '#484'
-
-// ── 初始化 ──
 
 export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEntityContext => {
     const blocks: WaterBlock[] = []
@@ -48,8 +43,6 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
         block.rowText = formatRowText(block)
         block.emitter.emit('infoUpdate')
     }
-
-    // ── 增删改查 ──
 
     const add = (config: WaterBlockConfig, x: number, y: number, z: number): WaterBlock => {
         const id = nextId++
@@ -107,8 +100,6 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
         refreshRowText(wb)
     }
 
-    // ── 时间更新 ──
-
     const updateTime = (time: number): void => {
         const t = time * 0.001
         for (const wb of blocks) {
@@ -116,8 +107,6 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
             if (uniforms) uniforms.uTime.value = t
         }
     }
-
-    // ── 选中管理 ──
 
     const select = (id: number | undefined): WaterBlock | undefined => {
         if (selectedId !== undefined) {
@@ -145,8 +134,6 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
 
     const getSelectedId = (): number | undefined => selectedId
 
-    // ── 同步 ──
-
     const syncPositions = (): void => {
         for (const wb of blocks) {
             wb.rowText = formatRowText(wb)
@@ -154,32 +141,30 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
         rebuildPanelInfo()
     }
 
-    // ── 上下文 ──
-
     const preSync = (_dt: number, _time: number): void => {
         waterPhysicsUpdate()
     }
 
     const ctx: WaterEntityContext = {
-        type: TYPE,
-        events: sourceEvents,
-        panelInfo,
-        add,
-        spawnAt,
-        remove,
-        select,
-        getSelected,
-        getSelectedId,
-        getAll: () => blocks,
-        getEntityList: () => blocks,
-        getMeshes: () => blocks.map(b => b.mesh),
-        resize,
-        setPosition,
-        updateTime,
-        syncPositions,
-        preSync,
-        panel: undefined as unknown as PanelContext,
+        type: TYPE as any,
+        events: sourceEvents as any,
+        panelInfo: panelInfo as any,
+        add: add as any,
+        spawnAt: spawnAt as any,
+        remove: remove as any,
+        select: select as any,
+        getSelected: getSelected as any,
+        getSelectedId: getSelectedId as any,
+        getAll: () => blocks as any,
+        getEntityList: () => blocks as any,
+        getMeshes: () => blocks.map(b => b.mesh) as any,
+        resize: resize as any,
+        setPosition: setPosition as any,
+        updateTime: updateTime as any,
+        syncPositions: syncPositions as any,
+        preSync: preSync as any,
+        panel: undefined as any,
     }
-    ctx.panel = createWaterPanel(ctx)
+    ;(ctx as any).panel = createWaterPanel(ctx as any)
     return ctx
 }

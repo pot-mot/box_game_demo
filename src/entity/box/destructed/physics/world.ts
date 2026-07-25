@@ -33,7 +33,12 @@ const BADGE_COLOR = '#844'
 
 let globalBoxId = 1
 
-export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld, fragmentCtx: FragmentEntityContext): DestructionEntityContext => {
+export const setupDestructibleBoxes = (
+    scene: Scene,
+    shared: SharedWorld,
+    fragmentCtx: FragmentEntityContext,
+    getTerrainHeight?: (x: number, z: number) => number | undefined,
+): DestructionEntityContext => {
     const {world, boxMat} = shared
 
     const boxes: DestructibleBox[] = []
@@ -62,7 +67,7 @@ export const setupDestructibleBoxes = (scene: Scene, shared: SharedWorld, fragme
     const add = (config: DestructibleConfig, x: number, y: number, z: number): DestructibleBox => {
         const id = globalBoxId++
         const halfH = config.height / 2
-        const py = findNonOverlappingY(boxes, config, x, y, z, (b) => b.destroyed)
+        const py = findNonOverlappingY(boxes, config, x, y, z, (b) => b.destroyed, getTerrainHeight)
 
         const {mesh, edges} = createDestructibleBoxMesh(config)
         mesh.position.set(x, py, z)

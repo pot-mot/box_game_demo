@@ -1,6 +1,7 @@
 import {Raycaster, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type Mesh} from 'three'
 import type {SpawnMode} from '../types/spawnMode.ts'
 import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
+import type {TerrainContext} from '../entity/terrain/base/types/index.ts'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 import {focusPanel} from '../ui/entity_control_panel.ts'
 
@@ -9,6 +10,7 @@ export const setupPointerInteraction = (
     renderer: WebGLRenderer,
     sources: EntityInfoSource[],
     getSpawnMode: () => SpawnMode,
+    terrainSources?: TerrainContext[],
 ): void => {
     const sourcesByType = new Map(sources.map(s => [s.type, s]))
     const raycaster = new Raycaster()
@@ -61,10 +63,37 @@ export const setupPointerInteraction = (
 
     renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault()
+        const mode = getSpawnMode()
+
+        // 地形模式：优先尝试雕刻
+        if (mode.startsWith('terrain/') && terrainSources && terrainSources.length > 0) {
+            pointer.x = (e.clientX / window.innerWidth) * 2 - 1
+            pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
+            raycaster.setFromCamera(pointer, camera)
+
+            const terrainMeshes = terrainSources.flatMap(s => s.getMeshes())
+            if (terrainMeshes.length > 0) {
+                const hits = raycaster.intersectObjects(terrainMeshes, false)
+                if (hits.length > 0) {
+                    const hitMesh = hits[0].object as Mesh
+                    const hitPoint = hits[0].point
+
+                    for (const ts of terrainSources) {
+                        const entity = ts.getEntityList().find(e => e.mesh === hitMesh)
+                        if (entity) {
+                            const dir = e.shiftKey ? -1 : 1
+                            ts.sculpt(entity.id, hitPoint.x, hitPoint.z, dir as 1 | -1)
+                            return
+                        }
+                    }
+                }
+            }
+        }
+
+        // 默认：在标准距离生成
         camera.getWorldDirection(forward)
         const spawnPos = new Vector3().copy(camera.position).add(forward.clone().multiplyScalar(SPAWN_DIST))
 
-        const mode = getSpawnMode()
         const source = sourcesByType.get(mode)
         if (source) {
             source.spawnAt(spawnPos.x, spawnPos.y, spawnPos.z)

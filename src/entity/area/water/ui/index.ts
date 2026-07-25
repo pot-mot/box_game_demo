@@ -1,5 +1,5 @@
-import type {PanelContext} from '../../base/ui'
-import type {WaterEntityContext, WaterBlock} from '../types'
+import type {PanelContext} from '../../../box/base/ui/index.ts'
+import type {WaterEntityContext, WaterBlock} from '../types/index.ts'
 import {createLabeledNumberInput} from '../../../../ui/components/number_input.ts'
 import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'
@@ -20,7 +20,7 @@ export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
 
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px;color:#48f'
-    header.textContent = 'Water Block Control'
+    header.textContent = 'Water Area Control'
     el.appendChild(header)
 
     el.appendChild(createSection('Pos'))

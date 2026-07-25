@@ -1,13 +1,21 @@
-import type {LineSegments} from 'three'
-import type {BaseEntity, BoxSize} from '../../base/types'
-import type {EntityInfoSource} from '../../base/types/entity_info'
+import type {LineSegments, Mesh} from 'three'
+import type {EntityEmitter} from '../../../box/base/types/event_emitter.ts'
+import type {EntityInfoSource} from '../../../box/base/types/entity_info.ts'
 
-export interface WaterBlockConfig extends BoxSize {
+export interface WaterBlockConfig {
+    width: number
+    height: number
+    depth: number
     density: number
 }
 
-export interface WaterBlock extends BaseEntity<WaterBlockConfig> {
+export interface WaterBlock {
+    id: number
+    config: WaterBlockConfig
+    mesh: Mesh
     wireframe: LineSegments | undefined
+    emitter: EntityEmitter
+    rowText: string
 }
 
 export interface WaterBlockInfo {

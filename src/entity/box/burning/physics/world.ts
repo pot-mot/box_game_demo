@@ -26,7 +26,11 @@ const TYPE: EntityType = 'box/burning' as const
 const BADGE_LABEL = 'B'
 const BADGE_COLOR = '#f44'
 
-export const setupBurningBoxes = (scene: Scene, shared: SharedWorld): BurningEntityContext => {
+export const setupBurningBoxes = (
+    scene: Scene,
+    shared: SharedWorld,
+    getTerrainHeight?: (x: number, z: number) => number | undefined,
+): BurningEntityContext => {
     const {world, boxMat} = shared
 
     const boxes: BurningBox[] = []
@@ -55,7 +59,7 @@ export const setupBurningBoxes = (scene: Scene, shared: SharedWorld): BurningEnt
 
     const add = (config: BurningBoxConfig, x: number, y: number, z: number): BurningBox => {
         const id = nextId++
-        const adjustedY = findNonOverlappingY(boxes, config, x, y, z)
+        const adjustedY = findNonOverlappingY(boxes, config, x, y, z, undefined, getTerrainHeight)
         const hw = config.width / 2
         const hh = config.height / 2
         const hd = config.depth / 2
