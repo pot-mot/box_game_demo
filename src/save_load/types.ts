@@ -116,7 +116,6 @@ export interface ModeInfoJSON {
 
 /** 完整存档数据结构 */
 export interface SaveData {
-    version: 1
     entities: SavableEntity[]
     modeInfo?: ModeInfoJSON
 }

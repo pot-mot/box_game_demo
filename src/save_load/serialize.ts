@@ -112,8 +112,8 @@ export const collectWorldState = (
             entities.push({
                 type: 'area/water',
                 config: e.config,
-                position: [e.mesh.position.x, e.mesh.position.y, e.mesh.position.z],
-                quaternion: [0, 0, 0, 1],
+                position: [e.body.position.x, e.body.position.y, e.body.position.z],
+                quaternion: quatToTuple(e.body.quaternion),
             })
         }
     }
@@ -126,7 +126,7 @@ export const collectWorldState = (
                 type: 'terrain',
                 config: e.config,
                 position: [e.mesh.position.x, e.mesh.position.y, e.mesh.position.z],
-                quaternion: [0, 0, 0, 1],
+                quaternion: quatToTuple(e.mesh.quaternion),
                 heights: e.heights,
             })
         }
@@ -172,7 +172,6 @@ export const collectWorldState = (
     }
 
     return {
-        version: 1,
         entities,
         modeInfo: modeInfo.edit || modeInfo.play ? modeInfo : undefined,
     }

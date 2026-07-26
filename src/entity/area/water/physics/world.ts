@@ -1,4 +1,5 @@
 import {type Scene, ShaderMaterial} from 'three'
+import {Body, BODY_TYPES, Box, Vec3} from 'cannon-es'
 import type {WaterBlockConfig, WaterBlock, WaterEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../../box/base/types/entity_info.ts'
 import type {PhysicsEnv} from '../../../../physics/env.ts'
@@ -23,7 +24,11 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
 
     const waterPhysicsUpdate = setupWaterPhysics(
         () => physicsEnv.getAllBodies(),
-        () => blocks.map(w => ({config: w.config, position: w.mesh.position})),
+        () => blocks.map(w => ({
+            config: w.config,
+            position: w.body.position,
+            quaternion: w.body.quaternion,
+        })),
     )
 
     const rebuildPanelInfo = () => {
@@ -44,13 +49,24 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
         block.emitter.emit('infoUpdate')
     }
 
-    const add = (config: WaterBlockConfig, x: number, y: number, z: number): WaterBlock => {
+    const add = (config: WaterBlockConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): WaterBlock => {
         const id = nextId++
+        const hw = config.width / 2
+        const hh = config.height / 2
+        const hd = config.depth / 2
         const mesh = createWaterBlockMesh(config)
         mesh.position.set(x, y, z)
+        if (quat) mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         scene.add(mesh)
+        const body = new Body({
+            mass: 0,
+            type: BODY_TYPES.STATIC,
+        })
+        body.addShape(new Box(new Vec3(hw, hh, hd)))
+        body.position.set(x, y, z)
+        if (quat) body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         const emitter = createEmitter<EntityEventMap>()
-        const wb: WaterBlock = {id, config: {...config}, mesh, emitter, rowText: '', wireframe: undefined}
+        const wb: WaterBlock = {id, config: {...config}, mesh, body, emitter, rowText: '', wireframe: undefined}
         refreshRowText(wb)
         emitter.on('infoUpdate', rebuildPanelInfo)
         blocks.push(wb)
@@ -83,6 +99,8 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
         const changedSize = partial.width !== undefined || partial.height !== undefined || partial.depth !== undefined
         if (changedSize) {
             updateWaterBlockMeshSize(wb.mesh, cfg)
+            while (wb.body.shapes.length) wb.body.removeShape(wb.body.shapes[0])
+            wb.body.addShape(new Box(new Vec3(cfg.width / 2, cfg.height / 2, cfg.depth / 2)))
             if (wb.wireframe) {
                 cleanupWireframe(wb)
                 wb.wireframe = createWireframe(wb.mesh.geometry)
@@ -97,6 +115,17 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
         const wb = blocks.find(b => b.id === id)
         if (!wb) return
         wb.mesh.position.set(pos.x, pos.y, pos.z)
+        wb.body.position.set(pos.x, pos.y, pos.z)
+        refreshRowText(wb)
+    }
+
+    const setTransform = (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}): void => {
+        const wb = blocks.find(b => b.id === id)
+        if (!wb) return
+        wb.mesh.position.set(pos.x, pos.y, pos.z)
+        wb.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
+        wb.body.position.set(pos.x, pos.y, pos.z)
+        wb.body.quaternion.set(wb.mesh.quaternion.x, wb.mesh.quaternion.y, wb.mesh.quaternion.z, wb.mesh.quaternion.w)
         refreshRowText(wb)
     }
 
@@ -160,6 +189,7 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
         getMeshes: () => blocks.map(b => b.mesh) as any,
         resize: resize as any,
         setPosition: setPosition as any,
+        setTransform: setTransform as any,
         updateTime: updateTime as any,
         syncPositions: syncPositions as any,
         preSync: preSync as any,

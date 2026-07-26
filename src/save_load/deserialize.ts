@@ -55,35 +55,36 @@ export const loadWorldFromData = (
 
     for (const entity of data.entities) {
         const [x, y, z] = entity.position
+        const quat = entity.quaternion ? {x: entity.quaternion[0], y: entity.quaternion[1], z: entity.quaternion[2], w: entity.quaternion[3]} : undefined
         switch (entity.type) {
             case 'box/common':
-                common.add(entity.config, x, y, z)
+                common.add(entity.config, x, y, z, quat)
                 break
             case 'box/destruction': {
-                const e = dest.add(entity.config, x, y, z)
+                const e = dest.add(entity.config, x, y, z, quat)
                 dest.setHealth(e.id, entity.health)
                 break
             }
             case 'box/burning': {
-                const e = burn.add(entity.config, x, y, z)
+                const e = burn.add(entity.config, x, y, z, quat)
                 burn.setHealth(e.id, entity.health)
                 e.burnProgress = entity.burnProgress
                 break
             }
             case 'box/magnet':
-                magnet.add(entity.config, x, y, z)
+                magnet.add(entity.config, x, y, z, quat)
                 break
             case 'box/elasticity': {
-                const e = elastic.add(entity.config, x, y, z)
+                const e = elastic.add(entity.config, x, y, z, quat)
                 e.def = entity.def
                 e.vel = entity.vel
                 break
             }
             case 'area/water':
-                water.add(entity.config, x, y, z)
+                water.add(entity.config, x, y, z, quat)
                 break
             case 'terrain': {
-                const e = terrain.add(entity.config, x, y, z)
+                const e = terrain.add(entity.config, x, y, z, quat)
                 if (terrain.setHeights) terrain.setHeights(e.id, entity.heights)
                 break
             }

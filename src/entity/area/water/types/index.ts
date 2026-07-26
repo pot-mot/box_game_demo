@@ -1,4 +1,5 @@
 import {z} from 'zod'
+import type {Body} from 'cannon-es'
 import type {LineSegments, Mesh} from 'three'
 import type {EntityEmitter} from '../../../box/base/types/event_emitter.ts'
 import type {EntityInfoSource} from '../../../box/base/types/entity_info.ts'
@@ -11,6 +12,7 @@ export interface WaterBlock {
     id: number
     config: WaterBlockConfig
     mesh: Mesh
+    body: Body
     wireframe: LineSegments | undefined
     emitter: EntityEmitter
     rowText: string
@@ -19,6 +21,7 @@ export interface WaterBlock {
 export interface WaterBlockInfo {
     config: WaterBlockConfig
     position: {x: number; y: number; z: number}
+    quaternion: {x: number; y: number; z: number; w: number}
 }
 
 export interface WaterEntityContext extends EntityInfoSource {
@@ -27,6 +30,7 @@ export interface WaterEntityContext extends EntityInfoSource {
     getAll: () => WaterBlock[]
     resize: (id: number, partial: Partial<WaterBlockConfig>) => void
     setPosition: (id: number, pos: {x: number; y: number; z: number}) => void
+    setTransform: (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}) => void
     updateTime: (time: number) => void
     preSync?(dt: number, time: number): void
 }

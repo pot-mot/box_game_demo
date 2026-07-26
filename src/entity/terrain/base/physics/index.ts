@@ -1,5 +1,5 @@
 import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
-import {BODY_TYPES, Heightfield, Body, Vec3} from 'cannon-es'
+import {BODY_TYPES, Heightfield, Body, Vec3, Quaternion} from 'cannon-es'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import type {EntityPanelInfo} from '../../../box/base/types/entity_info.ts'
 import {createEmitter, type SourceEventMap} from '../../../box/base/types/event_emitter'
@@ -12,6 +12,19 @@ import type {EntityType} from '../../../constants.ts'
 import type {BaseTerrainConfig, BaseTerrainEntity, TerrainSetupOptions, TerrainContext} from '../types'
 
 const reverseZ = (heights: number[][]): number[][] => heights.map(col => [...col].reverse())
+
+/** 根据 mesh 中心和旋转计算 Heightfield body 应放置的世界坐标 */
+const computeBodyPos = (
+    meshX: number,
+    meshZ: number,
+    half: number,
+    meshQuat: {x: number; y: number; z: number; w: number},
+): {x: number; y: number; z: number} => {
+    const offset = new Vec3(-half, 0, half)
+    const q = new Quaternion(meshQuat.x, meshQuat.y, meshQuat.z, meshQuat.w)
+    q.vmult(offset, offset)
+    return {x: meshX + offset.x, y: offset.y, z: meshZ + offset.z}
+}
 
 export const createTerrainContextImpl = (
     scene: Scene,
@@ -45,7 +58,7 @@ export const createTerrainContextImpl = (
 
     // ── CRUD ──
 
-    const add = (config: BaseTerrainConfig, x: number, _y: number, z: number): BaseTerrainEntity => {
+    const add = (config: BaseTerrainConfig, x: number, _y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): BaseTerrainEntity => {
         const id = nextId++
         const generator = options.generators[config.generatorId]
         const heights = generator.generate(config.gridSize, config.cellSize, config.minHeight, config.maxHeight)
@@ -53,6 +66,14 @@ export const createTerrainContextImpl = (
         const cs = config.cellSize
         const half = halfSize(gs, cs)
 
+        const {mesh, edges} = createTerrainMesh(heights, config)
+        mesh.position.set(x, 0, z)
+        if (quat) mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+        scene.add(mesh)
+
+        const meshQuat = quat ?? {x: 0, y: 0, z: 0, w: 1}
+        const bodyPos = computeBodyPos(x, z, half, meshQuat)
+        const baseQuat = new Quaternion().setFromAxisAngle(new Vec3(1, 0, 0), -Math.PI / 2)
         const body = new Body({
             mass: 0,
             type: BODY_TYPES.STATIC,
@@ -61,13 +82,14 @@ export const createTerrainContextImpl = (
             collisionFilterMask: TERRAIN_COLLISION_MASK,
         })
         body.addShape(new Heightfield(reverseZ(heights), {elementSize: cs}))
-        body.position.set(x - half, 0, z + half)
-        body.quaternion.setFromAxisAngle(new Vec3(1, 0, 0), -Math.PI / 2)
+        body.position.set(bodyPos.x, bodyPos.y, bodyPos.z)
+        if (quat) {
+            const userQuat = new Quaternion(quat.x, quat.y, quat.z, quat.w)
+            body.quaternion.copy(userQuat.mult(baseQuat))
+        } else {
+            body.quaternion.copy(baseQuat)
+        }
         world.addBody(body)
-
-        const {mesh, edges} = createTerrainMesh(heights, config)
-        mesh.position.set(x, 0, z)
-        scene.add(mesh)
 
         const entity: BaseTerrainEntity = {
             id, config: {...config}, heights,
@@ -130,7 +152,26 @@ export const createTerrainContextImpl = (
         const cs = t.config.cellSize
         const half = halfSize(gs, cs)
         t.mesh.position.set(x, 0, z)
-        t.body.position.set(x - half, 0, z + half)
+        const bodyPos = computeBodyPos(x, z, half, t.mesh.quaternion)
+        t.body.position.set(bodyPos.x, bodyPos.y, bodyPos.z)
+        t.body.aabbNeedsUpdate = true
+        t.rowText = formatRowText(t)
+        rebuildPanelInfo()
+    }
+
+    const setTransform = (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}): void => {
+        const t = entities.find(e => e.id === id)
+        if (!t) return
+        const gs = t.config.gridSize
+        const cs = t.config.cellSize
+        const half = halfSize(gs, cs)
+        t.mesh.position.set(pos.x, 0, pos.z)
+        t.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
+        const bodyPos = computeBodyPos(pos.x, pos.z, half, t.mesh.quaternion)
+        t.body.position.set(bodyPos.x, bodyPos.y, bodyPos.z)
+        const userQuat = new Quaternion(t.mesh.quaternion.x, t.mesh.quaternion.y, t.mesh.quaternion.z, t.mesh.quaternion.w)
+        const baseQuat = new Quaternion().setFromAxisAngle(new Vec3(1, 0, 0), -Math.PI / 2)
+        t.body.quaternion.copy(userQuat.mult(baseQuat))
         t.body.aabbNeedsUpdate = true
         t.rowText = formatRowText(t)
         rebuildPanelInfo()
@@ -211,7 +252,8 @@ export const createTerrainContextImpl = (
 
         while (t.body.shapes.length) t.body.removeShape(t.body.shapes[0])
         t.body.addShape(new Heightfield(reverseZ(t.heights), {elementSize: cs}))
-        t.body.position.set(t.mesh.position.x - half, 0, t.mesh.position.z + half)
+        const bodyPos = computeBodyPos(t.mesh.position.x, t.mesh.position.z, half, t.mesh.quaternion)
+        t.body.position.set(bodyPos.x, bodyPos.y, bodyPos.z)
 
         rebuildTerrainMesh(t, t.heights, t.config)
 
@@ -316,6 +358,7 @@ export const createTerrainContextImpl = (
         getBody,
         updateConfig,
         updatePosition,
+        setTransform,
         setHeights,
         panel: undefined as unknown as PanelContext,
     }

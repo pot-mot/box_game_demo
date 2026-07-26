@@ -45,5 +45,6 @@ export interface TerrainContext extends EntityInfoSource, TerrainHeightQuery {
     getBody: (id: number) => Body | undefined
     updateConfig: (id: number, partial: Partial<BaseTerrainConfig>) => void
     updatePosition: (id: number, x: number, z: number) => void
+    setTransform: (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}) => void
     setHeights: (id: number, heights: number[][]) => void
 }

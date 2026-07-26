@@ -114,7 +114,6 @@ const ModeInfo = z.object({
 })
 
 const SaveDataSchema = z.object({
-    version: z.literal(1),
     entities: z.array(SavableEntity),
     modeInfo: ModeInfo.optional(),
 })

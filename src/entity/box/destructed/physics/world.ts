@@ -63,7 +63,7 @@ export const setupDestructibleBoxes = (
         box.emitter.emit('infoUpdate')
     }
 
-    const add = (config: DestructibleConfig, x: number, y: number, z: number): DestructibleBox => {
+    const add = (config: DestructibleConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): DestructibleBox => {
         const id = globalBoxId++
         const halfH = config.height / 2
         const py = findNonOverlappingY(boxes, config, x, y, z, (b) => b.destroyed)
@@ -81,6 +81,10 @@ export const setupDestructibleBoxes = (
         })
         body.addShape(new Box(new Vec3(config.width / 2, halfH, config.depth / 2)))
         body.position.set(x, py, z)
+        if (quat) {
+            body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+            mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+        }
         world.addBody(body)
 
         const _collisions: CollisionRecord[] = []

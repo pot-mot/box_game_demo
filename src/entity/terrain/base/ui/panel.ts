@@ -25,6 +25,11 @@ export const createTerrainPanel = (ctx: TerrainContext, generatorOptions: {id: s
     const posX = createLabeledNumberInput(el, 'X', {step: '0.01'})
     const posZ = createLabeledNumberInput(el, 'Z', {step: '0.01'})
 
+    el.appendChild(createSection('Rot (°)'))
+    const rotX = createLabeledNumberInput(el, 'X', {min: '-360', max: '360', step: '0.1'})
+    const rotY = createLabeledNumberInput(el, 'Y', {min: '-360', max: '360', step: '0.1'})
+    const rotZ = createLabeledNumberInput(el, 'Z', {min: '-360', max: '360', step: '0.1'})
+
     el.appendChild(createSection('Generator'))
     const genSelect = document.createElement('select')
     genSelect.style.cssText = 'width:100%;padding:4px;margin:4px 0;font:inherit'
@@ -55,6 +60,9 @@ export const createTerrainPanel = (ctx: TerrainContext, generatorOptions: {id: s
             el.style.display = 'block'
             posX.value = sel.mesh.position.x.toFixed(2)
             posZ.value = sel.mesh.position.z.toFixed(2)
+            rotX.value = (sel.mesh.rotation.x * 180 / Math.PI).toFixed(1)
+            rotY.value = (sel.mesh.rotation.y * 180 / Math.PI).toFixed(1)
+            rotZ.value = (sel.mesh.rotation.z * 180 / Math.PI).toFixed(1)
             genSelect.value = sel.config.generatorId
             minH.value = String(sel.config.minHeight)
             maxH.value = String(sel.config.maxHeight)
@@ -65,7 +73,15 @@ export const createTerrainPanel = (ctx: TerrainContext, generatorOptions: {id: s
                 let newMin = Number(minH.value)
                 let newMax = Number(maxH.value)
                 if (newMin > newMax) [newMin, newMax] = [newMax, newMin]
-                ctx.updatePosition(sel.id, Number(posX.value), Number(posZ.value))
+                ctx.setTransform(sel.id, {
+                    x: Number(posX.value),
+                    y: 0,
+                    z: Number(posZ.value),
+                }, {
+                    x: parseFloat(rotX.value),
+                    y: parseFloat(rotY.value),
+                    z: parseFloat(rotZ.value),
+                })
                 ctx.updateConfig(sel.id, {
                     generatorId: genSelect.value,
                     minHeight: newMin,

@@ -79,7 +79,7 @@ export const setupElasticBoxes = (
 
     // ── 减缩 ──
 
-    const add = (config: ElasticBoxConfig, x: number, y: number, z: number): ElasticBox => {
+    const add = (config: ElasticBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): ElasticBox => {
         const id = nextId++
         const adjustedY = findNonOverlappingY(boxes, config, x, y, z)
         const hw = config.width / 2
@@ -99,6 +99,10 @@ export const setupElasticBoxes = (
         })
         body.addShape(new Box(new Vec3(hw, hh, hd)))
         body.position.set(x, adjustedY, z)
+        if (quat) {
+            body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+            mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+        }
         world.addBody(body)
 
         // 自重压缩 + 碰撞状态

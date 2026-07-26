@@ -3,7 +3,7 @@ import {BaseTerrainConfigSchema} from './base/validation.ts'
 /** 默认地形配置 */
 export const DEFAULT_TERRAIN_CONFIG = BaseTerrainConfigSchema.parse({
     gridSize: 16,
-    cellSize: 0.5,
+    cellSize: 1,
     minHeight: 0,
     maxHeight: 2.5,
     friction: 0.3,

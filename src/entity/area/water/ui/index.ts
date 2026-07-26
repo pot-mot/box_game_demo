@@ -28,6 +28,11 @@ export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
     const posY = createLabeledNumberInput(el, 'Y', {step: '0.01'})
     const posZ = createLabeledNumberInput(el, 'Z', {step: '0.01'})
 
+    el.appendChild(createSection('Rot (°)'))
+    const rotX = createLabeledNumberInput(el, 'X', {min: '-360', max: '360', step: '0.1'})
+    const rotY = createLabeledNumberInput(el, 'Y', {min: '-360', max: '360', step: '0.1'})
+    const rotZ = createLabeledNumberInput(el, 'Z', {min: '-360', max: '360', step: '0.1'})
+
     el.appendChild(createSection('Size'))
     const sizeX = createLabeledNumberInput(el, 'X', {min: '0.1', max: '100', step: '0.1', value: '2'})
     const sizeY = createLabeledNumberInput(el, 'Y', {min: '0.1', max: '100', step: '0.1', value: '2'})
@@ -48,6 +53,9 @@ export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
             posX.value = sel.mesh.position.x.toFixed(2)
             posY.value = sel.mesh.position.y.toFixed(2)
             posZ.value = sel.mesh.position.z.toFixed(2)
+            rotX.value = (sel.mesh.rotation.x * 180 / Math.PI).toFixed(1)
+            rotY.value = (sel.mesh.rotation.y * 180 / Math.PI).toFixed(1)
+            rotZ.value = (sel.mesh.rotation.z * 180 / Math.PI).toFixed(1)
             sizeX.value = String(sel.config.width)
             sizeY.value = String(sel.config.height)
             sizeZ.value = String(sel.config.depth)
@@ -56,10 +64,14 @@ export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
             applyBtn.onclick = () => {
                 const cur = ctx.getSelected()
                 if (!cur) return
-                ctx.setPosition(cur.id, {
+                ctx.setTransform(cur.id, {
                     x: parseFloat(posX.value),
                     y: parseFloat(posY.value),
                     z: parseFloat(posZ.value),
+                }, {
+                    x: parseFloat(rotX.value),
+                    y: parseFloat(rotY.value),
+                    z: parseFloat(rotZ.value),
                 })
                 ctx.resize(cur.id, {
                     width: parseFloat(sizeX.value),
