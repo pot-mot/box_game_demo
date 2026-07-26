@@ -1,0 +1,2 @@
+export const CHARACTER_LINEAR_DAMPING = 0.2
+export const GROUND_VELOCITY_THRESHOLD = 0.05

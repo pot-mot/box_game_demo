@@ -1,5 +1,5 @@
 import {type PerspectiveCamera} from 'three'
-import {ORBIT_SENSITIVITY} from '../../input/constants.ts'
+import {ORBIT_SENSITIVITY} from "../constants.ts";
 
 /** 编辑模式：鼠标拖拽旋转相机（偏航/俯仰），监听 mousedown/mousemove/mouseup */
 export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement): {setOrientation: (yaw: number, pitch: number) => void} => {

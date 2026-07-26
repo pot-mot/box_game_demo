@@ -22,10 +22,10 @@ import {setupCameraInfo} from './ui/camera_info.ts'
 import {setupStartupScreen} from './modes/startup_screen.ts'
 import {setupInstructionsPanel} from './modes/instructions_panel.ts'
 import {setupSettingsPanel} from './ui/settings_panel.ts'
-import {setupEditMode} from './modes/edit/index.ts'
-import type {EditModeController} from './modes/edit/index.ts'
-import {setupPlayMode} from './modes/play/index.ts'
-import type {PlayModeController} from './modes/play/index.ts'
+import {setupEditMode} from './modes/edit'
+import type {EditModeController} from './modes/edit'
+import {setupPlayMode} from './modes/play'
+import type {PlayModeController} from './modes/play'
 import {collectWorldState, saveWorldToFile} from './save_load/serialize.ts'
 import {loadWorldFromData, clearAllEntities} from './save_load/deserialize.ts'
 import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
@@ -198,9 +198,9 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
             gridUpdate()
 
             if (mode === 'edit') {
-                editMode?.updater()
+                editMode?.updater(delta)
             } else {
-                playMode?.updater()
+                playMode?.updater(delta)
             }
 
             // 双 Pass 渲染（水方块折射）

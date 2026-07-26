@@ -1,6 +1,6 @@
 import {Vector3, type PerspectiveCamera} from 'three'
-import {ORBIT_SENSITIVITY} from '../../input/constants.ts'
 import {ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE} from './constants.ts'
+import {ORBIT_SENSITIVITY} from "../constants.ts";
 
 /**
  * 游玩模式第三人称相机。

@@ -10,7 +10,7 @@ import {setupSpawnModePanel} from '../../ui/spawn_mode_panel.ts'
 import {setupElementListPanel} from '../../ui/element_list_panel.ts'
 
 export interface EditModeController {
-    updater: () => void
+    updater: (dt: number) => void
     setCameraOrientation: (yaw: number, pitch: number) => void
     spawnMode: {
         getSpawnMode: () => SpawnMode
@@ -40,7 +40,7 @@ export const setupEditMode = (
     const spawnModePanelUpdate = setupSpawnModePanel(spawnMode.getSpawnMode, spawnMode.setSpawnMode)
     const elementListPanelUpdate = setupElementListPanel(systems)
 
-    const updater = (): void => {
+    const updater = (_dt: number): void => {
         keyboardCamera.updater()
         spawnModePanelUpdate()
         elementListPanelUpdate()
