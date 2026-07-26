@@ -98,6 +98,15 @@ body {
     font: inherit;
 }
 
+#startup-cache {
+    margin-top: 16px;
+    font: 14px system-ui, sans-serif;
+    color: #888;
+}
+#startup-cache-clear {
+    color: #f88;
+}
+
 /* ── 操作说明面板 ── */
 
 #instructions-panel {

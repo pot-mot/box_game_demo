@@ -2,10 +2,15 @@ import {type PerspectiveCamera} from 'three'
 import {ORBIT_SENSITIVITY} from './constants.ts'
 
 /** 编辑模式：鼠标拖拽旋转相机（偏航/俯仰），监听 mousedown/mousemove/mouseup */
-export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement): void => {
+export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement): {setOrientation: (yaw: number, pitch: number) => void} => {
     let yaw = 0
     let pitch = 0
     let isDown = false
+
+    const applyRotation = (): void => {
+        camera.rotation.y = yaw
+        camera.rotation.x = pitch
+    }
 
     element.addEventListener('mousedown', (e: MouseEvent) => {
         if (e.button === 0) { isDown = true; element.focus() }
@@ -17,7 +22,14 @@ export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement)
         pitch -= e.movementY * ORBIT_SENSITIVITY
         // 限制俯仰角在 ±90° 内（留 0.01rad 间隙避免万向锁）
         pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch))
-        camera.rotation.y = yaw
-        camera.rotation.x = pitch
+        applyRotation()
     })
+
+    return {
+        setOrientation: (y: number, p: number) => {
+            yaw = y
+            pitch = p
+            applyRotation()
+        },
+    }
 }

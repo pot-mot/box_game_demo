@@ -1,5 +1,6 @@
 import type {GameMode} from './constants.ts'
 import type {SaveData} from '../save_load/types.ts'
+import {cacheSaveData, loadCachedSaveData, clearCachedSaveData} from '../save_load/cache.ts'
 
 export interface StartupHandlers {
     onStart: (mode: GameMode, saveData?: SaveData) => void
@@ -54,7 +55,42 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
     fileInput.id = 'startup-file-input'
     importRow.appendChild(fileInput)
 
+    // ── 缓存存档指示 ──
+    const cacheRow = document.createElement('div')
+    cacheRow.id = 'startup-cache'
+    box.appendChild(cacheRow)
+
+    const cacheLabel = document.createElement('span')
+    cacheLabel.id = 'startup-cache-label'
+    cacheRow.appendChild(cacheLabel)
+
+    const clearCacheBtn = document.createElement('a')
+    clearCacheBtn.id = 'startup-cache-clear'
+    clearCacheBtn.textContent = '清除'
+    clearCacheBtn.style.cssText = 'cursor:pointer;margin-left:12px;text-decoration:underline'
+    cacheRow.appendChild(clearCacheBtn)
+
+    const showCache = (): void => {
+        const cached = loadCachedSaveData()
+        if (cached) {
+            cacheLabel.textContent = '存在上次的存档'
+            cacheRow.style.display = ''
+            cachedData = cached
+        } else {
+            cacheRow.style.display = 'none'
+        }
+    }
+
+    clearCacheBtn.addEventListener('click', () => {
+        clearCachedSaveData()
+        cachedData = undefined
+        cacheRow.style.display = 'none'
+    })
+
     let importedData: SaveData | undefined
+    let cachedData: SaveData | undefined
+
+    showCache()
 
     fileInput.addEventListener('change', () => {
         const file = fileInput.files?.[0]
@@ -63,10 +99,12 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
         reader.onload = () => {
             try {
                 const raw = JSON.parse(reader.result as string) as unknown
-                // 异步 import validation，校验失败会抛异常
                 import('../save_load/validation.ts').then(({validateSaveData}) => {
                     try {
-                        importedData = validateSaveData(raw)
+                        const validated = validateSaveData(raw)
+                        importedData = validated
+                        cacheSaveData(validated)
+                        cacheRow.style.display = 'none'
                         importLabel.textContent = `已导入：${file.name}`
                         importLabel.style.color = '#8f8'
                     } catch {
@@ -84,7 +122,7 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     const dismiss = (mode: GameMode): void => {
         overlay.remove()
-        handlers.onStart(mode, importedData)
+        handlers.onStart(mode, importedData ?? cachedData)
     }
 
     editBtn.addEventListener('click', () => dismiss('edit'))

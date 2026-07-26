@@ -6,7 +6,6 @@ import type {ElasticBoxConfig} from '../entity/box/elasticity/types'
 import type {WaterBlockConfig} from '../entity/area/water/types'
 import type {BaseTerrainConfig} from '../entity/terrain/base/types'
 import type {FragmentConfig} from '../entity/fragment/common/types'
-import type {GameMode} from '../modes/constants'
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -89,18 +88,35 @@ export interface SavableFragment {
     data: FragmentDataJSON
 }
 
-export interface SavablePlayer {
-    position: Vec3JSON
-}
-
 export type SavableEntity = SavableCommonBox | SavableDestructibleBox | SavableBurningBox
     | SavableMagnetBox | SavableElasticBox | SavableWaterBlock | SavableTerrain
     | SavableFragment
 
+// ── 模式信息（强类型嵌套）──
+
+export interface CameraInfoJSON {
+    position: Vec3JSON
+    /** 欧拉角: [pitch, yaw, roll] = camera.rotation.{x, y, z} */
+    rotate: Vec3JSON
+}
+
+export interface PlayerInfoJSON {
+    position: Vec3JSON
+}
+
+export interface ModeInfoJSON {
+    edit?: {
+        cameraInfo?: CameraInfoJSON
+    }
+    play?: {
+        cameraInfo?: CameraInfoJSON
+        playerInfo?: PlayerInfoJSON
+    }
+}
+
 /** 完整存档数据结构 */
 export interface SaveData {
     version: 1
-    mode: GameMode
     entities: SavableEntity[]
-    player?: SavablePlayer
+    modeInfo?: ModeInfoJSON
 }

@@ -33,6 +33,7 @@ import {setupPlayer} from './entity/player/physics/world.ts'
 import {setupPlayerInput} from './entity/player/input.ts'
 import {collectWorldState, saveWorldToFile} from './save_load/serialize.ts'
 import {loadWorldFromData, clearAllEntities} from './save_load/deserialize.ts'
+import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
 
 type EntitySystem = EntityInfoSource & EntityTickHandler
@@ -106,15 +107,15 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
 
     // --- UI ---
     const cameraInfoUpdate = setupCameraInfo(camera)
-    const spawnModePanelUpdate = setupSpawnModePanel(spawnMode.getSpawnMode, spawnMode.setSpawnMode)
-    const elementListPanelUpdate = setupElementListPanel(systems)
     const {updater: instructionsUpdate, toggle: toggleInstructions} = setupInstructionsPanel(() => mode)
 
     // --- 相机控制（分模式）---
     let playCameraUpdate: (() => void) | undefined
+    let setOrbitOrientation: ((yaw: number, pitch: number) => void) | undefined
 
     if (mode === 'edit') {
-        setupMouseOrbit(camera, renderer.domElement)
+        const orbit = setupMouseOrbit(camera, renderer.domElement)
+        setOrbitOrientation = orbit.setOrientation
     } else {
         playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () => {
             const p = player?.getPlayer()
@@ -130,11 +131,15 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     document.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault()
+            const cached = loadCachedSaveData()
             const state = collectWorldState(
                 systemsByType,
                 allTerrainSources,
                 mode,
+                camera.position,
+                camera.rotation,
                 player?.getPlayer()?.body.position,
+                cached?.modeInfo,
             )
             saveWorldToFile(state)
         }
@@ -153,14 +158,25 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
                         import('./save_load/validation.ts').then(({validateSaveData}) => {
                             try {
                                 const validated = validateSaveData(raw)
+                                cacheSaveData(validated)
                                 clearAllEntities(systemsByType, allTerrainSources)
                                 const result = loadWorldFromData(validated, systemsByType, allTerrainSources)
-                                // 若当前为 play 模式且保存中有玩家数据，重建玩家
-                                if (mode === 'play' && result.playerPos) {
-                                    if (!player) player = setupPlayer(scene, shared)
-                                    player.remove()
-                                    player.spawn(result.playerPos.x, result.playerPos.y, result.playerPos.z)
-                                    playerInput = setupPlayerInput(camera, player, renderer.domElement)
+                                if (mode === 'edit') {
+                                    if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
+                                    if (result.editCameraRot) {
+                                        camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
+                                        setOrbitOrientation?.(camera.rotation.y, camera.rotation.x)
+                                    }
+                                }
+                                if (mode === 'play') {
+                                    if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
+                                    if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
+                                    if (result.playPlayerPos) {
+                                        if (!player) player = setupPlayer(scene, shared)
+                                        player.remove()
+                                        player.spawn(result.playPlayerPos.x, result.playPlayerPos.y, result.playPlayerPos.z)
+                                        playerInput = setupPlayerInput(camera, player, renderer.domElement)
+                                    }
                                 }
                             } catch (err) {
                                 console.warn('存档加载失败:', err)
@@ -176,16 +192,21 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
         }
     })
 
-    // --- 模式特定的配置 ---
+    // --- 编辑/游玩模式的面板与交互 ---
+    let spawnModePanelUpdate: () => void
+    let elementListPanelUpdate: () => void
     if (mode === 'edit') {
-        // 编辑模式：初始化默认地形
+        // 编辑模式：初始化默认地形、UI 面板、编辑交互
         terrainSource.spawnAt(0, 0, 0)
-        // 启用编辑交互
+        spawnModePanelUpdate = setupSpawnModePanel(spawnMode.getSpawnMode, spawnMode.setSpawnMode)
+        elementListPanelUpdate = setupElementListPanel(systems)
         pointerInteraction.setEnabled(true)
         keyboardCamera.setEnabled(true)
         player = undefined
     } else {
         // 游玩模式：创建玩家，禁用编辑交互
+        spawnModePanelUpdate = () => {}
+        elementListPanelUpdate = () => {}
         pointerInteraction.setEnabled(false)
         keyboardCamera.setEnabled(false)
         player = setupPlayer(scene, shared)
@@ -196,19 +217,30 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     // --- 设置面板（右上角）---
     setupSettingsPanel(toggleInstructions)
 
-    // --- 若导入了存档，覆盖默认地形/玩家 ---
+    // --- 若导入了存档，覆盖默认地形/玩家/相机 ---
     if (saveData) {
         clearAllEntities(systemsByType, allTerrainSources)
         const result = loadWorldFromData(saveData, systemsByType, allTerrainSources)
-        if (mode === 'play' && result.playerPos && player) {
-            player.remove()
-            player.spawn(result.playerPos.x, result.playerPos.y, result.playerPos.z)
-            playerInput = setupPlayerInput(camera, player, renderer.domElement)
-        } else if (mode === 'play' && !player) {
-            player = setupPlayer(scene, shared)
-            const safeY = result.playerPos?.y ?? getPlayerSpawnY(allTerrainSources)
-            player.spawn(result.playerPos?.x ?? 0, safeY, result.playerPos?.z ?? 0)
-            playerInput = setupPlayerInput(camera, player, renderer.domElement)
+        if (mode === 'edit') {
+            if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
+            if (result.editCameraRot) {
+                camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
+                setOrbitOrientation?.(camera.rotation.y, camera.rotation.x)
+            }
+        }
+        if (mode === 'play') {
+            if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
+            if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
+            const pp = result.playPlayerPos
+            if (pp && player) {
+                player.remove()
+                player.spawn(pp.x, pp.y, pp.z)
+                playerInput = setupPlayerInput(camera, player, renderer.domElement)
+            } else if (pp && !player) {
+                player = setupPlayer(scene, shared)
+                player.spawn(pp.x, pp.y, pp.z)
+                playerInput = setupPlayerInput(camera, player, renderer.domElement)
+            }
         }
     }
 

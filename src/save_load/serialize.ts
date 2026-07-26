@@ -2,7 +2,7 @@ import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {GameMode} from '../modes/constants'
-import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON} from './types.ts'
+import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON, ModeInfoJSON, CameraInfoJSON} from './types.ts'
 
 /** 将 {x, y, z} 转为 [x, y, z] */
 const vec3ToTuple = (v: {x: number; y: number; z: number}): [number, number, number] =>
@@ -28,7 +28,10 @@ export const collectWorldState = (
     systems: Map<string, EntityInfoSource>,
     terrainSources: TerrainContext[],
     mode: GameMode,
+    cameraPos?: {x: number; y: number; z: number},
+    cameraRot?: {x: number; y: number; z: number},
     playerPos?: {x: number; y: number; z: number},
+    prevModeInfo?: ModeInfoJSON,
 ): SaveData => {
     const entities: SavableEntity[] = []
 
@@ -151,11 +154,27 @@ export const collectWorldState = (
         }
     }
 
+    // ── 构建 modeInfo（保留另一模式的已有数据）──
+    const modeInfo: ModeInfoJSON = prevModeInfo ? {...prevModeInfo} : {}
+    const cameraInfo: CameraInfoJSON | undefined = cameraPos
+        ? {position: vec3ToTuple(cameraPos), rotate: [cameraRot?.x ?? 0, cameraRot?.y ?? 0, cameraRot?.z ?? 0]}
+        : undefined
+
+    if (mode === 'edit') {
+        if (cameraInfo) modeInfo.edit = {cameraInfo}
+        // 不清除 play 数据
+    } else if (mode === 'play') {
+        const playEntry: NonNullable<typeof modeInfo.play> = {}
+        if (cameraInfo) playEntry.cameraInfo = cameraInfo
+        if (playerPos) playEntry.playerInfo = {position: vec3ToTuple(playerPos)}
+        if (playEntry.cameraInfo || playEntry.playerInfo) modeInfo.play = playEntry
+        // 不清除 edit 数据
+    }
+
     return {
         version: 1,
-        mode,
         entities,
-        player: playerPos ? {position: vec3ToTuple(playerPos)} : undefined,
+        modeInfo: modeInfo.edit || modeInfo.play ? modeInfo : undefined,
     }
 }
 

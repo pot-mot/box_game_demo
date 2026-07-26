@@ -96,11 +96,27 @@ const SavableEntity = z.discriminatedUnion('type', [
     SavableFragment,
 ])
 
+const CameraInfo = z.object({
+    position: Vec3,
+    rotate: Vec3,
+})
+
+const PlayerInfo = z.object({
+    position: Vec3,
+})
+
+const ModeInfo = z.object({
+    edit: z.object({cameraInfo: CameraInfo}).optional(),
+    play: z.object({
+        cameraInfo: CameraInfo.optional(),
+        playerInfo: PlayerInfo.optional(),
+    }).optional(),
+})
+
 const SaveDataSchema = z.object({
     version: z.literal(1),
-    mode: z.enum(['edit', 'play']),
     entities: z.array(SavableEntity),
-    player: z.object({position: Vec3}).optional(),
+    modeInfo: ModeInfo.optional(),
 })
 
 export type ValidatedSaveData = z.infer<typeof SaveDataSchema>

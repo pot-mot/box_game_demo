@@ -27,12 +27,23 @@ export const clearAllEntities = (systems: Map<string, EntityInfoSource>, terrain
     }
 }
 
+export interface LoadWorldResult {
+    editCameraPos?: {x: number; y: number; z: number}
+    editCameraRot?: {x: number; y: number; z: number}
+    playCameraPos?: {x: number; y: number; z: number}
+    playCameraRot?: {x: number; y: number; z: number}
+    playPlayerPos?: {x: number; y: number; z: number}
+}
+
+const vec3FromTuple = (t?: [number, number, number]): {x: number; y: number; z: number} | undefined =>
+    t ? {x: t[0], y: t[1], z: t[2]} : undefined
+
 /** 从 SaveData 重建世界 */
 export const loadWorldFromData = (
     data: SaveData,
     systems: Map<string, EntityInfoSource>,
     terrainSources: TerrainContext[],
-): {playerPos?: {x: number; y: number; z: number}} => {
+): LoadWorldResult => {
     const common = systems.get('box/common') as any
     const dest = systems.get('box/destruction') as any
     const burn = systems.get('box/burning') as any
@@ -85,7 +96,14 @@ export const loadWorldFromData = (
         }
     }
 
+    const ei = data.modeInfo?.edit
+    const pi = data.modeInfo?.play
+
     return {
-        playerPos: data.player ? {x: data.player.position[0], y: data.player.position[1], z: data.player.position[2]} : undefined,
+        editCameraPos: vec3FromTuple(ei?.cameraInfo?.position),
+        editCameraRot: vec3FromTuple(ei?.cameraInfo?.rotate),
+        playCameraPos: vec3FromTuple(pi?.cameraInfo?.position),
+        playCameraRot: vec3FromTuple(pi?.cameraInfo?.rotate),
+        playPlayerPos: vec3FromTuple(pi?.playerInfo?.position),
     }
 }
