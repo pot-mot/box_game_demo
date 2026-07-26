@@ -35,7 +35,6 @@ export const setupMagnetBoxes = (
     scene: Scene,
     shared: SharedWorld,
     physicsEnv: PhysicsEnv,
-    getTerrainHeight?: (x: number, z: number) => number | undefined,
 ): MagnetEntityContext => {
     const {world, boxMat} = shared
 
@@ -67,7 +66,7 @@ export const setupMagnetBoxes = (
 
     const add = (config: MagnetBoxConfig, x: number, y: number, z: number): MagnetBox => {
         const id = nextId++
-        const adjustedY = findNonOverlappingY(boxes, config, x, y, z, undefined, getTerrainHeight)
+        const adjustedY = findNonOverlappingY(boxes, config, x, y, z)
         const hw = config.width / 2
         const hh = config.height / 2
         const hd = config.depth / 2

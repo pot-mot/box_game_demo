@@ -15,7 +15,6 @@ export const setupPointerInteraction = (
     const sourcesByType = new Map(sources.map(s => [s.type, s]))
     const raycaster = new Raycaster()
     const pointer = new Vector2()
-    const forward = new Vector3()
     let pointerDownPos = {x: 0, y: 0}
 
     renderer.domElement.addEventListener('pointerdown', (e: PointerEvent) => {
@@ -91,17 +90,28 @@ export const setupPointerInteraction = (
         }
     })
 
-    // 右键 = 始终生成实体（所有模式一致）
+    // 右键：射线检测最近面 → 5 单位内则在其上生成，否则在 camera 前方空中生成
     renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => {
         e.preventDefault()
         const mode = getSpawnMode()
-
-        camera.getWorldDirection(forward)
-        const spawnPos = new Vector3().copy(camera.position).add(forward.clone().multiplyScalar(SPAWN_DIST))
-
         const source = sourcesByType.get(mode)
-        if (source) {
-            source.spawnAt(spawnPos.x, spawnPos.y, spawnPos.z)
+        if (!source) return
+
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1
+        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
+        raycaster.setFromCamera(pointer, camera)
+
+        const allMeshes = sources.flatMap(s => s.getMeshes())
+        const hits = allMeshes.length > 0 ? raycaster.intersectObjects(allMeshes, false) : []
+        let spawnPos: Vector3
+
+        if (hits.length > 0 && hits[0].distance <= SPAWN_DIST) {
+            spawnPos = hits[0].point
+        } else {
+            spawnPos = new Vector3()
+            raycaster.ray.at(SPAWN_DIST, spawnPos)
         }
+
+        source.spawnAt(spawnPos.x, spawnPos.y, spawnPos.z)
     })
 }

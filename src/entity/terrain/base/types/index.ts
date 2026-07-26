@@ -37,7 +37,7 @@ export interface TerrainSetupOptions {
 }
 
 export interface TerrainHeightQuery {
-    getHeightAt: (worldX: number, worldZ: number) => number | undefined
+    getHeightAt: (worldX: number, worldZ: number, bottomY: number) => number | undefined
 }
 
 export interface TerrainContext extends EntityInfoSource, TerrainHeightQuery {

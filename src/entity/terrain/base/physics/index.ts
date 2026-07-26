@@ -76,6 +76,7 @@ export const createTerrainContextImpl = (
         }
         entity.rowText = formatRowText(entity)
         entities.push(entity)
+        liftBoxesOnTerrain(entity, shared)
         rebuildPanelInfo()
         return entity
     }
@@ -246,7 +247,9 @@ export const createTerrainContextImpl = (
 
     // ── 高度查询 ──
 
-    const getHeightAt = (worldX: number, worldZ: number): number | undefined => {
+    const getHeightAt = (worldX: number, worldZ: number, refY: number): number | undefined => {
+        let closestDist = Infinity
+        let closestH: number | undefined
         for (const t of entities) {
             const gs = t.config.gridSize
             const cs = t.config.cellSize
@@ -257,9 +260,14 @@ export const createTerrainContextImpl = (
             const xi = Math.round((lx + half) / cs)
             const zi = Math.round((lz + half) / cs)
             if (xi < 0 || xi >= gs || zi < 0 || zi >= gs) continue
-            return t.mesh.position.y + t.heights[xi][zi]
+            const h = t.mesh.position.y + t.heights[xi][zi]
+            const dist = Math.abs(h - refY)
+            if (dist < closestDist) {
+                closestDist = dist
+                closestH = h
+            }
         }
-        return undefined
+        return closestH
     }
 
     // ── 同步（no-op，static body）──

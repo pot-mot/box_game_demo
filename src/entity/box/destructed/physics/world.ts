@@ -37,7 +37,6 @@ export const setupDestructibleBoxes = (
     scene: Scene,
     shared: SharedWorld,
     fragmentCtx: FragmentEntityContext,
-    getTerrainHeight?: (x: number, z: number) => number | undefined,
 ): DestructionEntityContext => {
     const {world, boxMat} = shared
 
@@ -67,7 +66,7 @@ export const setupDestructibleBoxes = (
     const add = (config: DestructibleConfig, x: number, y: number, z: number): DestructibleBox => {
         const id = globalBoxId++
         const halfH = config.height / 2
-        const py = findNonOverlappingY(boxes, config, x, y, z, (b) => b.destroyed, getTerrainHeight)
+        const py = findNonOverlappingY(boxes, config, x, y, z, (b) => b.destroyed)
 
         const {mesh, edges} = createDestructibleBoxMesh(config)
         mesh.position.set(x, py, z)

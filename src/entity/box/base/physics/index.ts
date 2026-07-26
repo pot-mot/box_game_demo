@@ -8,6 +8,12 @@ export interface OverlapBox {
     config: BoxSize
 }
 
+/**
+ * 检查指定 XZ 位置是否有地形面高于 bottomY
+ * 若有则返回最近地形面的世界 Y 坐标，否则返回 undefined
+ */
+export type TerrainCheckHeight = (x: number, z: number, bottomY: number) => number | undefined
+
 export const findNonOverlappingY = <T extends OverlapBox>(
     boxes: T[],
     config: BoxSize,
@@ -15,14 +21,14 @@ export const findNonOverlappingY = <T extends OverlapBox>(
     y: number,
     z: number,
     skipIf?: (box: T) => boolean,
-    getTerrainHeight?: (x: number, z: number) => number | undefined,
+    getTerrainHeight?: TerrainCheckHeight,
 ): number => {
     let py = y
     const halfH = config.height / 2
 
-    // 检查地形表面
+    // 从 box 底部向上找最近的地形面
     if (getTerrainHeight) {
-        const th = getTerrainHeight(x, z)
+        const th = getTerrainHeight(x, z, py - halfH)
         if (th !== undefined) {
             const minBottom = th + 0.01
             if (py - halfH < minBottom) {

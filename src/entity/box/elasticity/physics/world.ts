@@ -29,7 +29,6 @@ const BADGE_COLOR = '#6b8'
 export const setupElasticBoxes = (
     scene: Scene,
     shared: SharedWorld,
-    getTerrainHeight?: (x: number, z: number) => number | undefined,
 ): ElasticEntityContext => {
     const {world, boxMat} = shared
 
@@ -82,7 +81,7 @@ export const setupElasticBoxes = (
 
     const add = (config: ElasticBoxConfig, x: number, y: number, z: number): ElasticBox => {
         const id = nextId++
-        const adjustedY = findNonOverlappingY(boxes, config, x, y, z, undefined, getTerrainHeight)
+        const adjustedY = findNonOverlappingY(boxes, config, x, y, z)
         const hw = config.width / 2
         const hh = config.height / 2
         const hd = config.depth / 2

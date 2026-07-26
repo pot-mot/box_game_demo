@@ -50,17 +50,16 @@ const physicsEnv = createPhysicsEnv()
 // --- Entity 子系统（按依赖顺序初始化）---
 const fragments = setupFragmentEntities(scene, shared)
 
-// Terrain 需要在 box 之前初始化，用于高度查询
+// Terrain 需要在 box 之前初始化
 const terrainSource = setupTerrain(scene, shared)
 const allTerrainSources: TerrainContext[] = [terrainSource]
-const getTerrainHeight = (x: number, z: number): number | undefined => terrainSource.getHeightAt(x, z)
 
-const common = setupCommonBoxes(scene, shared, getTerrainHeight)
-const destruction = setupDestructibleBoxes(scene, shared, fragments, getTerrainHeight)
+const common = setupCommonBoxes(scene, shared)
+const destruction = setupDestructibleBoxes(scene, shared, fragments)
 const water = setupWaterBlocks(scene, physicsEnv)
-const burning = setupBurningBoxes(scene, shared, getTerrainHeight)
-const magnet = setupMagnetBoxes(scene, shared, physicsEnv, getTerrainHeight)
-const elastic = setupElasticBoxes(scene, shared, getTerrainHeight)
+const burning = setupBurningBoxes(scene, shared)
+const magnet = setupMagnetBoxes(scene, shared, physicsEnv)
+const elastic = setupElasticBoxes(scene, shared)
 
 // 注册 body provider，供浮力/磁铁等跨系统逻辑使用
 physicsEnv.bodyProviders.push(
