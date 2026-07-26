@@ -1,13 +1,14 @@
+import {z} from 'zod'
 import type {LineSegments} from 'three'
 import type {Body} from 'cannon-es'
-import type {BaseEntity, RigidBodyConfig, XYZ} from '../../base/types'
+import type {BaseEntity, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
 import type {HealthComponent} from '../../base/types/health'
 import type {FragmentData} from '../../../destroyed/types'
+import {DestructibleConfigSchema} from '../validation.ts'
 
-export interface DestructibleConfig extends RigidBodyConfig {
-    maxHealth: number
-}
+export type DestructibleConfig = z.infer<typeof DestructibleConfigSchema>
+export {DestructibleConfigSchema} from '../validation.ts'
 
 export interface CollisionRecord {
     contactPoint: [number, number, number]

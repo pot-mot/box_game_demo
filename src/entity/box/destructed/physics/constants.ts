@@ -1,14 +1,15 @@
-import type {DestructibleConfig} from '../types'
+import {DestructibleConfigSchema} from '../validation.ts'
 
 /** 可破坏箱子默认配置 */
-export const DEFAULT_DESTRUCTIBLE_CONFIG: DestructibleConfig = {
+export const DEFAULT_DESTRUCTIBLE_CONFIG = DestructibleConfigSchema.parse({
     width: 1,
     height: 1,
     depth: 1,
     mass: 1,
     friction: 0.3,
     maxHealth: 8,
-}
+})
+
 /** 碰撞冲击力 → 伤害的缩放系数 */
 export const IMPACT_FORCE_SCALE = 0.5
 /** 碎片存续时间（秒） */

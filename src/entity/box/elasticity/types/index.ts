@@ -1,25 +1,19 @@
+import {z} from 'zod'
 import type {LineSegments} from 'three'
 import type {Body} from 'cannon-es'
-import type {BaseEntity, RigidBodyConfig, XYZ} from '../../base/types'
+import type {BaseEntity, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
+import {ElasticBoxConfigSchema} from '../validation.ts'
 
-/** 弹性箱子配置 */
-export interface ElasticBoxConfig extends RigidBodyConfig {
-    stiffness: number
-    dampingRatio: number
-    maxDeformFraction: number
-}
+export type ElasticBoxConfig = z.infer<typeof ElasticBoxConfigSchema>
+export {ElasticBoxConfigSchema} from '../validation.ts'
 
-/** 弹性箱子运行时对象 */
 export interface ElasticBox extends BaseEntity<ElasticBoxConfig> {
     body: Body
     edges: LineSegments
     wireframe: LineSegments | undefined
-    /** 三轴向形变位移 [dx, dy, dz] */
     def: [number, number, number]
-    /** 三轴向形变速度 [vx, vy, vz] */
     vel: [number, number, number]
-    /** 碰撞冷却计时器（otherBodyId → 剩余秒数） */
     cooldowns: Map<number, number>
 }
 

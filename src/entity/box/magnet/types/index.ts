@@ -1,12 +1,12 @@
+import {z} from 'zod'
 import type {LineSegments} from 'three'
 import type {Body} from 'cannon-es'
-import type {BaseEntity, RigidBodyConfig, XYZ} from '../../base/types'
+import type {BaseEntity, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
+import {MagnetBoxConfigSchema} from '../validation.ts'
 
-export interface MagnetBoxConfig extends RigidBodyConfig {
-    attractionRadius: number
-    attractionStrength: number
-}
+export type MagnetBoxConfig = z.infer<typeof MagnetBoxConfigSchema>
+export {MagnetBoxConfigSchema} from '../validation.ts'
 
 export interface MagnetBox extends BaseEntity<MagnetBoxConfig> {
     body: Body

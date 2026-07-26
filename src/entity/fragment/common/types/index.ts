@@ -1,15 +1,13 @@
+import {z} from 'zod'
 import type {LineSegments} from 'three'
 import type {Body} from 'cannon-es'
 import type {BaseEntity, XYZ} from '../../../box/base/types'
 import type {EntityInfoSource} from '../../../box/base/types/entity_info'
 import type {FragmentData} from '../../../destroyed/types'
+import {FragmentConfigSchema} from '../validation.ts'
 
-export interface FragmentConfig {
-    mass: number
-    friction: number
-    lifetime: number
-    maxLifetime: number
-}
+export type FragmentConfig = z.infer<typeof FragmentConfigSchema>
+export {FragmentConfigSchema} from '../validation.ts'
 
 export interface Fragment extends BaseEntity<FragmentConfig> {
     body: Body

@@ -1,11 +1,11 @@
-import type {WaterBlockConfig} from '../types'
+import {WaterBlockConfigSchema} from '../validation.ts'
 
-export const DEFAULT_WATER_CONFIG: WaterBlockConfig = {
+export const DEFAULT_WATER_CONFIG = WaterBlockConfigSchema.parse({
     width: 2,
     height: 2,
     depth: 2,
     density: 2.0,
-}
+})
 
 export const WATER_DENSITY = 2.0
 export const DRAG_COEFFICIENT = 4.0

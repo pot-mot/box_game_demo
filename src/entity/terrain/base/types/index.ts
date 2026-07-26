@@ -1,16 +1,12 @@
+import {z} from 'zod'
 import type {LineSegments, Mesh} from 'three'
 import type {Body} from 'cannon-es'
 import type {EntityType} from '../../../constants.ts'
 import type {EntityInfoSource} from '../../../box/base/types/entity_info.ts'
+import {BaseTerrainConfigSchema} from '../validation.ts'
 
-export interface BaseTerrainConfig {
-    gridSize: number
-    cellSize: number
-    minHeight: number
-    maxHeight: number
-    friction: number
-    generatorId: string
-}
+export type BaseTerrainConfig = z.infer<typeof BaseTerrainConfigSchema>
+export {BaseTerrainConfigSchema} from '../validation.ts'
 
 export interface BaseTerrainEntity {
     id: number
@@ -49,4 +45,5 @@ export interface TerrainContext extends EntityInfoSource, TerrainHeightQuery {
     getBody: (id: number) => Body | undefined
     updateConfig: (id: number, partial: Partial<BaseTerrainConfig>) => void
     updatePosition: (id: number, x: number, z: number) => void
+    setHeights: (id: number, heights: number[][]) => void
 }

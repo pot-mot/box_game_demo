@@ -26,3 +26,153 @@ body {
 .ep-sel {
     background: rgba(100, 180, 255, .25);
 }
+
+/* ── 启动界面 ── */
+
+#startup-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #111;
+}
+
+#startup-box {
+    text-align: center;
+    padding: 48px 64px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+}
+
+#startup-title {
+    font: 600 56px/1.2 system-ui, sans-serif;
+    color: #fff;
+    letter-spacing: 4px;
+}
+
+#startup-subtitle {
+    font: 18px/1.6 system-ui, sans-serif;
+    color: #888;
+    margin-top: 8px;
+    margin-bottom: 32px;
+}
+
+#startup-buttons {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-bottom: 24px;
+}
+
+.startup-btn {
+    padding: 14px 48px;
+    font: 500 18px system-ui, sans-serif;
+    border: 1px solid #555;
+    cursor: pointer;
+    background: #222;
+    color: #fff;
+}
+.startup-btn:hover {
+    background: #333;
+}
+.startup-btn-play {
+    background: #1a3a5c;
+    border-color: #2a6a9c;
+}
+.startup-btn-play:hover {
+    background: #2a4a7c;
+}
+
+#startup-import {
+    font: 14px system-ui, sans-serif;
+    color: #888;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+#startup-file-input {
+    color: #fff;
+    font: inherit;
+}
+
+/* ── 操作说明面板 ── */
+
+#instructions-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 999;
+    background: #111;
+    border: 1px solid #333;
+    padding: 28px 36px;
+    min-width: 360px;
+    pointer-events: none;
+}
+
+#instructions-title {
+    font: 600 18px/1.8 system-ui, sans-serif;
+    color: #fff;
+    text-align: center;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 8px;
+}
+
+#instructions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.instruction-line {
+    font: 14px/1.8 system-ui, sans-serif;
+    color: #ccc;
+}
+
+/* ── 右上角设置按钮与菜单 ── */
+
+#settings-btn {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 200;
+    width: 40px;
+    height: 40px;
+    border: 1px solid #555;
+    background: #111;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#settings-btn:hover {
+    background: #222;
+}
+
+#settings-menu {
+    position: fixed;
+    top: 64px;
+    right: 16px;
+    z-index: 200;
+    display: none;
+    min-width: 180px;
+    background: #111;
+    border: 1px solid #333;
+    padding: 4px 0;
+}
+
+.settings-menu-item {
+    padding: 10px 18px;
+    font: 14px/1.5 system-ui, sans-serif;
+    color: #ccc;
+    cursor: pointer;
+}
+.settings-menu-item:hover {
+    background: #222;
+}

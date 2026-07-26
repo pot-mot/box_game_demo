@@ -14,6 +14,9 @@ importers:
       three:
         specifier: ^0.185.1
         version: 0.185.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@playwright/test':
         specifier: ^1.62.0
@@ -545,6 +548,9 @@ packages:
       utf-8-validate:
         optional: true
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
 
   '@dimforge/rapier3d-compat@0.12.0': {}
@@ -937,3 +943,5 @@ snapshots:
       stackback: 0.0.2
 
   ws@8.21.1: {}
+
+  zod@4.4.3: {}

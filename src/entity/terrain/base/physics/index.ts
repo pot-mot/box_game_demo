@@ -278,6 +278,18 @@ export const createTerrainContextImpl = (
         // static bodies do not move
     }
 
+    // ── 设置高度（用于存档加载）──
+
+    const setHeights = (id: number, heights: number[][]): void => {
+        const t = entities.find(e => e.id === id)
+        if (!t) return
+        t.heights = heights.map(col => [...col])
+        rebuildShape(t)
+        liftBoxesOnTerrain(t, shared)
+        t.rowText = formatRowText(t)
+        rebuildPanelInfo()
+    }
+
     // ── 上下文 ──
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -304,6 +316,7 @@ export const createTerrainContextImpl = (
         getBody,
         updateConfig,
         updatePosition,
+        setHeights,
         panel: undefined as unknown as PanelContext,
     }
     return ctx

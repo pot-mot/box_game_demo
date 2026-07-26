@@ -1,8 +1,13 @@
+import {z} from 'zod'
 import type {LineSegments, Points} from 'three'
 import type {Body} from 'cannon-es'
-import type {BaseEntity, RigidBodyConfig, XYZ} from '../../base/types'
+import type {BaseEntity, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
 import type {HealthComponent} from '../../base/types/health'
+import {BurningBoxConfigSchema} from '../validation.ts'
+
+export type BurningBoxConfig = z.infer<typeof BurningBoxConfigSchema>
+export {BurningBoxConfigSchema} from '../validation.ts'
 
 export interface ParticleData {
     pos: Float32Array
@@ -12,10 +17,6 @@ export interface ParticleData {
     age: Float32Array
     lifetime: Float32Array
     active: Uint8Array
-}
-
-export interface BurningBoxConfig extends RigidBodyConfig {
-    maxHealth: number
 }
 
 export interface BurningBox extends BaseEntity<BurningBoxConfig>, HealthComponent {

@@ -5,26 +5,31 @@ import type {TerrainContext} from '../entity/terrain/base/types'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 import {focusPanel} from '../ui/entity_control_panel.ts'
 
+/**
+ * 指针交互（左键选中 + 右键生成 + 滚轮雕刻）。
+ * 返回 setEnabled 控制开关，用于编辑/游玩模式切换。
+ */
 export const setupPointerInteraction = (
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
     sources: EntityInfoSource[],
     getSpawnMode: () => SpawnMode,
     terrainSources?: TerrainContext[],
-): void => {
+): {setEnabled: (v: boolean) => void} => {
     const sourcesByType = new Map(sources.map(s => [s.type, s]))
     const raycaster = new Raycaster()
     const pointer = new Vector2()
     let pointerDownPos = {x: 0, y: 0}
+    let enabled = true
 
-    renderer.domElement.addEventListener('pointerdown', (e: PointerEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
+        if (!enabled) return
         renderer.domElement.focus()
-        if (e.button === 0) {
-            pointerDownPos = {x: e.clientX, y: e.clientY}
-        }
-    })
+        if (e.button === 0) pointerDownPos = {x: e.clientX, y: e.clientY}
+    }
 
-    renderer.domElement.addEventListener('pointerup', (e: PointerEvent) => {
+    const handlePointerUp = (e: PointerEvent) => {
+        if (!enabled) return
         if (e.button !== 0) return
         const dx = e.clientX - pointerDownPos.x
         const dy = e.clientY - pointerDownPos.y
@@ -44,7 +49,6 @@ export const setupPointerInteraction = (
         const hits = raycaster.intersectObjects(allMeshes, false)
         if (hits.length > 0) {
             const hitMesh = hits[0].object as Mesh
-
             for (const source of sources) {
                 const entity = source.getEntityList().find(e => e.mesh === hitMesh)
                 if (entity) {
@@ -58,10 +62,10 @@ export const setupPointerInteraction = (
 
         sources.forEach(s => s.select(undefined))
         focusPanel(undefined)
-    })
+    }
 
-    // 鼠标滚轮 = 雕刻地形（当前选中的是 terrain 即可）
-    renderer.domElement.addEventListener('wheel', (e: WheelEvent) => {
+    const handleWheel = (e: WheelEvent) => {
+        if (!enabled) return
         if (!terrainSources || terrainSources.length === 0) return
         const hasTerrainSelected = terrainSources.some(ts => ts.getSelectedId() !== undefined)
         if (!hasTerrainSelected) return
@@ -73,13 +77,11 @@ export const setupPointerInteraction = (
 
         const terrainMeshes = terrainSources.flatMap(s => s.getMeshes())
         if (terrainMeshes.length === 0) return
-
         const hits = raycaster.intersectObjects(terrainMeshes, false)
         if (hits.length === 0) return
 
         const hitMesh = hits[0].object as Mesh
         const hitPoint = hits[0].point
-
         for (const ts of terrainSources) {
             const entity = ts.getEntityList().find(e => e.mesh === hitMesh)
             if (entity) {
@@ -88,10 +90,10 @@ export const setupPointerInteraction = (
                 return
             }
         }
-    })
+    }
 
-    // 右键：射线检测最近面 → 5 单位内则在其上生成，否则在 camera 前方空中生成
-    renderer.domElement.addEventListener('contextmenu', (e: MouseEvent) => {
+    const handleContextMenu = (e: MouseEvent) => {
+        if (!enabled) return
         e.preventDefault()
         const mode = getSpawnMode()
         const source = sourcesByType.get(mode)
@@ -113,5 +115,14 @@ export const setupPointerInteraction = (
         }
 
         source.spawnAt(spawnPos.x, spawnPos.y, spawnPos.z)
-    })
+    }
+
+    renderer.domElement.addEventListener('pointerdown', handlePointerDown)
+    renderer.domElement.addEventListener('pointerup', handlePointerUp)
+    renderer.domElement.addEventListener('wheel', handleWheel)
+    renderer.domElement.addEventListener('contextmenu', handleContextMenu)
+
+    return {
+        setEnabled: (v: boolean) => { enabled = v },
+    }
 }

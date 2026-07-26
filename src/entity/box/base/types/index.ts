@@ -1,18 +1,14 @@
+import {z} from 'zod'
 import type {Mesh} from 'three'
 import type {Body} from 'cannon-es'
 import type {EntityEmitter} from './event_emitter'
 import type {PanelContext} from '../ui'
+import {BoxSizeSchema, RigidBodyConfigSchema} from '../validation.ts'
 
-export interface BoxSize {
-    width: number
-    height: number
-    depth: number
-}
+export type BoxSize = z.infer<typeof BoxSizeSchema>
+export type RigidBodyConfig = z.infer<typeof RigidBodyConfigSchema>
 
-export interface RigidBodyConfig extends BoxSize {
-    mass: number
-    friction: number
-}
+export {BoxSizeSchema, RigidBodyConfigSchema} from '../validation.ts'
 
 export interface XYZ {
     x: number

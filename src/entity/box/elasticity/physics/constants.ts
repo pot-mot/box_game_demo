@@ -1,6 +1,6 @@
-import type {ElasticBoxConfig} from '../types'
+import {ElasticBoxConfigSchema} from '../validation.ts'
 
-export const DEFAULT_ELASTIC_CONFIG: ElasticBoxConfig = {
+export const DEFAULT_ELASTIC_CONFIG = ElasticBoxConfigSchema.parse({
     width: 1,
     height: 1,
     depth: 1,
@@ -9,7 +9,7 @@ export const DEFAULT_ELASTIC_CONFIG: ElasticBoxConfig = {
     stiffness: 30,
     dampingRatio: 0.12,
     maxDeformFraction: 0.5,
-}
+})
 
 /** 碰撞冷却时间（秒），避免单次碰撞多次触发 */
 export const COLLISION_COOLDOWN = 0.05

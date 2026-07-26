@@ -1,13 +1,11 @@
+import {z} from 'zod'
 import type {LineSegments, Mesh} from 'three'
 import type {EntityEmitter} from '../../../box/base/types/event_emitter.ts'
 import type {EntityInfoSource} from '../../../box/base/types/entity_info.ts'
+import {WaterBlockConfigSchema} from '../validation.ts'
 
-export interface WaterBlockConfig {
-    width: number
-    height: number
-    depth: number
-    density: number
-}
+export type WaterBlockConfig = z.infer<typeof WaterBlockConfigSchema>
+export {WaterBlockConfigSchema} from '../validation.ts'
 
 export interface WaterBlock {
     id: number

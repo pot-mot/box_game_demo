@@ -1,7 +1,7 @@
-import type {MagnetBoxConfig} from '../types'
+import {MagnetBoxConfigSchema} from '../validation.ts'
 
 /** 磁铁箱子默认配置 */
-export const DEFAULT_MAGNET_CONFIG: MagnetBoxConfig = {
+export const DEFAULT_MAGNET_CONFIG = MagnetBoxConfigSchema.parse({
     width: 1,
     height: 1,
     depth: 1,
@@ -9,7 +9,7 @@ export const DEFAULT_MAGNET_CONFIG: MagnetBoxConfig = {
     friction: 0.3,
     attractionRadius: 5,
     attractionStrength: 3,
-}
+})
 
 /** 被吸引物体的最大线速度，防止碰撞弹飞 */
 export const MAX_SPEED = 8
