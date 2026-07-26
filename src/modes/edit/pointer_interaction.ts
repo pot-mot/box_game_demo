@@ -1,9 +1,9 @@
 import {Raycaster, Vector2, Vector3, type PerspectiveCamera, type WebGLRenderer, type Mesh} from 'three'
-import type {SpawnMode} from '../types/spawnMode.ts'
-import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
-import type {TerrainContext} from '../entity/terrain/base/types'
+import type {SpawnMode} from '../../types/spawnMode.ts'
+import type {EntityInfoSource} from '../../entity/box/base/types/entity_info.ts'
+import type {TerrainContext} from '../../entity/terrain/base/types'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
-import {focusPanel} from '../ui/entity_control_panel.ts'
+import {focusPanel} from '../../ui/entity_control_panel.ts'
 
 /**
  * 指针交互（左键选中 + 右键生成 + 滚轮雕刻）。

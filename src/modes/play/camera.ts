@@ -1,5 +1,6 @@
 import {Vector3, type PerspectiveCamera} from 'three'
-import {ORBIT_SENSITIVITY} from '../input/constants.ts'
+import {ORBIT_SENSITIVITY} from '../../input/constants.ts'
+import {ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE} from './constants.ts'
 
 /**
  * 游玩模式第三人称相机。
@@ -30,7 +31,7 @@ export const setupPlayCamera = (
 
     element.addEventListener('wheel', (e: WheelEvent) => {
         e.preventDefault()
-        distance = Math.max(1, Math.min(30, distance + e.deltaY * 0.01))
+        distance = Math.max(MIN_DISTANCE, Math.min(MAX_DISTANCE, distance + e.deltaY * ZOOM_SPEED))
     })
 
     return () => {

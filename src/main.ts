@@ -8,9 +8,6 @@ import type {SaveData} from './save_load/types.ts'
 import {createRenderContext} from './render/setup.ts'
 import {setupInfiniteGrid} from './render/grid.ts'
 import {setupRefractionPass} from './render/refraction_pass.ts'
-import {setupMouseOrbit} from './input/mouse_orbit.ts'
-import {setupSpawnModeManager} from './input/spawn_mode.ts'
-import {setupKeyboardCamera} from './input/keyboard_camera.ts'
 import {createSharedWorld} from './physics/world.ts'
 import {createPhysicsEnv} from './physics/env.ts'
 import {setupCommonBoxes} from './entity/box/common/physics/world.ts'
@@ -22,15 +19,13 @@ import {setupMagnetBoxes} from './entity/box/magnet/physics/world.ts'
 import {setupElasticBoxes} from './entity/box/elasticity/physics/world.ts'
 import {setupTerrain} from './entity/terrain/common/physics/world.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
-import {setupSpawnModePanel} from './ui/spawn_mode_panel.ts'
-import {setupElementListPanel} from './ui/element_list_panel.ts'
-import {setupPointerInteraction} from './input/pointer_interaction.ts'
 import {setupStartupScreen} from './modes/startup_screen.ts'
 import {setupInstructionsPanel} from './modes/instructions_panel.ts'
 import {setupSettingsPanel} from './ui/settings_panel.ts'
-import {setupPlayCamera} from './modes/play_camera.ts'
-import {setupPlayer} from './entity/player/physics/world.ts'
-import {setupPlayerInput} from './entity/player/input.ts'
+import {setupEditMode} from './modes/edit/index.ts'
+import type {EditModeController} from './modes/edit/index.ts'
+import {setupPlayMode} from './modes/play/index.ts'
+import type {PlayModeController} from './modes/play/index.ts'
 import {collectWorldState, saveWorldToFile} from './save_load/serialize.ts'
 import {loadWorldFromData, clearAllEntities} from './save_load/deserialize.ts'
 import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
@@ -47,16 +42,6 @@ setupStartupScreen({
         startGame(mode, saveData)
     },
 })
-
-/** 计算玩家安全出生 Y 坐标：取地形最高点 + 半身高 + 额外间隙 */
-const getPlayerSpawnY = (terrains: readonly TerrainContext[]): number => {
-    let maxH = 0 // 地面 Y
-    for (const t of terrains) {
-        const h = t.getHeightAt(0, 0, 1)
-        if (h !== undefined && h > maxH) maxH = h
-    }
-    return maxH + 0.5 + 0.3 // 半高 0.5 + 余量 0.3
-}
 
 const startGame = (mode: GameMode, saveData?: SaveData): void => {
     // --- 渲染系统 ---
@@ -98,34 +83,19 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
         systems.map(s => [s.type, s]),
     )
 
-    // --- 输入系统（编辑模式）---
-    const keyboardCamera = setupKeyboardCamera(camera, renderer.domElement)
-    const spawnMode = setupSpawnModeManager()
-    const pointerInteraction = setupPointerInteraction(
-        camera, renderer, systems, spawnMode.getSpawnMode, allTerrainSources,
-    )
+    // --- 模式控制器（编辑/游玩）---
+    let editMode: EditModeController | undefined
+    let playMode: PlayModeController | undefined
+
+    if (mode === 'edit') {
+        editMode = setupEditMode(camera, renderer, systems, allTerrainSources, terrainSource)
+    } else {
+        playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources)
+    }
 
     // --- UI ---
     const cameraInfoUpdate = setupCameraInfo(camera)
     const {updater: instructionsUpdate, toggle: toggleInstructions} = setupInstructionsPanel(() => mode)
-
-    // --- 相机控制（分模式）---
-    let playCameraUpdate: (() => void) | undefined
-    let setOrbitOrientation: ((yaw: number, pitch: number) => void) | undefined
-
-    if (mode === 'edit') {
-        const orbit = setupMouseOrbit(camera, renderer.domElement)
-        setOrbitOrientation = orbit.setOrientation
-    } else {
-        playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () => {
-            const p = player?.getPlayer()
-            return p ? p.mesh.position : undefined
-        })
-    }
-
-    // --- 游玩模式玩家（延迟初始化，见下文模式配置）---
-    let player: ReturnType<typeof setupPlayer> | undefined
-    let playerInput: (() => void) | undefined
 
     // --- 存档快捷键 ---
     document.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -138,7 +108,7 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
                 mode,
                 camera.position,
                 camera.rotation,
-                player?.getPlayer()?.body.position,
+                playMode?.getPlayerBodyPosition(),
                 cached?.modeInfo,
             )
             saveWorldToFile(state)
@@ -165,17 +135,14 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
                                     if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
                                     if (result.editCameraRot) {
                                         camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
-                                        setOrbitOrientation?.(camera.rotation.y, camera.rotation.x)
+                                        editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
                                     }
                                 }
                                 if (mode === 'play') {
                                     if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
                                     if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
                                     if (result.playPlayerPos) {
-                                        if (!player) player = setupPlayer(scene, shared)
-                                        player.remove()
-                                        player.spawn(result.playPlayerPos.x, result.playPlayerPos.y, result.playPlayerPos.z)
-                                        playerInput = setupPlayerInput(camera, player, renderer.domElement)
+                                        playMode?.respawnPlayer(result.playPlayerPos.x, result.playPlayerPos.y, result.playPlayerPos.z)
                                     }
                                 }
                             } catch (err) {
@@ -192,28 +159,6 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
         }
     })
 
-    // --- 编辑/游玩模式的面板与交互 ---
-    let spawnModePanelUpdate: () => void
-    let elementListPanelUpdate: () => void
-    if (mode === 'edit') {
-        // 编辑模式：初始化默认地形、UI 面板、编辑交互
-        terrainSource.spawnAt(0, 0, 0)
-        spawnModePanelUpdate = setupSpawnModePanel(spawnMode.getSpawnMode, spawnMode.setSpawnMode)
-        elementListPanelUpdate = setupElementListPanel(systems)
-        pointerInteraction.setEnabled(true)
-        keyboardCamera.setEnabled(true)
-        player = undefined
-    } else {
-        // 游玩模式：创建玩家，禁用编辑交互
-        spawnModePanelUpdate = () => {}
-        elementListPanelUpdate = () => {}
-        pointerInteraction.setEnabled(false)
-        keyboardCamera.setEnabled(false)
-        player = setupPlayer(scene, shared)
-        player.spawn(0, getPlayerSpawnY(allTerrainSources), 0)
-        playerInput = setupPlayerInput(camera, player, renderer.domElement)
-    }
-
     // --- 设置面板（右上角）---
     setupSettingsPanel(toggleInstructions)
 
@@ -225,21 +170,14 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
             if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
             if (result.editCameraRot) {
                 camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
-                setOrbitOrientation?.(camera.rotation.y, camera.rotation.x)
+                editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
             }
         }
         if (mode === 'play') {
             if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
             if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
-            const pp = result.playPlayerPos
-            if (pp && player) {
-                player.remove()
-                player.spawn(pp.x, pp.y, pp.z)
-                playerInput = setupPlayerInput(camera, player, renderer.domElement)
-            } else if (pp && !player) {
-                player = setupPlayer(scene, shared)
-                player.spawn(pp.x, pp.y, pp.z)
-                playerInput = setupPlayerInput(camera, player, renderer.domElement)
+            if (result.playPlayerPos) {
+                playMode?.respawnPlayer(result.playPlayerPos.x, result.playPlayerPos.y, result.playPlayerPos.z)
             }
         }
     }
@@ -257,25 +195,19 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
             for (const s of systems) s.preSync?.(delta, time)
             for (const s of systems) s.syncPositions()
 
-            // 玩家位置同步
-            if (player) {
-                player.syncPositions()
-            }
-
             gridUpdate()
-            keyboardCamera.updater()
-            playerInput?.()
+
+            if (mode === 'edit') {
+                editMode?.updater()
+            } else {
+                playMode?.updater()
+            }
 
             // 双 Pass 渲染（水方块折射）
             const waterMeshes: Mesh[] = water.getMeshes()
             renderFrame(waterMeshes)
 
-            playCameraUpdate?.()
             cameraInfoUpdate()
-            if (mode === 'edit') {
-                spawnModePanelUpdate()
-                elementListPanelUpdate()
-            }
             instructionsUpdate()
         } catch (e) {
             console.warn('Frame update failed:', e)

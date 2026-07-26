@@ -4,7 +4,7 @@ import type {SharedWorld} from '../../../physics/world.ts'
 import type {PlayerConfig, PlayerEntity} from '../types'
 import {createPlayerMesh} from '../render'
 import {DEFAULT_PLAYER_CONFIG, PLAYER_COLLISION_GROUP, PLAYER_COLLISION_MASK} from '../constants.ts'
-import {PLAYER_LINEAR_DAMPING, PLAYER_ANGULAR_DAMPING} from './constants.ts'
+import {PLAYER_LINEAR_DAMPING} from './constants.ts'
 
 export interface PlayerContext {
     getPlayer: () => PlayerEntity | undefined
@@ -32,7 +32,7 @@ export const setupPlayer = (scene: Scene, shared: SharedWorld): PlayerContext =>
             mass: 1,
             type: BODY_TYPES.DYNAMIC,
             linearDamping: PLAYER_LINEAR_DAMPING,
-            angularDamping: PLAYER_ANGULAR_DAMPING,
+            fixedRotation: true,
             collisionFilterGroup: PLAYER_COLLISION_GROUP,
             collisionFilterMask: PLAYER_COLLISION_MASK,
         })
@@ -68,7 +68,7 @@ export const setupPlayer = (scene: Scene, shared: SharedWorld): PlayerContext =>
     const syncPositions = (): void => {
         if (!player) return
         player.mesh.position.set(player.body.position.x, player.body.position.y, player.body.position.z)
-        player.mesh.quaternion.set(player.body.quaternion.x, player.body.quaternion.y, player.body.quaternion.z, player.body.quaternion.w)
+        player.mesh.quaternion.identity()
     }
 
     const getPlayer = (): PlayerEntity | undefined => player

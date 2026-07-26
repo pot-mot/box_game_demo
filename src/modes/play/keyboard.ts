@@ -1,31 +1,28 @@
 import {Vector3, type PerspectiveCamera} from 'three'
-import type {PlayerContext} from './physics/world.ts'
+import type {PlayerContext} from '../../entity/player/physics/world.ts'
 
-/** 玩家键盘输入控制（WASD 移动 + Space 跳跃） */
-export const setupPlayerInput = (
+/** 游玩模式玩家键盘控制（WASD 移动 + Space 跳跃） */
+export const setupPlayerKeyboard = (
     camera: PerspectiveCamera,
     player: PlayerContext,
-    element: HTMLElement,
 ): () => void => {
     const keys: Record<string, boolean> = {}
     const forward = new Vector3()
     const right = new Vector3()
 
-    const onKeyDown = (e: KeyboardEvent) => { keys[e.code] = true }
-    const onKeyUp = (e: KeyboardEvent) => { keys[e.code] = false }
-    const onBlur = () => { for (const k in keys) keys[k] = false }
-
-    element.addEventListener('keydown', onKeyDown)
-    element.addEventListener('keyup', onKeyUp)
-    element.addEventListener('blur', onBlur)
-
-    // 跳跃单独用 keydown 防止按住连跳
-    element.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.code === 'Space') {
+    const onKeyDown = (e: KeyboardEvent) => {
+        keys[e.code] = true
+        if (e.code === 'Space' && !e.repeat) {
             e.preventDefault()
             player.jump()
         }
-    })
+    }
+    const onKeyUp = (e: KeyboardEvent) => { keys[e.code] = false }
+    const onBlur = () => { for (const k in keys) keys[k] = false }
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
 
     return () => {
         if (!player.getPlayer()) return
