@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest'
-import {findNonOverlappingY, OVERLAP_MAX_ATTEMPTS, type OverlapBox} from './index.ts'
+import {findNonOverlappingY, OVERLAP_MAX_ATTEMPTS, type OverlapBox} from '.'
 
 const SIZE_1 = {width: 1, height: 1, depth: 1}
 
