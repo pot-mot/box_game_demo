@@ -83,4 +83,52 @@ describe('findNonOverlappingY', () => {
         // Should have climbed up the stack without infinite looping
         expect(result).toBeGreaterThan(0)
     })
+
+    it('不移动水平方向偏移不重叠的箱子', () => {
+        const existing = makeBox(0, 0.5, 0)
+        // 新箱子在 X 方向偏移 2，大于半宽之和 (0.5 + 0.5 = 1)
+        const result = findNonOverlappingY([existing], SIZE_1, 2, 0.5, 0)
+        expect(result).toBe(0.5)
+    })
+
+    it('不移动 Z 方向偏移不重叠的箱子', () => {
+        const existing = makeBox(0, 0.5, 0)
+        // 新箱子在 Z 方向偏移 2，大于半深之和 (0.5 + 0.5 = 1)
+        const result = findNonOverlappingY([existing], SIZE_1, 0, 0.5, 2)
+        expect(result).toBe(0.5)
+    })
+
+    it('处理恰好接触但不重叠的箱子（AABB 临界情况）', () => {
+        const existing = makeBox(0, 0.5, 0)
+        // existing 占据 y 范围 [0, 1]，新箱在 y=1.5 时占据 [1.0, 2.0]，恰好 boundary 接触
+        const result = findNonOverlappingY([existing], SIZE_1, 0, 1.5, 0)
+        expect(result).toBe(1.5)
+    })
+
+    it('多轮迭代找到最终无重叠位置', () => {
+        const boxes = [
+            makeBox(0, 0.5, 0),
+            makeBox(0, 1.5, 0),
+            makeBox(0, 2.5, 0),
+        ]
+        // 从 y=0 开始，需要连续升到 3.5+
+        const result = findNonOverlappingY(boxes, SIZE_1, 0, 0, 0)
+        expect(result).toBeGreaterThanOrEqual(3.5)
+    })
+
+    it('地形高度优先于地面高度', () => {
+        const getTerrain = (_x: number, _z: number) => 0.5
+        const result = findNonOverlappingY([], SIZE_1, 0, 0, 0, undefined, getTerrain)
+        // terrain at 0.5, bottom > 0.51, half height 0.5 → y >= 1.01
+        expect(result).toBeGreaterThanOrEqual(1.01)
+    })
+
+    it('同时处理地形和箱子重叠', () => {
+        const existing = makeBox(0, 1.0, 0)
+        const getTerrain = (_x: number, _z: number) => 0.5
+        const result = findNonOverlappingY([existing], SIZE_1, 0, 0, 0, undefined, getTerrain)
+        // terrain raises bottom first, then box overlap raises further
+        // box top at 1.5, half height 0.5 → y >= 2.0
+        expect(result).toBeGreaterThanOrEqual(2.0)
+    })
 })
