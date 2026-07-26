@@ -9,14 +9,14 @@ export const CAMERA_Y = 2
 
 /** 纹理画布尺寸 */
 export const TEX_SIZE = 256
-/** 纹理网格划分数量 */
-export const TEX_DIV = 4
-/** 纹理底色 */
-export const TEX_FILL = '#777777'
-/** 纹理网格线颜色 */
-export const TEX_GRID = '#999999'
-/** 纹理边框色 */
-export const TEX_ACCENT = '#bbbbbb'
+/** 纹理网格划分数量（每 TILE_SIZE 世界单位 1 格） */
+export const TEX_DIV = 1
+/** 纹理平铺单位大小（世界单位） */
+export const TILE_SIZE = 0.5
+/** 默认网格底色 */
+export const DEFAULT_BASE_COLOR = 0x777777
+/** 默认网格线颜色 */
+export const DEFAULT_GRID_COLOR = 0x999999
 
 /** 无限网格单元尺寸 */
 export const GRID_CELL_SIZE = 1

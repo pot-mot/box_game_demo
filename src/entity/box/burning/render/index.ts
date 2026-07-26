@@ -1,11 +1,14 @@
 import {
     BoxGeometry, ShaderMaterial, Mesh, LineSegments, LineBasicMaterial,
     Points, PointsMaterial, BufferGeometry, Float32BufferAttribute,
-    AdditiveBlending,
+    AdditiveBlending, Color,
 } from 'three'
 import type {BurningBoxConfig, BurningBox, ParticleData} from '../types'
 import {makeEdgeLines} from '../../base/render'
 import {EDGE_COLOR} from './constants.ts'
+import {gridMaskTexture} from '../../../../render/texture.ts'
+import {scaleBoxUVs} from '../../../../render/texture.ts'
+import {DEFAULT_BASE_COLOR, DEFAULT_GRID_COLOR, TILE_SIZE} from '../../../../render/constants.ts'
 import {
     MAX_PARTICLES, PARTICLE_SPAWN_RATE, PARTICLE_LIFETIME,
     PARTICLE_SPEED, PARTICLE_SIZE_BASE, PARTICLE_SIZE_MAX,
@@ -19,6 +22,7 @@ uniform float uTime;
 
 varying vec3 vPosition;
 varying float vDistort;
+varying vec2 vUv;
 
 // 简易 3D 伪随机哈希
 float hash(vec3 p) {
@@ -46,6 +50,7 @@ float noise(vec3 p) {
 
 void main() {
     vPosition = position;
+    vUv = uv;
 
     // 基于顶点位置 + 时间 + burnProgress 的扭曲量
     float t = uTime * 0.5;
@@ -70,9 +75,13 @@ void main() {
 
 const fragmentShader = `
 uniform float uBurnProgress;
+uniform sampler2D uMap;
+uniform vec3 uBaseColor;
+uniform vec3 uGridColor;
 
 varying vec3 vPosition;
 varying float vDistort;
+varying vec2 vUv;
 
 void main() {
     // 颜色渐变：白 → 黄 → 橙 → 红 → 黑
@@ -102,7 +111,15 @@ void main() {
     color += vec3(vDistort * 0.3, vDistort * 0.15, 0.0);
     color = clamp(color, 0.0, 1.0);
 
-    gl_FragColor = vec4(color, 1.0);
+    // 网格纹理叠加
+    float mask = texture2D(uMap, vUv).r;
+    vec3 gridCol = mix(uBaseColor, uGridColor, mask);
+
+    // 燃烧进度越高，火焰色越盖过网格色
+    float burnBlend = smoothstep(0.0, 0.4, uBurnProgress);
+    vec3 finalCol = mix(gridCol, color, burnBlend);
+
+    gl_FragColor = vec4(finalCol, 1.0);
 }
 `
 
@@ -110,10 +127,14 @@ void main() {
 
 export const createBurningBoxMesh = (config: BurningBoxConfig): {mesh: Mesh; edges: LineSegments} => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
+    scaleBoxUVs(geo, config.width, config.height, config.depth, TILE_SIZE)
     const mat = new ShaderMaterial({
         uniforms: {
             uBurnProgress: {value: 0},
             uTime: {value: 0},
+            uMap: {value: gridMaskTexture()},
+            uBaseColor: {value: new Color(DEFAULT_BASE_COLOR)},
+            uGridColor: {value: new Color(DEFAULT_GRID_COLOR)},
         },
         vertexShader,
         fragmentShader,
@@ -126,6 +147,7 @@ export const createBurningBoxMesh = (config: BurningBoxConfig): {mesh: Mesh; edg
 
 export const updateBurningBoxMeshSize = (pb: BurningBox, config: BurningBoxConfig): void => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
+    scaleBoxUVs(geo, config.width, config.height, config.depth, TILE_SIZE)
     pb.mesh.geometry.dispose()
     pb.mesh.geometry = geo
     pb.mesh.remove(pb.edges)

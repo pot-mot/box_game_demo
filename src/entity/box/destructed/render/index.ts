@@ -1,14 +1,17 @@
-import {BoxGeometry, MeshBasicMaterial, Mesh, LineBasicMaterial, type LineSegments} from 'three'
+import {BoxGeometry, Mesh, LineBasicMaterial, type LineSegments} from 'three'
 import type {DestructibleConfig, DestructibleBox} from '../types'
-import {gridTexture} from '../../../../render/texture.ts'
+import {createGridBoxMaterial} from '../../../../render/gridMaterial.ts'
+import {scaleBoxUVs} from '../../../../render/texture.ts'
 import {makeEdgeLines} from '../../base/render'
-import {EDGE_COLOR} from './constants.ts'
+import {EDGE_COLOR, BASE_COLOR, GRID_COLOR} from './constants.ts'
+import {TILE_SIZE} from '../../../../render/constants.ts'
 
 // ── 网格 ──
 
 export const createDestructibleBoxMesh = (config: DestructibleConfig): {mesh: Mesh; edges: LineSegments} => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
-    const mesh = new Mesh(geo, new MeshBasicMaterial({map: gridTexture()}))
+    scaleBoxUVs(geo, config.width, config.height, config.depth, TILE_SIZE)
+    const mesh = new Mesh(geo, createGridBoxMaterial(BASE_COLOR, GRID_COLOR))
     const edges = makeEdgeLines(geo, EDGE_COLOR)
     mesh.add(edges)
     return {mesh, edges}
@@ -18,6 +21,7 @@ export const createDestructibleBoxMesh = (config: DestructibleConfig): {mesh: Me
 
 export const updateDestructibleBoxMeshSize = (pb: DestructibleBox, config: DestructibleConfig): void => {
     const geo = new BoxGeometry(config.width, config.height, config.depth)
+    scaleBoxUVs(geo, config.width, config.height, config.depth, TILE_SIZE)
     pb.mesh.geometry.dispose()
     pb.mesh.geometry = geo
     pb.mesh.remove(pb.edges)

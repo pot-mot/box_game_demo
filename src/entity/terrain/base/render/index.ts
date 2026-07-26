@@ -1,5 +1,6 @@
-import {BufferGeometry, Float32BufferAttribute, Mesh, MeshBasicMaterial, LineBasicMaterial, LineSegments, DoubleSide} from 'three'
-import {gridTexture} from '../../../../render/texture.ts'
+import {BufferGeometry, Float32BufferAttribute, Mesh, MeshBasicMaterial, LineBasicMaterial, LineSegments} from 'three'
+import {createGridTerrainMaterial} from '../../../../render/gridMaterial.ts'
+import {DEFAULT_BASE_COLOR, DEFAULT_GRID_COLOR, TILE_SIZE} from '../../../../render/constants.ts'
 import type {BaseTerrainConfig} from '../types'
 import {TERRAIN_EDGE_COLOR} from '../../constants.ts'
 
@@ -21,7 +22,7 @@ export const createTerrainMesh = (heights: number[][], config: BaseTerrainConfig
             const pz = z * cs - half
             const py = heights[x][z]
             positions.push(px, py, pz)
-            uvs.push(x / (gs - 1), z / (gs - 1))
+            uvs.push(x * cs / TILE_SIZE, z * cs / TILE_SIZE)
 
             const t = range > 0 ? (py - config.minHeight) / range : 0.5
             const cr = Math.round(lerp(139, 100, t))
@@ -46,7 +47,7 @@ export const createTerrainMesh = (heights: number[][], config: BaseTerrainConfig
     geo.setIndex(indices)
     geo.computeVertexNormals()
 
-    const mesh = new Mesh(geo, new MeshBasicMaterial({map: gridTexture(), vertexColors: true, side: DoubleSide}))
+    const mesh = new Mesh(geo, createGridTerrainMaterial(DEFAULT_BASE_COLOR, DEFAULT_GRID_COLOR))
 
     const edgeIndices: number[] = []
     for (let x = 0; x < gs; x += 4) {
@@ -81,7 +82,9 @@ export const rebuildTerrainMesh = (
 ): void => {
     const {mesh, edges} = createTerrainMesh(heights, config)
     old.mesh.geometry.dispose()
+    ;(old.mesh.material as MeshBasicMaterial).dispose()
     old.mesh.geometry = mesh.geometry
+    old.mesh.material = mesh.material
     old.mesh.remove(old.edges)
     old.edges.geometry.dispose()
     ;(old.edges.material as LineBasicMaterial).dispose()

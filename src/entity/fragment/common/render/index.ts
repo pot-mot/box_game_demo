@@ -1,15 +1,15 @@
 import {
     BufferGeometry,
     BufferAttribute,
-    MeshBasicMaterial,
     Mesh,
     LineBasicMaterial,
     LineSegments,
 } from 'three'
 import type {FragmentData} from '../../../destroyed/types'
 import type {Fragment} from '../types'
-import {gridTexture} from '../../../../render/texture.ts'
-import {FRAGMENT_EDGE_COLOR} from './constants.ts'
+import {createGridBoxMaterial} from '../../../../render/gridMaterial.ts'
+import {TILE_SIZE} from '../../../../render/constants.ts'
+import {EDGE_COLOR, BASE_COLOR, GRID_COLOR} from './constants.ts'
 
 export const createFragmentMesh = (data: FragmentData): Mesh => {
     const geo = new BufferGeometry()
@@ -56,19 +56,19 @@ export const createFragmentMesh = (data: FragmentData): Mesh => {
         const axis = v[0] >= v[1] && v[0] >= v[2] ? 0 : v[1] >= v[0] && v[1] >= v[2] ? 1 : 2
 
         if (axis === 0) {
-            uvs[i * 2] = (lz + hd) / bd
-            uvs[i * 2 + 1] = (ly + hh) / bh
+            uvs[i * 2] = (lz + hd) / TILE_SIZE
+            uvs[i * 2 + 1] = (ly + hh) / TILE_SIZE
         } else if (axis === 1) {
-            uvs[i * 2] = (lx + hw) / bw
-            uvs[i * 2 + 1] = (lz + hd) / bd
+            uvs[i * 2] = (lx + hw) / TILE_SIZE
+            uvs[i * 2 + 1] = (lz + hd) / TILE_SIZE
         } else {
-            uvs[i * 2] = (lx + hw) / bw
-            uvs[i * 2 + 1] = (ly + hh) / bh
+            uvs[i * 2] = (lx + hw) / TILE_SIZE
+            uvs[i * 2 + 1] = (ly + hh) / TILE_SIZE
         }
     }
 
     geo.setAttribute('uv', new BufferAttribute(uvs, 2))
-    return new Mesh(geo, new MeshBasicMaterial({map: gridTexture()}))
+    return new Mesh(geo, createGridBoxMaterial(BASE_COLOR, GRID_COLOR))
 }
 
 export const createFragmentEdges = (data: FragmentData): LineSegments => {
@@ -88,7 +88,7 @@ export const createFragmentEdges = (data: FragmentData): LineSegments => {
     }
     const geo = new BufferGeometry()
     geo.setAttribute('position', new BufferAttribute(new Float32Array(edgePts), 3))
-    return new LineSegments(geo, new LineBasicMaterial({color: FRAGMENT_EDGE_COLOR}))
+    return new LineSegments(geo, new LineBasicMaterial({color: EDGE_COLOR}))
 }
 
 export const createFragmentFromData = (data: FragmentData): {mesh: Mesh; edges: LineSegments} => {
