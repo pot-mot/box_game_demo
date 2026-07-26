@@ -1,5 +1,5 @@
 import type {CommonBoxConfig, CommonEntityContext} from '../entity/box/common/types'
-import type {DestructibleConfig, DestructionEntityContext} from '../entity/box/destructed/types'
+import type {DestructibleConfig, DestructionEntityContext, CollisionRecord} from '../entity/box/destructed/types'
 import type {BurningBoxConfig, BurningEntityContext} from '../entity/box/burning/types'
 import type {MagnetBoxConfig, MagnetEntityContext} from '../entity/box/magnet/types'
 import type {ElasticBoxConfig, ElasticEntityContext} from '../entity/box/elasticity/types'
@@ -38,6 +38,9 @@ export interface SavableDestructibleBox {
     position: Vec3JSON
     quaternion: QuatJSON
     health: number
+    collisions?: CollisionRecord[]
+    collisionHistory?: CollisionRecord[]
+    cooldowns?: [number, number][]
 }
 
 export interface SavableBurningBox {
@@ -46,7 +49,6 @@ export interface SavableBurningBox {
     position: Vec3JSON
     quaternion: QuatJSON
     health: number
-    burnProgress: number
 }
 
 export interface SavableMagnetBox {
@@ -129,7 +131,6 @@ export interface SaveLoadEntry {
     body?: { position: { x: number; y: number; z: number }; quaternion: { x: number; y: number; z: number; w: number } }
     mesh?: { position: { x: number; y: number; z: number }; quaternion: { x: number; y: number; z: number; w: number } }
     health?: number
-    burnProgress?: number
     def?: [number, number, number]
     vel?: [number, number, number]
     heights?: number[][]

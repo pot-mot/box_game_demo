@@ -28,8 +28,15 @@ export interface DestructibleBox extends BaseEntity<DestructibleConfig>, HealthC
     _onCollide: ((e: any) => void) | undefined
 }
 
+export interface DestructionBoxAddOptions {
+    health?: number
+    collisions?: CollisionRecord[]
+    collisionHistory?: CollisionRecord[]
+    cooldowns?: Map<number, number>
+}
+
 export interface DestructionEntityContext extends EntityInfoSource {
-    add: (config: DestructibleConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => DestructibleBox
+    add: (config: DestructibleConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, options?: DestructionBoxAddOptions) => DestructibleBox
     getSelected: () => DestructibleBox | undefined
     getAll: () => DestructibleBox[]
     updateConfig: (id: number, partial: Partial<DestructibleConfig>) => void

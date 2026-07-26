@@ -28,8 +28,12 @@ export interface BurningBox extends BaseEntity<BurningBoxConfig>, HealthComponen
     particleData: ParticleData
 }
 
+export interface BurningBoxAddOptions {
+    health?: number
+}
+
 export interface BurningEntityContext extends EntityInfoSource {
-    add: (config: BurningBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => BurningBox
+    add: (config: BurningBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, options?: BurningBoxAddOptions) => BurningBox
     getSelected: () => BurningBox | undefined
     getAll: () => BurningBox[]
     updateConfig: (id: number, partial: Partial<BurningBoxConfig>) => void

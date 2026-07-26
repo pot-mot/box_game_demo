@@ -18,12 +18,21 @@ const SavableCommonBox = z.object({
     quaternion: Quat,
 })
 
+const CollisionRecordSchema = z.object({
+    contactPoint: z.tuple([z.number(), z.number(), z.number()]),
+    normal: z.tuple([z.number(), z.number(), z.number()]),
+    relativeVelocity: z.number(),
+})
+
 const SavableDestructibleBox = z.object({
     type: z.literal('box/destruction'),
     config: DestructibleConfigSchema,
     position: Vec3,
     quaternion: Quat,
     health: z.number(),
+    collisions: z.array(CollisionRecordSchema).optional(),
+    collisionHistory: z.array(CollisionRecordSchema).optional(),
+    cooldowns: z.array(z.tuple([z.number(), z.number()])).optional(),
 })
 
 const SavableBurningBox = z.object({
@@ -32,7 +41,6 @@ const SavableBurningBox = z.object({
     position: Vec3,
     quaternion: Quat,
     health: z.number(),
-    burnProgress: z.number().min(0).max(1),
 })
 
 const SavableMagnetBox = z.object({

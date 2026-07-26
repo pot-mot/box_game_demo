@@ -2,7 +2,7 @@ import {type Scene} from 'three'
 import {Body, BODY_TYPES, Box, Vec3} from 'cannon-es'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
-import type {ElasticBoxConfig, ElasticBox, ElasticEntityContext} from '../types'
+import type {ElasticBoxConfig, ElasticBox, ElasticBoxAddOptions, ElasticEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
 import {createElasticBoxMesh, updateElasticBoxMeshSize, disposeElasticBoxMesh} from '../render'
@@ -79,7 +79,7 @@ export const setupElasticBoxes = (
 
     // ── 减缩 ──
 
-    const add = (config: ElasticBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): ElasticBox => {
+    const add = (config: ElasticBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, options?: ElasticBoxAddOptions): ElasticBox => {
         const id = nextId++
         const adjustedY = findNonOverlappingY(boxes, config, x, y, z)
         const hw = config.width / 2
@@ -106,8 +106,8 @@ export const setupElasticBoxes = (
         world.addBody(body)
 
         // 自重压缩 + 碰撞状态
-        const def: [number, number, number] = [0, -config.height * GRAVITY_SQUASH, 0]
-        const vel: [number, number, number] = [0, 0, 0]
+        const def: [number, number, number] = options?.def ?? [0, -config.height * GRAVITY_SQUASH, 0]
+        const vel: [number, number, number] = options?.vel ?? [0, 0, 0]
 
         // 碰撞冷却
         const cooldowns = new Map<number, number>()

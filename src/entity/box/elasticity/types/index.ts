@@ -17,8 +17,13 @@ export interface ElasticBox extends BaseEntity<ElasticBoxConfig> {
     cooldowns: Map<number, number>
 }
 
+export interface ElasticBoxAddOptions {
+    def?: [number, number, number]
+    vel?: [number, number, number]
+}
+
 export interface ElasticEntityContext extends EntityInfoSource {
-    add: (config: ElasticBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => ElasticBox
+    add: (config: ElasticBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, options?: ElasticBoxAddOptions) => ElasticBox
     getSelected: () => ElasticBox | undefined
     getAll: () => ElasticBox[]
     updateConfig: (id: number, partial: Partial<ElasticBoxConfig>) => void

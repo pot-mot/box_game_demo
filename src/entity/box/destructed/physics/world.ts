@@ -2,7 +2,7 @@ import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
 import {Body, BODY_TYPES, Box, Vec3} from 'cannon-es'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
-import type {DestructibleConfig, DestructibleBox, DestructionEntityContext, CollisionRecord} from '../types'
+import type {DestructibleConfig, DestructibleBox, DestructionBoxAddOptions, DestructionEntityContext, CollisionRecord} from '../types'
 import type {FragmentEntityContext} from '../../../fragment/common/types'
 import type {XYZ} from '../../base/types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
@@ -63,7 +63,7 @@ export const setupDestructibleBoxes = (
         box.emitter.emit('infoUpdate')
     }
 
-    const add = (config: DestructibleConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): DestructibleBox => {
+    const add = (config: DestructibleConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, options?: DestructionBoxAddOptions): DestructibleBox => {
         const id = globalBoxId++
         const halfH = config.height / 2
         const py = findNonOverlappingY(boxes, config, x, y, z, (b) => b.destroyed)
@@ -87,9 +87,9 @@ export const setupDestructibleBoxes = (
         }
         world.addBody(body)
 
-        const _collisions: CollisionRecord[] = []
-        const _collisionHistory: CollisionRecord[] = []
-        const _cooldowns = new Map<number, number>()
+        const _collisions: CollisionRecord[] = options?.collisions ?? []
+        const _collisionHistory: CollisionRecord[] = options?.collisionHistory ?? []
+        const _cooldowns = options?.cooldowns ?? new Map<number, number>()
 
         const onCollide = (e: any): void => {
             const contact = e.contact
@@ -144,7 +144,7 @@ export const setupDestructibleBoxes = (
         const pb: DestructibleBox = {
             id, mesh, edges, wireframe: undefined,
             body, config: {...config},
-            health: config.maxHealth,
+            health: options?.health ?? config.maxHealth,
             maxHealth: config.maxHealth,
             fragments: [],
             destroyed: false,

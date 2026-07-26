@@ -64,30 +64,28 @@ export const loadWorldFromData = (
             case 'box/common':
                 common?.add(entity.config, x, y, z, quat)
                 break
-            case 'box/destruction': {
-                const e = dest?.add(entity.config, x, y, z, quat)
-                if (e) dest?.setHealth(e.id, entity.health)
+            case 'box/destruction':
+                dest?.add(entity.config, x, y, z, quat, {
+                    health: entity.health,
+                    collisions: entity.collisions,
+                    collisionHistory: entity.collisionHistory,
+                    cooldowns: entity.cooldowns ? new Map(entity.cooldowns) : undefined,
+                })
                 break
-            }
-            case 'box/burning': {
-                const e = burn?.add(entity.config, x, y, z, quat)
-                if (e) {
-                    burn?.setHealth(e.id, entity.health)
-                    e.burnProgress = entity.burnProgress
-                }
+            case 'box/burning':
+                burn?.add(entity.config, x, y, z, quat, {
+                    health: entity.health,
+                })
                 break
-            }
             case 'box/magnet':
                 magnet?.add(entity.config, x, y, z, quat)
                 break
-            case 'box/elasticity': {
-                const e = elastic?.add(entity.config, x, y, z, quat)
-                if (e) {
-                    e.def = entity.def
-                    e.vel = entity.vel
-                }
+            case 'box/elasticity':
+                elastic?.add(entity.config, x, y, z, quat, {
+                    def: entity.def,
+                    vel: entity.vel,
+                })
                 break
-            }
             case 'area/water':
                 water?.add(entity.config, x, y, z, quat)
                 break

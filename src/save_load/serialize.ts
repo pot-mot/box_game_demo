@@ -63,6 +63,9 @@ export const collectWorldState = (
                 position: vec3ToTuple(e.body.position),
                 quaternion: quatToTuple(e.body.quaternion),
                 health: e.health,
+                collisions: e._collisions,
+                collisionHistory: e._collisionHistory,
+                cooldowns: Array.from(e._cooldowns.entries()),
             })
         }
     }
@@ -77,7 +80,6 @@ export const collectWorldState = (
                 position: vec3ToTuple(e.body.position),
                 quaternion: quatToTuple(e.body.quaternion),
                 health: e.health,
-                burnProgress: e.burnProgress,
             })
         }
     }

@@ -52,7 +52,7 @@ describe('validateSaveData', () => {
         const types = [
             {type: 'box/common', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3}},
             {type: 'box/destruction', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, maxHealth: 100}, health: 100},
-            {type: 'box/burning', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, maxHealth: 100}, health: 100, burnProgress: 0.5},
+            {type: 'box/burning', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, maxHealth: 100}, health: 100},
             {type: 'box/magnet', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, attractionRadius: 5, attractionStrength: 10}},
             {type: 'box/elasticity', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, stiffness: 100, dampingRatio: 0.5, maxDeformFraction: 0.3}, def: [0, 0, 0], vel: [0, 0, 0]},
             {type: 'area/water', config: {width: 2, height: 2, depth: 2, density: 2}},

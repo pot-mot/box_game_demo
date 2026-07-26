@@ -2,7 +2,7 @@ import {type Scene, ShaderMaterial} from 'three'
 import {Body, BODY_TYPES, Box, Vec3,} from 'cannon-es'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, GROUND_Y} from '../../../../physics/constants.ts'
-import type {BurningBox, BurningBoxConfig, BurningEntityContext} from '../types'
+import type {BurningBox, BurningBoxConfig, BurningBoxAddOptions, BurningEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
 import {clampHealth, clampHealthOnMaxChange} from '../../base/types/health'
@@ -56,7 +56,7 @@ export const setupBurningBoxes = (
         box.emitter.emit('infoUpdate')
     }
 
-    const add = (config: BurningBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): BurningBox => {
+    const add = (config: BurningBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, options?: BurningBoxAddOptions): BurningBox => {
         const id = nextId++
         const adjustedY = findNonOverlappingY(boxes, config, x, y, z)
         const hw = config.width / 2
@@ -91,7 +91,7 @@ export const setupBurningBoxes = (
         const pb: BurningBox = {
             id, mesh, body, edges, wireframe: undefined,
             config: {...config},
-            health: config.maxHealth,
+            health: options?.health ?? config.maxHealth,
             maxHealth: config.maxHealth,
             burnProgress: 0,
             particles, particleData, emitter, rowText: '',
