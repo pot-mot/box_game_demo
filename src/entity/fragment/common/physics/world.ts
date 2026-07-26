@@ -1,7 +1,7 @@
 import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
 import {Body, BODY_TYPES, ConvexPolyhedron, Vec3} from 'cannon-es'
 import type {SharedWorld} from '../../../../physics/world.ts'
-import {DEBRIS_COLLISION_GROUP, DEBRIS_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {FRAGMENT_COLLISION_GROUP, FRAGMENT_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {FragmentConfig, Fragment, FragmentEntityContext} from '../types'
 import type {FragmentData} from '../../../destroyed/types'
 import type {XYZ} from '../../../box/base/types'
@@ -62,8 +62,8 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
             mass: Math.max(cfg.mass, 0.01),
             type: BODY_TYPES.DYNAMIC,
             material: boxMat,
-            collisionFilterGroup: DEBRIS_COLLISION_GROUP,
-            collisionFilterMask: DEBRIS_COLLISION_MASK,
+            collisionFilterGroup: FRAGMENT_COLLISION_GROUP,
+            collisionFilterMask: FRAGMENT_COLLISION_MASK,
         })
 
         const hull = new ConvexPolyhedron({

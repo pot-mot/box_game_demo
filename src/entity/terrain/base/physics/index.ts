@@ -6,7 +6,8 @@ import {createEmitter, type SourceEventMap} from '../../../box/base/types/event_
 import {createWireframe, cleanupWireframe} from '../../../box/base/render'
 import {createTerrainMesh, rebuildTerrainMesh} from '../render'
 import type {PanelContext} from '../../../box/base/ui'
-import {DEFAULT_TERRAIN_CONFIG, TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK, BRUSH_RADIUS, BRUSH_STRENGTH} from '../../constants.ts'
+import {DEFAULT_TERRAIN_CONFIG, BRUSH_RADIUS, BRUSH_STRENGTH} from '../../constants.ts'
+import {TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {EntityType} from '../../../constants.ts'
 import type {BaseTerrainConfig, BaseTerrainEntity, TerrainSetupOptions, TerrainContext} from '../types'
 
