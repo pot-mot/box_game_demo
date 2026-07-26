@@ -24,7 +24,7 @@ import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {computeFractureFromPoints} from '../../../destroyed/geometry/voronoi_fracture.ts'
 import {formatRowText, createDestructionPanel} from '../ui'
-import type {PanelContext} from '../../base/ui'
+
 import type {EntityType} from "../../../constants.ts";
 
 const TYPE: EntityType = 'box/destruction' as const
@@ -397,7 +397,7 @@ export const setupDestructibleBoxes = (
         rebuildPanelInfo()
     }
 
-    const ctx: DestructionEntityContext = {
+    const ctxWithoutPanel: Omit<DestructionEntityContext, 'panel'> = {
         type: TYPE,
         events: sourceEvents,
         panelInfo,
@@ -416,8 +416,9 @@ export const setupDestructibleBoxes = (
         updatePhysics,
         preSync: updatePhysics,
         syncPositions,
-        panel: undefined as unknown as PanelContext,
     }
-    ctx.panel = createDestructionPanel(ctx)
-    return ctx
+    return {
+        ...ctxWithoutPanel,
+        panel: createDestructionPanel(ctxWithoutPanel),
+    }
 }

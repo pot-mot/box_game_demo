@@ -25,7 +25,7 @@ export interface WaterBlockInfo {
 }
 
 export interface WaterEntityContext extends EntityInfoSource {
-    add: (config: WaterBlockConfig, x: number, y: number, z: number) => WaterBlock
+    add: (config: WaterBlockConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => WaterBlock
     getSelected: () => WaterBlock | undefined
     getAll: () => WaterBlock[]
     resize: (id: number, partial: Partial<WaterBlockConfig>) => void

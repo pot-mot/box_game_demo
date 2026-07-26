@@ -9,7 +9,7 @@ import {createElasticBoxMesh, updateElasticBoxMeshSize, disposeElasticBoxMesh} f
 import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {formatRowText, createElasticPanel} from '../ui'
-import type {PanelContext} from '../../base/ui'
+
 import {
     DEFAULT_ELASTIC_CONFIG,
     COLLISION_COOLDOWN,
@@ -302,7 +302,7 @@ export const setupElasticBoxes = (
 
     // ── 上下文 ──
 
-    const ctx: ElasticEntityContext = {
+    const ctxWithoutPanel: Omit<ElasticEntityContext, 'panel'> = {
         type: TYPE,
         events: sourceEvents,
         panelInfo,
@@ -319,8 +319,9 @@ export const setupElasticBoxes = (
         updateConfig,
         setTransform,
         preSync: updateDeformation,
-        panel: undefined as unknown as PanelContext,
     }
-    ctx.panel = createElasticPanel(ctx)
-    return ctx
+    return {
+        ...ctxWithoutPanel,
+        panel: createElasticPanel(ctxWithoutPanel),
+    }
 }

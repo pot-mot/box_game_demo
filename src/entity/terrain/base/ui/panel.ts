@@ -5,7 +5,7 @@ import {createLabeledNumberInput} from '../../../../ui/components/number_input.t
 import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'
 
-export const createTerrainPanel = (ctx: TerrainContext, generatorOptions: {id: string; label: string}[]): PanelContext => {
+export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generatorOptions: {id: string; label: string}[]): PanelContext => {
     const el = document.createElement('div')
     el.id = 'terrain-panel'
     el.style.cssText = [

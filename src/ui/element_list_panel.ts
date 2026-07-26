@@ -1,4 +1,5 @@
 import type {EntityInfoSource, EntityPanelInfo} from '../entity/box/base/types/entity_info.ts'
+import type {EntityType} from '../entity/constants.ts'
 import {focusPanel} from './entity_control_panel.ts'
 
 const ROW_STYLE = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer'
@@ -77,8 +78,8 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
         if (!row) return
 
         const id = Number(row.dataset.id)
-        const type = row.dataset.type as string
-        const source = sourcesByType.get(type as any)
+        const type = row.dataset.type! as EntityType
+        const source = sourcesByType.get(type)
         if (!source) return
 
         const entry = rows.get(`${type}-${id}`)
@@ -95,13 +96,13 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
     })
 
     let hoveredId: number | undefined
-    let hoveredType: string | undefined
+    let hoveredType: EntityType | undefined
 
     list.addEventListener('mouseover', (e: MouseEvent) => {
         const row = (e.target as HTMLElement).closest<HTMLElement>('[data-id]')
         if (row) {
             hoveredId = Number(row.dataset.id)
-            hoveredType = row.dataset.type
+            hoveredType = row.dataset.type! as EntityType
         } else {
             hoveredId = undefined
             hoveredType = undefined
@@ -115,7 +116,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
 
     document.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e.key === 'Delete' && hoveredId !== undefined && hoveredType !== undefined) {
-            const source = sourcesByType.get(hoveredType as any)
+            const source = sourcesByType.get(hoveredType)
             if (source) source.remove(hoveredId)
             hoveredId = undefined
             hoveredType = undefined

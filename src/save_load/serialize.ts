@@ -1,8 +1,10 @@
 import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import type {FragmentData} from '../entity/destroyed/types'
+import type {Fragment} from '../entity/fragment/common/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {GameMode} from '../modes/constants'
-import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON, ModeInfoJSON, CameraInfoJSON} from './types.ts'
+import type {EntityType} from '../entity/constants.ts'
+import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON, ModeInfoJSON, CameraInfoJSON, EntitySourceMap} from './types.ts'
 
 /** 将 {x, y, z} 转为 [x, y, z] */
 const vec3ToTuple = (v: {x: number; y: number; z: number}): [number, number, number] =>
@@ -35,8 +37,11 @@ export const collectWorldState = (
 ): SaveData => {
     const entities: SavableEntity[] = []
 
+    const getSource = <K extends EntityType>(key: K): EntitySourceMap[K] | undefined =>
+        systems.get(key) as EntitySourceMap[K] | undefined
+
     // 普通箱子
-    const common = systems.get('box/common') as any
+    const common = getSource('box/common')
     if (common?.getAll) {
         for (const e of common.getAll()) {
             entities.push({
@@ -49,7 +54,7 @@ export const collectWorldState = (
     }
 
     // 可破坏箱子
-    const dest = systems.get('box/destruction') as any
+    const dest = getSource('box/destruction')
     if (dest?.getAll) {
         for (const e of dest.getAll()) {
             entities.push({
@@ -63,7 +68,7 @@ export const collectWorldState = (
     }
 
     // 燃烧箱子
-    const burn = systems.get('box/burning') as any
+    const burn = getSource('box/burning')
     if (burn?.getAll) {
         for (const e of burn.getAll()) {
             entities.push({
@@ -78,7 +83,7 @@ export const collectWorldState = (
     }
 
     // 磁铁箱子
-    const magnet = systems.get('box/magnet') as any
+    const magnet = getSource('box/magnet')
     if (magnet?.getAll) {
         for (const e of magnet.getAll()) {
             entities.push({
@@ -91,7 +96,7 @@ export const collectWorldState = (
     }
 
     // 弹性箱子
-    const elastic = systems.get('box/elasticity') as any
+    const elastic = getSource('box/elasticity')
     if (elastic?.getAll) {
         for (const e of elastic.getAll()) {
             entities.push({
@@ -106,7 +111,7 @@ export const collectWorldState = (
     }
 
     // 水体
-    const water = systems.get('area/water') as any
+    const water = getSource('area/water')
     if (water?.getAll) {
         for (const e of water.getAll()) {
             entities.push({
@@ -120,7 +125,7 @@ export const collectWorldState = (
 
     // 地形
     for (const ts of terrainSources) {
-        const all = (ts as any).getAll?.() ?? []
+        const all = ts.getAll()
         for (const e of all) {
             entities.push({
                 type: 'terrain',
@@ -133,7 +138,7 @@ export const collectWorldState = (
     }
 
     // 碎片
-    const frag = systems.get('fragment/common') as any
+    const frag = getSource('fragment/common')
     if (frag?.getAll) {
         for (const e of frag.getAll()) {
             entities.push({
@@ -141,7 +146,7 @@ export const collectWorldState = (
                 config: e.config,
                 position: vec3ToTuple(e.body.position),
                 quaternion: quatToTuple(e.body.quaternion),
-                data: fragmentDataToJSON(e.fragmentData ?? {
+                data: fragmentDataToJSON((e as Fragment & { fragmentData?: FragmentData }).fragmentData ?? {
                     renderVertices: new Float32Array(),
                     renderIndices: [],
                     hullVertices: [],

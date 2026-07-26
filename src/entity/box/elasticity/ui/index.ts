@@ -7,7 +7,7 @@ import {createButtonRow} from '../../../../ui/components/button_row.ts'
 export const formatRowText = (box: ElasticBox): string =>
     `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width.toFixed(2)}×${box.config.height.toFixed(2)}×${box.config.depth.toFixed(2)}  Δ:${box.def[0].toFixed(3)}/${box.def[1].toFixed(3)}/${box.def[2].toFixed(3)}`
 
-export const createElasticPanel = (ctx: ElasticEntityContext): PanelContext => {
+export const createElasticPanel = (ctx: Omit<ElasticEntityContext, 'panel'>): PanelContext => {
     const el = document.createElement('div')
     el.id = 'elastic-box-panel'
     el.style.cssText = [

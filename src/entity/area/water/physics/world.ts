@@ -174,27 +174,28 @@ export const setupWaterBlocks = (scene: Scene, physicsEnv: PhysicsEnv): WaterEnt
         waterPhysicsUpdate()
     }
 
-    const ctx: WaterEntityContext = {
-        type: TYPE as any,
-        events: sourceEvents as any,
-        panelInfo: panelInfo as any,
-        add: add as any,
-        spawnAt: spawnAt as any,
-        remove: remove as any,
-        select: select as any,
-        getSelected: getSelected as any,
-        getSelectedId: getSelectedId as any,
-        getAll: () => blocks as any,
-        getEntityList: () => blocks as any,
-        getMeshes: () => blocks.map(b => b.mesh) as any,
-        resize: resize as any,
-        setPosition: setPosition as any,
-        setTransform: setTransform as any,
-        updateTime: updateTime as any,
-        syncPositions: syncPositions as any,
-        preSync: preSync as any,
-        panel: undefined as any,
+    const ctxWithoutPanel: Omit<WaterEntityContext, 'panel'> = {
+        type: TYPE,
+        events: sourceEvents,
+        panelInfo,
+        add,
+        spawnAt,
+        remove,
+        select,
+        getSelected,
+        getSelectedId,
+        getAll: () => blocks,
+        getEntityList: () => blocks,
+        getMeshes: () => blocks.map(b => b.mesh),
+        resize,
+        setPosition,
+        setTransform,
+        updateTime,
+        syncPositions,
+        preSync,
     }
-    ;(ctx as any).panel = createWaterPanel(ctx as any)
-    return ctx
+    return {
+        ...ctxWithoutPanel,
+        panel: createWaterPanel(ctxWithoutPanel),
+    }
 }

@@ -18,7 +18,24 @@ Three.js + cannon-es 物理箱子交互演示。
 
 3. **`readonly`** — 尽可能使用 `const` 显式声明常量，针对类型，尽可能使用 `DeepReadonly`。
 
-4. **枚举** - 禁止使用 `enum`，尽可能使用常量 + 索引类型推导的形式：
+4. **禁止不安全类型断言** — 严禁使用 `as any`、`as unknown as Xxx` 等旁路类型系统的不安全转换。安全的 `as` 用法仅限：
+   - `as const` 常量断言
+   - DOM 事件目标窄化（`e.target as HTMLElement`、`e.target as Node`）
+   - material 窄化（需配合 `instanceof` 守卫，如 `mesh.material as MeshBasicMaterial` 前确认 `mesh.material instanceof MeshBasicMaterial`）
+   - `JSON.parse()` 返回 `as unknown`（用于给校验层，但不得裸用 `as Xxx`）
+   - **判别式 Map 访问** — 当 `Map<Key, BaseType>` 的值在运行时是不同类型的子类，可通过泛型映射类型 `Record<Key, SubType>` 配合 `as` 做一次集中窄化，后续所有下游访问均获得精确类型，避免散落的 `as any`：
+     ```ts
+     type SourceMap = {
+         'type_a': ContextA
+         'type_b': ContextB
+     }
+     const getSource = <K extends KeyType>(key: K): SourceMap[K] | undefined =>
+         map.get(key) as SourceMap[K] | undefined
+     ```
+
+5. **两阶段初始化** — 禁止使用 `undefined as unknown as Xxx` 在对象字面量中占位再覆盖属性。若工厂函数无法在构造阶段提供完整对象（如 `panel` 依赖 `ctx` 自身），应将返回类型定为 `Omit<FullType, 'panel'>`，由调用方通过 `{ ...partial, panel: createPanel(partial) }` 组装为完整类型。
+
+6. **枚举** - 禁止使用 `enum`，尽可能使用常量 + 索引类型推导的形式：
    ```ts
    const EnumType_CONTANTS = ['A', 'B'] as const
    type EnumType = typeof EnumType_CONTANTS[number]

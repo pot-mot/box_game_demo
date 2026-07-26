@@ -15,7 +15,7 @@ import {createMagnetBoxMesh, updateMagnetBoxMeshSize, disposeMagnetBoxMesh} from
 import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {formatRowText, createMagnetPanel} from '../ui'
-import type {PanelContext} from '../../base/ui'
+
 import {DEFAULT_MAGNET_CONFIG, MAX_SPEED} from './constants.ts'
 import type {EntityType} from '../../../constants.ts'
 
@@ -270,7 +270,7 @@ export const setupMagnetBoxes = (
 
     // ── 上下文 ──
 
-    const ctx: MagnetEntityContext = {
+    const ctxWithoutPanel: Omit<MagnetEntityContext, 'panel'> = {
         type: TYPE,
         events: sourceEvents,
         panelInfo,
@@ -287,8 +287,9 @@ export const setupMagnetBoxes = (
         updateConfig,
         setTransform,
         preSync: applyAttraction,
-        panel: undefined as unknown as PanelContext,
     }
-    ctx.panel = createMagnetPanel(ctx)
-    return ctx
+    return {
+        ...ctxWithoutPanel,
+        panel: createMagnetPanel(ctxWithoutPanel),
+    }
 }

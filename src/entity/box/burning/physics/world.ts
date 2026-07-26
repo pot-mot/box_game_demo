@@ -18,7 +18,7 @@ import {
 import {cleanupWireframe, createWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {createBurningPanel, formatRowText} from '../ui'
-import type {PanelContext} from '../../base/ui'
+
 import {DEFAULT_BURNING_CONFIG} from './constants.ts'
 import type {EntityType} from '../../../constants.ts'
 
@@ -271,7 +271,7 @@ export const setupBurningBoxes = (
         rebuildPanelInfo()
     }
 
-    const ctx: BurningEntityContext = {
+    const ctxWithoutPanel: Omit<BurningEntityContext, 'panel'> = {
         type: TYPE,
         events: sourceEvents,
         panelInfo,
@@ -290,8 +290,9 @@ export const setupBurningBoxes = (
         setHealth,
         updatePhysics,
         preSync: updatePhysics,
-        panel: undefined as unknown as PanelContext,
     }
-    ctx.panel = createBurningPanel(ctx)
-    return ctx
+    return {
+        ...ctxWithoutPanel,
+        panel: createBurningPanel(ctxWithoutPanel),
+    }
 }

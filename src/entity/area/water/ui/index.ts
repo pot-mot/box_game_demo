@@ -7,7 +7,7 @@ import {createButtonRow} from '../../../../ui/components/button_row.ts'
 export const formatRowText = (box: WaterBlock): string =>
     `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  d:${box.config.density}`
 
-export const createWaterPanel = (ctx: WaterEntityContext): PanelContext => {
+export const createWaterPanel = (ctx: Omit<WaterEntityContext, 'panel'>): PanelContext => {
     const el = document.createElement('div')
     el.id = 'water-block-panel'
     el.style.cssText = [

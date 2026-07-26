@@ -15,7 +15,7 @@ export interface MagnetBox extends BaseEntity<MagnetBoxConfig> {
 }
 
 export interface MagnetEntityContext extends EntityInfoSource {
-    add: (config: MagnetBoxConfig, x: number, y: number, z: number) => MagnetBox
+    add: (config: MagnetBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => MagnetBox
     getSelected: () => MagnetBox | undefined
     getAll: () => MagnetBox[]
     updateConfig: (id: number, partial: Partial<MagnetBoxConfig>) => void

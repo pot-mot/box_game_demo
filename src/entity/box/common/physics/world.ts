@@ -14,7 +14,7 @@ import {createCommonBoxMesh, updateCommonBoxMeshSize, disposeCommonBoxMesh} from
 import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {formatRowText, createCommonPanel} from '../ui'
-import type {PanelContext} from '../../base/ui'
+
 import {DEFAULT_COMMON_CONFIG} from './constants.ts'
 import type {EntityType} from "../../../constants.ts";
 
@@ -212,7 +212,7 @@ export const setupCommonBoxes = (
 
     // ── 上下文 ──
 
-    const ctx: CommonEntityContext = {
+    const ctxWithoutPanel: Omit<CommonEntityContext, 'panel'> = {
         type: TYPE,
         events: sourceEvents,
         panelInfo,
@@ -228,8 +228,9 @@ export const setupCommonBoxes = (
         syncPositions,
         updateConfig,
         setTransform,
-        panel: undefined as unknown as PanelContext,
     }
-    ctx.panel = createCommonPanel(ctx)
-    return ctx
+    return {
+        ...ctxWithoutPanel,
+        panel: createCommonPanel(ctxWithoutPanel),
+    }
 }

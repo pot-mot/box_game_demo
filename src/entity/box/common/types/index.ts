@@ -15,7 +15,7 @@ export interface CommonBox extends BaseEntity<CommonBoxConfig> {
 }
 
 export interface CommonEntityContext extends EntityInfoSource {
-    add: (config: CommonBoxConfig, x: number, y: number, z: number) => CommonBox
+    add: (config: CommonBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => CommonBox
     getSelected: () => CommonBox | undefined
     getAll: () => CommonBox[]
     updateConfig: (id: number, partial: Partial<CommonBoxConfig>) => void

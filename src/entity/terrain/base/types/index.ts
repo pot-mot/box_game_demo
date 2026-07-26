@@ -37,7 +37,7 @@ export interface TerrainHeightQuery {
 }
 
 export interface TerrainContext extends EntityInfoSource, TerrainHeightQuery {
-    add: (config: BaseTerrainConfig, x: number, y: number, z: number) => BaseTerrainEntity
+    add: (config: BaseTerrainConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => BaseTerrainEntity
     getSelected: () => BaseTerrainEntity | undefined
     getAll: () => BaseTerrainEntity[]
     getEntityList: () => BaseTerrainEntity[]

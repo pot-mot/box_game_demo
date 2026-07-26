@@ -7,7 +7,7 @@ import {createButtonRow} from '../../../../ui/components/button_row.ts'
 export const formatRowText = (box: MagnetBox): string =>
     `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  R:${box.config.attractionRadius}  S:${box.config.attractionStrength}`
 
-export const createMagnetPanel = (ctx: MagnetEntityContext): PanelContext => {
+export const createMagnetPanel = (ctx: Omit<MagnetEntityContext, 'panel'>): PanelContext => {
     const el = document.createElement('div')
     el.id = 'magnet-box-panel'
     el.style.cssText = [

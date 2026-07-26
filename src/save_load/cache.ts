@@ -14,7 +14,7 @@ export const loadCachedSaveData = (): SaveData | undefined => {
     try {
         const raw = localStorage.getItem(CACHE_KEY)
         if (!raw) return undefined
-        return JSON.parse(raw) as SaveData
+        return JSON.parse(raw) as unknown as SaveData
     } catch {
         return undefined
     }

@@ -5,10 +5,10 @@ import type {EntityPanelInfo} from '../../../box/base/types/entity_info.ts'
 import {createEmitter, type SourceEventMap} from '../../../box/base/types/event_emitter'
 import {createWireframe, cleanupWireframe} from '../../../box/base/render'
 import {createTerrainMesh, rebuildTerrainMesh} from '../render'
-import type {PanelContext} from '../../../box/base/ui'
+
 import {DEFAULT_TERRAIN_CONFIG, BRUSH_RADIUS, BRUSH_STRENGTH} from '../../constants.ts'
 import {TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK} from '../../../../physics/constants.ts'
-import type {EntityType} from '../../../constants.ts'
+
 import type {BaseTerrainConfig, BaseTerrainEntity, TerrainSetupOptions, TerrainContext} from '../types'
 
 const reverseZ = (heights: number[][]): number[][] => heights.map(col => [...col].reverse())
@@ -30,7 +30,7 @@ export const createTerrainContextImpl = (
     scene: Scene,
     shared: SharedWorld,
     options: TerrainSetupOptions,
-): TerrainContext => {
+): Omit<TerrainContext, 'panel'> => {
     const {world, boxMat} = shared
     const entities: BaseTerrainEntity[] = []
     let nextId = 1
@@ -43,7 +43,7 @@ export const createTerrainContextImpl = (
         for (const t of entities) {
             panelInfo.push({
                 id: t.id,
-                type: options.type as unknown as EntityType,
+                type: options.type,
                 badgeLabel: options.badgeLabel,
                 badgeColor: options.badgeColor,
                 rowText: t.rowText,
@@ -339,8 +339,8 @@ export const createTerrainContextImpl = (
         return undefined
     }
 
-    const ctx: TerrainContext = {
-        type: options.type as unknown as EntityType,
+    return {
+        type: options.type,
         events: sourceEvents,
         panelInfo,
         add,
@@ -360,7 +360,5 @@ export const createTerrainContextImpl = (
         updatePosition,
         setTransform,
         setHeights,
-        panel: undefined as unknown as PanelContext,
     }
-    return ctx
 }

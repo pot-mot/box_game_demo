@@ -98,7 +98,8 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
         const reader = new FileReader()
         reader.onload = () => {
             try {
-                const raw = JSON.parse(reader.result as string) as unknown
+                if (typeof reader.result !== 'string') return
+                const raw = JSON.parse(reader.result) as unknown
                 import('../save_load/validation.ts').then(({validateSaveData}) => {
                     try {
                         const validated = validateSaveData(raw)

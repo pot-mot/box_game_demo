@@ -18,7 +18,7 @@ export interface ElasticBox extends BaseEntity<ElasticBoxConfig> {
 }
 
 export interface ElasticEntityContext extends EntityInfoSource {
-    add: (config: ElasticBoxConfig, x: number, y: number, z: number) => ElasticBox
+    add: (config: ElasticBoxConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => ElasticBox
     getSelected: () => ElasticBox | undefined
     getAll: () => ElasticBox[]
     updateConfig: (id: number, partial: Partial<ElasticBoxConfig>) => void

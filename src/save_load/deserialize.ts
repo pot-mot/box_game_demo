@@ -2,7 +2,8 @@ import {Vec3} from 'cannon-es'
 import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
-import type {SaveData, FragmentDataJSON} from './types.ts'
+import type {EntityType} from '../entity/constants.ts'
+import type {SaveData, FragmentDataJSON, EntitySourceMap} from './types.ts'
 
 /** JSON-safe 格式 → FragmentData */
 const jsonToFragmentData = (j: FragmentDataJSON): FragmentData => ({
@@ -22,7 +23,7 @@ export const clearAllEntities = (systems: Map<string, EntityInfoSource>, terrain
         for (const id of ids) source.remove(id)
     }
     for (const ts of terrainSources) {
-        const ids = ts.getEntityList().map((e: any) => e.id)
+        const ids = ts.getEntityList().map(e => e.id)
         for (const id of ids) ts.remove(id)
     }
 }
@@ -44,54 +45,63 @@ export const loadWorldFromData = (
     systems: Map<string, EntityInfoSource>,
     terrainSources: TerrainContext[],
 ): LoadWorldResult => {
-    const common = systems.get('box/common') as any
-    const dest = systems.get('box/destruction') as any
-    const burn = systems.get('box/burning') as any
-    const magnet = systems.get('box/magnet') as any
-    const elastic = systems.get('box/elasticity') as any
-    const water = systems.get('area/water') as any
-    const frag = systems.get('fragment/common') as any
-    const terrain = terrainSources[0] as any
+    const getSource = <K extends EntityType>(key: K): EntitySourceMap[K] | undefined =>
+        systems.get(key) as EntitySourceMap[K] | undefined
+
+    const common = getSource('box/common')
+    const dest = getSource('box/destruction')
+    const burn = getSource('box/burning')
+    const magnet = getSource('box/magnet')
+    const elastic = getSource('box/elasticity')
+    const water = getSource('area/water')
+    const frag = getSource('fragment/common')
+    const terrain = terrainSources[0]
 
     for (const entity of data.entities) {
         const [x, y, z] = entity.position
         const quat = entity.quaternion ? {x: entity.quaternion[0], y: entity.quaternion[1], z: entity.quaternion[2], w: entity.quaternion[3]} : undefined
         switch (entity.type) {
             case 'box/common':
-                common.add(entity.config, x, y, z, quat)
+                common?.add(entity.config, x, y, z, quat)
                 break
             case 'box/destruction': {
-                const e = dest.add(entity.config, x, y, z, quat)
-                dest.setHealth(e.id, entity.health)
+                const e = dest?.add(entity.config, x, y, z, quat)
+                if (e) dest?.setHealth(e.id, entity.health)
                 break
             }
             case 'box/burning': {
-                const e = burn.add(entity.config, x, y, z, quat)
-                burn.setHealth(e.id, entity.health)
-                e.burnProgress = entity.burnProgress
+                const e = burn?.add(entity.config, x, y, z, quat)
+                if (e) {
+                    burn?.setHealth(e.id, entity.health)
+                    e.burnProgress = entity.burnProgress
+                }
                 break
             }
             case 'box/magnet':
-                magnet.add(entity.config, x, y, z, quat)
+                magnet?.add(entity.config, x, y, z, quat)
                 break
             case 'box/elasticity': {
-                const e = elastic.add(entity.config, x, y, z, quat)
-                e.def = entity.def
-                e.vel = entity.vel
+                const e = elastic?.add(entity.config, x, y, z, quat)
+                if (e) {
+                    e.def = entity.def
+                    e.vel = entity.vel
+                }
                 break
             }
             case 'area/water':
-                water.add(entity.config, x, y, z, quat)
+                water?.add(entity.config, x, y, z, quat)
                 break
             case 'terrain': {
-                const e = terrain.add(entity.config, x, y, z, quat)
-                if (terrain.setHeights) terrain.setHeights(e.id, entity.heights)
+                if (terrain) {
+                    const e = terrain.add(entity.config, x, y, z, quat)
+                    if (e && entity.heights !== undefined) terrain.setHeights(e.id, entity.heights)
+                }
                 break
             }
             case 'fragment/common': {
                 const fd = jsonToFragmentData(entity.data)
                 const [qx, qy, qz, qw] = entity.quaternion
-                frag.add(fd, 'saved', {x, y, z}, {x: qx, y: qy, z: qz, w: qw})
+                frag?.add(fd, 'saved', {x, y, z}, {x: qx, y: qy, z: qz, w: qw})
                 break
             }
         }

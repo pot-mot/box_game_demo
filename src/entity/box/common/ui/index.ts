@@ -7,7 +7,7 @@ import {createButtonRow} from '../../../../ui/components/button_row.ts'
 export const formatRowText = (box: CommonBox): string =>
     `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  m:${box.config.mass}`
 
-export const createCommonPanel = (ctx: CommonEntityContext): PanelContext => {
+export const createCommonPanel = (ctx: Omit<CommonEntityContext, 'panel'>): PanelContext => {
     const el = document.createElement('div')
     el.id = 'common-box-panel'
     el.style.cssText = [

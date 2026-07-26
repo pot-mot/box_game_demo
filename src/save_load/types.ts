@@ -1,11 +1,11 @@
-import type {CommonBoxConfig} from '../entity/box/common/types'
-import type {DestructibleConfig} from '../entity/box/destructed/types'
-import type {BurningBoxConfig} from '../entity/box/burning/types'
-import type {MagnetBoxConfig} from '../entity/box/magnet/types'
-import type {ElasticBoxConfig} from '../entity/box/elasticity/types'
-import type {WaterBlockConfig} from '../entity/area/water/types'
-import type {BaseTerrainConfig} from '../entity/terrain/base/types'
-import type {FragmentConfig} from '../entity/fragment/common/types'
+import type {CommonBoxConfig, CommonEntityContext} from '../entity/box/common/types'
+import type {DestructibleConfig, DestructionEntityContext} from '../entity/box/destructed/types'
+import type {BurningBoxConfig, BurningEntityContext} from '../entity/box/burning/types'
+import type {MagnetBoxConfig, MagnetEntityContext} from '../entity/box/magnet/types'
+import type {ElasticBoxConfig, ElasticEntityContext} from '../entity/box/elasticity/types'
+import type {WaterBlockConfig, WaterEntityContext} from '../entity/area/water/types'
+import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/types'
+import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/common/types'
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -118,4 +118,40 @@ export interface ModeInfoJSON {
 export interface SaveData {
     entities: SavableEntity[]
     modeInfo?: ModeInfoJSON
+}
+
+// ── 存档模块使用的实体源访问接口 ──
+
+/** 存档/读档所需的最小实体结构 */
+export interface SaveLoadEntry {
+    id?: number
+    config: unknown
+    body?: { position: { x: number; y: number; z: number }; quaternion: { x: number; y: number; z: number; w: number } }
+    mesh?: { position: { x: number; y: number; z: number }; quaternion: { x: number; y: number; z: number; w: number } }
+    health?: number
+    burnProgress?: number
+    def?: [number, number, number]
+    vel?: [number, number, number]
+    heights?: number[][]
+}
+
+/** 存档模块使用的实体源访问接口 */
+export interface SaveLoadSource {
+    getAll(): ReadonlyArray<SaveLoadEntry>
+    add(config: unknown, x: number, y: number, z: number, quat?: { x: number; y: number; z: number; w: number }): { id: number }
+    remove(id: number): void
+    setHealth?(id: number, health: number): void
+    setHeights?(id: number, heights: number[][]): void
+}
+
+/** EntityType → 具体 Context 类型的强类型映射 */
+export type EntitySourceMap = {
+    'box/common': CommonEntityContext
+    'box/destruction': DestructionEntityContext
+    'box/burning': BurningEntityContext
+    'box/magnet': MagnetEntityContext
+    'box/elasticity': ElasticEntityContext
+    'area/water': WaterEntityContext
+    'fragment/common': FragmentEntityContext
+    'terrain': TerrainContext
 }

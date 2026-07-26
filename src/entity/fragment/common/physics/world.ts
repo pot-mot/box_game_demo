@@ -10,7 +10,7 @@ import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../../
 import {createFragmentFromData, syncFragmentToMesh} from '../render'
 import {createWireframe, cleanupWireframe} from '../../../box/base/render'
 import {formatRowText, createFragmentPanel} from '../ui'
-import type {PanelContext} from '../../../box/base/ui'
+
 import type {EntityType} from '../../../constants'
 import {DEFAULT_FRAGMENT_CONFIG} from './constants.ts'
 
@@ -203,7 +203,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         rebuildPanelInfo()
     }
 
-    const ctx: FragmentEntityContext = {
+    const ctxWithoutPanel: Omit<FragmentEntityContext, 'panel'> = {
         type: TYPE,
         events: sourceEvents,
         panelInfo,
@@ -221,8 +221,9 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         setTransform,
         updatePhysics,
         preSync: updatePhysics,
-        panel: undefined as unknown as PanelContext,
     }
-    ctx.panel = createFragmentPanel(ctx)
-    return ctx
+    return {
+        ...ctxWithoutPanel,
+        panel: createFragmentPanel(ctxWithoutPanel),
+    }
 }

@@ -28,12 +28,14 @@ export const GENERATOR_OPTIONS: {id: string; label: string}[] = [
 ]
 
 export const setupTerrain = (scene: Scene, shared: SharedWorld): TerrainContext & EntityInfoSource => {
-    const ctx = createTerrainContextImpl(scene, shared, {
-        type: TYPE as unknown as any,
+    const ctxWithoutPanel = createTerrainContextImpl(scene, shared, {
+        type: TYPE,
         badgeLabel: BADGE_LABEL,
         badgeColor: BADGE_COLOR,
-        generators: GENERATORS as unknown as Record<string, any>,
+        generators: GENERATORS,
     })
-    ;(ctx as any).panel = createTerrainPanel(ctx as TerrainContext, GENERATOR_OPTIONS)
-    return ctx as TerrainContext & EntityInfoSource
+    return {
+        ...ctxWithoutPanel,
+        panel: createTerrainPanel(ctxWithoutPanel, GENERATOR_OPTIONS),
+    }
 }

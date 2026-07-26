@@ -18,7 +18,8 @@ export const setupRefractionPass = (
 
         for (const m of waterMeshes) {
             m.visible = true
-            const mat = m.material as ShaderMaterial
+            if (!(m.material instanceof ShaderMaterial)) continue
+            const mat = m.material
             if (mat.uniforms.uRefractionTex) {
                 mat.uniforms.uRefractionTex.value = backgroundRT.texture
                 mat.uniforms.uViewportSize.value.set(window.innerWidth, window.innerHeight)

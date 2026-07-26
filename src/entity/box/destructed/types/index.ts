@@ -29,7 +29,7 @@ export interface DestructibleBox extends BaseEntity<DestructibleConfig>, HealthC
 }
 
 export interface DestructionEntityContext extends EntityInfoSource {
-    add: (config: DestructibleConfig, x: number, y: number, z: number) => DestructibleBox
+    add: (config: DestructibleConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}) => DestructibleBox
     getSelected: () => DestructibleBox | undefined
     getAll: () => DestructibleBox[]
     updateConfig: (id: number, partial: Partial<DestructibleConfig>) => void

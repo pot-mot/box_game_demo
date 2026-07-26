@@ -7,7 +7,7 @@ import {createButtonRow} from '../../../../ui/components/button_row.ts'
 export const formatRowText = (f: Fragment): string =>
     `${f.label}  (${f.mesh.position.x.toFixed(1)}, ${f.mesh.position.y.toFixed(1)}, ${f.mesh.position.z.toFixed(1)})  m:${f.config.mass.toFixed(2)}  ttl:${f.config.lifetime.toFixed(1)}`
 
-export const createFragmentPanel = (ctx: FragmentEntityContext): PanelContext => {
+export const createFragmentPanel = (ctx: Omit<FragmentEntityContext, 'panel'>): PanelContext => {
     const el = document.createElement('div')
     el.id = 'fragment-panel'
     el.style.cssText = [
