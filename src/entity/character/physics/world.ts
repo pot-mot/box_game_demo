@@ -48,7 +48,7 @@ export const setupCharacter = (scene: Scene, shared: SharedWorld): CharacterCont
         world.addBody(body)
 
         const id = nextId++
-        character = {id, config: cfg, mesh, body, rowText: `Character #${id}`}
+        character = {id, config: cfg, mesh, body, isOnGround: true, rowText: `Character #${id}`}
         stateMachine.reset()
         return character
     }
@@ -72,6 +72,16 @@ export const setupCharacter = (scene: Scene, shared: SharedWorld): CharacterCont
 
     const update = (dt: number): void => {
         if (!character) return
+
+        const {body} = character
+        character.isOnGround = false
+        for (const c of world.contacts) {
+            if (c.bi === body || c.bj === body) {
+                character.isOnGround = true
+                break
+            }
+        }
+
         stateMachine.update(dt, character)
         syncPositions()
     }

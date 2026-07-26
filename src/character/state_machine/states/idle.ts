@@ -13,7 +13,7 @@ export const idleHandler: StateHandler = {
         {
             to: 'jumping',
             guard: (input, entity) =>
-                input.jump && Math.abs(entity.body.velocity.y) < 0.05,
+                input.jump && entity.isOnGround,
         },
     ],
 }

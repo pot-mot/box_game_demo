@@ -13,5 +13,6 @@ export interface CharacterEntity {
     config: CharacterConfig
     mesh: Mesh
     body: Body
+    isOnGround: boolean
     rowText: string
 }

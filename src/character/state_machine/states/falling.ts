@@ -1,21 +1,35 @@
 import type {StateHandler} from '../types.ts'
-import {GROUND_VY_THRESHOLD} from '../constants.ts'
+import {AIR_DAMPING, AIR_CONTROL_FACTOR} from '../constants.ts'
 
 export const fallingHandler: StateHandler = {
     enter: () => {},
-    update: () => {},
+    update: (_dt, input, entity) => {
+        const len = Math.hypot(input.dx, input.dz)
+        const vx = entity.body.velocity.x
+        const vz = entity.body.velocity.z
+        if (len < 0.001) {
+            entity.body.velocity.x = vx * AIR_DAMPING
+            entity.body.velocity.z = vz * AIR_DAMPING
+        } else {
+            const tx = (input.dx / len) * entity.config.speed
+            const tz = (input.dz / len) * entity.config.speed
+            entity.body.velocity.x = vx + (tx - vx) * AIR_CONTROL_FACTOR
+            entity.body.velocity.z = vz + (tz - vz) * AIR_CONTROL_FACTOR
+        }
+        entity.body.wakeUp()
+    },
     exit: () => {},
     transitions: [
         {
             to: 'walking',
             guard: (input, entity) =>
-                Math.abs(entity.body.velocity.y) < GROUND_VY_THRESHOLD
+                entity.isOnGround
                 && Math.hypot(input.dx, input.dz) > 0.001,
         },
         {
             to: 'idle',
             guard: (_, entity) =>
-                Math.abs(entity.body.velocity.y) < GROUND_VY_THRESHOLD,
+                entity.isOnGround,
         },
     ],
 }
