@@ -14,6 +14,7 @@ export interface Fragment extends BaseEntity<FragmentConfig> {
     edges: LineSegments
     wireframe: LineSegments | undefined
     label: string
+    fragmentData: FragmentData
 }
 
 export interface FragmentEntityContext extends EntityInfoSource {

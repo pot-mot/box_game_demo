@@ -88,7 +88,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         const emitter = createEmitter<EntityEventMap>()
         const fragment: Fragment = {
             id, config: cfg, mesh, body, edges, wireframe: undefined,
-            label, emitter, rowText: '',
+            label, fragmentData: data, emitter, rowText: '',
         }
         refreshRowText(fragment)
         emitter.on('infoUpdate', rebuildPanelInfo)

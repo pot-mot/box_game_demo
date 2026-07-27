@@ -98,6 +98,7 @@ export const loadWorldFromData = (
             }
             case 'fragment/common': {
                 const fd = jsonToFragmentData(entity.data)
+                if (fd.hullVertices.length === 0 || fd.hullFaces.length === 0) break
                 const [qx, qy, qz, qw] = entity.quaternion
                 frag?.add(fd, 'saved', {x, y, z}, {x: qx, y: qy, z: qz, w: qw})
                 break

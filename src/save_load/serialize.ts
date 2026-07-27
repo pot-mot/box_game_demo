@@ -1,6 +1,5 @@
 import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import type {FragmentData} from '../entity/destroyed/types'
-import type {Fragment} from '../entity/fragment/common/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {GameMode} from '../modes/constants'
 import type {EntityType} from '../entity/constants.ts'
@@ -148,15 +147,7 @@ export const collectWorldState = (
                 config: e.config,
                 position: vec3ToTuple(e.body.position),
                 quaternion: quatToTuple(e.body.quaternion),
-                data: fragmentDataToJSON((e as Fragment & { fragmentData?: FragmentData }).fragmentData ?? {
-                    renderVertices: new Float32Array(),
-                    renderIndices: [],
-                    hullVertices: [],
-                    hullFaces: [],
-                    centroid: [0, 0, 0],
-                    massRatio: 1,
-                    boxSize: [0, 0, 0],
-                }),
+                data: fragmentDataToJSON(e.fragmentData),
             })
         }
     }
