@@ -27,8 +27,9 @@ import type {EditModeController} from './modes/edit'
 import {setupPlayMode} from './modes/play'
 import type {PlayModeController} from './modes/play'
 import {collectWorldState, saveWorldToFile} from './save_load/serialize.ts'
-import {loadWorldFromData, clearAllEntities} from './save_load/deserialize.ts'
+import {loadWorldFromData, clearAllEntities, type LoadWorldResult} from './save_load/deserialize.ts'
 import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
+import {promptLoadFile} from './save_load/actions.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
 
 type EntitySystem = EntityInfoSource & EntityTickHandler
@@ -97,76 +98,8 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     const cameraInfoUpdate = setupCameraInfo(camera)
     const {updater: instructionsUpdate, toggle: toggleInstructions} = setupInstructionsPanel(() => mode)
 
-    // --- 存档快捷键 ---
-    document.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault()
-            const cached = loadCachedSaveData()
-            const state = collectWorldState(
-                systemsByType,
-                allTerrainSources,
-                mode,
-                camera.position,
-                camera.rotation,
-                playMode?.getPlayerBodyPosition(),
-                cached?.modeInfo,
-            )
-            saveWorldToFile(state)
-        }
-        if (e.code === 'KeyO' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault()
-            const input = document.createElement('input')
-            input.type = 'file'
-            input.accept = '.json'
-            input.onchange = () => {
-                const file = input.files?.[0]
-                if (!file) return
-                const reader = new FileReader()
-                reader.onload = () => {
-                    try {
-                        if (typeof reader.result !== 'string') return
-                        const raw = JSON.parse(reader.result) as unknown
-                        import('./save_load/validation.ts').then(({validateSaveData}) => {
-                            try {
-                                const validated = validateSaveData(raw)
-                                cacheSaveData(validated)
-                                clearAllEntities(systemsByType, allTerrainSources)
-                                const result = loadWorldFromData(validated, systemsByType, allTerrainSources)
-                                if (mode === 'edit') {
-                                    if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
-                                    if (result.editCameraRot) {
-                                        camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
-                                        editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
-                                    }
-                                }
-                                if (mode === 'play') {
-                                    if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
-                                    if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
-                                    if (result.playPlayerPos) {
-                                        playMode?.respawnPlayer(result.playPlayerPos.x, result.playPlayerPos.y, result.playPlayerPos.z)
-                                    }
-                                }
-                            } catch (err) {
-                                console.warn('存档加载失败:', err)
-                            }
-                        })
-                    } catch {
-                        console.warn('文件解析失败')
-                    }
-                }
-                reader.readAsText(file)
-            }
-            input.click()
-        }
-    })
-
-    // --- 设置面板（右上角）---
-    setupSettingsPanel(toggleInstructions)
-
-    // --- 若导入了存档，覆盖默认地形/玩家/相机 ---
-    if (saveData) {
-        clearAllEntities(systemsByType, allTerrainSources)
-        const result = loadWorldFromData(saveData, systemsByType, allTerrainSources)
+    // --- 存档加载后恢复相机/玩家位置的辅助函数 ---
+    const applyLoadResult = (result: LoadWorldResult): void => {
         if (mode === 'edit') {
             if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
             if (result.editCameraRot) {
@@ -181,6 +114,44 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
                 playMode?.respawnPlayer(result.playPlayerPos.x, result.playPlayerPos.y, result.playPlayerPos.z)
             }
         }
+    }
+
+    // --- 存档快捷键 ---
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault()
+            const cached = loadCachedSaveData()
+            const state = collectWorldState(
+                systemsByType,
+                allTerrainSources,
+                mode,
+                camera.position,
+                camera.rotation,
+                playMode?.getPlayerBodyPosition(),
+                cached?.modeInfo,
+            )
+            cacheSaveData(state)
+            saveWorldToFile(state)
+        }
+        if (e.code === 'KeyO' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault()
+            promptLoadFile((data) => {
+                cacheSaveData(data)
+                clearAllEntities(systemsByType, allTerrainSources)
+                const result = loadWorldFromData(data, systemsByType, allTerrainSources)
+                applyLoadResult(result)
+            })
+        }
+    })
+
+    // --- 设置面板（右上角）---
+    setupSettingsPanel(toggleInstructions)
+
+    // --- 若导入了存档，覆盖默认地形/玩家/相机 ---
+    if (saveData) {
+        clearAllEntities(systemsByType, allTerrainSources)
+        const result = loadWorldFromData(saveData, systemsByType, allTerrainSources)
+        applyLoadResult(result)
     }
 
     // --- 单 RAF 循环 ---
