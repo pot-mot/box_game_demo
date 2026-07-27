@@ -18,6 +18,9 @@ import {setupBurningBoxes} from './entity/box/burning/physics/world.ts'
 import {setupMagnetBoxes} from './entity/box/magnet/physics/world.ts'
 import {setupElasticBoxes} from './entity/box/elasticity/physics/world.ts'
 import {setupTerrain} from './entity/terrain/common/physics/world.ts'
+import {setupCharacterEntities} from './entity/character/physics/world.ts'
+import type {CharacterEntitySystem} from './entity/character/physics/world.ts'
+import type {CharacterEntity} from './character/types.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
 import {setupStartupScreen} from './modes/startup_screen.ts'
 import {setupInstructionsPanel} from './modes/instructions_panel.ts'
@@ -60,6 +63,7 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     const fragments = setupFragmentEntities(scene, shared)
     const terrainSource = setupTerrain(scene, shared)
     const allTerrainSources: TerrainContext[] = [terrainSource]
+    const characterSystem: CharacterEntitySystem = setupCharacterEntities(scene, shared)
     const common = setupCommonBoxes(scene, shared)
     const destruction = setupDestructibleBoxes(scene, shared, fragments)
     const water = setupWaterBlocks(scene, physicsEnv)
@@ -70,6 +74,7 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     // 注册 body provider
     physicsEnv.bodyProviders.push(
         () => fragments.getAll().map(f => f.body),
+        () => characterSystem.getAll().map((e: CharacterEntity) => e.body),
         () => common.getAll().map(e => e.body),
         () => destruction.getAll().map(e => e.body),
         () => burning.getAll().map(e => e.body),
@@ -79,10 +84,18 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     )
 
     // 按 type 索引
-    const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, terrainSource]
+    const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, characterSystem as EntitySystem, terrainSource]
     const systemsByType = new Map<string, EntityInfoSource>(
         systems.map(s => [s.type, s]),
     )
+
+    // --- 从缓存/导入文件加载实体（必须在 mode setup 之前，确保角色存在后再激活 AI）---
+    const dataToLoad = saveData ?? loadCachedSaveData()
+    let loadResult: LoadWorldResult | undefined
+    if (dataToLoad) {
+        clearAllEntities(systemsByType, allTerrainSources)
+        loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources)
+    }
 
     // --- 模式控制器（编辑/游玩）---
     let editMode: EditModeController | undefined
@@ -91,30 +104,27 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     if (mode === 'edit') {
         editMode = setupEditMode(camera, renderer, systems, allTerrainSources, terrainSource)
     } else {
-        playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources)
+        playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem)
+    }
+
+    // --- 恢复相机 ---
+    if (loadResult) {
+        if (mode === 'edit') {
+            if (loadResult.editCameraPos) camera.position.set(loadResult.editCameraPos.x, loadResult.editCameraPos.y, loadResult.editCameraPos.z)
+            if (loadResult.editCameraRot) {
+                camera.rotation.set(loadResult.editCameraRot.x, loadResult.editCameraRot.y, loadResult.editCameraRot.z)
+                editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
+            }
+        }
+        if (mode === 'play') {
+            if (loadResult.playCameraPos) camera.position.set(loadResult.playCameraPos.x, loadResult.playCameraPos.y, loadResult.playCameraPos.z)
+            if (loadResult.playCameraRot) camera.rotation.set(loadResult.playCameraRot.x, loadResult.playCameraRot.y, loadResult.playCameraRot.z)
+        }
     }
 
     // --- UI ---
     const cameraInfoUpdate = setupCameraInfo(camera)
     const {updater: instructionsUpdate, toggle: toggleInstructions} = setupInstructionsPanel(() => mode)
-
-    // --- 存档加载后恢复相机/玩家位置的辅助函数 ---
-    const applyLoadResult = (result: LoadWorldResult): void => {
-        if (mode === 'edit') {
-            if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
-            if (result.editCameraRot) {
-                camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
-                editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
-            }
-        }
-        if (mode === 'play') {
-            if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
-            if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
-            if (result.playPlayerPos) {
-                playMode?.respawnPlayer(result.playPlayerPos.x, result.playPlayerPos.y, result.playPlayerPos.z)
-            }
-        }
-    }
 
     // --- 存档快捷键 ---
     document.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -127,7 +137,6 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
                 mode,
                 camera.position,
                 camera.rotation,
-                playMode?.getPlayerBodyPosition(),
                 cached?.modeInfo,
             )
             cacheSaveData(state)
@@ -139,20 +148,23 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
                 cacheSaveData(data)
                 clearAllEntities(systemsByType, allTerrainSources)
                 const result = loadWorldFromData(data, systemsByType, allTerrainSources)
-                applyLoadResult(result)
+                if (mode === 'edit') {
+                    if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
+                    if (result.editCameraRot) {
+                        camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
+                        editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
+                    }
+                }
+                if (mode === 'play') {
+                    if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
+                    if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
+                }
             })
         }
     })
 
     // --- 设置面板（右上角）---
     setupSettingsPanel(toggleInstructions)
-
-    // --- 若导入了存档，覆盖默认地形/玩家/相机 ---
-    if (saveData) {
-        clearAllEntities(systemsByType, allTerrainSources)
-        const result = loadWorldFromData(saveData, systemsByType, allTerrainSources)
-        applyLoadResult(result)
-    }
 
     // --- 单 RAF 循环 ---
     let lastTime = performance.now()

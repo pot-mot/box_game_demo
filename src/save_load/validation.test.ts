@@ -58,6 +58,12 @@ describe('validateSaveData', () => {
             {type: 'area/water', config: {width: 2, height: 2, depth: 2, density: 2}},
             {type: 'terrain', config: {gridSize: 10, cellSize: 1, minHeight: 0, maxHeight: 5, friction: 0.3, generatorId: 'fbm'}, heights: [[0]]},
             {type: 'fragment/common', config: {mass: 0.1, lifetime: 5}, data: {renderVertices: [0, 0, 0, 1, 1, 1, 1, 0, 0], renderIndices: [0, 1, 2], hullVertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], hullFaces: [[0, 1, 2]], centroid: [0, 0, 0], massRatio: 1, boxSize: [1, 1, 1]}},
+            {type: 'character', config: {
+                speed: 6, jumpHeight: 2, radius: 0.125, height: 1,
+                attackSlot: {type: 'melee', range: 1.5, damage: 3, cooldown: 0.5, duration: 0.3},
+                tendency: {tendencyId: 'hostileExceptSelf'},
+                faction: 0, maxHealth: 15, isPlayer: false,
+            }, health: 15},
         ]
         for (const entity of types) {
             const data = {
@@ -99,7 +105,7 @@ describe('validateSaveData', () => {
         expect(() => validateSaveData(data)).not.toThrow()
     })
 
-    it('通过 play modeInfo 含 playerInfo', () => {
+    it('通过 play modeInfo', () => {
         const data = {
             entities: [],
             modeInfo: {
@@ -108,12 +114,45 @@ describe('validateSaveData', () => {
                         position: [1, 2, 3] as [number, number, number],
                         rotate: [0, 1, 0] as [number, number, number],
                     },
-                    playerInfo: {
-                        position: [5, 0, 5] as [number, number, number],
-                    },
                 },
             },
         }
         expect(() => validateSaveData(data)).not.toThrow()
+    })
+
+    it('通过 character 实体含 isPlayer', () => {
+        const data = {
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, radius: 0.125, height: 1,
+                    attackSlot: {type: 'melee', range: 1.5, damage: 3, cooldown: 0.5, duration: 0.3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: true,
+                },
+                health: 15,
+                position: [0, 1, 0] as [number, number, number],
+                quaternion: [0, 0, 0, 1] as [number, number, number, number],
+            }],
+        }
+        expect(() => validateSaveData(data)).not.toThrow()
+    })
+
+    it('拒绝 character 缺少 isPlayer', () => {
+        const data = {
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, radius: 0.125, height: 1,
+                    attackSlot: {type: 'melee', range: 1.5, damage: 3, cooldown: 0.5, duration: 0.3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15,
+                },
+                health: 15,
+                position: [0, 1, 0] as [number, number, number],
+                quaternion: [0, 0, 0, 1] as [number, number, number, number],
+            }],
+        }
+        expect(() => validateSaveData(data)).toThrow()
     })
 })

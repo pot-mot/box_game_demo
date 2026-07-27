@@ -1,54 +1,42 @@
 import {type Scene, type PerspectiveCamera, type WebGLRenderer} from 'three'
 import type {SharedWorld} from '../../physics/world.ts'
 import type {TerrainContext} from '../../entity/terrain/base/types'
-import {setupCharacter} from '../../entity/character/physics/world.ts'
+import type {CharacterEntitySystem} from '../../entity/character/physics/world.ts'
 import {setupPlayerKeyboard} from './keyboard.ts'
 import {setupPlayCamera} from './camera.ts'
+import {setupHealthBars} from './health_bar.ts'
 
 export interface PlayModeController {
     updater: (dt: number) => void
-    respawnPlayer: (x: number, y: number, z: number) => void
-    getPlayerBodyPosition: () => { x: number; y: number; z: number } | undefined
-}
-
-const getPlayerSpawnY = (terrains: readonly TerrainContext[]): number => {
-    let maxH = 0
-    for (const t of terrains) {
-        const h = t.getHeightAt(0, 0, 1)
-        if (h !== undefined && h > maxH) maxH = h
-    }
-    return maxH + 0.5 + 0.3
 }
 
 export const setupPlayMode = (
     scene: Scene,
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
-    shared: SharedWorld,
-    terrainSources: TerrainContext[],
+    _shared: SharedWorld,
+    _terrainSources: TerrainContext[],
+    characterSystem: CharacterEntitySystem,
 ): PlayModeController => {
-    const character = setupCharacter(scene, shared)
-    character.spawn(0, getPlayerSpawnY(terrainSources), 0)
-    const playerInput = setupPlayerKeyboard(camera, character.stateMachine)
+    characterSystem.setAIEnabled(true)
+    characterSystem.activateAI()
+
+    const playerInput = setupPlayerKeyboard(camera, characterSystem)
     const playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () =>
-        character.getCharacter()?.mesh.position,
+        characterSystem.getPlayerCharacter()?.mesh.position,
     )
+    const healthBarUpdate = setupHealthBars(
+        scene,
+        () => characterSystem.getPlayerCharacter(),
+        () => characterSystem.getAll(),
+    ).update
 
     const updater = (dt: number): void => {
         playerInput()
-        character.update(dt)
+        characterSystem.update(dt)
         playCameraUpdate()
+        healthBarUpdate(camera, dt)
     }
 
-    const respawnPlayer = (x: number, y: number, z: number): void => {
-        character.remove()
-        character.spawn(x, y, z)
-    }
-
-    const getPlayerBodyPosition = () => {
-        const p = character.getCharacter()
-        return p?.body.position
-    }
-
-    return {updater, respawnPlayer, getPlayerBodyPosition}
+    return {updater}
 }

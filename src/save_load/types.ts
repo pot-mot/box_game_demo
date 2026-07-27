@@ -6,6 +6,7 @@ import type {ElasticBoxConfig, ElasticEntityContext} from '../entity/box/elastic
 import type {WaterBlockConfig, WaterEntityContext} from '../entity/area/water/types'
 import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/types'
 import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/common/types'
+import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -92,18 +93,45 @@ export interface SavableFragment {
 
 export type SavableEntity = SavableCommonBox | SavableDestructibleBox | SavableBurningBox
     | SavableMagnetBox | SavableElasticBox | SavableWaterBlock | SavableTerrain
-    | SavableFragment
+    | SavableFragment | SavableCharacter
+
+// ── 角色 ──
+
+export interface CharacterSaveConfig {
+    speed: number
+    jumpHeight: number
+    radius: number
+    height: number
+    attackSlot: {
+        type: 'melee'
+        range: number; damage: number; cooldown: number; duration: number
+    } | {
+        type: 'ranged'
+        range: number; damage: number; cooldown: number; duration: number
+        bulletSpeed: number; bulletKnockback: number; bulletLifetime: number
+    }
+    tendency: {
+        tendencyId: 'hostileAll' | 'hostileExceptSelf' | 'hostileTo' | 'hostileExcept' | 'pacifist'
+        targetFactions?: number[]
+    }
+    faction: number
+    maxHealth: number
+    isPlayer: boolean
+}
+
+export interface SavableCharacter {
+    type: 'character'
+    config: CharacterSaveConfig
+    health: number
+    position: Vec3JSON
+    quaternion: QuatJSON
+}
 
 // ── 模式信息（强类型嵌套）──
 
 export interface CameraInfoJSON {
     position: Vec3JSON
-    /** 欧拉角: [pitch, yaw, roll] = camera.rotation.{x, y, z} */
     rotate: Vec3JSON
-}
-
-export interface PlayerInfoJSON {
-    position: Vec3JSON
 }
 
 export interface ModeInfoJSON {
@@ -112,7 +140,6 @@ export interface ModeInfoJSON {
     }
     play?: {
         cameraInfo?: CameraInfoJSON
-        playerInfo?: PlayerInfoJSON
     }
 }
 
@@ -154,5 +181,6 @@ export type EntitySourceMap = {
     'box/elasticity': ElasticEntityContext
     'area/water': WaterEntityContext
     'fragment/common': FragmentEntityContext
+    'character': CharacterEntitySystem
     'terrain': TerrainContext
 }

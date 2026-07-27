@@ -15,9 +15,18 @@ export const walkingHandler: StateHandler = {
     transitions: [
         { to: 'idle', guard: (input) => Math.hypot(input.dx, input.dz) < 0.001 },
         {
+            to: 'attacking',
+            guard: (input, entity) =>
+                input.attack && entity.attackCooldownTimer <= 0,
+        },
+        {
             to: 'jumping',
             guard: (input, entity) =>
                 input.jump && entity.isOnGround,
+        },
+        {
+            to: 'dying',
+            guard: (_input, entity) => entity.health <= 0,
         },
     ],
 }

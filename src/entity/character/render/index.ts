@@ -1,12 +1,17 @@
 import {CapsuleGeometry, Mesh, MeshStandardMaterial} from 'three'
-import {CHARACTER_COLOR, CHARACTER_EMISSIVE} from './constants.ts'
 import type {CharacterConfig} from '../../../character/types.ts'
+import type {AttackType} from '../../../character/archetypes.ts'
+import {MELEE_COLOR, MELEE_EMISSIVE, RANGED_COLOR, RANGED_EMISSIVE} from './constants.ts'
 
-export const createCharacterMesh = (config: CharacterConfig): Mesh => {
+export const createCharacterMesh = (config: CharacterConfig, attackType: AttackType): Mesh => {
     const geom = new CapsuleGeometry(config.radius, config.height - config.radius * 2, 8, 12)
+    const isMelee = attackType === 'melee'
+    const color = isMelee ? MELEE_COLOR : RANGED_COLOR
+    const emissive = isMelee ? MELEE_EMISSIVE : RANGED_EMISSIVE
+
     const mat = new MeshStandardMaterial({
-        color: CHARACTER_COLOR,
-        emissive: CHARACTER_EMISSIVE,
+        color,
+        emissive,
         emissiveIntensity: 0.3,
         roughness: 0.6,
         metalness: 0.1,

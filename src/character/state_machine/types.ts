@@ -1,12 +1,13 @@
 import type {CharacterEntity} from '../types.ts'
 
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling'] as const
+export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying'] as const
 export type CharacterState = typeof CHARACTER_STATES[number]
 
 export interface CharacterInput {
     dx: number
     dz: number
     jump: boolean
+    attack: boolean
 }
 
 export interface MachineContext {
@@ -32,7 +33,7 @@ export interface CharacterStateMachine {
     readonly stateTime: number
     onStateChange: ((from: CharacterState, to: CharacterState) => void) | null
 
-    setInput(dx: number, dz: number, jump: boolean): void
+    setInput(dx: number, dz: number, jump: boolean, attack: boolean): void
     update(dt: number, entity: CharacterEntity): void
     reset(): void
 }

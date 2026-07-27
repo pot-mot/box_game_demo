@@ -28,5 +28,9 @@ export const jumpingHandler: StateHandler = {
             guard: (_, entity) =>
                 entity.body.velocity.y <= 0 && Math.abs(entity.body.velocity.y) >= 0.05,
         },
+        {
+            to: 'dying',
+            guard: (_input, entity) => entity.health <= 0,
+        },
     ],
 }

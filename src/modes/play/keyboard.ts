@@ -1,14 +1,15 @@
 import {Vector3, type PerspectiveCamera} from 'three'
-import type {CharacterStateMachine} from '../../character/state_machine/types.ts'
+import type {CharacterEntitySystem} from '../../entity/character/physics/world.ts'
 
 export const setupPlayerKeyboard = (
     camera: PerspectiveCamera,
-    stateMachine: CharacterStateMachine,
+    characterSystem: CharacterEntitySystem,
 ): () => void => {
     const keys: Record<string, boolean> = {}
     const forward = new Vector3()
     const right = new Vector3()
     let jumpThisFrame = false
+    let attackThisFrame = false
 
     const onKeyDown = (e: KeyboardEvent) => {
         keys[e.code] = true
@@ -16,11 +17,15 @@ export const setupPlayerKeyboard = (
             e.preventDefault()
             jumpThisFrame = true
         }
+        if (e.code === 'KeyJ' && !e.repeat) {
+            attackThisFrame = true
+        }
     }
     const onKeyUp = (e: KeyboardEvent) => { keys[e.code] = false }
     const onBlur = () => {
         for (const k in keys) keys[k] = false
         jumpThisFrame = false
+        attackThisFrame = false
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -40,7 +45,10 @@ export const setupPlayerKeyboard = (
         if (keys['KeyA']) { dx -= right.x; dz -= right.z }
         if (keys['KeyD']) { dx += right.x; dz += right.z }
 
-        stateMachine.setInput(dx, dz, jumpThisFrame)
+        characterSystem.setPlayerMove(dx, dz, jumpThisFrame, forward.x, forward.z)
+        if (attackThisFrame) characterSystem.setPlayerAttack()
+
         jumpThisFrame = false
+        attackThisFrame = false
     }
 }

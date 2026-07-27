@@ -33,7 +33,6 @@ export interface LoadWorldResult {
     editCameraRot?: {x: number; y: number; z: number}
     playCameraPos?: {x: number; y: number; z: number}
     playCameraRot?: {x: number; y: number; z: number}
-    playPlayerPos?: {x: number; y: number; z: number}
 }
 
 const vec3FromTuple = (t?: [number, number, number]): {x: number; y: number; z: number} | undefined =>
@@ -55,6 +54,7 @@ export const loadWorldFromData = (
     const elastic = getSource('box/elasticity')
     const water = getSource('area/water')
     const frag = getSource('fragment/common')
+    const character = getSource('character')
     const terrain = terrainSources[0]
 
     for (const entity of data.entities) {
@@ -103,6 +103,10 @@ export const loadWorldFromData = (
                 frag?.add(fd, 'saved', {x, y, z}, {x: qx, y: qy, z: qz, w: qw})
                 break
             }
+            case 'character': {
+                character?.add(entity.config, x, y, z, quat, {health: entity.health})
+                break
+            }
         }
     }
 
@@ -114,6 +118,5 @@ export const loadWorldFromData = (
         editCameraRot: vec3FromTuple(ei?.cameraInfo?.rotate),
         playCameraPos: vec3FromTuple(pi?.cameraInfo?.position),
         playCameraRot: vec3FromTuple(pi?.cameraInfo?.rotate),
-        playPlayerPos: vec3FromTuple(pi?.playerInfo?.position),
     }
 }

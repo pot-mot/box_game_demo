@@ -31,5 +31,9 @@ export const fallingHandler: StateHandler = {
             guard: (_, entity) =>
                 entity.isOnGround,
         },
+        {
+            to: 'dying',
+            guard: (_input, entity) => entity.health <= 0,
+        },
     ],
 }

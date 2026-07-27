@@ -31,7 +31,6 @@ export const collectWorldState = (
     mode: GameMode,
     cameraPos?: {x: number; y: number; z: number},
     cameraRot?: {x: number; y: number; z: number},
-    playerPos?: {x: number; y: number; z: number},
     prevModeInfo?: ModeInfoJSON,
 ): SaveData => {
     const entities: SavableEntity[] = []
@@ -138,6 +137,30 @@ export const collectWorldState = (
         }
     }
 
+    // 角色
+    const character = getSource('character')
+    if (character?.getAll) {
+        for (const e of character.getAll()) {
+            entities.push({
+                type: 'character',
+                config: {
+                    speed: e.config.speed,
+                    jumpHeight: e.config.jumpHeight,
+                    radius: e.config.radius,
+                    height: e.config.height,
+                    attackSlot: e.attackSlot,
+                    tendency: e.tendencyConfig,
+                    faction: e.faction,
+                    maxHealth: e.maxHealth,
+                    isPlayer: e.isPlayer,
+                },
+                health: e.health,
+                position: vec3ToTuple(e.body.position),
+                quaternion: quatToTuple(e.body.quaternion),
+            })
+        }
+    }
+
     // 碎片
     const frag = getSource('fragment/common')
     if (frag?.getAll) {
@@ -164,8 +187,7 @@ export const collectWorldState = (
     } else if (mode === 'play') {
         const playEntry: NonNullable<typeof modeInfo.play> = {}
         if (cameraInfo) playEntry.cameraInfo = cameraInfo
-        if (playerPos) playEntry.playerInfo = {position: vec3ToTuple(playerPos)}
-        if (playEntry.cameraInfo || playEntry.playerInfo) modeInfo.play = playEntry
+        if (playEntry.cameraInfo) modeInfo.play = playEntry
         // 不清除 edit 数据
     }
 

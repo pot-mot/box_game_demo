@@ -10,12 +10,16 @@ import {idleHandler} from './states/idle.ts'
 import {walkingHandler} from './states/walking.ts'
 import {jumpingHandler} from './states/jumping.ts'
 import {fallingHandler} from './states/falling.ts'
+import {attackingHandler} from './states/attacking.ts'
+import {dyingHandler} from './states/dying.ts'
 
 const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     idle: idleHandler,
     walking: walkingHandler,
     jumping: jumpingHandler,
     falling: fallingHandler,
+    attacking: attackingHandler,
+    dying: dyingHandler,
 }
 
 export const createCharacterStateMachine = (): CharacterStateMachine => {
@@ -23,17 +27,18 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     let previousState: CharacterState | null = null
     let stateTime = 0
     let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
-    const input: CharacterInput = {dx: 0, dz: 0, jump: false}
+    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false}
 
     const makeContext = (): MachineContext => ({
         stateTime,
         previousState,
     })
 
-    const setInput = (dx: number, dz: number, jump: boolean): void => {
+    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean): void => {
         input.dx = dx
         input.dz = dz
         input.jump = jump
+        input.attack = attack
     }
 
     const update = (dt: number, entity: CharacterEntity): void => {
@@ -64,6 +69,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.dx = 0
         input.dz = 0
         input.jump = false
+        input.attack = false
     }
 
     return {

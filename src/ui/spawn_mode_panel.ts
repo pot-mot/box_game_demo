@@ -3,6 +3,7 @@ import type {SpawnMode} from '../types/spawnMode.ts'
 const MODES: SpawnMode[] = [
     'box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity',
     'area/water',
+    'character',
     'terrain',
 ]
 const MODE_LABELS: Record<SpawnMode, string> = {
@@ -12,6 +13,7 @@ const MODE_LABELS: Record<SpawnMode, string> = {
     'box/magnet': 'Magnet',
     'box/elasticity': 'Elastic',
     'area/water': 'Water',
+    'character': 'Character',
     'terrain': 'Terrain',
 }
 

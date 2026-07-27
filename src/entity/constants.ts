@@ -3,6 +3,7 @@ const ENTITY_TYPE_VALUES = [
     'box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity',
     'fragment/common',
     'area/water',
+    'character',
     'terrain',
 ] as const
 type EntityType = typeof ENTITY_TYPE_VALUES[number]

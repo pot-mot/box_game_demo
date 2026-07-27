@@ -92,7 +92,50 @@ const SavableFragment = z.object({
     data: FragmentDataJSONSchema,
 })
 
-/** 所有实体类型的 discriminated union */
+const MeleeAttackSchema = z.object({
+    type: z.literal('melee'),
+    range: z.number().positive(),
+    damage: z.number().positive(),
+    cooldown: z.number().positive(),
+    duration: z.number().positive(),
+})
+
+const RangedAttackSchema = z.object({
+    type: z.literal('ranged'),
+    range: z.number().positive(),
+    damage: z.number().positive(),
+    cooldown: z.number().positive(),
+    duration: z.number().positive(),
+    bulletSpeed: z.number().positive(),
+    bulletKnockback: z.number(),
+    bulletLifetime: z.number().positive(),
+})
+
+const AttackSlotSchema = z.discriminatedUnion('type', [MeleeAttackSchema, RangedAttackSchema])
+
+const TendencyConfigSchema = z.object({
+    tendencyId: z.enum(['hostileAll', 'hostileExceptSelf', 'hostileTo', 'hostileExcept', 'pacifist']),
+    targetFactions: z.array(z.number()).optional(),
+})
+
+const SavableCharacter = z.object({
+    type: z.literal('character'),
+    config: z.object({
+        speed: z.number().positive(),
+        jumpHeight: z.number().positive(),
+        radius: z.number().positive(),
+        height: z.number().positive(),
+        attackSlot: AttackSlotSchema,
+        tendency: TendencyConfigSchema,
+        faction: z.number(),
+        maxHealth: z.number().positive(),
+        isPlayer: z.boolean(),
+    }),
+    health: z.number(),
+    position: Vec3,
+    quaternion: Quat,
+})
+
 const SavableEntity = z.discriminatedUnion('type', [
     SavableCommonBox,
     SavableDestructibleBox,
@@ -102,6 +145,7 @@ const SavableEntity = z.discriminatedUnion('type', [
     SavableWaterBlock,
     SavableTerrain,
     SavableFragment,
+    SavableCharacter,
 ])
 
 const CameraInfo = z.object({
@@ -109,15 +153,10 @@ const CameraInfo = z.object({
     rotate: Vec3,
 })
 
-const PlayerInfo = z.object({
-    position: Vec3,
-})
-
 const ModeInfo = z.object({
     edit: z.object({cameraInfo: CameraInfo}).optional(),
     play: z.object({
         cameraInfo: CameraInfo.optional(),
-        playerInfo: PlayerInfo.optional(),
     }).optional(),
 })
 
@@ -128,6 +167,5 @@ const SaveDataSchema = z.object({
 
 export type ValidatedSaveData = z.infer<typeof SaveDataSchema>
 
-/** 校验存档数据，失败抛出 ZodError */
 export const validateSaveData = (data: unknown): ValidatedSaveData =>
     SaveDataSchema.parse(data)
