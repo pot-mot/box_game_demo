@@ -156,8 +156,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const ch = characters.find(c => c.id === pi.id)
             if (!ch) continue
             const playerPrefix = ch.isPlayer ? '▶ Player: ' : ''
-            const skillType = ch.combat.skills[ch.combat.currentSkillIndex]?.config.type ?? 'melee'
-            pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${skillType}  spd:${ch.config.speed}`
+            const skill = ch.combat.skills[ch.combat.currentSkillIndex]
+            const weaponName = skill?.config.weapon.id ?? '?'
+            const weaponDmg = skill?.config.weapon.damage ?? 0
+            pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weaponDmg})  spd:${ch.config.speed}`
         }
     }
 
@@ -243,7 +245,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.combat.onDamageTaken = flash.onDamage
 
         const rowText = isPlayer ? `▶ Player: Character #${id}` : `Character #${id}`
-        panelInfos.push({id, type: 'character', badgeLabel: attackSlot.type, badgeColor: attackSlot.type === 'melee' ? '#ff4444' : '#4488ff', rowText})
+        const badgeLabel = attackSlot.weaponId ?? attackSlot.type
+        panelInfos.push({id, type: 'character', badgeLabel, badgeColor: attackSlot.type === 'melee' ? '#ff4444' : '#4488ff', rowText})
 
         return entity
     }
@@ -542,7 +545,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
             const pi = panelInfos.find(p => p.id === id)
             if (pi) {
-                pi.badgeLabel = newAttackSlot.type
+                pi.badgeLabel = newAttackSlot.weaponId ?? newAttackSlot.type
                 pi.badgeColor = newAttackSlot.type === 'melee' ? '#ff4444' : '#4488ff'
             }
         }
