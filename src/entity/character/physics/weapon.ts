@@ -49,12 +49,17 @@ export const createWeaponManager = (
             const target = getCharacterByBody(otherBody)
             if (!target || target.id === character.id) return
             if (!character.body || !target.body) return
-            if (character.attackedTargets.has(target.id)) return
-            if (!character.attackTendency(character.faction, target.faction)) return
+            const cc = character.combat
+            const tc = target.combat
+            if (cc.attackedTargets.has(target.id)) return
+            if (!cc.attackTendency(cc.faction, tc.faction)) return
 
-            target.health -= character.attackSlot.type === 'melee' ? character.attackSlot.damage : 0
-            if (target.health < 0) target.health = 0
-            character.attackedTargets.add(target.id)
+            const skill = cc.skills[cc.currentSkillIndex]
+            if (skill && skill.config.type === 'melee') {
+                tc.health -= skill.config.damage
+            }
+            if (tc.health < 0) tc.health = 0
+            cc.attackedTargets.add(target.id)
 
             _tmpVec.set(
                 target.body.position.x - character.body.position.x,
@@ -80,7 +85,8 @@ export const createWeaponManager = (
     }
 
     const updateWeapon = (_dt: number, character: CharacterEntity, weaponBody: Body): void => {
-        const progress = character.attackTimer / character.attackSlot.duration
+        const skill = character.combat.skills[character.combat.currentSkillIndex]
+        const progress = skill ? character.combat.attackTimer / skill.config.duration : 0
         const angle = -Math.PI / 4 + progress * (Math.PI / 2)
 
         const charPos = character.body.position

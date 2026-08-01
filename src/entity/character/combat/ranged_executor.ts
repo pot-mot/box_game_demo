@@ -1,18 +1,17 @@
 import {Body, Sphere, Vec3, BODY_TYPES} from 'cannon-es'
 import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
-import type {AttackTendency} from '../../../character/faction.ts'
-
-const BULLET_COLLISION_GROUP = 8
-const BULLET_COLLISION_MASK = 0
-const BULLET_HIT_RADIUS = 0.3
-const BULLET_SIZE = 0.1
+import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
+import type {SkillConfig} from '../../../character/combat/skill_types.ts'
+import type {CombatComponent} from '../../../character/combat/types.ts'
+import {applyDamage} from '../../../character/combat/damage.ts'
+import {BULLET_SIZE, BULLET_COLLISION_GROUP, BULLET_COLLISION_MASK, BULLET_HIT_RADIUS} from './constants.ts'
 
 interface BulletInstance {
     body: Body
     ownerId: number
     ownerFaction: number
-    ownerAttackTendency: AttackTendency
+    ownerAttackTendency: import('../../../character/faction.ts').AttackTendency
     damage: number
     knockbackForce: number
     lifetime: number
@@ -20,21 +19,21 @@ interface BulletInstance {
 
 const _tmpVec = new Vec3()
 
-export interface BulletPool {
-    fireBullet: (character: CharacterEntity, direction: Vec3) => void
-    updateBullets: (dt: number, allCharacters: readonly CharacterEntity[]) => void
-    clear: () => void
-}
-
-export const createBulletPool = (shared: SharedWorld): BulletPool => {
+export const createRangedExecutor = (
+    shared: SharedWorld,
+): SkillExecutor & { updateBullets: (dt: number, allCharacters: readonly CharacterEntity[]) => void; clear: () => void } => {
     const {world} = shared
     const bullets: BulletInstance[] = []
+    const firedThisAttack = new Set<number>()
 
-    const fireBullet = (character: CharacterEntity, direction: Vec3): void => {
-        const skill = character.combat.skills[character.combat.currentSkillIndex]
-        if (!skill || skill.config.type !== 'ranged') return
-
-        const cfg = skill.config
+    const fireBulletInternal = (
+        character: CharacterEntity,
+        direction: Vec3,
+        speed: number,
+        damage: number,
+        knockbackForce: number,
+        lifetime: number,
+    ): void => {
         const body = new Body({
             mass: 0.01,
             type: BODY_TYPES.DYNAMIC,
@@ -51,8 +50,7 @@ export const createBulletPool = (shared: SharedWorld): BulletPool => {
             spawnPos.y + 0.3,
             spawnPos.z + direction.z * 0.5,
         )
-
-        body.velocity.set(direction.x * cfg.projectileSpeed, direction.y * cfg.projectileSpeed, direction.z * cfg.projectileSpeed)
+        body.velocity.set(direction.x * speed, direction.y * speed, direction.z * speed)
         world.addBody(body)
 
         bullets.push({
@@ -60,10 +58,53 @@ export const createBulletPool = (shared: SharedWorld): BulletPool => {
             ownerId: character.id,
             ownerFaction: character.combat.faction,
             ownerAttackTendency: character.combat.attackTendency,
-            damage: cfg.damage,
-            knockbackForce: cfg.knockbackForce,
-            lifetime: cfg.projectileLifetime,
+            damage,
+            knockbackForce,
+            lifetime,
         })
+    }
+
+    const start = (
+        _skill: SkillConfig,
+        _combat: CombatComponent,
+        entity: CharacterEntity,
+        _direction: Vec3,
+        _ctx: ExecutorContext,
+    ): void => {
+        firedThisAttack.delete(entity.id)
+    }
+
+    const update = (
+        _dt: number,
+        skill: SkillConfig,
+        combat: CombatComponent,
+        entity: CharacterEntity,
+        _ctx: ExecutorContext,
+    ): void => {
+        if (combat.attackTimer > 0.016 || firedThisAttack.has(entity.id)) return
+        firedThisAttack.add(entity.id)
+
+        const dirX = combat.attackDirX
+        const dirZ = combat.attackDirZ
+        const len = Math.hypot(dirX, dirZ)
+        const ndx = len < 0.001 ? 0 : dirX / len
+        const ndz = len < 0.001 ? 1 : dirZ / len
+
+        _tmpVec.set(ndx, 0, ndz)
+        fireBulletInternal(
+            entity, _tmpVec,
+            skill.projectileSpeed, skill.damage,
+            skill.knockbackForce, skill.projectileLifetime,
+        )
+    }
+
+    const end = (
+        _skill: SkillConfig,
+        _combat: CombatComponent,
+        _entity: CharacterEntity,
+        _ctx: ExecutorContext,
+    ): void => {
+        // 子弹继续飞行，不做清理
     }
 
     const updateBullets = (dt: number, allCharacters: readonly CharacterEntity[]): void => {
@@ -93,8 +134,13 @@ export const createBulletPool = (shared: SharedWorld): BulletPool => {
 
                 if (!bullet.ownerAttackTendency(bullet.ownerFaction, target.combat.faction)) continue
 
-                target.combat.health -= bullet.damage
-                if (target.combat.health < 0) target.combat.health = 0
+                applyDamage(target.combat, {
+                    sourceId: bullet.ownerId,
+                    targetId: target.id,
+                    baseAmount: bullet.damage,
+                    finalAmount: bullet.damage,
+                    skillId: 'ranged',
+                })
 
                 if (bullet.knockbackForce > 0) {
                     _tmpVec.set(
@@ -105,9 +151,10 @@ export const createBulletPool = (shared: SharedWorld): BulletPool => {
                     const len = _tmpVec.length()
                     if (len > 0.0001) {
                         _tmpVec.scale(1 / len, _tmpVec)
-                        target.body.velocity.x += _tmpVec.x * bullet.knockbackForce
-                        target.body.velocity.z += _tmpVec.z * bullet.knockbackForce
-                        target.body.velocity.y += 1
+                        target.body.applyImpulse(
+                            new Vec3(_tmpVec.x * bullet.knockbackForce, 1, _tmpVec.z * bullet.knockbackForce),
+                            target.body.position,
+                        )
                     }
                     target.body.wakeUp()
                 }
@@ -137,5 +184,5 @@ export const createBulletPool = (shared: SharedWorld): BulletPool => {
         bullets.length = 0
     }
 
-    return {fireBullet, updateBullets, clear}
+    return {type: 'ranged', start, update, end, updateBullets, clear}
 }

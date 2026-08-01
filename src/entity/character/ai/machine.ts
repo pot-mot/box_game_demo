@@ -28,7 +28,7 @@ export const updateAI = (
     allCharacters: readonly CharacterEntity[],
     setInput: (dx: number, dz: number, attack: boolean) => void,
 ): void => {
-    if (character.isDead) return
+    if (character.combat.isDead) return
 
     const handler = AI_HANDLERS[ctx.currentState]
 

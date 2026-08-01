@@ -107,6 +107,8 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
         playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem)
     }
 
+    characterSystem.setCollisionVisible(mode === 'edit')
+
     // --- 恢复相机 ---
     if (loadResult) {
         if (mode === 'edit') {

@@ -52,7 +52,7 @@ export const setupHealthBars = (
         if (player) {
             const ppos = player.body.position
             for (const c of allChars) {
-                if (c.isDead || c.id === player.id) continue
+                if (c.combat.isDead || c.id === player.id) continue
                 const dx = c.body.position.x - ppos.x
                 const dy = c.body.position.y - ppos.y
                 const dz = c.body.position.z - ppos.z
@@ -74,17 +74,17 @@ export const setupHealthBars = (
                     bars.set(c.id, entry)
                 }
 
-                if (c.health !== entry.lastHealth || c.maxHealth !== entry.lastMaxHealth) {
+                if (c.combat.health !== entry.lastHealth || c.combat.maxHealth !== entry.lastMaxHealth) {
                     if (entry.sprite.material instanceof SpriteMaterial) {
                         const canvas = entry.sprite.material.map?.image
                         if (canvas instanceof HTMLCanvasElement) {
                             const ctx = canvas.getContext('2d')
-                            if (ctx) drawBar(ctx, c.health, c.maxHealth)
+                            if (ctx) drawBar(ctx, c.combat.health, c.combat.maxHealth)
                         }
                         entry.sprite.material.map!.needsUpdate = true
                     }
-                    entry.lastHealth = c.health
-                    entry.lastMaxHealth = c.maxHealth
+                    entry.lastHealth = c.combat.health
+                    entry.lastMaxHealth = c.combat.maxHealth
                 }
 
                 entry.sprite.position.set(

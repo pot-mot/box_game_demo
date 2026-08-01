@@ -16,8 +16,10 @@ export const walkingHandler: StateHandler = {
         { to: 'idle', guard: (input) => Math.hypot(input.dx, input.dz) < 0.001 },
         {
             to: 'attacking',
-            guard: (input, entity) =>
-                input.attack && entity.attackCooldownTimer <= 0,
+            guard: (input, entity) => {
+                const skill = entity.combat.skills[input.skillIndex]
+                return input.attack && (skill?.cooldownTimer ?? Infinity) <= 0
+            },
         },
         {
             to: 'jumping',
@@ -26,7 +28,7 @@ export const walkingHandler: StateHandler = {
         },
         {
             to: 'dying',
-            guard: (_input, entity) => entity.health <= 0,
+            guard: (_input, entity) => entity.combat.health <= 0,
         },
     ],
 }

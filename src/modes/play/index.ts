@@ -36,6 +36,13 @@ export const setupPlayMode = (
         characterSystem.update(dt)
         playCameraUpdate()
         healthBarUpdate(camera, dt)
+
+        const player = characterSystem.getPlayerCharacter()
+        if (player) {
+            const dx = camera.position.x - player.mesh.position.x
+            const dz = camera.position.z - player.mesh.position.z
+            characterSystem.setPlayerCameraAngle(Math.atan2(dx, dz))
+        }
     }
 
     return {updater}

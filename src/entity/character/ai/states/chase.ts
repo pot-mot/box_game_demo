@@ -7,7 +7,7 @@ export const chaseHandler: AIStateHandler = {
     enter: () => {},
     update: (_dt, ctx, character, allCharacters, setInput) => {
         const target = allCharacters.find(c => c.id === ctx.targetId)
-        if (!target || target.isDead) { setInput(0, 0, false); return }
+        if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.position
         const tp = target.body.position
@@ -24,23 +24,26 @@ export const chaseHandler: AIStateHandler = {
             to: 'attack',
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.targetId)
-                if (!target || target.isDead) return false
+                if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
                 _dir.set(tp.x - pos.x, tp.y - pos.y, tp.z - pos.z)
-                return _dir.length() < character.attackSlot.range
-                    && character.attackCooldownTimer <= 0
+                const skill = character.combat.skills[character.combat.currentSkillIndex]
+                const skillRange = skill?.config.range ?? 1.5
+                return _dir.length() < skillRange
+                    && (skill?.cooldownTimer ?? Infinity) <= 0
             },
         },
         {
             to: 'patrol',
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.targetId)
-                if (!target || target.isDead) return true
+                if (!target || target.combat.isDead) return true
                 const pos = character.body.position
                 const tp = target.body.position
                 _dir.set(tp.x - pos.x, tp.y - pos.y, tp.z - pos.z)
-                const detRange = character.attackSlot.type === 'ranged' ? character.attackSlot.range * 1.5 : 12
+                const detRange = character.combat.skills[character.combat.currentSkillIndex]?.config.type === 'ranged'
+                    ? (character.combat.skills[character.combat.currentSkillIndex]?.config.range ?? 10) * 1.5 : 12
                 return _dir.length() > detRange
             },
         },

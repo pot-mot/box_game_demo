@@ -27,18 +27,19 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     let previousState: CharacterState | null = null
     let stateTime = 0
     let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
-    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false}
+    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, skillIndex: 0}
 
     const makeContext = (): MachineContext => ({
         stateTime,
         previousState,
     })
 
-    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean): void => {
+    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, skillIndex?: number): void => {
         input.dx = dx
         input.dz = dz
         input.jump = jump
         input.attack = attack
+        input.skillIndex = skillIndex ?? 0
     }
 
     const update = (dt: number, entity: CharacterEntity): void => {
@@ -51,6 +52,9 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
                 previousState = currentState
                 currentState = t.to
                 stateTime = 0
+                if (currentState === 'attacking') {
+                    entity.combat.currentSkillIndex = input.skillIndex
+                }
                 const newCtx = makeContext()
                 STATE_HANDLERS[currentState].enter(entity, newCtx)
                 onStateChange?.(previousState, currentState)
@@ -70,6 +74,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.dz = 0
         input.jump = false
         input.attack = false
+        input.skillIndex = 0
     }
 
     return {

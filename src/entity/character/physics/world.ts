@@ -5,18 +5,27 @@ import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
+import {createCombatComponent} from '../../../character/combat/types.ts'
+import type { AttackResult } from '../../../character/combat/types.ts'
+import {createSkillSlot, SKILL_PRESETS, type SkillConfig, type SkillSlot} from '../../../character/combat/skill_types.ts'
+import {SKILL_DEFAULT_MAX_HEALTH, SKILL_DEFAULT_DETECTION_RANGE} from '../../../character/combat/skill_types.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
+import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext} from '../ai/types.ts'
 import {createAIMachine, updateAI} from '../ai/machine.ts'
 import {createCharacterMesh} from '../render'
+import {createCharacterModel} from '../appearance/model.ts'
+import {createAppearanceSystem} from '../appearance/system.ts'
+import type {AppearanceSystem} from '../appearance/system.ts'
+import type {CharacterModel} from '../appearance/types.ts'
+import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD, HEAD_TURN_LIMIT} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
 import {CHARACTER_LINEAR_DAMPING} from './constants.ts'
-import {ATTACK_PRESETS, ATTACK_DEFAULT_MAX_HEALTH, ATTACK_DEFAULT_DETECTION_RANGE} from '../../../character/archetypes.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
-import {createWeaponManager} from './weapon.ts'
-import type {WeaponManager} from './weapon.ts'
-import {createBulletPool} from './bullet.ts'
-import type {BulletPool} from './bullet.ts'
+import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
+import {createMeleeExecutor} from '../combat/melee_executor.ts'
+import {createRangedExecutor} from '../combat/ranged_executor.ts'
+import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {createCharacterPanel} from '../ui/panel.ts'
@@ -27,7 +36,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     markPlayer: (id: number) => void
     unmarkPlayer: () => void
     setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number) => void
-    setPlayerAttack: () => void
+    setPlayerAttack: (skillIndex?: number) => import('../../../character/combat/types.ts').AttackResult
     getPlayerCharacter: () => CharacterEntity | undefined
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: Body) => CharacterEntity | undefined
@@ -37,14 +46,41 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
     getAll: () => readonly CharacterEntity[]
     setTransform: (id: number, pos: {x: number; y: number; z: number}) => void
-    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number) => void
+    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig) => void
+    /** 设置碰撞体可视化 mesh 的可见性 */
+    setCollisionVisible: (visible: boolean) => void
+    /** 设置玩家摄像机水平方向角（用于头颈追踪） */
+    setPlayerCameraAngle: (angle: number) => void
 }
 
-const makeBulletConfig = (slot: AttackConfig) => {
-    if (slot.type === 'ranged') {
-        return {speed: slot.bulletSpeed, size: 0.1, damage: slot.damage, knockbackForce: slot.bulletKnockback, lifetime: slot.bulletLifetime}
-    }
-    return {speed: 20, size: 0.1, damage: 2, knockbackForce: 3, lifetime: 3}
+/** 将旧 AttackConfig 转换为 SkillSlot 数组 */
+const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
+    const skill: SkillConfig = attack.type === 'melee'
+        ? {
+            id: 'custom_melee',
+            type: 'melee',
+            damage: attack.damage,
+            range: attack.range,
+            cooldown: attack.cooldown,
+            duration: attack.duration,
+            knockbackForce: SKILL_PRESETS.default_melee.knockbackForce,
+            knockbackY: SKILL_PRESETS.default_melee.knockbackY,
+            projectileSpeed: 0,
+            projectileLifetime: 0,
+        }
+        : {
+            id: 'custom_ranged',
+            type: 'ranged',
+            damage: attack.damage,
+            range: attack.range,
+            cooldown: attack.cooldown,
+            duration: attack.duration,
+            knockbackForce: attack.bulletKnockback,
+            knockbackY: SKILL_PRESETS.default_ranged.knockbackY,
+            projectileSpeed: attack.bulletSpeed,
+            projectileLifetime: attack.bulletLifetime,
+        }
+    return [createSkillSlot(skill)]
 }
 
 export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): CharacterEntitySystem => {
@@ -53,9 +89,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const aiMap = new Map<number, AIContext>()
     const bodyCharMap = new Map<number, CharacterEntity>()
     const aiTargetDirs = new Map<number, {dx: number; dz: number}>()
+    const appearanceModels = new Map<number, CharacterModel>()
+    const appearanceSystems = new Map<number, AppearanceSystem>()
+    const facingAngles = new Map<number, number>()
     let nextId = 1
     let selectedId: number | undefined
     let aiEnabled = false
+    let playerCameraAngle: number | undefined
 
     let playerAttackPending = false
     let playerDx = 0
@@ -69,15 +109,27 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const getCharacterByBody = (body: Body): CharacterEntity | undefined => bodyCharMap.get(body.id)
 
-    const weaponManager: WeaponManager = createWeaponManager(shared, getCharacterByBody)
-    const bulletPool: BulletPool = createBulletPool(shared)
+    const meleeExecutor = createMeleeExecutor(shared, getCharacterByBody)
+    const rangedExecutor = createRangedExecutor(shared)
+    registerSkillExecutor('melee', meleeExecutor)
+    registerSkillExecutor('ranged', rangedExecutor)
+    /** 追踪当前激活的近战攻击（用于 start/end 生命周期） */
+    const activatedAttacks = new Set<number>()
+    /** 受击闪红状态 */
+    const flashStates = new Map<number, ReturnType<typeof createDamageFlash>>()
+    const noopExecCtx: import('../../../character/combat/executor.ts').ExecutorContext = {
+        fireProjectile: () => {},
+    }
+
+    let playerAttackSkillIndex = 0
 
     const refreshPlayerLabel = (): void => {
         for (const pi of panelInfos) {
             const ch = characters.find(c => c.id === pi.id)
             if (!ch) continue
             const playerPrefix = ch.isPlayer ? '▶ Player: ' : ''
-            pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.health}/${ch.maxHealth}  ${ch.attackSlot.type}  spd:${ch.config.speed}`
+            const skillType = ch.combat.skills[ch.combat.currentSkillIndex]?.config.type ?? 'melee'
+            pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${skillType}  spd:${ch.config.speed}`
         }
     }
 
@@ -99,9 +151,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         x: number, y: number, z: number,
         isPlayer?: boolean,
     ): CharacterEntity => {
-        const mesh = createCharacterMesh(config, attackSlot.type)
+        const mesh = createCharacterMesh(config)
         mesh.position.set(x, y, z)
         scene.add(mesh)
+
+        const model = createCharacterModel(config)
+        model.equipWeapon(attackSlot.type)
+        model.group.position.set(x, y, z)
+        scene.add(model.group)
 
         const body = new Body({
             mass: 1,
@@ -122,35 +179,37 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
         const id = nextId++
         const stateMachine = createCharacterStateMachine()
-        const bc = makeBulletConfig(attackSlot)
+        const skills = attackToSkillSlots(attackSlot)
+        const maxHP = SKILL_DEFAULT_MAX_HEALTH[attackSlot.type]
+
+        const combat = createCombatComponent(
+            skills, faction,
+            resolveTendency(tendencyConfig), tendencyConfig, maxHP,
+        )
 
         const entity: CharacterEntity = {
             id,
             config,
             mesh,
+            appearanceGroup: model.group,
             body,
             isOnGround: true,
             rowText: `Character #${id}`,
             isPlayer: isPlayer ?? false,
-            faction,
-            attackTendency: resolveTendency(tendencyConfig),
-            tendencyConfig,
-            attackSlot,
-            bulletConfig: bc,
-            maxHealth: ATTACK_DEFAULT_MAX_HEALTH[attackSlot.type],
-            health: ATTACK_DEFAULT_MAX_HEALTH[attackSlot.type],
-            isDead: false,
+            isDying: false,
+            dyingTimer: 0,
+            combat,
             stateMachine,
-            attackActive: false,
-            attackTimer: 0,
-            attackCooldownTimer: 0,
-            attackedTargets: new Set(),
-            attackDirX: 0,
-            attackDirZ: 1,
         }
 
         bodyCharMap.set(body.id, entity)
         characters.push(entity)
+        appearanceModels.set(entity.id, model)
+        appearanceSystems.set(entity.id, createAppearanceSystem())
+
+        const flash = createDamageFlash(entity)
+        flashStates.set(entity.id, flash)
+        entity.combat.onDamageTaken = flash.onDamage
 
         const rowText = isPlayer ? `▶ Player: Character #${id}` : `Character #${id}`
         panelInfos.push({id, type: 'character', badgeLabel: attackSlot.type, badgeColor: attackSlot.type === 'melee' ? '#ff4444' : '#4488ff', rowText})
@@ -159,15 +218,26 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const spawnAt = (x: number, y: number, z: number): void => {
-        const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, ATTACK_PRESETS.melee, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
+        const meleePreset: AttackConfig = {type: 'melee', range: SKILL_PRESETS.default_melee.range, damage: SKILL_PRESETS.default_melee.damage, cooldown: SKILL_PRESETS.default_melee.cooldown, duration: SKILL_PRESETS.default_melee.duration}
+        const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
         select(entity.id)
     }
 
     const syncPositions = (): void => {
         for (const entity of characters) {
-            if (entity.isDead) continue
+            if (entity.combat.isDead) continue
             entity.mesh.position.set(entity.body.position.x, entity.body.position.y, entity.body.position.z)
             entity.mesh.quaternion.identity()
+            entity.appearanceGroup.position.set(entity.body.position.x, entity.body.position.y, entity.body.position.z)
+            if (entity.isDying) {
+                const mat = entity.mesh.material
+                if (Array.isArray(mat)) {
+                    for (const m of mat) { m.transparent = true; m.opacity = 1 - entity.dyingTimer / DYING_DURATION }
+                } else {
+                    mat.transparent = true
+                    mat.opacity = 1 - entity.dyingTimer / DYING_DURATION
+                }
+            }
         }
         refreshPlayerLabel()
     }
@@ -186,9 +256,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
         events.emit('delete', id, wasSelected)
 
-        if (entity.attackActive) {
-            const wb = weaponManager.ownerMap.get(entity.id)
-            if (wb) weaponManager.destroyWeapon(entity, wb)
+        if (entity.combat.attackActive) {
+            const skill = entity.combat.skills[entity.combat.currentSkillIndex]
+            if (skill) {
+                const executor = getSkillExecutor(skill.config.type)
+                executor?.end(skill.config, entity.combat, entity, noopExecCtx)
+            }
+            activatedAttacks.delete(entity.id)
         }
 
         scene.remove(entity.mesh)
@@ -199,9 +273,19 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (Array.isArray(mat)) mat.forEach(m => m.dispose())
         else mat.dispose()
 
+        const model = appearanceModels.get(entity.id)
+        if (model) {
+            scene.remove(model.group)
+            model.dispose()
+            appearanceModels.delete(entity.id)
+        }
+        appearanceSystems.delete(entity.id)
+        facingAngles.delete(entity.id)
+
         characters.splice(idx, 1)
         aiMap.delete(id)
         aiTargetDirs.delete(id)
+        flashStates.delete(id)
 
         const pi = panelInfos.findIndex(p => p.id === id)
         if (pi !== -1) panelInfos.splice(pi, 1)
@@ -221,15 +305,28 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         playerForwardZ = forwardZ
     }
 
-    const setPlayerAttack = (): void => { playerAttackPending = true }
+    const setPlayerAttack = (skillIndex?: number): AttackResult => {
+        const player = getPlayerCharacter()
+        if (!player || player.combat.isDead) return 'dead'
+        if (player.combat.attackActive) return 'already_attacking'
+        const idx = skillIndex ?? 0
+        if (idx < 0 || idx >= player.combat.skills.length) return 'no_valid_skill'
+        const skill = player.combat.skills[idx]
+        if (skill.cooldownTimer > 0) return 'cooldown'
+        playerAttackPending = true
+        playerAttackSkillIndex = idx
+        return 'ok'
+    }
 
     const getPlayerCharacter = (): CharacterEntity | undefined =>
-        characters.find(c => c.isPlayer && !c.isDead)
+        characters.find(c => c.isPlayer && !c.combat.isDead)
 
     const getHostileTo = (faction: number): CharacterEntity[] =>
-        characters.filter(c => c.attackTendency(c.faction, faction) && !c.isDead)
+        characters.filter(c => c.combat.attackTendency(c.combat.faction, faction) && !c.combat.isDead)
 
     const setAIEnabled = (enabled: boolean): void => { aiEnabled = enabled }
+
+    const setPlayerCameraAngle = (angle: number): void => { playerCameraAngle = angle }
 
     const checkGround = (entity: CharacterEntity): void => {
         const {body} = entity
@@ -246,66 +343,104 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const update = (dt: number): void => {
         for (const entity of characters) {
-            if (entity.isDead) continue
+            if (entity.combat.isDead) continue
 
-            entity.attackCooldownTimer = Math.max(0, entity.attackCooldownTimer - dt)
+            const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
+            if (activeSkill) activeSkill.cooldownTimer = Math.max(0, activeSkill.cooldownTimer - dt)
+            flashStates.get(entity.id)?.tick(dt)
             checkGround(entity)
 
             const aiCtx = aiMap.get(entity.id)
             if (aiCtx && aiEnabled) {
                 updateAI(dt, aiCtx, entity, characters, (dx, dz, attack) => {
-                    entity.stateMachine.setInput(dx, dz, false, attack)
+                    entity.stateMachine.setInput(dx, dz, false, attack, 0)
                     if (attack && (dx !== 0 || dz !== 0)) {
                         aiTargetDirs.set(entity.id, {dx, dz})
                     }
                 })
-            } else if (entity.isPlayer) {
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending)
+            } else             if (entity.isPlayer) {
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerAttackSkillIndex)
                 if (playerAttackPending) {
-                    entity.attackDirX = playerForwardX
-                    entity.attackDirZ = playerForwardZ
+                    entity.combat.attackDirX = playerForwardX
+                    entity.combat.attackDirZ = playerForwardZ
                 }
             }
 
             entity.stateMachine.update(dt, entity)
 
-            if (entity.attackActive && !entity.isDead) {
-                if (entity.attackSlot.type === 'melee') {
-                    let weaponBody = weaponManager.ownerMap.get(entity.id)
-                    if (!weaponBody) weaponBody = weaponManager.createWeapon(entity)
-                    weaponManager.updateWeapon(dt, entity, weaponBody)
-                } else {
-                    if (entity.attackTimer < dt) {
-                        const dirInfo = aiTargetDirs.get(entity.id)
-                        let dirX = dirInfo ? dirInfo.dx : entity.attackDirX
-                        let dirZ = dirInfo ? dirInfo.dz : entity.attackDirZ
-                        const len = Math.hypot(dirX, dirZ)
-                        if (len < 0.001) { dirX = 0; dirZ = 1 }
-                        else { dirX /= len; dirZ /= len }
-                        _tmpVec.set(dirX, 0, dirZ)
-                        bulletPool.fireBullet(entity, _tmpVec)
+            const model = appearanceModels.get(entity.id)
+            const sys = appearanceSystems.get(entity.id)
+            if (model && sys) {
+                const hSpeed = Math.hypot(entity.body.velocity.x, entity.body.velocity.z)
+                sys.update(dt, model, entity.stateMachine.currentState, {
+                    stateTime: entity.stateMachine.stateTime,
+                    horizontalSpeed: hSpeed,
+                })
+
+                const vx = entity.body.velocity.x
+                const vz = entity.body.velocity.z
+                const currentAngle = facingAngles.get(entity.id) ?? 0
+
+                const targetAngle = Math.hypot(vx, vz) > VELOCITY_DIR_THRESHOLD
+                    ? Math.atan2(vx, vz)
+                    : currentAngle
+
+                let diff = targetAngle - currentAngle
+                diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
+                const newAngle = currentAngle + diff * Math.min(ROTATION_SPEED * dt, 1)
+                facingAngles.set(entity.id, newAngle)
+                model.group.rotation.y = newAngle
+
+                if (entity.isPlayer && playerCameraAngle !== undefined) {
+                    let headRel = playerCameraAngle - newAngle
+                    headRel = ((headRel + Math.PI) % (2 * Math.PI)) - Math.PI
+                    model.headNeck.rotation.y = Math.max(-HEAD_TURN_LIMIT, Math.min(HEAD_TURN_LIMIT, headRel))
+                } else if (!entity.isPlayer) {
+                    model.headNeck.rotation.y = 0
+                }
+            }
+
+            if (entity.combat.attackActive && !entity.combat.isDead) {
+                if (activeSkill) {
+                    const executor = getSkillExecutor(activeSkill.config.type)
+                    if (executor) {
+                        if (!activatedAttacks.has(entity.id)) {
+                            activatedAttacks.add(entity.id)
+                            const dirInfo = aiTargetDirs.get(entity.id)
+                            let dirX = dirInfo ? dirInfo.dx : entity.combat.attackDirX
+                            let dirZ = dirInfo ? dirInfo.dz : entity.combat.attackDirZ
+                            const len = Math.hypot(dirX, dirZ)
+                            if (len < 0.001) { dirX = 0; dirZ = 1 }
+                            else { dirX /= len; dirZ /= len }
+                            _tmpVec.set(dirX, 0, dirZ)
+                            executor.start(activeSkill.config, entity.combat, entity, _tmpVec, noopExecCtx)
+                        }
+                        executor.update(dt, activeSkill.config, entity.combat, entity, noopExecCtx)
                     }
                 }
-            } else if (!entity.attackActive) {
-                const weaponBody = weaponManager.ownerMap.get(entity.id)
-                if (weaponBody) weaponManager.destroyWeapon(entity, weaponBody)
+            } else if (activatedAttacks.has(entity.id)) {
+                activatedAttacks.delete(entity.id)
+                if (activeSkill) {
+                    const executor = getSkillExecutor(activeSkill.config.type)
+                    executor?.end(activeSkill.config, entity.combat, entity, noopExecCtx)
+                }
             }
         }
 
         playerAttackPending = false
         playerJump = false
 
-        bulletPool.updateBullets(dt, characters)
+        rangedExecutor.updateBullets(dt, characters)
 
         for (let i = characters.length - 1; i >= 0; i--) {
-            if (characters[i].isDead) remove(characters[i].id)
+            if (characters[i].combat.isDead) remove(characters[i].id)
         }
     }
 
     const activateAI = (): void => {
         for (const entity of characters) {
             if (!entity.isPlayer && !aiMap.has(entity.id)) {
-                aiMap.set(entity.id, createAIMachine(entity, entity.body.position.x, entity.body.position.y, entity.body.position.z, ATTACK_DEFAULT_DETECTION_RANGE[entity.attackSlot.type]))
+                aiMap.set(entity.id, createAIMachine(entity, entity.body.position.x, entity.body.position.y, entity.body.position.z, SKILL_DEFAULT_DETECTION_RANGE[entity.combat.skills[entity.combat.currentSkillIndex]?.config.type ?? 'melee']))
             }
         }
     }
@@ -313,8 +448,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
         const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, radius: saveConfig.radius, height: saveConfig.height}
         const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer)
-        entity.maxHealth = saveConfig.maxHealth
-        entity.health = opts?.health ?? saveConfig.maxHealth
+        entity.combat.maxHealth = saveConfig.maxHealth
+        entity.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         if (saveConfig.isPlayer) refreshPlayerLabel()
         return {id: entity.id}
@@ -327,7 +462,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.mesh.position.set(pos.x, pos.y, pos.z)
     }
 
-    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number): void => {
+    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
         if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
@@ -335,28 +470,31 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (charCfg.radius !== undefined) entity.config.radius = charCfg.radius
         if (charCfg.height !== undefined) entity.config.height = charCfg.height
         if (newAttackSlot) {
-            entity.attackSlot = newAttackSlot
-            entity.bulletConfig = makeBulletConfig(newAttackSlot)
-            const oldMat = entity.mesh.material
-            if (Array.isArray(oldMat)) oldMat.forEach(m => m.dispose())
-            else oldMat.dispose()
-            const newMesh = createCharacterMesh(entity.config, newAttackSlot.type)
-            newMesh.position.copy(entity.mesh.position)
-            newMesh.quaternion.copy(entity.mesh.quaternion)
-            scene.remove(entity.mesh)
-            entity.mesh.geometry.dispose()
-            entity.mesh = newMesh
-            scene.add(newMesh)
+            entity.combat.skills = attackToSkillSlots(newAttackSlot)
+            const model = appearanceModels.get(entity.id)
+            if (model) {
+                model.equipWeapon(newAttackSlot.type)
+            }
             const pi = panelInfos.find(p => p.id === id)
             if (pi) {
                 pi.badgeLabel = newAttackSlot.type
                 pi.badgeColor = newAttackSlot.type === 'melee' ? '#ff4444' : '#4488ff'
             }
         }
-        if (newFaction !== undefined) entity.faction = newFaction
+        if (newFaction !== undefined) entity.combat.faction = newFaction
         if (newMaxHealth !== undefined) {
-            entity.maxHealth = newMaxHealth
-            if (entity.health > newMaxHealth) entity.health = newMaxHealth
+            entity.combat.maxHealth = newMaxHealth
+            if (entity.combat.health > newMaxHealth) entity.combat.health = newMaxHealth
+        }
+        if (newTendencyConfig) {
+            entity.combat.attackTendency = resolveTendency(newTendencyConfig)
+            entity.combat.tendencyConfig = newTendencyConfig
+        }
+    }
+
+    const setCollisionVisible = (visible: boolean): void => {
+        for (const entity of characters) {
+            entity.mesh.visible = visible
         }
     }
 
@@ -385,6 +523,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         add,
         setTransform,
         updateCharacterConfig,
+        setCollisionVisible,
+        setPlayerCameraAngle,
     }
 
     return {

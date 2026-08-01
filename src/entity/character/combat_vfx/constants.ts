@@ -1,0 +1,2 @@
+export const DAMAGE_FLASH_DURATION = 0.15
+export const DAMAGE_FLASH_COLOR = 0xff0000
