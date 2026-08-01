@@ -23,6 +23,8 @@ export const attackHandler: AIStateHandler = {
 
         if (!character.combat.attackActive && skill.cooldownTimer <= 0) {
             setInput(adx, adz, true)
+        } else if (skill.config.type === 'ranged' && dist < skill.config.range * 0.5) {
+            setInput(-adx, -adz, false)
         } else {
             setInput(0, 0, false)
         }
@@ -36,7 +38,7 @@ export const attackHandler: AIStateHandler = {
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
-                _dir.set(tp.x - pos.x, tp.y - pos.y, tp.z - pos.z)
+                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
                 const detRange = character.combat.skills[character.combat.currentSkillIndex]?.config.type === 'ranged'
                     ? (character.combat.skills[character.combat.currentSkillIndex]?.config.range ?? 10) * 1.5 : 12
                 const skillRange = character.combat.skills[character.combat.currentSkillIndex]?.config.range ?? 1.5
@@ -50,7 +52,7 @@ export const attackHandler: AIStateHandler = {
                 if (!target || target.combat.isDead) return true
                 const pos = character.body.position
                 const tp = target.body.position
-                _dir.set(tp.x - pos.x, tp.y - pos.y, tp.z - pos.z)
+                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
                 const detRange = character.combat.skills[character.combat.currentSkillIndex]?.config.type === 'ranged'
                     ? (character.combat.skills[character.combat.currentSkillIndex]?.config.range ?? 10) * 1.5 : 12
                 return _dir.length() > detRange

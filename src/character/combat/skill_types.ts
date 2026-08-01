@@ -14,6 +14,12 @@ export interface SkillConfig {
     readonly knockbackY: number
     readonly projectileSpeed: number
     readonly projectileLifetime: number
+    /** 近战挥砍弧角（弧度），默认 PI/2 */
+    readonly arcAngle?: number
+    /** 近战武器旋转半径，默认 0.4 */
+    readonly arcRadius?: number
+    /** 近战挥砍垂直倾斜（弧度），正值=上挑，负值=下劈，默认 0 */
+    readonly arcTilt?: number
 }
 
 /** 技能槽：配置 + 运行时冷却 */
@@ -41,6 +47,21 @@ export const SKILL_PRESETS: Record<string, SkillConfig> = {
         knockbackY: 2,
         projectileSpeed: 0,
         projectileLifetime: 0,
+    },
+    heavy_melee: {
+        id: 'heavy_melee',
+        type: 'melee',
+        damage: 8,
+        range: 2.0,
+        cooldown: 1.2,
+        duration: 0.5,
+        knockbackForce: 8,
+        knockbackY: 3,
+        projectileSpeed: 0,
+        projectileLifetime: 0,
+        arcAngle: Math.PI * 0.39,
+        arcRadius: 0.5,
+        arcTilt: -Math.PI * 0.2,
     },
     default_ranged: {
         id: 'default_ranged',

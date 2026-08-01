@@ -40,7 +40,7 @@ export const patrolHandler: AIStateHandler = {
                 if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
                 const pos = character.body.position
                 const op = other.body.position
-                _dir.set(op.x - pos.x, op.y - pos.y, op.z - pos.z)
+                _dir.set(op.x - pos.x, 0, op.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.type === 'ranged' ? (skill.config.range * 1.5) : 8
                 if (_dir.length() < detRange) {

@@ -1,4 +1,5 @@
 import {Body, Sphere, Vec3, BODY_TYPES} from 'cannon-es'
+import {Mesh, MeshBasicMaterial, SphereGeometry, type Scene} from 'three'
 import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
@@ -7,8 +8,12 @@ import type {CombatComponent} from '../../../character/combat/types.ts'
 import {applyDamage} from '../../../character/combat/damage.ts'
 import {BULLET_SIZE, BULLET_COLLISION_GROUP, BULLET_COLLISION_MASK, BULLET_HIT_RADIUS} from './constants.ts'
 
+const BULLET_GEOMETRY = new SphereGeometry(0.08, 4, 4)
+const BULLET_MATERIAL_POOL = new Map<number, MeshBasicMaterial>()
+
 interface BulletInstance {
     body: Body
+    mesh: Mesh
     ownerId: number
     ownerFaction: number
     ownerAttackTendency: import('../../../character/faction.ts').AttackTendency
@@ -19,8 +24,19 @@ interface BulletInstance {
 
 const _tmpVec = new Vec3()
 
+const getPlayerFactionMaterial = (faction: number): MeshBasicMaterial => {
+    let mat = BULLET_MATERIAL_POOL.get(faction)
+    if (!mat) {
+        const hue = (faction * 137) % 360
+        mat = new MeshBasicMaterial({color: `hsl(${hue}, 80%, 55%)`})
+        BULLET_MATERIAL_POOL.set(faction, mat)
+    }
+    return mat
+}
+
 export const createRangedExecutor = (
     shared: SharedWorld,
+    scene: Scene,
 ): SkillExecutor & { updateBullets: (dt: number, allCharacters: readonly CharacterEntity[]) => void; clear: () => void } => {
     const {world} = shared
     const bullets: BulletInstance[] = []
@@ -53,8 +69,14 @@ export const createRangedExecutor = (
         body.velocity.set(direction.x * speed, direction.y * speed, direction.z * speed)
         world.addBody(body)
 
+        const material = getPlayerFactionMaterial(character.combat.faction)
+        const mesh = new Mesh(BULLET_GEOMETRY, material)
+        mesh.position.set(body.position.x, body.position.y, body.position.z)
+        scene.add(mesh)
+
         bullets.push({
             body,
+            mesh,
             ownerId: character.id,
             ownerFaction: character.combat.faction,
             ownerAttackTendency: character.combat.attackTendency,
@@ -107,6 +129,13 @@ export const createRangedExecutor = (
         // 子弹继续飞行，不做清理
     }
 
+    const removeBullet = (idx: number): void => {
+        const bullet = bullets[idx]
+        world.removeBody(bullet.body)
+        bullet.mesh.removeFromParent()
+        bullets.splice(idx, 1)
+    }
+
     const updateBullets = (dt: number, allCharacters: readonly CharacterEntity[]): void => {
         for (let i = bullets.length - 1; i >= 0; i--) {
             const bullet = bullets[i]
@@ -115,10 +144,11 @@ export const createRangedExecutor = (
             const bulletPos = bullet.body.position
 
             if (bullet.lifetime <= 0 || bulletPos.y < -10) {
-                world.removeBody(bullet.body)
-                bullets.splice(i, 1)
+                removeBullet(i)
                 continue
             }
+
+            bullet.mesh.position.set(bulletPos.x, bulletPos.y, bulletPos.z)
 
             let hit = false
             for (const target of allCharacters) {
@@ -159,8 +189,7 @@ export const createRangedExecutor = (
                     target.body.wakeUp()
                 }
 
-                world.removeBody(bullet.body)
-                bullets.splice(i, 1)
+                removeBullet(i)
                 hit = true
                 break
             }
@@ -173,14 +202,16 @@ export const createRangedExecutor = (
                 + bullet.body.velocity.z * bullet.body.velocity.z,
             )
             if (speed < 1) {
-                world.removeBody(bullet.body)
-                bullets.splice(i, 1)
+                removeBullet(i)
             }
         }
     }
 
     const clear = (): void => {
-        for (const b of bullets) world.removeBody(b.body)
+        for (const b of bullets) {
+            world.removeBody(b.body)
+            b.mesh.removeFromParent()
+        }
         bullets.length = 0
     }
 

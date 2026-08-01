@@ -1,5 +1,13 @@
 import type {Group, Mesh} from 'three'
 
+/** 角色配色 palette */
+export interface CharacterColorPalette {
+    readonly skinColor: number
+    readonly hairColor: number
+    readonly bodyColor: number
+    readonly legColor: number
+}
+
 /** 方块人外观模型，暴露所有关节 pivot 供动画系统直接操纵 */
 export interface CharacterModel {
     readonly group: Group

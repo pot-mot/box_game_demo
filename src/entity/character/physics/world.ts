@@ -18,7 +18,7 @@ import {createCharacterModel} from '../appearance/model.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
 import type {AppearanceSystem} from '../appearance/system.ts'
 import type {CharacterModel} from '../appearance/types.ts'
-import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD, HEAD_TURN_LIMIT} from '../appearance/constants.ts'
+import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
 import {CHARACTER_LINEAR_DAMPING} from './constants.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
@@ -35,7 +35,7 @@ const _tmpVec = new Vec3()
 export interface CharacterEntitySystem extends EntityInfoSource {
     markPlayer: (id: number) => void
     unmarkPlayer: () => void
-    setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number) => void
+    setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, sprint?: boolean) => void
     setPlayerAttack: (skillIndex?: number) => import('../../../character/combat/types.ts').AttackResult
     getPlayerCharacter: () => CharacterEntity | undefined
     getHostileTo: (faction: number) => CharacterEntity[]
@@ -46,11 +46,9 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
     getAll: () => readonly CharacterEntity[]
     setTransform: (id: number, pos: {x: number; y: number; z: number}) => void
-    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig) => void
+    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number) => void
     /** 设置碰撞体可视化 mesh 的可见性 */
     setCollisionVisible: (visible: boolean) => void
-    /** 设置玩家摄像机水平方向角（用于头颈追踪） */
-    setPlayerCameraAngle: (angle: number) => void
 }
 
 /** 将旧 AttackConfig 转换为 SkillSlot 数组 */
@@ -95,12 +93,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let nextId = 1
     let selectedId: number | undefined
     let aiEnabled = false
-    let playerCameraAngle: number | undefined
 
     let playerAttackPending = false
     let playerDx = 0
     let playerDz = 0
     let playerJump = false
+    let playerSprint = false
     let playerForwardX = 0
     let playerForwardZ = 1
 
@@ -110,7 +108,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const getCharacterByBody = (body: Body): CharacterEntity | undefined => bodyCharMap.get(body.id)
 
     const meleeExecutor = createMeleeExecutor(shared, getCharacterByBody)
-    const rangedExecutor = createRangedExecutor(shared)
+    const rangedExecutor = createRangedExecutor(shared, scene)
     registerSkillExecutor('melee', meleeExecutor)
     registerSkillExecutor('ranged', rangedExecutor)
     /** 追踪当前激活的近战攻击（用于 start/end 生命周期） */
@@ -155,7 +153,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         mesh.position.set(x, y, z)
         scene.add(mesh)
 
-        const model = createCharacterModel(config)
+        const model = createCharacterModel(config, faction)
         model.equipWeapon(attackSlot.type)
         model.group.position.set(x, y, z)
         scene.add(model.group)
@@ -180,6 +178,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const id = nextId++
         const stateMachine = createCharacterStateMachine()
         const skills = attackToSkillSlots(attackSlot)
+        if (isPlayer && attackSlot.type === 'melee') {
+            skills.push(createSkillSlot(SKILL_PRESETS.heavy_melee))
+        }
         const maxHP = SKILL_DEFAULT_MAX_HEALTH[attackSlot.type]
 
         const combat = createCombatComponent(
@@ -297,10 +298,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const getEntityList = (): Array<{id: number; mesh: Mesh}> => characters.map(c => ({id: c.id, mesh: c.mesh}))
     const getAll = (): readonly CharacterEntity[] => characters
 
-    const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number): void => {
+    const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, sprint?: boolean): void => {
         playerDx = dx
         playerDz = dz
         playerJump = jump
+        playerSprint = sprint ?? false
         playerForwardX = forwardX
         playerForwardZ = forwardZ
     }
@@ -326,8 +328,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const setAIEnabled = (enabled: boolean): void => { aiEnabled = enabled }
 
-    const setPlayerCameraAngle = (angle: number): void => { playerCameraAngle = angle }
-
     const checkGround = (entity: CharacterEntity): void => {
         const {body} = entity
         entity.isOnGround = false
@@ -346,20 +346,22 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (entity.combat.isDead) continue
 
             const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
-            if (activeSkill) activeSkill.cooldownTimer = Math.max(0, activeSkill.cooldownTimer - dt)
+            for (const sk of entity.combat.skills) {
+                sk.cooldownTimer = Math.max(0, sk.cooldownTimer - dt)
+            }
             flashStates.get(entity.id)?.tick(dt)
             checkGround(entity)
 
             const aiCtx = aiMap.get(entity.id)
             if (aiCtx && aiEnabled) {
                 updateAI(dt, aiCtx, entity, characters, (dx, dz, attack) => {
-                    entity.stateMachine.setInput(dx, dz, false, attack, 0)
+                    entity.stateMachine.setInput(dx, dz, false, attack, false, 0)
                     if (attack && (dx !== 0 || dz !== 0)) {
                         aiTargetDirs.set(entity.id, {dx, dz})
                     }
                 })
             } else             if (entity.isPlayer) {
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerAttackSkillIndex)
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerSprint, playerAttackSkillIndex)
                 if (playerAttackPending) {
                     entity.combat.attackDirX = playerForwardX
                     entity.combat.attackDirZ = playerForwardZ
@@ -381,9 +383,19 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const vz = entity.body.velocity.z
                 const currentAngle = facingAngles.get(entity.id) ?? 0
 
-                const targetAngle = Math.hypot(vx, vz) > VELOCITY_DIR_THRESHOLD
-                    ? Math.atan2(vx, vz)
-                    : currentAngle
+                let targetAngle: number
+                if (entity.isPlayer) {
+                    const inputLen = Math.hypot(playerDx, playerDz)
+                    if (inputLen > VELOCITY_DIR_THRESHOLD) {
+                        targetAngle = Math.atan2(playerDx, playerDz)
+                    } else {
+                        targetAngle = currentAngle
+                    }
+                } else {
+                    targetAngle = Math.hypot(vx, vz) > VELOCITY_DIR_THRESHOLD
+                        ? Math.atan2(vx, vz)
+                        : currentAngle
+                }
 
                 let diff = targetAngle - currentAngle
                 diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
@@ -391,11 +403,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 facingAngles.set(entity.id, newAngle)
                 model.group.rotation.y = newAngle
 
-                if (entity.isPlayer && playerCameraAngle !== undefined) {
-                    let headRel = playerCameraAngle - newAngle
-                    headRel = ((headRel + Math.PI) % (2 * Math.PI)) - Math.PI
-                    model.headNeck.rotation.y = Math.max(-HEAD_TURN_LIMIT, Math.min(HEAD_TURN_LIMIT, headRel))
-                } else if (!entity.isPlayer) {
+                if (entity.isPlayer) {
+                    model.headNeck.rotation.y = 0
+                } else {
                     model.headNeck.rotation.y = 0
                 }
             }
@@ -462,7 +472,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.mesh.position.set(pos.x, pos.y, pos.z)
     }
 
-    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig): void => {
+    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
         if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
@@ -471,6 +481,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (charCfg.height !== undefined) entity.config.height = charCfg.height
         if (newAttackSlot) {
             entity.combat.skills = attackToSkillSlots(newAttackSlot)
+            if (entity.isPlayer && newAttackSlot.type === 'melee') {
+                entity.combat.skills.push(createSkillSlot(SKILL_PRESETS.heavy_melee))
+            }
             const model = appearanceModels.get(entity.id)
             if (model) {
                 model.equipWeapon(newAttackSlot.type)
@@ -485,6 +498,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (newMaxHealth !== undefined) {
             entity.combat.maxHealth = newMaxHealth
             if (entity.combat.health > newMaxHealth) entity.combat.health = newMaxHealth
+        }
+        if (newHealth !== undefined) {
+            entity.combat.health = Math.max(0, Math.min(newHealth, entity.combat.maxHealth))
         }
         if (newTendencyConfig) {
             entity.combat.attackTendency = resolveTendency(newTendencyConfig)
@@ -524,7 +540,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setTransform,
         updateCharacterConfig,
         setCollisionVisible,
-        setPlayerCameraAngle,
     }
 
     return {

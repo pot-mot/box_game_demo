@@ -27,7 +27,7 @@ export const chaseHandler: AIStateHandler = {
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
-                _dir.set(tp.x - pos.x, tp.y - pos.y, tp.z - pos.z)
+                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const skillRange = skill?.config.range ?? 1.5
                 return _dir.length() < skillRange
@@ -41,7 +41,7 @@ export const chaseHandler: AIStateHandler = {
                 if (!target || target.combat.isDead) return true
                 const pos = character.body.position
                 const tp = target.body.position
-                _dir.set(tp.x - pos.x, tp.y - pos.y, tp.z - pos.z)
+                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
                 const detRange = character.combat.skills[character.combat.currentSkillIndex]?.config.type === 'ranged'
                     ? (character.combat.skills[character.combat.currentSkillIndex]?.config.range ?? 10) * 1.5 : 12
                 return _dir.length() > detRange

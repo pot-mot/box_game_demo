@@ -5,6 +5,8 @@ import type {CharacterEntitySystem} from '../../entity/character/physics/world.t
 import {setupPlayerKeyboard} from './keyboard.ts'
 import {setupPlayCamera} from './camera.ts'
 import {setupHealthBars} from './health_bar.ts'
+import {createPlayerHUD} from './player_hud.ts'
+import {createDeathScreen} from './death_screen.ts'
 
 export interface PlayModeController {
     updater: (dt: number) => void
@@ -24,12 +26,24 @@ export const setupPlayMode = (
     const playerInput = setupPlayerKeyboard(camera, characterSystem)
     const playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () =>
         characterSystem.getPlayerCharacter()?.mesh.position,
+        {
+            onLightAttack: () => characterSystem.setPlayerAttack(0),
+            onHeavyAttack: () => characterSystem.setPlayerAttack(1),
+        },
     )
     const healthBarUpdate = setupHealthBars(
         scene,
         () => characterSystem.getPlayerCharacter(),
         () => characterSystem.getAll(),
     ).update
+
+    const hud = createPlayerHUD()
+    let playerDied = false
+    let hadPlayer = false
+    const deathScreen = createDeathScreen(
+        () => { location.reload() },
+        () => { location.reload() },
+    )
 
     const updater = (dt: number): void => {
         playerInput()
@@ -39,9 +53,11 @@ export const setupPlayMode = (
 
         const player = characterSystem.getPlayerCharacter()
         if (player) {
-            const dx = camera.position.x - player.mesh.position.x
-            const dz = camera.position.z - player.mesh.position.z
-            characterSystem.setPlayerCameraAngle(Math.atan2(dx, dz))
+            hadPlayer = true
+            hud.update(player.combat.health, player.combat.maxHealth)
+        } else if (hadPlayer && !playerDied) {
+            playerDied = true
+            deathScreen.show()
         }
     }
 

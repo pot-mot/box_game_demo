@@ -27,18 +27,19 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     let previousState: CharacterState | null = null
     let stateTime = 0
     let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
-    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, skillIndex: 0}
+    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, skillIndex: 0, sprint: false}
 
     const makeContext = (): MachineContext => ({
         stateTime,
         previousState,
     })
 
-    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, skillIndex?: number): void => {
+    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, sprint?: boolean, skillIndex?: number): void => {
         input.dx = dx
         input.dz = dz
         input.jump = jump
         input.attack = attack
+        input.sprint = sprint ?? false
         input.skillIndex = skillIndex ?? 0
     }
 
@@ -74,6 +75,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.dz = 0
         input.jump = false
         input.attack = false
+        input.sprint = false
         input.skillIndex = 0
     }
 

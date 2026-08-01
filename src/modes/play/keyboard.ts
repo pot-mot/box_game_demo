@@ -9,7 +9,6 @@ export const setupPlayerKeyboard = (
     const forward = new Vector3()
     const right = new Vector3()
     let jumpThisFrame = false
-    let attackThisFrame = false
 
     const onKeyDown = (e: KeyboardEvent) => {
         keys[e.code] = true
@@ -17,15 +16,11 @@ export const setupPlayerKeyboard = (
             e.preventDefault()
             jumpThisFrame = true
         }
-        if (e.code === 'KeyJ' && !e.repeat) {
-            attackThisFrame = true
-        }
     }
     const onKeyUp = (e: KeyboardEvent) => { keys[e.code] = false }
     const onBlur = () => {
         for (const k in keys) keys[k] = false
         jumpThisFrame = false
-        attackThisFrame = false
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -45,10 +40,9 @@ export const setupPlayerKeyboard = (
         if (keys['KeyA']) { dx -= right.x; dz -= right.z }
         if (keys['KeyD']) { dx += right.x; dz += right.z }
 
-        characterSystem.setPlayerMove(dx, dz, jumpThisFrame, forward.x, forward.z)
-        if (attackThisFrame) characterSystem.setPlayerAttack()
+        const sprinting = keys['ShiftLeft'] || keys['ShiftRight']
+        characterSystem.setPlayerMove(dx, dz, jumpThisFrame, forward.x, forward.z, sprinting)
 
         jumpThisFrame = false
-        attackThisFrame = false
     }
 }

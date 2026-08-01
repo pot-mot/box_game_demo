@@ -7,8 +7,9 @@ export const walkingHandler: StateHandler = {
     update: (_dt, input, entity) => {
         const len = Math.hypot(input.dx, input.dz)
         if (len < 0.001) return
-        entity.body.velocity.x = (input.dx / len) * entity.config.speed
-        entity.body.velocity.z = (input.dz / len) * entity.config.speed
+        const speed = entity.config.speed * (input.sprint ? 1.8 : 1)
+        entity.body.velocity.x = (input.dx / len) * speed
+        entity.body.velocity.z = (input.dz / len) * speed
         entity.body.wakeUp()
     },
     exit: () => {},

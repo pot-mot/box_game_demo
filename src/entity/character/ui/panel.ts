@@ -109,6 +109,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     el.appendChild(createSection('Health'))
     const maxHP = createLabeledNumberInput(el, 'MaxHP', {min: '1', step: '1', value: '15'})
+    const curHP = createLabeledNumberInput(el, 'CurHP', {min: '0', step: '1', value: '15'})
 
     el.appendChild(createSection('Player'))
     const playerRow = document.createElement('div')
@@ -158,6 +159,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
             const skill = sel.combat.skills[sel.combat.currentSkillIndex]
             maxHP.value = String(sel.combat.maxHealth)
+            curHP.value = String(sel.combat.health)
             faction.value = String(sel.combat.faction)
             tendSelect.value = sel.combat.tendencyConfig.tendencyId
             targetFactionsInput.value = sel.combat.tendencyConfig.targetFactions?.join(',') ?? ''
@@ -209,7 +211,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     damage: parseFloat(atkDmg.value),
                     cooldown: parseFloat(atkCD.value),
                     duration: parseFloat(atkDuration.value),
-                }, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig())
+                }, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value))
             }
 
             const onDelete = () => {

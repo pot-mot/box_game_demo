@@ -12,15 +12,19 @@ const _tmpQuat = new CQuat()
 
 interface WeaponInstance {
     body: Body
+    baseAngle: number
+    arcTilt: number
     listener: (e: { body: Body }) => void
 }
+
+const DEFAULT_ARC_ANGLE = Math.PI / 2
+const DEFAULT_ARC_RADIUS = 0.4
 
 export const createMeleeExecutor = (
     shared: SharedWorld,
     getCharacterByBody: (body: Body) => CharacterEntity | undefined,
 ): SkillExecutor => {
     const {world} = shared
-    /** owner entity id → weapon instance */
     const weaponMap = new Map<number, WeaponInstance>()
 
     const destroyWeaponInternal = (ownerId: number): void => {
@@ -35,7 +39,7 @@ export const createMeleeExecutor = (
         skill: SkillConfig,
         combat: CombatComponent,
         entity: CharacterEntity,
-        _direction: Vec3,
+        direction: Vec3,
         _ctx: ExecutorContext,
     ): void => {
         const weaponBody = new Body({
@@ -44,11 +48,26 @@ export const createMeleeExecutor = (
             collisionFilterGroup: WEAPON_COLLISION_GROUP,
             collisionFilterMask: WEAPON_COLLISION_MASK,
         })
-        weaponBody.addShape(new Box(new Vec3(WEAPON_WIDTH / 2, WEAPON_HEIGHT / 2, WEAPON_LENGTH / 2)))
+        const shape = new Box(new Vec3(WEAPON_WIDTH / 2, WEAPON_HEIGHT / 2, WEAPON_LENGTH / 2))
+        shape.collisionResponse = false
+        weaponBody.addShape(shape)
+
+        const baseAngle = Math.atan2(direction.x, direction.z)
+        const arcRadius = skill.arcRadius ?? DEFAULT_ARC_RADIUS
+        const halfArc = (skill.arcAngle ?? DEFAULT_ARC_ANGLE) / 2
+        const startAngle = baseAngle - halfArc
+
+        const arcTilt = skill.arcTilt ?? 0
+        const offsetY = 0.4
+        const tiltStart = offsetY - arcTilt * 0.5
 
         const charPos = entity.body.position
-        weaponBody.position.set(charPos.x, charPos.y + 0.4, charPos.z + 0.4)
-        weaponBody.quaternion.setFromAxisAngle(new Vec3(0, 1, 0), -Math.PI / 4)
+        weaponBody.position.set(
+            charPos.x + Math.sin(startAngle) * arcRadius,
+            charPos.y + tiltStart,
+            charPos.z + Math.cos(startAngle) * arcRadius,
+        )
+        weaponBody.quaternion.setFromAxisAngle(_tmpVec.set(0, 1, 0), startAngle)
         world.addBody(weaponBody)
 
         const onCollide = (e: { body: Body }) => {
@@ -58,6 +77,7 @@ export const createMeleeExecutor = (
             if (!target || target.id === entity.id) return
             if (!entity.body || !target.body) return
             const tc = target.combat
+            if (tc.isDead) return
             if (combat.attackedTargets.has(target.id)) return
             if (!combat.attackTendency(combat.faction, tc.faction)) return
 
@@ -87,7 +107,7 @@ export const createMeleeExecutor = (
         }
 
         weaponBody.addEventListener('collide', onCollide)
-        weaponMap.set(entity.id, {body: weaponBody, listener: onCollide})
+        weaponMap.set(entity.id, {body: weaponBody, baseAngle, arcTilt, listener: onCollide})
     }
 
     const update = (
@@ -103,20 +123,19 @@ export const createMeleeExecutor = (
         const skillSlot = combat.skills[combat.currentSkillIndex] as SkillSlot | undefined
         const duration = skillSlot?.config.duration ?? 1
         const progress = Math.min(combat.attackTimer / duration, 1)
-        const angle = -Math.PI / 4 + progress * (Math.PI / 2)
+        const arcAngle = _skill.arcAngle ?? DEFAULT_ARC_ANGLE
+        const halfArc = arcAngle / 2
+        const angle = wi.baseAngle - halfArc + progress * arcAngle
 
+        const arcRadius = _skill.arcRadius ?? DEFAULT_ARC_RADIUS
         const charPos = entity.body.position
-        const offsetX = 0
         const offsetY = 0.4
-        const offsetZ = 0.4
-
-        const cos = Math.cos(angle)
-        const sin = Math.sin(angle)
+        const tiltY = offsetY - wi.arcTilt * (0.5 - progress)
 
         wi.body.position.set(
-            charPos.x + offsetX * cos - offsetZ * sin,
-            charPos.y + offsetY,
-            charPos.z + offsetX * sin + offsetZ * cos,
+            charPos.x + Math.sin(angle) * arcRadius,
+            charPos.y + tiltY,
+            charPos.z + Math.cos(angle) * arcRadius,
         )
         _tmpQuat.setFromAxisAngle(_tmpVec.set(0, 1, 0), angle)
         wi.body.quaternion.copy(_tmpQuat)

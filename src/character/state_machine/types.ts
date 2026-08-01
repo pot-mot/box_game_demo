@@ -9,6 +9,7 @@ export interface CharacterInput {
     jump: boolean
     attack: boolean
     skillIndex: number
+    sprint: boolean
 }
 
 export interface MachineContext {
@@ -34,7 +35,7 @@ export interface CharacterStateMachine {
     readonly stateTime: number
     onStateChange: ((from: CharacterState, to: CharacterState) => void) | null
 
-    setInput(dx: number, dz: number, jump: boolean, attack: boolean, skillIndex?: number): void
+    setInput(dx: number, dz: number, jump: boolean, attack: boolean, sprint?: boolean, skillIndex?: number): void
     update(dt: number, entity: CharacterEntity): void
     reset(): void
 }
