@@ -5,6 +5,8 @@ export type AttackType = typeof ATTACK_TYPES[number]
 /** 近战攻击槽配置 */
 export interface MeleeAttackConfig {
     type: 'melee'
+    /** MELEE_WEAPON_PRESETS 的 key（可选，默认 'long_sword'） */
+    weaponId?: string
     range: number
     damage: number
     cooldown: number
@@ -14,6 +16,8 @@ export interface MeleeAttackConfig {
 /** 远程攻击槽配置 */
 export interface RangedAttackConfig {
     type: 'ranged'
+    /** RANGED_WEAPON_PRESETS 的 key（可选，默认 'longbow'） */
+    weaponId?: string
     range: number
     damage: number
     cooldown: number
@@ -25,18 +29,6 @@ export interface RangedAttackConfig {
 
 /** 攻击槽联合 */
 export type AttackConfig = MeleeAttackConfig | RangedAttackConfig
-
-/** 远程子弹运行时配置 */
-export interface BulletConfig {
-    speed: number
-    size: number
-    damage: number
-    knockbackForce: number
-    lifetime: number
-}
-
-/** 默认子弹尺寸 */
-export const BULLET_SIZE = 0.1
 
 /** 攻击槽预设 */
 export const ATTACK_PRESETS = {
@@ -57,16 +49,4 @@ export const ATTACK_PRESETS = {
         bulletKnockback: 3,
         bulletLifetime: 3,
     },
-}
-
-/** 攻击槽默认血量 */
-export const ATTACK_DEFAULT_MAX_HEALTH: Record<AttackType, number> = {
-    melee: 15,
-    ranged: 8,
-}
-
-/** 攻击槽默认探测范围 */
-export const ATTACK_DEFAULT_DETECTION_RANGE: Record<AttackType, number> = {
-    melee: 8,
-    ranged: 12,
 }

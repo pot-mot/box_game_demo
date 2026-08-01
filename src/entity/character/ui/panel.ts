@@ -1,10 +1,65 @@
 import type {PanelContext} from '../../box/base/ui'
 import type {CharacterEntitySystem} from '../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
-import type {TendencyId, TendencyConfig} from '../../../character/faction.ts'
+import type {TendencyConfig, TendencyId} from '../../../character/faction.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
+import {MELEE_WEAPON_PRESETS} from '../../../character/weapon/melee_weapon.ts'
+import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
+import {RANGED_SKILL_PRESETS} from '../../../character/combat/ranged_skill.ts'
+
+const MELEE_WEAPON_OPTIONS = Object.entries(MELEE_WEAPON_PRESETS).map(([key, w]) => ({value: key, label: `${w.id} (dmg:${w.damage} rng:${w.range})`}))
+const RANGED_WEAPON_OPTIONS = Object.entries(RANGED_WEAPON_PRESETS).map(([key, w]) => ({
+    value: key, label: `${w.id} (dmg:${w.damage} rng:${w.range})${
+        w.spreadCount ? ' [Shotgun]' : w.explosionRadius ? ' [Explosion]' : w.homingStrength ? ' [Homing]' : w.throwAngle ? ' [Throw]' : ''
+    }`,
+}))
+
+const SKILL_MAP: Record<string, {cooldown: number; duration: number} | undefined> = {}
+for (const [, s] of Object.entries(MELEE_SKILL_PRESETS)) SKILL_MAP[s.weapon.id] = {cooldown: s.cooldown, duration: s.duration}
+for (const [, s] of Object.entries(RANGED_SKILL_PRESETS)) SKILL_MAP[s.weapon.id] = {cooldown: s.cooldown, duration: s.duration}
+
+const autoFillFromWeapon = (weaponId: string, type: 'melee' | 'ranged', fields: {
+    atkRange: HTMLInputElement; atkDmg: HTMLInputElement; atkCD: HTMLInputElement; atkDuration: HTMLInputElement
+    bulletSpeed: HTMLInputElement; bulletKB: HTMLInputElement; bulletLife: HTMLInputElement
+    weaponTag: HTMLElement
+}): void => {
+    const w = type === 'melee' ? MELEE_WEAPON_PRESETS[weaponId] : RANGED_WEAPON_PRESETS[weaponId]
+    if (!w) return
+    fields.atkRange.value = String(w.range)
+    fields.atkDmg.value = String(w.damage)
+    const sk = SKILL_MAP[w.id]
+    if (sk) {
+        fields.atkCD.value = String(sk.cooldown)
+        fields.atkDuration.value = String(sk.duration)
+    }
+    if (type === 'ranged') {
+        const rw = w as RangedWeaponConfig
+        fields.bulletSpeed.value = String(rw.projectileSpeed)
+        fields.bulletKB.value = String(rw.knockbackForce)
+        fields.bulletLife.value = String(rw.projectileLifetime)
+        const tags: string[] = []
+        if (rw.spreadCount) tags.push(`Spread ×${rw.spreadCount}`)
+        if (rw.explosionRadius) tags.push(`Explosion R:${rw.explosionRadius}`)
+        if (rw.homingStrength) tags.push(`Homing S:${rw.homingStrength}`)
+        if (rw.throwAngle) tags.push(`Arc:${(rw.throwAngle * 180 / Math.PI).toFixed(0)}°`)
+        fields.weaponTag.textContent = tags.join('  ')
+    } else {
+        fields.weaponTag.textContent = ''
+    }
+}
+
+const populateWeaponOptions = (select: HTMLSelectElement, type: 'melee' | 'ranged'): void => {
+    select.innerHTML = ''
+    const options = type === 'melee' ? MELEE_WEAPON_OPTIONS : RANGED_WEAPON_OPTIONS
+    for (const opt of options) {
+        const o = document.createElement('option')
+        o.value = opt.value; o.textContent = opt.label
+        select.appendChild(o)
+    }
+}
 
 export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>): PanelContext => {
     const el = document.createElement('div')
@@ -13,7 +68,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         'position: fixed; bottom: 24px; right: 24px;',
         'background: rgba(0,0,0,.75); color: #fff;',
         'font: 13px/1.5 monospace; padding: 16px 20px;',
-        'border-radius: 10px; min-width: 240px;',
+        'border-radius: 10px; min-width: 260px;',
         'user-select: none; display: none;',
     ].join(' ')
 
@@ -96,7 +151,18 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     atkSelect.appendChild(rangedOpt)
     atkSelectLabel.appendChild(atkSelect)
     atkTypeRow.appendChild(atkSelectLabel)
+
+    const weaponSelectLabel = document.createElement('label')
+    weaponSelectLabel.textContent = 'Wpn '
+    const weaponSelect = document.createElement('select')
+    weaponSelect.style.cssText = 'max-width:180px'
+    weaponSelectLabel.appendChild(weaponSelect)
+    atkTypeRow.appendChild(weaponSelectLabel)
     el.appendChild(atkTypeRow)
+
+    const weaponTag = document.createElement('div')
+    weaponTag.style.cssText = 'font-size:11px;color:#aaa;margin-top:2px;margin-bottom:4px'
+    el.appendChild(weaponTag)
 
     const atkRange = createLabeledNumberInput(el, 'Range', {min: '0.1', step: '0.1', value: '1.5'})
     const atkDmg = createLabeledNumberInput(el, 'Damage', {min: '0.1', step: '0.1', value: '3'})
@@ -128,12 +194,30 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
+    let currentType: 'melee' | 'ranged' = 'melee'
+
     const showRanged = () => {
-        [bulletSpeed, bulletKB, bulletLife, atkDuration].forEach(input => {
+        [bulletSpeed, bulletKB, bulletLife].forEach(input => {
             input.parentElement!.style.display = atkSelect.value === 'ranged' ? '' : 'none'
         })
     }
-    atkSelect.onchange = showRanged
+
+    atkSelect.onchange = (): void => {
+        currentType = atkSelect.value as 'melee' | 'ranged'
+        populateWeaponOptions(weaponSelect, currentType)
+        showRanged()
+        weaponTag.textContent = ''
+    }
+
+    weaponSelect.onchange = () => {
+        if (weaponSelect.value) {
+            autoFillFromWeapon(weaponSelect.value, currentType, {
+                atkRange, atkDmg, atkCD, atkDuration,
+                bulletSpeed, bulletKB, bulletLife,
+                weaponTag,
+            })
+        }
+    }
 
     const getSelected = (): CharacterEntity | undefined => {
         const id = ctx.getSelectedId()
@@ -164,23 +248,36 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             tendSelect.value = sel.combat.tendencyConfig.tendencyId
             targetFactionsInput.value = sel.combat.tendencyConfig.targetFactions?.join(',') ?? ''
             showTargetFactions()
-            atkRange.value = String(skill?.config.range ?? 1.5)
-            atkDmg.value = String(skill?.config.damage ?? 3)
-            atkCD.value = String(skill?.config.cooldown ?? 0.5)
-            atkDuration.value = String(skill?.config.duration ?? 0.3)
-            atkSelect.value = skill?.config.type ?? 'melee'
+
+            const skillType = skill?.config.type ?? 'melee'
+            atkSelect.value = skillType
+            currentType = skillType as 'melee' | 'ranged'
+            populateWeaponOptions(weaponSelect, currentType)
+
+            const weaponId = skill?.config.weapon.id ?? ''
+            if (MELEE_WEAPON_PRESETS[weaponId] || RANGED_WEAPON_PRESETS[weaponId]) {
+                weaponSelect.value = weaponId
+                autoFillFromWeapon(weaponId, currentType, {
+                    atkRange, atkDmg, atkCD, atkDuration,
+                    bulletSpeed, bulletKB, bulletLife,
+                    weaponTag,
+                })
+            } else {
+                weaponSelect.value = ''
+                atkRange.value = String(skill?.config.weapon.range ?? 1.5)
+                atkDmg.value = String(skill?.config.weapon.damage ?? 3)
+                atkCD.value = String(skill?.config.cooldown ?? 0.5)
+                atkDuration.value = String(skill?.config.duration ?? 0.3)
+                if (skill?.config.type === 'ranged') {
+                    bulletSpeed.value = String(skill.config.weapon.projectileSpeed)
+                    bulletKB.value = String(skill.config.weapon.knockbackForce)
+                    bulletLife.value = String(skill.config.weapon.projectileLifetime)
+                }
+                weaponTag.textContent = ''
+            }
+
             playerCheck.checked = sel.isPlayer
-
-            if (skill?.config.type === 'ranged') {
-                bulletSpeed.value = String(skill.config.projectileSpeed)
-                bulletKB.value = String(skill.config.knockbackForce)
-                bulletLife.value = String(skill.config.projectileLifetime)
-            }
             showRanged()
-
-            playerCheck.onchange = () => {
-                // 不直接调用 setPlayerId，等 Apply 统一提交
-            }
 
             const onApply = () => {
                 const cur = getSelected()
@@ -191,6 +288,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (playerCheck.checked) ctx.markPlayer(cur.id)
                 else ctx.unmarkPlayer()
                 const isRanged = atkSelect.value === 'ranged'
+                const selectedWeaponId = weaponSelect.value || undefined
                 ctx.updateCharacterConfig?.(cur.id, {
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
@@ -198,6 +296,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     height: parseFloat(height.value),
                 }, isRanged ? {
                     type: 'ranged',
+                    weaponId: selectedWeaponId,
                     range: parseFloat(atkRange.value),
                     damage: parseFloat(atkDmg.value),
                     cooldown: parseFloat(atkCD.value),
@@ -207,6 +306,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     bulletLifetime: parseFloat(bulletLife.value),
                 } : {
                     type: 'melee',
+                    weaponId: selectedWeaponId,
                     range: parseFloat(atkRange.value),
                     damage: parseFloat(atkDmg.value),
                     cooldown: parseFloat(atkCD.value),

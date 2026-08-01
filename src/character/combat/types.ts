@@ -16,6 +16,9 @@ export interface CombatComponent {
     attackDirX: number
     attackDirZ: number
 
+    /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍，于进入 attacking 状态时随机 */
+    swingTilt: number
+
     faction: Faction
     attackTendency: AttackTendency
     tendencyConfig: TendencyConfig
@@ -45,6 +48,7 @@ export const createCombatComponent = (
     attackedTargets: new Set(),
     attackDirX: 0,
     attackDirZ: 1,
+    swingTilt: 0,
     faction,
     attackTendency,
     tendencyConfig,

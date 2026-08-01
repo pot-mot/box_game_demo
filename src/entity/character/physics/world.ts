@@ -7,11 +7,14 @@ import type {TendencyConfig} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
 import {createCombatComponent} from '../../../character/combat/types.ts'
 import type { AttackResult } from '../../../character/combat/types.ts'
-import {createSkillSlot, SKILL_PRESETS, type SkillConfig, type SkillSlot} from '../../../character/combat/skill_types.ts'
-import {SKILL_DEFAULT_MAX_HEALTH, SKILL_DEFAULT_DETECTION_RANGE} from '../../../character/combat/skill_types.ts'
+import {createSkillSlot, type SkillConfig, type SkillSlot} from '../../../character/combat/skill_types.ts'
+import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
+import {MELEE_WEAPON_PRESETS} from '../../../character/weapon/melee_weapon.ts'
+import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext} from '../ai/types.ts'
+import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_sight.ts'
 import {createAIMachine, updateAI} from '../ai/machine.ts'
 import {createCharacterMesh} from '../render'
 import {createCharacterModel} from '../appearance/model.ts'
@@ -49,35 +52,60 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number) => void
     /** 设置碰撞体可视化 mesh 的可见性 */
     setCollisionVisible: (visible: boolean) => void
+    /** 配置视线检查（需在所有实体系统初始化后调用） */
+    setupLineOfSight: (systems: readonly EntityInfoSource[]) => void
 }
 
 /** 将旧 AttackConfig 转换为 SkillSlot 数组 */
 const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
-    const skill: SkillConfig = attack.type === 'melee'
-        ? {
-            id: 'custom_melee',
+    if (attack.type === 'melee') {
+        const weaponPreset = MELEE_WEAPON_PRESETS[attack.weaponId ?? ''] ?? MELEE_WEAPON_PRESETS.long_sword
+        const skill: SkillConfig = {
+            id: attack.weaponId ?? 'custom_melee',
             type: 'melee',
-            damage: attack.damage,
-            range: attack.range,
             cooldown: attack.cooldown,
             duration: attack.duration,
-            knockbackForce: SKILL_PRESETS.default_melee.knockbackForce,
-            knockbackY: SKILL_PRESETS.default_melee.knockbackY,
-            projectileSpeed: 0,
-            projectileLifetime: 0,
+            weapon: {
+                id: weaponPreset.id,
+                type: 'melee',
+                damage: attack.damage,
+                range: attack.range,
+                knockbackForce: weaponPreset.knockbackForce,
+                knockbackY: weaponPreset.knockbackY,
+                arcAngle: weaponPreset.arcAngle,
+                arcRadius: weaponPreset.arcRadius,
+                arcTilt: weaponPreset.arcTilt,
+                detectionRange: weaponPreset.detectionRange,
+                mesh: weaponPreset.mesh,
+            },
         }
-        : {
-            id: 'custom_ranged',
+        return [createSkillSlot(skill)]
+    }
+    const weaponPreset = RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow
+    const skill: SkillConfig = {
+        id: attack.weaponId ?? 'custom_ranged',
+        type: 'ranged',
+        cooldown: attack.cooldown,
+        duration: attack.duration,
+        weapon: {
+            id: weaponPreset.id,
             type: 'ranged',
             damage: attack.damage,
             range: attack.range,
-            cooldown: attack.cooldown,
-            duration: attack.duration,
             knockbackForce: attack.bulletKnockback,
-            knockbackY: SKILL_PRESETS.default_ranged.knockbackY,
             projectileSpeed: attack.bulletSpeed,
             projectileLifetime: attack.bulletLifetime,
-        }
+            detectionRange: weaponPreset.detectionRange,
+            idealRange: weaponPreset.idealRange,
+            retreatRange: weaponPreset.retreatRange,
+            spreadCount: weaponPreset.spreadCount,
+            spreadAngle: weaponPreset.spreadAngle,
+            explosionRadius: weaponPreset.explosionRadius,
+            homingStrength: weaponPreset.homingStrength,
+            throwAngle: weaponPreset.throwAngle,
+            mesh: weaponPreset.mesh,
+        },
+    }
     return [createSkillSlot(skill)]
 }
 
@@ -107,7 +135,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const getCharacterByBody = (body: Body): CharacterEntity | undefined => bodyCharMap.get(body.id)
 
-    const meleeExecutor = createMeleeExecutor(shared, getCharacterByBody)
+    const getAllCharacters = (): readonly CharacterEntity[] => characters
+    const getModel = (id: number): CharacterModel | undefined => appearanceModels.get(id)
+    const meleeExecutor = createMeleeExecutor(getAllCharacters, getModel)
     const rangedExecutor = createRangedExecutor(shared, scene)
     registerSkillExecutor('melee', meleeExecutor)
     registerSkillExecutor('ranged', rangedExecutor)
@@ -154,7 +184,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         scene.add(mesh)
 
         const model = createCharacterModel(config, faction)
-        model.equipWeapon(attackSlot.type)
+        model.equipWeapon(attackSlot.type === 'melee' ? MELEE_WEAPON_PRESETS.long_sword.mesh : RANGED_WEAPON_PRESETS.longbow.mesh)
         model.group.position.set(x, y, z)
         scene.add(model.group)
 
@@ -179,9 +209,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const stateMachine = createCharacterStateMachine()
         const skills = attackToSkillSlots(attackSlot)
         if (isPlayer && attackSlot.type === 'melee') {
-            skills.push(createSkillSlot(SKILL_PRESETS.heavy_melee))
+            skills.push(createSkillSlot(MELEE_SKILL_PRESETS.heavy_sword_slam))
         }
-        const maxHP = SKILL_DEFAULT_MAX_HEALTH[attackSlot.type]
+        const maxHP = attackSlot.type === 'melee' ? 15 : 8
 
         const combat = createCombatComponent(
             skills, faction,
@@ -219,7 +249,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const spawnAt = (x: number, y: number, z: number): void => {
-        const meleePreset: AttackConfig = {type: 'melee', range: SKILL_PRESETS.default_melee.range, damage: SKILL_PRESETS.default_melee.damage, cooldown: SKILL_PRESETS.default_melee.cooldown, duration: SKILL_PRESETS.default_melee.duration}
+        const meleePreset: AttackConfig = {type: 'melee', range: MELEE_SKILL_PRESETS.long_sword_slash.weapon.range, damage: MELEE_SKILL_PRESETS.long_sword_slash.weapon.damage, cooldown: MELEE_SKILL_PRESETS.long_sword_slash.cooldown, duration: MELEE_SKILL_PRESETS.long_sword_slash.duration}
         const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
         select(entity.id)
     }
@@ -358,9 +388,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     entity.stateMachine.setInput(dx, dz, false, attack, false, 0)
                     if (attack && (dx !== 0 || dz !== 0)) {
                         aiTargetDirs.set(entity.id, {dx, dz})
+                        entity.combat.attackDirX = dx
+                        entity.combat.attackDirZ = dz
                     }
                 })
-            } else             if (entity.isPlayer) {
+            } else if (entity.isPlayer) {
                 entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerSprint, playerAttackSkillIndex)
                 if (playerAttackPending) {
                     entity.combat.attackDirX = playerForwardX
@@ -377,6 +409,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
+                    swingTilt: entity.combat.swingTilt,
                 })
 
                 const vx = entity.body.velocity.x
@@ -447,11 +480,26 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
     }
 
+    let losChecker: LineOfSightChecker | null = null
+
     const activateAI = (): void => {
         for (const entity of characters) {
             if (!entity.isPlayer && !aiMap.has(entity.id)) {
-                aiMap.set(entity.id, createAIMachine(entity, entity.body.position.x, entity.body.position.y, entity.body.position.z, SKILL_DEFAULT_DETECTION_RANGE[entity.combat.skills[entity.combat.currentSkillIndex]?.config.type ?? 'melee']))
+                aiMap.set(entity.id, createAIMachine(entity, entity.body.position.x, entity.body.position.y, entity.body.position.z, entity.combat.skills[entity.combat.currentSkillIndex]?.config.weapon.detectionRange ?? 8, losChecker))
             }
+        }
+    }
+
+    const setupLineOfSight = (systems: readonly EntityInfoSource[]): void => {
+        losChecker = createLineOfSightChecker(() => {
+            const meshes: Mesh[] = []
+            for (const s of systems) {
+                for (const m of s.getMeshes()) meshes.push(m)
+            }
+            return meshes
+        })
+        for (const ctx of aiMap.values()) {
+            ctx.losChecker = losChecker
         }
     }
 
@@ -482,11 +530,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (newAttackSlot) {
             entity.combat.skills = attackToSkillSlots(newAttackSlot)
             if (entity.isPlayer && newAttackSlot.type === 'melee') {
-                entity.combat.skills.push(createSkillSlot(SKILL_PRESETS.heavy_melee))
+                entity.combat.skills.push(createSkillSlot(MELEE_SKILL_PRESETS.heavy_sword_slam))
             }
             const model = appearanceModels.get(entity.id)
             if (model) {
-                model.equipWeapon(newAttackSlot.type)
+                const wId = newAttackSlot.weaponId
+                const meshCfg = newAttackSlot.type === 'melee'
+                    ? (MELEE_WEAPON_PRESETS[wId ?? ''] ?? MELEE_WEAPON_PRESETS.long_sword).mesh
+                    : (RANGED_WEAPON_PRESETS[wId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow).mesh
+                model.equipWeapon(meshCfg)
             }
             const pi = panelInfos.find(p => p.id === id)
             if (pi) {
@@ -540,6 +592,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setTransform,
         updateCharacterConfig,
         setCollisionVisible,
+        setupLineOfSight,
     }
 
     return {

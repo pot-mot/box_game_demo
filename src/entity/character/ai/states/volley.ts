@@ -4,8 +4,11 @@ import type {RangedSkillConfig} from '../../../../character/combat/ranged_skill.
 
 const _dir = new Vec3()
 
-export const chaseHandler: AIStateHandler = {
-    enter: () => {},
+export const volleyHandler: AIStateHandler = {
+    enter: (ctx, _character) => {
+        ctx.strafeDir = Math.random() < 0.5 ? 1 : -1
+        ctx.strafeTimer = 1.5
+    },
     update: (_dt, ctx, character, allCharacters, setInput) => {
         const target = allCharacters.find(c => c.id === ctx.targetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
@@ -15,16 +18,45 @@ export const chaseHandler: AIStateHandler = {
         _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
         const dist = _dir.length()
 
-        if (dist < 0.01) { setInput(0, 0, false); return }
-
         const skill = character.combat.skills[character.combat.currentSkillIndex]
-        if (skill?.config.type === 'ranged') {
-            const ideal = (skill.config as RangedSkillConfig).weapon.idealRange
-            if (dist < ideal * 1.3) { setInput(0, 0, false); return }
+        if (!skill || skill.config.type !== 'ranged') { setInput(0, 0, false); return }
+        const cfg = skill.config as RangedSkillConfig
+
+        if (dist < 0.01) { setInput(0, 0, false); return }
+        const len = dist
+        const adx = _dir.x / len
+        const adz = _dir.z / len
+
+        ctx.strafeTimer -= _dt
+        if (ctx.strafeTimer <= 0) {
+            ctx.strafeDir *= -1
+            ctx.strafeTimer = 1.5
         }
 
-        _dir.scale(1 / dist, _dir)
-        setInput(_dir.x, _dir.z, false)
+        if (!character.combat.attackActive && skill.cooldownTimer <= 0) {
+            setInput(adx, adz, true)
+        } else {
+            const strafeX = -adz * ctx.strafeDir
+            const strafeZ = adx * ctx.strafeDir
+            setInput(strafeX * 0.7 + adx * 0.15, strafeZ * 0.7 + adz * 0.15, false)
+        }
+
+        let nearestId = target.id
+        let nearestDist = dist
+        for (const other of allCharacters) {
+            if (other.id === character.id || other.combat.isDead) continue
+            if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
+            const ox = other.body.position.x - pos.x
+            const oz = other.body.position.z - pos.z
+            const od = Math.hypot(ox, oz)
+            if (od < cfg.weapon.detectionRange && od < nearestDist * 0.6) {
+                nearestDist = od
+                nearestId = other.id
+            }
+        }
+        if (nearestId !== target.id) {
+            ctx.targetId = nearestId
+        }
     },
     exit: () => {},
     transitions: [
@@ -39,12 +71,11 @@ export const chaseHandler: AIStateHandler = {
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
-                return _dir.length() < cfg.weapon.idealRange * 1.3
-                    && (skill.cooldownTimer ?? Infinity) <= 0
+                return _dir.length() > cfg.weapon.idealRange * 1.3
             },
         },
         {
-            to: 'attack',
+            to: 'kite',
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.targetId)
                 if (!target || target.combat.isDead) return false
@@ -52,10 +83,9 @@ export const chaseHandler: AIStateHandler = {
                 const tp = target.body.position
                 _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill || skill.config.type === 'ranged') return false
-                const skillRange = skill.config.weapon.range
-                return _dir.length() < skillRange
-                    && (skill.cooldownTimer ?? Infinity) <= 0
+                if (!skill || skill.config.type !== 'ranged') return false
+                const cfg = skill.config as RangedSkillConfig
+                return _dir.length() < cfg.weapon.retreatRange
             },
         },
         {

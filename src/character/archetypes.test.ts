@@ -1,9 +1,9 @@
 import {describe, it, expect} from 'vitest'
 import {
     ATTACK_PRESETS,
-    ATTACK_DEFAULT_MAX_HEALTH,
-    ATTACK_DEFAULT_DETECTION_RANGE,
 } from './archetypes.ts'
+import {MELEE_WEAPON_PRESETS} from './weapon/melee_weapon.ts'
+import {RANGED_WEAPON_PRESETS} from './weapon/ranged_weapon.ts'
 
 describe('ATTACK_PRESETS.melee', () => {
     it('type 为 melee', () => {
@@ -41,14 +41,21 @@ describe('ATTACK_PRESETS.ranged', () => {
     })
 })
 
-describe('默认血量', () => {
-    it('近战血量大于远程', () => {
-        expect(ATTACK_DEFAULT_MAX_HEALTH.melee).toBeGreaterThan(ATTACK_DEFAULT_MAX_HEALTH.ranged)
+describe('MELEE_WEAPON_PRESETS', () => {
+    it('detectionRange 为正数', () => {
+        expect(MELEE_WEAPON_PRESETS.long_sword.detectionRange).toBeGreaterThan(0)
+    })
+    it('heavy_sword detectionRange 大于 long_sword', () => {
+        expect(MELEE_WEAPON_PRESETS.heavy_sword.detectionRange).toBeGreaterThan(MELEE_WEAPON_PRESETS.long_sword.detectionRange)
     })
 })
 
-describe('默认探测范围', () => {
-    it('远程探测范围大于近战', () => {
-        expect(ATTACK_DEFAULT_DETECTION_RANGE.ranged).toBeGreaterThan(ATTACK_DEFAULT_DETECTION_RANGE.melee)
+describe('RANGED_WEAPON_PRESETS', () => {
+    it('detectionRange 大于近战', () => {
+        expect(RANGED_WEAPON_PRESETS.longbow.detectionRange).toBeGreaterThan(MELEE_WEAPON_PRESETS.long_sword.detectionRange)
+    })
+    it('idealRange 在 retreatRange 和 range 之间', () => {
+        expect(RANGED_WEAPON_PRESETS.longbow.idealRange).toBeGreaterThan(RANGED_WEAPON_PRESETS.longbow.retreatRange)
+        expect(RANGED_WEAPON_PRESETS.longbow.idealRange).toBeLessThan(RANGED_WEAPON_PRESETS.longbow.range)
     })
 })

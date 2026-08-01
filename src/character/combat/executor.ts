@@ -7,7 +7,6 @@ import type { SkillConfig, SkillType } from './skill_types.ts'
 export interface ExecutorContext {
     readonly fireProjectile: (
         source: CharacterEntity,
-        config: SkillConfig,
         direction: Vec3,
         speed: number,
         damage: number,

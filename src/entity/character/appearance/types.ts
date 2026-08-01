@@ -1,4 +1,5 @@
 import type {Group, Mesh} from 'three'
+import type { WeaponMeshConfig } from './weapon_mesh.ts'
 
 /** 角色配色 palette */
 export interface CharacterColorPalette {
@@ -39,11 +40,14 @@ export interface CharacterModel {
     readonly leftLegKnee: Group
     readonly leftShin: Mesh
 
-    /** 切换武器（会先移除旧武器） */
-    equipWeapon: (type: 'melee' | 'ranged') => void
+    /** 切换武器（传入武器 mesh 配置，会先移除旧武器） */
+    equipWeapon: (meshConfig: WeaponMeshConfig) => void
 
     /** 移除当前武器 */
     removeWeapon: () => void
+
+    /** 当前武器命中检测标记点（null = 未装备），供 melee_executor 使用 */
+    readonly weaponMesh: Mesh | null
 
     /** 释放所有几何体和材质 */
     dispose: () => void
@@ -53,6 +57,8 @@ export interface CharacterModel {
 export interface AnimationContext {
     readonly stateTime: number
     readonly horizontalSpeed: number
+    /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍 */
+    readonly swingTilt: number
 }
 
 /** 单个状态的动画处理器 */

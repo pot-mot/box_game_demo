@@ -89,6 +89,8 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
         systems.map(s => [s.type, s]),
     )
 
+    characterSystem.setupLineOfSight(systems)
+
     // --- 从缓存/导入文件加载实体（必须在 mode setup 之前，确保角色存在后再激活 AI）---
     const dataToLoad = saveData ?? loadCachedSaveData()
     let loadResult: LoadWorldResult | undefined

@@ -35,18 +35,32 @@ export const patrolHandler: AIStateHandler = {
     transitions: [{
         to: 'chase',
         guard: (ctx, character, allCharacters) => {
+            let bestDist = Infinity
+            let bestId: number | undefined
+            const pos = character.body.position
+            const skill = character.combat.skills[character.combat.currentSkillIndex]
+            const detRange = skill?.config.weapon.detectionRange ?? 8
+            const los = ctx.losChecker
+
             for (const other of allCharacters) {
                 if (other.id === character.id || other.combat.isDead) continue
                 if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
-                const pos = character.body.position
+
                 const op = other.body.position
-                _dir.set(op.x - pos.x, 0, op.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.type === 'ranged' ? (skill.config.range * 1.5) : 8
-                if (_dir.length() < detRange) {
-                    ctx.targetId = other.id
-                    return true
-                }
+                const dx = op.x - pos.x
+                const dz = op.z - pos.z
+                const d = Math.hypot(dx, dz)
+                if (d >= detRange || d >= bestDist) continue
+
+                if (los && !los.hasLOS(pos.x, pos.y + 0.5, pos.z, op.x, op.y + 0.5, op.z)) continue
+
+                bestDist = d
+                bestId = other.id
+            }
+
+            if (bestId !== undefined) {
+                ctx.targetId = bestId
+                return true
             }
             return false
         },

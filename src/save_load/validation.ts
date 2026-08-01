@@ -94,6 +94,7 @@ const SavableFragment = z.object({
 
 const MeleeAttackSchema = z.object({
     type: z.literal('melee'),
+    weaponId: z.string().optional(),
     range: z.number().positive(),
     damage: z.number().positive(),
     cooldown: z.number().positive(),
@@ -102,6 +103,7 @@ const MeleeAttackSchema = z.object({
 
 const RangedAttackSchema = z.object({
     type: z.literal('ranged'),
+    weaponId: z.string().optional(),
     range: z.number().positive(),
     damage: z.number().positive(),
     cooldown: z.number().positive(),

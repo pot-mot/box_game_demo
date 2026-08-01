@@ -104,9 +104,11 @@ export interface CharacterSaveConfig {
     height: number
     attackSlot: {
         type: 'melee'
+        weaponId?: string
         range: number; damage: number; cooldown: number; duration: number
     } | {
         type: 'ranged'
+        weaponId?: string
         range: number; damage: number; cooldown: number; duration: number
         bulletSpeed: number; bulletKnockback: number; bulletLifetime: number
     }

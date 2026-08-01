@@ -1,6 +1,7 @@
 import type {CharacterEntity} from '../../../character/types.ts'
+import type {LineOfSightChecker} from './line_of_sight.ts'
 
-export const AI_STATES = ['patrol', 'chase', 'attack'] as const
+export const AI_STATES = ['patrol', 'chase', 'approach', 'volley', 'kite', 'attack'] as const
 export type AIState = typeof AI_STATES[number]
 
 export interface AIContext {
@@ -12,6 +13,9 @@ export interface AIContext {
     stateTime: number
     waitTimer: number
     targetId: number | undefined
+    strafeDir: number
+    strafeTimer: number
+    losChecker: LineOfSightChecker | null
 }
 
 export interface AITransition {

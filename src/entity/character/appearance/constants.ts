@@ -47,21 +47,6 @@ export const SELECT_PALETTE = (faction: number): CharacterColorPalette => {
     return {...base}
 }
 
-/** 近战武器颜色 */
-export const MELEE_WEAPON_COLOR = 0xff3333
-
-/** 远程武器颜色 */
-export const RANGED_WEAPON_COLOR = 0x3388ff
-
-/** 近战棍尺寸 (宽 × 高 × 深) */
-export const MELEE_WEAPON_SIZE: [number, number, number] = [0.05, 0.6, 0.05]
-
-/** 远程法杖尺寸 (宽 × 高 × 深) */
-export const RANGED_WEAPON_SIZE: [number, number, number] = [0.05, 0.8, 0.05]
-
-/** 武器相对手部 pivot 的 Y 偏移（向上延伸） */
-export const WEAPON_Y_OFFSET = 0.15
-
 /** 身体部位比例（头 : 身 : 腿 = 2 : 4 : 4） */
 export const HEAD_RATIO = 0.2
 export const BODY_RATIO = 0.4

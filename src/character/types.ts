@@ -32,6 +32,5 @@ export interface CharacterEntity {
     stateMachine: CharacterStateMachine
 }
 
-export type { BulletConfig } from './archetypes.ts'
 export type { Faction, AttackTendency, TendencyConfig } from './faction.ts'
 export type { AttackConfig } from './archetypes.ts'

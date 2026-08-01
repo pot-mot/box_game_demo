@@ -1,12 +1,9 @@
 import {Group, Mesh, BoxGeometry, MeshStandardMaterial, CanvasTexture, NearestFilter} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import type {CharacterModel, CharacterColorPalette} from './types.ts'
+import type {WeaponMeshConfig} from './weapon_mesh.ts'
+import {createWeaponMesh} from './weapon_mesh.ts'
 import {
-    MELEE_WEAPON_COLOR,
-    RANGED_WEAPON_COLOR,
-    MELEE_WEAPON_SIZE,
-    RANGED_WEAPON_SIZE,
-    WEAPON_Y_OFFSET,
     HEAD_RATIO,
     BODY_RATIO,
     LEG_RATIO,
@@ -257,35 +254,27 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     tracked.push(headTM)
     group.add(headNeck)
 
-    let weaponMesh: Mesh | null = null
-    let weaponGeometry: BoxGeometry | null = null
-    let weaponMaterial: MeshStandardMaterial | null = null
+    let weaponGroup: Group | null = null
+    let weaponHitCenter: Mesh | null = null
+    let weaponCleanup: (() => void) | null = null
 
     const removeWeapon = (): void => {
-        if (weaponMesh) {
-            rightHandPivot.remove(weaponMesh)
-            weaponGeometry?.dispose()
-            weaponMaterial?.dispose()
-            weaponMesh = null
-            weaponGeometry = null
-            weaponMaterial = null
+        if (weaponGroup) {
+            rightHandPivot.remove(weaponGroup)
+            weaponCleanup?.()
+            weaponGroup = null
+            weaponHitCenter = null
+            weaponCleanup = null
         }
     }
 
-    const equipWeapon = (type: 'melee' | 'ranged'): void => {
+    const equipWeapon = (meshConfig: WeaponMeshConfig): void => {
         removeWeapon()
-        const [w, h, d] = type === 'melee' ? MELEE_WEAPON_SIZE : RANGED_WEAPON_SIZE
-        const color = type === 'melee' ? MELEE_WEAPON_COLOR : RANGED_WEAPON_COLOR
-        weaponGeometry = new BoxGeometry(w, h, d)
-        weaponMaterial = new MeshStandardMaterial({
-            color,
-            roughness: 0.4,
-            metalness: 0.3,
-        })
-        weaponMesh = new Mesh(weaponGeometry, weaponMaterial)
-        weaponMesh.castShadow = true
-        weaponMesh.position.y = WEAPON_Y_OFFSET
-        rightHandPivot.add(weaponMesh)
+        const result = createWeaponMesh(meshConfig)
+        weaponGroup = result.group
+        weaponHitCenter = result.hitCenter
+        weaponCleanup = result.cleanup
+        rightHandPivot.add(weaponGroup)
     }
 
     const dispose = (): void => {
@@ -322,6 +311,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         leftShin: leftShinTM.mesh,
         equipWeapon,
         removeWeapon,
+        get weaponMesh() { return weaponHitCenter },
         dispose,
     }
 }
