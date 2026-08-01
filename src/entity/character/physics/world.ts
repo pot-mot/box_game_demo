@@ -26,6 +26,7 @@ import {DEFAULT_CHARACTER_CONFIG, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION
 import {CHARACTER_LINEAR_DAMPING} from './constants.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
+import {SELECT_PALETTE} from '../appearance/constants.ts'
 import {createMeleeExecutor} from '../combat/melee_executor.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
@@ -34,6 +35,16 @@ import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {createCharacterPanel} from '../ui/panel.ts'
 
 const _tmpVec = new Vec3()
+
+/** 根据阵营取 badge 颜色 */
+const factionBadgeColor = (faction: number, isPlayer: boolean): string => {
+    if (isPlayer) return '#ffaa00'
+    const p = SELECT_PALETTE(faction)
+    const r = (p.bodyColor >> 16) & 0xff
+    const g = (p.bodyColor >> 8) & 0xff
+    const b = p.bodyColor & 0xff
+    return `rgb(${r},${g},${b})`
+}
 
 export interface CharacterEntitySystem extends EntityInfoSource {
     markPlayer: (id: number) => void
@@ -160,6 +171,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const weaponName = skill?.config.weapon.id ?? '?'
             const weaponDmg = skill?.config.weapon.damage ?? 0
             pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weaponDmg})  spd:${ch.config.speed}`
+            pi.badgeLabel = ch.isPlayer ? 'P' : `F${ch.combat.faction}`
+            pi.badgeColor = factionBadgeColor(ch.combat.faction, ch.isPlayer)
         }
     }
 
@@ -245,8 +258,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.combat.onDamageTaken = flash.onDamage
 
         const rowText = isPlayer ? `▶ Player: Character #${id}` : `Character #${id}`
-        const badgeLabel = attackSlot.weaponId ?? attackSlot.type
-        panelInfos.push({id, type: 'character', badgeLabel, badgeColor: attackSlot.type === 'melee' ? '#ff4444' : '#4488ff', rowText})
+        const badgeLabel = isPlayer ? 'P' : `F${faction}`
+        panelInfos.push({id, type: 'character', badgeLabel, badgeColor: factionBadgeColor(faction, isPlayer ?? false), rowText})
 
         return entity
     }
@@ -545,8 +558,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
             const pi = panelInfos.find(p => p.id === id)
             if (pi) {
-                pi.badgeLabel = newAttackSlot.weaponId ?? newAttackSlot.type
-                pi.badgeColor = newAttackSlot.type === 'melee' ? '#ff4444' : '#4488ff'
+                pi.badgeLabel = entity.isPlayer ? 'P' : `F${entity.combat.faction}`
+                pi.badgeColor = factionBadgeColor(entity.combat.faction, entity.isPlayer)
             }
         }
         if (newFaction !== undefined) entity.combat.faction = newFaction

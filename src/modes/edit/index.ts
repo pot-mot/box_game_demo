@@ -23,11 +23,8 @@ export const setupEditMode = (
     renderer: WebGLRenderer,
     systems: EntityInfoSource[],
     terrainSources: TerrainContext[],
-    terrainSource: TerrainContext,
+    _terrainSource: TerrainContext,
 ): EditModeController => {
-    // 初始地形
-    terrainSource.spawnAt(0, 0, 0)
-
     // 编辑控制
     const orbit = setupMouseOrbit(camera, renderer.domElement)
     const keyboardCamera = setupKeyboardCamera(camera)
