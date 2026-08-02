@@ -459,8 +459,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (aiCtx && aiEnabled) {
                 updateAI(dt, aiCtx, entity, characters, (dx, dz, attack) => {
                     entity.stateMachine.setInput(dx, dz, false, attack, false, 0)
+                    aiTargetDirs.set(entity.id, {dx, dz})
                     if (attack && (dx !== 0 || dz !== 0)) {
-                        aiTargetDirs.set(entity.id, {dx, dz})
                         entity.combat.attackDirX = dx
                         entity.combat.attackDirZ = dz
                     }
@@ -498,9 +498,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         targetAngle = currentAngle
                     }
                 } else {
-                    targetAngle = Math.hypot(vx, vz) > VELOCITY_DIR_THRESHOLD
-                        ? Math.atan2(vx, vz)
-                        : currentAngle
+                    const aiDir = aiTargetDirs.get(entity.id)
+                    if (aiDir !== undefined) {
+                        const aiDirLen = Math.hypot(aiDir.dx, aiDir.dz)
+                        targetAngle = aiDirLen > VELOCITY_DIR_THRESHOLD
+                            ? Math.atan2(aiDir.dx, aiDir.dz)
+                            : currentAngle
+                    } else {
+                        targetAngle = Math.hypot(vx, vz) > VELOCITY_DIR_THRESHOLD
+                            ? Math.atan2(vx, vz)
+                            : currentAngle
+                    }
                 }
 
                 let diff = targetAngle - currentAngle
