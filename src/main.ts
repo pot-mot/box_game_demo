@@ -34,6 +34,8 @@ import {loadWorldFromData, clearAllEntities, type LoadWorldResult} from './save_
 import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
 import {promptLoadFile} from './save_load/actions.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
+import {createInputRegistry} from './input/registry.ts'
+import {openBindingPanel} from './input/binding_panel.ts'
 
 type EntitySystem = EntityInfoSource & EntityTickHandler
 
@@ -48,6 +50,9 @@ setupStartupScreen({
 })
 
 const startGame = (mode: GameMode, saveData?: SaveData): void => {
+    // --- 输入注册表（必须在所有模式初始化之前）---
+    const input = createInputRegistry()
+
     // --- 渲染系统 ---
     const {scene, camera, renderer} = createRenderContext(app)
     const renderFrame = setupRefractionPass(scene, camera, renderer)
@@ -226,44 +231,41 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     const {updater: instructionsUpdate, toggle: toggleInstructions} = setupInstructionsPanel(() => mode)
 
     // --- 存档快捷键 ---
-    document.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault()
-            const cached = loadCachedSaveData()
-            const state = collectWorldState(
-                systemsByType,
-                allTerrainSources,
-                mode,
-                camera.position,
-                camera.rotation,
-                cached?.modeInfo,
-            )
-            cacheSaveData(state)
-            saveWorldToFile(state)
-        }
-        if (e.code === 'KeyO' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault()
-            promptLoadFile((data) => {
-                cacheSaveData(data)
-                clearAllEntities(systemsByType, allTerrainSources)
-                const result = loadWorldFromData(data, systemsByType, allTerrainSources)
-                if (mode === 'edit') {
-                    if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
-                    if (result.editCameraRot) {
-                        camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
-                        editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
-                    }
+    input.onActionDown('save_world', () => {
+        const cached = loadCachedSaveData()
+        const state = collectWorldState(
+            systemsByType,
+            allTerrainSources,
+            mode,
+            camera.position,
+            camera.rotation,
+            cached?.modeInfo,
+        )
+        cacheSaveData(state)
+        saveWorldToFile(state)
+    })
+
+    input.onActionDown('load_world', () => {
+        promptLoadFile((data) => {
+            cacheSaveData(data)
+            clearAllEntities(systemsByType, allTerrainSources)
+            const result = loadWorldFromData(data, systemsByType, allTerrainSources)
+            if (mode === 'edit') {
+                if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
+                if (result.editCameraRot) {
+                    camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
+                    editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
                 }
-                if (mode === 'play') {
-                    if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
-                    if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
-                }
-            })
-        }
+            }
+            if (mode === 'play') {
+                if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
+                if (result.playCameraRot) camera.rotation.set(result.playCameraRot.x, result.playCameraRot.y, result.playCameraRot.z)
+            }
+        })
     })
 
     // --- 设置面板（右上角）---
-    setupSettingsPanel(toggleInstructions)
+    setupSettingsPanel(toggleInstructions, openBindingPanel)
 
     // --- 单 RAF 循环 ---
     let lastTime = performance.now()
@@ -312,6 +314,7 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
 
             cameraInfoUpdate()
             instructionsUpdate()
+            input.getUpdater()()
         } catch (e) {
             console.warn('Frame update failed:', e)
         }

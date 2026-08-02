@@ -1,6 +1,7 @@
 import {Vector3, type PerspectiveCamera} from 'three'
 import {ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE} from './constants.ts'
 import {ORBIT_SENSITIVITY} from '../constants.ts'
+import {getInputRegistry} from '../../input/registry.ts'
 import {applyFreeFlightMovement} from '../free_flight.ts'
 
 const CLICK_DRAG_THRESHOLD = 5
@@ -20,13 +21,13 @@ export const setupPlayCamera = (
     getTarget: () => Vector3 | undefined,
     mouseAttack?: MouseAttackCallbacks,
 ): () => void => {
+    const input = getInputRegistry()
     let yaw = Math.PI
     let pitch = Math.PI / 6
     let distance = 6
     let isDown = false
     /** 左键按下后累计移动距离（像素），用于区分 click / drag */
     let dragDist = 0
-    const keys: Record<string, boolean> = {}
 
     element.addEventListener('mousedown', (e: MouseEvent) => {
         if (e.button === 0) {
@@ -70,11 +71,6 @@ export const setupPlayCamera = (
         }
     })
 
-    const onKeyDown = (e: KeyboardEvent) => { keys[e.code] = true }
-    const onKeyUp = (e: KeyboardEvent) => { keys[e.code] = false }
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-
     return () => {
         const target = getTarget()
         if (target) {
@@ -89,6 +85,6 @@ export const setupPlayCamera = (
 
         camera.rotation.order = 'YXZ'
         camera.rotation.set(pitch, yaw, 0)
-        applyFreeFlightMovement(camera, keys)
+        applyFreeFlightMovement(camera, input)
     }
 }

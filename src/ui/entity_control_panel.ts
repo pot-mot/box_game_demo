@@ -1,7 +1,20 @@
 import type {PanelContext} from '../entity/box/base/ui'
+import {getInputRegistry} from '../input/registry.ts'
 
 let container: HTMLElement | undefined
 let currentPanel: PanelContext | undefined
+let inputSetup = false
+
+const ensureInputHook = (): void => {
+    if (inputSetup) return
+    inputSetup = true
+    const input = getInputRegistry()
+    input.onActionDown('close_panel', () => {
+        if (currentPanel !== undefined) {
+            focusPanel(undefined)
+        }
+    })
+}
 
 const getContainer = (): HTMLElement => {
     if (!container) {
@@ -13,6 +26,7 @@ const getContainer = (): HTMLElement => {
 }
 
 export const focusPanel = (panel: PanelContext | undefined): void => {
+    ensureInputHook()
     if (currentPanel) {
         currentPanel.destroy()
     }
@@ -26,9 +40,3 @@ export const focusPanel = (panel: PanelContext | undefined): void => {
         c.style.display = 'none'
     }
 }
-
-document.addEventListener('keydown', (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && currentPanel !== undefined) {
-        focusPanel(undefined)
-    }
-})

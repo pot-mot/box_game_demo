@@ -1,4 +1,5 @@
 import {type PerspectiveCamera} from 'three'
+import {getInputRegistry} from '../../input/registry.ts'
 import {applyFreeFlightMovement} from '../free_flight.ts'
 
 /**
@@ -10,23 +11,12 @@ export const setupKeyboardCamera = (camera: PerspectiveCamera): {
     updater: () => void
     setEnabled: (v: boolean) => void
 } => {
-    const keys: Record<string, boolean> = {}
+    const input = getInputRegistry()
     let enabled = true
-
-    const onKeyDown = (e: KeyboardEvent) => {
-        if (!enabled) return
-        keys[e.code] = true
-    }
-    const onKeyUp = (e: KeyboardEvent) => { keys[e.code] = false }
-    const onBlur = () => { for (const k in keys) keys[k] = false }
-
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('keyup', onKeyUp)
-    window.addEventListener('blur', onBlur)
 
     const updater = (): void => {
         if (!enabled) return
-        applyFreeFlightMovement(camera, keys)
+        applyFreeFlightMovement(camera, input)
     }
 
     return {updater, setEnabled: (v: boolean) => { enabled = v } }

@@ -1,6 +1,7 @@
 import type {EntityInfoSource, EntityPanelInfo} from '../entity/box/base/types/entity_info.ts'
 import type {EntityType} from '../entity/constants.ts'
 import {focusPanel} from './entity_control_panel.ts'
+import {getInputRegistry} from '../input/registry.ts'
 
 const ROW_STYLE = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer'
 const INFO_STYLE = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
@@ -24,6 +25,17 @@ const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElem
     const row = document.createElement('div')
     row.style.cssText = ROW_STYLE
     row.dataset.id = String(id)
+
+    /* hover 效果替代 .ep-row:hover */
+    row.addEventListener('mouseenter', () => {
+        row.style.background = 'rgba(255,255,255,.1)'
+    })
+    row.addEventListener('mouseleave', () => {
+        /* 选中状态由外部设置 background，leave 时仅恢复非选中默认 */
+        if (row.style.background === 'rgba(255,255,255,.1)') {
+            row.style.background = ''
+        }
+    })
 
     const typeBadge = document.createElement('span')
     typeBadge.style.cssText = 'font-size:10px;padding:1px 4px;border-radius:3px;margin-right:4px'
@@ -95,6 +107,17 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
     const findSource = (entry: EntityPanelInfo): EntityInfoSource | undefined =>
         sourcesByType.get(entry.type)
 
+    const tryDeleteHovered = (): void => {
+        if (hoveredId !== undefined && hoveredType !== undefined) {
+            const source = sourcesByType.get(hoveredType)
+            if (source) {
+                source.remove(hoveredId)
+                hoveredId = undefined
+                hoveredType = undefined
+            }
+        }
+    }
+
     list.addEventListener('click', (e: MouseEvent) => {
         const target = e.target as HTMLElement
         const row = target.closest<HTMLElement>('[data-id]')
@@ -134,14 +157,8 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
         hoveredType = undefined
     })
 
-    document.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.key === 'Delete' && hoveredId !== undefined && hoveredType !== undefined) {
-            const source = sourcesByType.get(hoveredType)
-            if (source) source.remove(hoveredId)
-            hoveredId = undefined
-            hoveredType = undefined
-        }
-    })
+    const input = getInputRegistry()
+    input.onActionDown('delete_entity', tryDeleteHovered)
 
     /** 需要按顺序渲染的分组 */
     const GROUP_ORDER = ['Character', 'Box', 'Area', 'Terrain', 'Fragment']
@@ -198,7 +215,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
 
                 const source = findSource(entry)
                 const selId = source?.getSelectedId()
-                row.className = entry.id === selId ? 'ep-row ep-sel' : 'ep-row'
+                row.style.background = entry.id === selId ? 'rgba(100,180,255,.25)' : ''
             }
         }
 
