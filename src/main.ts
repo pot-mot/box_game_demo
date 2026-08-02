@@ -91,7 +91,7 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
 
     characterSystem.setupLineOfSight(systems)
 
-    /* 箱子生成回调（供 builder AI 使用，由 play 模式注册） */
+    /* 箱子生成回调（供 builder AI 使用） */
     const boxSpawner = (entry: {entityType: string; mass: number; friction: number; maxHealth?: number; attractionRadius?: number; attractionStrength?: number; stiffness?: number; dampingRatio?: number; maxDeformFraction?: number}, x: number, y: number, z: number, size: {width: number; height: number; depth: number}): void => {
         const mass = entry.mass * size.width * size.height * size.depth
         switch (entry.entityType) {
@@ -128,6 +128,8 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
         }
     }
 
+    characterSystem.registerBoxSpawner(boxSpawner)
+
     // --- 从缓存/导入文件加载实体（必须在 mode setup 之前，确保角色存在后再激活 AI）---
     const dataToLoad = saveData ?? loadCachedSaveData()
     let loadResult: LoadWorldResult | undefined
@@ -145,6 +147,62 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     } else {
         playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem, boxSpawner)
     }
+
+    /* ── 编辑模式：执行 / 步进状态 ── */
+    let executing = false
+    let snapshot: SaveData | undefined
+    let aiActive = false
+
+    const saveSnapshot = (): void => {
+        snapshot = collectWorldState(
+            systemsByType,
+            allTerrainSources,
+            'edit',
+            camera.position,
+            camera.rotation,
+        )
+    }
+
+    const restoreSnapshot = (): void => {
+        if (!snapshot) return
+        clearAllEntities(systemsByType, allTerrainSources)
+        loadWorldFromData(snapshot, systemsByType, allTerrainSources)
+        saveSnapshot()
+    }
+
+    const ensureAI = (): void => {
+        const shouldRun = executing || (editMode?.execute.pendingSteps() ?? 0) > 0
+        if (shouldRun && !aiActive) {
+            characterSystem.setAIEnabled(true)
+            characterSystem.activateAI()
+            aiActive = true
+        } else if (!shouldRun && aiActive) {
+            characterSystem.setAIEnabled(false)
+            aiActive = false
+        }
+    }
+
+    if (editMode) {
+        editMode.execute.onToggle((entering: boolean) => {
+            if (entering) {
+                saveSnapshot()
+                executing = true
+            } else {
+                executing = false
+                restoreSnapshot()
+            }
+        })
+
+        editMode.execute.onReset(() => {
+            executing = false
+            characterSystem.setAIEnabled(false)
+            aiActive = false
+            restoreSnapshot()
+        })
+    }
+
+    /* 进入编辑模式时保存初始快照，保证始终至少有一个快照 */
+    if (mode === 'edit') saveSnapshot()
 
     characterSystem.setCollisionVisible(mode === 'edit')
 
@@ -215,15 +273,35 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
         lastTime = time
 
         try {
-            shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)
+            const simActive = mode === 'play' || executing
+            const pendingSteps = editMode?.execute.pendingSteps() ?? 0
+            const stepActive = pendingSteps > 0 && !executing
 
-            for (const s of systems) s.preSync?.(delta, time)
-            for (const s of systems) s.syncPositions()
+            if (simActive) {
+                /* play 模式或持续执行：正常变速步进 */
+                shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)
+                for (const s of systems) s.preSync?.(delta, time)
+                for (const s of systems) s.syncPositions()
+            } else if (stepActive) {
+                /* 逐帧步进：每帧精确推进 1 物理步 */
+                shared.world.step(FIXED_TIME_STEP, FIXED_TIME_STEP, 1)
+                for (const s of systems) s.preSync?.(FIXED_TIME_STEP, time)
+                for (const s of systems) s.syncPositions()
+                editMode?.execute.consumeStep()
+            }
+            /* else: 编辑暂停态，物理世界完全冻结 */
+
+            ensureAI()
 
             gridUpdate()
 
             if (mode === 'edit') {
                 editMode?.updater(delta)
+                if (simActive) {
+                    characterSystem.update(delta)
+                } else if (stepActive) {
+                    characterSystem.update(FIXED_TIME_STEP)
+                }
             } else {
                 playMode?.updater(delta)
             }

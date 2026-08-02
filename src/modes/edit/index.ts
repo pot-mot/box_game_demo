@@ -8,6 +8,7 @@ import {setupSpawnModeManager} from './spawn_mode.ts'
 import {setupPointerInteraction} from './pointer_interaction.ts'
 import {setupSpawnModePanel} from '../../ui/spawn_mode_panel.ts'
 import {setupElementListPanel} from '../../ui/element_list_panel.ts'
+import {setupExecutePanel, type ExecutePanel} from './execute_panel.ts'
 
 export interface EditModeController {
     updater: (dt: number) => void
@@ -16,6 +17,7 @@ export interface EditModeController {
         getSpawnMode: () => SpawnMode
         setSpawnMode: (mode: SpawnMode) => void
     }
+    execute: Omit<ExecutePanel, 'update'>
 }
 
 export const setupEditMode = (
@@ -33,12 +35,16 @@ export const setupEditMode = (
 
     keyboardCamera.setEnabled(true)
 
+    // 执行面板
+    const executePanel = setupExecutePanel()
+
     // UI 面板
     const spawnModePanelUpdate = setupSpawnModePanel(spawnMode.getSpawnMode, spawnMode.setSpawnMode)
     const elementListPanelUpdate = setupElementListPanel(systems)
 
     const updater = (_dt: number): void => {
         keyboardCamera.updater()
+        executePanel.update()
         spawnModePanelUpdate()
         elementListPanelUpdate()
     }
@@ -49,6 +55,15 @@ export const setupEditMode = (
         spawnMode: {
             getSpawnMode: spawnMode.getSpawnMode,
             setSpawnMode: spawnMode.setSpawnMode,
+        },
+        execute: {
+            isExecuting: executePanel.isExecuting,
+            pendingSteps: executePanel.pendingSteps,
+            onToggle: executePanel.onToggle,
+            onReset: executePanel.onReset,
+            enqueueSteps: executePanel.enqueueSteps,
+            consumeStep: executePanel.consumeStep,
+            forceStop: executePanel.forceStop,
         },
     }
 }
