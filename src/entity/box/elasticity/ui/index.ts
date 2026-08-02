@@ -38,6 +38,11 @@ export const createElasticPanel = (ctx: Omit<ElasticEntityContext, 'panel'>): Pa
     const rotY = createLabeledNumberInput(el, 'Y', {min: '-360', max: '360', step: '0.1'})
     const rotZ = createLabeledNumberInput(el, 'Z', {min: '-360', max: '360', step: '0.1'})
 
+    el.appendChild(createSection('Size'))
+    const sizeX = createLabeledNumberInput(el, 'X', {min: '0.1', max: '100', step: '0.1', value: '1'})
+    const sizeY = createLabeledNumberInput(el, 'Y', {min: '0.1', max: '100', step: '0.1', value: '1'})
+    const sizeZ = createLabeledNumberInput(el, 'Z', {min: '0.1', max: '100', step: '0.1', value: '1'})
+
     const massSection = document.createElement('div')
     massSection.style.cssText = 'border-top:1px solid #555;padding:4px 0'
     const massLabel = document.createElement('label')
@@ -46,6 +51,8 @@ export const createElasticPanel = (ctx: Omit<ElasticEntityContext, 'panel'>): Pa
     massLabel.appendChild(mass)
     massSection.appendChild(massLabel)
     el.appendChild(massSection)
+
+    const friction = createLabeledNumberInput(el, 'Friction', {min: '0', max: '1', step: '0.01', value: '0.3', style: 'width:80px'})
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
@@ -65,7 +72,11 @@ export const createElasticPanel = (ctx: Omit<ElasticEntityContext, 'panel'>): Pa
             rotX.value = (sel.mesh.rotation.x * 180 / Math.PI).toFixed(1)
             rotY.value = (sel.mesh.rotation.y * 180 / Math.PI).toFixed(1)
             rotZ.value = (sel.mesh.rotation.z * 180 / Math.PI).toFixed(1)
+            sizeX.value = String(sel.config.width)
+            sizeY.value = String(sel.config.height)
+            sizeZ.value = String(sel.config.depth)
             mass.value = String(sel.config.mass)
+            friction.value = String(sel.config.friction)
 
             const onApply = () => {
                 const cur = ctx.getSelected()
@@ -76,11 +87,11 @@ export const createElasticPanel = (ctx: Omit<ElasticEntityContext, 'panel'>): Pa
                     x: parseFloat(rotX.value), y: parseFloat(rotY.value), z: parseFloat(rotZ.value),
                 })
                 ctx.updateConfig(cur.id, {
-                    width: cur.config.width,
-                    height: cur.config.height,
-                    depth: cur.config.depth,
+                    width: parseFloat(sizeX.value),
+                    height: parseFloat(sizeY.value),
+                    depth: parseFloat(sizeZ.value),
                     mass: parseFloat(mass.value) || cur.config.mass,
-                    friction: cur.config.friction,
+                    friction: parseFloat(friction.value) || cur.config.friction,
                     stiffness: parseFloat(stiffnessInput.value) || cur.config.stiffness,
                     dampingRatio: parseFloat(dampingInput.value) || cur.config.dampingRatio,
                     maxDeformFraction: parseFloat(maxDeformInput.value) || cur.config.maxDeformFraction,

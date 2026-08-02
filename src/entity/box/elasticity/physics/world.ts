@@ -1,7 +1,7 @@
 import {type Scene} from 'three'
 import {Body, BODY_TYPES, Box, Vec3} from 'cannon-es'
 import type {SharedWorld} from '../../../../physics/world.ts'
-import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {ElasticBoxConfig, ElasticBox, ElasticBoxAddOptions, ElasticEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
@@ -218,7 +218,29 @@ export const setupElasticBoxes = (
         if (!pb) return
         const old = pb.config
         const cfg: ElasticBoxConfig = {...old, ...partial}
+        const changedSize = partial.width !== undefined || partial.height !== undefined || partial.depth !== undefined
         const changedMass = partial.mass !== undefined && partial.mass !== old.mass
+        if (changedSize) {
+            const hh = cfg.height / 2
+            const oldHh = old.height / 2
+            pb.config = cfg
+            updateElasticBoxMeshSize(pb)
+            while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
+            pb.body.addShape(new Box(new Vec3(cfg.width / 2, hh, cfg.depth / 2)))
+            pb.body.updateMassProperties()
+            const oldBottom = pb.body.position.y - oldHh
+            const newBottom = pb.body.position.y - hh
+            if (newBottom < oldBottom || newBottom < GROUND_Y) {
+                const target = Math.max(oldBottom, GROUND_Y)
+                pb.body.position.y = target + hh
+                pb.mesh.position.y = target + hh
+            }
+            if (pb.wireframe) {
+                cleanupWireframe(pb)
+                pb.wireframe = createWireframe(pb.mesh.geometry)
+                pb.mesh.add(pb.wireframe)
+            }
+        }
         if (changedMass) {
             if (cfg.mass === 0) {
                 pb.body.type = BODY_TYPES.STATIC
