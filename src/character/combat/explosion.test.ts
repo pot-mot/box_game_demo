@@ -6,7 +6,7 @@ import {applyExplosionDamage} from './explosion.ts'
 const makeMock = (id: number, x: number, y: number, z: number, hp: number, faction: number, isDead: boolean): Parameters<typeof applyExplosionDamage>[6] => ({
     id,
     config: {speed: 0, jumpHeight: 0, radius: 0.125, height: 1},
-    mesh: null!, appearanceGroup: null!, body: {position: new Vec3(x, y, z), velocity: new Vec3(), applyImpulse: () => {}, wakeUp: () => {}} as unknown as Parameters<typeof applyExplosionDamage>[6]['body'],
+    mesh: null!, wireframe: undefined, appearanceGroup: null!, body: {position: new Vec3(x, y, z), velocity: new Vec3(), applyImpulse: () => {}, wakeUp: () => {}} as unknown as Parameters<typeof applyExplosionDamage>[6]['body'],
     isOnGround: true, rowText: '', isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', isDying: false, dyingTimer: 0,
     combat: {
         faction, health: hp, maxHealth: hp, isDead,

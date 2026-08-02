@@ -37,6 +37,7 @@ import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
+import {createWireframe, cleanupWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
 
 const _tmpVec = new Vec3()
@@ -252,6 +253,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             id,
             config,
             mesh,
+            wireframe: undefined,
             appearanceGroup: model.group,
             body,
             isOnGround: true,
@@ -307,8 +309,20 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const select = (id: number | undefined): void => {
+        if (selectedId !== undefined) {
+            const prev = characters.find(c => c.id === selectedId)
+            if (prev) cleanupWireframe(prev)
+        }
         selectedId = id
         events.emit('select', id)
+        if (id !== undefined) {
+            const entity = characters.find(c => c.id === id)
+            if (entity) {
+                const line = createWireframe(entity.mesh.geometry)
+                entity.mesh.add(line)
+                entity.wireframe = line
+            }
+        }
     }
     const getSelectedId = (): number | undefined => selectedId
 
@@ -319,6 +333,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const wasSelected = id === selectedId
 
         events.emit('delete', id, wasSelected)
+
+        cleanupWireframe(entity)
 
         if (entity.combat.attackActive) {
             const skill = entity.combat.skills[entity.combat.currentSkillIndex]
