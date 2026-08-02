@@ -14,6 +14,8 @@ import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext} from '../ai/types.ts'
+import type {AIStrategy} from '../../../character/ai_strategy.ts'
+import {DEFAULT_STRATEGY_CONFIGS} from '../../../character/ai_strategy.ts'
 import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_sight.ts'
 import {createAIMachine, updateAI} from '../ai/machine.ts'
 import {createCharacterMesh} from '../render'
@@ -61,6 +63,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     getAll: () => readonly CharacterEntity[]
     setTransform: (id: number, pos: {x: number; y: number; z: number}) => void
     updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number) => void
+    /** 设置单个角色的 AI 策略 */
+    setAIStrategy: (id: number, strategy: AIStrategy) => void
     /** 设置碰撞体可视化 mesh 的可见性 */
     setCollisionVisible: (visible: boolean) => void
     /** 配置视线检查（需在所有实体系统初始化后调用） */
@@ -193,6 +197,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         faction: number,
         x: number, y: number, z: number,
         isPlayer?: boolean,
+        aiStrategy: AIStrategy = 'tactical',
     ): CharacterEntity => {
         const mesh = createCharacterMesh(config)
         mesh.position.set(x, y, z)
@@ -242,6 +247,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             isOnGround: true,
             rowText: `Character #${id}`,
             isPlayer: isPlayer ?? false,
+            aiStrategy,
             isDying: false,
             dyingTimer: 0,
             combat,
@@ -501,7 +507,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const activateAI = (): void => {
         for (const entity of characters) {
             if (!entity.isPlayer && !aiMap.has(entity.id)) {
-                aiMap.set(entity.id, createAIMachine(entity, entity.body.position.x, entity.body.position.y, entity.body.position.z, entity.combat.skills[entity.combat.currentSkillIndex]?.config.weapon.detectionRange ?? 8, losChecker))
+                aiMap.set(entity.id, createAIMachine(entity, entity.body.position.x, entity.body.position.y, entity.body.position.z, entity.combat.skills[entity.combat.currentSkillIndex]?.config.weapon.detectionRange ?? 8, losChecker, entity.aiStrategy))
             }
         }
     }
@@ -521,7 +527,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
         const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, radius: saveConfig.radius, height: saveConfig.height}
-        const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer)
+        const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.aiStrategy ?? 'tactical')
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
@@ -562,7 +568,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 pi.badgeColor = factionBadgeColor(entity.combat.faction, entity.isPlayer)
             }
         }
-        if (newFaction !== undefined) entity.combat.faction = newFaction
+        if (newFaction !== undefined) {
+            entity.combat.faction = newFaction
+            const model = appearanceModels.get(entity.id)
+            if (model) model.recolor(SELECT_PALETTE(newFaction))
+        }
         if (newMaxHealth !== undefined) {
             entity.combat.maxHealth = newMaxHealth
             if (entity.combat.health > newMaxHealth) entity.combat.health = newMaxHealth
@@ -573,6 +583,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (newTendencyConfig) {
             entity.combat.attackTendency = resolveTendency(newTendencyConfig)
             entity.combat.tendencyConfig = newTendencyConfig
+        }
+    }
+
+    const setAIStrategy = (id: number, strategy: AIStrategy): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.aiStrategy = strategy
+        const ctx = aiMap.get(id)
+        if (ctx) {
+            ctx.strategy = strategy
+            ctx.strategyConfig = DEFAULT_STRATEGY_CONFIGS[strategy]
+            ctx.burstAttackCount = 0
         }
     }
 
@@ -607,6 +629,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         add,
         setTransform,
         updateCharacterConfig,
+        setAIStrategy,
         setCollisionVisible,
         setupLineOfSight,
     }

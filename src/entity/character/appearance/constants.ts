@@ -47,17 +47,20 @@ export const SELECT_PALETTE = (faction: number): CharacterColorPalette => {
     return {...base}
 }
 
-/** 身体部位比例（头 : 身 : 腿 = 2 : 4 : 4） */
-export const HEAD_RATIO = 0.2
-export const BODY_RATIO = 0.4
-export const LEG_RATIO = 0.4
+/** 身体部位比例（头 : 身 : 腿 ≈ 1.4 : 3.6 : 5） */
+export const HEAD_RATIO = 0.14
+export const BODY_RATIO = 0.36
+export const LEG_RATIO = 0.5
+
+/** 头部宽度系数（相对于 bodyW） */
+export const HEAD_WIDTH_RATIO = 0.65
 
 /** 肢体宽度系数（相对于 radius * 2 即身宽） */
 export const ARM_WIDTH_RATIO = 0.4
 export const LEG_WIDTH_RATIO = 0.5
 
 /** 身体前后深度系数（bodyD = bodyW * BODY_DEPTH_RATIO） */
-export const BODY_DEPTH_RATIO = 1.3
+export const BODY_DEPTH_RATIO = 0.75
 
 /** 手臂X轴偏移（距离身体侧边的额外间距） */
 export const ARM_X_GAP = 0.02

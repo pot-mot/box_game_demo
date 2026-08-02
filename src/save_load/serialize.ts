@@ -143,11 +143,12 @@ export const collectWorldState = (
         for (const e of character.getAll()) {
             entities.push({
                 type: 'character',
-                config: {
-                    speed: e.config.speed,
-                    jumpHeight: e.config.jumpHeight,
-                    radius: e.config.radius,
-                    height: e.config.height,
+                    config: {
+                        speed: e.config.speed,
+                        jumpHeight: e.config.jumpHeight,
+                        radius: e.config.radius,
+                        height: e.config.height,
+                        aiStrategy: e.aiStrategy,
                     attackSlot: e.combat.skills[0]?.config.type === 'melee'
                         ? {
                             type: 'melee' as const,

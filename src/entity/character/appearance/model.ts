@@ -7,6 +7,7 @@ import {
     HEAD_RATIO,
     BODY_RATIO,
     LEG_RATIO,
+    HEAD_WIDTH_RATIO,
     ARM_WIDTH_RATIO,
     LEG_WIDTH_RATIO,
     ARM_X_GAP,
@@ -133,7 +134,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     const bodyW = R * 2
     const bodyD = bodyW * BODY_DEPTH_RATIO
-    const headW = bodyW
+    const headW = bodyW * HEAD_WIDTH_RATIO
 
     const armW = bodyW * ARM_WIDTH_RATIO
     const armD = bodyW * ARM_WIDTH_RATIO
@@ -248,7 +249,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     // ── 头 ──
     const headNeck = new Group()
     headNeck.position.y = shoulderY
-    const headTM = createHeadBox(headW, headH, bodyW, palette)
+    const headTM = createHeadBox(headW, headH, headW, palette)
     headTM.mesh.position.y = headH / 2
     headNeck.add(headTM.mesh)
     tracked.push(headTM)
@@ -275,6 +276,57 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         weaponHitCenter = result.hitCenter
         weaponCleanup = result.cleanup
         rightHandPivot.add(weaponGroup)
+    }
+
+    /** 安全获取 mesh 的 6 面材质数组，非 MeshStandardMaterial 时返回 undefined */
+    const getBoxMaterials = (mesh: Mesh): MeshStandardMaterial[] | undefined => {
+        const mats = mesh.material
+        if (Array.isArray(mats) && mats.length >= 6 && mats[0] instanceof MeshStandardMaterial) {
+            return mats as MeshStandardMaterial[]
+        }
+        return undefined
+    }
+
+    /** 按 frontColor 原地更新 twoFaceBox 的 6 面材质颜色 */
+    const updateTwoFaceBoxColors = (mesh: Mesh, frontColor: number): void => {
+        const mats = getBoxMaterials(mesh)
+        if (!mats) return
+        const sideColor = darken(frontColor, SIDE_DARKEN_RATIO)
+        const backColor = darken(frontColor, BACK_DARKEN_RATIO)
+        mats[0].color.set(sideColor)
+        mats[1].color.set(sideColor)
+        mats[2].color.set(frontColor)
+        mats[3].color.set(darken(frontColor, 0.6))
+        mats[4].color.set(frontColor)
+        mats[5].color.set(backColor)
+    }
+
+    /** 根据新调色板原地更新所有部位材质颜色 */
+    const recolor = (palette: CharacterColorPalette): void => {
+        updateTwoFaceBoxColors(bodyTM.mesh, palette.bodyColor)
+        updateTwoFaceBoxColors(rightUpperArmTM.mesh, palette.bodyColor)
+        updateTwoFaceBoxColors(rightForearmTM.mesh, palette.bodyColor)
+        updateTwoFaceBoxColors(leftUpperArmTM.mesh, palette.bodyColor)
+        updateTwoFaceBoxColors(leftForearmTM.mesh, palette.bodyColor)
+        updateTwoFaceBoxColors(rightThighTM.mesh, palette.legColor)
+        updateTwoFaceBoxColors(rightShinTM.mesh, palette.legColor)
+        updateTwoFaceBoxColors(leftThighTM.mesh, palette.legColor)
+        updateTwoFaceBoxColors(leftShinTM.mesh, palette.legColor)
+
+        const headMats = getBoxMaterials(headTM.mesh)
+        if (headMats) {
+            headMats[0].color.set(palette.hairColor)
+            headMats[1].color.set(palette.hairColor)
+            headMats[2].color.set(palette.hairColor)
+            headMats[3].color.set(palette.skinColor)
+            headMats[4].color.set(palette.skinColor)
+            headMats[5].color.set(darken(palette.hairColor, 0.8))
+
+            const oldTexture = headMats[4].map
+            if (oldTexture) oldTexture.dispose()
+            headMats[4].map = drawFaceCanvas(palette.skinColor)
+            headMats[4].needsUpdate = true
+        }
     }
 
     const dispose = (): void => {
@@ -311,6 +363,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         leftShin: leftShinTM.mesh,
         equipWeapon,
         removeWeapon,
+        recolor,
         get weaponMesh() { return weaponHitCenter },
         dispose,
     }

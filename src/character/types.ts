@@ -2,6 +2,7 @@ import type {Mesh, Group} from 'three'
 import type {Body} from 'cannon-es'
 import type {CharacterStateMachine} from './state_machine/types.ts'
 import type { CombatComponent } from './combat/types.ts'
+import type { AIStrategy } from './ai_strategy.ts'
 
 export interface CharacterConfig {
     speed: number
@@ -22,6 +23,9 @@ export interface CharacterEntity {
     rowText: string
 
     isPlayer: boolean
+
+    /** AI 策略（仅非玩家角色有效，默认 tactical） */
+    aiStrategy: AIStrategy
 
     /** 死亡动画计时（非持久状态） */
     isDying: boolean

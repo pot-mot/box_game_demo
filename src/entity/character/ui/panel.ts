@@ -9,6 +9,7 @@ import {MELEE_WEAPON_PRESETS} from '../../../character/weapon/melee_weapon.ts'
 import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
 import {RANGED_SKILL_PRESETS} from '../../../character/combat/ranged_skill.ts'
+import {isAIStrategy} from '../../../character/ai_strategy.ts'
 
 const MELEE_WEAPON_OPTIONS = Object.entries(MELEE_WEAPON_PRESETS).map(([key, w]) => ({value: key, label: `${w.id} (dmg:${w.damage} rng:${w.range})`}))
 const RANGED_WEAPON_OPTIONS = Object.entries(RANGED_WEAPON_PRESETS).map(([key, w]) => ({
@@ -191,6 +192,28 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     playerRow.appendChild(playerLabel)
     el.appendChild(playerRow)
 
+    /* AI 策略区（仅非玩家角色可见） */
+    const aiSection = createSection('AI Strategy')
+    el.appendChild(aiSection)
+    const aiRow = document.createElement('div')
+    aiRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    const aiLabel = document.createElement('label')
+    aiLabel.textContent = 'Strategy '
+    const aiSelect = document.createElement('select')
+    const AI_OPTIONS: ReadonlyArray<{value: string; label: string}> = [
+        {value: 'tactical', label: 'Tactical (default)'},
+        {value: 'aggressive', label: 'Aggressive'},
+        {value: 'cowardly', label: 'Cowardly'},
+    ]
+    for (const opt of AI_OPTIONS) {
+        const o = document.createElement('option')
+        o.value = opt.value; o.textContent = opt.label
+        aiSelect.appendChild(o)
+    }
+    aiLabel.appendChild(aiSelect)
+    aiRow.appendChild(aiLabel)
+    el.appendChild(aiRow)
+
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
@@ -277,6 +300,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             }
 
             playerCheck.checked = sel.isPlayer
+            aiSelect.value = sel.aiStrategy
+            aiSection.style.display = sel.isPlayer ? 'none' : ''
+            aiRow.style.display = sel.isPlayer ? 'none' : ''
             showRanged()
 
             const onApply = () => {
@@ -287,6 +313,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 )
                 if (playerCheck.checked) ctx.markPlayer(cur.id)
                 else ctx.unmarkPlayer()
+                const aiStrat = aiSelect.value
+                if (isAIStrategy(aiStrat)) ctx.setAIStrategy?.(cur.id, aiStrat)
                 const isRanged = atkSelect.value === 'ranged'
                 const selectedWeaponId = weaponSelect.value || undefined
                 ctx.updateCharacterConfig?.(cur.id, {

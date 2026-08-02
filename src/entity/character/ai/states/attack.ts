@@ -3,7 +3,6 @@ import type {AIStateHandler} from '../types.ts'
 
 const _dir = new Vec3()
 
-/** 仅服务近战角色。远程角色走 approach → volley → kite 路径 */
 export const attackHandler: AIStateHandler = {
     enter: () => {},
     update: (_dt, ctx, character, allCharacters, setInput) => {
@@ -30,6 +29,23 @@ export const attackHandler: AIStateHandler = {
     },
     exit: () => {},
     transitions: [
+        {
+            /* 攻击超时 → 调整位置 */
+            to: 'chase',
+            guard: (ctx) => {
+                const timeout = ctx.strategyConfig.attackTimeout
+                if (timeout <= 0) return false
+                return ctx.stateTime >= timeout
+            },
+        },
+        {
+            /* cowardly 策略：攻击后逃跑（按策略配置的 attackTimeout） */
+            to: 'flee',
+            guard: (ctx) => {
+                if (ctx.strategy !== 'cowardly') return false
+                return ctx.stateTime >= ctx.strategyConfig.attackTimeout
+            },
+        },
         {
             to: 'chase',
             guard: (ctx, character, allCharacters) => {

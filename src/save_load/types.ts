@@ -102,6 +102,7 @@ export interface CharacterSaveConfig {
     jumpHeight: number
     radius: number
     height: number
+    aiStrategy?: 'tactical' | 'aggressive' | 'cowardly'
     attackSlot: {
         type: 'melee'
         weaponId?: string

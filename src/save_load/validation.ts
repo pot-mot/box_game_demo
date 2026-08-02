@@ -127,6 +127,7 @@ const SavableCharacter = z.object({
         jumpHeight: z.number().positive(),
         radius: z.number().positive(),
         height: z.number().positive(),
+        aiStrategy: z.enum(['tactical', 'aggressive', 'cowardly']).optional(),
         attackSlot: AttackSlotSchema,
         tendency: TendencyConfigSchema,
         faction: z.number(),

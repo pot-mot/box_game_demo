@@ -33,6 +33,41 @@ export const kiteHandler: AIStateHandler = {
     exit: () => {},
     transitions: [
         {
+            /* 后退超时 → 尝试还击或重新逼近 */
+            to: 'attack',
+            guard: (ctx, character, allCharacters) => {
+                const timeout = ctx.strategyConfig.kiteTimeout
+                if (timeout <= 0) return false
+                if (ctx.stateTime < timeout) return false
+                /* 需要目标在攻击距离内 */
+                const target = allCharacters.find(c => c.id === ctx.targetId)
+                if (!target || target.combat.isDead) return false
+                const pos = character.body.position
+                const tp = target.body.position
+                const skill = character.combat.skills[character.combat.currentSkillIndex]
+                if (!skill) return false
+                return Math.hypot(tp.x - pos.x, tp.z - pos.z) < skill.config.weapon.range
+            },
+        },
+        {
+            /* 后退超时且目标不在射程 → 重新追逐 */
+            to: 'chase',
+            guard: (ctx) => {
+                const timeout = ctx.strategyConfig.kiteTimeout
+                if (timeout <= 0) return false
+                return ctx.stateTime >= timeout
+            },
+        },
+        {
+            /* cowardly 策略：直接逃而不是后退 */
+            to: 'flee',
+            guard: (ctx) => {
+                if (ctx.strategy !== 'cowardly') return false
+                return ctx.burstAttackCount < ctx.strategyConfig.attackBurstCount;
+
+            },
+        },
+        {
             to: 'volley',
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.targetId)

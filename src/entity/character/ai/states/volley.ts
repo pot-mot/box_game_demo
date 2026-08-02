@@ -61,6 +61,31 @@ export const volleyHandler: AIStateHandler = {
     exit: () => {},
     transitions: [
         {
+            /* 扫射超时 → 变招追逐 */
+            to: 'chase',
+            guard: (ctx) => {
+                const timeout = ctx.strategyConfig.volleyTimeout
+                if (timeout <= 0) return false
+                return ctx.stateTime >= timeout
+            },
+        },
+        {
+            /* cowardly 策略：扫射时敌人靠近就逃 */
+            to: 'flee',
+            guard: (ctx, character, allCharacters) => {
+                if (ctx.strategy !== 'cowardly') return false
+                if (ctx.burstAttackCount >= ctx.strategyConfig.attackBurstCount) return false
+                const target = allCharacters.find(c => c.id === ctx.targetId)
+                if (!target || target.combat.isDead) return false
+                const pos = character.body.position
+                const tp = target.body.position
+                const skill = character.combat.skills[character.combat.currentSkillIndex]
+                if (!skill || skill.config.type !== 'ranged') return false
+                const cfg = skill.config as RangedSkillConfig
+                return Math.hypot(tp.x - pos.x, tp.z - pos.z) < cfg.weapon.retreatRange
+            },
+        },
+        {
             to: 'approach',
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.targetId)

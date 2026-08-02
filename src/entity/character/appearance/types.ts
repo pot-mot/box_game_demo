@@ -49,6 +49,9 @@ export interface CharacterModel {
     /** 当前武器命中检测标记点（null = 未装备），供 melee_executor 使用 */
     readonly weaponMesh: Mesh | null
 
+    /** 根据新调色板原地更新所有部位材质颜色（不重建几何体） */
+    recolor: (palette: CharacterColorPalette) => void
+
     /** 释放所有几何体和材质 */
     dispose: () => void
 }
