@@ -12,6 +12,7 @@ import {jumpingHandler} from './states/jumping.ts'
 import {fallingHandler} from './states/falling.ts'
 import {attackingHandler} from './states/attacking.ts'
 import {dyingHandler} from './states/dying.ts'
+import {dashingHandler} from './states/dashing.ts'
 
 const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     idle: idleHandler,
@@ -20,6 +21,7 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     falling: fallingHandler,
     attacking: attackingHandler,
     dying: dyingHandler,
+    dashing: dashingHandler,
 }
 
 export const createCharacterStateMachine = (): CharacterStateMachine => {
@@ -48,7 +50,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         const ctx = makeContext()
 
         for (const t of handler.transitions) {
-            if (t.guard(input, entity)) {
+            if (t.guard(input, entity, ctx)) {
                 handler.exit(entity, ctx)
                 previousState = currentState
                 currentState = t.to

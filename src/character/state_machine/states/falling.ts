@@ -32,6 +32,10 @@ export const fallingHandler: StateHandler = {
                 entity.isOnGround,
         },
         {
+            to: 'dashing',
+            guard: (input, entity) => input.sprint && entity.dashCooldownTimer <= 0,
+        },
+        {
             to: 'dying',
             guard: (_input, entity) => entity.combat.health <= 0,
         },

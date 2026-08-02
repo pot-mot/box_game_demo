@@ -29,6 +29,10 @@ export const jumpingHandler: StateHandler = {
                 entity.body.velocity.y <= 0 && Math.abs(entity.body.velocity.y) >= 0.05,
         },
         {
+            to: 'dashing',
+            guard: (input, entity) => input.sprint && entity.dashCooldownTimer <= 0,
+        },
+        {
             to: 'dying',
             guard: (_input, entity) => entity.combat.health <= 0,
         },

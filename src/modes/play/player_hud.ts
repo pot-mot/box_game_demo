@@ -1,24 +1,36 @@
 /**
- * 玩家 HUD — 左上角显示生命值、状态计时器、技能冷却
+ * 玩家 HUD — 左上角显示生命值、状态计时器、通用计时器行
  */
+
+/** 通用计时器行数据 */
+export interface TimerRowData {
+    label: string
+    /** 0~1 进度条填充比例 */
+    fillRatio: number
+    fillColor: string
+    text: string
+    visible: boolean
+}
+
 export interface PlayerHUDData {
     health: number
     maxHealth: number
     stateName: string
     stateTime: number
-    skills: ReadonlyArray<{
-        id: string
-        cooldownTimer: number
-        cooldownMax: number
-    }>
-    attackTimer: number
-    attackDuration: number
+    timers: ReadonlyArray<TimerRowData>
 }
 
 export interface PlayerHUD {
     update: (data: PlayerHUDData) => void
     setVisible: (visible: boolean) => void
     destroy: () => void
+}
+
+interface TimerRow {
+    row: HTMLDivElement
+    label: HTMLElement
+    fill: HTMLElement
+    text: HTMLElement
 }
 
 export const createPlayerHUD = (): PlayerHUD => {
@@ -57,58 +69,41 @@ export const createPlayerHUD = (): PlayerHUD => {
     stateEl.style.cssText = 'font-size:12px'
     el.appendChild(stateEl)
 
-    const attackSection = document.createElement('div')
-    attackSection.style.cssText = 'margin-top:2px'
-    const atkLabel = document.createElement('span')
-    atkLabel.textContent = 'ATK '
-    atkLabel.style.cssText = 'font-size:11px;opacity:.7'
-    attackSection.appendChild(atkLabel)
-    const atkBarOuter = document.createElement('div')
-    atkBarOuter.style.cssText = 'height:6px;background:rgba(255,255,255,.15);border-radius:3px;margin:2px 0;overflow:hidden;display:inline-block;width:80px;vertical-align:middle'
-    const atkBarInner = document.createElement('div')
-    atkBarInner.style.cssText = 'height:100%;width:0%;background:#ffaa00;border-radius:3px;transition:width .1s'
-    atkBarOuter.appendChild(atkBarInner)
-    attackSection.appendChild(atkBarOuter)
-    const atkText = document.createElement('span')
-    atkText.style.cssText = 'font-size:11px;margin-left:4px;vertical-align:middle'
-    attackSection.appendChild(atkText)
-    attackSection.style.display = 'none'
-    el.appendChild(attackSection)
+    const timersTitle = document.createElement('div')
+    timersTitle.style.cssText = 'font-size:11px;opacity:.7;margin-top:4px'
+    timersTitle.textContent = 'TIMERS'
+    el.appendChild(timersTitle)
 
-    const skillsTitle = document.createElement('div')
-    skillsTitle.style.cssText = 'font-size:11px;opacity:.7;margin-top:4px'
-    skillsTitle.textContent = 'SKILLS'
-    el.appendChild(skillsTitle)
-    const skillsList = document.createElement('div')
-    skillsList.style.cssText = 'font-size:11px'
-    el.appendChild(skillsList)
+    const timersList = document.createElement('div')
+    timersList.style.cssText = 'font-size:11px'
+    el.appendChild(timersList)
 
     document.body.appendChild(el)
 
-    let skillRows: HTMLDivElement[] = []
+    let timerRows: TimerRow[] = []
 
-    const ensureSkillRows = (count: number): void => {
-        while (skillRows.length < count) {
+    const ensureTimerRows = (count: number): void => {
+        while (timerRows.length < count) {
             const row = document.createElement('div')
             row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:1px'
-            const idx = document.createElement('span')
-            idx.style.cssText = 'opacity:.5;min-width:14px'
+            const lbl = document.createElement('span')
+            lbl.style.cssText = 'opacity:.7;min-width:36px'
             const bar = document.createElement('div')
             bar.style.cssText = 'height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;flex:1'
-            const barFill = document.createElement('div')
-            barFill.style.cssText = 'height:100%;width:100%;background:#4488ff;border-radius:2px;transition:width .15s'
-            bar.appendChild(barFill)
-            const text = document.createElement('span')
-            text.style.cssText = 'min-width:60px;text-align:right'
-            row.appendChild(idx)
+            const fill = document.createElement('div')
+            fill.style.cssText = 'height:100%;width:100%;border-radius:2px;transition:width .15s'
+            bar.appendChild(fill)
+            const txt = document.createElement('span')
+            txt.style.cssText = 'min-width:64px;text-align:right'
+            row.appendChild(lbl)
             row.appendChild(bar)
-            row.appendChild(text)
-            skillsList.appendChild(row)
-            skillRows.push(row)
+            row.appendChild(txt)
+            timersList.appendChild(row)
+            timerRows.push({row, label: lbl, fill, text: txt})
         }
-        while (skillRows.length > count) {
-            const removed = skillRows.pop()
-            if (removed) removed.remove()
+        while (timerRows.length > count) {
+            const removed = timerRows.pop()
+            if (removed) removed.row.remove()
         }
     }
 
@@ -122,39 +117,16 @@ export const createPlayerHUD = (): PlayerHUD => {
 
         stateEl.textContent = `ST: ${data.stateName}  ${data.stateTime.toFixed(2)}s`
 
-        const isAttacking = data.stateName === 'attacking'
-        if (isAttacking) {
-            attackSection.style.display = ''
-            const atkPct = data.attackDuration > 0
-                ? Math.min(1, data.attackTimer / data.attackDuration)
-                : 0
-            atkBarInner.style.width = `${atkPct * 100}%`
-            atkText.textContent = `${data.attackTimer.toFixed(2)}s / ${data.attackDuration.toFixed(2)}s`
-        } else {
-            attackSection.style.display = 'none'
-        }
-
-        const skillCount = data.skills.length
-        ensureSkillRows(skillCount)
-        for (let i = 0; i < skillCount; i++) {
-            const skill = data.skills[i]
-            const row = skillRows[i]
-            const idx = row.children[0] as HTMLElement
-            const bar = row.children[1] as HTMLElement
-            const fill = bar.children[0] as HTMLElement
-            const text = row.children[2] as HTMLElement
-            idx.textContent = `${i}:`
-            const cdPct = skill.cooldownMax > 0
-                ? 1 - Math.min(1, skill.cooldownTimer / skill.cooldownMax)
-                : 0
-            fill.style.width = `${cdPct * 100}%`
-            if (skill.cooldownTimer > 0) {
-                fill.style.background = '#ff6644'
-                text.textContent = `${skill.cooldownTimer.toFixed(1)}s`
-            } else {
-                fill.style.background = '#44ff44'
-                text.textContent = 'RDY'
-            }
+        const count = data.timers.length
+        ensureTimerRows(count)
+        for (let i = 0; i < count; i++) {
+            const t = data.timers[i]
+            const r = timerRows[i]
+            r.label.textContent = t.label
+            r.fill.style.width = `${t.fillRatio * 100}%`
+            r.fill.style.background = t.fillColor
+            r.text.textContent = t.text
+            r.row.style.display = t.visible ? '' : 'none'
         }
     }
 

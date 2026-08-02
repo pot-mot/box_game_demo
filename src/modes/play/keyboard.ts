@@ -23,7 +23,7 @@ export const setupPlayerKeyboard = (
         if (input.isActionActive('move_left')) { dx -= right.x; dz -= right.z }
         if (input.isActionActive('move_right')) { dx += right.x; dz += right.z }
 
-        const sprinting = input.isActionActive('sprint')
+        const sprinting = input.wasActionPressed('sprint')
         const jumped = input.wasActionPressed('jump')
         characterSystem.setPlayerMove(dx, dz, jumped, forward.x, forward.z, sprinting)
     }

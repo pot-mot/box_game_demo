@@ -263,6 +263,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             combatStrategy,
             isDying: false,
             dyingTimer: 0,
+            dashCooldownTimer: 0,
             combat,
             stateMachine,
         }
@@ -428,6 +429,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             for (const sk of entity.combat.skills) {
                 sk.cooldownTimer = Math.max(0, sk.cooldownTimer - dt)
             }
+            entity.dashCooldownTimer = Math.max(0, entity.dashCooldownTimer - dt)
             flashStates.get(entity.id)?.tick(dt)
             checkGround(entity)
 
@@ -521,6 +523,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
         playerAttackPending = false
         playerJump = false
+        playerSprint = false
 
         rangedExecutor.updateBullets(dt, characters)
 

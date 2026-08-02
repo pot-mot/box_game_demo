@@ -1,6 +1,6 @@
 import type {CharacterEntity} from '../types.ts'
 
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying'] as const
+export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying', 'dashing'] as const
 export type CharacterState = typeof CHARACTER_STATES[number]
 
 export interface CharacterInput {
@@ -19,7 +19,7 @@ export interface MachineContext {
 
 export interface Transition {
     to: CharacterState
-    guard: (input: CharacterInput, entity: CharacterEntity) => boolean
+    guard: (input: CharacterInput, entity: CharacterEntity, ctx: MachineContext) => boolean
 }
 
 export interface StateHandler {

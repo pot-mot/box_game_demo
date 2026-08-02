@@ -24,6 +24,10 @@ export const idleHandler: StateHandler = {
                 input.jump && entity.isOnGround,
         },
         {
+            to: 'dashing',
+            guard: (input, entity) => input.sprint && entity.dashCooldownTimer <= 0,
+        },
+        {
             to: 'dying',
             guard: (_input, entity) => entity.combat.health <= 0,
         },

@@ -6,6 +6,7 @@ import {jumpingAnim} from './animators/jumping.ts'
 import {fallingAnim} from './animators/falling.ts'
 import {attackingAnim} from './animators/attacking.ts'
 import {dyingAnim} from './animators/dying.ts'
+import {dashingAnim} from './animators/dashing.ts'
 
 const ANIMATION_HANDLERS: Record<CharacterState, AnimationHandler> = {
     idle: idleAnim,
@@ -14,6 +15,7 @@ const ANIMATION_HANDLERS: Record<CharacterState, AnimationHandler> = {
     falling: fallingAnim,
     attacking: attackingAnim,
     dying: dyingAnim,
+    dashing: dashingAnim,
 }
 
 export interface AppearanceSystem {
