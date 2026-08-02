@@ -22,8 +22,17 @@ export const attackingHandler: StateHandler = {
     },
     update: (dt, _input, entity) => {
         entity.combat.attackTimer += dt
-        entity.body.velocity.x *= 0.3
-        entity.body.velocity.z *= 0.3
+        const vx = entity.body.velocity.x * 0.3
+        const vz = entity.body.velocity.z * 0.3
+        if (entity.isOnGround && entity.groundNormal.y > 0.001) {
+            const n = entity.groundNormal
+            entity.body.velocity.x = vx
+            entity.body.velocity.y = -(vx * n.x + vz * n.z) / n.y
+            entity.body.velocity.z = vz
+        } else {
+            entity.body.velocity.x = vx
+            entity.body.velocity.z = vz
+        }
         entity.body.wakeUp()
     },
     exit: (entity) => {

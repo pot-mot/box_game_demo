@@ -25,6 +25,8 @@ export interface CharacterEntity {
     appearanceGroup: Group
     body: Body
     isOnGround: boolean
+    /** 地面接触法线（从地面指向角色，已归一化）。无地面接触时回退为 (0, 1, 0) */
+    groundNormal: { readonly x: number; readonly y: number; readonly z: number }
     rowText: string
 
     isPlayer: boolean

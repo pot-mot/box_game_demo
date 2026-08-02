@@ -8,3 +8,5 @@ export const DASH_SPEED_MULTIPLIER = 2
 export const DASH_DURATION = 0.25
 /** 冲刺冷却时间（秒） */
 export const DASH_COOLDOWN = 1.0
+/** 判定为"地面"的接触法线 Y 分量下限（cos 坡度角）。0.7 → 约 45° */
+export const GROUND_NORMAL_THRESHOLD = 0.7

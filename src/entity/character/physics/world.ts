@@ -29,6 +29,7 @@ import type {CharacterModel} from '../appearance/types.ts'
 import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
 import {CHARACTER_LINEAR_DAMPING} from './constants.ts'
+import {GROUND_NORMAL_THRESHOLD} from '../../../character/state_machine/constants.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
 import {SELECT_PALETTE} from '../appearance/constants.ts'
@@ -257,6 +258,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             appearanceGroup: model.group,
             body,
             isOnGround: true,
+            groundNormal: { x: 0, y: 1, z: 0 },
             rowText: `Character #${id}`,
             isPlayer: isPlayer ?? false,
             peaceStrategy,
@@ -409,15 +411,35 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const setAIEnabled = (enabled: boolean): void => { aiEnabled = enabled }
 
     const checkGround = (entity: CharacterEntity): void => {
-        const {body} = entity
+        const { body } = entity
         entity.isOnGround = false
+        entity.groundNormal = { x: 0, y: 1, z: 0 }
+
+        let bestNy = -Infinity
+        let bestNx = 0
+        let bestNz = 0
+
         for (const c of world.contacts) {
-            if (c.bi === body || c.bj === body) {
-                if (c.ni && Math.abs(c.ni.y) > 0.7) {
-                    entity.isOnGround = true
-                    break
-                }
+            if (!c.ni) continue
+            if (c.bi !== body && c.bj !== body) continue
+
+            const flip = c.bi === body ? -1 : 1
+            const ny = c.ni.y * flip
+            const nx = c.ni.x * flip
+            const nz = c.ni.z * flip
+
+            if (ny <= GROUND_NORMAL_THRESHOLD) continue
+
+            if (ny > bestNy) {
+                bestNy = ny
+                bestNx = nx
+                bestNz = nz
             }
+        }
+
+        if (bestNy > 0) {
+            entity.isOnGround = true
+            entity.groundNormal = { x: bestNx, y: bestNy, z: bestNz }
         }
     }
 

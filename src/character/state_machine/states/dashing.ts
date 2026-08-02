@@ -23,8 +23,17 @@ export const dashingHandler: StateHandler = {
     },
     update: (_dt, _input, entity) => {
         const speed = entity.config.speed * DASH_SPEED_MULTIPLIER
-        entity.body.velocity.x = dashDirX * speed
-        entity.body.velocity.z = dashDirZ * speed
+        const vx = dashDirX * speed
+        const vz = dashDirZ * speed
+        if (entity.isOnGround && entity.groundNormal.y > 0.001) {
+            const n = entity.groundNormal
+            entity.body.velocity.x = vx
+            entity.body.velocity.y = -(vx * n.x + vz * n.z) / n.y
+            entity.body.velocity.z = vz
+        } else {
+            entity.body.velocity.x = vx
+            entity.body.velocity.z = vz
+        }
         entity.body.wakeUp()
     },
     exit: () => {},

@@ -4,8 +4,17 @@ import {GROUND_DAMPING} from '../constants.ts'
 export const idleHandler: StateHandler = {
     enter: () => {},
     update: (_dt, _input, entity) => {
-        entity.body.velocity.x *= GROUND_DAMPING
-        entity.body.velocity.z *= GROUND_DAMPING
+        const vx = entity.body.velocity.x * GROUND_DAMPING
+        const vz = entity.body.velocity.z * GROUND_DAMPING
+        if (entity.isOnGround && entity.groundNormal.y > 0.001) {
+            const n = entity.groundNormal
+            entity.body.velocity.x = vx
+            entity.body.velocity.y = -(vx * n.x + vz * n.z) / n.y
+            entity.body.velocity.z = vz
+        } else {
+            entity.body.velocity.x = vx
+            entity.body.velocity.z = vz
+        }
         entity.body.wakeUp()
     },
     exit: () => {},
