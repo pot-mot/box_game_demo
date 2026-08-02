@@ -9,7 +9,7 @@ import {MELEE_WEAPON_PRESETS} from '../../../character/weapon/melee_weapon.ts'
 import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
 import {RANGED_SKILL_PRESETS} from '../../../character/combat/ranged_skill.ts'
-import {isAIStrategy} from '../../../character/ai_strategy.ts'
+import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
 
 const MELEE_WEAPON_OPTIONS = Object.entries(MELEE_WEAPON_PRESETS).map(([key, w]) => ({value: key, label: `${w.id} (dmg:${w.damage} rng:${w.range})`}))
 const RANGED_WEAPON_OPTIONS = Object.entries(RANGED_WEAPON_PRESETS).map(([key, w]) => ({
@@ -195,29 +195,86 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     /* AI 策略区（仅非玩家角色可见） */
     const aiSection = createSection('AI Strategy')
     el.appendChild(aiSection)
-    const aiRow = document.createElement('div')
-    aiRow.style.cssText = 'display:flex;gap:8px;align-items:center'
-    const aiLabel = document.createElement('label')
-    aiLabel.textContent = 'Strategy '
-    const aiSelect = document.createElement('select')
-    const AI_OPTIONS: ReadonlyArray<{value: string; label: string}> = [
+
+    /* 和平策略下拉框 */
+    const peaceRow = document.createElement('div')
+    peaceRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    const peaceLabel = document.createElement('label')
+    peaceLabel.textContent = 'Peace '
+    const peaceSelect = document.createElement('select')
+    for (const s of PEACE_SUB_STRATEGIES) {
+        const o = document.createElement('option')
+        o.value = s; o.textContent = s === 'patrol' ? 'Patrol' : 'Build'
+        peaceSelect.appendChild(o)
+    }
+    peaceLabel.appendChild(peaceSelect)
+    peaceRow.appendChild(peaceLabel)
+    el.appendChild(peaceRow)
+
+    /* 战斗策略下拉框 */
+    const combatRow = document.createElement('div')
+    combatRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    const combatLabel = document.createElement('label')
+    combatLabel.textContent = 'Combat '
+    const combatSelect = document.createElement('select')
+    const COMBAT_OPTIONS: ReadonlyArray<{value: string; label: string}> = [
         {value: 'tactical', label: 'Tactical (default)'},
         {value: 'aggressive', label: 'Aggressive'},
         {value: 'cowardly', label: 'Cowardly'},
     ]
-    for (const opt of AI_OPTIONS) {
+    for (const opt of COMBAT_OPTIONS) {
         const o = document.createElement('option')
         o.value = opt.value; o.textContent = opt.label
-        aiSelect.appendChild(o)
+        combatSelect.appendChild(o)
     }
-    aiLabel.appendChild(aiSelect)
-    aiRow.appendChild(aiLabel)
-    el.appendChild(aiRow)
+    combatLabel.appendChild(combatSelect)
+    combatRow.appendChild(combatLabel)
+    el.appendChild(combatRow)
+
+    /* 建造配置区（仅 build 策略可见） */
+    const buildSection = createSection('Build Config')
+    el.appendChild(buildSection)
+    const buildIntervalInput = createLabeledNumberInput(el, 'Interval(s)', {min: '0.5', step: '0.1', value: '3'})
+    const buildBoxTypesLabel = document.createElement('label')
+    buildBoxTypesLabel.textContent = 'Box Types '
+    buildBoxTypesLabel.style.cssText = 'font-size:12px;color:#aaa'
+    el.appendChild(buildBoxTypesLabel)
+    el.appendChild(document.createElement('br'))
+
+    /* 箱型概览列表容器 */
+    const boxTypesContainer = document.createElement('div')
+    boxTypesContainer.style.cssText = 'max-height:120px;overflow-y:auto;margin:4px 0'
+    el.appendChild(boxTypesContainer)
+
+    /* 添加箱型按钮 */
+    const addBoxTypeBtn = document.createElement('button')
+    addBoxTypeBtn.textContent = '+ Add Box Type'
+    addBoxTypeBtn.style.cssText = 'font-size:12px;margin-top:4px'
+    el.appendChild(addBoxTypeBtn)
+    el.appendChild(document.createElement('br'))
+
+    /* 箱型详细配置弹出面板 */
+    const detailPanel = document.createElement('div')
+    detailPanel.style.cssText = 'display:none;background:rgba(255,255,255,.08);padding:8px;border-radius:6px;margin-top:6px'
+    const detailTitle = document.createElement('div')
+    detailTitle.style.cssText = 'font-weight:700;font-size:12px;margin-bottom:4px'
+    detailPanel.appendChild(detailTitle)
+    const detailFields = document.createElement('div')
+    detailPanel.appendChild(detailFields)
+    el.appendChild(detailPanel)
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
     let currentType: 'melee' | 'ranged' = 'melee'
+
+    peaceSelect.onchange = () => {
+        const show = peaceSelect.value === 'build'
+        buildSection.style.display = show ? '' : 'none'
+        buildBoxTypesLabel.style.display = show ? '' : 'none'
+        boxTypesContainer.style.display = show ? '' : 'none'
+        addBoxTypeBtn.style.display = show ? '' : 'none'
+    }
 
     const showRanged = () => {
         [bulletSpeed, bulletKB, bulletLife].forEach(input => {
@@ -246,6 +303,92 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         const id = ctx.getSelectedId()
         if (id === undefined) return undefined
         return ctx.getAll().find(c => c.id === id)
+    }
+
+    /* 运行时箱型配置缓存 */
+    let cachedBoxTypes: Array<{
+        entityType: string
+        probability: string
+        minWidth: string; maxWidth: string
+        minHeight: string; maxHeight: string
+        minDepth: string; maxDepth: string
+        mass: string; friction: string
+        maxHealth?: string
+        attractionRadius?: string; attractionStrength?: string
+        stiffness?: string; dampingRatio?: string; maxDeformFraction?: string
+    }> = []
+
+    const refreshBoxTypeList = (): void => {
+        boxTypesContainer.innerHTML = ''
+        for (let i = 0; i < cachedBoxTypes.length; i++) {
+            const bt = cachedBoxTypes[i]
+            const row = document.createElement('div')
+            row.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:11px;padding:2px 0;cursor:pointer'
+            row.textContent = `${bt.entityType} (${bt.probability}) ${bt.minWidth}-${bt.maxWidth}×${bt.minHeight}-${bt.maxHeight}×${bt.minDepth}-${bt.maxDepth}`
+            row.title = '点击编辑详细参数'
+            const delBtn = document.createElement('button')
+            delBtn.textContent = '×'
+            delBtn.style.cssText = 'font-size:10px;padding:0 3px;margin-left:auto'
+            delBtn.onclick = (e) => { e.stopPropagation(); cachedBoxTypes.splice(i, 1); refreshBoxTypeList() }
+            row.appendChild(delBtn)
+            row.onclick = () => showDetail(i)
+            boxTypesContainer.appendChild(row)
+        }
+    }
+
+    const showDetail = (idx: number): void => {
+        if (idx < 0 || idx >= cachedBoxTypes.length) { detailPanel.style.display = 'none'; return }
+        const bt = cachedBoxTypes[idx]
+        detailTitle.textContent = `Edit: ${bt.entityType}`
+        detailFields.innerHTML = ''
+        const addField = (label: string, key: keyof typeof bt): void => {
+            const div = document.createElement('div')
+            div.style.cssText = 'display:flex;gap:4px;align-items:center;margin:2px 0'
+            const lbl = document.createElement('span')
+            lbl.textContent = label; lbl.style.cssText = 'font-size:11px;width:100px'
+            const inp = document.createElement('input')
+            inp.type = 'text'; inp.style.cssText = 'width:60px;font-size:11px'
+            inp.value = String(bt[key] ?? '')
+            inp.oninput = () => { (bt as Record<string, string>)[key] = inp.value; refreshBoxTypeList() }
+            div.appendChild(lbl); div.appendChild(inp)
+            detailFields.appendChild(div)
+        }
+        addField('EntityType', 'entityType')
+        addField('Probability', 'probability')
+        addField('Min W', 'minWidth'); addField('Max W', 'maxWidth')
+        addField('Min H', 'minHeight'); addField('Max H', 'maxHeight')
+        addField('Min D', 'minDepth'); addField('Max D', 'maxDepth')
+        addField('Mass', 'mass')
+        addField('Friction', 'friction')
+        if (bt.entityType === 'box/destruction' || bt.entityType === 'box/burning') {
+            addField('MaxHealth', 'maxHealth')
+        }
+        if (bt.entityType === 'box/magnet') {
+            addField('AttrRadius', 'attractionRadius')
+            addField('AttrStrength', 'attractionStrength')
+        }
+        if (bt.entityType === 'box/elasticity') {
+            addField('Stiffness', 'stiffness')
+            addField('DampingRatio', 'dampingRatio')
+            addField('MaxDeformFr', 'maxDeformFraction')
+        }
+        const closeBtn = document.createElement('button')
+        closeBtn.textContent = 'Done'
+        closeBtn.style.cssText = 'font-size:11px;margin-top:4px'
+        closeBtn.onclick = () => { detailPanel.style.display = 'none' }
+        detailFields.appendChild(closeBtn)
+        detailPanel.style.display = 'block'
+    }
+
+    addBoxTypeBtn.onclick = () => {
+        cachedBoxTypes.push({
+            entityType: 'box/common', probability: '0',
+            minWidth: '0.5', maxWidth: '2',
+            minHeight: '0.5', maxHeight: '2',
+            minDepth: '0.5', maxDepth: '2',
+            mass: '1', friction: '0.3',
+        })
+        refreshBoxTypeList()
     }
 
     return {
@@ -300,9 +443,12 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             }
 
             playerCheck.checked = sel.isPlayer
-            aiSelect.value = sel.aiStrategy
+            peaceSelect.value = sel.peaceStrategy
+            combatSelect.value = sel.combatStrategy
             aiSection.style.display = sel.isPlayer ? 'none' : ''
-            aiRow.style.display = sel.isPlayer ? 'none' : ''
+            peaceRow.style.display = sel.isPlayer ? 'none' : ''
+            combatRow.style.display = sel.isPlayer ? 'none' : ''
+            buildSection.style.display = (!sel.isPlayer && sel.peaceStrategy === 'build') ? '' : 'none'
             showRanged()
 
             const onApply = () => {
@@ -313,8 +459,50 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 )
                 if (playerCheck.checked) ctx.markPlayer(cur.id)
                 else ctx.unmarkPlayer()
-                const aiStrat = aiSelect.value
-                if (isAIStrategy(aiStrat)) ctx.setAIStrategy?.(cur.id, aiStrat)
+                const isPlayer = playerCheck.checked
+                aiSection.style.display = isPlayer ? 'none' : ''
+                peaceRow.style.display = isPlayer ? 'none' : ''
+                combatRow.style.display = isPlayer ? 'none' : ''
+                buildSection.style.display = (!isPlayer && peaceSelect.value === 'build') ? '' : 'none'
+                const peaceStrat = peaceSelect.value
+                if (isPeaceSubStrategy(peaceStrat)) {
+                    ctx.setPeaceStrategy?.(cur.id, peaceStrat)
+                }
+                const combatStrat = combatSelect.value
+                if (isCombatSubStrategy(combatStrat)) {
+                    ctx.setCombatStrategy?.(cur.id, combatStrat)
+                }
+                /* 持久化建造配置 */
+                if (peaceStrat === 'build') {
+                    const boxTypes = cachedBoxTypes
+                        .filter(bt => BUILDABLE_BOX_TYPES.includes(bt.entityType as BuildableBoxType))
+                        .map(bt => ({
+                            entityType: bt.entityType as BuildableBoxType,
+                            probability: parseFloat(bt.probability) || 0,
+                            minWidth: parseFloat(bt.minWidth) || 0.5,
+                            maxWidth: parseFloat(bt.maxWidth) || 2,
+                            minHeight: parseFloat(bt.minHeight) || 0.5,
+                            maxHeight: parseFloat(bt.maxHeight) || 2,
+                            minDepth: parseFloat(bt.minDepth) || 0.5,
+                            maxDepth: parseFloat(bt.maxDepth) || 2,
+                            mass: parseFloat(bt.mass) || 1,
+                            friction: parseFloat(bt.friction) || 0.3,
+                            ...(bt.entityType === 'box/destruction' || bt.entityType === 'box/burning' ? {maxHealth: parseFloat(bt.maxHealth ?? '0') || 10} : {}),
+                            ...(bt.entityType === 'box/magnet' ? {
+                                attractionRadius: parseFloat(bt.attractionRadius ?? '0') || 5,
+                                attractionStrength: parseFloat(bt.attractionStrength ?? '0') || 10,
+                            } : {}),
+                            ...(bt.entityType === 'box/elasticity' ? {
+                                stiffness: parseFloat(bt.stiffness ?? '0') || 100,
+                                dampingRatio: parseFloat(bt.dampingRatio ?? '0') || 0.3,
+                                maxDeformFraction: parseFloat(bt.maxDeformFraction ?? '0') || 0.2,
+                            } : {}),
+                        }))
+                    ctx.setPeaceConfig?.(cur.id, {
+                        buildInterval: parseFloat(buildIntervalInput.value) || 3,
+                        boxTypes,
+                    })
+                }
                 const isRanged = atkSelect.value === 'ranged'
                 const selectedWeaponId = weaponSelect.value || undefined
                 ctx.updateCharacterConfig?.(cur.id, {

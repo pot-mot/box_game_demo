@@ -14,8 +14,11 @@ import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext} from '../ai/types.ts'
-import type {AIStrategy} from '../../../character/ai_strategy.ts'
-import {DEFAULT_STRATEGY_CONFIGS} from '../../../character/ai_strategy.ts'
+import type {PeaceSubStrategy, CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
+import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
+import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
+import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
+import type {SpawnBoxCallback} from '../ai/types.ts'
 import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_sight.ts'
 import {createAIMachine, updateAI} from '../ai/machine.ts'
 import {createCharacterMesh} from '../render'
@@ -63,8 +66,14 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     getAll: () => readonly CharacterEntity[]
     setTransform: (id: number, pos: {x: number; y: number; z: number}) => void
     updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number) => void
-    /** 设置单个角色的 AI 策略 */
-    setAIStrategy: (id: number, strategy: AIStrategy) => void
+    /** 设置单个角色的和平策略 */
+    setPeaceStrategy: (id: number, strategy: PeaceSubStrategy) => void
+    /** 设置单个角色的和平策略配置 */
+    setPeaceConfig: (id: number, config: PeaceConfig) => void
+    /** 设置单个角色的战斗策略 */
+    setCombatStrategy: (id: number, strategy: CombatSubStrategy) => void
+    /** 注册箱子生成回调（供 builder AI 使用） */
+    registerBoxSpawner: (fn: SpawnBoxCallback) => void
     /** 设置碰撞体可视化 mesh 的可见性 */
     setCollisionVisible: (visible: boolean) => void
     /** 配置视线检查（需在所有实体系统初始化后调用） */
@@ -197,7 +206,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         faction: number,
         x: number, y: number, z: number,
         isPlayer?: boolean,
-        aiStrategy: AIStrategy = 'tactical',
+        peaceStrategy: PeaceSubStrategy = 'patrol',
+        combatStrategy: CombatSubStrategy = 'tactical',
     ): CharacterEntity => {
         const mesh = createCharacterMesh(config)
         mesh.position.set(x, y, z)
@@ -247,7 +257,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             isOnGround: true,
             rowText: `Character #${id}`,
             isPlayer: isPlayer ?? false,
-            aiStrategy,
+            peaceStrategy,
+            combatStrategy,
             isDying: false,
             dyingTimer: 0,
             combat,
@@ -507,7 +518,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const activateAI = (): void => {
         for (const entity of characters) {
             if (!entity.isPlayer && !aiMap.has(entity.id)) {
-                aiMap.set(entity.id, createAIMachine(entity, entity.body.position.x, entity.body.position.y, entity.body.position.z, entity.combat.skills[entity.combat.currentSkillIndex]?.config.weapon.detectionRange ?? 8, losChecker, entity.aiStrategy))
+                const ctx = createAIMachine(
+                    entity,
+                    entity.body.position.x, entity.body.position.y, entity.body.position.z,
+                    entity.combat.skills[entity.combat.currentSkillIndex]?.config.weapon.detectionRange ?? 8,
+                    losChecker,
+                    DEFAULT_PEACE_CONFIGS[entity.peaceStrategy],
+                    entity.combatStrategy,
+                )
+                if (boxSpawner) ctx.spawnBox = boxSpawner
+                aiMap.set(entity.id, ctx)
             }
         }
     }
@@ -527,7 +547,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
         const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, radius: saveConfig.radius, height: saveConfig.height}
-        const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.aiStrategy ?? 'tactical')
+        const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical')
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
@@ -586,15 +606,38 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
     }
 
-    const setAIStrategy = (id: number, strategy: AIStrategy): void => {
+    const setPeaceStrategy = (id: number, strategy: PeaceSubStrategy): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
-        entity.aiStrategy = strategy
+        entity.peaceStrategy = strategy
         const ctx = aiMap.get(id)
         if (ctx) {
-            ctx.strategy = strategy
-            ctx.strategyConfig = DEFAULT_STRATEGY_CONFIGS[strategy]
-            ctx.burstAttackCount = 0
+            ctx.peaceConfig = DEFAULT_PEACE_CONFIGS[strategy]
+            /* 切换策略时重置和平 FSM 状态 */
+            ctx.peaceState = 'patrol'
+            ctx.peaceStateTime = 0
+            ctx.waitTimer = 0
+        }
+    }
+
+    const setPeaceConfig = (id: number, config: PeaceConfig): void => {
+        const ctx = aiMap.get(id)
+        if (!ctx) return
+        ctx.peaceConfig = config
+        ctx.peaceState = 'patrol'
+        ctx.peaceStateTime = 0
+        ctx.waitTimer = 0
+    }
+
+    const setCombatStrategy = (id: number, strategy: CombatSubStrategy): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.combatStrategy = strategy
+        const ctx = aiMap.get(id)
+        if (ctx) {
+            ctx.combatStrategy = strategy
+            ctx.combatConfig = DEFAULT_COMBAT_CONFIGS[strategy]
+            ctx.combatBurstAttackCount = 0
         }
     }
 
@@ -603,6 +646,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.mesh.visible = visible
         }
     }
+
+    const registerBoxSpawner = (fn: SpawnBoxCallback): void => {
+        for (const ctx of aiMap.values()) {
+            ctx.spawnBox = fn
+        }
+        /* 记录以便后续新创建的 AI 也能设置 */
+        boxSpawner = fn
+    }
+    let boxSpawner: SpawnBoxCallback | undefined
 
     const ctxWithoutPanel: Omit<CharacterEntitySystem, 'panel'> = {
         type: 'character',
@@ -629,7 +681,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         add,
         setTransform,
         updateCharacterConfig,
-        setAIStrategy,
+        setPeaceStrategy,
+        setPeaceConfig,
+        setCombatStrategy,
+        registerBoxSpawner,
         setCollisionVisible,
         setupLineOfSight,
     }

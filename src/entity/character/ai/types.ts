@@ -1,42 +1,46 @@
-import type {CharacterEntity} from '../../../character/types.ts'
-import type {AIStrategy, AIStrategyConfig} from '../../../character/ai_strategy.ts'
+import type {CombatSubStrategy, CombatConfig} from '../../../character/ai_strategy/combat.ts'
+import type {PeaceConfig, PeaceSubStrategy} from '../../../character/ai_strategy/peace.ts'
+import type {BoxSpawnEntry} from '../../../character/ai_strategy/types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
+import type {CombatState} from './combat/types.ts'
+import type {PeaceState} from './peace/types.ts'
 
-export type {AIStrategy, AIStrategyConfig} from '../../../character/ai_strategy.ts'
+export type {CombatSubStrategy, CombatConfig}
+export type {PeaceSubStrategy, PeaceConfig}
+export type {CombatState}
+export type {PeaceState}
 
-export const AI_STATES = ['patrol', 'chase', 'approach', 'volley', 'kite', 'attack', 'flee'] as const
-export type AIState = typeof AI_STATES[number]
+/** 箱子生成回调签名 */
+export type SpawnBoxCallback = (entry: BoxSpawnEntry, x: number, y: number, z: number, size: {width: number; height: number; depth: number}) => void
 
+/** AI 运行时上下文（扁平化，combat / peace 字段前缀区分） */
 export interface AIContext {
     characterId: number
     spawnPoint: {x: number; y: number; z: number}
-    patrolRadius: number
-    waypoint: {x: number; y: number; z: number}
-    currentState: AIState
-    stateTime: number
-    waitTimer: number
-    targetId: number | undefined
-    strafeDir: number
-    strafeTimer: number
+
+    /** 共享 */
     losChecker: LineOfSightChecker | null
-    /** AI 策略 */
-    strategy: AIStrategy
-    /** 策略配置 */
-    strategyConfig: AIStrategyConfig
-    /** 逃跑方向（cowardly flee 状态使用） */
-    fleeDir: {x: number; z: number}
-    /** 当前逃跑周期内的还击次数（cowardly 专用） */
-    burstAttackCount: number
-}
+    spawnBox?: SpawnBoxCallback
 
-export interface AITransition {
-    to: AIState
-    guard: (ctx: AIContext, character: CharacterEntity, allCharacters: readonly CharacterEntity[]) => boolean
-}
+    /** 当前活跃的 FSM */
+    activeFsm: 'peace' | 'combat'
 
-export interface AIStateHandler {
-    enter: (ctx: AIContext, character: CharacterEntity) => void
-    update: (dt: number, ctx: AIContext, character: CharacterEntity, allCharacters: readonly CharacterEntity[], setInput: (dx: number, dz: number, attack: boolean) => void) => void
-    exit: (ctx: AIContext, character: CharacterEntity) => void
-    transitions: readonly AITransition[]
+    /* ── 战斗 FSM 状态 ── */
+    combatState: CombatState
+    combatStateTime: number
+    combatTargetId: number | undefined
+    combatStrafeDir: number
+    combatStrafeTimer: number
+    combatFleeDir: {x: number; z: number}
+    combatBurstAttackCount: number
+    combatStrategy: CombatSubStrategy
+    combatConfig: CombatConfig
+
+    /* ── 和平 FSM 状态 ── */
+    peaceState: PeaceState
+    peaceStateTime: number
+    peaceConfig: PeaceConfig
+    waypoint: {x: number; y: number; z: number}
+    waitTimer: number
+    buildTimer: number
 }

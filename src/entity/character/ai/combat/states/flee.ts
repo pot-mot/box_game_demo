@@ -1,10 +1,10 @@
 import {Vec3} from 'cannon-es'
-import type {AIStateHandler} from '../types.ts'
-import type {RangedSkillConfig} from '../../../../character/combat/ranged_skill.ts'
+import type {CombatStateHandler} from '../types.ts'
+import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 
 const _fleeDir = new Vec3()
 
-export const fleeHandler: AIStateHandler = {
+export const fleeHandler: CombatStateHandler = {
     enter: (ctx, character) => {
         const pos = character.body.position
 
@@ -27,8 +27,8 @@ export const fleeHandler: AIStateHandler = {
         const fx = _fleeDir.x * cosA - _fleeDir.z * sinA
         const fz = _fleeDir.x * sinA + _fleeDir.z * cosA
         const fl = Math.hypot(fx, fz)
-        ctx.fleeDir.x = fl > 0.001 ? fx / fl : 1
-        ctx.fleeDir.z = fl > 0.001 ? fz / fl : 0
+        ctx.combatFleeDir.x = fl > 0.001 ? fx / fl : 1
+        ctx.combatFleeDir.z = fl > 0.001 ? fz / fl : 0
     },
     update: (_dt, ctx, character, allCharacters, setInput) => {
         const skill = character.combat.skills[character.combat.currentSkillIndex]
@@ -56,39 +56,39 @@ export const fleeHandler: AIStateHandler = {
             const nl = Math.hypot(nearestDx, nearestDz)
             if (nl > 0.001) {
                 /* 远离最近敌人 */
-                ctx.fleeDir.x = -nearestDx / nl
-                ctx.fleeDir.z = -nearestDz / nl
+                ctx.combatFleeDir.x = -nearestDx / nl
+                ctx.combatFleeDir.z = -nearestDz / nl
             }
         }
 
         /* 每隔 1.5 秒略微变化逃跑方向 */
-        if (Math.floor(ctx.stateTime / 1.5) !== Math.floor((ctx.stateTime - _dt) / 1.5)) {
+        if (Math.floor(ctx.combatStateTime / 1.5) !== Math.floor((ctx.combatStateTime - _dt) / 1.5)) {
             const angleOffset = (Math.random() - 0.5) * (Math.PI / 4)
             const cosA = Math.cos(angleOffset)
             const sinA = Math.sin(angleOffset)
-            const fx = ctx.fleeDir.x * cosA - ctx.fleeDir.z * sinA
-            const fz = ctx.fleeDir.x * sinA + ctx.fleeDir.z * cosA
-            ctx.fleeDir.x = fx
-            ctx.fleeDir.z = fz
+            const fx = ctx.combatFleeDir.x * cosA - ctx.combatFleeDir.z * sinA
+            const fz = ctx.combatFleeDir.x * sinA + ctx.combatFleeDir.z * cosA
+            ctx.combatFleeDir.x = fx
+            ctx.combatFleeDir.z = fz
         }
 
         const isRanged = skill?.config.type === 'ranged'
 
         if (isRanged && !character.combat.attackActive && skill.cooldownTimer <= 0 && nearestDist < (skill.config as RangedSkillConfig).weapon.range) {
             /* 远程边逃边射 */
-            setInput(ctx.fleeDir.x, ctx.fleeDir.z, true)
+            setInput(ctx.combatFleeDir.x, ctx.combatFleeDir.z, true)
         } else {
-            setInput(ctx.fleeDir.x, ctx.fleeDir.z, false)
+            setInput(ctx.combatFleeDir.x, ctx.combatFleeDir.z, false)
         }
     },
     exit: () => {},
     transitions: [
         {
-            /* 逃跑时长到达上限 → 若还可还击则尝试 attack，否则回 patrol */
+            /* 逃跑时长到达上限 → 若还可还击则尝试 attack，否则回 inactive */
             to: 'attack',
             guard: (ctx, character, allCharacters) => {
-                if (ctx.stateTime < ctx.strategyConfig.fleeDuration) return false
-                if (ctx.burstAttackCount >= ctx.strategyConfig.attackBurstCount) return false
+                if (ctx.combatStateTime < ctx.combatConfig.fleeDuration) return false
+                if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
                 /* 需要有有效目标 */
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
@@ -99,8 +99,8 @@ export const fleeHandler: AIStateHandler = {
                     const ox = other.body.position.x - pos.x
                     const oz = other.body.position.z - pos.z
                     if (Math.hypot(ox, oz) < detRange) {
-                        ctx.targetId = other.id
-                        ctx.burstAttackCount++
+                        ctx.combatTargetId = other.id
+                        ctx.combatBurstAttackCount++
                         return true
                     }
                 }
@@ -108,11 +108,11 @@ export const fleeHandler: AIStateHandler = {
             },
         },
         {
-            /* 逃跑完成（无目标或还击次数已满）→ 巡逻 */
-            to: 'patrol',
+            /* 逃跑完成（无目标或还击次数已满）→ inactive */
+            to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                if (ctx.stateTime < ctx.strategyConfig.fleeDuration) return false
-                if (ctx.burstAttackCount < ctx.strategyConfig.attackBurstCount) {
+                if (ctx.combatStateTime < ctx.combatConfig.fleeDuration) return false
+                if (ctx.combatBurstAttackCount < ctx.combatConfig.attackBurstCount) {
                     /* 若无可达目标，放弃 */
                     const skill = character.combat.skills[character.combat.currentSkillIndex]
                     const detRange = skill?.config.weapon.detectionRange ?? 8
@@ -132,8 +132,8 @@ export const fleeHandler: AIStateHandler = {
             },
         },
         {
-            /* 没有敌人在侦测范围内 → 巡逻 */
-            to: 'patrol',
+            /* 没有敌人在侦测范围内 → inactive */
+            to: 'inactive',
             guard: (_ctx, character, allCharacters) => {
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8

@@ -1,13 +1,13 @@
 import {Vec3} from 'cannon-es'
-import type {AIStateHandler} from '../types.ts'
-import type {RangedSkillConfig} from '../../../../character/combat/ranged_skill.ts'
+import type {CombatStateHandler} from '../types.ts'
+import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 
 const _dir = new Vec3()
 
-export const kiteHandler: AIStateHandler = {
+export const kiteHandler: CombatStateHandler = {
     enter: () => {},
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const target = allCharacters.find(c => c.id === ctx.targetId)
+        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.position
@@ -36,11 +36,11 @@ export const kiteHandler: AIStateHandler = {
             /* 后退超时 → 尝试还击或重新逼近 */
             to: 'attack',
             guard: (ctx, character, allCharacters) => {
-                const timeout = ctx.strategyConfig.kiteTimeout
+                const timeout = ctx.combatConfig.kiteTimeout
                 if (timeout <= 0) return false
-                if (ctx.stateTime < timeout) return false
+                if (ctx.combatStateTime < timeout) return false
                 /* 需要目标在攻击距离内 */
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -53,24 +53,23 @@ export const kiteHandler: AIStateHandler = {
             /* 后退超时且目标不在射程 → 重新追逐 */
             to: 'chase',
             guard: (ctx) => {
-                const timeout = ctx.strategyConfig.kiteTimeout
+                const timeout = ctx.combatConfig.kiteTimeout
                 if (timeout <= 0) return false
-                return ctx.stateTime >= timeout
+                return ctx.combatStateTime >= timeout
             },
         },
         {
             /* cowardly 策略：直接逃而不是后退 */
             to: 'flee',
             guard: (ctx) => {
-                if (ctx.strategy !== 'cowardly') return false
-                return ctx.burstAttackCount < ctx.strategyConfig.attackBurstCount;
-
+                if (ctx.combatStrategy !== 'cowardly') return false
+                return ctx.combatBurstAttackCount < ctx.combatConfig.attackBurstCount;
             },
         },
         {
             to: 'volley',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -82,9 +81,9 @@ export const kiteHandler: AIStateHandler = {
             },
         },
         {
-            to: 'patrol',
+            to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return true
                 const pos = character.body.position
                 const tp = target.body.position

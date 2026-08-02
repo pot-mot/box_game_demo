@@ -148,7 +148,8 @@ export const collectWorldState = (
                         jumpHeight: e.config.jumpHeight,
                         radius: e.config.radius,
                         height: e.config.height,
-                        aiStrategy: e.aiStrategy,
+                        peaceStrategy: e.peaceStrategy,
+                        combatStrategy: e.combatStrategy,
                     attackSlot: e.combat.skills[0]?.config.type === 'melee'
                         ? {
                             type: 'melee' as const,

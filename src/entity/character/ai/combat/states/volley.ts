@@ -1,16 +1,16 @@
 import {Vec3} from 'cannon-es'
-import type {AIStateHandler} from '../types.ts'
-import type {RangedSkillConfig} from '../../../../character/combat/ranged_skill.ts'
+import type {CombatStateHandler} from '../types.ts'
+import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 
 const _dir = new Vec3()
 
-export const volleyHandler: AIStateHandler = {
+export const volleyHandler: CombatStateHandler = {
     enter: (ctx, _character) => {
-        ctx.strafeDir = Math.random() < 0.5 ? 1 : -1
-        ctx.strafeTimer = 1.5
+        ctx.combatStrafeDir = Math.random() < 0.5 ? 1 : -1
+        ctx.combatStrafeTimer = 1.5
     },
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const target = allCharacters.find(c => c.id === ctx.targetId)
+        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.position
@@ -27,17 +27,17 @@ export const volleyHandler: AIStateHandler = {
         const adx = _dir.x / len
         const adz = _dir.z / len
 
-        ctx.strafeTimer -= _dt
-        if (ctx.strafeTimer <= 0) {
-            ctx.strafeDir *= -1
-            ctx.strafeTimer = 1.5
+        ctx.combatStrafeTimer -= _dt
+        if (ctx.combatStrafeTimer <= 0) {
+            ctx.combatStrafeDir *= -1
+            ctx.combatStrafeTimer = 1.5
         }
 
         if (!character.combat.attackActive && skill.cooldownTimer <= 0) {
             setInput(adx, adz, true)
         } else {
-            const strafeX = -adz * ctx.strafeDir
-            const strafeZ = adx * ctx.strafeDir
+            const strafeX = -adz * ctx.combatStrafeDir
+            const strafeZ = adx * ctx.combatStrafeDir
             setInput(strafeX * 0.7 + adx * 0.15, strafeZ * 0.7 + adz * 0.15, false)
         }
 
@@ -55,7 +55,7 @@ export const volleyHandler: AIStateHandler = {
             }
         }
         if (nearestId !== target.id) {
-            ctx.targetId = nearestId
+            ctx.combatTargetId = nearestId
         }
     },
     exit: () => {},
@@ -64,18 +64,18 @@ export const volleyHandler: AIStateHandler = {
             /* 扫射超时 → 变招追逐 */
             to: 'chase',
             guard: (ctx) => {
-                const timeout = ctx.strategyConfig.volleyTimeout
+                const timeout = ctx.combatConfig.volleyTimeout
                 if (timeout <= 0) return false
-                return ctx.stateTime >= timeout
+                return ctx.combatStateTime >= timeout
             },
         },
         {
             /* cowardly 策略：扫射时敌人靠近就逃 */
             to: 'flee',
             guard: (ctx, character, allCharacters) => {
-                if (ctx.strategy !== 'cowardly') return false
-                if (ctx.burstAttackCount >= ctx.strategyConfig.attackBurstCount) return false
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                if (ctx.combatStrategy !== 'cowardly') return false
+                if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -88,7 +88,7 @@ export const volleyHandler: AIStateHandler = {
         {
             to: 'approach',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -102,7 +102,7 @@ export const volleyHandler: AIStateHandler = {
         {
             to: 'kite',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -114,9 +114,9 @@ export const volleyHandler: AIStateHandler = {
             },
         },
         {
-            to: 'patrol',
+            to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return true
                 const pos = character.body.position
                 const tp = target.body.position

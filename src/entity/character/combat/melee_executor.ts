@@ -11,7 +11,7 @@ const _tmpVec = new Vec3()
 const _tmpVec3 = new Vector3()
 
 /** 武器命中半径（覆盖武器半长 + 角色碰撞半径裕量） */
-const WEAPON_HIT_RADIUS = 0.55
+const WEAPON_HIT_RADIUS = 0.9
 
 export const createMeleeExecutor = (
     getAllCharacters: () => readonly CharacterEntity[],
@@ -40,15 +40,15 @@ export const createMeleeExecutor = (
 
         const duration = combat.skills[combat.currentSkillIndex]?.config.duration ?? 0.3
         const progress = combat.attackTimer / duration
-        // 仅在挥砍阶段（进度 0.25–0.75）检测命中，跳过蓄力和恢复
-        if (progress < 0.25 || progress > 0.75) return
+        /* 在挥砍阶段（进度 0.1–0.85）检测命中，跳过蓄力前段和恢复末段 */
+        if (progress < 0.1 || progress > 0.85) return
 
         model.weaponMesh.getWorldPosition(_tmpVec3)
         const wx = _tmpVec3.x
         const wy = _tmpVec3.y
         const wz = _tmpVec3.z
 
-        const hitRadius = WEAPON_HIT_RADIUS + (skill.weapon.range - 1.5) * 0.15
+        const hitRadius = WEAPON_HIT_RADIUS + Math.max(0, skill.weapon.range - 1.2) * 0.2
 
         for (const target of getAllCharacters()) {
             if (target.id === entity.id) continue
@@ -58,7 +58,7 @@ export const createMeleeExecutor = (
 
             const tPos = target.body.position
             const dx = tPos.x - wx
-            const dy = tPos.y - wy
+            const dy = (tPos.y - wy) * 0.3
             const dz = tPos.z - wz
             const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
 

@@ -1,15 +1,15 @@
 import {Vec3} from 'cannon-es'
-import type {AIStateHandler} from '../types.ts'
-import type {RangedSkillConfig} from '../../../../character/combat/ranged_skill.ts'
+import type {CombatStateHandler} from '../types.ts'
+import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 
 const _dir = new Vec3()
 
-export const approachHandler: AIStateHandler = {
+export const approachHandler: CombatStateHandler = {
     enter: (ctx, _character) => {
-        ctx.strafeTimer = 0
+        ctx.combatStrafeTimer = 0
     },
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const target = allCharacters.find(c => c.id === ctx.targetId)
+        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.position
@@ -27,7 +27,7 @@ export const approachHandler: AIStateHandler = {
         const adz = _dir.z / len
 
         /* aggressive 策略：使用攻击距离而非理想距离 */
-        const effectiveRange = ctx.strategy === 'aggressive' ? cfg.weapon.range : cfg.weapon.idealRange
+        const effectiveRange = ctx.combatStrategy === 'aggressive' ? cfg.weapon.range : cfg.weapon.idealRange
 
         if (dist < effectiveRange) {
             if (!character.combat.attackActive && skill.cooldownTimer <= 0) {
@@ -49,18 +49,18 @@ export const approachHandler: AIStateHandler = {
             /* 逼近超时 → 重新追逐 */
             to: 'chase',
             guard: (ctx) => {
-                const timeout = ctx.strategyConfig.approachTimeout
+                const timeout = ctx.combatConfig.approachTimeout
                 if (timeout <= 0) return false
-                return ctx.stateTime >= timeout
+                return ctx.combatStateTime >= timeout
             },
         },
         {
             /* cowardly 策略：敌人太近就逃跑 */
             to: 'flee',
             guard: (ctx, character, allCharacters) => {
-                if (ctx.strategy !== 'cowardly') return false
-                if (ctx.burstAttackCount >= ctx.strategyConfig.attackBurstCount) return false
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                if (ctx.combatStrategy !== 'cowardly') return false
+                if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -74,8 +74,8 @@ export const approachHandler: AIStateHandler = {
             /* aggressive 策略：进入攻击而非扫射 */
             to: 'attack',
             guard: (ctx, character, allCharacters) => {
-                if (ctx.strategy !== 'aggressive') return false
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                if (ctx.combatStrategy !== 'aggressive') return false
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -90,8 +90,8 @@ export const approachHandler: AIStateHandler = {
             to: 'volley',
             guard: (ctx, character, allCharacters) => {
                 /* aggressive 策略跳过 volley */
-                if (ctx.strategy === 'aggressive') return false
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                if (ctx.combatStrategy === 'aggressive') return false
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -106,7 +106,7 @@ export const approachHandler: AIStateHandler = {
         {
             to: 'chase',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -114,16 +114,16 @@ export const approachHandler: AIStateHandler = {
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
-                const threshold = ctx.strategy === 'aggressive'
+                const threshold = ctx.combatStrategy === 'aggressive'
                     ? cfg.weapon.range * 2
                     : cfg.weapon.idealRange * 1.5
                 return _dir.length() > threshold
             },
         },
         {
-            to: 'patrol',
+            to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return true
                 const pos = character.body.position
                 const tp = target.body.position

@@ -1,12 +1,12 @@
 import {Vec3} from 'cannon-es'
-import type {AIStateHandler} from '../types.ts'
+import type {CombatStateHandler} from '../types.ts'
 
 const _dir = new Vec3()
 
-export const attackHandler: AIStateHandler = {
+export const attackHandler: CombatStateHandler = {
     enter: () => {},
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const target = allCharacters.find(c => c.id === ctx.targetId)
+        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.position
@@ -33,23 +33,23 @@ export const attackHandler: AIStateHandler = {
             /* 攻击超时 → 调整位置 */
             to: 'chase',
             guard: (ctx) => {
-                const timeout = ctx.strategyConfig.attackTimeout
+                const timeout = ctx.combatConfig.attackTimeout
                 if (timeout <= 0) return false
-                return ctx.stateTime >= timeout
+                return ctx.combatStateTime >= timeout
             },
         },
         {
             /* cowardly 策略：攻击后逃跑（按策略配置的 attackTimeout） */
             to: 'flee',
             guard: (ctx) => {
-                if (ctx.strategy !== 'cowardly') return false
-                return ctx.stateTime >= ctx.strategyConfig.attackTimeout
+                if (ctx.combatStrategy !== 'cowardly') return false
+                return ctx.combatStateTime >= ctx.combatConfig.attackTimeout
             },
         },
         {
             to: 'chase',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.position
                 const tp = target.body.position
@@ -61,9 +61,9 @@ export const attackHandler: AIStateHandler = {
             },
         },
         {
-            to: 'patrol',
+            to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.targetId)
+                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return true
                 const pos = character.body.position
                 const tp = target.body.position

@@ -1,14 +1,10 @@
-/** AI 策略类型 */
-export const AI_STRATEGY_VALUES = ['tactical', 'aggressive', 'cowardly'] as const
-export type AIStrategy = typeof AI_STRATEGY_VALUES[number]
+import type {CombatSubStrategy} from './types.ts'
 
-/** 运行时校验 AI 策略字符串是否为合法值 */
-export const isAIStrategy = (v: string): v is AIStrategy =>
-    (AI_STRATEGY_VALUES as readonly string[]).includes(v)
+export type {CombatSubStrategy}
 
-/** 各策略下的时间上限常量（单位：秒，0 表示不限制） */
-export interface AIStrategyConfig {
-    /** 追逐超时后放弃追击回到 patrol */
+/** 战斗策略下的时间上限常量（单位：秒，0 表示不限制） */
+export interface CombatConfig {
+    /** 追逐超时后放弃追击回到 inactive */
     chaseTimeout: number
     /** 逼近超时后重新评估 */
     approachTimeout: number
@@ -24,8 +20,8 @@ export interface AIStrategyConfig {
     attackBurstCount: number
 }
 
-/** 各策略默认配置 */
-export const DEFAULT_STRATEGY_CONFIGS: Record<AIStrategy, AIStrategyConfig> = {
+/** 各战斗子策略默认配置 */
+export const DEFAULT_COMBAT_CONFIGS: Record<CombatSubStrategy, CombatConfig> = {
     tactical: {
         chaseTimeout: 5,
         approachTimeout: 4,

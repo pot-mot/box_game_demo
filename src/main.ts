@@ -91,6 +91,43 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
 
     characterSystem.setupLineOfSight(systems)
 
+    /* 箱子生成回调（供 builder AI 使用，由 play 模式注册） */
+    const boxSpawner = (entry: {entityType: string; mass: number; friction: number; maxHealth?: number; attractionRadius?: number; attractionStrength?: number; stiffness?: number; dampingRatio?: number; maxDeformFraction?: number}, x: number, y: number, z: number, size: {width: number; height: number; depth: number}): void => {
+        const mass = entry.mass * size.width * size.height * size.depth
+        switch (entry.entityType) {
+            case 'box/common':
+                common.add({...size, mass, friction: entry.friction}, x, y, z)
+                break
+            case 'box/destruction':
+                destruction.add({
+                    ...size, mass, friction: entry.friction,
+                    maxHealth: entry.maxHealth ?? 10,
+                }, x, y, z)
+                break
+            case 'box/burning':
+                burning.add({
+                    ...size, mass, friction: entry.friction,
+                    maxHealth: entry.maxHealth ?? 10,
+                }, x, y, z)
+                break
+            case 'box/magnet':
+                magnet.add({
+                    ...size, mass, friction: entry.friction,
+                    attractionRadius: entry.attractionRadius ?? 5,
+                    attractionStrength: entry.attractionStrength ?? 10,
+                }, x, y, z)
+                break
+            case 'box/elasticity':
+                elastic.add({
+                    ...size, mass, friction: entry.friction,
+                    stiffness: entry.stiffness ?? 100,
+                    dampingRatio: entry.dampingRatio ?? 0.3,
+                    maxDeformFraction: entry.maxDeformFraction ?? 0.2,
+                }, x, y, z)
+                break
+        }
+    }
+
     // --- 从缓存/导入文件加载实体（必须在 mode setup 之前，确保角色存在后再激活 AI）---
     const dataToLoad = saveData ?? loadCachedSaveData()
     let loadResult: LoadWorldResult | undefined
@@ -106,7 +143,7 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
     if (mode === 'edit') {
         editMode = setupEditMode(camera, renderer, systems, allTerrainSources, terrainSource)
     } else {
-        playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem)
+        playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem, boxSpawner)
     }
 
     characterSystem.setCollisionVisible(mode === 'edit')
