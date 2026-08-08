@@ -281,6 +281,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const rowText = isPlayer ? `▶ Player: Character #${id}` : `Character #${id}`
         const badgeLabel = isPlayer ? 'P' : `F${faction}`
         panelInfos.push({id, type: 'character', badgeLabel, badgeColor: factionBadgeColor(faction, isPlayer ?? false), rowText})
+        refreshPlayerLabel()
 
         return entity
     }
@@ -633,7 +634,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
-        if (saveConfig.isPlayer) refreshPlayerLabel()
+        /* spawnEntity 之后 maxHealth/health 才被覆盖，需再次刷新列表行 */
+        refreshPlayerLabel()
         return {id: entity.id}
     }
 
@@ -664,11 +666,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     : (RANGED_WEAPON_PRESETS[wId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow).mesh
                 model.equipWeapon(meshCfg)
             }
-            const pi = panelInfos.find(p => p.id === id)
-            if (pi) {
-                pi.badgeLabel = entity.isPlayer ? 'P' : `F${entity.combat.faction}`
-                pi.badgeColor = factionBadgeColor(entity.combat.faction, entity.isPlayer)
-            }
         }
         if (newFaction !== undefined) {
             entity.combat.faction = newFaction
@@ -686,6 +683,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.combat.attackTendency = resolveTendency(newTendencyConfig)
             entity.combat.tendencyConfig = newTendencyConfig
         }
+        refreshPlayerLabel()
     }
 
     const setPeaceStrategy = (id: number, strategy: PeaceSubStrategy): void => {
