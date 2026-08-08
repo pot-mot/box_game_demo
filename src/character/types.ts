@@ -27,6 +27,8 @@ export interface CharacterEntity {
     isOnGround: boolean
     /** 地面接触法线（从地面指向角色，已归一化）。无地面接触时回退为 (0, 1, 0) */
     groundNormal: { readonly x: number; readonly y: number; readonly z: number }
+    /** 郊狼时间计时（秒）：最近一次真实接触至今，宽限期内仍判定为着地 */
+    groundKeepTimer: number
     rowText: string
 
     isPlayer: boolean

@@ -52,6 +52,7 @@ const makeChar = (
         config: {speed: 0, jumpHeight: 0, radius: 0.125, height: 1},
         mesh: null!, appearanceGroup: null!,
         isOnGround: true, rowText: '',
+        groundKeepTimer: 0,
         isPlayer: false,
         peaceStrategy: 'patrol' as const,
         combatStrategy,

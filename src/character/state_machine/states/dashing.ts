@@ -1,5 +1,6 @@
 import type {StateHandler} from '../types.ts'
-import {DASH_SPEED_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN} from '../constants.ts'
+import {DASH_SPEED_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, SLOPE_WALK_THRESHOLD} from '../constants.ts'
+import {shouldFall, isSupportedOn, projectToSlope} from '../ground.ts'
 
 /** 进入冲刺时锁定的方向 */
 let dashDirX = 0
@@ -25,12 +26,7 @@ export const dashingHandler: StateHandler = {
         const speed = entity.config.speed * DASH_SPEED_MULTIPLIER
         const vx = dashDirX * speed
         const vz = dashDirZ * speed
-        if (entity.isOnGround && entity.groundNormal.y > 0.001) {
-            const n = entity.groundNormal
-            entity.body.velocity.x = vx
-            entity.body.velocity.y = -(vx * n.x + vz * n.z) / n.y
-            entity.body.velocity.z = vz
-        } else {
+        if (!projectToSlope(entity, vx, vz, SLOPE_WALK_THRESHOLD)) {
             entity.body.velocity.x = vx
             entity.body.velocity.z = vz
         }
@@ -43,19 +39,19 @@ export const dashingHandler: StateHandler = {
             guard: (input, entity, ctx) =>
                 ctx.stateTime >= DASH_DURATION
                 && Math.hypot(input.dx, input.dz) > 0.001
-                && entity.isOnGround,
+                && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'idle',
             guard: (_input, entity, ctx) =>
                 ctx.stateTime >= DASH_DURATION
-                && entity.isOnGround,
+                && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'falling',
             guard: (_input, entity, ctx) =>
                 ctx.stateTime >= DASH_DURATION
-                && !entity.isOnGround,
+                && shouldFall(entity),
         },
         {
             to: 'dying',

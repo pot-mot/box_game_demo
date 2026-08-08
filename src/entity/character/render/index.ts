@@ -1,9 +1,9 @@
-import {CapsuleGeometry, Mesh, MeshStandardMaterial} from 'three'
+import {BoxGeometry, Mesh, MeshStandardMaterial} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 
-/** 创建碰撞体可视化胶囊（edit 模式显示，play 模式隐藏） */
+/** 创建碰撞体可视化盒子（edit 模式显示，play 模式隐藏） */
 export const createCharacterMesh = (config: CharacterConfig): Mesh => {
-    const geom = new CapsuleGeometry(config.radius, config.height - config.radius * 2, 8, 12)
+    const geom = new BoxGeometry(config.radius * 2, config.height, config.radius * 2)
     const mat = new MeshStandardMaterial({
         color: 0x888888,
         roughness: 0.4,

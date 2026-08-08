@@ -10,8 +10,14 @@ import type {CharacterModel} from '../appearance/types.ts'
 const _tmpVec = new Vec3()
 const _tmpVec3 = new Vector3()
 
-/** 武器命中半径（覆盖武器半长 + 角色碰撞半径裕量） */
-const WEAPON_HIT_RADIUS = 0.9
+/** 武器命中箱半长（XZ 平面） */
+const WEAPON_HIT_BOX_HALF_XY = 0.7
+/** 武器命中箱半高 = 武器 range × 此因子 */
+const WEAPON_HIT_BOX_HALF_Y_FACTOR = 0.25
+/** 受击箱半径倍率（角色碰撞半径 × 此值） */
+const TARGET_HIT_BOX_RADIUS_FACTOR = 1.5
+/** 受击箱高度倍率（角色碰撞半高 × 此值） */
+const TARGET_HIT_BOX_HEIGHT_FACTOR = 1.1
 
 export const createMeleeExecutor = (
     getAllCharacters: () => readonly CharacterEntity[],
@@ -48,7 +54,9 @@ export const createMeleeExecutor = (
         const wy = _tmpVec3.y
         const wz = _tmpVec3.z
 
-        const hitRadius = WEAPON_HIT_RADIUS + Math.max(0, skill.weapon.range - 1.2) * 0.2
+        /* 武器命中箱半长 */
+        const whw = WEAPON_HIT_BOX_HALF_XY
+        const whh = skill.weapon.range * WEAPON_HIT_BOX_HALF_Y_FACTOR
 
         for (const target of getAllCharacters()) {
             if (target.id === entity.id) continue
@@ -56,13 +64,16 @@ export const createMeleeExecutor = (
             if (combat.attackedTargets.has(target.id)) continue
             if (!combat.attackTendency(combat.faction, target.combat.faction)) continue
 
-            const tPos = target.body.position
-            const dx = tPos.x - wx
-            const dy = (tPos.y - wy) * 0.3
-            const dz = tPos.z - wz
-            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+            const tx = target.body.position.x
+            const ty = target.body.position.y
+            const tz = target.body.position.z
+            const thw = target.config.radius * TARGET_HIT_BOX_RADIUS_FACTOR
+            const thh = target.config.height / 2 * TARGET_HIT_BOX_HEIGHT_FACTOR
 
-            if (dist > hitRadius + target.config.radius) continue
+            /* AABB-AABB 重叠检测 */
+            if (Math.abs(wx - tx) > whw + thw) continue
+            if (Math.abs(wy - ty) > whh + thh) continue
+            if (Math.abs(wz - tz) > whw + thw) continue
 
             applyDamage(target.combat, {
                 sourceId: entity.id,
@@ -73,7 +84,7 @@ export const createMeleeExecutor = (
             })
             combat.attackedTargets.add(target.id)
 
-            _tmpVec.set(tPos.x - wx, 0, tPos.z - wz)
+            _tmpVec.set(tx - wx, 0, tz - wz)
             const len = _tmpVec.length()
             if (len > 0.0001) {
                 _tmpVec.scale(1 / len, _tmpVec)

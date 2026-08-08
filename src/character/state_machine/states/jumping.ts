@@ -1,5 +1,6 @@
 import type {StateHandler} from '../types.ts'
 import {AIR_DAMPING, AIR_CONTROL_FACTOR} from '../constants.ts'
+import {shouldFall} from '../ground.ts'
 
 export const jumpingHandler: StateHandler = {
     enter: (entity) => {
@@ -27,6 +28,11 @@ export const jumpingHandler: StateHandler = {
             to: 'falling',
             guard: (_, entity) =>
                 entity.body.velocity.y <= 0 && Math.abs(entity.body.velocity.y) >= 0.05,
+        },
+        {
+            to: 'falling',
+            /* 上升段（vy > 0）保持 jumping，不因支撑判定提前切换 */
+            guard: (_input, entity) => shouldFall(entity) && entity.body.velocity.y <= 0,
         },
         {
             to: 'dashing',

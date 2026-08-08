@@ -12,7 +12,6 @@ export const GROUND_Y = 0
 export const BOX_BOX_FRICTION = 0.5
 /** 箱子与地面的摩擦系数 */
 export const BOX_GROUND_FRICTION = 0.3
-
 // --- 碰撞组 ---
 // cannon-es 用 bitmask 做碰撞过滤，broadphase 的 needBroadphaseCollision 检查：
 //   (groupA & maskB) !== 0 && (groupB & maskA) !== 0 时才产生碰撞对。

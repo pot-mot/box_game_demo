@@ -1,5 +1,5 @@
 import {type Scene, type Mesh} from 'three'
-import {Body, BODY_TYPES, Cylinder, Sphere, Vec3} from 'cannon-es'
+import {Body, BODY_TYPES, Box, Vec3} from 'cannon-es'
 import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
@@ -28,8 +28,9 @@ import type {AppearanceSystem} from '../appearance/system.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
-import {CHARACTER_LINEAR_DAMPING} from './constants.ts'
-import {GROUND_NORMAL_THRESHOLD} from '../../../character/state_machine/constants.ts'
+import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
+import {resolveGroundState} from './ground_state.ts'
+import {computeSeparation} from './separation.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
 import {SELECT_PALETTE} from '../appearance/constants.ts'
@@ -136,7 +137,7 @@ const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
 }
 
 export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): CharacterEntitySystem => {
-    const {world} = shared
+    const {world, charMat} = shared
     const characters: CharacterEntity[] = []
     const aiMap = new Map<number, AIContext>()
     const bodyCharMap = new Map<number, CharacterEntity>()
@@ -225,15 +226,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             type: BODY_TYPES.DYNAMIC,
             linearDamping: CHARACTER_LINEAR_DAMPING,
             fixedRotation: true,
+            material: charMat,
             collisionFilterGroup: CHARACTER_COLLISION_GROUP,
             collisionFilterMask: CHARACTER_COLLISION_MASK,
         })
 
-        const r = config.radius
-        const cylH = config.height - r * 2
-        body.addShape(new Cylinder(r, r, cylH, 8), new Vec3(0, 0, 0))
-        body.addShape(new Sphere(r), new Vec3(0, cylH / 2, 0))
-        body.addShape(new Sphere(r), new Vec3(0, -cylH / 2, 0))
+        body.addShape(new Box(new Vec3(config.radius, config.height / 2, config.radius)))
         body.position.set(x, y, z)
         world.addBody(body)
 
@@ -259,6 +257,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             body,
             isOnGround: true,
             groundNormal: { x: 0, y: 1, z: 0 },
+            groundKeepTimer: 0,
             rowText: `Character #${id}`,
             isPlayer: isPlayer ?? false,
             peaceStrategy,
@@ -410,37 +409,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const setAIEnabled = (enabled: boolean): void => { aiEnabled = enabled }
 
-    const checkGround = (entity: CharacterEntity): void => {
-        const { body } = entity
-        entity.isOnGround = false
-        entity.groundNormal = { x: 0, y: 1, z: 0 }
-
-        let bestNy = -Infinity
-        let bestNx = 0
-        let bestNz = 0
-
-        for (const c of world.contacts) {
-            if (!c.ni) continue
-            if (c.bi !== body && c.bj !== body) continue
-
-            const flip = c.bi === body ? -1 : 1
-            const ny = c.ni.y * flip
-            const nx = c.ni.x * flip
-            const nz = c.ni.z * flip
-
-            if (ny <= GROUND_NORMAL_THRESHOLD) continue
-
-            if (ny > bestNy) {
-                bestNy = ny
-                bestNx = nx
-                bestNz = nz
-            }
-        }
-
-        if (bestNy > 0) {
-            entity.isOnGround = true
-            entity.groundNormal = { x: bestNx, y: bestNy, z: bestNz }
-        }
+    const checkGround = (entity: CharacterEntity, dt: number): void => {
+        const next = resolveGroundState(world.contacts, entity.body, {
+            isOnGround: entity.isOnGround,
+            groundNormal: entity.groundNormal,
+            groundKeepTimer: entity.groundKeepTimer,
+        }, dt)
+        entity.isOnGround = next.isOnGround
+        entity.groundNormal = next.groundNormal
+        entity.groundKeepTimer = next.groundKeepTimer
     }
 
     const update = (dt: number): void => {
@@ -453,13 +430,27 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
             entity.dashCooldownTimer = Math.max(0, entity.dashCooldownTimer - dt)
             flashStates.get(entity.id)?.tick(dt)
-            checkGround(entity)
+            checkGround(entity, dt)
 
             const aiCtx = aiMap.get(entity.id)
             if (aiCtx && aiEnabled) {
                 updateAI(dt, aiCtx, entity, characters, (dx, dz, attack) => {
-                    entity.stateMachine.setInput(dx, dz, false, attack, false, 0)
-                    aiTargetDirs.set(entity.id, {dx, dz})
+                    /* 若与另一个角色有物理接触，禁止继续向其方向推挤 */
+                    let finalDX = dx
+                    let finalDZ = dz
+                    if (dx !== 0 || dz !== 0) {
+                        for (const c of world.contacts) {
+                            const ob = c.bi === entity.body ? c.bj : c.bj === entity.body ? c.bi : undefined
+                            if (!ob) continue
+                            if (!bodyCharMap.has(ob.id)) continue
+                            /* 仅当 AI 输入方向指向接触对方时阻断，允许沿接触面滑开 */
+                            const nx = ob.position.x - entity.body.position.x
+                            const nz = ob.position.z - entity.body.position.z
+                            if (dx * nx + dz * nz > 0) { finalDX = 0; finalDZ = 0; break }
+                        }
+                    }
+                    entity.stateMachine.setInput(finalDX, finalDZ, false, attack, false, 0)
+                    aiTargetDirs.set(entity.id, {dx: finalDX, dz: finalDZ})
                     if (attack && (dx !== 0 || dz !== 0)) {
                         entity.combat.attackDirX = dx
                         entity.combat.attackDirZ = dz
@@ -549,6 +540,48 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     executor?.end(activeSkill.config, entity.combat, entity, noopExecCtx)
                 }
             }
+        }
+
+        /* 强制水平分离重叠的角色 — 遍历 world.contacts 兜底防止卡死 */
+        const separated = new Set<string>()
+        for (const c of world.contacts) {
+            const ai = bodyCharMap.get(c.bi.id)
+            const aj = bodyCharMap.get(c.bj.id)
+            if (!ai || !aj) continue
+            if (ai.combat.isDead || aj.combat.isDead) continue
+
+            const key = ai.id < aj.id ? `${ai.id}-${aj.id}` : `${aj.id}-${ai.id}`
+            if (separated.has(key)) continue
+            separated.add(key)
+
+            const sep = computeSeparation({
+                aiX: ai.body.position.x, aiZ: ai.body.position.z,
+                ajX: aj.body.position.x, ajZ: aj.body.position.z,
+                radiusA: ai.config.radius, radiusB: aj.config.radius,
+            }, CHARACTER_SEPARATION_SPEED)
+            if (!sep) continue
+
+            ai.body.position.x += sep.aiDx
+            ai.body.position.z += sep.aiDz
+            aj.body.position.x += sep.ajDx
+            aj.body.position.z += sep.ajDz
+
+            ai.mesh.position.x = ai.body.position.x
+            ai.mesh.position.z = ai.body.position.z
+            ai.appearanceGroup.position.x = ai.body.position.x
+            ai.appearanceGroup.position.z = ai.body.position.z
+            aj.mesh.position.x = aj.body.position.x
+            aj.mesh.position.z = aj.body.position.z
+            aj.appearanceGroup.position.x = aj.body.position.x
+            aj.appearanceGroup.position.z = aj.body.position.z
+
+            ai.body.velocity.x += sep.aiVx
+            ai.body.velocity.z += sep.aiVz
+            aj.body.velocity.x += sep.ajVx
+            aj.body.velocity.z += sep.ajVz
+
+            ai.body.wakeUp()
+            aj.body.wakeUp()
         }
 
         playerAttackPending = false

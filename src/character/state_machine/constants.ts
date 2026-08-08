@@ -8,5 +8,13 @@ export const DASH_SPEED_MULTIPLIER = 2
 export const DASH_DURATION = 0.25
 /** 冲刺冷却时间（秒） */
 export const DASH_COOLDOWN = 1.0
-/** 判定为"地面"的接触法线 Y 分量下限（cos 坡度角）。0.7 → 约 45° */
-export const GROUND_NORMAL_THRESHOLD = 0.7
+/** 斜坡行走法线 Y 分量下限（cos 坡度角）。0.5 → 约 60°，防止垂直墙上投影出畸大 Y 速度 */
+export const SLOPE_WALK_THRESHOLD = 0.5
+/** 从 falling 恢复到行走的法线 Y 分量下限（滞回，高于 SLOPE_WALK_THRESHOLD，防止边界抖动） */
+export const SLOPE_RECOVER_THRESHOLD = 0.65
+/** falling 状态沿支撑面滑动的法线 Y 下限（0.3 → 约 72°；低于此的贴墙接触不投影，保留重力下落） */
+export const FALL_SLIDE_MIN_NY = 0.3
+/** 下落时总速度上限倍率（限制陡坡下滑/坠落无限加速） */
+export const FALL_MAX_SPEED_MULTIPLIER = 2
+/** 状态翻转防抖：walking/idle/falling 之间切换的最低驻留时间（秒），防止接触法线噪声导致抖动 */
+export const STATE_FLIP_MIN_TIME = 0.1

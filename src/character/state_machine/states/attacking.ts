@@ -1,4 +1,6 @@
 import type {StateHandler} from '../types.ts'
+import {SLOPE_WALK_THRESHOLD} from '../constants.ts'
+import {shouldFall, isSupportedOn, projectToSlope, applySlopeAntiGravity} from '../ground.ts'
 
 /** 近战挥砍倾斜角范围：最小 60°（PI/3），最大 180°（PI） */
 const TILT_MIN = Math.PI / 3
@@ -24,14 +26,12 @@ export const attackingHandler: StateHandler = {
         entity.combat.attackTimer += dt
         const vx = entity.body.velocity.x * 0.3
         const vz = entity.body.velocity.z * 0.3
-        if (entity.isOnGround && entity.groundNormal.y > 0.001) {
-            const n = entity.groundNormal
+        /* 斜坡防滑：可站立坡面上速度清零并沿坡投影 + 反力抵消重力沿坡分量，防止攻击中自然下滑 */
+        if (!projectToSlope(entity, 0, 0, SLOPE_WALK_THRESHOLD)) {
             entity.body.velocity.x = vx
-            entity.body.velocity.y = -(vx * n.x + vz * n.z) / n.y
             entity.body.velocity.z = vz
         } else {
-            entity.body.velocity.x = vx
-            entity.body.velocity.z = vz
+            applySlopeAntiGravity(entity)
         }
         entity.body.wakeUp()
     },
@@ -48,7 +48,7 @@ export const attackingHandler: StateHandler = {
                 const skill = entity.combat.skills[entity.combat.currentSkillIndex]
                 return entity.combat.attackTimer >= (skill?.config.duration ?? 0)
                     && Math.hypot(input.dx, input.dz) > 0.001
-                    && entity.isOnGround
+                    && isSupportedOn(entity, SLOPE_WALK_THRESHOLD)
             },
         },
         {
@@ -56,7 +56,7 @@ export const attackingHandler: StateHandler = {
             guard: (_input, entity) => {
                 const skill = entity.combat.skills[entity.combat.currentSkillIndex]
                 return entity.combat.attackTimer >= (skill?.config.duration ?? 0)
-                    && entity.isOnGround
+                    && isSupportedOn(entity, SLOPE_WALK_THRESHOLD)
             },
         },
         {
@@ -65,7 +65,7 @@ export const attackingHandler: StateHandler = {
                 const skill = entity.combat.skills[entity.combat.currentSkillIndex]
                 return entity.combat.attackTimer >= (skill?.config.duration ?? 0)
                     && input.jump
-                    && entity.isOnGround
+                    && isSupportedOn(entity, SLOPE_WALK_THRESHOLD)
             },
         },
         {
@@ -73,7 +73,7 @@ export const attackingHandler: StateHandler = {
             guard: (_input, entity) => {
                 const skill = entity.combat.skills[entity.combat.currentSkillIndex]
                 return entity.combat.attackTimer >= (skill?.config.duration ?? 0)
-                    && !entity.isOnGround
+                    && shouldFall(entity)
             },
         },
         {
