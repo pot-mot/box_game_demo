@@ -8,6 +8,10 @@ import {createSkillSlot} from '../../../character/combat/skill_types.ts'
 import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
+import {createAppearanceSystem} from '../appearance/system.ts'
+import {WALK_ANIM_MAX_SPEED, HORIZONTAL_SPEED_SMOOTHING} from '../appearance/constants.ts'
+import {CAMERA_SMOOTH_FACTOR} from '../../../modes/play/constants.ts'
+import type {CharacterModel} from '../appearance/types.ts'
 
 const DT = FIXED_TIME_STEP
 const FRAMES_3600 = 3600
@@ -190,6 +194,147 @@ describe('idle 下坡坡度矩阵（3600 帧物理更新）', () => {
             const r = runAndStats(shared, entity, 0, FRAMES_3600)
             expect(r.fallingFrames).toBeGreaterThan(FRAMES_3600 * 0.9)
             expect(r.finalState).toBe('falling')
+        })
+    }
+})
+
+/** 构造关节 mock（rotation 带 x/y/z 与 set，覆盖 idle/walking 动画写入） */
+const makeRotation = (): {x: number; y: number; z: number; set: (x: number, y: number, z: number) => void} => ({
+    x: 0, y: 0, z: 0,
+    set(x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z },
+})
+
+/** 构造最低限度 CharacterModel mock（9 个动画关节） */
+const makeModelMock = (): CharacterModel => ({
+    group: null!,
+    headNeck: {rotation: makeRotation()} as never,
+    head: null!,
+    body: null!,
+    rightArmShoulder: {rotation: makeRotation()} as never,
+    rightUpperArm: null!,
+    rightArmElbow: {rotation: makeRotation()} as never,
+    rightForearm: null!,
+    rightHandPivot: null!,
+    leftArmShoulder: {rotation: makeRotation()} as never,
+    leftUpperArm: null!,
+    leftArmElbow: {rotation: makeRotation()} as never,
+    leftForearm: null!,
+    leftHandPivot: null!,
+    rightLegHip: {rotation: makeRotation()} as never,
+    rightThigh: null!,
+    rightLegKnee: {rotation: makeRotation()} as never,
+    rightShin: null!,
+    leftLegHip: {rotation: makeRotation()} as never,
+    leftThigh: null!,
+    leftLegKnee: {rotation: makeRotation()} as never,
+    leftShin: null!,
+    equipWeapon: () => {}, removeWeapon: () => {}, weaponMesh: null, recolor: () => {}, dispose: () => {},
+} as unknown as CharacterModel)
+
+describe('郊狼过程动画与摄像机平滑', () => {
+    /* 预热 1s：排除初始 idle→walking 过渡（速度 0→6 导致的合法频率爬升） */
+    const WARMUP_FRAMES = 60
+
+    for (const deg of SLOPES_WALKABLE) {
+        it(`walking 下坡 ${deg}° 动画相位单调不减且速率平滑`, () => {
+            const shared = createSharedWorld()
+            makeSlope(shared, Math.tan(deg * Math.PI / 180))
+            const x = 820
+            const y = Math.tan(deg * Math.PI / 180) * x + 0.51
+            const entity = makeChar(shared, x, y, -50)
+            const sys = createAppearanceSystem()
+            const model = makeModelMock()
+
+            let gs: GroundState = {isOnGround: true, groundNormal: {x: 0, y: 1, z: 0}, groundKeepTimer: 0}
+            let prevT: number | undefined
+            let prevPhaseVel: number | undefined
+            let phaseRegress = 0
+            let maxPhaseVelJump = 0
+            /* 与 appearance/system.ts 一致的 EMA 平滑与位移积分（状态切换时重置） */
+            let smoothedSpeed = 0
+            let travel = 0
+            let prevState: string | undefined
+            for (let i = 0; i < FRAMES_3600; i++) {
+                gs = tick(shared, entity, gs, -1, 0)
+                const state = entity.stateMachine.currentState
+                const hSpeed = Math.hypot(entity.body.velocity.x, entity.body.velocity.z)
+                sys.update(DT, model, state, {
+                    stateTime: entity.stateMachine.stateTime,
+                    horizontalSpeed: hSpeed,
+                    horizontalTravel: 0,
+                    swingTilt: 0,
+                })
+                if (state !== prevState) {
+                    smoothedSpeed = hSpeed
+                    travel = 0
+                    prevState = state
+                } else {
+                    smoothedSpeed += (hSpeed - smoothedSpeed) * HORIZONTAL_SPEED_SMOOTHING
+                }
+                travel += smoothedSpeed * DT
+                if (i < WARMUP_FRAMES) continue
+                if (state !== 'walking') {
+                    prevT = undefined
+                    prevPhaseVel = undefined
+                    continue
+                }
+                /* 与 walkingAnim 一致：t = 1.2×stateTime + 1.3×travel，相位速度 = 1.2 + 1.3×speed */
+                const phaseVel = 1.2 + 1.3 * Math.min(smoothedSpeed, WALK_ANIM_MAX_SPEED)
+                const t = 1.2 * entity.stateMachine.stateTime + 1.3 * travel
+                if (prevT !== undefined) {
+                    if (t < prevT - 1e-6) phaseRegress++
+                    if (prevPhaseVel !== undefined) maxPhaseVelJump = Math.max(maxPhaseVelJump, Math.abs(phaseVel - prevPhaseVel))
+                }
+                prevT = t
+                prevPhaseVel = phaseVel
+            }
+            expect(phaseRegress).toBe(0)
+            expect(maxPhaseVelJump).toBeLessThan(1.0)
+        })
+
+        it(`walking 下坡 ${deg}° 摄像机帧间位移平滑`, () => {
+            const shared = createSharedWorld()
+            makeSlope(shared, Math.tan(deg * Math.PI / 180))
+            const x = 820
+            const y = Math.tan(deg * Math.PI / 180) * x + 0.51
+            const entity = makeChar(shared, x, y, -50)
+
+            /* 与 setupPlayCamera 默认参数一致（yaw=π, pitch=π/6, distance=6），含 EMA 平滑跟随 */
+            const CAM_YAW = Math.PI
+            const CAM_PITCH = Math.PI / 6
+            const CAM_DIST = 6
+            const SMOOTH_K = 1 - Math.exp(-CAMERA_SMOOTH_FACTOR * DT)
+            let gs: GroundState = {isOnGround: true, groundNormal: {x: 0, y: 1, z: 0}, groundKeepTimer: 0}
+            let prevCam: {x: number; y: number; z: number} | undefined
+            let maxFrameDelta = 0
+            let yFlips = 0
+            let prevSign: number | undefined
+            let smoothed: {x: number; y: number; z: number} | undefined
+            for (let i = 0; i < FRAMES_3600; i++) {
+                gs = tick(shared, entity, gs, -1, 0)
+                if (i < WARMUP_FRAMES) continue
+                const p = entity.body.position
+                const rawCamX = p.x + CAM_DIST * Math.sin(CAM_YAW) * Math.cos(CAM_PITCH)
+                const rawCamY = p.y + CAM_DIST * Math.sin(CAM_PITCH)
+                const rawCamZ = p.z + CAM_DIST * Math.cos(CAM_YAW) * Math.cos(CAM_PITCH)
+                if (!smoothed) {
+                    smoothed = {x: rawCamX, y: rawCamY, z: rawCamZ}
+                } else {
+                    smoothed.x += (rawCamX - smoothed.x) * SMOOTH_K
+                    smoothed.y += (rawCamY - smoothed.y) * SMOOTH_K
+                    smoothed.z += (rawCamZ - smoothed.z) * SMOOTH_K
+                }
+                if (prevCam) {
+                    maxFrameDelta = Math.max(maxFrameDelta, Math.hypot(smoothed.x - prevCam.x, smoothed.y - prevCam.y, smoothed.z - prevCam.z))
+                    const dy = smoothed.y - prevCam.y
+                    const sign = Math.sign(dy)
+                    if (prevSign !== undefined && sign !== 0 && prevSign !== 0 && sign !== prevSign) yFlips++
+                    if (sign !== 0) prevSign = sign
+                }
+                prevCam = {...smoothed}
+            }
+            expect(maxFrameDelta).toBeLessThan(0.15)
+            expect(yFlips).toBeLessThan(2)
         })
     }
 })

@@ -1,14 +1,16 @@
 import type {AnimationHandler} from '../types.ts'
-import {WALK_ANIM_MAX_SPEED} from '../constants.ts'
 
 export const walkingAnim: AnimationHandler = {
     enter: () => {},
     update: (dt, model, ctx) => {
         void dt
 
-        const speed = Math.min(ctx.horizontalSpeed, WALK_ANIM_MAX_SPEED)
-        const freq = 1.2 + speed * 1.3
-        const t = ctx.stateTime * freq
+        /*
+         * 相位 = 基础步频时间 + 位移驱动步频：
+         * t = 1.2×stateTime + 1.3×horizontalTravel（与原公式 stateTime×(1.2+speed×1.3) 在匀速时等价）
+         * 两项均单调递增 → 相位永不回退，coyote 吸附/弹跳导致的速度突变只改变摆腿速率不产生相位跳变
+         */
+        const t = 1.2 * ctx.stateTime + 1.3 * ctx.horizontalTravel
 
         const legSwing = Math.sin(t) * 0.5
         const kneeBend = Math.max(0, -Math.cos(t)) * 0.35

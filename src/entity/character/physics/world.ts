@@ -476,6 +476,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
+                    horizontalTravel: 0,
                     swingTilt: entity.combat.swingTilt,
                 })
 

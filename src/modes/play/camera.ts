@@ -1,5 +1,5 @@
 import {Vector3, type PerspectiveCamera} from 'three'
-import {ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE} from './constants.ts'
+import {ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE, CAMERA_SMOOTH_FACTOR} from './constants.ts'
 import {ORBIT_SENSITIVITY} from '../constants.ts'
 import {getInputRegistry} from '../../input/registry.ts'
 import {applyFreeFlightMovement} from '../free_flight.ts'
@@ -12,7 +12,7 @@ export interface MouseAttackCallbacks {
 }
 
 /**
- * 游玩模式相机：有玩家 → 第三人称环绕；无玩家 → 自由飞行（与编辑模式共用 applyFreeFlightMovement）。
+ * 游玩模式相机：有玩家 → 第三人称环绕（平滑跟随目标，抑制角色弹跳导致的抖动）；无玩家 → 自由飞行。
  * 左键拖拽旋转相机，左键短按触发轻击，右键触发重击。
  */
 export const setupPlayCamera = (
@@ -20,7 +20,7 @@ export const setupPlayCamera = (
     element: HTMLElement,
     getTarget: () => Vector3 | undefined,
     mouseAttack?: MouseAttackCallbacks,
-): () => void => {
+): (dt: number) => void => {
     const input = getInputRegistry()
     let yaw = Math.PI
     let pitch = Math.PI / 6
@@ -28,6 +28,9 @@ export const setupPlayCamera = (
     let isDown = false
     /** 左键按下后累计移动距离（像素），用于区分 click / drag */
     let dragDist = 0
+    /** 平滑后的跟随目标（EMA），避免角色弹跳直接传导到相机 */
+    const smoothedTarget = new Vector3()
+    let hasSmoothedTarget = false
 
     element.addEventListener('mousedown', (e: MouseEvent) => {
         if (e.button === 0) {
@@ -71,15 +74,23 @@ export const setupPlayCamera = (
         }
     })
 
-    return () => {
+    return (dt: number) => {
         const target = getTarget()
         if (target) {
+            /* 帧率无关的 EMA 平滑：1 - exp(-k·dt) */
+            const k = 1 - Math.exp(-CAMERA_SMOOTH_FACTOR * dt)
+            if (!hasSmoothedTarget) {
+                smoothedTarget.copy(target)
+                hasSmoothedTarget = true
+            } else {
+                smoothedTarget.lerp(target, k)
+            }
             camera.position.set(
-                target.x + distance * Math.sin(yaw) * Math.cos(pitch),
-                target.y + distance * Math.sin(pitch),
-                target.z + distance * Math.cos(yaw) * Math.cos(pitch),
+                smoothedTarget.x + distance * Math.sin(yaw) * Math.cos(pitch),
+                smoothedTarget.y + distance * Math.sin(pitch),
+                smoothedTarget.z + distance * Math.cos(yaw) * Math.cos(pitch),
             )
-            camera.lookAt(target)
+            camera.lookAt(smoothedTarget)
             return
         }
 

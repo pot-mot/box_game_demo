@@ -60,6 +60,8 @@ export interface CharacterModel {
 export interface AnimationContext {
     readonly stateTime: number
     readonly horizontalSpeed: number
+    /** 累计水平位移（m）：由动画系统按平滑速度积分，单调递增，供位移驱动动画使用 */
+    readonly horizontalTravel: number
     /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍 */
     readonly swingTilt: number
 }

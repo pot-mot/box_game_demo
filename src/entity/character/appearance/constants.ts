@@ -78,6 +78,9 @@ export const SIDE_DARKEN_RATIO = 0.85
 /** 行走速度归一化上限（m/s），用于动画周期计算 */
 export const WALK_ANIM_MAX_SPEED = 6.0
 
+/** 水平速度平滑系数（EMA 权重，0~1，越小越平滑）：抑制 coyote 吸附/弹跳导致的速度突变引起的动画频率抖动 */
+export const HORIZONTAL_SPEED_SMOOTHING = 0.3
+
 /** 身体朝向旋转速度（rad/s） */
 export const ROTATION_SPEED = 10
 

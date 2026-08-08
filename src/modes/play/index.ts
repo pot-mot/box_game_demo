@@ -53,7 +53,7 @@ export const setupPlayMode = (
     const updater = (dt: number): void => {
         playerInput()
         characterSystem.update(dt)
-        playCameraUpdate()
+        playCameraUpdate(dt)
         healthBarUpdate(camera, dt)
 
         const player = characterSystem.getPlayerCharacter()
