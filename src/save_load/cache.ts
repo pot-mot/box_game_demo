@@ -1,8 +1,9 @@
 import type {SaveData} from './types.ts'
+import {validateSaveData} from './validation.ts'
 
 const CACHE_KEY = 'box_demo_save'
 
-export const cacheSaveData = (data: SaveData): void => {
+export const cacheSaveData = (data: unknown): void => {
     try {
         localStorage.setItem(CACHE_KEY, JSON.stringify(data))
     } catch {
@@ -14,7 +15,8 @@ export const loadCachedSaveData = (): SaveData | undefined => {
     try {
         const raw = localStorage.getItem(CACHE_KEY)
         if (!raw) return undefined
-        return JSON.parse(raw) as unknown as SaveData
+        const parsed = JSON.parse(raw)
+        return validateSaveData(parsed)
     } catch {
         return undefined
     }

@@ -1,19 +1,10 @@
-import {DestructibleConfigSchema} from '../validation.ts'
-
-/** 可破坏箱子默认配置 */
-export const DEFAULT_DESTRUCTIBLE_CONFIG = DestructibleConfigSchema.parse({
-    width: 1,
-    height: 1,
-    depth: 1,
-    mass: 1,
-    friction: 0.3,
+/** 可破坏箱子额外字段默认值 */
+export const DESTRUCTIBLE_CONFIG_DEFAULTS = {
     maxHealth: 8,
-})
+}
 
 /** 碰撞冲击力 → 伤害的缩放系数 */
 export const IMPACT_FORCE_SCALE = 0.5
-/** 碎片存续时间（秒） */
-export const DEBRIS_LIFETIME = 5
 /** 碰撞冷却时间（秒），防止连续碰撞重复触发 */
 export const COLLISION_COOLDOWN = 0.5
 /** 最少碎片生成数量 */

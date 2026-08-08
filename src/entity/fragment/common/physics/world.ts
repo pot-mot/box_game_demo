@@ -12,7 +12,7 @@ import {createWireframe, cleanupWireframe} from '../../../box/base/render'
 import {formatRowText, createFragmentPanel} from '../ui'
 
 import type {EntityType} from '../../../constants'
-import {DEFAULT_FRAGMENT_CONFIG} from './constants.ts'
+import {DEFAULT_FRAGMENT_CONFIG} from '../validation.ts'
 
 const TYPE: EntityType = 'fragment/common' as const
 const BADGE_LABEL = 'F'

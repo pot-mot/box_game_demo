@@ -19,7 +19,7 @@ import {cleanupWireframe, createWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {createBurningPanel, formatRowText} from '../ui'
 
-import {DEFAULT_BURNING_CONFIG} from './constants.ts'
+import {DEFAULT_BURNING_CONFIG} from '../validation.ts'
 import type {EntityType} from '../../../constants.ts'
 
 const TYPE: EntityType = 'box/burning' as const

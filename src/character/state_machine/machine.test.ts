@@ -13,7 +13,7 @@ const makeMock = (): CharacterEntity => {
     const slot = createSkillSlot(MELEE_SKILL_PRESETS.long_sword_slash)
     return {
         id: 1,
-        config: {speed: 6, jumpHeight: 2, radius: 0.125, height: 1},
+        config: {speed: 6, jumpHeight: 2, scale: 1},
         mesh: null!, wireframe: undefined,
         appearanceGroup: {rotation: {y: 0}} as unknown as CharacterEntity['appearanceGroup'],
         body: {mass: 1, force: new Vec3(), velocity: new Vec3(), wakeUp: () => {}} as unknown as CharacterEntity['body'],

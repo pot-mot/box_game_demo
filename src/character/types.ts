@@ -10,8 +10,8 @@ export type {PeaceSubStrategy, CombatSubStrategy}
 export interface CharacterConfig {
     speed: number
     jumpHeight: number
-    radius: number
-    height: number
+    /** 整体缩放（碰撞箱和模型等比缩放） */
+    scale: number
 }
 
 export interface CharacterEntity {

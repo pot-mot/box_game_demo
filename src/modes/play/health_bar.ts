@@ -1,5 +1,6 @@
 import {type Scene, type PerspectiveCamera, Sprite, SpriteMaterial, CanvasTexture} from 'three'
 import type {CharacterEntity} from '../../character/types.ts'
+import {CHARACTER_BASE_SIZE} from '../../entity/character/constants.ts'
 
 const BAR_W = 128
 const BAR_H = 16
@@ -89,7 +90,7 @@ export const setupHealthBars = (
 
                 entry.sprite.position.set(
                     c.body.position.x,
-                    c.body.position.y + c.config.height + 0.3,
+                    c.body.position.y + CHARACTER_BASE_SIZE.height * c.config.scale + 0.3,
                     c.body.position.z,
                 )
                 entry.sprite.scale.set(FIXED_SCALE, FIXED_SCALE * (BAR_H / BAR_W), 1)

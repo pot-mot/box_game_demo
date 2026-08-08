@@ -55,12 +55,16 @@ export const LEG_RATIO = 0.5
 /** 头部宽度系数（相对于 bodyW） */
 export const HEAD_WIDTH_RATIO = 0.65
 
-/** 肢体宽度系数（相对于 radius * 2 即身宽） */
+/** 肢体宽度系数（相对于 bodyW 即身宽） */
 export const ARM_WIDTH_RATIO = 0.4
 export const LEG_WIDTH_RATIO = 0.5
 
 /** 身体前后深度系数（bodyD = bodyW * BODY_DEPTH_RATIO） */
 export const BODY_DEPTH_RATIO = 0.75
+
+/** 模型基准尺寸（scale=1 时，与碰撞箱无关） */
+export const MODEL_BASE_HEIGHT = 1
+export const MODEL_BASE_WIDTH = 0.25
 
 /** 手臂X轴偏移（距离身体侧边的额外间距） */
 export const ARM_X_GAP = 0.02

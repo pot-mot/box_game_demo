@@ -8,7 +8,7 @@ import type {CharacterEntity} from '../types.ts'
 /** 构造最小 CharacterEntity mock */
 const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterEntity => ({
     id: 1,
-    config: {speed: 6, jumpHeight: 2, radius: 0.125, height: 1},
+    config: {speed: 6, jumpHeight: 2, scale: 1},
     mesh: null!, wireframe: undefined, appearanceGroup: null!,
     body: {mass: 1, force: new Vec3(), velocity: new Vec3(), wakeUp: () => {}} as unknown as CharacterEntity['body'],
     isOnGround,

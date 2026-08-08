@@ -43,8 +43,7 @@ const restoreCanvas2d = (): void => {
 const meleeSaveConfig = (overrides?: Partial<CharacterSaveConfig>): CharacterSaveConfig => ({
     speed: 6,
     jumpHeight: 2,
-    radius: 0.125,
-    height: 1,
+    scale: 1,
     attackSlot: {
         type: 'melee',
         weaponId: 'long_sword',

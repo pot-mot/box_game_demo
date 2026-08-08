@@ -8,7 +8,7 @@ import {createWaterBlockMesh, updateWaterBlockMeshSize, disposeWaterBlockMesh} f
 import {createWireframe, cleanupWireframe} from '../../../box/base/render'
 import {setupWaterPhysics} from './forces.ts'
 import {formatRowText, createWaterPanel} from '../ui'
-import {DEFAULT_WATER_CONFIG} from './constants.ts'
+import {DEFAULT_WATER_CONFIG} from '../validation.ts'
 import type {EntityType} from '../../../constants.ts'
 
 const TYPE: EntityType = 'area/water' as const

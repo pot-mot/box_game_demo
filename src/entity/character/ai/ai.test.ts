@@ -49,7 +49,7 @@ const makeChar = (
             attackedTargets: new Set(),
             attackDirX: 0, attackDirZ: 0, swingTilt: 0,
         },
-        config: {speed: 0, jumpHeight: 0, radius: 0.125, height: 1},
+        config: {speed: 0, jumpHeight: 0, scale: 1},
         mesh: null!, appearanceGroup: null!,
         isOnGround: true, rowText: '',
         groundKeepTimer: 0, airborneTime: 0, groundedTime: 0,

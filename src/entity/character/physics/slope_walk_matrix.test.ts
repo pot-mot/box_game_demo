@@ -78,7 +78,7 @@ const makeChar = (shared: ReturnType<typeof createSharedWorld>, x: number, y: nu
     const slot = createSkillSlot(MELEE_SKILL_PRESETS.long_sword_slash)
     const entity: CharacterEntity = {
         id: 1,
-        config: {speed: 6, jumpHeight: 2, radius: 0.125, height: 1},
+        config: {speed: 6, jumpHeight: 2, scale: 1},
         mesh: null!, wireframe: undefined,
         appearanceGroup: {rotation: {y: 0}} as unknown as CharacterEntity['appearanceGroup'],
         body,
@@ -246,14 +246,14 @@ describe('郊狼过程动画与摄像机平滑', () => {
             const model = makeModelMock()
 
             let gs: GroundState = {isOnGround: true, groundNormal: {x: 0, y: 1, z: 0}, groundKeepTimer: 0}
-            let prevT: number | undefined
-            let prevPhaseVel: number | undefined
+            let prevT: number | undefined = undefined
+            let prevPhaseVel: number | undefined = undefined
             let phaseRegress = 0
             let maxPhaseVelJump = 0
             /* 与 appearance/system.ts 一致的 EMA 平滑与位移积分（状态切换时重置） */
             let smoothedSpeed = 0
             let travel = 0
-            let prevState: string | undefined
+            let prevState: string | undefined = undefined
             for (let i = 0; i < FRAMES_3600; i++) {
                 gs = tick(shared, entity, gs, -1, 0)
                 const state = entity.stateMachine.currentState
@@ -305,11 +305,11 @@ describe('郊狼过程动画与摄像机平滑', () => {
             const CAM_DIST = 6
             const SMOOTH_K = 1 - Math.exp(-CAMERA_SMOOTH_FACTOR * DT)
             let gs: GroundState = {isOnGround: true, groundNormal: {x: 0, y: 1, z: 0}, groundKeepTimer: 0}
-            let prevCam: {x: number; y: number; z: number} | undefined
+            let prevCam: {x: number; y: number; z: number} | undefined = undefined
             let maxFrameDelta = 0
             let yFlips = 0
-            let prevSign: number | undefined
-            let smoothed: {x: number; y: number; z: number} | undefined
+            let prevSign: number | undefined = undefined
+            let smoothed: {x: number; y: number; z: number} | undefined = undefined
             for (let i = 0; i < FRAMES_3600; i++) {
                 gs = tick(shared, entity, gs, -1, 0)
                 if (i < WARMUP_FRAMES) continue

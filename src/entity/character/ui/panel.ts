@@ -86,8 +86,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     el.appendChild(createSection('Config'))
     const speed = createLabeledNumberInput(el, 'Speed', {min: '0.1', step: '0.1', value: '6'})
     const jumpH = createLabeledNumberInput(el, 'JumpH', {min: '0.1', step: '0.1', value: '2'})
-    const radius = createLabeledNumberInput(el, 'Radius', {min: '0.05', step: '0.01', value: '0.125'})
-    const height = createLabeledNumberInput(el, 'Height', {min: '0.2', step: '0.01', value: '1'})
+    const scale = createLabeledNumberInput(el, 'Scale', {min: '0.1', step: '0.1', value: '1'})
 
     el.appendChild(createSection('Faction'))
     const faction = createLabeledNumberInput(el, 'Faction', {min: '0', step: '1', value: '0'})
@@ -404,8 +403,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
             speed.value = String(sel.config.speed)
             jumpH.value = String(sel.config.jumpHeight)
-            radius.value = String(sel.config.radius)
-            height.value = String(sel.config.height)
+            scale.value = String(sel.config.scale)
 
             const skill = sel.combat.skills[sel.combat.currentSkillIndex]
             maxHP.value = String(sel.combat.maxHealth)
@@ -508,8 +506,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 ctx.updateCharacterConfig?.(cur.id, {
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
-                    radius: parseFloat(radius.value),
-                    height: parseFloat(height.value),
+                    scale: parseFloat(scale.value),
                 }, isRanged ? {
                     type: 'ranged',
                     weaponId: selectedWeaponId,

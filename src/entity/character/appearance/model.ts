@@ -19,6 +19,8 @@ import {
     FACE_CANVAS_SIZE,
     SELECT_PALETTE,
     darken,
+    MODEL_BASE_HEIGHT,
+    MODEL_BASE_WIDTH,
 } from './constants.ts'
 
 interface TrackedMesh {
@@ -125,15 +127,14 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     const palette = SELECT_PALETTE(faction)
     const tracked: TrackedMesh[] = []
 
-    const H = config.height
-    const R = config.radius
+    const H = MODEL_BASE_HEIGHT
+    const bodyW = MODEL_BASE_WIDTH
+    const bodyD = bodyW * BODY_DEPTH_RATIO
 
     const headH = H * HEAD_RATIO
     const bodyH = H * BODY_RATIO
     const legH = H * LEG_RATIO
 
-    const bodyW = R * 2
-    const bodyD = bodyW * BODY_DEPTH_RATIO
     const headW = bodyW * HEAD_WIDTH_RATIO
 
     const armW = bodyW * ARM_WIDTH_RATIO
@@ -254,6 +255,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     headNeck.add(headTM.mesh)
     tracked.push(headTM)
     group.add(headNeck)
+
+    group.scale.set(config.scale, config.scale, config.scale)
 
     let weaponGroup: Group | null = null
     let weaponHitCenter: Mesh | null = null

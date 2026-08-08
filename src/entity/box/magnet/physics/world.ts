@@ -16,7 +16,8 @@ import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {formatRowText, createMagnetPanel} from '../ui'
 
-import {DEFAULT_MAGNET_CONFIG, MAX_SPEED} from './constants.ts'
+import {DEFAULT_MAGNET_CONFIG} from '../validation.ts'
+import {MAX_SPEED} from './constants.ts'
 import type {EntityType} from '../../../constants.ts'
 
 // ── 常量 ──

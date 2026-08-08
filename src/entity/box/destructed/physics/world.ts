@@ -8,8 +8,8 @@ import type {XYZ} from '../../base/types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
 import {clampHealth, clampHealthOnMaxChange} from '../../base/types/health'
+import {DEFAULT_DESTRUCTIBLE_CONFIG} from '../validation.ts'
 import {
-    DEFAULT_DESTRUCTIBLE_CONFIG,
     IMPACT_FORCE_SCALE,
     COLLISION_COOLDOWN,
     MIN_FRAGMENT_COUNT,

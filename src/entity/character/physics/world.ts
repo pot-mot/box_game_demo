@@ -1,4 +1,4 @@
-import {type Scene, type Mesh} from 'three'
+import {type Scene, type Mesh, type LineBasicMaterial} from 'three'
 import {Body, BODY_TYPES, Box, Vec3} from 'cannon-es'
 import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
@@ -21,13 +21,14 @@ import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import type {SpawnBoxCallback} from '../ai/types.ts'
 import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_sight.ts'
 import {createAIMachine, updateAI} from '../ai/machine.ts'
-import {createCharacterMesh} from '../render'
+import {createCharacterMesh, updateCharacterMesh} from '../render'
 import {createCharacterModel} from '../appearance/model.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
 import type {AppearanceSystem} from '../appearance/system.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
-import {DEFAULT_CHARACTER_CONFIG, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
+import {DEFAULT_CHARACTER_CONFIG} from '../validation.ts'
+import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE} from '../constants.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import {resolveGroundState} from './ground_state.ts'
 import {computeSeparation} from './separation.ts'
@@ -240,7 +241,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             collisionFilterMask: CHARACTER_COLLISION_MASK,
         })
 
-        body.addShape(new Box(new Vec3(config.radius, config.height / 2, config.radius)))
+        const bw = CHARACTER_BASE_SIZE.width * config.scale
+        const bh = CHARACTER_BASE_SIZE.height * config.scale
+        const bd = CHARACTER_BASE_SIZE.depth * config.scale
+        body.addShape(new Box(new Vec3(bw / 2, bh / 2, bd / 2)))
         body.position.set(x, y, z)
         world.addBody(body)
 
@@ -567,10 +571,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (separated.has(key)) continue
             separated.add(key)
 
+            const maxHalf = Math.max(CHARACTER_BASE_SIZE.width, CHARACTER_BASE_SIZE.depth) / 2
             const sep = computeSeparation({
                 aiX: ai.body.position.x, aiZ: ai.body.position.z,
                 ajX: aj.body.position.x, ajZ: aj.body.position.z,
-                radiusA: ai.config.radius, radiusB: aj.config.radius,
+                radiusA: maxHalf * ai.config.scale,
+                radiusB: maxHalf * aj.config.scale,
             }, CHARACTER_SEPARATION_SPEED)
             if (!sep) continue
 
@@ -641,7 +647,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
-        const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, radius: saveConfig.radius, height: saveConfig.height}
+        const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, scale: saveConfig.scale}
         const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical')
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
@@ -663,8 +669,32 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (!entity) return
         if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
         if (charCfg.jumpHeight !== undefined) entity.config.jumpHeight = charCfg.jumpHeight
-        if (charCfg.radius !== undefined) entity.config.radius = charCfg.radius
-        if (charCfg.height !== undefined) entity.config.height = charCfg.height
+        if (charCfg.scale !== undefined) {
+            entity.config.scale = charCfg.scale
+
+            const model = appearanceModels.get(entity.id)
+            if (model) {
+                model.group.scale.set(entity.config.scale, entity.config.scale, entity.config.scale)
+            }
+
+            while (entity.body.shapes.length > 0) entity.body.shapes.pop()
+            const bw = CHARACTER_BASE_SIZE.width * entity.config.scale
+            const bh = CHARACTER_BASE_SIZE.height * entity.config.scale
+            const bd = CHARACTER_BASE_SIZE.depth * entity.config.scale
+            entity.body.addShape(new Box(new Vec3(bw / 2, bh / 2, bd / 2)))
+            entity.body.updateMassProperties()
+            entity.body.wakeUp()
+
+            updateCharacterMesh(entity.mesh, entity.config.scale)
+            if (entity.wireframe) {
+                entity.mesh.remove(entity.wireframe)
+                entity.wireframe.geometry.dispose()
+                ;(entity.wireframe.material as LineBasicMaterial).dispose()
+                const newWire = createWireframe(entity.mesh.geometry)
+                entity.mesh.add(newWire)
+                entity.wireframe = newWire
+            }
+        }
         if (newAttackSlot) {
             entity.combat.skills = attackToSkillSlots(newAttackSlot)
             if (entity.isPlayer && newAttackSlot.type === 'melee') {

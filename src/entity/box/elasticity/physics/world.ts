@@ -10,8 +10,8 @@ import {createWireframe, cleanupWireframe} from '../../base/render'
 import {findNonOverlappingY} from '../../base/physics'
 import {formatRowText, createElasticPanel} from '../ui'
 
+import {DEFAULT_ELASTIC_CONFIG} from '../validation.ts'
 import {
-    DEFAULT_ELASTIC_CONFIG,
     COLLISION_COOLDOWN,
     IMPACT_DEFORM_SCALE,
     GRAVITY_SQUASH,

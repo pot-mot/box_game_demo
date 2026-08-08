@@ -49,7 +49,7 @@ const makeChar = (shared: ReturnType<typeof createSharedWorld>, x: number, y: nu
     const slot = createSkillSlot(MELEE_SKILL_PRESETS.long_sword_slash)
     const entity: CharacterEntity = {
         id: 1,
-        config: {speed: 6, jumpHeight: 2, radius: 0.125, height: 1},
+        config: {speed: 6, jumpHeight: 2, scale: 1},
         mesh: null!, wireframe: undefined, appearanceGroup: null!,
         body,
         isOnGround: true,

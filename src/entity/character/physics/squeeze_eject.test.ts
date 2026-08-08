@@ -46,7 +46,7 @@ const makeChar = (
     const slot = createSkillSlot(MELEE_SKILL_PRESETS.long_sword_slash)
     const entity: CharacterEntity = {
         id,
-        config: {speed, jumpHeight: 2, radius: R, height: 1},
+        config: {speed, jumpHeight: 2, scale: 1},
         mesh: null!,
         wireframe: undefined,
         appearanceGroup: null!,
@@ -195,8 +195,8 @@ const tickMulti = (
                 aiZ: ai.body.position.z,
                 ajX: aj.body.position.x,
                 ajZ: aj.body.position.z,
-                radiusA: ai.config.radius,
-                radiusB: aj.config.radius,
+                radiusA: R * ai.config.scale,
+                radiusB: R * aj.config.scale,
             },
             CHARACTER_SEPARATION_SPEED,
         )
@@ -448,8 +448,8 @@ describe('AI 移动行为与分离不冲突', () => {
                 aiZ: ai.body.position.z,
                 ajX: target.body.position.x,
                 ajZ: target.body.position.z,
-                radiusA: ai.config.radius,
-                radiusB: target.config.radius,
+                radiusA: R * ai.config.scale,
+                radiusB: R * target.config.scale,
             },
             CHARACTER_SEPARATION_SPEED,
         )
@@ -1054,8 +1054,8 @@ describe('60 物理子步稳定性', () => {
                     aiZ: a.body.position.z,
                     ajX: b.body.position.x,
                     ajZ: b.body.position.z,
-                    radiusA: a.config.radius,
-                    radiusB: b.config.radius,
+                    radiusA: R * a.config.scale,
+                    radiusB: R * b.config.scale,
                 },
                 CHARACTER_SEPARATION_SPEED,
             )
@@ -1137,8 +1137,8 @@ describe('60 物理子步稳定性', () => {
                             aiZ: entities[ci].body.position.z,
                             ajX: entities[cj].body.position.x,
                             ajZ: entities[cj].body.position.z,
-                            radiusA: entities[ci].config.radius,
-                            radiusB: entities[cj].config.radius,
+                            radiusA: R * entities[ci].config.scale,
+                            radiusB: R * entities[cj].config.scale,
                         },
                         CHARACTER_SEPARATION_SPEED,
                     )
@@ -1201,8 +1201,8 @@ describe('60 物理子步稳定性', () => {
                     aiZ: w1.a.body.position.z,
                     ajX: w1.b.body.position.x,
                     ajZ: w1.b.body.position.z,
-                    radiusA: w1.a.config.radius,
-                    radiusB: w1.b.config.radius,
+                    radiusA: R * w1.a.config.scale,
+                    radiusB: R * w1.b.config.scale,
                 },
                 CHARACTER_SEPARATION_SPEED,
             )
@@ -1243,8 +1243,8 @@ describe('60 物理子步稳定性', () => {
                     aiZ: w60.a.body.position.z,
                     ajX: w60.b.body.position.x,
                     ajZ: w60.b.body.position.z,
-                    radiusA: w60.a.config.radius,
-                    radiusB: w60.b.config.radius,
+                    radiusA: R * w60.a.config.scale,
+                    radiusB: R * w60.b.config.scale,
                 },
                 CHARACTER_SEPARATION_SPEED,
             )

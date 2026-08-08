@@ -100,8 +100,7 @@ export type SavableEntity = SavableCommonBox | SavableDestructibleBox | SavableB
 export interface CharacterSaveConfig {
     speed: number
     jumpHeight: number
-    radius: number
-    height: number
+    scale: number
     peaceStrategy?: 'patrol' | 'build'
     combatStrategy?: 'tactical' | 'aggressive' | 'cowardly'
     attackSlot: {
