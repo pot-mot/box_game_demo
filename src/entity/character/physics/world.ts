@@ -37,12 +37,21 @@ import {SELECT_PALETTE} from '../appearance/constants.ts'
 import {createMeleeExecutor} from '../combat/melee_executor.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
+import type {WeaponMeshConfig} from '../appearance/weapon_mesh.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {createWireframe, cleanupWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
 
 const _tmpVec = new Vec3()
+
+/** 根据 AttackConfig 解析武器模型配置 */
+const resolveWeaponMeshConfig = (attack: AttackConfig): WeaponMeshConfig => {
+    if (attack.type === 'melee') {
+        return (MELEE_WEAPON_PRESETS[attack.weaponId ?? ''] ?? MELEE_WEAPON_PRESETS.long_sword).mesh
+    }
+    return (RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow).mesh
+}
 
 /** 根据阵营取 badge 颜色 */
 const factionBadgeColor = (faction: number, isPlayer: boolean): string => {
@@ -217,7 +226,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         scene.add(mesh)
 
         const model = createCharacterModel(config, faction)
-        model.equipWeapon(attackSlot.type === 'melee' ? MELEE_WEAPON_PRESETS.long_sword.mesh : RANGED_WEAPON_PRESETS.longbow.mesh)
+        model.equipWeapon(resolveWeaponMeshConfig(attackSlot))
         model.group.position.set(x, y, z)
         scene.add(model.group)
 
@@ -663,11 +672,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
             const model = appearanceModels.get(entity.id)
             if (model) {
-                const wId = newAttackSlot.weaponId
-                const meshCfg = newAttackSlot.type === 'melee'
-                    ? (MELEE_WEAPON_PRESETS[wId ?? ''] ?? MELEE_WEAPON_PRESETS.long_sword).mesh
-                    : (RANGED_WEAPON_PRESETS[wId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow).mesh
-                model.equipWeapon(meshCfg)
+                model.equipWeapon(resolveWeaponMeshConfig(newAttackSlot))
             }
         }
         if (newFaction !== undefined) {

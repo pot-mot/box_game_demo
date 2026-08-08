@@ -458,7 +458,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     {x: parseFloat(posX.value), y: parseFloat(posY.value), z: parseFloat(posZ.value)},
                 )
                 if (playerCheck.checked) ctx.markPlayer(cur.id)
-                else ctx.unmarkPlayer()
+                else if (cur.isPlayer) ctx.unmarkPlayer()
                 const isPlayer = playerCheck.checked
                 aiSection.style.display = isPlayer ? 'none' : ''
                 peaceRow.style.display = isPlayer ? 'none' : ''
@@ -528,6 +528,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     cooldown: parseFloat(atkCD.value),
                     duration: parseFloat(atkDuration.value),
                 }, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value))
+                const updated = getSelected()
+                if (updated) {
+                    maxHP.value = String(updated.combat.maxHealth)
+                    curHP.value = String(updated.combat.health)
+                }
             }
 
             const onDelete = () => {
