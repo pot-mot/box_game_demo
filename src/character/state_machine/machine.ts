@@ -13,6 +13,7 @@ import {fallingHandler} from './states/falling.ts'
 import {attackingHandler} from './states/attacking.ts'
 import {dyingHandler} from './states/dying.ts'
 import {dashingHandler} from './states/dashing.ts'
+import {updateGroundTimers} from './ground.ts'
 
 const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     idle: idleHandler,
@@ -48,6 +49,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     const update = (dt: number, entity: CharacterEntity): void => {
         const handler = STATE_HANDLERS[currentState]
         const ctx = makeContext()
+        updateGroundTimers(entity, dt)
 
         for (const t of handler.transitions) {
             if (t.guard(input, entity, ctx)) {

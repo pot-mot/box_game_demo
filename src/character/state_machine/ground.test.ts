@@ -1,4 +1,4 @@
-import {describe, it, expect} from 'vitest'
+﻿import {describe, it, expect} from 'vitest'
 import {Vec3} from 'cannon-es'
 import {isSupportedOn, shouldFall, projectToSlope, applySlopeAntiGravity} from './ground.ts'
 import {SLOPE_WALK_THRESHOLD} from './constants.ts'
@@ -14,6 +14,7 @@ const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterE
     isOnGround,
     groundNormal: {x: nx, y: ny, z: nz},
     groundKeepTimer: 0,
+    airborneTime: 0, groundedTime: 0,
     rowText: '', isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
     isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
     combat: null!, stateMachine: null!,
@@ -28,8 +29,8 @@ describe('isSupportedOn', () => {
         expect(isSupportedOn(makeEntity(true, 0.6, 0, 0.8), SLOPE_WALK_THRESHOLD)).toBe(true)
     })
 
-    it('陡坡（ny=0.4 ≤ 0.5）为 false', () => {
-        expect(isSupportedOn(makeEntity(true, 0.4, 0, 0.9165), SLOPE_WALK_THRESHOLD)).toBe(false)
+    it('陡坡（ny=0.04 ≤ 0.06）为 false', () => {
+        expect(isSupportedOn(makeEntity(true, 0.04, 0, 0.999), SLOPE_WALK_THRESHOLD)).toBe(false)
     })
 
     it('无支撑为 false', () => {
@@ -42,8 +43,8 @@ describe('shouldFall', () => {
         expect(shouldFall(makeEntity(false, 1))).toBe(true)
     })
 
-    it('陡坡（ny=0.4）为 true', () => {
-        expect(shouldFall(makeEntity(true, 0.4, 0, 0.9165))).toBe(true)
+    it('陡坡（ny=0.04）为 true', () => {
+        expect(shouldFall(makeEntity(true, 0.04, 0, 0.999))).toBe(true)
     })
 
     it('平地（ny=1）为 false', () => {
@@ -64,7 +65,7 @@ describe('projectToSlope', () => {
     })
 
     it('法线低于 minNy 时不投影且返回 false', () => {
-        const e = makeEntity(true, 0.4, 0, 0.9165)
+        const e = makeEntity(true, 0.04, 0, 0.999)
         const ok = projectToSlope(e, 3, 4, SLOPE_WALK_THRESHOLD)
         expect(ok).toBe(false)
         expect(e.body.velocity.x).toBe(0)
@@ -90,8 +91,8 @@ describe('applySlopeAntiGravity', () => {
         expect(e.body.force.y).toBeCloseTo(-GRAVITY, 10)
     })
 
-    it('陡坡（ny ≤ 0.5）不施加反重力', () => {
-        const e = makeEntity(true, 0.4, 0, 0.9165)
+    it('陡坡（ny ≤ 0.06）不施加反重力', () => {
+        const e = makeEntity(true, 0.04, 0, 0.999)
         applySlopeAntiGravity(e)
         expect(e.body.force.x).toBe(0)
         expect(e.body.force.y).toBe(0)

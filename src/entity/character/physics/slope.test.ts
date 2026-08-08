@@ -55,6 +55,7 @@ const makeChar = (shared: ReturnType<typeof createSharedWorld>, x: number, y: nu
         isOnGround: true,
         groundNormal: {x: 0, y: 1, z: 0},
         groundKeepTimer: 0,
+        airborneTime: 0, groundedTime: 0,
         rowText: '', isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
         isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
         combat: {
@@ -161,12 +162,12 @@ describe('斜坡下坡行走', () => {
 })
 
 describe('陡坡下滑（预期行为）', () => {
-    it('62° 坡 idle 2s 进入 falling 且速度有界、位置下降', () => {
+    it('88° 坡 idle 2s 进入 falling 且速度有界、位置下降', () => {
         const shared = createSharedWorld()
-        makeSlope(shared, Math.tan(Math.PI * 62 / 180))
+        makeSlope(shared, Math.tan(Math.PI * 88 / 180))
         const x = 10
         const z = -20
-        const y = Math.tan(Math.PI * 62 / 180) * x + 1
+        const y = Math.tan(Math.PI * 88 / 180) * x + 1
         const entity = makeChar(shared, x, y, z)
 
         let gs: GroundState = {isOnGround: true, groundNormal: {x: 0, y: 1, z: 0}, groundKeepTimer: 0}

@@ -1,6 +1,6 @@
 import type {StateHandler} from '../types.ts'
 import {DASH_SPEED_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, SLOPE_WALK_THRESHOLD} from '../constants.ts'
-import {shouldFall, isSupportedOn, projectToSlope} from '../ground.ts'
+import {shouldFall, isSupportedOn, projectToSlopeAtSpeed, applySlopeSink} from '../ground.ts'
 
 /** 进入冲刺时锁定的方向 */
 let dashDirX = 0
@@ -24,11 +24,12 @@ export const dashingHandler: StateHandler = {
     },
     update: (_dt, _input, entity) => {
         const speed = entity.config.speed * DASH_SPEED_MULTIPLIER
-        const vx = dashDirX * speed
-        const vz = dashDirZ * speed
-        if (!projectToSlope(entity, vx, vz, SLOPE_WALK_THRESHOLD)) {
-            entity.body.velocity.x = vx
-            entity.body.velocity.z = vz
+        if (!projectToSlopeAtSpeed(entity, dashDirX, dashDirZ, speed, SLOPE_WALK_THRESHOLD)) {
+            entity.body.velocity.x = dashDirX * speed
+            entity.body.velocity.z = dashDirZ * speed
+        } else {
+            /* 弹跳悬空（宽限期）时向坡面吸附，快速落回 */
+            applySlopeSink(entity)
         }
         entity.body.wakeUp()
     },

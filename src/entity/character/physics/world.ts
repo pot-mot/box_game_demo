@@ -258,6 +258,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             isOnGround: true,
             groundNormal: { x: 0, y: 1, z: 0 },
             groundKeepTimer: 0,
+            airborneTime: 0,
+            groundedTime: 0,
             rowText: `Character #${id}`,
             isPlayer: isPlayer ?? false,
             peaceStrategy,

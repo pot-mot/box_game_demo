@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {Body, Vec3} from 'cannon-es'
 import {resolveGroundState, DEFAULT_GROUND_NORMAL, type GroundState} from './ground_state.ts'
-import {GROUND_KEEP_TIME} from './constants.ts'
+import {GROUND_KEEP_TIME} from '../../../character/state_machine/constants.ts'
 
 const bodyA = new Body()
 const bodyB = new Body()
@@ -28,14 +28,16 @@ describe('resolveGroundState', () => {
         expect(next.groundKeepTimer).toBe(GROUND_KEEP_TIME)
     })
 
-    it('多个接触取最大 ny', () => {
+    it('多数法线方向簇胜出（抑制孤立异常法线）', () => {
         const contacts = [
-            groundedContact(0.5, 0, 0.866),
+            groundedContact(0.8, 0, 0.6),
             groundedContact(0.8, 0, 0.6),
             groundedContact(1),
         ]
         const next = resolveGroundState(contacts, bodyA, prevState({groundKeepTimer: 0}), 1 / 60)
-        expect(next.groundNormal).toEqual({x: 0, y: 1, z: 0})
+        expect(next.groundNormal.x).toBeCloseTo(0, 10)
+        expect(next.groundNormal.y).toBeCloseTo(0.8, 5)
+        expect(next.groundNormal.z).toBeCloseTo(0.6, 5)
     })
 
     it('朝下法线的接触（翻转后 ny ≤ 0）不算着地', () => {

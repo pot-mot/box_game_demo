@@ -41,8 +41,8 @@ export const idleHandler: StateHandler = {
         },
         {
             to: 'falling',
-            guard: (_input, entity, ctx) =>
-                shouldFall(entity) && ctx.stateTime >= STATE_FLIP_MIN_TIME,
+            guard: (_input, entity) =>
+                shouldFall(entity) && entity.airborneTime >= STATE_FLIP_MIN_TIME,
         },
     ],
 }

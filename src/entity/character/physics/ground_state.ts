@@ -1,5 +1,5 @@
 import {type Body, type Vec3} from 'cannon-es'
-import {GROUND_KEEP_TIME} from './constants.ts'
+import {GROUND_KEEP_TIME} from '../../../character/state_machine/constants.ts'
 
 export interface GroundState {
     isOnGround: boolean
@@ -23,6 +23,16 @@ export interface GroundContactLike {
  * - 无接触但宽限期未过 → 保持着地与上一帧法线，递减计时
  * - 持续脱离超过宽限期 → 真正判定为脱离地面
  */
+/** 法线方向簇判定阈值（点积 > 0.9 视为同一方向，夹角 < 26°） */
+const VOTE_CONSISTENCY = 0.9
+
+interface NormalVote {
+    x: number
+    y: number
+    z: number
+    count: number
+}
+
 export const resolveGroundState = (
     contacts: readonly GroundContactLike[],
     body: Body,
@@ -30,30 +40,51 @@ export const resolveGroundState = (
     dt: number,
 ): GroundState => {
     /* 任意向上法线的接触即算着地，不设坡度阈值（坡度判定在状态机层） */
-    let bestNy = -Infinity
-    let bestNx = 0
-    let bestNz = 0
+    const groups: NormalVote[] = []
 
     for (const c of contacts) {
         if (!c.ni) continue
         if (c.bi !== body && c.bj !== body) continue
         const flip = c.bi === body ? -1 : 1
         const ny = c.ni.y * flip
+        if (ny <= 0) continue
         const nx = c.ni.x * flip
         const nz = c.ni.z * flip
-        if (ny <= 0) continue
-        if (ny > bestNy) {
-            bestNy = ny
-            /* +0 消除 -0（0 × flip 可能产生 -0，toEqual 严格区分） */
-            bestNx = nx + 0
-            bestNz = nz + 0
+        /* 法线方向簇投票：多数投票抑制孤立异常法线（Box 棱-三角形棱、Box 底面面接触伪影） */
+        let group: NormalVote | undefined
+        for (const g of groups) {
+            if (nx * g.x + ny * g.y + nz * g.z > VOTE_CONSISTENCY * Math.hypot(g.x, g.y, g.z)) {
+                group = g
+                break
+            }
+        }
+        if (group) {
+            group.x += nx
+            group.y += ny
+            group.z += nz
+            group.count++
+        } else {
+            groups.push({x: nx, y: ny, z: nz, count: 1})
         }
     }
 
-    if (bestNy > 0) {
+    /* 选数量最多的方向簇；平局时取 ny 最大（更水平的支撑优先） */
+    let best: NormalVote | undefined
+    for (const g of groups) {
+        if (!best || g.count > best.count || (g.count === best.count && g.y > best.y)) best = g
+    }
+
+    if (best) {
+        const len = Math.hypot(best.x, best.y, best.z)
+        const inv = 1 / len
         return {
             isOnGround: true,
-            groundNormal: {x: bestNx, y: bestNy, z: bestNz},
+            groundNormal: {
+                /* +0 消除 -0（0 × flip 可能产生 -0，toEqual 严格区分） */
+                x: best.x * inv + 0,
+                y: best.y * inv,
+                z: best.z * inv + 0,
+            },
             groundKeepTimer: GROUND_KEEP_TIME,
         }
     }

@@ -39,16 +39,16 @@ export const fallingHandler: StateHandler = {
     transitions: [
         {
             to: 'walking',
-            guard: (input, entity, ctx) =>
+            guard: (input, entity) =>
                 isSupportedOn(entity, SLOPE_RECOVER_THRESHOLD)
                 && Math.hypot(input.dx, input.dz) > 0.001
-                && ctx.stateTime >= STATE_FLIP_MIN_TIME,
+                && entity.groundedTime >= STATE_FLIP_MIN_TIME,
         },
         {
             to: 'idle',
-            guard: (_input, entity, ctx) =>
+            guard: (_input, entity) =>
                 isSupportedOn(entity, SLOPE_RECOVER_THRESHOLD)
-                && ctx.stateTime >= STATE_FLIP_MIN_TIME,
+                && entity.groundedTime >= STATE_FLIP_MIN_TIME,
         },
         {
             to: 'dashing',

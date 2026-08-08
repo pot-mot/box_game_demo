@@ -1,6 +1,6 @@
 import type {StateHandler} from '../types.ts'
 import {SLOPE_WALK_THRESHOLD, STATE_FLIP_MIN_TIME} from '../constants.ts'
-import {shouldFall, isSupportedOn, projectToSlope} from '../ground.ts'
+import {shouldFall, isSupportedOn, projectToSlopeAtSpeed, applySlopeSink} from '../ground.ts'
 
 export const walkingHandler: StateHandler = {
     enter: (entity) => {
@@ -10,11 +10,14 @@ export const walkingHandler: StateHandler = {
         const len = Math.hypot(input.dx, input.dz)
         if (len < 0.001) return
         const speed = entity.config.speed
-        const vx = (input.dx / len) * speed
-        const vz = (input.dz / len) * speed
-        if (!projectToSlope(entity, vx, vz, SLOPE_WALK_THRESHOLD)) {
-            entity.body.velocity.x = vx
-            entity.body.velocity.z = vz
+        const dx = input.dx / len
+        const dz = input.dz / len
+        if (!projectToSlopeAtSpeed(entity, dx, dz, speed, SLOPE_WALK_THRESHOLD)) {
+            entity.body.velocity.x = dx * speed
+            entity.body.velocity.z = dz * speed
+        } else {
+            /* 弹跳悬空（宽限期）时向坡面吸附，快速落回 */
+            applySlopeSink(entity)
         }
         entity.body.wakeUp()
     },
@@ -43,8 +46,8 @@ export const walkingHandler: StateHandler = {
         },
         {
             to: 'falling',
-            guard: (_input, entity, ctx) =>
-                shouldFall(entity) && ctx.stateTime >= STATE_FLIP_MIN_TIME,
+            guard: (_input, entity) =>
+                shouldFall(entity) && entity.airborneTime >= STATE_FLIP_MIN_TIME,
         },
     ],
 }

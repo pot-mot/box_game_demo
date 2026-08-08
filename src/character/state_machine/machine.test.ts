@@ -1,4 +1,4 @@
-import {describe, it, expect} from 'vitest'
+﻿import {describe, it, expect} from 'vitest'
 import {Vec3} from 'cannon-es'
 import {createCharacterStateMachine} from './machine.ts'
 import type {CharacterStateMachine} from './types.ts'
@@ -20,6 +20,7 @@ const makeMock = (): CharacterEntity => {
         isOnGround: true,
         groundNormal: {x: 0, y: 1, z: 0},
         groundKeepTimer: 0,
+        airborneTime: 0, groundedTime: 0,
         rowText: '', isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
         isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
         combat: {
@@ -54,13 +55,15 @@ describe('斜坡 falling 判定', () => {
         e.stateMachine.setInput(1, 0, false, false)
         run(e.stateMachine, e, 9)
         expect(e.stateMachine.currentState).toBe('walking')
-        e.groundNormal = {x: 0, y: 0.4, z: 0.9165}
+        e.groundNormal = {x: 0, y: 0.04, z: 0.999}
+        /* airborneTime 累积 0.15s 后进入 falling */
+        run(e.stateMachine, e, 9)
+        expect(e.stateMachine.currentState).toBe('falling')
     }
 
-    it('陡坡（ny=0.4）持续 0.1s 后进入 falling', () => {
+    it('陡坡（ny=0.04）持续悬空后进入 falling', () => {
         const e = makeMock()
         enterSteepSlope(e)
-        e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('falling')
     })
 
@@ -71,7 +74,7 @@ describe('斜坡 falling 判定', () => {
         let prev = e.stateMachine.currentState
         let flips = 0
         for (let i = 0; i < 120; i++) {
-            e.groundNormal = i % 2 === 0 ? {x: 0, y: 0.6, z: 0.8} : {x: 0, y: 0.4, z: 0.9165}
+            e.groundNormal = i % 2 === 0 ? {x: 0, y: 0.6, z: 0.8} : {x: 0, y: 0.04, z: 0.999}
             e.stateMachine.update(DT, e)
             if (e.stateMachine.currentState !== prev) {
                 flips++
@@ -81,13 +84,13 @@ describe('斜坡 falling 判定', () => {
         expect(flips).toBeLessThanOrEqual(1)
     })
 
-    it('falling 中坡变缓（ny=0.7 > 0.65）持续 0.1s 后恢复 walking', () => {
+    it('falling 中坡变缓（ny=0.2 > 0.08）持续 0.15s 后恢复 walking', () => {
         const e = makeMock()
         enterSteepSlope(e)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('falling')
 
-        e.groundNormal = {x: 0, y: 0.7, z: 0.7141}
+        e.groundNormal = {x: 0, y: 0.2, z: 0.98}
         run(e.stateMachine, e, 5)
         expect(e.stateMachine.currentState).toBe('falling')
         /* 浮点累计在 0.1s 边界可能差一帧，循环等待恢复 */
@@ -102,9 +105,11 @@ describe('falling 行为', () => {
     const enterFalling = (e: CharacterEntity): void => {
         e.stateMachine.setInput(1, 0, false, false)
         run(e.stateMachine, e, 9)
-        e.groundNormal = {x: 0, y: 0.5, z: 0.866}
-        e.stateMachine.update(DT, e)
+        e.groundNormal = {x: 0, y: 0.04, z: 0.999}
+        run(e.stateMachine, e, 9)
         expect(e.stateMachine.currentState).toBe('falling')
+        /* 进入后置于 falling 滑动投影区（ny > FALL_SLIDE_MIN_NY） */
+        e.groundNormal = {x: 0, y: 0.4, z: 0.9165}
     }
 
     it('有支撑时沿坡面滑动（v·n = 0）', () => {
@@ -156,7 +161,7 @@ describe('攻击/冲刺在陡坡结束', () => {
     it('attacking 在陡坡（ny=0.4）攻击结束进入 falling', () => {
         const e = makeMock()
         e.isOnGround = true
-        e.groundNormal = {x: 0, y: 0.4, z: 0.9165}
+        e.groundNormal = {x: 0, y: 0.04, z: 0.999}
         e.stateMachine.setInput(0, 0, false, true, false, 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
@@ -178,7 +183,7 @@ describe('攻击/冲刺在陡坡结束', () => {
     it('dashing 在陡坡（ny=0.4）冲刺结束进入 falling', () => {
         const e = makeMock()
         e.isOnGround = true
-        e.groundNormal = {x: 0, y: 0.4, z: 0.9165}
+        e.groundNormal = {x: 0, y: 0.04, z: 0.999}
         e.stateMachine.setInput(1, 0, false, false, true)
         e.stateMachine.update(DT, e)
         e.stateMachine.update(DT, e)
