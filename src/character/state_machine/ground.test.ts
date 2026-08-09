@@ -15,7 +15,7 @@ const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterE
     groundNormal: {x: nx, y: ny, z: nz},
     groundKeepTimer: 0,
     airborneTime: 0, groundedTime: 0,
-    rowText: '', isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
+    rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
     isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
     combat: null!, stateMachine: null!,
 })

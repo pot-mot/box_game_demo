@@ -59,7 +59,7 @@ Three.js + cannon-es 物理箱子交互演示。
 
 2. **`import type` + `as`** — 类型冲突时用 `import type {Material as CannonMaterial} from 'cannon-es'`，值类型冲突时用 `import {Material as CannonMaterial}` 并额外使用 `type` 修饰符。
 
-3. **路径后缀** — import 路径必须包含 `.ts` 扩展名。
+3. **路径后缀** — import 路径除 `xxx/index.ts` 可省略外，必须包含 `.ts` 扩展名。
 
 4. **命名导出** — 禁止 `export default`，全部使用命名导出。
 
@@ -114,6 +114,16 @@ src/
 4. **状态机驱动角色** — `entity/character/physics/world.ts` 每帧调用 `stateMachine.update(dt, entity)` → 状态直接操作 `entity.body.velocity` → 随后 `syncPositions()` 同步 body→mesh。`modes/play/keyboard.ts` 通过 `stateMachine.setInput()` 注入输入，不直接调 move/jump。
 
 5. **常量集中** — 各分包的 magic number 必须提取到对应的 `constants.ts`，禁止散落在函数体内。
+
+## 文档
+
+项目文档统一存放在 `docs/` 目录，修改相关功能前务必先阅读对应文档、修改完成后及时更新。
+
+| 文档 | 内容 |
+|------|------|
+| [`docs/ai_system.md`](docs/ai_system.md) | 角色 AI 寻路索敌系统：双层 FSM 架构、状态转移图、全量配置项、类型定义、扩展指南、核心文件索引 |
+
+**扩展 AI 功能时**：阅读 `docs/ai_system.md` → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。
 
 ## 陷阱
 

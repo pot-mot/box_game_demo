@@ -94,7 +94,7 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
         systems.map(s => [s.type, s]),
     )
 
-    characterSystem.setupLineOfSight(systems)
+    characterSystem.setupAI(systems)
 
     /* 箱子生成回调（供 builder AI 使用） */
     const boxSpawner = (entry: {entityType: string; mass: number; friction: number; maxHealth?: number; attractionRadius?: number; attractionStrength?: number; stiffness?: number; dampingRatio?: number; maxDeformFraction?: number}, x: number, y: number, z: number, size: {width: number; height: number; depth: number}): void => {

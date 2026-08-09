@@ -4,6 +4,7 @@ import type {BoxSpawnEntry} from '../../../character/ai_strategy/types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
 import type {CombatState} from './combat/types.ts'
 import type {PeaceState} from './peace/types.ts'
+import type {NavRunContext, NavSensor} from './nav/types.ts'
 
 export type {CombatSubStrategy, CombatConfig}
 export type {PeaceSubStrategy, PeaceConfig}
@@ -21,6 +22,12 @@ export interface AIContext {
     /** 共享 */
     losChecker: LineOfSightChecker | null
     spawnBox?: SpawnBoxCallback
+
+    /** 导航感知子系统运行时上下文 */
+    nav: NavRunContext
+
+    /** 导航传感器（共享实例） */
+    navSensor: NavSensor | null
 
     /** 当前活跃的 FSM */
     activeFsm: 'peace' | 'combat'

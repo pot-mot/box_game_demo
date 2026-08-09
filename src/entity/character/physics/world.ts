@@ -19,8 +19,10 @@ import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import type {SpawnBoxCallback} from '../ai/types.ts'
+import {createNavSensor, type NavSensor} from '../ai/nav/sensor.ts'
 import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_sight.ts'
 import {createAIMachine, updateAI} from '../ai/machine.ts'
+import {processNav} from '../ai/nav/machine.ts'
 import {createCharacterMesh, updateCharacterMesh} from '../render'
 import {createCharacterModel} from '../appearance/model.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
@@ -89,8 +91,10 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     registerBoxSpawner: (fn: SpawnBoxCallback) => void
     /** 设置碰撞体可视化 mesh 的可见性 */
     setCollisionVisible: (visible: boolean) => void
-    /** 配置视线检查（需在所有实体系统初始化后调用） */
-    setupLineOfSight: (systems: readonly EntityInfoSource[]) => void
+    /** 配置 AI 感知（视线检查 + 导航传感器，需在所有实体系统初始化后调用） */
+    setupAI: (systems: readonly EntityInfoSource[]) => void
+    /** 设置单角色导航感知开关 */
+    setNavEnabled: (id: number, enabled: boolean) => void
 }
 
 /** 将旧 AttackConfig 转换为 SkillSlot 数组 */
@@ -221,6 +225,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         isPlayer?: boolean,
         peaceStrategy: PeaceSubStrategy = 'patrol',
         combatStrategy: CombatSubStrategy = 'tactical',
+        navEnabled: boolean = true,
     ): CharacterEntity => {
         const mesh = createCharacterMesh(config)
         mesh.position.set(x, y, z)
@@ -275,6 +280,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             groundedTime: 0,
             rowText: `Character #${id}`,
             isPlayer: isPlayer ?? false,
+            navEnabled,
             peaceStrategy,
             combatStrategy,
             isDying: false,
@@ -465,7 +471,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                             if (dx * nx + dz * nz > 0) { finalDX = 0; finalDZ = 0; break }
                         }
                     }
-                    entity.stateMachine.setInput(finalDX, finalDZ, false, attack, false, 0)
+
+                    /* 导航感知处理（包含 legacy 卡住检测） */
+                    let jump = false
+                    const sensor = aiCtx.navSensor
+                    if (sensor && (finalDX !== 0 || finalDZ !== 0)) {
+                        const navResult = processNav(dt, aiCtx.nav, entity, sensor, finalDX, finalDZ)
+                        finalDX = navResult.dx
+                        finalDZ = navResult.dz
+                        jump = navResult.jump
+                    }
+
+                    entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 0)
                     aiTargetDirs.set(entity.id, {dx: finalDX, dz: finalDZ})
                     if (attack && (dx !== 0 || dz !== 0)) {
                         entity.combat.attackDirX = dx
@@ -615,6 +632,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     let losChecker: LineOfSightChecker | null = null
+    let navSensor: NavSensor | null = null
+
+    const setNavEnabled = (id: number, enabled: boolean): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.navEnabled = enabled
+        const aiCtx = aiMap.get(id)
+        if (aiCtx) {
+            aiCtx.nav.enabled = enabled
+        }
+    }
 
     const activateAI = (): void => {
         for (const entity of characters) {
@@ -628,12 +656,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     entity.combatStrategy,
                 )
                 if (boxSpawner) ctx.spawnBox = boxSpawner
+                if (navSensor) ctx.navSensor = navSensor
                 aiMap.set(entity.id, ctx)
             }
         }
     }
 
-    const setupLineOfSight = (systems: readonly EntityInfoSource[]): void => {
+    const setupAI = (systems: readonly EntityInfoSource[]): void => {
         losChecker = createLineOfSightChecker(() => {
             const meshes: Mesh[] = []
             for (const s of systems) {
@@ -644,11 +673,35 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         for (const ctx of aiMap.values()) {
             ctx.losChecker = losChecker
         }
+
+        /* 同时初始化导航传感器（复用 system 的 mesh 列表） */
+        /* 排除 area/ 类型的系统（水域等非障碍物不应参与碰撞检测） */
+        navSensor = createNavSensor(
+            () => {
+                const meshes: Mesh[] = []
+                for (const s of systems) {
+                    if (s.type.startsWith('area/')) continue
+                    for (const m of s.getMeshes()) meshes.push(m)
+                }
+                return meshes
+            },
+            () => {
+                const terrain = systems.find(s => s.type === 'terrain')
+                return terrain?.getMeshes() ?? []
+            },
+            () => {
+                const char = systems.find(s => s.type === 'character')
+                return char?.getMeshes() ?? []
+            },
+        )
+        for (const ctx of aiMap.values()) {
+            ctx.navSensor = navSensor
+        }
     }
 
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
         const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, scale: saveConfig.scale}
-        const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical')
+        const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
@@ -804,7 +857,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setCombatStrategy,
         registerBoxSpawner,
         setCollisionVisible,
-        setupLineOfSight,
+        setupAI,
+        setNavEnabled,
     }
 
     return {

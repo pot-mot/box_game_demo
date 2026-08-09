@@ -8,6 +8,7 @@ import type {LineOfSightChecker} from './line_of_sight.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
 import {fleeHandler} from './combat/states/flee.ts'
+import {createNavRunContext} from './nav/machine.ts'
 
 /** 检测最近敌人，返回角色 ID 和距离 */
 const findNearestEnemy = (
@@ -52,6 +53,8 @@ export const createAIMachine = (
         characterId: character.id,
         spawnPoint: {x: spawnX, y: spawnY, z: spawnZ},
         losChecker,
+        nav: createNavRunContext(character.navEnabled),
+        navSensor: null,
         activeFsm: 'peace',
 
         /* 战斗 FSM 字段 */

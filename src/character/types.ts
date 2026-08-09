@@ -37,6 +37,9 @@ export interface CharacterEntity {
 
     isPlayer: boolean
 
+    /** 导航感知开关（默认 true，面板可动态切换） */
+    navEnabled: boolean
+
     /** 和平策略（仅非玩家角色有效，默认 patrol） */
     peaceStrategy: PeaceSubStrategy
     /** 战斗策略（仅非玩家角色有效，默认 tactical） */

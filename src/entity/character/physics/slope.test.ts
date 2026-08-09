@@ -56,7 +56,7 @@ const makeChar = (shared: ReturnType<typeof createSharedWorld>, x: number, y: nu
         groundNormal: {x: 0, y: 1, z: 0},
         groundKeepTimer: 0,
         airborneTime: 0, groundedTime: 0,
-        rowText: '', isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
+        rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
         isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
         combat: {
             faction: 0, health: 100, maxHealth: 100, isDead: false,

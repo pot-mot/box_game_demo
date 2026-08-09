@@ -230,6 +230,20 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     combatRow.appendChild(combatLabel)
     el.appendChild(combatRow)
 
+    /* 导航感知开关 */
+    const navRow = document.createElement('div')
+    navRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:4px'
+    const navCheck = document.createElement('input')
+    navCheck.type = 'checkbox'
+    navCheck.id = 'chk-nav'
+    const navLabel = document.createElement('label')
+    navLabel.htmlFor = 'chk-nav'
+    navLabel.textContent = ' Enable Nav Sensing'
+    navLabel.style.cssText = 'cursor:pointer'
+    navRow.appendChild(navCheck)
+    navRow.appendChild(navLabel)
+    el.appendChild(navRow)
+
     /* 建造配置区（仅 build 策略可见） */
     const buildSection = createSection('Build Config')
     el.appendChild(buildSection)
@@ -443,9 +457,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             playerCheck.checked = sel.isPlayer
             peaceSelect.value = sel.peaceStrategy
             combatSelect.value = sel.combatStrategy
+            navCheck.checked = sel.navEnabled
             aiSection.style.display = sel.isPlayer ? 'none' : ''
             peaceRow.style.display = sel.isPlayer ? 'none' : ''
             combatRow.style.display = sel.isPlayer ? 'none' : ''
+            navRow.style.display = sel.isPlayer ? 'none' : ''
             buildSection.style.display = (!sel.isPlayer && sel.peaceStrategy === 'build') ? '' : 'none'
             showRanged()
 
@@ -461,7 +477,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 aiSection.style.display = isPlayer ? 'none' : ''
                 peaceRow.style.display = isPlayer ? 'none' : ''
                 combatRow.style.display = isPlayer ? 'none' : ''
+                navRow.style.display = isPlayer ? 'none' : ''
                 buildSection.style.display = (!isPlayer && peaceSelect.value === 'build') ? '' : 'none'
+                ctx.setNavEnabled?.(cur.id, navCheck.checked)
                 const peaceStrat = peaceSelect.value
                 if (isPeaceSubStrategy(peaceStrat)) {
                     ctx.setPeaceStrategy?.(cur.id, peaceStrat)

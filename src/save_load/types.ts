@@ -120,6 +120,7 @@ export interface CharacterSaveConfig {
     faction: number
     maxHealth: number
     isPlayer: boolean
+    navEnabled?: boolean
 }
 
 export interface SavableCharacter {

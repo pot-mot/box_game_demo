@@ -8,6 +8,7 @@ import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {AIContext} from './types.ts'
+import {createNavRunContext} from './nav/machine.ts'
 import {createAIMachine, updateAI} from './machine.ts'
 import {chaseHandler} from './combat/states/chase.ts'
 import {attackHandler} from './combat/states/attack.ts'
@@ -54,6 +55,7 @@ const makeChar = (
         isOnGround: true, rowText: '',
         groundKeepTimer: 0, airborneTime: 0, groundedTime: 0,
         isPlayer: false,
+        navEnabled: true,
         peaceStrategy: 'patrol' as const,
         combatStrategy,
         isDying: false, dyingTimer: 0,
@@ -67,6 +69,8 @@ const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: numb
         characterId: 0,
         spawnPoint: {x: 0, y: 0, z: 0},
         losChecker: null,
+        nav: createNavRunContext(true),
+        navSensor: null,
         activeFsm: 'combat',
         combatState: 'chase',
         combatStateTime: 0,

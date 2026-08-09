@@ -152,6 +152,7 @@ const CharacterConfigInner = z.object({
     faction: z.number().default(0),
     maxHealth: z.number().positive().default(100),
     isPlayer: z.boolean().default(false),
+    navEnabled: z.boolean().default(true),
 })
 
 /** character config 默认值（供外层 .default() 使用） */
@@ -164,6 +165,7 @@ const CHARACTER_SAVE_CONFIG_DEFAULTS = {
     faction: 0,
     maxHealth: 100,
     isPlayer: false,
+    navEnabled: true,
 }
 
 const SavableCharacter = z.object({

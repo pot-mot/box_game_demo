@@ -173,6 +173,7 @@ export const collectWorldState = (
                     faction: e.combat.faction,
                     maxHealth: e.combat.maxHealth,
                     isPlayer: e.isPlayer,
+                    navEnabled: e.navEnabled,
                 },
                 health: e.combat.health,
                 position: vec3ToTuple(e.body.position),

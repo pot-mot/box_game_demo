@@ -57,6 +57,7 @@ const makeChar = (
         airborneTime: 0,
         groundedTime: 0,
         rowText: '',
+        navEnabled: true,
         isPlayer: false,
         peaceStrategy: 'patrol',
         combatStrategy: 'tactical',

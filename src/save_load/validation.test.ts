@@ -161,11 +161,12 @@ describe('validateSaveData', () => {
         expect(result.entities).toHaveLength(1)
         expect(result.entities[0].type).toBe('character')
         if (result.entities[0].type === 'character') {
-            expect(result.entities[0].config.speed).toBe(6)
+            expect(result.entities[0].config.speed).toBe(3)
             expect(result.entities[0].config.scale).toBe(1)
             expect(result.entities[0].config.faction).toBe(0)
             expect(result.entities[0].config.maxHealth).toBe(100)
             expect(result.entities[0].config.isPlayer).toBe(false)
+            expect(result.entities[0].config.navEnabled).toBe(true)
             expect(result.entities[0].config.tendency.tendencyId).toBe('hostileExceptSelf')
             expect(result.entities[0].config.attackSlot.type).toBe('melee')
             expect(result.entities[0].health).toBe(15)
