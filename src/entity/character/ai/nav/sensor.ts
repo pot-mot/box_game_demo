@@ -4,7 +4,7 @@ import type {NavSenseOutput, NavSensor} from './types.ts'
 import type {NavConfig} from './types.ts'
 import {
     RAY_HORIZONTAL_ANGLES, RAY_PITCH_ANGLES, SIDE_SCAN_ANGLES,
-    PIT_FALL_THRESHOLD, WALKABLE_NORMAL_MIN_Y,
+    WALKABLE_NORMAL_MIN_Y,
 } from './constants.ts'
 import {CHARACTER_BASE_SIZE} from '../../constants.ts'
 
@@ -147,10 +147,10 @@ export const createNavSensor = (
         }
 
         /* ── 前方坑洞探针 ── */
+        /* 从自身脚底高度向下探测，超过跳跃高度则视为不可安全下落 */
         const probeX = footX + _forward.x * config.checkDistance
         const probeZ = footZ + _forward.z * config.checkDistance
-        const probeY = footY + 0.5
-        _origin.set(probeX, probeY, probeZ)
+        _origin.set(probeX, footY, probeZ)
         _raycaster.set(_origin, new Vector3(0, -1, 0))
 
         let groundAhead = false
@@ -159,13 +159,13 @@ export const createNavSensor = (
         if (probeTargets.length > 0) {
             const groundHits = _raycaster.intersectObjects(probeTargets, false)
             if (groundHits.length > 0) {
-                const groundY = groundHits[0].point.y
-                /* 地面落差在阈值内则判定为可站立 */
-                groundAhead = (footY - PIT_FALL_THRESHOLD) <= groundY
+                /* 命中点距离在跳跃高度范围内则判定为可安全到达 */
+                groundAhead = groundHits[0].distance <= jumpHeight
             }
+            /* 命中点在 jumpHeight 之外，或完全未命中 → 坑洞 → groundAhead 保持 false */
         } else {
-            /* 无任何 mesh 时判定为不可站立（可能有坑洞） */
-            groundAhead = false
+            /* 无任何 mesh 可查 → 假定平坦世界有地面 */
+            groundAhead = true
         }
 
         /* ── 分类 ── */

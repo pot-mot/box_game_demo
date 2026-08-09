@@ -151,13 +151,30 @@ describe('NavSensor 传感器检测', () => {
         expect(result.obstacleHeight).toBeLessThanOrEqual(entity.config.jumpHeight)
     })
 
-    it('4. 前方地面塌陷返回 blocked_pit', () => {
-        /* 移除地面 mesh，模拟坑洞 */
+    it('4. 前方地形断裂 → 探针超出跳跃高度未命中 → blocked_pit', () => {
+        /* 小片地形，角色站在边缘，探头位置前方无地面 */
+        const smallGround = new Mesh(
+            new BoxGeometry(1, 0.1, 1),
+            new MeshBasicMaterial(),
+        )
+        smallGround.position.set(-0.5, -0.05, 0)
+        smallGround.updateMatrixWorld()
         grounds.length = 0
+        grounds.push(smallGround)
 
+        /* checkDistance = 1.5，探头在 x=1.5，超出 1×1 地形范围 */
         const result = sensor.sense(entity, 1, 0, navConfig)
         expect(result.result).toBe('blocked_pit')
         expect(result.groundAhead).toBe(false)
+    })
+
+    it('4b. 无任何 mesh → 假定平坦世界 → groundAhead=true', () => {
+        grounds.length = 0
+        obstacles.length = 0
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.groundAhead).toBe(true)
+        expect(result.result).toBe('clear')
     })
 
     it('5. 前方有墙 + 左侧通畅', () => {
@@ -295,8 +312,12 @@ describe('NavFSM 导航状态机', () => {
     })
 
     it('11. 坑洞 + 侧面通畅 + nav 开启 → 绕行', () => {
-        /* 移除前方地面 */
+        /* 小片地形，角色站在边缘，前方悬空 */
         grounds.length = 0
+        const smallGround = new Mesh(new BoxGeometry(1, 0.1, 1), new MeshBasicMaterial())
+        smallGround.position.set(-0.5, -0.05, 0)
+        smallGround.updateMatrixWorld()
+        grounds.push(smallGround)
 
         processNav(FIXED_DT, navCtx, entity, sensor, 1, 0)
         /* blocked_pit，但左右均无墙，应进入 steering */
@@ -311,6 +332,10 @@ describe('NavFSM 导航状态机', () => {
 
     it('12. 坑洞 + 四周堵死 + nav 开启 → stuck → idle', () => {
         grounds.length = 0
+        const smallGround = new Mesh(new BoxGeometry(1, 0.1, 1), new MeshBasicMaterial())
+        smallGround.position.set(-0.5, -0.05, 0)
+        smallGround.updateMatrixWorld()
+        grounds.push(smallGround)
         /* 四周墙 */
         obstacles.push(
             createBoxMesh(1.3, 2.0, 0, 0.3, 4, 2.5),
@@ -910,6 +935,8 @@ describe('NavSensor 站在实体上的坑洞检测', () => {
     it('42. 站在 boxes 边缘 → 前方悬空 → groundAhead=false（正确检测坑洞）', () => {
         const platform = createBoxMesh(0.5, 0.5, 0, 1, 1, 1)
         obstacles.push(platform)
+        /* 移除大地面 mesh，模拟探头前方无任何立足面 */
+        grounds.length = 0
         const entity = makeEntity(1.0)
 
         const result = sensor.sense(entity, 1, 0, navConfig)

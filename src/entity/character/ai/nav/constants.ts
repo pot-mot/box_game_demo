@@ -8,9 +8,6 @@ export const STEER_ANGLE_MIN = Math.PI / 4       // 45°
 export const STEER_ANGLE_MAX = Math.PI / 2       // 90°
 export const STEER_ANGLE_STEP = Math.PI / 12     // 15°
 
-/** 坑洞判定落差阈值 */
-export const PIT_FALL_THRESHOLD = 0.5
-
 /** 可行走表面的最小面法线 Y 分量（与角色状态机 SLOPE_WALK_THRESHOLD 一致） */
 export const WALKABLE_NORMAL_MIN_Y = 0.06
 
