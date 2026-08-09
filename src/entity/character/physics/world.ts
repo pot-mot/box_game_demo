@@ -45,6 +45,7 @@ import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entit
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {createWireframe, cleanupWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
+import {resolvePhases} from '../../../character/combat/attack_phases.ts'
 
 const _tmpVec = new Vec3()
 
@@ -257,7 +258,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const stateMachine = createCharacterStateMachine()
         const skills = attackToSkillSlots(attackSlot)
         if (isPlayer && attackSlot.type === 'melee') {
+            /* 玩家近战专属：追加重击技能作为副槽，并挂连招链 */
             skills.push(createSkillSlot(MELEE_SKILL_PRESETS.heavy_sword_slam))
+            skills[0].comboChain = ['heavy_sword_slam']
         }
         const maxHP = attackSlot.type === 'melee' ? 15 : 8
 
@@ -297,7 +300,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
         const flash = createDamageFlash(entity)
         flashStates.set(entity.id, flash)
-        entity.combat.onDamageTaken = flash.onDamage
+        const originalOnDamage = flash.onDamage
+        entity.combat.onDamageTaken = (amount: number) => {
+            originalOnDamage(amount)
+            /* 攻击中被击中时标记硬直 */
+            if (entity.combat.attackActive && entity.combat.health > 0) {
+                entity.combat.pendingFlinch = true
+            }
+        }
 
         const rowText = isPlayer ? `▶ Player: Character #${id}` : `Character #${id}`
         const badgeLabel = isPlayer ? 'P' : `F${faction}`
@@ -503,11 +513,23 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const sys = appearanceSystems.get(entity.id)
             if (model && sys) {
                 const hSpeed = Math.hypot(entity.body.velocity.x, entity.body.velocity.z)
+
+                /* 计算阶段动画上下文 */
+                const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
+                const phases = activeSkill ? resolvePhases(activeSkill.config.phases) : []
+                const phaseDuration = entity.combat.phaseIndex < phases.length
+                    ? activeSkill!.config.duration * phases[entity.combat.phaseIndex].durationRatio
+                    : 1
+                const totalDuration = activeSkill?.config.duration ?? 1
+
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
                     horizontalTravel: 0,
                     swingTilt: entity.combat.swingTilt,
+                    attackPhase: entity.combat.phaseIndex < phases.length ? phases[entity.combat.phaseIndex].name : undefined,
+                    attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
+                    attackTotalProgress: totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
                 })
 
                 const vx = entity.body.velocity.x
@@ -752,6 +774,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.combat.skills = attackToSkillSlots(newAttackSlot)
             if (entity.isPlayer && newAttackSlot.type === 'melee') {
                 entity.combat.skills.push(createSkillSlot(MELEE_SKILL_PRESETS.heavy_sword_slam))
+                entity.combat.skills[0].comboChain = ['heavy_sword_slam']
             }
             const model = appearanceModels.get(entity.id)
             if (model) {

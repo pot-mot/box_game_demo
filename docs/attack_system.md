@@ -1,0 +1,671 @@
+# 攻击系统文档（武器阶段 / 连招 / 动画 / 中断）
+
+## 一、整体架构
+
+攻击系统由三层协作完成一次武器攻击的完整生命周期：
+
+```
+武器配置层（character/weapon/ + character/combat/）
+  └─ MeleeSkillConfig / RangedSkillConfig
+       ├─ duration: 攻击总时长
+       ├─ phases: AttackPhase[]    ← 阶段序列
+       └─ comboChain?: string[]    ← 连招链
+
+角色状态机层（character/state_machine/）
+  └─ attacking  meta-state（阶段调度器）
+       └─ 按 phase 名查找 STATE_HANDLERS["attacking_{skillId}_{phaseName}"]
+            ├─ 找到 → 委托 enter/update/exit
+            └─ 未找到 → 默认阶段行为（按 moveSpeedMultiplier 减速等）
+
+动画表现层（entity/character/appearance/）
+  └─ ANIMATION_HANDLERS["attacking_{skillId}_{phaseName}"]
+       ├─ 找到 → 调用阶段专用 AnimationHandler
+       └─ 未找到 → 回退 ANIMATION_HANDLERS["attacking"]
+```
+
+**关键**：攻击子状态和动画处理器均按 `attacking_{skillId}_{phaseName}` 命名约定 1:1 配对，通过强类型模板字面量推导和判别式 Map 访问实现类型安全。
+
+---
+
+## 二、攻击阶段数据模型
+
+### 2.1 阶段类型定义
+
+**文件**：`src/character/combat/attack_phases.ts`（新增）
+
+```ts
+/** 攻击阶段名（运行时通过武器预设组合确定实际状态名） */
+export const ATTACK_PHASES = ['windup', 'strike', 'recovery', 'spin', 'draw', 'aim', 'release'] as const
+export type AttackPhaseName = typeof ATTACK_PHASES[number]
+
+/** 阶段缓动类型 */
+export const EASING_TYPES = ['ease_in_out', 'ease_out', 'linear'] as const
+export type EasingType = typeof EASING_TYPES[number]
+
+/** 攻击阶段配置 */
+export interface AttackPhase {
+    /** 阶段名，构成状态名 "attacking_{skillId}_{name}" */
+    readonly name: AttackPhaseName
+    /** 占总时长的比例（0-1），所有阶段比例之和应 ≤ 1 */
+    readonly durationRatio: number
+    /** 移速倍率：0 = 完全定身，1 = 全速移动 */
+    readonly moveSpeedMultiplier: number
+    /** 是否可被 combo 输入 / dash / jump 打断 */
+    readonly cancellable: boolean
+    /** 动画参数 */
+    readonly animConfig: AttackAnimConfig
+}
+
+/** 阶段动画参数 */
+export interface AttackAnimConfig {
+    /** 手臂从后到前的肩部 X 轴摆幅（蓄力时终值、打击时起值） */
+    readonly armSwingBackX: number
+    /** 手臂横向分量（Z 轴，用于水平斩 / 垂直砍分解） */
+    readonly armSwingBackZ: number
+    /** 打击时肩部 X 轴最终值 */
+    readonly armSwingForwardX: number
+    /** 肘部弯曲幅度 */
+    readonly elbowBend: number
+    /** 躯干前倾角 */
+    readonly bodyLean: number
+    /** 双手持握（左手镜像右手） */
+    readonly twoHanded: boolean
+    /** 缓动曲线 */
+    readonly easing: EasingType
+}
+```
+
+### 2.2 阶段解析
+
+```ts
+/** 根据阶段名查找已注册的阶段特定 StateHandler，未找到则返回 attackingHandler 回退 */
+const resolvePhaseHandler = (skillId: string, phaseName: AttackPhaseName): StateHandler => {
+    const key = `attacking_${skillId}_${phaseName}` as const
+    return STATE_HANDLERS[key] ?? STATE_HANDLERS['attacking']
+}
+```
+
+### 2.3 时间模型
+
+```
+skill.duration = 0.5s
+├─ windup:   durationRatio = 0.35 → 实际时长 0.175s
+├─ strike:   durationRatio = 0.30 → 实际时长 0.150s
+└─ recovery: durationRatio = 0.35 → 实际时长 0.175s
+
+每个阶段内的 phaseProgress = phaseTimer / (duration * durationRatio)
+总进度 totalProgress = attackTimer / duration
+```
+
+**未定义 phases 时**自动生成单阶段回退：`[{name: "strike", durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false}]`，行为与重构前完全一致。
+
+---
+
+## 三、连招系统
+
+### 3.1 连招链定义
+
+在 `SkillSlot` 上新增可选字段：
+
+```ts
+export interface SkillSlot {
+    readonly config: SkillConfig
+    cooldownTimer: number
+    /** 连招链：本技能后可接的技能 ID 列表，按顺序执行 */
+    readonly comboChain?: readonly string[]
+}
+```
+
+例：长刀连招链 `['long_sword_slash', 'long_sword_slash', 'heavy_sword_slam']` — 两下轻砍接一下重击。
+
+### 3.2 连招推进
+
+在 `CombatComponent` 上新增运行时状态：
+
+```ts
+/** 当前连招中的位置（0 = 第一招） */
+comboIndex: number
+/** 连招输入窗口计时器（秒，窗口内可接下一招） */
+comboTimer: number
+```
+
+推进流程：
+
+```
+attacking meta-state update(dt):
+  ├─ 当前阶段 cancellable && input.attack === true && comboTimer > 0
+  │    → 检查 comboChain[comboIndex + 1] 是否可用（冷却就绪）
+  │    → 中断当前攻击，comboIndex++，enter 下一技能的攻击
+  │
+  ├─ comboTimer <= 0
+  │    → 窗口关闭，comboIndex 重置为 0，正常走完所有阶段
+  │
+  └─ 其他 → 正常推进阶段
+```
+
+**combo 超时**：当前技能 duration 结束 + `COMBO_WINDOW`（默认 0.3s）后 `comboTimer` 归零，连招终止。
+
+### 3.3 NPC AI 的连招
+
+AI 无需感知连招链。AI combat FSM 的 `attack` 状态在战斗 engagement 期间持续保持 `attack = true`，attacking meta-state 在 `cancellable` 阶段检测到 `input.attack === true` 时自动推进连招链。AI 不需要知道链有多长、当前在第几段。
+
+---
+
+## 四、中断系统
+
+### 4.1 全局 flinching 状态
+
+新增 `flinching` 到 `CHARACTER_STATES`：
+
+```ts
+export const CHARACTER_STATES = [
+    'idle', 'walking', 'jumping', 'falling',
+    'attacking', 'dying', 'dashing', 'flinching',
+] as const
+```
+
+**触发条件**：`CombatComponent.onDamageTaken` 回调中，若 `attackActive === true`（攻击/技能释放中被击中），设置 `combat.pendingFlinch = true`。
+
+**flinching 状态行为**：
+
+| 方法 | 行为 |
+|------|------|
+| `enter` | `attackActive = false`，触发技能冷却（被打断惩罚），`comboIndex = 0`，速度归零，`pendingFlinch = false` |
+| `update` | 速度持续归零，不响应移动输入，`body.wakeUp()` |
+| `exit` | 无特殊清理 |
+
+**动画**：短暂后仰 + 手臂弹开，持续 0.25s（`FLINCH_DURATION`）。
+
+**转换规则**（所有状态均需添加）：
+
+```ts
+{
+    to: 'flinching',
+    guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+}
+// 优先级：dying > flinching > 其他转换
+```
+
+### 4.2 Combo 输入取消（软中断）
+
+- 仅在 `cancellable === true` 的阶段接受取消
+- 取消时当前技能进入冷却，**不**触发额外惩罚
+- 在 `comboTimer > 0` 窗口内检测到新的 `input.attack === true` 时执行
+
+### 4.3 Dash / Jump 取消（自中断）
+
+- 仅在 `cancellable === true` 的阶段，dashing / jumping 的 transition guard 可以通过
+- attacking meta-state 在 exit 时正常清理（技能进冷却、comboIndex 重置）
+
+### 4.4 状态转移图
+
+```
+                     ┌─→ flinching (受击，所有状态) ─→ idle/walking/falling
+                     │
+idle/walking ──→ attacking (meta-state)
+                     │
+                     │  phase0(cancellable) → phase1 → phase2(cancellable)
+                     │       │                              │
+                     │    combo输入?                    combo输入?
+                     │    → 下一技能                     → 下一技能
+                     │    dash/jump?                    dash/jump?
+                     │    → dashing/jumping              → dashing/jumping
+                     │
+                     └─→ walking/idle/falling/jumping (攻击完成)
+```
+
+---
+
+## 五、动画系统重构
+
+### 5.1 动画文件组织
+
+每个攻击子状态独立拥有自己的 `AnimationHandler` 文件，与状态文件通过命名约定 1:1 配对：
+
+```
+states/attack/
+├── heavy_sword/
+│   ├── windup.ts        ← StateHandler（逻辑：定身、蓄力推进）
+│   ├── strike.ts        ← StateHandler（逻辑：命中窗口、击退判定）
+│   └── recovery.ts      ← StateHandler（逻辑：后摇、可取消窗口）
+├── short_sword/
+│   ├── strike.ts
+│   └── recovery.ts
+├── longbow/
+│   ├── draw.ts
+│   ├── aim.ts
+│   └── release.ts
+└── ...
+
+animators/attack/
+├── heavy_sword/
+│   ├── windup.ts        ← AnimationHandler（动画：双手举过头顶蓄力）
+│   ├── strike.ts        ← AnimationHandler（动画：全力下砸 + 躯干前倾）
+│   └── recovery.ts      ← AnimationHandler（动画：缓慢收刀回中）
+├── short_sword/
+│   ├── strike.ts        ← AnimationHandler（动画：快速横斩 + 随机 tilt）
+│   └── recovery.ts
+├── longbow/
+│   ├── draw.ts          ← AnimationHandler（动画：左手推弓 + 右手拉弦）
+│   ├── aim.ts
+│   └── release.ts       ← AnimationHandler（动画：释放 + 弓弦反弹）
+└── ...
+```
+
+### 5.2 动画调度
+
+`AppearanceSystem` 按**完整状态名**查找 animator：
+
+```ts
+const animator = getAnimator(state)
+    ?? (state.startsWith('attacking_') ? getAnimator('attacking') : getAnimator('idle'))
+```
+
+`getAnimator` 通过判别式 Map 访问实现强类型（见第六章）。
+
+每个 animator 文件完全自包含——直接读取 `model` 关节操作旋转，不依赖 phase config 参数。
+
+### 5.3 阶段动画预设示例
+
+| 技能 | 阶段 | armSwingBack | armSwingForward | elbowBend | twoHanded | 描述 |
+|------|------|:---:|:---:|:---:|:---:|------|
+| heavy_sword_slam | windup | X:-2.0, Z:0 | — | 0.8 | 是 | 双手举过头顶 |
+| heavy_sword_slam | strike | — | X:2.5, Z:0 | -0.1 | 是 | 全力下砸 |
+| heavy_sword_slam | recovery | — | — | 0→0 | 是 | 缓慢收刀 |
+| short_sword_slash | strike | X:-0.6, Z:±random | X:1.0, Z:±random | 0.1 | 否 | 快速横斩 + tilt |
+| short_sword_slash | recovery | — | — | 0→0 | 否 | 单臂收回 |
+| spear_thrust | windup | X:-0.8, Z:0 | — | 0.3 | 是 | 双手后拉 |
+| spear_thrust | strike | — | X:1.8, Z:0 | 0 | 是 | 直线前刺 |
+| dual_axe_spin | spin | X:-0.5, Z:-3.0 | — | 0.2 | 否 | 水平旋转，双斧交替 |
+| longbow_shot | draw | X:-1.0, Z:0 | — | 0.6 | 是 | 左手推弓，右手拉弦 |
+| longbow_shot | release | — | X:1.2, Z:0 | 0 | 是 | 释放 + 弦回弹 |
+| staff_orb | aim | X:-0.5, Z:0 | — | 0.3 | 是 | 法杖前指 |
+| staff_orb | release | — | X:0.8, Z:0 | 0.1 | 是 | 能量释放 |
+
+### 5.4 回退兼容
+
+当状态对应的 animator 不存在时，回退到通用 `attackingAnim`。通用 animator 使用 `attackTotalProgress` 按比例驱动三阶段动画（0→0.3 蓄力 / 0.3→0.6 打击 / 0.6→1.0 恢复），时间轴按 `skill.duration / 0.5` 等比缩放。
+
+---
+
+## 六、强类型状态搜索
+
+### 6.1 类型推导
+
+所有攻击子状态名由武器预设 key + 阶段名通过模板字面量推导：
+
+```ts
+// character/combat/attack_phases.ts
+
+type MeleeSkillId = keyof typeof MELEE_SKILL_PRESETS
+type RangedSkillId = keyof typeof RANGED_SKILL_PRESETS
+
+/** 编译期计算所有可能的攻击子状态名 */
+type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${AttackPhaseName}`
+// 结果: "attacking_short_sword_slash_strike"
+//      | "attacking_heavy_sword_slam_windup"
+//      | "attacking_longbow_shot_draw"
+//      | ...（所有组合）
+```
+
+### 6.2 状态机侧判别式 Map
+
+```ts
+// character/state_machine/machine.ts
+
+type AllStateNames = CharacterState | AttackSubState
+
+const stateHandlerMap = new Map<string, StateHandler>()
+
+const getStateHandler = <K extends string>(key: K): Record<AllStateNames, StateHandler>[K & AllStateNames] | undefined =>
+    stateHandlerMap.get(key) as Record<AllStateNames, StateHandler>[K & AllStateNames] | undefined
+```
+
+### 6.3 动画系统侧判别式 Map
+
+```ts
+// entity/character/appearance/system.ts
+
+type AnimStateMap = Record<CharacterState, AnimationHandler>
+    & Record<AttackSubState, AnimationHandler>
+
+const animatorMap = new Map<string, AnimationHandler>()
+
+const getAnimator = <K extends string>(state: K): AnimStateMap[K & keyof AnimStateMap] | undefined =>
+    animatorMap.get(state) as AnimStateMap[K & keyof AnimStateMap] | undefined
+```
+
+调用侧：
+
+```ts
+const animator = getAnimator(state)
+    ?? (state.startsWith('attacking_') ? getAnimator('attacking') : getAnimator('idle'))
+// animator 类型为精确的 AnimationHandler，下游无需再 as
+```
+
+---
+
+## 七、新增攻击状态 / 武器指南
+
+### 7.1 为新武器添加完整攻击状态
+
+1. 在 `src/character/weapon/melee_weapon.ts`（或 `ranged_weapon.ts`）的 `PRESETS` 中添加武器预设
+2. 在 `src/character/combat/melee_skill.ts`（或 `ranged_skill.ts`）的 `PRESETS` 中添加技能预设，**必须定义 phases 数组**
+3. 在 `src/character/state_machine/states/attack/{skillId}/` 下创建各阶段 `StateHandler` 文件
+4. 在 `src/character/state_machine/machine.ts` 中调用 `registerStateHandler(key, handler)` 注册
+5. 在 `src/entity/character/appearance/animators/attack/{skillId}/` 下创建各阶段 `AnimationHandler` 文件
+6. 在 `src/entity/character/appearance/system.ts` 中调用 `registerAnimator(key, handler)` 注册
+7. 更新 `CombatComponent` 的 `comboChain`（如果该技能应属于连招链）
+
+### 7.2 仅使用默认行为（无专用状态文件）
+
+仅在技能预设中定义 `phases` 数组即可。attacking meta-state 在找不到阶段专用 handler 时会使用默认行为（按 `moveSpeedMultiplier` 减速 + 斜坡防滑）。动画回退到通用 `attackingAnim`（按 `attackTotalProgress` 比例播放）。
+
+### 7.3 新增 flinching 触发源
+
+在伤害回调或环境效果中设置 `combat.pendingFlinch = true`，下一帧 attacking meta-state 会通过 transition guard 检测到并转入 flinching。
+
+---
+
+## 八、核心文件索引
+
+| 层级 | 文件 | 内容 |
+|------|------|------|
+| **NEW** | `src/character/combat/attack_phases.ts` | `AttackPhase`、`AttackAnimConfig`、`EasingType` 类型；阶段解析工具；类型推导 |
+| 修改 | `src/character/combat/melee_skill.ts` | `MeleeSkillConfig` 新增 `phases`、`comboChain`；6 个预设补充阶段定义 |
+| 修改 | `src/character/combat/ranged_skill.ts` | `RangedSkillConfig` 新增 `phases`、`comboChain`；9 个预设补充阶段定义 |
+| 修改 | `src/character/combat/skill_types.ts` | `SkillSlot` 新增 `comboChain` |
+| 修改 | `src/character/combat/types.ts` | `CombatComponent` 新增 `phaseIndex`、`phaseTimer`、`comboIndex`、`comboTimer`、`pendingFlinch` |
+| 修改 | `src/character/state_machine/types.ts` | `CHARACTER_STATES` 新增 `'flinching'`；`MachineContext` 新增 `attackPhase` |
+| 修改 | `src/character/state_machine/machine.ts` | 动态 handler 解析（`Map<string, StateHandler>` + 判别式访问）；阶段感知的 skillIndex 设置 |
+| **重写** | `src/character/state_machine/states/attacking.ts` | 阶段调度 meta-state：enter 初始化阶段索引 → update 推进阶段 + 委托 → exit 清理 |
+| **NEW** | `src/character/state_machine/states/flinching.ts` | flinching 状态 handler |
+| **NEW** | `src/character/state_machine/states/attack/` | 武器特定攻击子状态文件（`{skillId}/{phaseName}.ts`） |
+| 修改 | `src/entity/character/appearance/types.ts` | `AnimationContext` 新增 `attackPhase`、`attackPhaseProgress`、`attackTotalProgress` |
+| 修改 | `src/entity/character/appearance/system.ts` | `Map<string, AnimationHandler>` + 判别式访问；传递阶段信息给 animator |
+| **重写** | `src/entity/character/appearance/animators/attacking.ts` | 保留为通用回退 animator（使用 `attackTotalProgress` 按比例缩放时间轴） |
+| **NEW** | `src/entity/character/appearance/animators/attack/` | 阶段专用 animator 文件（`{skillId}/{phaseName}.ts`） |
+| 修改 | `src/entity/character/physics/world.ts` | 传递 `phaseIndex`/`phaseTimer`/`totalProgress` 给外观系统；更新 executor 调度 |
+
+---
+
+## 九、CombatComponent 字段变更清单
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `currentSkillIndex` | `number` | 保留，当前技能槽索引 |
+| `attackActive` | `boolean` | 保留 |
+| `attackTimer` | `number` | 保留，攻击总计时 |
+| `attackedTargets` | `Set<number>` | 保留 |
+| `swingTilt` | `number` | 保留（在阶段动画中使用） |
+| **NEW** `phaseIndex` | `number` | 当前所在阶段索引（0-based） |
+| **NEW** `phaseTimer` | `number` | 当前阶段已用时间（秒） |
+| **NEW** `comboIndex` | `number` | 连招链当前位置 |
+| **NEW** `comboTimer` | `number` | 连招输入窗口剩余时间（秒） |
+| **NEW** `pendingFlinch` | `boolean` | 是否被标记为需要受击硬直 |
+
+---
+
+## 十、测试用例设计
+
+> 测试框架：Vitest。测试文件命名为 `<被测模块>.test.ts`，与被测源文件同目录。测试使用 `DT = 1/60` 固定帧步长、内联 mock 工厂函数（`as unknown as` 窄化）、`run(sm, entity, frames)` 帧进辅助函数和 `it.each()` 参数化测试。
+
+### 10.1 AttackPhase 配置验证 — 新文件 `character/combat/attack_phases.test.ts`
+
+**目的**：验证所有技能预设的 phases 配置完整且合法。
+
+#### 基础约束
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 1 | 每个近战/远程技能预设的 `phases` 已定义且非空数组 | `it.each` 遍历 `MELEE_SKILL_PRESETS` + `RANGED_SKILL_PRESETS` |
+| 2 | 每个阶段的 `durationRatio` 在 (0, 1] 区间 | `it.each` 遍历每个技能的每个阶段 |
+| 3 | 每个技能的阶段比例之和 ≤ 1 | 逐技能累加 `durationRatio` |
+| 4 | 每个阶段的 `moveSpeedMultiplier` 在 [0, 1] 区间 | `it.each` |
+| 5 | 每个阶段的 `name` 是 `ATTACK_PHASES` 的有效成员 | `it.each` |
+| 6 | 阶段序列的最后一个阶段 `durationRatio` 使总和恰好接近 1（±0.01 容差），避免"悬空时间" | 逐技能验证 `sum >= 0.99 && sum <= 1.01` |
+
+#### 设计不变量
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 7 | 重武器（heavy_sword、war_hammer）的 windup `durationRatio` 高于轻武器（short_sword、throwing_dart） | 跨预设比较 |
+| 8 | 有 `comboChain` 定义的技能，链中每个 ID 都存在对应的技能预设 | 查找 `MELEE_SKILL_PRESETS` 或 `RANGED_SKILL_PRESETS` |
+| 9 | 远程武器 phase 名称只使用 `draw`/`aim`/`release`，近战只使用 `windup`/`strike`/`recovery`/`spin` | 按 `skill.type` 检查 `phase.name` 集合 |
+| 10 | `cancellable === true` 的阶段只能是 windup、recovery、aim（不能在 strike/draw/release 中可取消） | `it.each` |
+
+#### 动画参数约束
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 11 | `animConfig.easing` 是 `EASING_TYPES` 的有效成员 | `it.each` |
+| 12 | windup/aim 阶段 `armSwingBackX < 0`（手臂向后蓄力） | 按阶段类型断言 |
+| 13 | strike/release 阶段 `armSwingForwardX > 0`（手臂向前打击） | 按阶段类型断言 |
+| 14 | `twoHanded === true` 的武器，所有阶段 `twoHanded` 保持一致 | 按技能遍历 |
+
+#### 回退兼容
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 15 | `resolvePhases(undefined, 0.3)` 生成单阶段回退 `[{name: "strike", durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false}]` | 直接调用函数断言 |
+| 16 | 回退阶段的 `duration` 使用传入的默认值 | 断言 `durationRatio === 1` |
+| 17 | 回退阶段与重构前 attacking 行为参数一致（0.3 移速倍率） | 断言 `moveSpeedMultiplier === 0.3` |
+
+---
+
+### 10.2 技能配置扩展测试 — 扩展 `melee_skill.test.ts` / `ranged_skill.test.ts`
+
+**目的**：在现有技能测试基础上追加 phases 和 comboChain 的验证。
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 1 | 每个技能预设的 `phases` 不为 `undefined` | `it.each` |
+| 2 | 有 `comboChain` 的技能，链中每个 skill ID 的类型匹配（近战→近战、远程→远程） | 通过 `MELEE_SKILL_PRESETS` / `RANGED_SKILL_PRESETS` 查找校验 |
+| 3 | `comboChain` 中的 ID 与自身 ID 不同（不应自引用） | `it.each` |
+
+---
+
+### 10.3 状态机阶段调度测试 — 扩展 `machine.test.ts`
+
+**目的**：验证 attacking meta-state 的阶段推进和委托逻辑。
+
+#### Mock 构造
+
+```ts
+// 使用带 phases 的 skill 构造 entity mock
+const makePhaseMock = (skillId: string = 'heavy_sword_slam'): CharacterEntity => {
+    const preset = MELEE_SKILL_PRESETS[skillId] ?? MELEE_SKILL_PRESETS.long_sword_slash
+    const slot = createSkillSlot(preset)
+    // ... 其余字段同现有 makeMock()，但需包含新增的 combat 字段
+    combat: {
+        // ... 现有字段
+        phaseIndex: 0, phaseTimer: 0,
+        comboIndex: 0, comboTimer: 0,
+        pendingFlinch: false,
+    }
+}
+```
+
+#### 阶段推进
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 1 | 进入 attacking 时 `phaseIndex === 0`，`phaseTimer === 0` | `setInput(0, 0, false, true)` → `update(DT)` | `combat.phaseIndex === 0`，`combat.phaseTimer === 0` |
+| 2 | 阶段推进：`phaseTimer >= phaseDuration` 时 `phaseIndex++` | 用 `run()` 推进帧数使 `combat.attackTimer` 超过第一阶段时长 | `combat.phaseIndex` 递增到下一阶段 |
+| 3 | 最后一个阶段结束后正常 transition 出 attacking | `run()` 超过 `skill.duration` | `currentState !== 'attacking'` |
+| 4 | 阶段内 `moveSpeedMultiplier` 生效 | 在第一阶段（windup，移速 0.1）检查 velocity 衰减 | `velocity.x` 被乘以对应倍率 |
+| 5 | 阶段切换时 velocity 倍率跟随更新 | 进入 strike 阶段（移速 0） | vertical/horizontal velocity 被归零 |
+
+#### 阶段委托
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 6 | 已注册的阶段 handler 被调用 | 向 `stateHandlerMap` 注册 `'attacking_heavy_sword_slam_windup'` 的 mock handler（含计数标记） | mock handler 的 `enter`/`update`/`exit` 被调用 |
+| 7 | 未注册的阶段 handler 回退到 `attackingHandler` | 使用未注册 handler 的 skill | 执行默认阶段行为（减速 + 斜坡防滑），不崩溃 |
+| 8 | 默认回退的进入/更新/退出不抛异常 | `resolvePhaseHandler('nonexistent_skill', 'windup')` | 返回 `STATE_HANDLERS['attacking']` |
+
+#### 无 phases 回退兼容
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 9 | 技能无 `phases` 定义时使用单阶段回退 | 构造 mock 技能无 phases | `phaseIndex` 保持 0，`attackTimer >= duration` 后直接退出 attacking |
+| 10 | 回退时移速倍率为 0.3（与原 attacking 一致） | 无 phases + velocity 初始值非零 | 每帧 velocity 乘以 0.3 |
+| 11 | 回退时 swingTilt 正常随机（近战） | 无 phases + type==='melee' | `swingTilt` 取非零值 |
+
+---
+
+### 10.4 flinching 状态测试 — 新文件 `character/state_machine/states/flinching.test.ts`
+
+**目的**：验证受击硬直状态的触发、行为和转换。
+
+#### 触发条件
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 1 | `pendingFlinch === true` + `health > 0` → 进入 flinching | attacking 状态中设置 `pendingFlinch = true` | `currentState === 'flinching'` |
+| 2 | `pendingFlinch === true` + `health === 0` → 进入 dying，不进 flinching | `health = 0`，`pendingFlinch = true` | `currentState === 'dying'` |
+| 3 | `pendingFlinch === false` → 即使受击也不进 flinching | `onDamageTaken` 触发但 `attackActive === false` | `pendingFlinch` 保持 `false`，不进入 flinching |
+| 4 | 在 idle 状态受击（`attackActive === false`）→ 不进 flinching | 普通行走时受伤 | 保持原状态，`pendingFlinch` 保持 `false` |
+
+#### Enter 行为
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 5 | `enter` 后将 `pendingFlinch` 重置为 `false` | 进入 flinching 后检查 |
+| 6 | `enter` 后将 `attackActive` 设为 `false` | 进入 flinching 后检查 |
+| 7 | `enter` 后将当前技能冷却设为 `skill.cooldown`（打断惩罚） | 进入 flinching 后检查 `cooldownTimer` |
+| 8 | `enter` 后将 `comboIndex` 重置为 0 | `comboIndex === 0` |
+| 9 | `enter` 后 velocity 归零 | `velocity.length() < 0.001` |
+
+#### Update 行为
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 10 | `update` 持续将 velocity 归零（不响应移动输入） | `setInput(1, 0, false, false)` 后 velocity 仍为 0 |
+| 11 | `update` 调用 `body.wakeUp()` | mock body 的 `wakeUp` 被调用 |
+
+#### 转换
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 12 | `stateTime >= FLINCH_DURATION` + 有支撑 + 移动输入 → walking | `isOnGround = true`，`setInput(1, 0, false, false)`，推进帧数超过 `FLINCH_DURATION` | `currentState === 'walking'` |
+| 13 | `stateTime >= FLINCH_DURATION` + 有支撑 + 无输入 → idle | `isOnGround = true`，`setInput(0, 0, false, false)` | `currentState === 'idle'` |
+| 14 | `stateTime >= FLINCH_DURATION` + 无支撑 → falling | `isOnGround = false`，`shouldFall === true` | `currentState === 'falling'` |
+| 15 | `stateTime >= FLINCH_DURATION` + jump → jumping | `isOnGround = true`，`setInput(0, 0, true, false)` | `currentState === 'jumping'` |
+| 16 | health ≤ 0 时立刻转 dying（优先级最高） | `health = 0` | `currentState === 'dying'` |
+
+#### 全状态 flinching guard
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 17 | idle 状态的 transitions 包含 `→ flinching` guard | `idleHandler.transitions.find(t => t.to === 'flinching')` 存在且 guard 正确 |
+| 18 | walking 状态的 transitions 包含 `→ flinching` guard | 同上 |
+| 19 | jumping 状态的 transitions 包含 `→ flinching` guard | 同上 |
+| 20 | falling 状态的 transitions 包含 `→ flinching` guard | 同上 |
+| 21 | attacking 状态的 transitions 包含 `→ flinching` guard | 同上 |
+| 22 | dashing 状态的 transitions 包含 `→ flinching` guard | 同上 |
+| 23 | `→ flinching` guard 在 `→ dying` guard 之后（优先级低于 dying） | `transitions` 数组中 dying 的索引 < flinching 的索引 |
+
+---
+
+### 10.5 连招系统测试 — 可合入 `machine.test.ts` 或新文件
+
+**目的**：验证连招链的推进、中断和超时。
+
+#### Combo 推进
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 1 | cancellable 阶段 + `input.attack === true` + `comboTimer > 0` → 推进到下一技能 | `phaseIndex` 在 cancellable 阶段，保持 `attack = true` | `currentSkillIndex` 或 skill id 切换为链中下一个 |
+| 2 | cancellable 阶段 + `input.attack === false` → 不推进 | `phaseIndex` 在 cancellable 阶段，`attack = false` | 正常走完当前攻击 |
+| 3 | 非 cancellable 阶段 + `input.attack === true` → 不推进 | `phaseIndex` 在 strike 阶段（`cancellable = false`） | 不触发 combo，正常完成攻击 |
+| 4 | `comboTimer === 0` 时即使 cancellable 也不推进 | 手动设 `comboTimer = 0` | 不触发 combo |
+
+#### Combo 超时
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 5 | 攻击完成后 `comboTimer` 递减，到 0 后 `comboIndex` 重置 | 进入 recovery 阶段，不再提供 `attack` 输入 | `comboTimer` 逐步归零，`comboIndex === 0` |
+| 6 | combo 输入窗口在 `COMBO_WINDOW`（0.3s）后关闭 | 攻击结束 + 0.3s 后 | `comboTimer === 0` |
+
+#### Combo 链边界
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 7 | `comboIndex` 到达链尾时，再接 `attack` 不推进 | `comboIndex === comboChain.length - 1` | 正常收尾 |
+| 8 | 链中下一技能冷却中 → 不推进 | 下一技能的 `cooldownTimer > 0` | 不触发 combo |
+| 9 | `comboChain` 为 `undefined` 时，`attack` 输入在 cancellable 阶段不触发 combo | 无 comboChain 定义的技能 | 正常单次攻击收尾 |
+| 10 | 多次连招循环（AA→B→A→A→B）| 反复输入 | `comboIndex` 正确递增并循环重置 |
+
+#### AI 连招
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 11 | AI 连续保持 `attack = true` 时自动走完整条 combo 链 | `setInput(dx, dz, false, true)` 持续多帧 | 链中所有技能被依次执行 |
+| 12 | AI `attack = true` 在 `cancellable === false` 的阶段不触发 combo | 同上但阶段不可取消 | combo 不推进，完成释放后正常退出 |
+
+---
+
+### 10.6 中断优先级测试 — 可合入 `machine.test.ts`
+
+**目的**：验证各种中断源的优先级顺序。
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 1 | dying 优先级 > flinching | `health = 0` + `pendingFlinch = true` | 进入 `dying`，不进入 `flinching` |
+| 2 | flinching 优先级 > combo | `pendingFlinch = true` + cancellable 阶段 + `attack = true` | 进入 `flinching`，不推进 combo |
+| 3 | flinching 优先级 > dash | `pendingFlinch = true` + cancellable 阶段 + `sprint = true` | 进入 `flinching`，不进入 `dashing` |
+| 4 | dash 优先级 > combo | cancellable 阶段 + `sprint = true` + `attack = true` | 进入 `dashing`（dash 转换在 combo 逻辑之前被遍历到），不推进 combo |
+| 5 | combo 推进后攻击强制完成（新攻击不可被旧攻击的 dash 打断） | combo 推进到非 cancellable 阶段 | dash 不生效 |
+
+---
+
+### 10.7 动画系统测试 — 新文件 `entity/character/appearance/attack_anim.test.ts`
+
+**目的**：验证 AnimationContext 的阶段信息传递和 animator 回退。
+
+#### AnimationContext 传递
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 1 | 在 attacking 状态中 `AnimationContext.attackPhase` 等于当前阶段名 | `currentState === 'attacking'` + `phaseIndex = 0` + `skill = heavy_sword_slam` | `ctx.attackPhase === 'windup'` |
+| 2 | 在非 attacking 状态中 `AnimationContext.attackPhase` 为 `undefined` | `currentState === 'idle'` | `ctx.attackPhase === undefined` |
+| 3 | `attackPhaseProgress` = `phaseTimer / phaseDuration`（0~1 之间） | attacking 中途 | `>= 0 && <= 1`，与手动计算一致 |
+| 4 | `attackTotalProgress` = `attackTimer / skill.duration`（0~1 之间） | attacking 中途 | `>= 0 && <= 1`，与手动计算一致 |
+| 5 | 阶段切换时 `attackPhaseProgress` 重置为 0 | `phaseIndex` 从 0 推进到 1 | 新阶段首帧 `attackPhaseProgress` 接近 0 |
+
+#### Animator 查找与回退
+
+| # | 测试用例 | 前置条件 | 预期结果 |
+|---|----------|----------|----------|
+| 6 | 已注册的阶段 animator 被 `getAnimator()` 找到 | 注册 `'attacking_heavy_sword_slam_windup'` | 返回对应 `AnimationHandler` |
+| 7 | 未注册的阶段 animator → `getAnimator()` 回退到 `'attacking'` | 传递 `'attacking_unknown_windup'` | 返回 `ANIMATION_HANDLERS['attacking']` |
+| 8 | 回退 `attackingAnim.update()` 使用 `attackTotalProgress` 而非硬编码时间 | 回退动画 + `duration = 0.6s`，`attackTimer = 0.3s` | 动画时间轴按 50% 进度缩放（`t' = 0.3 * 0.5 = 0.15s`） |
+| 9 | `getAnimator()` 对非 attacking 前缀的状态正确查询 | 传递 `'idle'` | 返回 `ANIMATION_HANDLERS['idle']` |
+
+---
+
+### 10.8 强类型状态名测试 — 可合入 `attack_phases.test.ts`
+
+**目的**：验证模板字面量类型推导的正确性。
+
+| # | 测试用例 | 验证方式 |
+|---|----------|----------|
+| 1 | `AttackSubState` 类型包含已知组合 `"attacking_short_sword_slash_strike"` | 赋值给 `const x: AttackSubState = ...`，编译通过 |
+| 2 | `AttackSubState` 类型包含所有近战技能 × 所有阶段 | 计数验证 |
+| 3 | 不在预设中的阶段名组合编译报错 | `// @ts-expect-error` 断言 |
+| 4 | `getStateHandler("attacking_heavy_sword_slam_windup")` 返回类型为 `StateHandler` | 类型推断通过 |
+| 5 | `getAnimator("attacking_longbow_shot_draw")` 返回类型为 `AnimationHandler` | 类型推断通过 |
+
+---
+
+### 10.9 测试文件清单
+
+| 测试文件 | 对应被测模块 | 类型 |
+|----------|-------------|------|
+| **NEW** `character/combat/attack_phases.test.ts` | `attack_phases.ts` — 阶段配置 + 类型推导 | 新文件 |
+| 扩展 `character/combat/melee_skill.test.ts` | `melee_skill.ts` — phases/comboChain 追加 | 扩展现有 |
+| 扩展 `character/combat/ranged_skill.test.ts` | `ranged_skill.ts` — phases/comboChain 追加 | 扩展现有 |
+| 扩展 `character/state_machine/machine.test.ts` | `attacking.ts` — 阶段调度 + handler 委托 + 回退 | 扩展现有 |
+| **NEW** `character/state_machine/states/flinching.test.ts` | `flinching.ts` — 硬直状态完整生命周期 | 新文件 |
+| **NEW** `entity/character/appearance/attack_anim.test.ts` | `system.ts` + `attacking.ts` — 阶段动画上下文 + 回退 | 新文件 |

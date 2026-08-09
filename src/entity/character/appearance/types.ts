@@ -64,6 +64,12 @@ export interface AnimationContext {
     readonly horizontalTravel: number
     /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍 */
     readonly swingTilt: number
+    /** 当前攻击阶段名（仅在 attacking 状态有效，其他状态为 undefined） */
+    readonly attackPhase: string | undefined
+    /** 当前阶段进度 0-1（phaseTimer / phaseDuration） */
+    readonly attackPhaseProgress: number
+    /** 攻击总进度 0-1（attackTimer / totalDuration） */
+    readonly attackTotalProgress: number
 }
 
 /** 单个状态的动画处理器 */

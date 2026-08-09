@@ -12,10 +12,13 @@ export type SkillConfig = MeleeSkillConfig | RangedSkillConfig
 export interface SkillSlot {
     readonly config: SkillConfig
     cooldownTimer: number
+    /** 连招链：本技能后可接的技能 ID 列表，按顺序执行（undefined = 无连招） */
+    comboChain?: readonly string[]
 }
 
 /** 创建技能槽 */
-export const createSkillSlot = (config: SkillConfig): SkillSlot => ({
+export const createSkillSlot = (config: SkillConfig, comboChain?: readonly string[]): SkillSlot => ({
     config,
     cooldownTimer: 0,
+    comboChain,
 })

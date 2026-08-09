@@ -58,5 +58,9 @@ export const dashingHandler: StateHandler = {
             to: 'dying',
             guard: (_input, entity) => entity.combat.health <= 0,
         },
+        {
+            to: 'flinching',
+            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+        },
     ],
 }

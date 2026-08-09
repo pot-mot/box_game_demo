@@ -1,6 +1,6 @@
 import type {CharacterEntity} from '../types.ts'
 
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying', 'dashing'] as const
+export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying', 'dashing', 'flinching'] as const
 export type CharacterState = typeof CHARACTER_STATES[number]
 
 export interface CharacterInput {
@@ -15,6 +15,8 @@ export interface CharacterInput {
 export interface MachineContext {
     readonly stateTime: number
     readonly previousState: CharacterState | null
+    /** 当前攻击阶段名（仅在 attacking 状态期间有效，其他状态为 undefined） */
+    readonly attackPhase: string | undefined
 }
 
 export interface Transition {

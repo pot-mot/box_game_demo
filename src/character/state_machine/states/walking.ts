@@ -45,6 +45,10 @@ export const walkingHandler: StateHandler = {
             guard: (_input, entity) => entity.combat.health <= 0,
         },
         {
+            to: 'flinching',
+            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+        },
+        {
             to: 'falling',
             guard: (_input, entity) =>
                 shouldFall(entity) && entity.airborneTime >= STATE_FLIP_MIN_TIME,

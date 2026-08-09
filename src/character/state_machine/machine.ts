@@ -1,4 +1,5 @@
 import type {CharacterEntity} from '../types.ts'
+import {resolvePhases} from '../combat/attack_phases.ts'
 import type {
     CharacterState,
     CharacterInput,
@@ -13,6 +14,7 @@ import {fallingHandler} from './states/falling.ts'
 import {attackingHandler} from './states/attacking.ts'
 import {dyingHandler} from './states/dying.ts'
 import {dashingHandler} from './states/dashing.ts'
+import {flinchingHandler} from './states/flinching.ts'
 import {updateGroundTimers} from './ground.ts'
 
 const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
@@ -23,6 +25,7 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     attacking: attackingHandler,
     dying: dyingHandler,
     dashing: dashingHandler,
+    flinching: flinchingHandler,
 }
 
 export const createCharacterStateMachine = (): CharacterStateMachine => {
@@ -32,10 +35,23 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
     const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, skillIndex: 0, sprint: false}
 
-    const makeContext = (): MachineContext => ({
-        stateTime,
-        previousState,
-    })
+    const makeContext = (entity?: CharacterEntity): MachineContext => {
+        let attackPhase: string | undefined
+        if (entity !== undefined && currentState === 'attacking') {
+            const skill = entity.combat.skills[entity.combat.currentSkillIndex]
+            if (skill) {
+                const phases = resolvePhases(skill.config.phases)
+                if (entity.combat.phaseIndex < phases.length) {
+                    attackPhase = phases[entity.combat.phaseIndex].name
+                }
+            }
+        }
+        return {
+            stateTime,
+            previousState,
+            attackPhase,
+        }
+    }
 
     const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, sprint?: boolean, skillIndex?: number): void => {
         input.dx = dx
@@ -48,7 +64,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
 
     const update = (dt: number, entity: CharacterEntity): void => {
         const handler = STATE_HANDLERS[currentState]
-        const ctx = makeContext()
+        const ctx = makeContext(entity)
         updateGroundTimers(entity, dt)
 
         for (const t of handler.transitions) {
@@ -60,7 +76,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
                 if (currentState === 'attacking') {
                     entity.combat.currentSkillIndex = input.skillIndex
                 }
-                const newCtx = makeContext()
+                const newCtx = makeContext(entity)
                 STATE_HANDLERS[currentState].enter(entity, newCtx)
                 onStateChange?.(previousState, currentState)
                 return
@@ -68,7 +84,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         }
 
         stateTime += dt
-        STATE_HANDLERS[currentState].update(dt, input, entity, makeContext())
+        STATE_HANDLERS[currentState].update(dt, input, entity, makeContext(entity))
     }
 
     const reset = (): void => {

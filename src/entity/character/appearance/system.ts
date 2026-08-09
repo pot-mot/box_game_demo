@@ -17,6 +17,7 @@ const ANIMATION_HANDLERS: Record<CharacterState, AnimationHandler> = {
     attacking: attackingAnim,
     dying: dyingAnim,
     dashing: dashingAnim,
+    flinching: attackingAnim,
 }
 
 export interface AppearanceSystem {
@@ -35,12 +36,12 @@ export const createAppearanceSystem = (): AppearanceSystem => {
     const onStateChange = (from: CharacterState | null, to: CharacterState, model: CharacterModel): void => {
         if (from && currentModel === model) {
             const prevHandler = ANIMATION_HANDLERS[from]
-            prevHandler.exit(model, {stateTime: 0, horizontalSpeed: 0, horizontalTravel: 0, swingTilt: 0})
+            prevHandler.exit(model, {stateTime: 0, horizontalSpeed: 0, horizontalTravel: 0, swingTilt: 0, attackPhase: undefined, attackPhaseProgress: 0, attackTotalProgress: 0})
         }
         currentState = to
         currentModel = model
         const handler = ANIMATION_HANDLERS[to]
-        handler.enter(model, {stateTime: 0, horizontalSpeed: 0, horizontalTravel: 0, swingTilt: 0})
+        handler.enter(model, {stateTime: 0, horizontalSpeed: 0, horizontalTravel: 0, swingTilt: 0, attackPhase: undefined, attackPhaseProgress: 0, attackTotalProgress: 0})
     }
 
     const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {

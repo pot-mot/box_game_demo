@@ -19,6 +19,17 @@ export interface CombatComponent {
     /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍，于进入 attacking 状态时随机 */
     swingTilt: number
 
+    /** 攻击阶段索引（0-based），attacking meta-state 推进 */
+    phaseIndex: number
+    /** 当前阶段已用时间（秒） */
+    phaseTimer: number
+    /** 连招链当前位置（0 = 第一招） */
+    comboIndex: number
+    /** 连招输入窗口计时器（秒，到期归零终止连招） */
+    comboTimer: number
+    /** 是否被标记为受击硬直 */
+    pendingFlinch: boolean
+
     faction: Faction
     attackTendency: AttackTendency
     tendencyConfig: TendencyConfig
@@ -49,6 +60,11 @@ export const createCombatComponent = (
     attackDirX: 0,
     attackDirZ: 1,
     swingTilt: 0,
+    phaseIndex: 0,
+    phaseTimer: 0,
+    comboIndex: 0,
+    comboTimer: 0,
+    pendingFlinch: false,
     faction,
     attackTendency,
     tendencyConfig,

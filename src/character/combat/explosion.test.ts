@@ -16,6 +16,7 @@ const makeMock = (id: number, x: number, y: number, z: number, hp: number, facti
         onDamageTaken: null, onDeath: null, onDamageDealt: null,
         skills: [], currentSkillIndex: 0, attackActive: false, attackTimer: 0,
         attackedTargets: new Set(), attackDirX: 0, attackDirZ: 0, swingTilt: 0,
+        phaseIndex: 0, phaseTimer: 0, comboIndex: 0, comboTimer: 0, pendingFlinch: false,
     } as Parameters<typeof applyExplosionDamage>[6]['combat'],
     stateMachine: null!,
 })
