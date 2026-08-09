@@ -162,10 +162,15 @@ export const createNavSensor = (
                 /* 命中点距离在跳跃高度范围内则判定为可安全到达 */
                 groundAhead = groundHits[0].distance <= jumpHeight
             }
-            /* 命中点在 jumpHeight 之外，或完全未命中 → 坑洞 → groundAhead 保持 false */
+            /* 命中点在 jumpHeight 之外，或完全未命中 → 有待回退检查 */
         } else {
             /* 无任何 mesh 可查 → 假定平坦世界有地面 */
             groundAhead = true
+        }
+
+        /* 回退：无地形 mesh（隐式无限平面 y=0），脚底到平面距离在跳跃高度内即安全 */
+        if (!groundAhead && grounds.length === 0) {
+            groundAhead = footY <= jumpHeight
         }
 
         /* ── 分类 ── */

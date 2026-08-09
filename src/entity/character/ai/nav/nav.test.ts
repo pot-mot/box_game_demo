@@ -177,6 +177,18 @@ describe('NavSensor 传感器检测', () => {
         expect(result.result).toBe('clear')
     })
 
+    it('4c. 无地形 + 有障碍(不在探头下方) → 隐式平面 y=0 → footY≤jumpHeight → groundAhead=true', () => {
+        /* 模拟无限平面世界：无 terrain mesh，但场景有箱子（探头下方碰不到） */
+        grounds.length = 0
+        /* 箱子在侧面，探头正下方没有物体 */
+        obstacles.push(createBoxMesh(1.0, 0.5, 2.0, 1, 1, 1))
+        obstacles.push(createBoxMesh(1.0, 0.5, -2.0, 1, 1, 1))
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.groundAhead).toBe(true)
+        expect(result.result).toBe('clear')
+    })
+
     it('5. 前方有墙 + 左侧通畅', () => {
         /* 墙在正前方，但左侧无阻挡 */
         const wall = createBoxMesh(1.0, 2.0, 0, 0.3, 4, 0.3)
@@ -932,12 +944,12 @@ describe('NavSensor 站在实体上的坑洞检测', () => {
         expect(result.result).toBe('clear')
     })
 
-    it('42. 站在 boxes 边缘 → 前方悬空 → groundAhead=false（正确检测坑洞）', () => {
-        const platform = createBoxMesh(0.5, 0.5, 0, 1, 1, 1)
+    it('42. 站在高箱边缘 → 前方悬空落差 > jumpHeight → groundAhead=false', () => {
+        /* 角色站在很高的箱子上（boxTopY=3，footY=3.1），落差超过 jumpHeight=2 */
+        const platform = createBoxMesh(0.5, 1.5, 0, 1, 3, 1)
         obstacles.push(platform)
-        /* 移除大地面 mesh，模拟探头前方无任何立足面 */
         grounds.length = 0
-        const entity = makeEntity(1.0)
+        const entity = makeEntity(3.0)
 
         const result = sensor.sense(entity, 1, 0, navConfig)
         expect(result.groundAhead).toBe(false)
