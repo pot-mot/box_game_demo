@@ -13,6 +13,26 @@ export interface RapQuaternion {
     w: number
 }
 
+// ── Rapier 辅助 ──
+
+/**
+ * 安全创建碰撞体并附着到父刚体。
+ * Rapier 0.20 的类型定义在 TypeScript 6 下 createCollider 第二参数检测异常，
+ * 此函数做集中窄化，后续统一通过此入口创建碰撞体。
+ */
+import type RAPIER from '@dimforge/rapier3d-compat'
+
+export const createColliderForBody = (
+    world: RAPIER.World,
+    desc: RAPIER.ColliderDesc,
+    body: RAPIER.RigidBody | undefined,
+): RAPIER.Collider => {
+    if (body !== undefined) {
+        return world.createCollider(desc, body)
+    }
+    return world.createCollider(desc)
+}
+
 // ── 构造 ──
 
 export const v3 = (x: number, y: number, z: number): RapVector3 => ({ x, y, z })

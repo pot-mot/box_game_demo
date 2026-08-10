@@ -1,7 +1,8 @@
 import {type Scene} from 'three'
-import {Body, BODY_TYPES, Box, Vec3} from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {createColliderForBody, quatVmult} from '../../../../physics/rapier_utils.ts'
 import type {ElasticBoxConfig, ElasticBox, ElasticBoxAddOptions, ElasticEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
@@ -30,7 +31,7 @@ export const setupElasticBoxes = (
     scene: Scene,
     shared: SharedWorld,
 ): ElasticEntityContext => {
-    const {world, boxMat} = shared
+    const { world, eventQueue } = shared
 
     const boxes: ElasticBox[] = []
     let nextId = 1
@@ -90,67 +91,31 @@ export const setupElasticBoxes = (
         mesh.position.set(x, adjustedY, z)
         scene.add(mesh)
 
-        const body = new Body({
-            mass: config.mass,
-            type: config.mass === 0 ? BODY_TYPES.STATIC : BODY_TYPES.DYNAMIC,
-            material: boxMat,
-            collisionFilterGroup: DEFAULT_COLLISION_GROUP,
-            collisionFilterMask: DEFAULT_COLLISION_MASK,
-        })
-        body.addShape(new Box(new Vec3(hw, hh, hd)))
-        body.position.set(x, adjustedY, z)
+        const isStatic = config.mass === 0
+        const bodyDesc = isStatic
+            ? RAPIER.RigidBodyDesc.fixed()
+            : RAPIER.RigidBodyDesc.dynamic()
+        bodyDesc.setTranslation(x, adjustedY, z)
+        const body = world.createRigidBody(bodyDesc)
+
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(hw, hh, hd)
+            .setFriction(0.5)
+            .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+        const mainCollider = createColliderForBody(world, colliderDesc, body)
+
         if (quat) {
-            body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+            body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
             mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         }
-        world.addBody(body)
 
-        // 自重压缩 + 碰撞状态
         const def: [number, number, number] = options?.def ?? [0, -config.height * GRAVITY_SQUASH, 0]
         const vel: [number, number, number] = options?.vel ?? [0, 0, 0]
 
-        // 碰撞冷却
         const cooldowns = new Map<number, number>()
-
-        body.addEventListener('collide', (e: any) => {
-            const contact = e.contact
-            const isBi = contact.bi === body
-            const otherBody = isBi ? contact.bj : contact.bi
-
-            const otherId = otherBody.id
-            const cd = cooldowns.get(otherId) || 0
-            if (cd > 0) return
-            cooldowns.set(otherId, COLLISION_COOLDOWN)
-
-            const normal = isBi ? contact.ni.clone() : contact.ni.clone().negate()
-
-            // 计算相对速度沿法线分量
-            const vd = new Vec3()
-            if (isBi) {
-                vd.x = contact.bi.velocity.x - contact.bj.velocity.x
-                vd.y = contact.bi.velocity.y - contact.bj.velocity.y
-                vd.z = contact.bi.velocity.z - contact.bj.velocity.z
-            } else {
-                vd.x = contact.bj.velocity.x - contact.bi.velocity.x
-                vd.y = contact.bj.velocity.y - contact.bi.velocity.y
-                vd.z = contact.bj.velocity.z - contact.bi.velocity.z
-            }
-            const relVel = Math.abs(vd.x * normal.x + vd.y * normal.y + vd.z * normal.z)
-            const impulse = relVel * IMPACT_DEFORM_SCALE
-
-            // 将法线转换到局部空间，确定受撞轴向
-            const invQuat = body.quaternion.clone().inverse()
-            const localN = invQuat.vmult(normal)
-            const lnArr = [localN.x, localN.y, localN.z]
-            const absN = [Math.abs(lnArr[0]), Math.abs(lnArr[1]), Math.abs(lnArr[2])]
-            const axis = absN.indexOf(Math.max(...absN))
-
-            vel[axis] -= impulse
-        })
 
         const emitter = createEmitter<EntityEventMap>()
         const pb: ElasticBox = {
-            id, mesh, body, edges, wireframe: undefined,
+            id, mesh, body, mainCollider, edges, wireframe: undefined,
             config: {...config},
             def, vel, cooldowns, emitter, rowText: '',
         }
@@ -175,10 +140,10 @@ export const setupElasticBoxes = (
         cleanupWireframe(pb)
         scene.remove(pb.mesh)
         disposeElasticBoxMesh(pb)
-        world.removeBody(pb.body)
+        world.removeRigidBody(pb.body)
         boxes.splice(idx, 1)
         for (const b of boxes) {
-            if (b.body.type === BODY_TYPES.DYNAMIC) b.body.wakeUp()
+            if (b.body.bodyType() === RAPIER.RigidBodyType.Dynamic) b.body.wakeUp()
         }
         rebuildPanelInfo()
     }
@@ -225,14 +190,17 @@ export const setupElasticBoxes = (
             const oldHh = old.height / 2
             pb.config = cfg
             updateElasticBoxMeshSize(pb)
-            while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
-            pb.body.addShape(new Box(new Vec3(cfg.width / 2, hh, cfg.depth / 2)))
-            pb.body.updateMassProperties()
-            const oldBottom = pb.body.position.y - oldHh
-            const newBottom = pb.body.position.y - hh
+            world.removeCollider(pb.mainCollider, true)
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
+                .setFriction(0.5)
+                .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
+            const pos = pb.body.translation()
+            const oldBottom = pos.y - oldHh
+            const newBottom = pos.y - hh
             if (newBottom < oldBottom || newBottom < GROUND_Y) {
                 const target = Math.max(oldBottom, GROUND_Y)
-                pb.body.position.y = target + hh
+                pb.body.setTranslation({ x: pos.x, y: target + hh, z: pos.z }, true)
                 pb.mesh.position.y = target + hh
             }
             if (pb.wireframe) {
@@ -243,12 +211,9 @@ export const setupElasticBoxes = (
         }
         if (changedMass) {
             if (cfg.mass === 0) {
-                pb.body.type = BODY_TYPES.STATIC
-                pb.body.mass = 0
+                pb.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
-                pb.body.type = BODY_TYPES.DYNAMIC
-                pb.body.mass = cfg.mass
-                pb.body.updateMassProperties()
+                pb.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
                 pb.body.wakeUp()
             }
         }
@@ -264,20 +229,67 @@ export const setupElasticBoxes = (
         const pb = boxes.find(b => b.id === id)
         if (!pb) return
         pb.mesh.position.set(pos.x, pos.y, pos.z)
-        pb.body.position.set(pos.x, pos.y, pos.z)
+        pb.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true)
         pb.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
-        pb.body.quaternion.set(pb.mesh.quaternion.x, pb.mesh.quaternion.y, pb.mesh.quaternion.z, pb.mesh.quaternion.w)
-        if (pb.body.type === BODY_TYPES.DYNAMIC) pb.body.wakeUp()
+        pb.body.setRotation(
+            { x: pb.mesh.quaternion.x, y: pb.mesh.quaternion.y, z: pb.mesh.quaternion.z, w: pb.mesh.quaternion.w },
+            true,
+        )
+        if (pb.body.bodyType() === RAPIER.RigidBodyType.Dynamic) pb.body.wakeUp()
         refreshRowText(pb)
     }
 
     // ── 弹性形变更新（preSync） ──
 
     const updateDeformation = (dt: number): void => {
+        eventQueue.drainCollisionEvents((h1: number, h2: number, started: boolean) => {
+            if (!started) return
+
+            for (const pb of boxes) {
+                if (pb.config.mass === 0) continue
+                if (pb.mainCollider.handle !== h1 && pb.mainCollider.handle !== h2) continue
+
+                const myHandle = pb.mainCollider.handle
+                const otherHandle = myHandle === h1 ? h2 : h1
+                const otherCollider = world.getCollider(otherHandle)
+                if (!otherCollider) continue
+                const otherBody = otherCollider.parent()
+                if (!otherBody) continue
+
+                const otherBodyHandle = otherBody.handle
+                if ((pb.cooldowns.get(otherBodyHandle) ?? 0) > 0) continue
+                pb.cooldowns.set(otherBodyHandle, COLLISION_COOLDOWN)
+
+                world.contactPair(pb.mainCollider, otherCollider, (manifold, _flipped) => {
+                    const n = manifold.normal()
+                    const normal = myHandle === h1
+                        ? { x: n.x, y: n.y, z: n.z }
+                        : { x: -n.x, y: -n.y, z: -n.z }
+
+                    const ourVel = pb.body.linvel()
+                    const otherVel = otherBody.linvel()
+                    const relVel = Math.abs(
+                        (ourVel.x - otherVel.x) * normal.x +
+                        (ourVel.y - otherVel.y) * normal.y +
+                        (ourVel.z - otherVel.z) * normal.z,
+                    )
+                    const impulse = relVel * IMPACT_DEFORM_SCALE
+
+                    const rot = pb.body.rotation()
+                    const invRot = { x: -rot.x, y: -rot.y, z: -rot.z, w: rot.w }
+                    const localN = { x: 0, y: 0, z: 0 }
+                    quatVmult(localN, invRot, normal)
+                    const absN = [Math.abs(localN.x), Math.abs(localN.y), Math.abs(localN.z)]
+                    const axis = absN.indexOf(Math.max(...absN))
+
+                    pb.vel[axis] -= impulse
+                })
+            }
+        })
+
         for (const pb of boxes) {
             if (pb.config.mass === 0) continue
 
-            // 递减碰撞冷却
             for (const [key, val] of pb.cooldowns) {
                 const next = val - dt
                 if (next <= 0) pb.cooldowns.delete(key)
@@ -302,7 +314,6 @@ export const setupElasticBoxes = (
                 }
             }
 
-            // 自重：Y 轴维持一个微小压缩
             const gravityTarget = -base[1] * GRAVITY_SQUASH
             pb.def[1] += (gravityTarget - pb.def[1]) * Math.min(1, dt * 5)
 
@@ -314,8 +325,10 @@ export const setupElasticBoxes = (
 
     const syncPositions = (): void => {
         for (const pb of boxes) {
-            pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
-            pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)
+            const pos = pb.body.translation()
+            pb.mesh.position.set(pos.x, pos.y, pos.z)
+            const rot = pb.body.rotation()
+            pb.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
             updateElasticBoxMeshSize(pb)
             pb.rowText = formatRowText(pb)
         }

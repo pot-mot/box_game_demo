@@ -45,8 +45,8 @@ export const collectWorldState = (
             entities.push({
                 type: 'box/common',
                 config: e.config,
-                position: vec3ToTuple(e.body.position),
-                quaternion: quatToTuple(e.body.quaternion),
+                position: vec3ToTuple(e.body.translation()),
+                quaternion: quatToTuple(e.body.rotation()),
             })
         }
     }
@@ -58,8 +58,8 @@ export const collectWorldState = (
             entities.push({
                 type: 'box/destruction',
                 config: e.config,
-                position: vec3ToTuple(e.body.position),
-                quaternion: quatToTuple(e.body.quaternion),
+                position: vec3ToTuple(e.body.translation()),
+                quaternion: quatToTuple(e.body.rotation()),
                 health: e.health,
                 collisions: e._collisions,
                 collisionHistory: e._collisionHistory,
@@ -75,8 +75,8 @@ export const collectWorldState = (
             entities.push({
                 type: 'box/burning',
                 config: e.config,
-                position: vec3ToTuple(e.body.position),
-                quaternion: quatToTuple(e.body.quaternion),
+                position: vec3ToTuple(e.body.translation()),
+                quaternion: quatToTuple(e.body.rotation()),
                 health: e.health,
             })
         }
@@ -89,8 +89,8 @@ export const collectWorldState = (
             entities.push({
                 type: 'box/magnet',
                 config: e.config,
-                position: vec3ToTuple(e.body.position),
-                quaternion: quatToTuple(e.body.quaternion),
+                position: vec3ToTuple(e.body.translation()),
+                quaternion: quatToTuple(e.body.rotation()),
             })
         }
     }
@@ -102,8 +102,8 @@ export const collectWorldState = (
             entities.push({
                 type: 'box/elasticity',
                 config: e.config,
-                position: vec3ToTuple(e.body.position),
-                quaternion: quatToTuple(e.body.quaternion),
+                position: vec3ToTuple(e.body.translation()),
+                quaternion: quatToTuple(e.body.rotation()),
                 def: e.def,
                 vel: e.vel,
             })
@@ -117,8 +117,8 @@ export const collectWorldState = (
             entities.push({
                 type: 'area/water',
                 config: e.config,
-                position: [e.body.position.x, e.body.position.y, e.body.position.z],
-                quaternion: quatToTuple(e.body.quaternion),
+                position: [e.transform.x, e.transform.y, e.transform.z],
+                quaternion: [e.transform.qx, e.transform.qy, e.transform.qz, e.transform.qw],
             })
         }
     }
@@ -176,8 +176,8 @@ export const collectWorldState = (
                     navEnabled: e.navEnabled,
                 },
                 health: e.combat.health,
-                position: vec3ToTuple(e.body.position),
-                quaternion: quatToTuple(e.body.quaternion),
+                position: vec3ToTuple(e.body.translation()),
+                quaternion: quatToTuple(e.body.rotation()),
             })
         }
     }
@@ -189,8 +189,8 @@ export const collectWorldState = (
             entities.push({
                 type: 'fragment/common',
                 config: e.config,
-                position: vec3ToTuple(e.body.position),
-                quaternion: quatToTuple(e.body.quaternion),
+                position: vec3ToTuple(e.body.translation()),
+                quaternion: quatToTuple(e.body.rotation()),
                 data: fragmentDataToJSON(e.fragmentData),
             })
         }

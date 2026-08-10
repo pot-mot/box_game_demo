@@ -5,6 +5,7 @@ import type {EntityTickHandler} from './types/physics.ts'
 import type {TerrainContext} from './entity/terrain/base/types'
 import type {GameMode} from './modes/constants.ts'
 import type {SaveData} from './save_load/types.ts'
+import RAPIER from '@dimforge/rapier3d-compat'
 import {createRenderContext} from './render/setup.ts'
 import {setupInfiniteGrid} from './render/grid.ts'
 import {setupRefractionPass} from './render/refraction_pass.ts'
@@ -49,7 +50,10 @@ setupStartupScreen({
     },
 })
 
-const startGame = (mode: GameMode, saveData?: SaveData): void => {
+const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => {
+    // --- Rapier 物理引擎初始化 ---
+    await RAPIER.init()
+
     // --- 输入注册表（必须在所有模式初始化之前）---
     const input = createInputRegistry()
 
@@ -281,12 +285,15 @@ const startGame = (mode: GameMode, saveData?: SaveData): void => {
 
             if (simActive) {
                 /* play 模式或持续执行：正常变速步进 */
-                shared.world.step(FIXED_TIME_STEP, delta, MAX_SUB_STEPS)
+                const totalSteps = Math.min(Math.max(1, Math.ceil(delta / FIXED_TIME_STEP)), MAX_SUB_STEPS)
+                for (let s = 0; s < totalSteps; s++) {
+                    shared.world.step(shared.eventQueue)
+                }
                 for (const s of systems) s.preSync?.(delta, time)
                 for (const s of systems) s.syncPositions()
             } else if (stepActive) {
                 /* 逐帧步进：每帧精确推进 1 物理步 */
-                shared.world.step(FIXED_TIME_STEP, FIXED_TIME_STEP, 1)
+                shared.world.step(shared.eventQueue)
                 for (const s of systems) s.preSync?.(FIXED_TIME_STEP, time)
                 for (const s of systems) s.syncPositions()
                 editMode?.execute.consumeStep()

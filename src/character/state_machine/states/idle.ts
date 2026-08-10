@@ -5,16 +5,15 @@ import {shouldFall, isSupportedOn, projectToSlope, applySlopeAntiGravity} from '
 export const idleHandler: StateHandler = {
     enter: () => {},
     update: (_dt, _input, entity) => {
-        const vx = entity.body.velocity.x * GROUND_DAMPING
-        const vz = entity.body.velocity.z * GROUND_DAMPING
+        const linvel = entity.body.linvel()
+        const vx = linvel.x * GROUND_DAMPING
+        const vz = linvel.z * GROUND_DAMPING
         /* 斜坡防滑：可站立坡面上速度清零并沿坡投影 + 反力抵消重力沿坡分量，防止自然下滑 */
         if (!projectToSlope(entity, 0, 0, SLOPE_WALK_THRESHOLD)) {
-            entity.body.velocity.x = vx
-            entity.body.velocity.z = vz
+            entity.body.setLinvel({x: vx, y: linvel.y, z: vz}, true)
         } else {
             applySlopeAntiGravity(entity)
         }
-        entity.body.wakeUp()
     },
     exit: () => {},
     transitions: [

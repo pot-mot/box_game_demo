@@ -123,16 +123,15 @@ export const attackingHandler: StateHandler = {
             const moveMul = c.phaseIndex < phases.length
                 ? phases[c.phaseIndex].moveSpeedMultiplier
                 : 0.3
-            const vx = entity.body.velocity.x * moveMul
-            const vz = entity.body.velocity.z * moveMul
+            const linvel = entity.body.linvel()
+            const vx = linvel.x * moveMul
+            const vz = linvel.z * moveMul
             if (!projectToSlope(entity, 0, 0, SLOPE_WALK_THRESHOLD)) {
-                entity.body.velocity.x = vx
-                entity.body.velocity.z = vz
+                entity.body.setLinvel({x: vx, y: linvel.y, z: vz}, true)
             } else {
                 applySlopeAntiGravity(entity)
             }
         }
-        entity.body.wakeUp()
     },
     exit: (entity) => {
         const c = entity.combat

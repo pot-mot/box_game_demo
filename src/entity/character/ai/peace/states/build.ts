@@ -1,8 +1,8 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {PeaceStateHandler} from '../types.ts'
 import {isBuildConfig, type BoxSpawnEntry} from '../../../../../character/ai_strategy/types.ts'
 
-const _pos = new Vec3()
+const _pos: RapVector3 = {x: 0, y: 0, z: 0}
 
 /** 按概率加权随机选择箱型 */
 const selectBoxType = (entries: readonly BoxSpawnEntry[]): BoxSpawnEntry | undefined => {
@@ -35,13 +35,13 @@ export const buildHandler: PeaceStateHandler = {
         const d = randBetween(entry.minDepth, entry.maxDepth)
 
         /* 在角色周围随机位置放置 */
-        const pos = character.body.position
+        const pos = character.body.translation()
         const angle = Math.random() * Math.PI * 2
         const dist = 1 + Math.random() * 1.5
         const bx = pos.x + Math.cos(angle) * dist
         const bz = pos.z + Math.sin(angle) * dist
 
-        _pos.set(bx, pos.y, bz)
+        v3Set(_pos, bx, pos.y, bz)
 
         ctx.spawnBox(entry, _pos.x, _pos.y, _pos.z, {width: w, height: h, depth: d})
     },

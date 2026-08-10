@@ -1,6 +1,6 @@
 import {z} from 'zod'
 import type {LineSegments, Points} from 'three'
-import type {Body} from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type {BaseEntity, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
 import type {HealthComponent} from '../../base/types/health'
@@ -20,7 +20,8 @@ export interface ParticleData {
 }
 
 export interface BurningBox extends BaseEntity<BurningBoxConfig>, HealthComponent {
-    body: Body
+    body: RAPIER.RigidBody
+    mainCollider: RAPIER.Collider
     edges: LineSegments
     wireframe: LineSegments | undefined
     burnProgress: number

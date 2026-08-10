@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest'
-import {Vec3} from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import {createSkillSlot} from '../../../character/combat/skill_types.ts'
 import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
 import {RANGED_SKILL_PRESETS} from '../../../character/combat/ranged_skill.ts'
@@ -38,7 +38,8 @@ const makeChar = (
 
     return {
         id,
-        body: {position: new Vec3(x, 0, z)},
+        body: {translation: () => ({x, y: 0, z})} as unknown as CharacterEntity['body'],
+        mainCollider: undefined as unknown as RAPIER.Collider,
         combat: {
             faction,
             isDead: overrides?.isDead ?? false,

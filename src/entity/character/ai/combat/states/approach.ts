@@ -1,8 +1,8 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 
-const _dir = new Vec3()
+const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
 export const approachHandler: CombatStateHandler = {
     enter: (ctx, _character) => {
@@ -12,10 +12,10 @@ export const approachHandler: CombatStateHandler = {
         const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
-        const pos = character.body.position
-        const tp = target.body.position
-        _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
-        const dist = _dir.length()
+        const pos = character.body.translation()
+        const tp = target.body.translation()
+        v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
+        const dist = v3Length(_dir)
 
         const skill = character.combat.skills[character.combat.currentSkillIndex]
         if (!skill || skill.config.type !== 'ranged') { setInput(0, 0, false); return }
@@ -62,8 +62,8 @@ export const approachHandler: CombatStateHandler = {
                 if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
+                const pos = character.body.translation()
+                const tp = target.body.translation()
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
@@ -77,13 +77,13 @@ export const approachHandler: CombatStateHandler = {
                 if (ctx.combatStrategy !== 'aggressive') return false
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill) return false
                 const cooldownOk = (skill.cooldownTimer ?? Infinity) <= 0
-                return _dir.length() < skill.config.weapon.range && cooldownOk
+                return v3Length(_dir) < skill.config.weapon.range && cooldownOk
             },
         },
         {
@@ -93,14 +93,14 @@ export const approachHandler: CombatStateHandler = {
                 if (ctx.combatStrategy === 'aggressive') return false
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
                 const cooldownOk = (skill.cooldownTimer ?? Infinity) <= 0
-                return _dir.length() < cfg.weapon.idealRange + 0.5 && cooldownOk
+                return v3Length(_dir) < cfg.weapon.idealRange + 0.5 && cooldownOk
             },
         },
         {
@@ -108,16 +108,16 @@ export const approachHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
                 const threshold = ctx.combatStrategy === 'aggressive'
                     ? cfg.weapon.range * 2
                     : cfg.weapon.idealRange * 1.5
-                return _dir.length() > threshold
+                return v3Length(_dir) > threshold
             },
         },
         {
@@ -125,12 +125,12 @@ export const approachHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return true
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return _dir.length() > detRange
+                return v3Length(_dir) > detRange
             },
         },
     ],

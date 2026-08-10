@@ -1,8 +1,9 @@
 import {type Scene, ShaderMaterial} from 'three'
-import {Body, BODY_TYPES, Box, Vec3,} from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
-import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, GROUND_Y} from '../../../../physics/constants.ts'
-import type {BurningBox, BurningBoxConfig, BurningBoxAddOptions, BurningEntityContext} from '../types'
+import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, GROUND_Y, GRAVITY} from '../../../../physics/constants.ts'
+import {createColliderForBody} from '../../../../physics/rapier_utils.ts'
+import type {BurningBoxConfig, BurningBox, BurningBoxAddOptions, BurningEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
 import {clampHealth, clampHealthOnMaxChange} from '../../base/types/health'
@@ -30,7 +31,7 @@ export const setupBurningBoxes = (
     scene: Scene,
     shared: SharedWorld,
 ): BurningEntityContext => {
-    const {world, boxMat} = shared
+    const { world } = shared
 
     const boxes: BurningBox[] = []
     let nextId = 1
@@ -67,20 +68,22 @@ export const setupBurningBoxes = (
         mesh.position.set(x, adjustedY, z)
         scene.add(mesh)
 
-        const body = new Body({
-            mass: config.mass,
-            type: config.mass === 0 ? BODY_TYPES.STATIC : BODY_TYPES.DYNAMIC,
-            material: boxMat,
-            collisionFilterGroup: DEFAULT_COLLISION_GROUP,
-            collisionFilterMask: DEFAULT_COLLISION_MASK,
-        })
-        body.addShape(new Box(new Vec3(hw, hh, hd)))
-        body.position.set(x, adjustedY, z)
+        const isStatic = config.mass === 0
+        const bodyDesc = isStatic
+            ? RAPIER.RigidBodyDesc.fixed()
+            : RAPIER.RigidBodyDesc.dynamic()
+        bodyDesc.setTranslation(x, adjustedY, z)
+        const body = world.createRigidBody(bodyDesc)
+
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(hw, hh, hd)
+            .setFriction(0.5)
+            .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+        const mainCollider = createColliderForBody(world, colliderDesc, body)
+
         if (quat) {
-            body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+            body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
             mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         }
-        world.addBody(body)
 
         const particleData = createParticleData()
         const particles = createParticlePoints()
@@ -89,7 +92,7 @@ export const setupBurningBoxes = (
 
         const emitter = createEmitter<EntityEventMap>()
         const pb: BurningBox = {
-            id, mesh, body, edges, wireframe: undefined,
+            id, mesh, body, mainCollider, edges, wireframe: undefined,
             config: {...config},
             health: options?.health ?? config.maxHealth,
             maxHealth: config.maxHealth,
@@ -120,7 +123,7 @@ export const setupBurningBoxes = (
         disposeBurningBoxMesh(pb)
         scene.remove(pb.particles)
         disposeParticlePoints(pb.particles)
-        world.removeBody(pb.body)
+        world.removeRigidBody(pb.body)
         boxes.splice(idx, 1)
         rebuildPanelInfo()
     }
@@ -161,14 +164,17 @@ export const setupBurningBoxes = (
         if (changedSize) {
             const hh = cfg.height / 2
             updateBurningBoxMeshSize(pb, cfg)
-            while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
-            pb.body.addShape(new Box(new Vec3(cfg.width / 2, hh, cfg.depth / 2)))
-            pb.body.updateMassProperties()
-            const oldBottom = pb.body.position.y - old.height / 2
-            const newBottom = pb.body.position.y - hh
+            world.removeCollider(pb.mainCollider, true)
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
+                .setFriction(0.5)
+                .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
+            const pos = pb.body.translation()
+            const oldBottom = pos.y - old.height / 2
+            const newBottom = pos.y - hh
             if (newBottom < oldBottom || newBottom < GROUND_Y) {
                 const target = Math.max(oldBottom, GROUND_Y)
-                pb.body.position.y = target + hh
+                pb.body.setTranslation({ x: pos.x, y: target + hh, z: pos.z }, true)
                 pb.mesh.position.y = target + hh
             }
             if (pb.wireframe) {
@@ -179,12 +185,9 @@ export const setupBurningBoxes = (
         }
         if (changedMass) {
             if (cfg.mass === 0) {
-                pb.body.type = BODY_TYPES.STATIC
-                pb.body.mass = 0
+                pb.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
-                pb.body.type = BODY_TYPES.DYNAMIC
-                pb.body.mass = cfg.mass
-                pb.body.updateMassProperties()
+                pb.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
                 pb.body.wakeUp()
             }
         }
@@ -203,11 +206,14 @@ export const setupBurningBoxes = (
         const pb = boxes.find(b => b.id === id)
         if (!pb) return
         pb.mesh.position.set(pos.x, pos.y, pos.z)
-        pb.body.position.set(pos.x, pos.y, pos.z)
+        pb.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true)
         pb.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
-        pb.body.quaternion.set(pb.mesh.quaternion.x, pb.mesh.quaternion.y, pb.mesh.quaternion.z, pb.mesh.quaternion.w)
+        pb.body.setRotation(
+            { x: pb.mesh.quaternion.x, y: pb.mesh.quaternion.y, z: pb.mesh.quaternion.z, w: pb.mesh.quaternion.w },
+            true,
+        )
         pb.particles.position.set(pos.x, pos.y, pos.z)
-        if (pb.body.type === BODY_TYPES.DYNAMIC) pb.body.wakeUp()
+        if (pb.body.bodyType() === RAPIER.RigidBodyType.Dynamic) pb.body.wakeUp()
         refreshRowText(pb)
     }
 
@@ -229,14 +235,13 @@ export const setupBurningBoxes = (
             mat.uniforms.uBurnProgress.value = pb.burnProgress
             mat.uniforms.uTime.value += dt
 
-            // 质量随燃烧递减
-            const massScale = 1.0 - pb.burnProgress * 0.8
-            if (pb.body.type === BODY_TYPES.DYNAMIC) {
-                pb.body.mass = pb.config.mass * massScale
-                pb.body.updateMassProperties()
+            if (pb.body.bodyType() === RAPIER.RigidBodyType.Dynamic) {
+                const originalMass = pb.config.mass
+                const massDeficit = originalMass * pb.burnProgress * 0.8
+                pb.body.resetForces(true)
+                pb.body.addForce({x: 0, y: -massDeficit * GRAVITY, z: 0}, true)
             }
 
-            // 更新粒子
             updateParticles(
                 pb.particleData, pb.particles, dt, pb.config, pb.burnProgress,
             )
@@ -252,7 +257,7 @@ export const setupBurningBoxes = (
                 disposeBurningBoxMesh(pb)
                 scene.remove(pb.particles)
                 disposeParticlePoints(pb.particles)
-                world.removeBody(pb.body)
+                world.removeRigidBody(pb.body)
                 boxes.splice(i, 1)
                 rebuildPanelInfo()
             }
@@ -260,12 +265,13 @@ export const setupBurningBoxes = (
         rebuildPanelInfo()
     }
 
-    // 存储 particleData 在 box 对象上
     const syncPositions = (): void => {
         for (const pb of boxes) {
-            pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
-            pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)
-            pb.particles.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
+            const pos = pb.body.translation()
+            pb.mesh.position.set(pos.x, pos.y, pos.z)
+            const rot = pb.body.rotation()
+            pb.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
+            pb.particles.position.set(pos.x, pos.y, pos.z)
             pb.rowText = formatRowText(pb)
         }
         rebuildPanelInfo()

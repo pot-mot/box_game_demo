@@ -2,6 +2,7 @@ import {type Scene} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {createColliderForBody} from '../../../../physics/rapier_utils.ts'
 import type {CommonBoxConfig, CommonBox, CommonEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
@@ -68,10 +69,8 @@ export const setupCommonBoxes = (
 
         const colliderDesc = RAPIER.ColliderDesc.cuboid(hw, hh, hd)
             .setFriction(0.5)
-            .setCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK)
-        // Rapier 0.20 类型定义未包含第二参数，但运行时支持 parent body
-        // @ts-expect-error Rapier createCollider 类型定义缺少 parent 参数
-        const mainCollider = world.createCollider(colliderDesc, body)
+            .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+        const mainCollider = createColliderForBody(world, colliderDesc, body)
 
         if (quat) {
             body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
@@ -151,9 +150,8 @@ export const setupCommonBoxes = (
             world.removeCollider(pb.mainCollider, true)
             const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
                 .setFriction(0.5)
-                .setCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK)
-            // @ts-expect-error Rapier createCollider 类型定义缺少 parent 参数
-            pb.mainCollider = world.createCollider(colliderDesc, pb.body)
+                .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
             const pos = pb.body.translation()
             const oldBottom = pos.y - old.height / 2
             const newBottom = pos.y - hh

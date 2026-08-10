@@ -1,6 +1,7 @@
 import {type Scene, type Mesh, type LineBasicMaterial} from 'three'
-import {Body, BODY_TYPES, Box, Vec3} from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
+import {createColliderForBody} from '../../../physics/rapier_utils.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig} from '../../../character/faction.ts'
@@ -33,6 +34,7 @@ import {DEFAULT_CHARACTER_CONFIG} from '../validation.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE} from '../constants.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import {resolveGroundState} from './ground_state.ts'
+import type {GroundContactLike} from './ground_state.ts'
 import {computeSeparation} from './separation.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
@@ -47,7 +49,8 @@ import {createWireframe, cleanupWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
 import {resolvePhases} from '../../../character/combat/attack_phases.ts'
 
-const _tmpVec = new Vec3()
+/** Rapier 带 body/bodyHandle 反查的超类型 */
+type CharacterRigidBody = RAPIER.RigidBody
 
 /** 根据 AttackConfig 解析武器模型配置 */
 const resolveWeaponMeshConfig = (attack: AttackConfig): WeaponMeshConfig => {
@@ -74,7 +77,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setPlayerAttack: (skillIndex?: number) => import('../../../character/combat/types.ts').AttackResult
     getPlayerCharacter: () => CharacterEntity | undefined
     getHostileTo: (faction: number) => CharacterEntity[]
-    getCharacterByBody: (body: Body) => CharacterEntity | undefined
+    getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
     update: (dt: number) => void
     setAIEnabled: (enabled: boolean) => void
     activateAI: () => void
@@ -152,7 +155,7 @@ const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
 }
 
 export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): CharacterEntitySystem => {
-    const {world, charMat} = shared
+    const {world, eventQueue} = shared
     const characters: CharacterEntity[] = []
     const aiMap = new Map<number, AIContext>()
     const bodyCharMap = new Map<number, CharacterEntity>()
@@ -175,7 +178,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const events = createEmitter<{ delete: [id: number, wasSelected: boolean]; select: [id: number | undefined] }>()
     const panelInfos: EntityPanelInfo[] = []
 
-    const getCharacterByBody = (body: Body): CharacterEntity | undefined => bodyCharMap.get(body.id)
+    /** 活跃接触对（从碰撞事件队列维护），供地面检测 / AI 推挤 / 分离使用 */
+    const activeContactPairs = new Map<string, {colliderAHandle: number; colliderBHandle: number}>()
+
+    const getCharacterByBody = (body: CharacterRigidBody): CharacterEntity | undefined => bodyCharMap.get(body.handle)
 
     const getAllCharacters = (): readonly CharacterEntity[] => characters
     const getModel = (id: number): CharacterModel | undefined => appearanceModels.get(id)
@@ -237,22 +243,20 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         model.group.position.set(x, y, z)
         scene.add(model.group)
 
-        const body = new Body({
-            mass: 1,
-            type: BODY_TYPES.DYNAMIC,
-            linearDamping: CHARACTER_LINEAR_DAMPING,
-            fixedRotation: true,
-            material: charMat,
-            collisionFilterGroup: CHARACTER_COLLISION_GROUP,
-            collisionFilterMask: CHARACTER_COLLISION_MASK,
-        })
+        const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+            .lockRotations()
+            .setLinearDamping(CHARACTER_LINEAR_DAMPING)
+            .setTranslation(x, y, z)
+        const body = world.createRigidBody(bodyDesc)
 
         const bw = CHARACTER_BASE_SIZE.width * config.scale
         const bh = CHARACTER_BASE_SIZE.height * config.scale
         const bd = CHARACTER_BASE_SIZE.depth * config.scale
-        body.addShape(new Box(new Vec3(bw / 2, bh / 2, bd / 2)))
-        body.position.set(x, y, z)
-        world.addBody(body)
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(bw / 2, bh / 2, bd / 2)
+            .setFriction(0)
+            .setCollisionGroups((CHARACTER_COLLISION_GROUP << 16) | (CHARACTER_COLLISION_MASK & 0xFFFF))
+            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
+        const mainCollider = createColliderForBody(world, colliderDesc, body)
 
         const id = nextId++
         const stateMachine = createCharacterStateMachine()
@@ -276,6 +280,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             wireframe: undefined,
             appearanceGroup: model.group,
             body,
+            mainCollider,
             isOnGround: true,
             groundNormal: { x: 0, y: 1, z: 0 },
             groundKeepTimer: 0,
@@ -293,7 +298,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             stateMachine,
         }
 
-        bodyCharMap.set(body.id, entity)
+        bodyCharMap.set(body.handle, entity)
         characters.push(entity)
         appearanceModels.set(entity.id, model)
         appearanceSystems.set(entity.id, createAppearanceSystem())
@@ -326,9 +331,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const syncPositions = (): void => {
         for (const entity of characters) {
             if (entity.combat.isDead) continue
-            entity.mesh.position.set(entity.body.position.x, entity.body.position.y, entity.body.position.z)
+            const pos = entity.body.translation()
+            entity.mesh.position.set(pos.x, pos.y, pos.z)
             entity.mesh.quaternion.identity()
-            entity.appearanceGroup.position.set(entity.body.position.x, entity.body.position.y, entity.body.position.z)
+            entity.appearanceGroup.position.set(pos.x, pos.y, pos.z)
             if (entity.isDying) {
                 const mat = entity.mesh.material
                 if (Array.isArray(mat)) {
@@ -380,8 +386,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
 
         scene.remove(entity.mesh)
-        world.removeBody(entity.body)
-        bodyCharMap.delete(entity.body.id)
+        world.removeRigidBody(entity.body)
+        bodyCharMap.delete(entity.body.handle)
         entity.mesh.geometry.dispose()
         const mat = entity.mesh.material
         if (Array.isArray(mat)) mat.forEach(m => m.dispose())
@@ -441,8 +447,31 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const setAIEnabled = (enabled: boolean): void => { aiEnabled = enabled }
 
+    const buildGroundContacts = (entity: CharacterEntity): GroundContactLike[] => {
+        const contacts: GroundContactLike[] = []
+        const myHandle = entity.mainCollider.handle
+        const myBodyHandle = entity.body.handle
+        for (const pair of activeContactPairs.values()) {
+            if (pair.colliderAHandle !== myHandle && pair.colliderBHandle !== myHandle) continue
+            const otherHandle = pair.colliderAHandle === myHandle ? pair.colliderBHandle : pair.colliderAHandle
+            const otherCollider = world.getCollider(otherHandle)
+            if (!otherCollider) continue
+            const contactShape = entity.mainCollider.contactCollider(otherCollider, 0.1)
+            if (!contactShape) continue
+            const otherBody = otherCollider.parent()
+            if (!otherBody) continue
+            contacts.push({
+                normal: { x: contactShape.normal1.x, y: contactShape.normal1.y, z: contactShape.normal1.z },
+                bodyAHandle: myBodyHandle,
+                bodyBHandle: otherBody.handle,
+            })
+        }
+        return contacts
+    }
+
     const checkGround = (entity: CharacterEntity, dt: number): void => {
-        const next = resolveGroundState(world.contacts, entity.body, {
+        const contacts = buildGroundContacts(entity)
+        const next = resolveGroundState(contacts, entity.body.handle, {
             isOnGround: entity.isOnGround,
             groundNormal: entity.groundNormal,
             groundKeepTimer: entity.groundKeepTimer,
@@ -453,6 +482,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const update = (dt: number): void => {
+        /* 同步碰撞事件 → 维护 activeContactPairs */
+        eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
+            const key = handle1 < handle2 ? `${handle1}-${handle2}` : `${handle2}-${handle1}`
+            if (started) {
+                activeContactPairs.set(key, { colliderAHandle: handle1, colliderBHandle: handle2 })
+            } else {
+                activeContactPairs.delete(key)
+            }
+        })
+
         for (const entity of characters) {
             if (entity.combat.isDead) continue
 
@@ -471,13 +510,21 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     let finalDX = dx
                     let finalDZ = dz
                     if (dx !== 0 || dz !== 0) {
-                        for (const c of world.contacts) {
-                            const ob = c.bi === entity.body ? c.bj : c.bj === entity.body ? c.bi : undefined
-                            if (!ob) continue
-                            if (!bodyCharMap.has(ob.id)) continue
+                        const myHandle = entity.mainCollider.handle
+                        for (const pair of activeContactPairs.values()) {
+                            if (pair.colliderAHandle !== myHandle && pair.colliderBHandle !== myHandle) continue
+                            const otherHandle = pair.colliderAHandle === myHandle ? pair.colliderBHandle : pair.colliderAHandle
+                            const otherCollider = world.getCollider(otherHandle)
+                            if (!otherCollider) continue
+                            const otherBody = otherCollider.parent()
+                            if (!otherBody) continue
+                            if (!bodyCharMap.has(otherBody.handle)) continue
+                            const ob = otherBody
                             /* 仅当 AI 输入方向指向接触对方时阻断，允许沿接触面滑开 */
-                            const nx = ob.position.x - entity.body.position.x
-                            const nz = ob.position.z - entity.body.position.z
+                            const obPos = ob.translation()
+                            const myPos = entity.body.translation()
+                            const nx = obPos.x - myPos.x
+                            const nz = obPos.z - myPos.z
                             if (dx * nx + dz * nz > 0) { finalDX = 0; finalDZ = 0; break }
                         }
                     }
@@ -512,7 +559,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const model = appearanceModels.get(entity.id)
             const sys = appearanceSystems.get(entity.id)
             if (model && sys) {
-                const hSpeed = Math.hypot(entity.body.velocity.x, entity.body.velocity.z)
+                const linvel = entity.body.linvel()
+                const hSpeed = Math.hypot(linvel.x, linvel.z)
 
                 /* 计算阶段动画上下文 */
                 const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
@@ -532,8 +580,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     attackTotalProgress: totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
                 })
 
-                const vx = entity.body.velocity.x
-                const vz = entity.body.velocity.z
+                const vx = linvel.x
+                const vz = linvel.z
                 const currentAngle = facingAngles.get(entity.id) ?? 0
 
                 let targetAngle: number
@@ -583,8 +631,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                             const len = Math.hypot(dirX, dirZ)
                             if (len < 0.001) { dirX = 0; dirZ = 1 }
                             else { dirX /= len; dirZ /= len }
-                            _tmpVec.set(dirX, 0, dirZ)
-                            executor.start(activeSkill.config, entity.combat, entity, _tmpVec, noopExecCtx)
+                            const dirVec = { x: dirX, y: 0, z: dirZ }
+                            executor.start(activeSkill.config, entity.combat, entity, dirVec, noopExecCtx)
                         }
                         executor.update(dt, activeSkill.config, entity.combat, entity, noopExecCtx)
                     }
@@ -598,11 +646,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
         }
 
-        /* 强制水平分离重叠的角色 — 遍历 world.contacts 兜底防止卡死 */
+        /* 强制水平分离重叠的角色 — 遍历 activeContactPairs 兜底防止卡死 */
         const separated = new Set<string>()
-        for (const c of world.contacts) {
-            const ai = bodyCharMap.get(c.bi.id)
-            const aj = bodyCharMap.get(c.bj.id)
+        for (const pair of activeContactPairs.values()) {
+            const colliderA = world.getCollider(pair.colliderAHandle)
+            const colliderB = world.getCollider(pair.colliderBHandle)
+            if (!colliderA || !colliderB) continue
+            const bodyA = colliderA.parent()
+            const bodyB = colliderB.parent()
+            if (!bodyA || !bodyB) continue
+            const ai = bodyCharMap.get(bodyA.handle)
+            const aj = bodyCharMap.get(bodyB.handle)
             if (!ai || !aj) continue
             if (ai.combat.isDead || aj.combat.isDead) continue
 
@@ -610,36 +664,36 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (separated.has(key)) continue
             separated.add(key)
 
+            const aPos = bodyA.translation()
+            const bPos = bodyB.translation()
             const maxHalf = Math.max(CHARACTER_BASE_SIZE.width, CHARACTER_BASE_SIZE.depth) / 2
             const sep = computeSeparation({
-                aiX: ai.body.position.x, aiZ: ai.body.position.z,
-                ajX: aj.body.position.x, ajZ: aj.body.position.z,
+                aiX: aPos.x, aiZ: aPos.z,
+                ajX: bPos.x, ajZ: bPos.z,
                 radiusA: maxHalf * ai.config.scale,
                 radiusB: maxHalf * aj.config.scale,
             }, CHARACTER_SEPARATION_SPEED)
             if (!sep) continue
 
-            ai.body.position.x += sep.aiDx
-            ai.body.position.z += sep.aiDz
-            aj.body.position.x += sep.ajDx
-            aj.body.position.z += sep.ajDz
+            bodyA.setTranslation({ x: aPos.x + sep.aiDx, y: aPos.y, z: aPos.z + sep.aiDz }, true)
+            bodyB.setTranslation({ x: bPos.x + sep.ajDx, y: bPos.y, z: bPos.z + sep.ajDz }, true)
 
-            ai.mesh.position.x = ai.body.position.x
-            ai.mesh.position.z = ai.body.position.z
-            ai.appearanceGroup.position.x = ai.body.position.x
-            ai.appearanceGroup.position.z = ai.body.position.z
-            aj.mesh.position.x = aj.body.position.x
-            aj.mesh.position.z = aj.body.position.z
-            aj.appearanceGroup.position.x = aj.body.position.x
-            aj.appearanceGroup.position.z = aj.body.position.z
+            ai.mesh.position.x = bodyA.translation().x
+            ai.mesh.position.z = bodyA.translation().z
+            ai.appearanceGroup.position.x = bodyA.translation().x
+            ai.appearanceGroup.position.z = bodyA.translation().z
+            aj.mesh.position.x = bodyB.translation().x
+            aj.mesh.position.z = bodyB.translation().z
+            aj.appearanceGroup.position.x = bodyB.translation().x
+            aj.appearanceGroup.position.z = bodyB.translation().z
 
-            ai.body.velocity.x += sep.aiVx
-            ai.body.velocity.z += sep.aiVz
-            aj.body.velocity.x += sep.ajVx
-            aj.body.velocity.z += sep.ajVz
+            const aVel = bodyA.linvel()
+            const bVel = bodyB.linvel()
+            bodyA.setLinvel({ x: aVel.x + sep.aiVx, y: aVel.y, z: aVel.z + sep.aiVz }, true)
+            bodyB.setLinvel({ x: bVel.x + sep.ajVx, y: bVel.y, z: bVel.z + sep.ajVz }, true)
 
-            ai.body.wakeUp()
-            aj.body.wakeUp()
+            bodyA.wakeUp()
+            bodyB.wakeUp()
         }
 
         playerAttackPending = false
@@ -669,9 +723,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const activateAI = (): void => {
         for (const entity of characters) {
             if (!entity.isPlayer && !aiMap.has(entity.id)) {
+                const pos = entity.body.translation()
                 const ctx = createAIMachine(
                     entity,
-                    entity.body.position.x, entity.body.position.y, entity.body.position.z,
+                    pos.x, pos.y, pos.z,
                     entity.combat.skills[entity.combat.currentSkillIndex]?.config.weapon.detectionRange ?? 8,
                     losChecker,
                     DEFAULT_PEACE_CONFIGS[entity.peaceStrategy],
@@ -726,7 +781,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
-        if (quat) entity.body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+        if (quat) entity.body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
         /* spawnEntity 之后 maxHealth/health 才被覆盖，需再次刷新列表行 */
         refreshPlayerLabel()
         return {id: entity.id}
@@ -735,7 +790,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const setTransform = (id: number, pos: {x: number; y: number; z: number}): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
-        entity.body.position.set(pos.x, pos.y, pos.z)
+        entity.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true)
         entity.mesh.position.set(pos.x, pos.y, pos.z)
     }
 
@@ -752,12 +807,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 model.group.scale.set(entity.config.scale, entity.config.scale, entity.config.scale)
             }
 
-            while (entity.body.shapes.length > 0) entity.body.shapes.pop()
+            world.removeCollider(entity.mainCollider, true)
             const bw = CHARACTER_BASE_SIZE.width * entity.config.scale
             const bh = CHARACTER_BASE_SIZE.height * entity.config.scale
             const bd = CHARACTER_BASE_SIZE.depth * entity.config.scale
-            entity.body.addShape(new Box(new Vec3(bw / 2, bh / 2, bd / 2)))
-            entity.body.updateMassProperties()
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(bw / 2, bh / 2, bd / 2)
+                .setFriction(0)
+                .setCollisionGroups((CHARACTER_COLLISION_GROUP << 16) | (CHARACTER_COLLISION_MASK & 0xFFFF))
+                .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
+            entity.mainCollider = createColliderForBody(world, colliderDesc, entity.body)
             entity.body.wakeUp()
 
             updateCharacterMesh(entity.mesh, entity.config.scale)

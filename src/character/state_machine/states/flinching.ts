@@ -11,13 +11,11 @@ export const flinchingHandler: StateHandler = {
         c.comboIndex = 0
         c.phaseIndex = 0
         c.phaseTimer = 0
-        entity.body.velocity.set(0, 0, 0)
-        entity.body.wakeUp()
+        entity.body.setLinvel({x: 0, y: 0, z: 0}, true)
     },
     update: (_dt, _input, entity) => {
         void _dt, _input
-        entity.body.velocity.set(0, 0, 0)
-        entity.body.wakeUp()
+        entity.body.setLinvel({x: 0, y: 0, z: 0}, true)
     },
     exit: () => {},
     transitions: [

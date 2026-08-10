@@ -146,8 +146,9 @@ const navigatingHandler: NavStateHandler = {
 const steeringHandler: NavStateHandler = {
     enter: (ctx, entity) => {
         ctx.steerAngle = STEER_ANGLE_MIN * ctx.steerDirection
-        ctx.lastPosX = entity.body.position.x
-        ctx.lastPosZ = entity.body.position.z
+        const trans = entity.body.translation()
+        ctx.lastPosX = trans.x
+        ctx.lastPosZ = trans.z
     },
     update: (dt, ctx, entity, sensor, intendedDX, intendedDZ) => {
         ctx.stateTime += dt
@@ -226,13 +227,14 @@ const steeringHandler: NavStateHandler = {
             guard: (_ctx, entity, _sensor, intendedDX, intendedDZ) => {
                 if (Math.hypot(intendedDX, intendedDZ) < 0.001) return false
                 /* 原地未移动超过 1.5s */
+                const trans2 = entity.body.translation()
                 const moved = Math.hypot(
-                    entity.body.position.x - _ctx.lastPosX,
-                    entity.body.position.z - _ctx.lastPosZ,
+                    trans2.x - _ctx.lastPosX,
+                    trans2.z - _ctx.lastPosZ,
                 ) > 0.01
                 if (moved) {
-                    _ctx.lastPosX = entity.body.position.x
-                    _ctx.lastPosZ = entity.body.position.z
+                    _ctx.lastPosX = trans2.x
+                    _ctx.lastPosZ = trans2.z
                     return false
                 }
                 return _ctx.stateTime > 1.5
@@ -376,14 +378,15 @@ export const processNav = (
     if (!ctx.enabled) {
         /* legacy 卡住检测 */
         if (Math.hypot(intendedDX, intendedDZ) > 0.001) {
+            const trans3 = entity.body.translation()
             const moved = Math.hypot(
-                entity.body.position.x - ctx.lastPosX,
-                entity.body.position.z - ctx.lastPosZ,
+                trans3.x - ctx.lastPosX,
+                trans3.z - ctx.lastPosZ,
             ) > 0.01
             if (moved) {
                 ctx.stuckTimer = 0
-                ctx.lastPosX = entity.body.position.x
-                ctx.lastPosZ = entity.body.position.z
+                ctx.lastPosX = trans3.x
+                ctx.lastPosZ = trans3.z
             } else {
                 ctx.stuckTimer += dt
             }

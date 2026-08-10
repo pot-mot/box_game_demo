@@ -1,4 +1,3 @@
-import {type Body, type Vec3} from 'cannon-es'
 import {GROUND_KEEP_TIME} from '../../../character/state_machine/constants.ts'
 
 export interface GroundState {
@@ -10,11 +9,11 @@ export interface GroundState {
 /** 无接触时的默认法线（朝上） */
 export const DEFAULT_GROUND_NORMAL = {x: 0, y: 1, z: 0}
 
-/** 接触信息最小接口（兼容 cannon-es Contact） */
+/** 接触信息最小接口（兼容 Rapier contact 信息） */
 export interface GroundContactLike {
-    ni: Vec3 | null
-    bi: Body
-    bj: Body
+    normal: { readonly x: number; readonly y: number; readonly z: number }
+    bodyAHandle: number
+    bodyBHandle: number
 }
 
 /**
@@ -35,7 +34,7 @@ interface NormalVote {
 
 export const resolveGroundState = (
     contacts: readonly GroundContactLike[],
-    body: Body,
+    bodyHandle: number,
     prev: GroundState,
     dt: number,
 ): GroundState => {
@@ -43,13 +42,12 @@ export const resolveGroundState = (
     const groups: NormalVote[] = []
 
     for (const c of contacts) {
-        if (!c.ni) continue
-        if (c.bi !== body && c.bj !== body) continue
-        const flip = c.bi === body ? -1 : 1
-        const ny = c.ni.y * flip
+        if (c.bodyAHandle !== bodyHandle && c.bodyBHandle !== bodyHandle) continue
+        const flip = c.bodyAHandle === bodyHandle ? -1 : 1
+        const ny = c.normal.y * flip
         if (ny <= 0) continue
-        const nx = c.ni.x * flip
-        const nz = c.ni.z * flip
+        const nx = c.normal.x * flip
+        const nz = c.normal.z * flip
         /* 法线方向簇投票：多数投票抑制孤立异常法线（Box 棱-三角形棱、Box 底面面接触伪影） */
         let group: NormalVote | undefined
         for (const g of groups) {

@@ -13,13 +13,12 @@ export const walkingHandler: StateHandler = {
         const dx = input.dx / len
         const dz = input.dz / len
         if (!projectToSlopeAtSpeed(entity, dx, dz, speed, SLOPE_WALK_THRESHOLD)) {
-            entity.body.velocity.x = dx * speed
-            entity.body.velocity.z = dz * speed
+            const linvel = entity.body.linvel()
+            entity.body.setLinvel({x: dx * speed, y: linvel.y, z: dz * speed}, true)
         } else {
             /* 弹跳悬空（宽限期）时向坡面吸附，快速落回 */
             applySlopeSink(entity)
         }
-        entity.body.wakeUp()
     },
     exit: () => {},
     transitions: [

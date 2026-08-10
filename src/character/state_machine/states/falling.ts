@@ -8,32 +8,37 @@ import {
     STATE_FLIP_MIN_TIME,
 } from '../constants.ts'
 import {isSupportedOn, projectToSlope} from '../ground.ts'
+import {v3Length} from '../../../physics/rapier_utils.ts'
 
 export const fallingHandler: StateHandler = {
     enter: () => {},
     update: (_dt, input, entity) => {
         const len = Math.hypot(input.dx, input.dz)
-        const vx = entity.body.velocity.x
-        const vz = entity.body.velocity.z
+        const linvel = entity.body.linvel()
+        const vx = linvel.x
+        const vz = linvel.z
+        let newVx: number
+        let newVz: number
         if (len < 0.001) {
-            entity.body.velocity.x = vx * AIR_DAMPING
-            entity.body.velocity.z = vz * AIR_DAMPING
+            newVx = vx * AIR_DAMPING
+            newVz = vz * AIR_DAMPING
         } else {
             const tx = (input.dx / len) * entity.config.speed
             const tz = (input.dz / len) * entity.config.speed
-            entity.body.velocity.x = vx + (tx - vx) * AIR_CONTROL_FACTOR
-            entity.body.velocity.z = vz + (tz - vz) * AIR_CONTROL_FACTOR
+            newVx = vx + (tx - vx) * AIR_CONTROL_FACTOR
+            newVz = vz + (tz - vz) * AIR_CONTROL_FACTOR
         }
+        entity.body.setLinvel({x: newVx, y: linvel.y, z: newVz}, true)
         /* 有支撑面（陡坡）时沿表面滑动（v·n = 0），防止铲地导致接触法线抖动 */
-        projectToSlope(entity, entity.body.velocity.x, entity.body.velocity.z, FALL_SLIDE_MIN_NY)
+        projectToSlope(entity, newVx, newVz, FALL_SLIDE_MIN_NY)
         /* 钳制总速度（含 vy），防止陡坡下滑/坠落无限加速 */
         const maxSpeed = entity.config.speed * FALL_MAX_SPEED_MULTIPLIER
-        const speed = entity.body.velocity.length()
+        const finalLinvel = entity.body.linvel()
+        const speed = v3Length(finalLinvel)
         if (speed > maxSpeed) {
             const k = maxSpeed / speed
-            entity.body.velocity.scale(k, entity.body.velocity)
+            entity.body.setLinvel({x: finalLinvel.x * k, y: finalLinvel.y * k, z: finalLinvel.z * k}, true)
         }
-        entity.body.wakeUp()
     },
     exit: () => {},
     transitions: [

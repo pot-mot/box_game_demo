@@ -1,5 +1,6 @@
 import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
-import {Body, BODY_TYPES, ConvexPolyhedron, Vec3} from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
+import {createColliderForBody} from '../../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {FRAGMENT_COLLISION_GROUP, FRAGMENT_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {FragmentConfig, Fragment, FragmentEntityContext} from '../types'
@@ -19,7 +20,7 @@ const BADGE_LABEL = 'F'
 const BADGE_COLOR = '#666'
 
 export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): FragmentEntityContext => {
-    const {world, boxMat} = shared
+    const {world} = shared
 
     const fragments: Fragment[] = []
     let nextId = 1
@@ -58,36 +59,48 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         const {mesh, edges} = createFragmentFromData(data)
         scene.add(mesh)
 
-        const body = new Body({
-            mass: Math.max(cfg.mass, 0.01),
-            type: BODY_TYPES.DYNAMIC,
-            material: boxMat,
-            collisionFilterGroup: FRAGMENT_COLLISION_GROUP,
-            collisionFilterMask: FRAGMENT_COLLISION_MASK,
-        })
-
-        const hull = new ConvexPolyhedron({
-            vertices: data.hullVertices,
-            faces: data.hullFaces,
-        })
-        body.addShape(hull)
-
-        const worldCentroid = new Vec3(pos.x + data.centroid[0], pos.y + data.centroid[1], pos.z + data.centroid[2])
-        body.position.copy(worldCentroid)
-        body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
-        mesh.position.set(body.position.x, body.position.y, body.position.z)
-        mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w)
-
-        if (impulse) {
-            const imp = new Vec3(impulse.x, impulse.y, impulse.z)
-            body.applyImpulse(imp, worldCentroid)
+        const flatVerts = new Float32Array(data.hullVertices.length * 3)
+        for (let i = 0; i < data.hullVertices.length; i++) {
+            flatVerts[i * 3] = data.hullVertices[i].x
+            flatVerts[i * 3 + 1] = data.hullVertices[i].y
+            flatVerts[i * 3 + 2] = data.hullVertices[i].z
         }
 
-        world.addBody(body)
+        const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+            .setTranslation(
+                pos.x + data.centroid[0],
+                pos.y + data.centroid[1],
+                pos.z + data.centroid[2],
+            )
+            .setRotation(quat)
+            .setCanSleep(true)
+        bodyDesc.setAdditionalMass(Math.max(cfg.mass, 0.01))
+        const body = world.createRigidBody(bodyDesc)
+
+        const colliderDesc = RAPIER.ColliderDesc.convexHull(flatVerts)!
+        const mainCollider = createColliderForBody(world, colliderDesc
+            .setFriction(0.5)
+            .setCollisionGroups((FRAGMENT_COLLISION_GROUP << 16) | (FRAGMENT_COLLISION_MASK & 0xFFFF)), body)
+
+        mesh.position.set(body.translation().x, body.translation().y, body.translation().z)
+        const rot = body.rotation()
+        mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
+
+        if (impulse) {
+            body.applyImpulseAtPoint(
+                {x: impulse.x, y: impulse.y, z: impulse.z},
+                {
+                    x: pos.x + data.centroid[0],
+                    y: pos.y + data.centroid[1],
+                    z: pos.z + data.centroid[2],
+                },
+                true,
+            )
+        }
 
         const emitter = createEmitter<EntityEventMap>()
         const fragment: Fragment = {
-            id, config: cfg, mesh, body, edges, wireframe: undefined,
+            id, config: cfg, mesh, body, mainCollider, edges, wireframe: undefined,
             label, fragmentData: data, emitter, rowText: '',
         }
         refreshRowText(fragment)
@@ -111,7 +124,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         f.mesh.remove(f.edges)
         f.edges.geometry.dispose()
         ;(f.edges.material as LineBasicMaterial).dispose()
-        world.removeBody(f.body)
+        world.removeRigidBody(f.body)
         fragments.splice(idx, 1)
         rebuildPanelInfo()
     }
@@ -150,12 +163,10 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         const changedMass = partial.mass !== undefined && partial.mass !== old.mass
         if (changedMass) {
             if (cfg.mass === 0) {
-                f.body.type = BODY_TYPES.STATIC
-                f.body.mass = 0
+                f.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
-                f.body.type = BODY_TYPES.DYNAMIC
-                f.body.mass = cfg.mass
-                f.body.updateMassProperties()
+                f.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
+                f.body.setAdditionalMass(cfg.mass, true)
                 f.body.wakeUp()
             }
         }
@@ -167,10 +178,12 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         const f = fragments.find(f => f.id === id)
         if (!f) return
         f.mesh.position.set(pos.x, pos.y, pos.z)
-        f.body.position.set(pos.x, pos.y, pos.z)
+        f.body.setTranslation({x: pos.x, y: pos.y, z: pos.z}, true)
         f.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
-        f.body.quaternion.set(f.mesh.quaternion.x, f.mesh.quaternion.y, f.mesh.quaternion.z, f.mesh.quaternion.w)
-        if (f.body.type === BODY_TYPES.DYNAMIC) f.body.wakeUp()
+        f.body.setRotation(
+            {x: f.mesh.quaternion.x, y: f.mesh.quaternion.y, z: f.mesh.quaternion.z, w: f.mesh.quaternion.w},
+            true,
+        )
         refreshRowText(f)
     }
 
@@ -189,7 +202,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
                 f.mesh.remove(f.edges)
                 f.edges.geometry.dispose()
                 ;(f.edges.material as LineBasicMaterial).dispose()
-                world.removeBody(f.body)
+                world.removeRigidBody(f.body)
                 fragments.splice(i, 1)
             }
         }

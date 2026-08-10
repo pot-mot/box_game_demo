@@ -1,5 +1,6 @@
 import {describe, it, expect, beforeAll, afterAll, beforeEach, vi} from 'vitest'
 import {Scene} from 'three'
+import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld} from '../../../physics/world.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
@@ -72,7 +73,8 @@ describe('角色 panelInfo 同步', () => {
     let system: CharacterEntitySystem
     let warnSpy: ReturnType<typeof vi.spyOn>
 
-    beforeAll(() => {
+    beforeAll(async () => {
+        await RAPIER.init()
         /* 注入 canvas 2d 桩，使真实 createCharacterModel 可在 happy-dom 下运行 */
         patchCanvas2d()
         /* 屏蔽 three 对材质 map=undefined 的警告噪音 */

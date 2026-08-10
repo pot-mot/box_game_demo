@@ -1,5 +1,5 @@
 import type {Mesh, Group, LineSegments} from 'three'
-import type {Body} from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type {CharacterStateMachine} from './state_machine/types.ts'
 import type { CombatComponent } from './combat/types.ts'
 import type {PeaceSubStrategy} from './ai_strategy/types.ts'
@@ -23,7 +23,8 @@ export interface CharacterEntity {
     wireframe: LineSegments | undefined
     /** 方块人外观 Group */
     appearanceGroup: Group
-    body: Body
+    body: RAPIER.RigidBody
+    mainCollider: RAPIER.Collider
     isOnGround: boolean
     /** 地面接触法线（从地面指向角色，已归一化）。无地面接触时回退为 (0, 1, 0) */
     groundNormal: { readonly x: number; readonly y: number; readonly z: number }

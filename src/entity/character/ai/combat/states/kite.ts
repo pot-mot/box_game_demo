@@ -1,8 +1,8 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 
-const _dir = new Vec3()
+const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
 export const kiteHandler: CombatStateHandler = {
     enter: () => {},
@@ -10,10 +10,10 @@ export const kiteHandler: CombatStateHandler = {
         const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
-        const pos = character.body.position
-        const tp = target.body.position
-        _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
-        const dist = _dir.length()
+        const pos = character.body.translation()
+        const tp = target.body.translation()
+        v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
+        const dist = v3Length(_dir)
 
         const skill = character.combat.skills[character.combat.currentSkillIndex]
         if (!skill || skill.config.type !== 'ranged') { setInput(0, 0, false); return }
@@ -42,8 +42,8 @@ export const kiteHandler: CombatStateHandler = {
                 /* 需要目标在攻击距离内 */
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
+                const pos = character.body.translation()
+                const tp = target.body.translation()
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill) return false
                 return Math.hypot(tp.x - pos.x, tp.z - pos.z) < skill.config.weapon.range
@@ -71,13 +71,13 @@ export const kiteHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
-                return _dir.length() > cfg.weapon.retreatRange * 1.5
+                return v3Length(_dir) > cfg.weapon.retreatRange * 1.5
             },
         },
         {
@@ -85,12 +85,12 @@ export const kiteHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return true
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return _dir.length() > detRange
+                return v3Length(_dir) > detRange
             },
         },
     ],

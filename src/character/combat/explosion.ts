@@ -1,8 +1,8 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, v3Length, type RapVector3} from '../../physics/rapier_utils.ts'
 import type {CharacterEntity} from '../types.ts'
 import {applyDamage} from './damage.ts'
 
-const _dir = new Vec3()
+const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
 /** 对爆炸半径内所有角色施加距离衰减伤害和径向击退 */
 export const applyExplosionDamage = (
@@ -19,9 +19,9 @@ export const applyExplosionDamage = (
         if (target.id === sourceEntity.id || target.combat.isDead) continue
         if (!sourceEntity.combat.attackTendency(sourceEntity.combat.faction, target.combat.faction)) continue
 
-        const tPos = target.body.position
-        _dir.set(tPos.x - centerX, tPos.y - centerY, tPos.z - centerZ)
-        const dist = _dir.length()
+        const tPos = target.body.translation()
+        v3Set(_dir, tPos.x - centerX, tPos.y - centerY, tPos.z - centerZ)
+        const dist = v3Length(_dir)
         if (dist > radius || dist < 0.0001) continue
 
         const falloff = 1 - dist / radius
@@ -35,12 +35,14 @@ export const applyExplosionDamage = (
         })
 
         const lenInv = 1 / dist
-        const impulse = new Vec3(
-            _dir.x * lenInv * knockbackForce * falloff,
-            knockbackForce * falloff * 0.5,
-            _dir.z * lenInv * knockbackForce * falloff,
+        target.body.applyImpulseAtPoint(
+            {
+                x: _dir.x * lenInv * knockbackForce * falloff,
+                y: knockbackForce * falloff * 0.5,
+                z: _dir.z * lenInv * knockbackForce * falloff,
+            },
+            target.body.translation(),
+            true,
         )
-        target.body.applyImpulse(impulse, target.body.position)
-        target.body.wakeUp()
     }
 }

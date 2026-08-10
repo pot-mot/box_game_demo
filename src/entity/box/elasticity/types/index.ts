@@ -1,6 +1,6 @@
 import {z} from 'zod'
 import type {LineSegments} from 'three'
-import type {Body} from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type {BaseEntity, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
 import {ElasticBoxConfigSchema} from '../validation.ts'
@@ -9,7 +9,8 @@ export type ElasticBoxConfig = z.infer<typeof ElasticBoxConfigSchema>
 export {ElasticBoxConfigSchema} from '../validation.ts'
 
 export interface ElasticBox extends BaseEntity<ElasticBoxConfig> {
-    body: Body
+    body: RAPIER.RigidBody
+    mainCollider: RAPIER.Collider
     edges: LineSegments
     wireframe: LineSegments | undefined
     def: [number, number, number]

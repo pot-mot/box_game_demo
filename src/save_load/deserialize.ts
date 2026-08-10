@@ -1,4 +1,4 @@
-import {Vec3} from 'cannon-es'
+import {v3} from '../physics/rapier_utils.ts'
 import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
@@ -9,7 +9,7 @@ import type {SaveData, FragmentDataJSON, EntitySourceMap} from './types.ts'
 const jsonToFragmentData = (j: FragmentDataJSON): FragmentData => ({
     renderVertices: new Float32Array(j.renderVertices),
     renderIndices: j.renderIndices,
-    hullVertices: j.hullVertices.map(([x, y, z]) => new Vec3(x, y, z)),
+    hullVertices: j.hullVertices.map(([x, y, z]) => v3(x, y, z)),
     hullFaces: j.hullFaces,
     centroid: j.centroid,
     massRatio: j.massRatio,

@@ -1,4 +1,4 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, v3Length, type RapVector3} from '../../../physics/rapier_utils.ts'
 import {Vector3} from 'three'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
@@ -8,7 +8,7 @@ import type {CombatComponent} from '../../../character/combat/types.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 
-const _tmpVec = new Vec3()
+const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
 const _tmpVec3 = new Vector3()
 
 /** 武器命中箱半长（XZ 平面） */
@@ -28,7 +28,7 @@ export const createMeleeExecutor = (
         _skill: SkillConfig,
         _combat: CombatComponent,
         _entity: CharacterEntity,
-        _direction: Vec3,
+        _direction: RapVector3,
         _ctx: ExecutorContext,
     ): void => {
         // 无需 body —— 命中检测基于武器模型的世界空间位置
@@ -65,9 +65,10 @@ export const createMeleeExecutor = (
             if (combat.attackedTargets.has(target.id)) continue
             if (!combat.attackTendency(combat.faction, target.combat.faction)) continue
 
-            const tx = target.body.position.x
-            const ty = target.body.position.y
-            const tz = target.body.position.z
+            const tTrans = target.body.translation()
+            const tx = tTrans.x
+            const ty = tTrans.y
+            const tz = tTrans.z
             const tw = CHARACTER_BASE_SIZE.width * target.config.scale
             const td = CHARACTER_BASE_SIZE.depth * target.config.scale
             const th = CHARACTER_BASE_SIZE.height * target.config.scale
@@ -89,16 +90,21 @@ export const createMeleeExecutor = (
             })
             combat.attackedTargets.add(target.id)
 
-            _tmpVec.set(tx - wx, 0, tz - wz)
-            const len = _tmpVec.length()
+            v3Set(_tmpVec, tx - wx, 0, tz - wz)
+            const len = v3Length(_tmpVec)
             if (len > 0.0001) {
-                _tmpVec.scale(1 / len, _tmpVec)
-                target.body.applyImpulse(
-                    new Vec3(_tmpVec.x * skill.weapon.knockbackForce, skill.weapon.knockbackY, _tmpVec.z * skill.weapon.knockbackForce),
-                    target.body.position,
+                _tmpVec.x /= len
+                _tmpVec.z /= len
+                target.body.applyImpulseAtPoint(
+                    {
+                        x: _tmpVec.x * skill.weapon.knockbackForce,
+                        y: skill.weapon.knockbackY,
+                        z: _tmpVec.z * skill.weapon.knockbackForce,
+                    },
+                    target.body.translation(),
+                    true,
                 )
             }
-            target.body.wakeUp()
         }
     }
 

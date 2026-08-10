@@ -1,5 +1,7 @@
-import {Body, Sphere, Vec3, BODY_TYPES} from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 import {Mesh, MeshBasicMaterial, SphereGeometry, type Scene} from 'three'
+import {v3Set, v3Length, type RapVector3} from '../../../physics/rapier_utils.ts'
+import {createColliderForBody} from '../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
@@ -13,7 +15,8 @@ const BULLET_GEOMETRY = new SphereGeometry(0.08, 4, 4)
 const BULLET_MATERIAL_POOL = new Map<number, MeshBasicMaterial>()
 
 interface BulletInstance {
-    body: Body
+    body: RAPIER.RigidBody
+    collider: RAPIER.Collider
     mesh: Mesh
     ownerId: number
     ownerFaction: number
@@ -25,7 +28,7 @@ interface BulletInstance {
     explosionRadius: number
 }
 
-const _tmpVec = new Vec3()
+const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
 
 const getPlayerFactionMaterial = (faction: number): MeshBasicMaterial => {
     let mat = BULLET_MATERIAL_POOL.get(faction)
@@ -47,7 +50,7 @@ export const createRangedExecutor = (
 
     const fireBulletInternal = (
         character: CharacterEntity,
-        direction: Vec3,
+        direction: RapVector3,
         speed: number,
         damage: number,
         knockbackForce: number,
@@ -56,35 +59,36 @@ export const createRangedExecutor = (
         explosionRadius: number,
         throwAngle: number,
     ): void => {
-        const body = new Body({
-            mass: 0.01,
-            type: BODY_TYPES.DYNAMIC,
-            collisionFilterGroup: BULLET_COLLISION_GROUP,
-            collisionFilterMask: BULLET_COLLISION_MASK,
-            linearDamping: 0,
-            angularDamping: 1,
-        })
-        body.addShape(new Sphere(BULLET_SIZE))
+        const spawnPos = character.body.translation()
+        const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
+            .setTranslation(
+                spawnPos.x + direction.x * 0.5,
+                spawnPos.y + 0.3,
+                spawnPos.z + direction.z * 0.5,
+            )
+            .setLinearDamping(0)
+        bodyDesc.setAdditionalMass(0.01)
+        const body = world.createRigidBody(bodyDesc)
 
-        const spawnPos = character.body.position
-        body.position.set(
-            spawnPos.x + direction.x * 0.5,
-            spawnPos.y + 0.3,
-            spawnPos.z + direction.z * 0.5,
-        )
+        const colliderDesc = RAPIER.ColliderDesc.ball(BULLET_SIZE)
+            .setRestitution(0)
+            .setCollisionGroups((BULLET_COLLISION_GROUP << 16) | (BULLET_COLLISION_MASK & 0xFFFF))
+            .setSensor(true)
+        const collider = createColliderForBody(world, colliderDesc, body)
 
         const hSpeed = speed * Math.cos(throwAngle)
         const vSpeed = speed * Math.sin(throwAngle)
-        body.velocity.set(direction.x * hSpeed, vSpeed, direction.z * hSpeed)
-        world.addBody(body)
+        body.setLinvel({x: direction.x * hSpeed, y: vSpeed, z: direction.z * hSpeed}, true)
 
         const material = getPlayerFactionMaterial(character.combat.faction)
         const mesh = new Mesh(BULLET_GEOMETRY, material)
-        mesh.position.set(body.position.x, body.position.y, body.position.z)
+        const bt = body.translation()
+        mesh.position.set(bt.x, bt.y, bt.z)
         scene.add(mesh)
 
         bullets.push({
             body,
+            collider,
             mesh,
             ownerId: character.id,
             ownerFaction: character.combat.faction,
@@ -103,7 +107,7 @@ export const createRangedExecutor = (
         _skill: SkillConfig,
         _combat: CombatComponent,
         entity: CharacterEntity,
-        direction: Vec3,
+        direction: RapVector3,
         _ctx: ExecutorContext,
     ): void => {
         firedThisAttack.delete(entity.id)
@@ -142,7 +146,7 @@ export const createRangedExecutor = (
                 const sinOff = Math.sin(offset)
                 const px = fixedDx * cosOff - fixedDz * sinOff
                 const pz = fixedDx * sinOff + fixedDz * cosOff
-                _tmpVec.set(px, 0, pz)
+                v3Set(_tmpVec, px, 0, pz)
                 fireBulletInternal(
                     entity, _tmpVec, w.projectileSpeed, w.damage,
                     w.knockbackForce, w.projectileLifetime,
@@ -151,7 +155,7 @@ export const createRangedExecutor = (
                 )
             }
         } else {
-            _tmpVec.set(fixedDx, 0, fixedDz)
+            v3Set(_tmpVec, fixedDx, 0, fixedDz)
             fireBulletInternal(
                 entity, _tmpVec, w.projectileSpeed, w.damage,
                 w.knockbackForce, w.projectileLifetime,
@@ -172,7 +176,7 @@ export const createRangedExecutor = (
 
     const removeBullet = (idx: number): void => {
         const bullet = bullets[idx]
-        world.removeBody(bullet.body)
+        world.removeRigidBody(bullet.body)
         bullet.mesh.removeFromParent()
         bullets.splice(idx, 1)
     }
@@ -185,7 +189,7 @@ export const createRangedExecutor = (
             const bullet = bullets[i]
             bullet.lifetime -= dt
 
-            const bulletPos = bullet.body.position
+            const bulletPos = bullet.body.translation()
 
             if (bullet.lifetime <= 0 || bulletPos.y < -10 || (bullet.explosionRadius > 0 && bulletPos.y < 0)) {
                 if (bullet.explosionRadius > 0) {
@@ -204,32 +208,39 @@ export const createRangedExecutor = (
 
             if (bullet.homingStrength > 0) {
                 let nearestDist = Infinity
-                const nearestPos = _tmpVec.clone()
+                let nearestDx = 0
+                let nearestDz = 0
                 for (const target of allCharacters) {
                     if (target.id === bullet.ownerId || target.combat.isDead) continue
                     if (!bullet.ownerAttackTendency(bullet.ownerFaction, target.combat.faction)) continue
-                    const dx = target.body.position.x - bulletPos.x
-                    const dy = target.body.position.y - bulletPos.y
-                    const dz = target.body.position.z - bulletPos.z
+                    const tp = target.body.translation()
+                    const dx = tp.x - bulletPos.x
+                    const dy = tp.y - bulletPos.y
+                    const dz = tp.z - bulletPos.z
                     const d = Math.sqrt(dx * dx + dy * dy + dz * dz)
                     if (d < nearestDist) {
                         nearestDist = d
-                        nearestPos.set(dx, dy, dz)
+                        nearestDx = dx
+                        nearestDz = dz
                     }
                 }
                 if (nearestDist < 15) {
-                    const speed = Math.sqrt(
-                        bullet.body.velocity.x * bullet.body.velocity.x
-                        + bullet.body.velocity.z * bullet.body.velocity.z,
-                    )
+                    const lv = bullet.body.linvel()
+                    const speed = Math.sqrt(lv.x * lv.x + lv.z * lv.z)
                     if (nearestDist > 0.0001 && speed > 0.1) {
                         const invLen = 1 / nearestDist
-                        const targetDX = nearestPos.x * invLen
-                        const targetDZ = nearestPos.z * invLen
-                        const currentDX = bullet.body.velocity.x / speed
-                        const currentDZ = bullet.body.velocity.z / speed
-                        bullet.body.velocity.x += (targetDX - currentDX) * bullet.homingStrength * speed * dt * 4
-                        bullet.body.velocity.z += (targetDZ - currentDZ) * bullet.homingStrength * speed * dt * 4
+                        const targetDX = nearestDx * invLen
+                        const targetDZ = nearestDz * invLen
+                        const currentDX = lv.x / speed
+                        const currentDZ = lv.z / speed
+                        bullet.body.setLinvel(
+                            {
+                                x: lv.x + (targetDX - currentDX) * bullet.homingStrength * speed * dt * 4,
+                                y: lv.y,
+                                z: lv.z + (targetDZ - currentDZ) * bullet.homingStrength * speed * dt * 4,
+                            },
+                            true,
+                        )
                     }
                 }
             }
@@ -240,12 +251,13 @@ export const createRangedExecutor = (
             for (const target of allCharacters) {
                 if (target.id === bullet.ownerId || target.combat.isDead) continue
 
-                _tmpVec.set(
-                    bulletPos.x - target.body.position.x,
-                    bulletPos.y - target.body.position.y,
-                    bulletPos.z - target.body.position.z,
+                const tp = target.body.translation()
+                v3Set(_tmpVec,
+                    bulletPos.x - tp.x,
+                    bulletPos.y - tp.y,
+                    bulletPos.z - tp.z,
                 )
-                const dist = _tmpVec.length()
+                const dist = v3Length(_tmpVec)
                 if (dist > BULLET_HIT_RADIUS) continue
 
                 if (!bullet.ownerAttackTendency(bullet.ownerFaction, target.combat.faction)) continue
@@ -269,20 +281,25 @@ export const createRangedExecutor = (
                     })
 
                     if (bullet.knockbackForce > 0) {
-                        _tmpVec.set(
-                            target.body.position.x - bulletPos.x,
+                        v3Set(_tmpVec,
+                            tp.x - bulletPos.x,
                             0,
-                            target.body.position.z - bulletPos.z,
+                            tp.z - bulletPos.z,
                         )
-                        const len = _tmpVec.length()
+                        const len = v3Length(_tmpVec)
                         if (len > 0.0001) {
-                            _tmpVec.scale(1 / len, _tmpVec)
-                            target.body.applyImpulse(
-                                new Vec3(_tmpVec.x * bullet.knockbackForce, 1, _tmpVec.z * bullet.knockbackForce),
-                                target.body.position,
+                            _tmpVec.x /= len
+                            _tmpVec.z /= len
+                            target.body.applyImpulseAtPoint(
+                                {
+                                    x: _tmpVec.x * bullet.knockbackForce,
+                                    y: 1,
+                                    z: _tmpVec.z * bullet.knockbackForce,
+                                },
+                                target.body.translation(),
+                                true,
                             )
                         }
-                        target.body.wakeUp()
                     }
                 }
 
@@ -293,11 +310,8 @@ export const createRangedExecutor = (
 
             if (hit) continue
 
-            const speed = Math.sqrt(
-                bullet.body.velocity.x * bullet.body.velocity.x
-                + bullet.body.velocity.y * bullet.body.velocity.y
-                + bullet.body.velocity.z * bullet.body.velocity.z,
-            )
+            const lv = bullet.body.linvel()
+            const speed = v3Length(lv)
             if (speed < 1) {
                 removeBullet(i)
             }
@@ -306,7 +320,7 @@ export const createRangedExecutor = (
 
     const clear = (): void => {
         for (const b of bullets) {
-            world.removeBody(b.body)
+            world.removeRigidBody(b.body)
             b.mesh.removeFromParent()
         }
         bullets.length = 0

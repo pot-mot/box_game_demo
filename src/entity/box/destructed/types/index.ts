@@ -1,6 +1,6 @@
 import {z} from 'zod'
 import type {LineSegments} from 'three'
-import type {Body} from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type {BaseEntity, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
 import type {HealthComponent} from '../../base/types/health'
@@ -19,13 +19,13 @@ export interface CollisionRecord {
 export interface DestructibleBox extends BaseEntity<DestructibleConfig>, HealthComponent {
     edges: LineSegments
     wireframe: LineSegments | undefined
-    body: Body
+    body: RAPIER.RigidBody
+    mainCollider: RAPIER.Collider
     fragments: FragmentData[]
     destroyed: boolean
     _collisions: CollisionRecord[]
     _collisionHistory: CollisionRecord[]
     _cooldowns: Map<number, number>
-    _onCollide: ((e: any) => void) | undefined
 }
 
 export interface DestructionBoxAddOptions {

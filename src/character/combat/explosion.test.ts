@@ -1,13 +1,22 @@
 import {describe, it, expect} from 'vitest'
-import {Vec3} from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import {applyExplosionDamage} from './explosion.ts'
 
 /** 构造最低限度 CharacterEntity mock */
 const makeMock = (id: number, x: number, y: number, z: number, hp: number, faction: number, isDead: boolean): Parameters<typeof applyExplosionDamage>[6] => ({
     id,
     config: {speed: 0, jumpHeight: 0, scale: 1},
-    mesh: null!, wireframe: undefined, appearanceGroup: null!, body: {position: new Vec3(x, y, z), velocity: new Vec3(), applyImpulse: () => {}, wakeUp: () => {}} as unknown as Parameters<typeof applyExplosionDamage>[6]['body'],
-    isOnGround: true, groundNormal: { x: 0, y: 1, z: 0 }, groundKeepTimer: 0, airborneTime: 0, groundedTime: 0,     rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
+    mesh: null!, wireframe: undefined, appearanceGroup: null!,
+    body: {
+        translation: () => ({x, y, z}),
+        linvel: () => ({x: 0, y: 0, z: 0}),
+        applyImpulseAtPoint: () => {},
+        wakeUp: () => {},
+        handle: id,
+    } as unknown as Parameters<typeof applyExplosionDamage>[6]['body'],
+    mainCollider: undefined as unknown as RAPIER.Collider,
+    isOnGround: true, groundNormal: { x: 0, y: 1, z: 0 }, groundKeepTimer: 0, airborneTime: 0, groundedTime: 0,
+    rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
     combat: {
         faction, health: hp, maxHealth: hp, isDead,
         damageModifiers: [],

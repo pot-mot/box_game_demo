@@ -1,7 +1,7 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 
-const _dir = new Vec3()
+const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
 export const attackHandler: CombatStateHandler = {
     enter: () => {},
@@ -9,10 +9,10 @@ export const attackHandler: CombatStateHandler = {
         const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
-        const pos = character.body.position
-        const tp = target.body.position
-        _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
-        const dist = _dir.length()
+        const pos = character.body.translation()
+        const tp = target.body.translation()
+        v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
+        const dist = v3Length(_dir)
 
         const skill = character.combat.skills[character.combat.currentSkillIndex]
         if (!skill || dist > skill.config.weapon.range) { setInput(0, 0, false); return }
@@ -51,13 +51,13 @@ export const attackHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const skillRange = skill?.config.weapon.range ?? 1.5
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return _dir.length() > skillRange && _dir.length() < detRange
+                return v3Length(_dir) > skillRange && v3Length(_dir) < detRange
             },
         },
         {
@@ -65,12 +65,12 @@ export const attackHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return true
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return _dir.length() > detRange
+                return v3Length(_dir) > detRange
             },
         },
     ],

@@ -1,8 +1,8 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {PeaceStateHandler} from '../types.ts'
 import {isPatrolConfig, isBuildConfig} from '../../../../../character/ai_strategy/types.ts'
 
-const _dir = new Vec3()
+const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
 export const patrolHandler: PeaceStateHandler = {
     enter: (ctx, _character) => {
@@ -26,9 +26,9 @@ export const patrolHandler: PeaceStateHandler = {
         }
 
         /* 巡逻游走逻辑（所有策略共用） */
-        const pos = character.body.position
-        _dir.set(ctx.waypoint.x - pos.x, 0, ctx.waypoint.z - pos.z)
-        const dist = _dir.length()
+        const pos = character.body.translation()
+        v3Set(_dir, ctx.waypoint.x - pos.x, 0, ctx.waypoint.z - pos.z)
+        const dist = v3Length(_dir)
 
         if (dist < 0.3) {
             ctx.waitTimer += _dt
@@ -42,7 +42,8 @@ export const patrolHandler: PeaceStateHandler = {
                 ctx.waitTimer = 0
             }
         } else {
-            _dir.scale(1 / dist, _dir)
+            _dir.x /= dist
+            _dir.z /= dist
             setInput(_dir.x, _dir.z, false)
         }
     },

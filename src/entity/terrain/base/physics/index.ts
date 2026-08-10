@@ -1,5 +1,6 @@
 import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
-import {BODY_TYPES, Heightfield, Body, Vec3, Quaternion} from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
+import {createColliderForBody} from '../../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import type {EntityPanelInfo} from '../../../box/base/types/entity_info.ts'
 import {createEmitter, type SourceEventMap} from '../../../box/base/types/event_emitter'
@@ -12,19 +13,32 @@ import {TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK} from '../../../../physi
 
 import type {BaseTerrainConfig, BaseTerrainEntity, TerrainSetupOptions, TerrainContext} from '../types'
 
-const reverseZ = (heights: number[][]): number[][] => heights.map(col => [...col].reverse())
-
-/** 根据 mesh 中心和旋转计算 Heightfield body 应放置的世界坐标 */
-const computeBodyPos = (
-    meshX: number,
-    meshZ: number,
-    half: number,
-    meshQuat: {x: number; y: number; z: number; w: number},
-): {x: number; y: number; z: number} => {
-    const offset = new Vec3(-half, 0, half)
-    const q = new Quaternion(meshQuat.x, meshQuat.y, meshQuat.z, meshQuat.w)
-    q.vmult(offset, offset)
-    return {x: meshX + offset.x, y: offset.y, z: meshZ + offset.z}
+/** 从高度数组构建 Trimesh 顶点和索引 */
+const buildTrimesh = (heights: number[][], gs: number, cs: number): {vertices: Float32Array; indices: Uint32Array} => {
+    const n = gs
+    const count = n * n
+    const vertices = new Float32Array(count * 3)
+    const indices: number[] = []
+    const half = ((n - 1) * cs) / 2
+    for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+            const idx = (r * n + c) * 3
+            vertices[idx] = c * cs - half
+            vertices[idx + 1] = heights[r][c]
+            vertices[idx + 2] = r * cs - half
+        }
+    }
+    for (let r = 0; r < n - 1; r++) {
+        for (let c = 0; c < n - 1; c++) {
+            const a = r * n + c
+            const b = a + 1
+            const d = a + n
+            const e = d + 1
+            indices.push(a, b, e)
+            indices.push(a, e, d)
+        }
+    }
+    return {vertices, indices: new Uint32Array(indices)}
 }
 
 export const createTerrainContextImpl = (
@@ -32,12 +46,14 @@ export const createTerrainContextImpl = (
     shared: SharedWorld,
     options: TerrainSetupOptions,
 ): Omit<TerrainContext, 'panel'> => {
-    const {world, boxMat} = shared
+    const {world} = shared
     const entities: BaseTerrainEntity[] = []
     let nextId = 1
     let selectedId: number | undefined
     const panelInfo: EntityPanelInfo[] = []
     const sourceEvents = createEmitter<SourceEventMap>()
+
+    const getDynamicBodies = options.getDynamicBodies ?? (() => [])
 
     const rebuildPanelInfo = (): void => {
         panelInfo.length = 0
@@ -65,42 +81,33 @@ export const createTerrainContextImpl = (
         const heights = generator.generate(config.gridSize, config.cellSize, config.minHeight, config.maxHeight)
         const gs = config.gridSize
         const cs = config.cellSize
-        const half = halfSize(gs, cs)
 
         const {mesh, edges} = createTerrainMesh(heights, config)
         mesh.position.set(x, 0, z)
         if (quat) mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         scene.add(mesh)
 
-        const meshQuat = quat ?? {x: 0, y: 0, z: 0, w: 1}
-        const bodyPos = computeBodyPos(x, z, half, meshQuat)
-        const baseQuat = new Quaternion().setFromAxisAngle(new Vec3(1, 0, 0), -Math.PI / 2)
-        const body = new Body({
-            mass: 0,
-            type: BODY_TYPES.STATIC,
-            material: boxMat,
-            collisionFilterGroup: TERRAIN_COLLISION_GROUP,
-            collisionFilterMask: TERRAIN_COLLISION_MASK,
-        })
-        body.addShape(new Heightfield(reverseZ(heights), {elementSize: cs}))
-        body.position.set(bodyPos.x, bodyPos.y, bodyPos.z)
-        if (quat) {
-            const userQuat = new Quaternion(quat.x, quat.y, quat.z, quat.w)
-            body.quaternion.copy(userQuat.mult(baseQuat))
-        } else {
-            body.quaternion.copy(baseQuat)
-        }
-        world.addBody(body)
+        const {vertices, indices} = buildTrimesh(heights, gs, cs)
+
+        const bodyDesc = RAPIER.RigidBodyDesc.fixed()
+            .setTranslation(x, 0, z)
+        if (quat) bodyDesc.setRotation(quat)
+        const body = world.createRigidBody(bodyDesc)
+
+        const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indices)
+            .setFriction(0.5)
+            .setCollisionGroups((TERRAIN_COLLISION_GROUP << 16) | (TERRAIN_COLLISION_MASK & 0xFFFF))
+        const mainCollider = createColliderForBody(world, colliderDesc, body)
 
         const entity: BaseTerrainEntity = {
             id, config: {...config}, heights,
-            body, mesh, edges,
+            body, mainCollider, mesh, edges,
             wireframe: undefined,
             rowText: '',
         }
         entity.rowText = formatRowText(entity)
         entities.push(entity)
-        liftBoxesOnTerrain(entity, shared)
+        liftBoxesOnTerrain(entity, getDynamicBodies)
         rebuildPanelInfo()
         return entity
     }
@@ -123,7 +130,7 @@ export const createTerrainContextImpl = (
         t.mesh.remove(t.edges)
         t.edges.geometry.dispose()
         ;(t.edges.material as LineBasicMaterial).dispose()
-        world.removeBody(t.body)
+        world.removeRigidBody(t.body)
         entities.splice(idx, 1)
         rebuildPanelInfo()
     }
@@ -139,7 +146,7 @@ export const createTerrainContextImpl = (
         const gen = options.generators[cfg.generatorId]
         t.heights = gen.generate(cfg.gridSize, cfg.cellSize, cfg.minHeight, cfg.maxHeight)
         rebuildShape(t)
-        liftBoxesOnTerrain(t, shared)
+        liftBoxesOnTerrain(t, getDynamicBodies)
         t.rowText = formatRowText(t)
         rebuildPanelInfo()
     }
@@ -149,13 +156,8 @@ export const createTerrainContextImpl = (
     const updatePosition = (id: number, x: number, z: number): void => {
         const t = entities.find(e => e.id === id)
         if (!t) return
-        const gs = t.config.gridSize
-        const cs = t.config.cellSize
-        const half = halfSize(gs, cs)
         t.mesh.position.set(x, 0, z)
-        const bodyPos = computeBodyPos(x, z, half, t.mesh.quaternion)
-        t.body.position.set(bodyPos.x, bodyPos.y, bodyPos.z)
-        t.body.aabbNeedsUpdate = true
+        t.body.setTranslation({x, y: 0, z}, true)
         t.rowText = formatRowText(t)
         rebuildPanelInfo()
     }
@@ -163,17 +165,13 @@ export const createTerrainContextImpl = (
     const setTransform = (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}): void => {
         const t = entities.find(e => e.id === id)
         if (!t) return
-        const gs = t.config.gridSize
-        const cs = t.config.cellSize
-        const half = halfSize(gs, cs)
         t.mesh.position.set(pos.x, 0, pos.z)
         t.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
-        const bodyPos = computeBodyPos(pos.x, pos.z, half, t.mesh.quaternion)
-        t.body.position.set(bodyPos.x, bodyPos.y, bodyPos.z)
-        const userQuat = new Quaternion(t.mesh.quaternion.x, t.mesh.quaternion.y, t.mesh.quaternion.z, t.mesh.quaternion.w)
-        const baseQuat = new Quaternion().setFromAxisAngle(new Vec3(1, 0, 0), -Math.PI / 2)
-        t.body.quaternion.copy(userQuat.mult(baseQuat))
-        t.body.aabbNeedsUpdate = true
+        t.body.setTranslation({x: pos.x, y: 0, z: pos.z}, true)
+        t.body.setRotation(
+            {x: t.mesh.quaternion.x, y: t.mesh.quaternion.y, z: t.mesh.quaternion.z, w: t.mesh.quaternion.w},
+            true,
+        )
         t.rowText = formatRowText(t)
         rebuildPanelInfo()
     }
@@ -234,7 +232,7 @@ export const createTerrainContextImpl = (
         }
 
         rebuildShape(t)
-        liftBoxesOnTerrain(t, shared)
+        liftBoxesOnTerrain(t, getDynamicBodies)
         t.rowText = formatRowText(t)
         rebuildPanelInfo()
     }
@@ -242,7 +240,6 @@ export const createTerrainContextImpl = (
     const rebuildShape = (t: BaseTerrainEntity): void => {
         const gs = t.config.gridSize
         const cs = t.config.cellSize
-        const half = halfSize(gs, cs)
 
         const oldWireframe = t.wireframe
         if (oldWireframe) {
@@ -251,10 +248,14 @@ export const createTerrainContextImpl = (
             t.wireframe = undefined
         }
 
-        while (t.body.shapes.length) t.body.removeShape(t.body.shapes[0])
-        t.body.addShape(new Heightfield(reverseZ(t.heights), {elementSize: cs}))
-        const bodyPos = computeBodyPos(t.mesh.position.x, t.mesh.position.z, half, t.mesh.quaternion)
-        t.body.position.set(bodyPos.x, bodyPos.y, bodyPos.z)
+        /* 移除旧碰撞体，重建 Trimesh 碰撞体 */
+        world.removeCollider(t.mainCollider, true)
+
+        const {vertices, indices} = buildTrimesh(t.heights, gs, cs)
+        const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indices)
+            .setFriction(0.5)
+            .setCollisionGroups((TERRAIN_COLLISION_GROUP << 16) | (TERRAIN_COLLISION_MASK & 0xFFFF))
+        t.mainCollider = createColliderForBody(world, colliderDesc, t.body)
 
         rebuildTerrainMesh(t, t.heights, t.config)
 
@@ -265,26 +266,25 @@ export const createTerrainContextImpl = (
         }
     }
 
-    const liftBoxesOnTerrain = (t: BaseTerrainEntity, s: SharedWorld): void => {
+    const liftBoxesOnTerrain = (t: BaseTerrainEntity, getBodies: () => readonly RAPIER.RigidBody[]): void => {
         const gs = t.config.gridSize
         const cs = t.config.cellSize
         const half = halfSize(gs, cs)
-        const bodies: Body[] = []
-        s.world.bodies.forEach(b => { if (b.type === BODY_TYPES.DYNAMIC) bodies.push(b) })
-        for (const b of bodies) {
-            if (b.shapes.length === 0) continue
-            const lx = b.position.x - t.mesh.position.x
-            const lz = b.position.z - t.mesh.position.z
+        const terTrans = t.body.translation()
+        for (const b of getBodies()) {
+            if (b.bodyType() !== RAPIER.RigidBodyType.Dynamic) continue
+            const bTrans = b.translation()
+            const lx = bTrans.x - t.mesh.position.x
+            const lz = bTrans.z - t.mesh.position.z
             if (lx < -half || lx > half || lz < -half || lz > half) continue
             const xi = Math.round((lx + half) / cs)
             const zi = Math.round((lz + half) / cs)
             if (xi < 0 || xi >= gs || zi < 0 || zi >= gs) continue
-            const terrainY = t.body.position.y + t.heights[xi][zi]
-            const halfH = b.shapes[0].boundingSphereRadius || 0.5
-            const bottom = b.position.y - halfH
+            const terrainY = terTrans.y + t.heights[xi][zi]
+            let halfH = 0.5
+            const bottom = bTrans.y - halfH
             if (bottom < terrainY) {
-                b.position.y = terrainY + halfH
-                b.wakeUp()
+                b.setTranslation({x: bTrans.x, y: terrainY + halfH, z: bTrans.z}, true)
             }
         }
     }
@@ -328,7 +328,7 @@ export const createTerrainContextImpl = (
         if (!t) return
         t.heights = heights.map(col => [...col])
         rebuildShape(t)
-        liftBoxesOnTerrain(t, shared)
+        liftBoxesOnTerrain(t, getDynamicBodies)
         t.rowText = formatRowText(t)
         rebuildPanelInfo()
     }
@@ -336,7 +336,7 @@ export const createTerrainContextImpl = (
     // ── 上下文 ──
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const getBody = (_id: number): Body | undefined => {
+    const getBody = (_id: number): RAPIER.RigidBody | undefined => {
         return undefined
     }
 

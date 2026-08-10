@@ -1,13 +1,13 @@
-import type { Vec3 } from 'cannon-es'
-import type { CharacterEntity } from '../types.ts'
-import type { CombatComponent } from './types.ts'
-import type { SkillConfig, SkillType } from './skill_types.ts'
+import type {RapVector3} from '../../physics/rapier_utils.ts'
+import type {CharacterEntity} from '../types.ts'
+import type {CombatComponent} from './types.ts'
+import type {SkillConfig, SkillType} from './skill_types.ts'
 
-/** 执行器运行时上下文 — 暴露必要能力，不依赖具体物理实现 */
+/** 执行器运行时上下文 —— 暴露必要能力，不依赖具体物理实现 */
 export interface ExecutorContext {
     readonly fireProjectile: (
         source: CharacterEntity,
-        direction: Vec3,
+        direction: RapVector3,
         speed: number,
         damage: number,
         knockbackForce: number,
@@ -15,7 +15,7 @@ export interface ExecutorContext {
     ) => void
 }
 
-/** 技能执行器接口 — 近战/远程各自实现 */
+/** 技能执行器接口 —— 近战/远程各自实现 */
 export interface SkillExecutor {
     readonly type: SkillType
 
@@ -24,7 +24,7 @@ export interface SkillExecutor {
         skill: SkillConfig,
         combat: CombatComponent,
         entity: CharacterEntity,
-        direction: Vec3,
+        direction: RapVector3,
         ctx: ExecutorContext,
     ): void
 

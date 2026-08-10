@@ -16,7 +16,7 @@ const findNearestEnemy = (
     character: CharacterEntity,
     allCharacters: readonly CharacterEntity[],
 ): {id: number; dist: number} | undefined => {
-    const pos = character.body.position
+    const pos = character.body.translation()
     const skill = character.combat.skills[character.combat.currentSkillIndex]
     const detRange = skill?.config.weapon.detectionRange ?? 8
     const los = ctx.losChecker
@@ -28,7 +28,7 @@ const findNearestEnemy = (
         if (other.id === character.id || other.combat.isDead) continue
         if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
 
-        const op = other.body.position
+        const op = other.body.translation()
         const d = Math.hypot(op.x - pos.x, op.z - pos.z)
         if (d >= detRange || d >= bestDist) continue
 

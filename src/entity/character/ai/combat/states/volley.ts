@@ -1,8 +1,8 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 
-const _dir = new Vec3()
+const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
 export const volleyHandler: CombatStateHandler = {
     enter: (ctx, _character) => {
@@ -13,10 +13,10 @@ export const volleyHandler: CombatStateHandler = {
         const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
-        const pos = character.body.position
-        const tp = target.body.position
-        _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
-        const dist = _dir.length()
+        const pos = character.body.translation()
+        const tp = target.body.translation()
+        v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
+        const dist = v3Length(_dir)
 
         const skill = character.combat.skills[character.combat.currentSkillIndex]
         if (!skill || skill.config.type !== 'ranged') { setInput(0, 0, false); return }
@@ -46,8 +46,8 @@ export const volleyHandler: CombatStateHandler = {
         for (const other of allCharacters) {
             if (other.id === character.id || other.combat.isDead) continue
             if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
-            const ox = other.body.position.x - pos.x
-            const oz = other.body.position.z - pos.z
+            const ox = other.body.translation().x - pos.x
+            const oz = other.body.translation().z - pos.z
             const od = Math.hypot(ox, oz)
             if (od < cfg.weapon.detectionRange && od < nearestDist * 0.6) {
                 nearestDist = od
@@ -77,8 +77,8 @@ export const volleyHandler: CombatStateHandler = {
                 if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
+                const pos = character.body.translation()
+                const tp = target.body.translation()
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
@@ -90,13 +90,13 @@ export const volleyHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
-                return _dir.length() > cfg.weapon.idealRange * 1.3
+                return v3Length(_dir) > cfg.weapon.idealRange * 1.3
             },
         },
         {
@@ -104,13 +104,13 @@ export const volleyHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill || skill.config.type !== 'ranged') return false
                 const cfg = skill.config as RangedSkillConfig
-                return _dir.length() < cfg.weapon.retreatRange
+                return v3Length(_dir) < cfg.weapon.retreatRange
             },
         },
         {
@@ -118,12 +118,12 @@ export const volleyHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return true
-                const pos = character.body.position
-                const tp = target.body.position
-                _dir.set(tp.x - pos.x, 0, tp.z - pos.z)
+                const pos = character.body.translation()
+                const tp = target.body.translation()
+                v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return _dir.length() > detRange
+                return v3Length(_dir) > detRange
             },
         },
     ],

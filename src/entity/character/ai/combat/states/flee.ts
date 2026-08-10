@@ -1,23 +1,23 @@
-import {Vec3} from 'cannon-es'
+import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 
-const _fleeDir = new Vec3()
+const _fleeDir: RapVector3 = {x: 0, y: 0, z: 0}
 
 export const fleeHandler: CombatStateHandler = {
     enter: (ctx, character) => {
-        const pos = character.body.position
+        const pos = character.body.translation()
 
         /* 使用 spawn 中心作为备用逃离方向 */
         const dx = pos.x - ctx.spawnPoint.x
         const dz = pos.z - ctx.spawnPoint.z
         const fallbackLen = Math.hypot(dx, dz)
         if (fallbackLen > 0.001) {
-            _fleeDir.set(dx / fallbackLen, 0, dz / fallbackLen)
+            v3Set(_fleeDir, dx / fallbackLen, 0, dz / fallbackLen)
         } else {
-            _fleeDir.set(Math.random() - 0.5, 0, Math.random() - 0.5)
-            const rl = _fleeDir.length()
-            if (rl > 0.001) _fleeDir.scale(1 / rl, _fleeDir)
+            v3Set(_fleeDir, Math.random() - 0.5, 0, Math.random() - 0.5)
+            const rl = v3Length(_fleeDir)
+            if (rl > 0.001) { _fleeDir.x /= rl; _fleeDir.z /= rl }
         }
 
         /* 方向随机偏移 ±30° */
@@ -33,7 +33,7 @@ export const fleeHandler: CombatStateHandler = {
     update: (_dt, ctx, character, allCharacters, setInput) => {
         const skill = character.combat.skills[character.combat.currentSkillIndex]
         const detRange = skill?.config.weapon.detectionRange ?? 8
-        const pos = character.body.position
+        const pos = character.body.translation()
 
         /* 检查是否有附近敌人：从敌人方向逃离 */
         let nearestDist = Infinity
@@ -42,8 +42,8 @@ export const fleeHandler: CombatStateHandler = {
         for (const other of allCharacters) {
             if (other.id === character.id || other.combat.isDead) continue
             if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
-            const ox = other.body.position.x - pos.x
-            const oz = other.body.position.z - pos.z
+            const ox = other.body.translation().x - pos.x
+            const oz = other.body.translation().z - pos.z
             const od = Math.hypot(ox, oz)
             if (od < detRange && od < nearestDist) {
                 nearestDist = od
@@ -92,12 +92,12 @@ export const fleeHandler: CombatStateHandler = {
                 /* 需要有有效目标 */
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                const pos = character.body.position
+                const pos = character.body.translation()
                 for (const other of allCharacters) {
                     if (other.id === character.id || other.combat.isDead) continue
                     if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
-                    const ox = other.body.position.x - pos.x
-                    const oz = other.body.position.z - pos.z
+                    const ox = other.body.translation().x - pos.x
+                    const oz = other.body.translation().z - pos.z
                     if (Math.hypot(ox, oz) < detRange) {
                         ctx.combatTargetId = other.id
                         ctx.combatBurstAttackCount++
@@ -116,12 +116,12 @@ export const fleeHandler: CombatStateHandler = {
                     /* 若无可达目标，放弃 */
                     const skill = character.combat.skills[character.combat.currentSkillIndex]
                     const detRange = skill?.config.weapon.detectionRange ?? 8
-                    const pos = character.body.position
+                    const pos = character.body.translation()
                     let hasTarget = false
                     for (const other of allCharacters) {
                         if (other.id === character.id || other.combat.isDead) continue
                         if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
-                        if (Math.hypot(other.body.position.x - pos.x, other.body.position.z - pos.z) < detRange) {
+                        if (Math.hypot(other.body.translation().x - pos.x, other.body.translation().z - pos.z) < detRange) {
                             hasTarget = true
                             break
                         }
@@ -137,11 +137,11 @@ export const fleeHandler: CombatStateHandler = {
             guard: (_ctx, character, allCharacters) => {
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                const pos = character.body.position
+                const pos = character.body.translation()
                 for (const other of allCharacters) {
                     if (other.id === character.id || other.combat.isDead) continue
                     if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
-                    if (Math.hypot(other.body.position.x - pos.x, other.body.position.z - pos.z) < detRange) {
+                    if (Math.hypot(other.body.translation().x - pos.x, other.body.translation().z - pos.z) < detRange) {
                         return false
                     }
                 }

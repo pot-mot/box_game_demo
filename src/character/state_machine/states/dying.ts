@@ -5,11 +5,10 @@ export const DYING_DURATION = 0.6
 export const dyingHandler: StateHandler = {
     enter: (entity) => {
         entity.combat.attackActive = false
-        entity.body.velocity.set(0, 0, 0)
-        entity.body.wakeUp()
+        entity.body.setLinvel({x: 0, y: 0, z: 0}, true)
     },
     update: (dt, _input, entity) => {
-        entity.body.velocity.set(0, 0, 0)
+        entity.body.setLinvel({x: 0, y: 0, z: 0}, true)
         if (!entity.isDying) {
             entity.isDying = true
             entity.dyingTimer = 0

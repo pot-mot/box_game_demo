@@ -35,7 +35,7 @@ export const createNavSensor = (
     ): NavSenseOutput => {
         const scale = entity.config.scale
         const jumpHeight = entity.config.jumpHeight
-        const pos = entity.body.position
+        const pos = entity.body.translation()
         const bh = CHARACTER_BASE_SIZE.height * scale
 
         /* 射线起点：碰撞箱底部略上方 */

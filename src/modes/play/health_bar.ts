@@ -51,12 +51,13 @@ export const setupHealthBars = (
         const visible = new Set<number>()
 
         if (player) {
-            const ppos = player.body.position
+            const ppos = player.body.translation()
             for (const c of allChars) {
                 if (c.combat.isDead || c.id === player.id) continue
-                const dx = c.body.position.x - ppos.x
-                const dy = c.body.position.y - ppos.y
-                const dz = c.body.position.z - ppos.z
+                const ct = c.body.translation()
+                const dx = ct.x - ppos.x
+                const dy = ct.y - ppos.y
+                const dz = ct.z - ppos.z
                 const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
                 if (dist > DISPLAY_RADIUS) continue
                 visible.add(c.id)
@@ -88,10 +89,11 @@ export const setupHealthBars = (
                     entry.lastMaxHealth = c.combat.maxHealth
                 }
 
+                const ct2 = c.body.translation()
                 entry.sprite.position.set(
-                    c.body.position.x,
-                    c.body.position.y + CHARACTER_BASE_SIZE.height * c.config.scale + 0.3,
-                    c.body.position.z,
+                    ct2.x,
+                    ct2.y + CHARACTER_BASE_SIZE.height * c.config.scale + 0.3,
+                    ct2.z,
                 )
                 entry.sprite.scale.set(FIXED_SCALE, FIXED_SCALE * (BAR_H / BAR_W), 1)
             }

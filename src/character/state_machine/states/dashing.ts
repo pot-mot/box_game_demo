@@ -8,8 +8,9 @@ let dashDirZ = 0
 
 export const dashingHandler: StateHandler = {
     enter: (entity) => {
-        const vx = entity.body.velocity.x
-        const vz = entity.body.velocity.z
+        const linvel = entity.body.linvel()
+        const vx = linvel.x
+        const vz = linvel.z
         const vLen = Math.hypot(vx, vz)
         if (vLen > 0.1) {
             dashDirX = vx / vLen
@@ -25,13 +26,12 @@ export const dashingHandler: StateHandler = {
     update: (_dt, _input, entity) => {
         const speed = entity.config.speed * DASH_SPEED_MULTIPLIER
         if (!projectToSlopeAtSpeed(entity, dashDirX, dashDirZ, speed, SLOPE_WALK_THRESHOLD)) {
-            entity.body.velocity.x = dashDirX * speed
-            entity.body.velocity.z = dashDirZ * speed
+            const linvel = entity.body.linvel()
+            entity.body.setLinvel({x: dashDirX * speed, y: linvel.y, z: dashDirZ * speed}, true)
         } else {
             /* 弹跳悬空（宽限期）时向坡面吸附，快速落回 */
             applySlopeSink(entity)
         }
-        entity.body.wakeUp()
     },
     exit: () => {},
     transitions: [

@@ -99,6 +99,8 @@ export const createFragmentFromData = (data: FragmentData): {mesh: Mesh; edges: 
 }
 
 export const syncFragmentToMesh = (fragment: Fragment): void => {
-    fragment.mesh.position.set(fragment.body.position.x, fragment.body.position.y, fragment.body.position.z)
-    fragment.mesh.quaternion.set(fragment.body.quaternion.x, fragment.body.quaternion.y, fragment.body.quaternion.z, fragment.body.quaternion.w)
+    const trans = fragment.body.translation()
+    fragment.mesh.position.set(trans.x, trans.y, trans.z)
+    const rot = fragment.body.rotation()
+    fragment.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
 }

@@ -36,18 +36,20 @@ export const applySlopeSink = (entity: CharacterEntity): void => {
     if (!isSupportedOn(entity, SLOPE_WALK_THRESHOLD)) return
     if (entity.groundKeepTimer >= GROUND_KEEP_TIME) return
     const n = entity.groundNormal
-    entity.body.velocity.x -= n.x * SLOPE_SINK_SPEED
-    entity.body.velocity.y -= n.y * SLOPE_SINK_SPEED
-    entity.body.velocity.z -= n.z * SLOPE_SINK_SPEED
+    const linvel = entity.body.linvel()
+    entity.body.setLinvel({
+        x: linvel.x - n.x * SLOPE_SINK_SPEED,
+        y: linvel.y - n.y * SLOPE_SINK_SPEED,
+        z: linvel.z - n.z * SLOPE_SINK_SPEED,
+    }, true)
 }
 
 /** 沿支撑面投影速度（v·n = 0，保持水平速度分量）；无支撑或法线低于 minNy 时不投影，返回 false */
 export const projectToSlope = (entity: CharacterEntity, vx: number, vz: number, minNy: number): boolean => {
     if (!isSupportedOn(entity, minNy)) return false
     const n = entity.groundNormal
-    entity.body.velocity.x = vx
-    entity.body.velocity.y = -(vx * n.x + vz * n.z) / n.y
-    entity.body.velocity.z = vz
+    const vy = -(vx * n.x + vz * n.z) / n.y
+    entity.body.setLinvel({x: vx, y: vy, z: vz}, true)
     return true
 }
 
@@ -67,9 +69,7 @@ export const projectToSlopeAtSpeed = (
     const n = entity.groundNormal
     const t = dx * n.x + dz * n.z
     const k = speed / Math.sqrt(1 + (t * t) / (n.y * n.y))
-    entity.body.velocity.x = dx * k
-    entity.body.velocity.y = -t * k / n.y
-    entity.body.velocity.z = dz * k
+    entity.body.setLinvel({x: dx * k, y: -t * k / n.y, z: dz * k}, true)
     return true
 }
 
@@ -80,5 +80,6 @@ export const projectToSlopeAtSpeed = (
  */
 export const applySlopeAntiGravity = (entity: CharacterEntity): void => {
     if (!isSupportedOn(entity, SLOPE_WALK_THRESHOLD)) return
-    entity.body.force.y = -entity.body.mass * GRAVITY
+    entity.body.resetForces(true)
+    entity.body.addForce({x: 0, y: -entity.body.mass() * GRAVITY, z: 0}, true)
 }

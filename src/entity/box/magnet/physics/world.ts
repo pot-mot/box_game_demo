@@ -1,13 +1,9 @@
 import {type Scene} from 'three'
-import {
-    Body,
-    BODY_TYPES,
-    Box,
-    Vec3,
-} from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import type {PhysicsEnv} from '../../../../physics/env.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {createColliderForBody} from '../../../../physics/rapier_utils.ts'
 import type {MagnetBoxConfig, MagnetBox, MagnetEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
@@ -28,7 +24,7 @@ const BADGE_COLOR = '#96c'
 
 // ── 临时向量，复用避免 GC ──
 
-const _force = new Vec3()
+const _force = { x: 0, y: 0, z: 0 }
 
 // ── 初始化 ──
 
@@ -37,7 +33,7 @@ export const setupMagnetBoxes = (
     shared: SharedWorld,
     physicsEnv: PhysicsEnv,
 ): MagnetEntityContext => {
-    const {world, boxMat} = shared
+    const { world } = shared
 
     const boxes: MagnetBox[] = []
     let nextId = 1
@@ -74,22 +70,24 @@ export const setupMagnetBoxes = (
         const {mesh, edges} = createMagnetBoxMesh(config)
         mesh.position.set(x, adjustedY, z)
         scene.add(mesh)
-        const body = new Body({
-            mass: config.mass,
-            type: config.mass === 0 ? BODY_TYPES.STATIC : BODY_TYPES.DYNAMIC,
-            material: boxMat,
-            collisionFilterGroup: DEFAULT_COLLISION_GROUP,
-            collisionFilterMask: DEFAULT_COLLISION_MASK,
-        })
-        body.addShape(new Box(new Vec3(hw, hh, hd)))
-        body.position.set(x, adjustedY, z)
+        const isStatic = config.mass === 0
+        const bodyDesc = isStatic
+            ? RAPIER.RigidBodyDesc.fixed()
+            : RAPIER.RigidBodyDesc.dynamic()
+        bodyDesc.setTranslation(x, adjustedY, z)
+        const body = world.createRigidBody(bodyDesc)
+
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(hw, hh, hd)
+            .setFriction(0.5)
+            .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+        const mainCollider = createColliderForBody(world, colliderDesc, body)
+
         if (quat) {
-            body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+            body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
             mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         }
-        world.addBody(body)
         const emitter = createEmitter<EntityEventMap>()
-        const pb: MagnetBox = {id, mesh, body, config: {...config}, edges, wireframe: undefined, emitter, rowText: ''}
+        const pb: MagnetBox = {id, mesh, body, mainCollider, config: {...config}, edges, wireframe: undefined, emitter, rowText: ''}
         refreshRowText(pb)
         emitter.on('infoUpdate', rebuildPanelInfo)
         boxes.push(pb)
@@ -111,10 +109,10 @@ export const setupMagnetBoxes = (
         cleanupWireframe(pb)
         scene.remove(pb.mesh)
         disposeMagnetBoxMesh(pb)
-        world.removeBody(pb.body)
+        world.removeRigidBody(pb.body)
         boxes.splice(idx, 1)
         for (const b of boxes) {
-            if (b.body.type === BODY_TYPES.DYNAMIC) b.body.wakeUp()
+            if (b.body.bodyType() === RAPIER.RigidBodyType.Dynamic) b.body.wakeUp()
         }
         rebuildPanelInfo()
     }
@@ -159,14 +157,17 @@ export const setupMagnetBoxes = (
         if (changedSize) {
             const hh = cfg.height / 2
             updateMagnetBoxMeshSize(pb, cfg)
-            while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
-            pb.body.addShape(new Box(new Vec3(cfg.width / 2, hh, cfg.depth / 2)))
-            pb.body.updateMassProperties()
-            const oldBottom = pb.body.position.y - old.height / 2
-            const newBottom = pb.body.position.y - hh
+            world.removeCollider(pb.mainCollider, true)
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
+                .setFriction(0.5)
+                .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
+            const pos = pb.body.translation()
+            const oldBottom = pos.y - old.height / 2
+            const newBottom = pos.y - hh
             if (newBottom < oldBottom || newBottom < GROUND_Y) {
                 const target = Math.max(oldBottom, GROUND_Y)
-                pb.body.position.y = target + hh
+                pb.body.setTranslation({ x: pos.x, y: target + hh, z: pos.z }, true)
                 pb.mesh.position.y = target + hh
             }
             if (pb.wireframe) {
@@ -177,12 +178,9 @@ export const setupMagnetBoxes = (
         }
         if (changedMass) {
             if (cfg.mass === 0) {
-                pb.body.type = BODY_TYPES.STATIC
-                pb.body.mass = 0
+                pb.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
-                pb.body.type = BODY_TYPES.DYNAMIC
-                pb.body.mass = cfg.mass
-                pb.body.updateMassProperties()
+                pb.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
                 pb.body.wakeUp()
             }
         }
@@ -198,10 +196,13 @@ export const setupMagnetBoxes = (
         const pb = boxes.find(b => b.id === id)
         if (!pb) return
         pb.mesh.position.set(pos.x, pos.y, pos.z)
-        pb.body.position.set(pos.x, pos.y, pos.z)
+        pb.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true)
         pb.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
-        pb.body.quaternion.set(pb.mesh.quaternion.x, pb.mesh.quaternion.y, pb.mesh.quaternion.z, pb.mesh.quaternion.w)
-        if (pb.body.type === BODY_TYPES.DYNAMIC) pb.body.wakeUp()
+        pb.body.setRotation(
+            { x: pb.mesh.quaternion.x, y: pb.mesh.quaternion.y, z: pb.mesh.quaternion.z, w: pb.mesh.quaternion.w },
+            true,
+        )
+        if (pb.body.bodyType() === RAPIER.RigidBodyType.Dynamic) pb.body.wakeUp()
         refreshRowText(pb)
     }
 
@@ -214,7 +215,7 @@ export const setupMagnetBoxes = (
         const allBodies = physicsEnv.getAllBodies()
         const magnetBodyIds = new Set<number>()
         for (const pb of boxes) {
-            magnetBodyIds.add(pb.body.id)
+            magnetBodyIds.add(pb.body.handle)
         }
 
         for (const pb of boxes) {
@@ -222,37 +223,36 @@ export const setupMagnetBoxes = (
             const strength = pb.config.attractionStrength
             if (radius <= 0 || strength <= 0) continue
 
-            const mPos = pb.body.position
+            const mPos = pb.body.translation()
             const radiusSq = radius * radius
 
             for (const target of allBodies) {
-                if (magnetBodyIds.has(target.id)) continue
-                if (target.type === BODY_TYPES.STATIC) continue
+                if (magnetBodyIds.has(target.handle)) continue
+                if (target.bodyType() === RAPIER.RigidBodyType.Fixed) continue
 
-                const tPos = target.position
+                const tPos = target.translation()
                 const dx = mPos.x - tPos.x
                 const dy = mPos.y - tPos.y
                 const dz = mPos.z - tPos.z
                 const distSq = dx * dx + dy * dy + dz * dz
 
                 if (distSq > 0 && distSq < radiusSq) {
-                    // 清零角速度，彻底消除碰撞产生的旋转
-                    target.angularVelocity.set(0, 0, 0)
+                    target.setAngvel({x: 0, y: 0, z: 0}, true)
 
-                    // 线速度钳制
-                    const v = target.velocity
+                    const v = target.linvel()
                     const speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
                     if (speed > MAX_SPEED) {
                         const scale = MAX_SPEED / speed
-                        v.x *= scale; v.y *= scale; v.z *= scale
+                        target.setLinvel({x: v.x * scale, y: v.y * scale, z: v.z * scale}, true)
                     }
 
-                    // 施加指向磁铁的力
                     const dist = Math.sqrt(distSq)
                     const factor = strength * (1 - dist / radius)
                     const invDist = factor / dist
-                    _force.set(dx * invDist, dy * invDist, dz * invDist)
-                    target.applyForce(_force, tPos)
+                    _force.x = dx * invDist
+                    _force.y = dy * invDist
+                    _force.z = dz * invDist
+                    target.addForceAtPoint(_force, tPos, true)
                 }
             }
         }
@@ -262,8 +262,10 @@ export const setupMagnetBoxes = (
 
     const syncPositions = (): void => {
         for (const pb of boxes) {
-            pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
-            pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)
+            const pos = pb.body.translation()
+            pb.mesh.position.set(pos.x, pos.y, pos.z)
+            const rot = pb.body.rotation()
+            pb.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
             pb.rowText = formatRowText(pb)
         }
         rebuildPanelInfo()
