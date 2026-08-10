@@ -69,14 +69,16 @@ export const setupCommonBoxes = (
         const colliderDesc = RAPIER.ColliderDesc.cuboid(hw, hh, hd)
             .setFriction(0.5)
             .setCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK)
-        const colliderHandle = world.createCollider(colliderDesc, body).handle
+        // Rapier 0.20 类型定义未包含第二参数，但运行时支持 parent body
+        // @ts-expect-error Rapier createCollider 类型定义缺少 parent 参数
+        const mainCollider = world.createCollider(colliderDesc, body)
 
         if (quat) {
             body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
             mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         }
         const emitter = createEmitter<EntityEventMap>()
-        const pb: CommonBox = {id, mesh, body, colliderHandle, config: {...config}, edges, wireframe: undefined, emitter, rowText: ''}
+        const pb: CommonBox = {id, mesh, body, mainCollider, config: {...config}, edges, wireframe: undefined, emitter, rowText: ''}
         refreshRowText(pb)
         emitter.on('infoUpdate', rebuildPanelInfo)
         boxes.push(pb)
@@ -146,11 +148,12 @@ export const setupCommonBoxes = (
         if (changedSize) {
             const hh = cfg.height / 2
             updateCommonBoxMeshSize(pb, cfg)
-            world.removeCollider(pb.colliderHandle, true)
+            world.removeCollider(pb.mainCollider, true)
             const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
                 .setFriction(0.5)
                 .setCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK)
-            pb.colliderHandle = world.createCollider(colliderDesc, pb.body).handle
+            // @ts-expect-error Rapier createCollider 类型定义缺少 parent 参数
+            pb.mainCollider = world.createCollider(colliderDesc, pb.body)
             const pos = pb.body.translation()
             const oldBottom = pos.y - old.height / 2
             const newBottom = pos.y - hh

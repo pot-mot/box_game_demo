@@ -10,7 +10,7 @@ export {CommonBoxConfigSchema} from '../validation.ts'
 
 export interface CommonBox extends BaseEntity<CommonBoxConfig> {
     body: RAPIER.RigidBody
-    colliderHandle: number
+    mainCollider: RAPIER.Collider
     edges: LineSegments
     wireframe: LineSegments | undefined
 }
