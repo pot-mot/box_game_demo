@@ -51,7 +51,16 @@ const getOverlapVolume = (
     const collider = body.collider(0)
     if (!collider) return 0
     const pos = body.translation()
-    const halfExt = { x: 0.5, y: 0.5, z: 0.5 }
+    const shape = collider.shape as unknown as { halfExtents?: { x: number; y: number; z: number }; radius?: number }
+    let halfExt: { x: number; y: number; z: number }
+    if (shape.halfExtents) {
+        halfExt = shape.halfExtents
+    } else if (shape.radius !== undefined) {
+        const r = shape.radius
+        halfExt = { x: r, y: r, z: r }
+    } else {
+        halfExt = { x: 0.5, y: 0.5, z: 0.5 }
+    }
     const worldAabb = {
         mins: { x: pos.x - halfExt.x, y: pos.y - halfExt.y, z: pos.z - halfExt.z },
         maxs: { x: pos.x + halfExt.x, y: pos.y + halfExt.y, z: pos.z + halfExt.z },

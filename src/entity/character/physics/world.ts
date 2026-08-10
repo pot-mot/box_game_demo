@@ -79,6 +79,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
     update: (dt: number) => void
+    /** 预先排空碰撞事件 → 地面检测使用，必须在其他系统 preSync 前调用 */
+    readGroundContacts: () => void
     setAIEnabled: (enabled: boolean) => void
     activateAI: () => void
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
@@ -481,8 +483,22 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.groundKeepTimer = next.groundKeepTimer
     }
 
+    /** 预先排空碰撞事件队列 —— 必须在其他系统的 preSync 之前调用，
+     *  否则 destruction/elastic 的 preSync 会先行 drainCollisionEvents，
+     *  导致角色地面检测永远没有接触数据 */
+    const readGroundContacts = (): void => {
+        eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
+            const key = handle1 < handle2 ? `${handle1}-${handle2}` : `${handle2}-${handle1}`
+            if (started) {
+                activeContactPairs.set(key, { colliderAHandle: handle1, colliderBHandle: handle2 })
+            } else {
+                activeContactPairs.delete(key)
+            }
+        })
+    }
+
     const update = (dt: number): void => {
-        /* 同步碰撞事件 → 维护 activeContactPairs */
+        /* 同步碰撞事件 → 维护 activeContactPairs（已移至 readGroundContacts，此处保留兜底） */
         eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
             const key = handle1 < handle2 ? `${handle1}-${handle2}` : `${handle2}-${handle1}`
             if (started) {
@@ -919,6 +935,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         getEntityList,
         getAll,
         spawnAt,
+        readGroundContacts,
         syncPositions,
         markPlayer,
         unmarkPlayer,

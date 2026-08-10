@@ -289,11 +289,14 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 for (let s = 0; s < totalSteps; s++) {
                     shared.world.step(shared.eventQueue)
                 }
+                /* 角色地面检测必须先于其他系统 drainCollisionEvents */
+                characterSystem.readGroundContacts()
                 for (const s of systems) s.preSync?.(delta, time)
                 for (const s of systems) s.syncPositions()
             } else if (stepActive) {
                 /* 逐帧步进：每帧精确推进 1 物理步 */
                 shared.world.step(shared.eventQueue)
+                characterSystem.readGroundContacts()
                 for (const s of systems) s.preSync?.(FIXED_TIME_STEP, time)
                 for (const s of systems) s.syncPositions()
                 editMode?.execute.consumeStep()
