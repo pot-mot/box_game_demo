@@ -1,6 +1,6 @@
 /** 重力加速度（Y 轴向下） */
 export const GRAVITY = -9.82
-/** 物理固定时间步长 */
+/** 物理固定时间步长 —— Rapier 内部固定步长，此常量仅用于 main.ts 计算子步次数 */
 export const FIXED_TIME_STEP = 1 / 60
 /** 每帧最大物理子步数 */
 export const MAX_SUB_STEPS = 3
@@ -8,12 +8,8 @@ export const MAX_SUB_STEPS = 3
 export const MAX_DT = 0.033
 /** 地面 Y 坐标 */
 export const GROUND_Y = 0
-/** 箱子之间的摩擦系数 */
-export const BOX_BOX_FRICTION = 0.5
-/** 箱子与地面的摩擦系数 */
-export const BOX_GROUND_FRICTION = 0.3
 // --- 碰撞组 ---
-// cannon-es 用 bitmask 做碰撞过滤，broadphase 的 needBroadphaseCollision 检查：
+// Rapier setCollisionGroups(membership, filter) 使用与 cannon-es 相同的 bitmask 语义：
 //   (groupA & maskB) !== 0 && (groupB & maskA) !== 0 时才产生碰撞对。
 // 组 1 — 场景默认组（地面、common、destructed、其他 box）
 // 组 2 — 碎片（只与组 1、4 碰撞，碎片间不互撞）

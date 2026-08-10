@@ -1,6 +1,6 @@
 import {z} from 'zod'
 import type {Mesh} from 'three'
-import type {Body} from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type {EntityEmitter} from './event_emitter'
 import type {PanelContext} from '../ui'
 import {BoxSizeSchema, RigidBodyConfigSchema} from '../validation.ts'
@@ -25,7 +25,7 @@ export interface BaseEntity<TConfig> {
 }
 
 export interface HasBody {
-    body: Body
+    body: RAPIER.RigidBody
 }
 
 export interface EntityContext<TConfig, TEntity extends BaseEntity<TConfig>> {

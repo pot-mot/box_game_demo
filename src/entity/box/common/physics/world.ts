@@ -1,10 +1,5 @@
 import {type Scene} from 'three'
-import {
-    Body,
-    BODY_TYPES,
-    Box,
-    Vec3,
-} from 'cannon-es'
+import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {CommonBoxConfig, CommonBox, CommonEntityContext} from '../types'
@@ -16,21 +11,17 @@ import {findNonOverlappingY} from '../../base/physics'
 import {formatRowText, createCommonPanel} from '../ui'
 
 import {DEFAULT_COMMON_CONFIG} from '../validation.ts'
-import type {EntityType} from "../../../constants.ts";
-
-// ── 常量 ──
+import type {EntityType} from '../../../constants.ts'
 
 const TYPE: EntityType = 'box/common' as const
 const BADGE_LABEL = 'C'
 const BADGE_COLOR = '#448'
 
-// ── 初始化 ──
-
 export const setupCommonBoxes = (
     scene: Scene,
     shared: SharedWorld,
 ): CommonEntityContext => {
-    const {world, boxMat} = shared
+    const { world } = shared
 
     const boxes: CommonBox[] = []
     let nextId = 1
@@ -67,22 +58,25 @@ export const setupCommonBoxes = (
         const {mesh, edges} = createCommonBoxMesh(config)
         mesh.position.set(x, adjustedY, z)
         scene.add(mesh)
-        const body = new Body({
-            mass: config.mass,
-            type: config.mass === 0 ? BODY_TYPES.STATIC : BODY_TYPES.DYNAMIC,
-            material: boxMat,
-            collisionFilterGroup: DEFAULT_COLLISION_GROUP,
-            collisionFilterMask: DEFAULT_COLLISION_MASK,
-        })
-        body.addShape(new Box(new Vec3(hw, hh, hd)))
-        body.position.set(x, adjustedY, z)
+
+        const isStatic = config.mass === 0
+        const bodyDesc = isStatic
+            ? RAPIER.RigidBodyDesc.fixed()
+            : RAPIER.RigidBodyDesc.dynamic()
+        bodyDesc.setTranslation(x, adjustedY, z)
+        const body = world.createRigidBody(bodyDesc)
+
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(hw, hh, hd)
+            .setFriction(0.5)
+            .setCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK)
+        const colliderHandle = world.createCollider(colliderDesc, body).handle
+
         if (quat) {
-            body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+            body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
             mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         }
-        world.addBody(body)
         const emitter = createEmitter<EntityEventMap>()
-        const pb: CommonBox = {id, mesh, body, config: {...config}, edges, wireframe: undefined, emitter, rowText: ''}
+        const pb: CommonBox = {id, mesh, body, colliderHandle, config: {...config}, edges, wireframe: undefined, emitter, rowText: ''}
         refreshRowText(pb)
         emitter.on('infoUpdate', rebuildPanelInfo)
         boxes.push(pb)
@@ -99,16 +93,15 @@ export const setupCommonBoxes = (
         if (idx === -1) return
         const pb = boxes[idx]
         const wasSelected = selectedId === id
-        // 在清空选中状态前 emit，让监听器能拿到 wasSelected
         sourceEvents.emit('delete', id, wasSelected)
         if (wasSelected) select(undefined)
         cleanupWireframe(pb)
         scene.remove(pb.mesh)
         disposeCommonBoxMesh(pb)
-        world.removeBody(pb.body)
+        world.removeRigidBody(pb.body)
         boxes.splice(idx, 1)
         for (const b of boxes) {
-            if (b.body.type === BODY_TYPES.DYNAMIC) b.body.wakeUp()
+            if (b.body.bodyType() === RAPIER.RigidBodyType.Dynamic) b.body.wakeUp()
         }
         rebuildPanelInfo()
     }
@@ -153,14 +146,17 @@ export const setupCommonBoxes = (
         if (changedSize) {
             const hh = cfg.height / 2
             updateCommonBoxMeshSize(pb, cfg)
-            while (pb.body.shapes.length) pb.body.removeShape(pb.body.shapes[0])
-            pb.body.addShape(new Box(new Vec3(cfg.width / 2, hh, cfg.depth / 2)))
-            pb.body.updateMassProperties()
-            const oldBottom = pb.body.position.y - old.height / 2
-            const newBottom = pb.body.position.y - hh
+            world.removeCollider(pb.colliderHandle, true)
+            const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
+                .setFriction(0.5)
+                .setCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK)
+            pb.colliderHandle = world.createCollider(colliderDesc, pb.body).handle
+            const pos = pb.body.translation()
+            const oldBottom = pos.y - old.height / 2
+            const newBottom = pos.y - hh
             if (newBottom < oldBottom || newBottom < GROUND_Y) {
                 const target = Math.max(oldBottom, GROUND_Y)
-                pb.body.position.y = target + hh
+                pb.body.setTranslation({ x: pos.x, y: target + hh, z: pos.z }, true)
                 pb.mesh.position.y = target + hh
             }
             if (pb.wireframe) {
@@ -171,12 +167,9 @@ export const setupCommonBoxes = (
         }
         if (changedMass) {
             if (cfg.mass === 0) {
-                pb.body.type = BODY_TYPES.STATIC
-                pb.body.mass = 0
+                pb.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
-                pb.body.type = BODY_TYPES.DYNAMIC
-                pb.body.mass = cfg.mass
-                pb.body.updateMassProperties()
+                pb.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
                 pb.body.wakeUp()
             }
         }
@@ -192,10 +185,12 @@ export const setupCommonBoxes = (
         const pb = boxes.find(b => b.id === id)
         if (!pb) return
         pb.mesh.position.set(pos.x, pos.y, pos.z)
-        pb.body.position.set(pos.x, pos.y, pos.z)
+        pb.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true)
         pb.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
-        pb.body.quaternion.set(pb.mesh.quaternion.x, pb.mesh.quaternion.y, pb.mesh.quaternion.z, pb.mesh.quaternion.w)
-        if (pb.body.type === BODY_TYPES.DYNAMIC) pb.body.wakeUp()
+        pb.body.setRotation(
+            { x: pb.mesh.quaternion.x, y: pb.mesh.quaternion.y, z: pb.mesh.quaternion.z, w: pb.mesh.quaternion.w },
+            true,
+        )
         refreshRowText(pb)
     }
 
@@ -203,8 +198,10 @@ export const setupCommonBoxes = (
 
     const syncPositions = (): void => {
         for (const pb of boxes) {
-            pb.mesh.position.set(pb.body.position.x, pb.body.position.y, pb.body.position.z)
-            pb.mesh.quaternion.set(pb.body.quaternion.x, pb.body.quaternion.y, pb.body.quaternion.z, pb.body.quaternion.w)
+            const pos = pb.body.translation()
+            pb.mesh.position.set(pos.x, pos.y, pos.z)
+            const rot = pb.body.rotation()
+            pb.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
             pb.rowText = formatRowText(pb)
         }
         rebuildPanelInfo()

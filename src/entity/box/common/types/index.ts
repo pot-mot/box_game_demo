@@ -1,6 +1,6 @@
 import {z} from 'zod'
 import type {LineSegments} from 'three'
-import type {Body} from 'cannon-es'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type {BaseEntity, XYZ} from '../../base/types'
 import type {EntityInfoSource} from '../../base/types/entity_info'
 import {CommonBoxConfigSchema} from '../validation.ts'
@@ -9,7 +9,8 @@ export type CommonBoxConfig = z.infer<typeof CommonBoxConfigSchema>
 export {CommonBoxConfigSchema} from '../validation.ts'
 
 export interface CommonBox extends BaseEntity<CommonBoxConfig> {
-    body: Body
+    body: RAPIER.RigidBody
+    colliderHandle: number
     edges: LineSegments
     wireframe: LineSegments | undefined
 }
