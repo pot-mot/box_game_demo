@@ -7,9 +7,11 @@ import type {GameMode} from './modes/constants.ts'
 import type {SaveData} from './save_load/types.ts'
 import RAPIER from '@dimforge/rapier3d-compat'
 import {createRenderContext} from './render/setup.ts'
+import {createSharedWorld} from './physics/world.ts'
+import {clearAllForces} from './physics/rapier_utils.ts'
+import {createVelocitySnapshots} from './physics/velocity_snapshots.ts'
 import {setupInfiniteGrid} from './render/grid.ts'
 import {setupRefractionPass} from './render/refraction_pass.ts'
-import {createSharedWorld} from './physics/world.ts'
 import {createPhysicsEnv} from './physics/env.ts'
 import {setupCommonBoxes} from './entity/box/common/physics/world.ts'
 import {setupDestructibleBoxes} from './entity/box/destructed/physics/world.ts'
@@ -68,17 +70,26 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const shared = createSharedWorld()
     const physicsEnv = createPhysicsEnv()
 
+    /* 每个物理子步结束后清除所有刚体累积力：
+     * Rapier addForce 不会自动清除，本项目所有施力均为每帧瞬态语义。
+     * 注意：力是每帧施加一次（preSync/update），多子步帧里只在第一个子步生效
+     * （与 cannon-es 每内部步清力的语义一致，属有意取舍） */
+    shared.eventBus.onStepEnd(() => clearAllForces(shared.world))
+
+    /* 撞击前速度快照（单例）：destruction / elasticity 共用，每子步结束自动刷新 */
+    const velocitySnapshots = createVelocitySnapshots(shared.eventBus, () => physicsEnv.getAllBodies())
+
     // --- Entity 子系统（按依赖顺序初始化）---
     const fragments = setupFragmentEntities(scene, shared)
-    const terrainSource = setupTerrain(scene, shared)
+    const terrainSource = setupTerrain(scene, shared, () => physicsEnv.getAllBodies())
     const allTerrainSources: TerrainContext[] = [terrainSource]
     const characterSystem: CharacterEntitySystem = setupCharacterEntities(scene, shared)
     const common = setupCommonBoxes(scene, shared)
-    const destruction = setupDestructibleBoxes(scene, shared, fragments)
+    const destruction = setupDestructibleBoxes(scene, shared, fragments, velocitySnapshots)
     const water = setupWaterBlocks(scene, physicsEnv)
     const burning = setupBurningBoxes(scene, shared)
     const magnet = setupMagnetBoxes(scene, shared, physicsEnv)
-    const elastic = setupElasticBoxes(scene, shared)
+    const elastic = setupElasticBoxes(scene, shared, velocitySnapshots)
 
     // 注册 body provider
     physicsEnv.bodyProviders.push(
@@ -288,15 +299,16 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 const totalSteps = Math.min(Math.max(1, Math.ceil(delta / FIXED_TIME_STEP)), MAX_SUB_STEPS)
                 for (let s = 0; s < totalSteps; s++) {
                     shared.world.step(shared.eventQueue)
+                    /* 每个子步立即排空事件：autoDrain 会在下一步前清空队列，
+                     * 延迟到循环结束再排空会丢失非末子步的接触开始/结束事件 */
+                    shared.eventBus.drain()
                 }
-                /* 角色地面检测必须先于其他系统 drainCollisionEvents */
-                characterSystem.readGroundContacts()
                 for (const s of systems) s.preSync?.(delta, time)
                 for (const s of systems) s.syncPositions()
             } else if (stepActive) {
                 /* 逐帧步进：每帧精确推进 1 物理步 */
                 shared.world.step(shared.eventQueue)
-                characterSystem.readGroundContacts()
+                shared.eventBus.drain()
                 for (const s of systems) s.preSync?.(FIXED_TIME_STEP, time)
                 for (const s of systems) s.syncPositions()
                 editMode?.execute.consumeStep()

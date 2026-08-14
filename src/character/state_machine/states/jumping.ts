@@ -1,6 +1,6 @@
 import type {StateHandler} from '../types.ts'
-import {AIR_DAMPING, AIR_CONTROL_FACTOR} from '../constants.ts'
-import {shouldFall} from '../ground.ts'
+import {AIR_DAMPING, AIR_CONTROL_FACTOR, SLOPE_WALK_THRESHOLD, JUMP_LAND_MIN_TIME} from '../constants.ts'
+import {shouldFall, isSupportedOn} from '../ground.ts'
 
 export const jumpingHandler: StateHandler = {
     enter: (entity) => {
@@ -27,6 +27,29 @@ export const jumpingHandler: StateHandler = {
             guard: (_, entity) => {
                 const vy = entity.body.linvel().y
                 return vy <= 0 && Math.abs(vy) >= 0.05
+            },
+        },
+        {
+            /* 落地恢复支撑（下降段）→ 恢复行走：
+             * Rapier 接触结算后静止 vy≈0（|vy| < 0.05 无法触发上面的 falling 守卫），
+             * 必须显式检测支撑面，否则角色会永远卡在 jumping */
+            to: 'walking',
+            guard: (input, entity, ctx) => {
+                const vy = entity.body.linvel().y
+                return vy <= 0
+                    && ctx.stateTime >= JUMP_LAND_MIN_TIME
+                    && isSupportedOn(entity, SLOPE_WALK_THRESHOLD)
+                    && Math.hypot(input.dx, input.dz) > 0.001
+            },
+        },
+        {
+            /* 落地恢复支撑（下降段）→ 待机 */
+            to: 'idle',
+            guard: (_input, entity, ctx) => {
+                const vy = entity.body.linvel().y
+                return vy <= 0
+                    && ctx.stateTime >= JUMP_LAND_MIN_TIME
+                    && isSupportedOn(entity, SLOPE_WALK_THRESHOLD)
             },
         },
         {

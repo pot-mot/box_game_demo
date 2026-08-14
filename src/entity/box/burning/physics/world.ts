@@ -1,8 +1,8 @@
 import {type Scene, ShaderMaterial} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
-import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, GROUND_Y, GRAVITY} from '../../../../physics/constants.ts'
-import {createColliderForBody} from '../../../../physics/rapier_utils.ts'
+import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, GROUND_Y} from '../../../../physics/constants.ts'
+import {createColliderForBody, setBodyMass} from '../../../../physics/rapier_utils.ts'
 import type {BurningBoxConfig, BurningBox, BurningBoxAddOptions, BurningEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
@@ -77,8 +77,15 @@ export const setupBurningBoxes = (
 
         const colliderDesc = RAPIER.ColliderDesc.cuboid(hw, hh, hd)
             .setFriction(0.5)
+            /* 密度 0：质量完全由附加质量决定 */
+            .setDensity(0)
             .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
+        if (!isStatic) {
+            /* 质量 = config.mass（对齐 cannon-es master）：不设置则按密度 1 × 体积计算 */
+            setBodyMass(body, config.mass)
+        }
 
         if (quat) {
             body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
@@ -167,7 +174,10 @@ export const setupBurningBoxes = (
             world.removeCollider(pb.mainCollider, true)
             const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
                 .setFriction(0.5)
+                /* 密度 0：重建碰撞体不改变刚体质量 */
+                .setDensity(0)
                 .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+                .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
             const pos = pb.body.translation()
             const oldBottom = pos.y - old.height / 2
@@ -188,6 +198,8 @@ export const setupBurningBoxes = (
                 pb.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
                 pb.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
+                /* 同步真实质量（Rapier 的 setBodyType 不携带质量） */
+                setBodyMass(pb.body, cfg.mass)
                 pb.body.wakeUp()
             }
         }
@@ -236,10 +248,10 @@ export const setupBurningBoxes = (
             mat.uniforms.uTime.value += dt
 
             if (pb.body.bodyType() === RAPIER.RigidBodyType.Dynamic) {
-                const originalMass = pb.config.mass
-                const massDeficit = originalMass * pb.burnProgress * 0.8
-                pb.body.resetForces(true)
-                pb.body.addForce({x: 0, y: -massDeficit * GRAVITY, z: 0}, true)
+                /* 质量随燃烧递减（对齐 cannon-es master：mass = config.mass × (1 - burn × 0.8)）。
+                 * 直接改真实质量，替代迁移期的反力 hack */
+                const massScale = 1.0 - pb.burnProgress * 0.8
+                setBodyMass(pb.body, pb.config.mass * massScale)
             }
 
             updateParticles(

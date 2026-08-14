@@ -3,7 +3,8 @@ import {Vec3} from 'cannon-es'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
-import {createColliderForBody, quatVmult} from '../../../../physics/rapier_utils.ts'
+import {createColliderForBody, quatVmult, setBodyMass} from '../../../../physics/rapier_utils.ts'
+import type {VelocitySnapshots} from '../../../../physics/velocity_snapshots.ts'
 import type {DestructibleConfig, DestructibleBox, DestructionBoxAddOptions, DestructionEntityContext, CollisionRecord} from '../types'
 import type {FragmentEntityContext} from '../../../fragment/common/types'
 import type {XYZ} from '../../base/types'
@@ -39,13 +40,73 @@ export const setupDestructibleBoxes = (
     scene: Scene,
     shared: SharedWorld,
     fragmentCtx: FragmentEntityContext,
+    velocitySnapshots: VelocitySnapshots,
 ): DestructionEntityContext => {
-    const { world, eventQueue } = shared
+    const { world, eventBus } = shared
 
     const boxes: DestructibleBox[] = []
     let selectedId: number | undefined
     const panelInfo: EntityPanelInfo[] = []
     const sourceEvents = createEmitter<SourceEventMap>()
+
+    /**
+     * 碰撞事件即时处理（事件发生在刚体结算后的当前子步）：
+     * 用「上一子步」的速度快照计算冲击速度，避免读到撞击后的 ≈0 速度。
+     * 伤害扣除与碎裂仍延后到 preSync（updatePhysics）统一执行。
+     */
+    eventBus.subscribe((h1, h2, started) => {
+        if (!started) return
+        for (const pb of boxes) {
+            if (pb.destroyed) continue
+            if (pb.mainCollider.handle !== h1 && pb.mainCollider.handle !== h2) continue
+
+            const myHandle = pb.mainCollider.handle
+            const otherHandle = myHandle === h1 ? h2 : h1
+            const otherCollider = world.getCollider(otherHandle)
+            if (!otherCollider) continue
+            const otherBody = otherCollider.parent()
+            if (!otherBody) continue
+
+            const otherBodyHandle = otherBody.handle
+            if ((pb._cooldowns.get(otherBodyHandle) ?? 0) > 0) continue
+            pb._cooldowns.set(otherBodyHandle, COLLISION_COOLDOWN)
+
+            world.contactPair(pb.mainCollider, otherCollider, (manifold, flipped) => {
+                const n = manifold.normal()
+                /* manifold.normal() 指向接触对内部顺序的 collider1 → collider2；
+                 * flipped=true 表示内部顺序与查询参数相反，取反后得到
+                 * 「从本箱子指向对方」的确定性法线（存入存档，方向必须稳定） */
+                const normal = flipped
+                    ? [-n.x, -n.y, -n.z] as [number, number, number]
+                    : [n.x, n.y, n.z] as [number, number, number]
+
+                const solverPt = manifold.solverContactPoint(0)
+                const contactPoint: [number, number, number] = solverPt
+                    ? [solverPt.x, solverPt.y, solverPt.z]
+                    : [0, 0, 0]
+
+                const ourVel = velocitySnapshots.get(pb.body.handle) ?? pb.body.linvel()
+                const otherVel = velocitySnapshots.get(otherBodyHandle) ?? otherBody.linvel()
+                const relVel = Math.abs(
+                    (ourVel.x - otherVel.x) * normal[0] +
+                    (ourVel.y - otherVel.y) * normal[1] +
+                    (ourVel.z - otherVel.z) * normal[2],
+                )
+
+                const record: CollisionRecord = {
+                    contactPoint,
+                    normal,
+                    relativeVelocity: relVel,
+                }
+
+                pb._collisions.push(record)
+                pb._collisionHistory.push(record)
+                while (pb._collisionHistory.length > MAX_COLLISION_HISTORY) {
+                    pb._collisionHistory.shift()
+                }
+            })
+        }
+    })
 
     const rebuildPanelInfo = () => {
         panelInfo.length = 0
@@ -83,8 +144,15 @@ export const setupDestructibleBoxes = (
 
         const colliderDesc = RAPIER.ColliderDesc.cuboid(config.width / 2, halfH, config.depth / 2)
             .setFriction(0.5)
+            /* 密度 0：质量完全由附加质量决定 */
+            .setDensity(0)
             .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
+        if (!isStatic) {
+            /* 质量 = config.mass（对齐 cannon-es master）：不设置则按密度 1 × 体积计算 */
+            setBodyMass(body, config.mass)
+        }
 
         if (quat) {
             body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
@@ -180,7 +248,10 @@ export const setupDestructibleBoxes = (
             world.removeCollider(pb.mainCollider, true)
             const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
                 .setFriction(0.5)
+                /* 密度 0：重建碰撞体不改变刚体质量 */
+                .setDensity(0)
                 .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+                .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
             const pos = pb.body.translation()
             const oldBottom = pos.y - old.height / 2
@@ -201,6 +272,8 @@ export const setupDestructibleBoxes = (
                 pb.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
                 pb.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
+                /* 同步真实质量（Rapier 的 setBodyType 不携带质量） */
+                setBodyMass(pb.body, cfg.mass)
                 pb.body.wakeUp()
             }
         }
@@ -285,58 +358,6 @@ export const setupDestructibleBoxes = (
     }
 
     const updatePhysics = (dt: number): void => {
-        eventQueue.drainCollisionEvents((h1: number, h2: number, started: boolean) => {
-            if (!started) return
-
-            for (const pb of boxes) {
-                if (pb.destroyed) continue
-                if (pb.mainCollider.handle !== h1 && pb.mainCollider.handle !== h2) continue
-
-                const myHandle = pb.mainCollider.handle
-                const otherHandle = myHandle === h1 ? h2 : h1
-                const otherCollider = world.getCollider(otherHandle)
-                if (!otherCollider) continue
-                const otherBody = otherCollider.parent()
-                if (!otherBody) continue
-
-                const otherBodyHandle = otherBody.handle
-                if ((pb._cooldowns.get(otherBodyHandle) ?? 0) > 0) continue
-                pb._cooldowns.set(otherBodyHandle, COLLISION_COOLDOWN)
-
-                world.contactPair(pb.mainCollider, otherCollider, (manifold, _flipped) => {
-                    const n = manifold.normal()
-                    const normal = myHandle === h1
-                        ? [n.x, n.y, n.z] as [number, number, number]
-                        : [-n.x, -n.y, -n.z] as [number, number, number]
-
-                    const solverPt = manifold.solverContactPoint(0)
-                    const contactPoint: [number, number, number] = solverPt
-                        ? [solverPt.x, solverPt.y, solverPt.z]
-                        : [0, 0, 0]
-
-                    const ourVel = pb.body.linvel()
-                    const otherVel = otherBody.linvel()
-                    const relVel = Math.abs(
-                        (ourVel.x - otherVel.x) * normal[0] +
-                        (ourVel.y - otherVel.y) * normal[1] +
-                        (ourVel.z - otherVel.z) * normal[2],
-                    )
-
-                    const record: CollisionRecord = {
-                        contactPoint,
-                        normal,
-                        relativeVelocity: relVel,
-                    }
-
-                    pb._collisions.push(record)
-                    pb._collisionHistory.push(record)
-                    while (pb._collisionHistory.length > MAX_COLLISION_HISTORY) {
-                        pb._collisionHistory.shift()
-                    }
-                })
-            }
-        })
-
         for (let i = boxes.length - 1; i >= 0; i--) {
             const pb = boxes[i]
             if (pb.destroyed) continue

@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import {Mesh, MeshBasicMaterial, SphereGeometry, type Scene} from 'three'
 import {v3Set, v3Length, type RapVector3} from '../../../physics/rapier_utils.ts'
-import {createColliderForBody} from '../../../physics/rapier_utils.ts'
+import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
@@ -67,14 +67,16 @@ export const createRangedExecutor = (
                 spawnPos.z + direction.z * 0.5,
             )
             .setLinearDamping(0)
-        bodyDesc.setAdditionalMass(0.01)
         const body = world.createRigidBody(bodyDesc)
 
         const colliderDesc = RAPIER.ColliderDesc.ball(BULLET_SIZE)
             .setRestitution(0)
+            /* 密度 0：子弹质量 = 附加质量 0.01（对齐 cannon-es master） */
+            .setDensity(0)
             .setCollisionGroups((BULLET_COLLISION_GROUP << 16) | (BULLET_COLLISION_MASK & 0xFFFF))
             .setSensor(true)
         const collider = createColliderForBody(world, colliderDesc, body)
+        setBodyMass(body, 0.01)
 
         const hSpeed = speed * Math.cos(throwAngle)
         const vSpeed = speed * Math.sin(throwAngle)

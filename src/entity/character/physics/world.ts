@@ -1,7 +1,8 @@
 import {type Scene, type Mesh, type LineBasicMaterial} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
-import {createColliderForBody} from '../../../physics/rapier_utils.ts'
+import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
+import {createContactTracker, queryColliderContacts, type ContactTracker} from '../../../physics/contact_tracking.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig} from '../../../character/faction.ts'
@@ -79,8 +80,6 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
     update: (dt: number) => void
-    /** 预先排空碰撞事件 → 地面检测使用，必须在其他系统 preSync 前调用 */
-    readGroundContacts: () => void
     setAIEnabled: (enabled: boolean) => void
     activateAI: () => void
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
@@ -157,7 +156,7 @@ const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
 }
 
 export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): CharacterEntitySystem => {
-    const {world, eventQueue} = shared
+    const {world} = shared
     const characters: CharacterEntity[] = []
     const aiMap = new Map<number, AIContext>()
     const bodyCharMap = new Map<number, CharacterEntity>()
@@ -180,8 +179,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const events = createEmitter<{ delete: [id: number, wasSelected: boolean]; select: [id: number | undefined] }>()
     const panelInfos: EntityPanelInfo[] = []
 
-    /** 活跃接触对（从碰撞事件队列维护），供地面检测 / AI 推挤 / 分离使用 */
-    const activeContactPairs = new Map<string, {colliderAHandle: number; colliderBHandle: number}>()
+    /** 活跃接触对（从碰撞事件总线维护），供地面检测 / AI 推挤 / 分离使用 */
+    const contactTracker: ContactTracker = createContactTracker(shared.eventBus)
 
     const getCharacterByBody = (body: CharacterRigidBody): CharacterEntity | undefined => bodyCharMap.get(body.handle)
 
@@ -256,9 +255,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const bd = CHARACTER_BASE_SIZE.depth * config.scale
         const colliderDesc = RAPIER.ColliderDesc.cuboid(bw / 2, bh / 2, bd / 2)
             .setFriction(0)
+            /* 密度 0：质量完全由附加质量决定，与碰撞体尺寸（scale）解耦 */
+            .setDensity(0)
             .setCollisionGroups((CHARACTER_COLLISION_GROUP << 16) | (CHARACTER_COLLISION_MASK & 0xFFFF))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
+        /* 质量恒为 1（对齐 cannon-es master）：击退/磁力/浮力均按 mass=1 计算。
+         * 不设置的话 Rapier 按密度 1 × 体积（≈0.04）计算，击退冲量会被放大 25 倍 */
+        setBodyMass(body, 1)
 
         const id = nextId++
         const stateMachine = createCharacterStateMachine()
@@ -449,27 +453,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const setAIEnabled = (enabled: boolean): void => { aiEnabled = enabled }
 
-    const buildGroundContacts = (entity: CharacterEntity): GroundContactLike[] => {
-        const contacts: GroundContactLike[] = []
-        const myHandle = entity.mainCollider.handle
-        const myBodyHandle = entity.body.handle
-        for (const pair of activeContactPairs.values()) {
-            if (pair.colliderAHandle !== myHandle && pair.colliderBHandle !== myHandle) continue
-            const otherHandle = pair.colliderAHandle === myHandle ? pair.colliderBHandle : pair.colliderAHandle
-            const otherCollider = world.getCollider(otherHandle)
-            if (!otherCollider) continue
-            const contactShape = entity.mainCollider.contactCollider(otherCollider, 0.1)
-            if (!contactShape) continue
-            const otherBody = otherCollider.parent()
-            if (!otherBody) continue
-            contacts.push({
-                normal: { x: contactShape.normal1.x, y: contactShape.normal1.y, z: contactShape.normal1.z },
-                bodyAHandle: myBodyHandle,
-                bodyBHandle: otherBody.handle,
-            })
-        }
-        return contacts
-    }
+    const buildGroundContacts = (entity: CharacterEntity): GroundContactLike[] =>
+        queryColliderContacts(world, entity.mainCollider, contactTracker.pairsInvolving(entity.mainCollider.handle))
 
     const checkGround = (entity: CharacterEntity, dt: number): void => {
         const contacts = buildGroundContacts(entity)
@@ -483,30 +468,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.groundKeepTimer = next.groundKeepTimer
     }
 
-    /** 预先排空碰撞事件队列 —— 必须在其他系统的 preSync 之前调用，
-     *  否则 destruction/elastic 的 preSync 会先行 drainCollisionEvents，
-     *  导致角色地面检测永远没有接触数据 */
-    const readGroundContacts = (): void => {
-        eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
-            const key = handle1 < handle2 ? `${handle1}-${handle2}` : `${handle2}-${handle1}`
-            if (started) {
-                activeContactPairs.set(key, { colliderAHandle: handle1, colliderBHandle: handle2 })
-            } else {
-                activeContactPairs.delete(key)
-            }
-        })
-    }
-
     const update = (dt: number): void => {
-        /* 同步碰撞事件 → 维护 activeContactPairs（已移至 readGroundContacts，此处保留兜底） */
-        eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
-            const key = handle1 < handle2 ? `${handle1}-${handle2}` : `${handle2}-${handle1}`
-            if (started) {
-                activeContactPairs.set(key, { colliderAHandle: handle1, colliderBHandle: handle2 })
-            } else {
-                activeContactPairs.delete(key)
-            }
-        })
+        /* 清理失效接触对（销毁的实体不会产生 stopped 事件） */
+        contactTracker.prune(world)
 
         for (const entity of characters) {
             if (entity.combat.isDead) continue
@@ -527,7 +491,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     let finalDZ = dz
                     if (dx !== 0 || dz !== 0) {
                         const myHandle = entity.mainCollider.handle
-                        for (const pair of activeContactPairs.values()) {
+                        for (const pair of contactTracker.pairs.values()) {
                             if (pair.colliderAHandle !== myHandle && pair.colliderBHandle !== myHandle) continue
                             const otherHandle = pair.colliderAHandle === myHandle ? pair.colliderBHandle : pair.colliderAHandle
                             const otherCollider = world.getCollider(otherHandle)
@@ -662,9 +626,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
         }
 
-        /* 强制水平分离重叠的角色 — 遍历 activeContactPairs 兜底防止卡死 */
+        /* 强制水平分离重叠的角色 — 遍历活跃接触对兜底防止卡死 */
         const separated = new Set<string>()
-        for (const pair of activeContactPairs.values()) {
+        for (const pair of contactTracker.pairs.values()) {
             const colliderA = world.getCollider(pair.colliderAHandle)
             const colliderB = world.getCollider(pair.colliderBHandle)
             if (!colliderA || !colliderB) continue
@@ -829,9 +793,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const bd = CHARACTER_BASE_SIZE.depth * entity.config.scale
             const colliderDesc = RAPIER.ColliderDesc.cuboid(bw / 2, bh / 2, bd / 2)
                 .setFriction(0)
+                /* 密度 0：重建碰撞体不改变刚体质量（恒为 1） */
+                .setDensity(0)
                 .setCollisionGroups((CHARACTER_COLLISION_GROUP << 16) | (CHARACTER_COLLISION_MASK & 0xFFFF))
                 .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             entity.mainCollider = createColliderForBody(world, colliderDesc, entity.body)
+            /* 重建后刷新总质量（碰撞体密度 0，质量仍为 1） */
+            setBodyMass(entity.body, 1)
             entity.body.wakeUp()
 
             updateCharacterMesh(entity.mesh, entity.config.scale)
@@ -935,7 +903,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         getEntityList,
         getAll,
         spawnAt,
-        readGroundContacts,
         syncPositions,
         markPlayer,
         unmarkPlayer,

@@ -33,6 +33,33 @@ export const createColliderForBody = (
     return world.createCollider(desc)
 }
 
+/**
+ * 设置刚体精确质量。
+ * 陷阱（rapier3d-compat 0.20.0）：RigidBodyDesc.setAdditionalMass 无效
+ * （desc 上的 mass/massOnly 不被 wasm 采纳，实测被忽略）；
+ * 运行期 setAdditionalMass 后 mass() 读取的仍是旧值，必须显式调用
+ * recomputeMassPropertiesFromColliders() 才会把「碰撞体密度质量 + 附加质量」刷新。
+ * 本项目所有碰撞体设 density 0，质量完全由此函数的附加质量决定。
+ */
+export const setBodyMass = (body: RAPIER.RigidBody, mass: number, wakeUp = true): void => {
+    body.setAdditionalMass(mass, wakeUp)
+    body.recomputeMassPropertiesFromColliders()
+}
+
+/**
+ * 清除所有刚体的累积力（每个物理子步结束后调用一次）。
+ * 陷阱：Rapier 的 addForce 不会在 step 结算后自动清除，力会无限期残留
+ * （实测：静止角色离地后反重力力仍持续抵消重力，导致角色永远不下落；
+ * 磁力/浮力每帧累加会爆炸）。本项目的施力语义全部是「每帧瞬态」，
+ * 因此统一在子步结束后清零，由各系统在下一帧重新施加。
+ * 注意：resetForces 只清力不清力矩（torque），若未来使用 addTorque 需在此补 resetTorques。
+ */
+export const clearAllForces = (world: RAPIER.World): void => {
+    world.bodies.forEach((body) => {
+        body.resetForces(false)
+    })
+}
+
 // ── 构造 ──
 
 export const v3 = (x: number, y: number, z: number): RapVector3 => ({ x, y, z })

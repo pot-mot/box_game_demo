@@ -1,4 +1,5 @@
 import {type Scene} from 'three'
+import type RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import type {EntityInfoSource} from '../../../box/base/types/entity_info.ts'
 import type {TerrainContext} from '../../base/types'
@@ -27,12 +28,17 @@ export const GENERATOR_OPTIONS: {id: string; label: string}[] = [
     {id: 'steps', label: '阶梯'},
 ]
 
-export const setupTerrain = (scene: Scene, shared: SharedWorld): TerrainContext & EntityInfoSource => {
+export const setupTerrain = (
+    scene: Scene,
+    shared: SharedWorld,
+    getDynamicBodies: () => readonly RAPIER.RigidBody[],
+): TerrainContext & EntityInfoSource => {
     const ctxWithoutPanel = createTerrainContextImpl(scene, shared, {
         type: TYPE,
         badgeLabel: BADGE_LABEL,
         badgeColor: BADGE_COLOR,
         generators: GENERATORS,
+        getDynamicBodies,
     })
     return {
         ...ctxWithoutPanel,

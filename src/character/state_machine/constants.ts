@@ -14,6 +14,9 @@ export const SLOPE_WALK_THRESHOLD = 0.06
 export const SLOPE_RECOVER_THRESHOLD = 0.08
 /** 郊狼时间：脱离地面后仍判定为着地的宽限期（秒），覆盖下坡弹跳的短暂悬空，防止误触发 falling */
 export const GROUND_KEEP_TIME = 0.3
+/** 跳跃落地判定最短滞空时间（秒）：落地恢复支撑且处于下降段后才允许退出 jumping，
+ *  防止起跳瞬间的支撑面（coyote 宽限）误触发落地转换 */
+export const JUMP_LAND_MIN_TIME = 0.15
 /** 宽限期内向支撑面吸附的速率（m/s）：弹跳悬空时快速落回坡面 */
 export const SLOPE_SINK_SPEED = 3
 /** falling 状态沿支撑面滑动的法线 Y 下限（0.3 → 约 72°；低于此的贴墙接触不投影，保留重力下落） */

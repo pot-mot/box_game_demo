@@ -1,6 +1,6 @@
 import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
-import {createColliderForBody} from '../../../../physics/rapier_utils.ts'
+import {createColliderForBody, setBodyMass} from '../../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {FRAGMENT_COLLISION_GROUP, FRAGMENT_COLLISION_MASK} from '../../../../physics/constants.ts'
 import type {FragmentConfig, Fragment, FragmentEntityContext} from '../types'
@@ -74,13 +74,17 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
             )
             .setRotation(quat)
             .setCanSleep(true)
-        bodyDesc.setAdditionalMass(Math.max(cfg.mass, 0.01))
         const body = world.createRigidBody(bodyDesc)
 
         const colliderDesc = RAPIER.ColliderDesc.convexHull(flatVerts)!
         const mainCollider = createColliderForBody(world, colliderDesc
             .setFriction(0.5)
-            .setCollisionGroups((FRAGMENT_COLLISION_GROUP << 16) | (FRAGMENT_COLLISION_MASK & 0xFFFF)), body)
+            /* 密度 0：质量完全由附加质量决定 */
+            .setDensity(0)
+            .setCollisionGroups((FRAGMENT_COLLISION_GROUP << 16) | (FRAGMENT_COLLISION_MASK & 0xFFFF))
+            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS), body)
+        /* 碎片质量 = config.mass（对齐 cannon-es master） */
+        setBodyMass(body, Math.max(cfg.mass, 0.01))
 
         mesh.position.set(body.translation().x, body.translation().y, body.translation().z)
         const rot = body.rotation()
@@ -166,7 +170,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
                 f.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
                 f.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
-                f.body.setAdditionalMass(cfg.mass, true)
+                setBodyMass(f.body, cfg.mass)
                 f.body.wakeUp()
             }
         }

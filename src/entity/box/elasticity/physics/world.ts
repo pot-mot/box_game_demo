@@ -2,7 +2,8 @@ import {type Scene} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
-import {createColliderForBody, quatVmult} from '../../../../physics/rapier_utils.ts'
+import {createColliderForBody, quatVmult, setBodyMass} from '../../../../physics/rapier_utils.ts'
+import type {VelocitySnapshots} from '../../../../physics/velocity_snapshots.ts'
 import type {ElasticBoxConfig, ElasticBox, ElasticBoxAddOptions, ElasticEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../base/types/event_emitter'
@@ -30,14 +31,64 @@ const BADGE_COLOR = '#6b8'
 export const setupElasticBoxes = (
     scene: Scene,
     shared: SharedWorld,
+    velocitySnapshots: VelocitySnapshots,
 ): ElasticEntityContext => {
-    const { world, eventQueue } = shared
+    const { world, eventBus } = shared
 
     const boxes: ElasticBox[] = []
     let nextId = 1
     let selectedId: number | undefined
     const panelInfo: EntityPanelInfo[] = []
     const sourceEvents = createEmitter<SourceEventMap>()
+
+    /** 碰撞事件即时处理：用撞击前速度计算形变冲量（弹簧积分仍留在 preSync） */
+    eventBus.subscribe((h1, h2, started) => {
+        if (!started) return
+
+        for (const pb of boxes) {
+            if (pb.config.mass === 0) continue
+            if (pb.mainCollider.handle !== h1 && pb.mainCollider.handle !== h2) continue
+
+            const myHandle = pb.mainCollider.handle
+            const otherHandle = myHandle === h1 ? h2 : h1
+            const otherCollider = world.getCollider(otherHandle)
+            if (!otherCollider) continue
+            const otherBody = otherCollider.parent()
+            if (!otherBody) continue
+
+            const otherBodyHandle = otherBody.handle
+            if ((pb.cooldowns.get(otherBodyHandle) ?? 0) > 0) continue
+            pb.cooldowns.set(otherBodyHandle, COLLISION_COOLDOWN)
+
+            world.contactPair(pb.mainCollider, otherCollider, (manifold, flipped) => {
+                const n = manifold.normal()
+                /* manifold.normal() 指向接触对内部顺序的 collider1 → collider2；
+                 * flipped=true 表示内部顺序与查询参数相反，取反后得到
+                 * 「从本箱子指向对方」的确定性法线 */
+                const normal = flipped
+                    ? { x: -n.x, y: -n.y, z: -n.z }
+                    : { x: n.x, y: n.y, z: n.z }
+
+                const ourVel = velocitySnapshots.get(pb.body.handle) ?? pb.body.linvel()
+                const otherVel = velocitySnapshots.get(otherBodyHandle) ?? otherBody.linvel()
+                const relVel = Math.abs(
+                    (ourVel.x - otherVel.x) * normal.x +
+                    (ourVel.y - otherVel.y) * normal.y +
+                    (ourVel.z - otherVel.z) * normal.z,
+                )
+                const impulse = relVel * IMPACT_DEFORM_SCALE
+
+                const rot = pb.body.rotation()
+                const invRot = { x: -rot.x, y: -rot.y, z: -rot.z, w: rot.w }
+                const localN = { x: 0, y: 0, z: 0 }
+                quatVmult(localN, invRot, normal)
+                const absN = [Math.abs(localN.x), Math.abs(localN.y), Math.abs(localN.z)]
+                const axis = absN.indexOf(Math.max(...absN))
+
+                pb.vel[axis] -= impulse
+            })
+        }
+    })
 
     const rebuildPanelInfo = () => {
         panelInfo.length = 0
@@ -100,8 +151,15 @@ export const setupElasticBoxes = (
 
         const colliderDesc = RAPIER.ColliderDesc.cuboid(hw, hh, hd)
             .setFriction(0.5)
+            /* 密度 0：质量完全由附加质量决定 */
+            .setDensity(0)
             .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
+        if (!isStatic) {
+            /* 质量 = config.mass（对齐 cannon-es master）：不设置则按密度 1 × 体积计算 */
+            setBodyMass(body, config.mass)
+        }
 
         if (quat) {
             body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, false)
@@ -193,7 +251,10 @@ export const setupElasticBoxes = (
             world.removeCollider(pb.mainCollider, true)
             const colliderDesc = RAPIER.ColliderDesc.cuboid(cfg.width / 2, hh, cfg.depth / 2)
                 .setFriction(0.5)
+                /* 密度 0：重建碰撞体不改变刚体质量 */
+                .setDensity(0)
                 .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+                .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
             const pos = pb.body.translation()
             const oldBottom = pos.y - oldHh
@@ -214,6 +275,8 @@ export const setupElasticBoxes = (
                 pb.body.setBodyType(RAPIER.RigidBodyType.Fixed, true)
             } else {
                 pb.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true)
+                /* 同步真实质量（Rapier 的 setBodyType 不携带质量） */
+                setBodyMass(pb.body, cfg.mass)
                 pb.body.wakeUp()
             }
         }
@@ -242,51 +305,6 @@ export const setupElasticBoxes = (
     // ── 弹性形变更新（preSync） ──
 
     const updateDeformation = (dt: number): void => {
-        eventQueue.drainCollisionEvents((h1: number, h2: number, started: boolean) => {
-            if (!started) return
-
-            for (const pb of boxes) {
-                if (pb.config.mass === 0) continue
-                if (pb.mainCollider.handle !== h1 && pb.mainCollider.handle !== h2) continue
-
-                const myHandle = pb.mainCollider.handle
-                const otherHandle = myHandle === h1 ? h2 : h1
-                const otherCollider = world.getCollider(otherHandle)
-                if (!otherCollider) continue
-                const otherBody = otherCollider.parent()
-                if (!otherBody) continue
-
-                const otherBodyHandle = otherBody.handle
-                if ((pb.cooldowns.get(otherBodyHandle) ?? 0) > 0) continue
-                pb.cooldowns.set(otherBodyHandle, COLLISION_COOLDOWN)
-
-                world.contactPair(pb.mainCollider, otherCollider, (manifold, _flipped) => {
-                    const n = manifold.normal()
-                    const normal = myHandle === h1
-                        ? { x: n.x, y: n.y, z: n.z }
-                        : { x: -n.x, y: -n.y, z: -n.z }
-
-                    const ourVel = pb.body.linvel()
-                    const otherVel = otherBody.linvel()
-                    const relVel = Math.abs(
-                        (ourVel.x - otherVel.x) * normal.x +
-                        (ourVel.y - otherVel.y) * normal.y +
-                        (ourVel.z - otherVel.z) * normal.z,
-                    )
-                    const impulse = relVel * IMPACT_DEFORM_SCALE
-
-                    const rot = pb.body.rotation()
-                    const invRot = { x: -rot.x, y: -rot.y, z: -rot.z, w: rot.w }
-                    const localN = { x: 0, y: 0, z: 0 }
-                    quatVmult(localN, invRot, normal)
-                    const absN = [Math.abs(localN.x), Math.abs(localN.y), Math.abs(localN.z)]
-                    const axis = absN.indexOf(Math.max(...absN))
-
-                    pb.vel[axis] -= impulse
-                })
-            }
-        })
-
         for (const pb of boxes) {
             if (pb.config.mass === 0) continue
 

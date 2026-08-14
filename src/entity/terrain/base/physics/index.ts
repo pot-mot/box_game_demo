@@ -97,6 +97,7 @@ export const createTerrainContextImpl = (
         const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indices)
             .setFriction(0.5)
             .setCollisionGroups((TERRAIN_COLLISION_GROUP << 16) | (TERRAIN_COLLISION_MASK & 0xFFFF))
+            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
 
         const entity: BaseTerrainEntity = {
@@ -255,6 +256,7 @@ export const createTerrainContextImpl = (
         const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indices)
             .setFriction(0.5)
             .setCollisionGroups((TERRAIN_COLLISION_GROUP << 16) | (TERRAIN_COLLISION_MASK & 0xFFFF))
+            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         t.mainCollider = createColliderForBody(world, colliderDesc, t.body)
 
         rebuildTerrainMesh(t, t.heights, t.config)
@@ -281,7 +283,18 @@ export const createTerrainContextImpl = (
             const zi = Math.round((lz + half) / cs)
             if (xi < 0 || xi >= gs || zi < 0 || zi >= gs) continue
             const terrainY = terTrans.y + t.heights[xi][zi]
+            /* 用碰撞体形状半长估算物体底部高度（Box 读 halfExtents，Sphere 读 radius，
+             * 其余形状回退 0.5 —— 当前项目只有 Box/Sphere/Trimesh 动态体） */
             let halfH = 0.5
+            const firstCollider = b.collider(0)
+            if (firstCollider) {
+                const shape = firstCollider.shape
+                if (shape instanceof RAPIER.Cuboid) {
+                    halfH = shape.halfExtents.y
+                } else if (shape instanceof RAPIER.Ball) {
+                    halfH = shape.radius
+                }
+            }
             const bottom = bTrans.y - halfH
             if (bottom < terrainY) {
                 b.setTranslation({x: bTrans.x, y: terrainY + halfH, z: bTrans.z}, true)
