@@ -224,3 +224,18 @@ body.setAngvel({
 3. 破坏箱子 → 受击碎裂为碎片
 4. 磁力箱子 → 吸引周围箱子
 5. 水 → 箱子在水中浮起、减速
+
+---
+
+## 最终实现（2026-08 修复后）
+
+初版让各系统在 preSync 里 drain 共享队列，实践中失败（单消费者争抢 + 只吃到最后一次事件），
+且 box↔box / box↔ground 的碰撞事件根本不会产生（只有角色碰撞体启用了 ActiveEvents）。修复要点：
+
+1. 所有主碰撞体（common/destruction/burning/magnet/elasticity/fragment/terrain/ground）
+   都启用 `setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)`。
+2. destruction / elasticity 改为订阅 `eventBus` **即时**处理撞击事件：
+   - 撞击强度用「上一子步」的 `VelocitySnapshots` 计算 —— Rapier 在接触开始的同一子步内
+     完成冲量求解，事件回调里读到的 linvel 已是撞击后的 ≈0 速度；
+   - 伤害结算/碎裂（destruction）与弹簧积分（elasticity）仍留在 preSync 按帧推进。
+3. 实测回归：mass 5 的箱子从 2.5m 砸向 mass 5 的 destruction 箱 → 正确碎裂为碎片。

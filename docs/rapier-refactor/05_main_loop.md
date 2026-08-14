@@ -54,27 +54,33 @@ const totalSteps = Math.min(
     Math.max(1, Math.ceil(delta / FIXED_TIME_STEP)),
     MAX_SUB_STEPS,
 )
-const subDt = delta / totalSteps
 for (let i = 0; i < totalSteps; i++) {
     shared.world.step(shared.eventQueue)
+    shared.eventBus.drain()   // ★ 每个子步立即排空并广播事件
 }
 
 // 模式 B：单步执行
 shared.world.step(shared.eventQueue)
+shared.eventBus.drain()
 ```
 
 **关键差异：** Rapier 的 `world.step()` 不接受 `dt` 参数，总使用内固定步长（默认 ~1/60s）。手动子步循环模拟 cannon-es 的 `maxSubSteps` 行为。
 
+**★ 必须在每个子步后立即 `eventBus.drain()`：** `EventQueue(autoDrain=true)` 在每次
+`step` 前自动清空队列，若拖到循环结束再排空，只有最后一个子步的事件能存活，
+落地等接触开始事件会随机丢失（地面检测时灵时不灵）。排空后事件广播给所有订阅者，
+并触发 `onStepEnd` 钩子（速度快照刷新 + `clearAllForces` 清力）。
+
 ### 4. preSync 调用
 
 ```diff
-  for (const system of systems) {
--     system.preSync?.(dt, time)
-+     system.preSync?.(dt, time, shared.eventQueue)
-  }
+   for (const system of systems) {
+       system.preSync?.(dt, time)
+   }
 ```
 
-弹性箱子、可破坏箱子从 `eventQueue` 中排空碰撞事件。
+弹性箱子、可破坏箱子的**撞击检测**已移到事件总线订阅中即时处理（需要撞击前速度），
+preSync 只保留按帧推进的逻辑（伤害结算/碎裂、弹簧积分）。
 
 ### 5. 所有 `FIXED_TIME_STEP` 引用保持不变
 

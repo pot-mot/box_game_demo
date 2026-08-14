@@ -294,3 +294,32 @@ Rapier 的 `eventQueue.drainCollisionEvents` 只在碰撞**开始或结束**时�
 - 在斜坡上不滑落（反重力生效）
 - 靠近悬崖边时 coyote time 允许起跳
 - 两个角色靠近时互相排斥
+
+---
+
+## 最终实现（2026-08 修复后）
+
+文档初版建议各系统直接 drain 共享队列，实践后改为事件总线架构，要点：
+
+- `main.ts` 每个子步后立即 `eventBus.drain()`（见 05_main_loop.md），杜绝 autoDrain 丢事件与系统间争抢。
+- `ContactTracker`（`src/physics/contact_tracking.ts`）订阅总线维护活跃接触对（started 加入 / stopped 移除），
+  角色地面检测 / AI 推挤阻断 / 角色间分离共用同一份集合。
+- 地面接触查询 `queryColliderContacts`：对每个活跃接触对调用 `collider.contactCollider(other, 0.1)`，
+  取 `normal1`（指向查询碰撞体外侧 = 从角色指向对方），配合 `resolveGroundState` 的 flip 语义
+  还原 cannon-es `contact.ni`（bi → bj）行为。
+- 角色碰撞体启用 `ActiveEvents.COLLISION_EVENTS` 保证「角色↔任意物体」的接触事件必然产生。
+- 分离逻辑仍在 character `update()` 中按帧执行（镜像 master 的 world.contacts 遍历）。
+
+已知物理伪影：Rapier Trimesh 对轴对齐盒存在棱-棱伪造法线，60° 以上陡坡会出现单帧法线突变
+（表现为速度尖峰/亚毫米振动），多数投票未能完全抑制，后续可在投票层加历史一致性过滤。
+
+### 角色跳跃落地修复
+
+Rapier 接触结算后静止 vy≈0，`jumping → falling` 的 `|vy| >= 0.05` 守卫不再必然命中。
+`jumping.ts` 增加落地守卫（`stateTime >= JUMP_LAND_MIN_TIME && vy <= 0 && isSupportedOn`），
+分别转入 `walking`（有输入）与 `idle`（无输入）。
+
+### 测试
+
+- 完整地面检测 / 斜坡 / 挤压弹射测试已从 master 恢复（`slope.test.ts`、`slope_walk_matrix.test.ts`、
+  `squeeze_eject.test.ts`），测试 harness 位于 `src/entity/character/physics/harness.ts`。
