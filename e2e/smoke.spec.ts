@@ -10,7 +10,7 @@ test.describe('页面加载', () => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         // 进入编辑模式触发 Three.js 渲染
-        const editBtn = page.locator('#startup-buttons button', {hasText: '编辑模式'})
+        const editBtn = page.locator('button', {hasText: '编辑模式'})
         await editBtn.click()
         await page.waitForTimeout(500)
         // 在支持 WebGL 的浏览器中 canvas 应该存在
@@ -33,7 +33,7 @@ test.describe('启动画面交互', () => {
     test('点击 "编辑模式" 按钮进入编辑模式', async ({page}) => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
-        const editBtn = page.locator('#startup-buttons button', {hasText: '编辑模式'})
+        const editBtn = page.locator('button', {hasText: '编辑模式'})
         await expect(editBtn).toBeVisible()
         await editBtn.click()
         // 点击后启动画面应该消失
@@ -47,7 +47,7 @@ test.describe('启动画面交互', () => {
     test('点击 "游玩模式" 按钮进入游玩模式', async ({page}) => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
-        const playBtn = page.locator('#startup-buttons button', {hasText: '游玩模式'})
+        const playBtn = page.locator('button', {hasText: '游玩模式'})
         await expect(playBtn).toBeVisible()
         await playBtn.click()
         await page.waitForSelector('#startup-overlay', {state: 'hidden', timeout: 5000}).catch(() => {})
@@ -60,7 +60,7 @@ test.describe('设置面板', () => {
         await page.goto('/')
         // 先进入编辑模式
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
-        const editBtn = page.locator('#startup-buttons button', {hasText: '编辑模式'})
+        const editBtn = page.locator('button', {hasText: '编辑模式'})
         await editBtn.click()
         await page.waitForTimeout(500)
 
@@ -80,7 +80,7 @@ test.describe('快捷键存档', () => {
     test('Ctrl+S 不触发浏览器保存对话框（存档下载）', async ({page}) => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
-        const editBtn = page.locator('#startup-buttons button', {hasText: '编辑模式'})
+        const editBtn = page.locator('button', {hasText: '编辑模式'})
         await editBtn.click()
         await page.waitForTimeout(500)
 

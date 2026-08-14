@@ -140,4 +140,14 @@ describe('角色 panelInfo 同步', () => {
         system.remove(id)
         expect(system.panelInfo.find(p => p.id === id)).toBeUndefined()
     })
+
+    it('角色刚体质量恒为 1（击退力度回归保护），修改 scale 不影响质量', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)
+        expect(entity).toBeDefined()
+        expect(entity!.body.mass()).toBeCloseTo(1, 6)
+        /* 重建碰撞体（scale 变化）后质量仍为 1 */
+        system.updateCharacterConfig(id, {scale: 2})
+        expect(entity!.body.mass()).toBeCloseTo(1, 6)
+    })
 })

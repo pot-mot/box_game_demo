@@ -7,6 +7,7 @@ export const setupSettingsPanel = (
     toggleBindings: () => void,
 ): void => {
     const btn = document.createElement('button')
+    btn.id = 'settings-btn'
     btn.style.cssText = [
         'position:fixed;top:16px;right:16px;z-index:200',
         'width:40px;height:40px',
@@ -21,6 +22,7 @@ export const setupSettingsPanel = (
     document.body.appendChild(btn)
 
     const menu = document.createElement('div')
+    menu.id = 'settings-menu'
     menu.style.cssText = [
         'position:fixed;top:64px;right:16px;z-index:200',
         'display:none;min-width:180px',

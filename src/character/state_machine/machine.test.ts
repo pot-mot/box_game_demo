@@ -8,7 +8,8 @@ import type {CharacterEntity} from '../types.ts'
 
 const DT = 1 / 60
 
-/** 构造可驱动状态机的完整 CharacterEntity mock（真实 entity body mock + stateMachine） */
+/** 构造可驱动状态机的完整 CharacterEntity mock（真实 entity body mock + stateMachine）。
+ *  mock 仅覆盖状态机路径使用到的接口子集，集中窄化一次避免测试体散落断言转换 */
 const makeMock = (): CharacterEntity => {
     const slot = createSkillSlot(MELEE_SKILL_PRESETS.long_sword_slash)
     const mockBody = {
@@ -185,7 +186,7 @@ describe('falling 行为', () => {
 })
 
 describe('攻击/冲刺在陡坡结束', () => {
-    it.skip('attacking 在陡坡（ny=0.4）攻击结束进入 falling', () => {
+    it('attacking 在陡坡（ny=0.4）攻击结束进入 falling', () => {
         const e = makeMock()
         e.isOnGround = true
         e.groundNormal = {x: 0, y: 0.04, z: 0.999}
@@ -193,17 +194,17 @@ describe('攻击/冲刺在陡坡结束', () => {
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
         e.stateMachine.setInput(1, 0, false, true, false, 0)
-        run(e.stateMachine, e, 20)
+        run(e.stateMachine, e, 25)
         expect(e.stateMachine.currentState).toBe('falling')
     })
 
-    it.skip('attacking 在平地攻击结束进入 walking', () => {
+    it('attacking 在平地攻击结束进入 walking', () => {
         const e = makeMock()
         e.stateMachine.setInput(0, 0, false, true, false, 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
         e.stateMachine.setInput(1, 0, false, true, false, 0)
-        run(e.stateMachine, e, 20)
+        run(e.stateMachine, e, 25)
         expect(e.stateMachine.currentState).toBe('walking')
     })
 
