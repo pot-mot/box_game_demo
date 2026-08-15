@@ -72,6 +72,7 @@ const makeJoint = (): Group => new Group()
 
 const makeModelMock = (): CharacterModel => ({
     group: new Group(),
+    spine: new Group(),
     headNeck: makeJoint(),
     head: new Mesh(),
     body: new Mesh(),
@@ -80,6 +81,7 @@ const makeModelMock = (): CharacterModel => ({
     rightArmElbow: makeJoint(),
     rightForearm: new Mesh(),
     rightHandPivot: new Group(),
+    rightWristPivot: new Group(),
     leftArmShoulder: makeJoint(),
     leftUpperArm: new Mesh(),
     leftArmElbow: makeJoint(),
@@ -96,6 +98,8 @@ const makeModelMock = (): CharacterModel => ({
     equipWeapon: () => {},
     removeWeapon: () => {},
     weaponMesh: null,
+    weaponTip: null,
+    weaponGripTilt: 0,
     recolor: () => {},
     dispose: () => {},
 })
@@ -215,6 +219,9 @@ describe('郊狼过程动画与摄像机平滑', () => {
                     attackPhase: undefined,
                     attackPhaseProgress: 0,
                     attackTotalProgress: 0,
+                    attackPhases: undefined,
+                    attackPhaseIndex: 0,
+                    weaponHeld: false,
                 })
                 if (state !== prevState) {
                     smoothedSpeed = hSpeed
