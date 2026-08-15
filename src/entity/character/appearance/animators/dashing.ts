@@ -20,7 +20,7 @@ export const dashingAnim: AnimationHandler = {
         model.rightLegKnee.rotation.x = 0.05
         model.leftLegKnee.rotation.x = 0.05
 
-        model.body.rotation.x = -0.15
+        model.spine.rotation.x = -0.15
         model.rightArmShoulder.rotation.x = -0.5
         model.leftArmShoulder.rotation.x = -0.5
         model.rightArmElbow.rotation.x = -0.3
@@ -38,7 +38,7 @@ export const dashingAnim: AnimationHandler = {
         model.leftArmShoulder.rotation.set(0, 0, 0)
         model.rightArmElbow.rotation.set(0, 0, 0)
         model.leftArmElbow.rotation.set(0, 0, 0)
-        model.body.rotation.set(0, 0, 0)
+        model.spine.rotation.set(0, 0, 0)
         model.headNeck.rotation.set(0, 0, 0)
     },
 }

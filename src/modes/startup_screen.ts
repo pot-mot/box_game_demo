@@ -6,7 +6,7 @@ export interface StartupHandlers {
     onStart: (mode: GameMode, saveData?: SaveData) => void
 }
 
-/** 创建启动界面：标题 + 双模式按钮 + 导入存档 */
+/** 创建启动界面：标题 + 三模式按钮 + 导入存档 */
 export const setupStartupScreen = (handlers: StartupHandlers): void => {
     const overlay = document.createElement('div')
     overlay.id = 'startup-overlay'
@@ -49,6 +49,9 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     const playBtn = makeBtn('游玩模式', ';background:#1a3a5c;border-color:#2a6a9c')
     btnRow.appendChild(playBtn)
+
+    const showcaseBtn = makeBtn('展示模式')
+    btnRow.appendChild(showcaseBtn)
 
     // 导入存档
     const importRow = document.createElement('div')
@@ -136,4 +139,5 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     editBtn.addEventListener('click', () => dismiss('edit'))
     playBtn.addEventListener('click', () => dismiss('play'))
+    showcaseBtn.addEventListener('click', () => dismiss('showcase'))
 }

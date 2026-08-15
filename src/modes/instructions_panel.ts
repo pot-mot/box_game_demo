@@ -38,6 +38,13 @@ const MOUSE_INSTRUCTIONS_PLAY = [
     '滚轮     缩放距离',
 ]
 
+const MOUSE_INSTRUCTIONS_SHOWCASE = [
+    '鼠标左键拖拽 旋转视角',
+    '鼠标右键拖拽 平移视角',
+    '滚轮       缩放',
+    '鼠标左键点击 聚焦角色',
+]
+
 /** 在说明面板中需要显示的键盘动作顺序 */
 const INSTRUCTION_ORDER: readonly InputAction[] = [
     'move_forward', 'move_backward', 'move_left', 'move_right',
@@ -73,12 +80,22 @@ export const setupInstructionsPanel = (getMode: () => GameMode): {
     const buildContent = (): void => {
         const mode = getMode()
         const bindings = input.getBindings()
-        title.textContent = mode === 'edit' ? '=== 编辑模式操作说明 ===' : '=== 游玩模式操作说明 ==='
+        if (mode === 'edit') {
+            title.textContent = '=== 编辑模式操作说明 ==='
+        } else if (mode === 'showcase') {
+            title.textContent = '=== 展示模式操作说明 ==='
+        } else {
+            title.textContent = '=== 游玩模式操作说明 ==='
+        }
 
         list.innerHTML = ''
 
         /* 鼠标操作（静态） */
-        const mouseItems = mode === 'edit' ? MOUSE_INSTRUCTIONS_EDIT : MOUSE_INSTRUCTIONS_PLAY
+        const mouseItems = mode === 'edit'
+            ? MOUSE_INSTRUCTIONS_EDIT
+            : mode === 'showcase'
+                ? MOUSE_INSTRUCTIONS_SHOWCASE
+                : MOUSE_INSTRUCTIONS_PLAY
         for (const text of mouseItems) {
             const div = document.createElement('div')
             div.style.cssText = LINE_CSS

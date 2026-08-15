@@ -3,6 +3,7 @@ import type {CharacterConfig} from '../../../character/types.ts'
 import type {CharacterModel, CharacterColorPalette} from './types.ts'
 import type {WeaponMeshConfig} from './weapon_mesh.ts'
 import {createWeaponMesh} from './weapon_mesh.ts'
+import {WEAPON_GRIP_POSES} from './constants.ts'
 import {
     HEAD_RATIO,
     BODY_RATIO,
@@ -30,13 +31,15 @@ interface TrackedMesh {
 }
 
 /** BoxGeometry 面序：0=+X右, 1=-X左, 2=+Y顶, 3=-Y底, 4=+Z前, 5=-Z后 */
-const createMaterial = (color: number, map?: CanvasTexture): MeshStandardMaterial =>
-    new MeshStandardMaterial({
-        color,
-        roughness: MODEL_ROUGHNESS,
-        metalness: 0.1,
-        map,
-    })
+const createMaterial = (color: number, map?: CanvasTexture): MeshStandardMaterial => {
+    /* 仅在 map 非 undefined 时传入该字段 —— 显式传 {map: undefined} 会触发
+     * Three.js setValues 的 "parameter 'map' has value of undefined" 警告
+     * （每次角色构造 59 个无贴图材质，showcase 场景 15 角色一次性刷屏 885 条） */
+    if (map === undefined) {
+        return new MeshStandardMaterial({color, roughness: MODEL_ROUGHNESS, metalness: 0.1})
+    }
+    return new MeshStandardMaterial({color, roughness: MODEL_ROUGHNESS, metalness: 0.1, map})
+}
 
 /** 创建正面亮 / 侧面暗 / 背面最暗的多材质 Box */
 const createTwoFaceBox = (w: number, h: number, d: number, frontColor: number): TrackedMesh => {
@@ -153,8 +156,6 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     const forearmH = bodyH / 2
 
     const hipY = -H / 2 + legH
-    const shoulderY = hipY + bodyH
-    const bodyCenterY = hipY + bodyH / 2
 
     const shoulderX = bodyW / 2 + ARM_X_GAP
     const hipX = LEG_X_GAP
@@ -197,15 +198,19 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     group.add(leftLegHip)
 
-    // ── 身体 ──
+    // ── 躯干 spine 关节（髋部 pivot：旋转/平移同时带动 躯干+双臂+头，实现拧腰/前倾动力链） ──
+    const spine = new Group()
+    spine.position.set(0, hipY, 0)
+    group.add(spine)
+
     const bodyTM = createTwoFaceBox(bodyW, bodyH, bodyD, palette.bodyColor)
-    bodyTM.mesh.position.y = bodyCenterY
-    group.add(bodyTM.mesh)
+    bodyTM.mesh.position.y = bodyH / 2
+    spine.add(bodyTM.mesh)
     tracked.push(bodyTM)
 
     // ── 右臂 ──
     const rightArmShoulder = new Group()
-    rightArmShoulder.position.set(shoulderX, shoulderY, 0)
+    rightArmShoulder.position.set(shoulderX, bodyH, 0)
     const rightUpperArmTM = createTwoFaceBox(armW, upperArmH, armD, palette.bodyColor)
     rightUpperArmTM.mesh.position.y = -upperArmH / 2
     rightArmShoulder.add(rightUpperArmTM.mesh)
@@ -223,11 +228,15 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     rightHandPivot.position.y = -forearmH
     rightArmElbow.add(rightHandPivot)
 
-    group.add(rightArmShoulder)
+    /* 动态腕关节：动画器驱动（攻击对齐/刃面偏转），静止时为单位变换；武器经静态握持 mount 挂其下 */
+    const rightWristPivot = new Group()
+    rightHandPivot.add(rightWristPivot)
+
+    spine.add(rightArmShoulder)
 
     // ── 左臂 ──
     const leftArmShoulder = new Group()
-    leftArmShoulder.position.set(-shoulderX, shoulderY, 0)
+    leftArmShoulder.position.set(-shoulderX, bodyH, 0)
     const leftUpperArmTM = createTwoFaceBox(armW, upperArmH, armD, palette.bodyColor)
     leftUpperArmTM.mesh.position.y = -upperArmH / 2
     leftArmShoulder.add(leftUpperArmTM.mesh)
@@ -245,40 +254,59 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     leftHandPivot.position.y = -forearmH
     leftArmElbow.add(leftHandPivot)
 
-    group.add(leftArmShoulder)
+    spine.add(leftArmShoulder)
 
     // ── 头 ──
     const headNeck = new Group()
-    headNeck.position.y = shoulderY
+    headNeck.position.y = bodyH
     const headTM = createHeadBox(headW, headH, headW, palette)
     headTM.mesh.position.y = headH / 2
     headNeck.add(headTM.mesh)
     tracked.push(headTM)
-    group.add(headNeck)
+    spine.add(headNeck)
 
     group.scale.set(config.scale, config.scale, config.scale)
 
     let weaponGroup: Group | null = null
     let weaponHitCenter: Mesh | null = null
+    let weaponTipMesh: Mesh | null = null
     let weaponCleanup: (() => void) | null = null
+    let weaponMount: Group | null = null
+    let weaponGripTilt = 0
 
     const removeWeapon = (): void => {
         if (weaponGroup) {
-            rightHandPivot.remove(weaponGroup)
+            weaponMount?.remove(weaponGroup)
             weaponCleanup?.()
             weaponGroup = null
             weaponHitCenter = null
+            weaponTipMesh = null
             weaponCleanup = null
+            weaponMount = null
+            weaponGripTilt = 0
         }
     }
 
     const equipWeapon = (meshConfig: WeaponMeshConfig): void => {
         removeWeapon()
         const result = createWeaponMesh(meshConfig)
+        const grip = WEAPON_GRIP_POSES[meshConfig.id]
+        /* 静态握持 mount：按武器类型施加携带姿态（位置偏移 + 欧拉角），不受动画器影响；
+         * 握把中心在武器本地 Y 轴上，先旋转后平移，故按 rx 分解偏移（m.y = -gripY·cos(rx)、m.z = -gripY·sin(rx)）
+         * 使握把中心精确落于手腕节点 */
+        const mount = new Group()
+        const cosR = Math.cos(grip.rx)
+        const sinR = Math.sin(grip.rx)
+        mount.position.set(grip.x, grip.y - result.gripY * cosR, grip.z - result.gripY * sinR)
+        mount.rotation.set(grip.rx, grip.ry, grip.rz)
+        mount.add(result.group)
         weaponGroup = result.group
         weaponHitCenter = result.hitCenter
+        weaponTipMesh = result.tip
         weaponCleanup = result.cleanup
-        rightHandPivot.add(weaponGroup)
+        weaponMount = mount
+        weaponGripTilt = grip.rx
+        rightWristPivot.add(mount)
     }
 
     /** 安全获取 mesh 的 6 面材质数组，非 MeshStandardMaterial 时返回 undefined */
@@ -343,6 +371,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     return {
         group,
+        spine,
         headNeck,
         head: headTM.mesh,
         body: bodyTM.mesh,
@@ -351,6 +380,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         rightArmElbow,
         rightForearm: rightForearmTM.mesh,
         rightHandPivot,
+        rightWristPivot,
         leftArmShoulder,
         leftUpperArm: leftUpperArmTM.mesh,
         leftArmElbow,
@@ -368,6 +398,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         removeWeapon,
         recolor,
         get weaponMesh() { return weaponHitCenter },
+        get weaponTip() { return weaponTipMesh },
+        get weaponGripTilt() { return weaponGripTilt },
         dispose,
     }
 }

@@ -1,5 +1,6 @@
 import type {Group, Mesh} from 'three'
 import type { WeaponMeshConfig } from './weapon_mesh.ts'
+import type { AttackPhase, AttackPhaseName } from '../../../character/combat/attack_phases.ts'
 
 /** 角色配色 palette */
 export interface CharacterColorPalette {
@@ -13,6 +14,9 @@ export interface CharacterColorPalette {
 export interface CharacterModel {
     readonly group: Group
 
+    /** 躯干关节（髋部 pivot）：旋转带动 躯干+双臂+头（拧腰/前倾动力链） */
+    readonly spine: Group
+
     readonly headNeck: Group
     readonly head: Mesh
 
@@ -23,6 +27,8 @@ export interface CharacterModel {
     readonly rightArmElbow: Group
     readonly rightForearm: Mesh
     readonly rightHandPivot: Group
+    /** 右腕动态关节（动画器驱动刃面朝向/攻击对齐，静止时为单位变换，武器挂其下） */
+    readonly rightWristPivot: Group
 
     readonly leftArmShoulder: Group
     readonly leftUpperArm: Mesh
@@ -49,6 +55,12 @@ export interface CharacterModel {
     /** 当前武器命中检测标记点（null = 未装备），供 melee_executor 使用 */
     readonly weaponMesh: Mesh | null
 
+    /** 当前武器刀尖采样点（null = 未装备），供刀光轨迹使用 */
+    readonly weaponTip: Mesh | null
+
+    /** 当前武器静态握持前倾角 rx（rad，未装备 = 0），供动画器攻击时对齐抵消 */
+    readonly weaponGripTilt: number
+
     /** 根据新调色板原地更新所有部位材质颜色（不重建几何体） */
     recolor: (palette: CharacterColorPalette) => void
 
@@ -65,11 +77,17 @@ export interface AnimationContext {
     /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍 */
     readonly swingTilt: number
     /** 当前攻击阶段名（仅在 attacking 状态有效，其他状态为 undefined） */
-    readonly attackPhase: string | undefined
+    readonly attackPhase: AttackPhaseName | undefined
     /** 当前阶段进度 0-1（phaseTimer / phaseDuration） */
     readonly attackPhaseProgress: number
     /** 攻击总进度 0-1（attackTimer / totalDuration） */
     readonly attackTotalProgress: number
+    /** 当前技能的完整阶段序列（仅 attacking 状态有效，其他状态为 undefined）— 供动画器做相邻阶段姿态衔接 */
+    readonly attackPhases: readonly AttackPhase[] | undefined
+    /** 当前阶段索引（与 attackPhases 配套，越界表示全部阶段已完成） */
+    readonly attackPhaseIndex: number
+    /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
+    readonly weaponHeld: boolean
 }
 
 /** 单个状态的动画处理器 */

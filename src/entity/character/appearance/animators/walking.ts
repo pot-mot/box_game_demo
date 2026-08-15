@@ -1,4 +1,5 @@
 import type {AnimationHandler} from '../types.ts'
+import {WEAPON_WALK_ARM_SWING, WEAPON_WALK_ELBOW} from '../constants.ts'
 
 export const walkingAnim: AnimationHandler = {
     enter: () => {},
@@ -22,12 +23,15 @@ export const walkingAnim: AnimationHandler = {
         model.rightLegKnee.rotation.x = swingAbs < 0.3 ? kneeBend : kneeBend * (1 - (swingAbs - 0.3) / 0.7)
         model.leftLegKnee.rotation.x = swingAbs > 0.7 ? kneeBend * ((1 - swingAbs) / 0.3) : kneeBend
 
+        /* 持械臂大幅收敛摆幅（武器锁定体侧），空手保持自然反相摆臂 */
         const armSwing = -Math.sin(t) * 0.35
-        model.rightArmShoulder.rotation.x = armSwing
+        model.rightArmShoulder.rotation.x = ctx.weaponHeld
+            ? -Math.sin(t) * WEAPON_WALK_ARM_SWING
+            : armSwing
         model.leftArmShoulder.rotation.x = -armSwing
 
         const armBend = Math.max(0, Math.cos(t)) * 0.2
-        model.rightArmElbow.rotation.x = armBend + 0.05
+        model.rightArmElbow.rotation.x = ctx.weaponHeld ? WEAPON_WALK_ELBOW : armBend + 0.05
         model.leftArmElbow.rotation.x = armBend + 0.05
 
         model.headNeck.rotation.x = Math.abs(Math.sin(t * 2)) * 0.04 - 0.02

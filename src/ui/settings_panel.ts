@@ -1,10 +1,12 @@
 /**
  * 设置面板（右上角齿轮按钮）。
  * 提供回到主页面、查看操作说明、配置按键的入口。
+ * @param onReturnHome 可选，覆盖“返回主页面”的默认 reload 行为（展示模式需优雅退出）
  */
 export const setupSettingsPanel = (
     toggleInstructions: () => void,
     toggleBindings: () => void,
+    onReturnHome?: () => void,
 ): void => {
     const btn = document.createElement('button')
     btn.id = 'settings-btn'
@@ -48,7 +50,11 @@ export const setupSettingsPanel = (
 
     menu.appendChild(createItem('🏠 返回主页面', () => {
         close()
-        window.location.reload()
+        if (onReturnHome) {
+            onReturnHome()
+        } else {
+            window.location.reload()
+        }
     }))
 
     menu.appendChild(createItem('❓ 操作说明', () => {

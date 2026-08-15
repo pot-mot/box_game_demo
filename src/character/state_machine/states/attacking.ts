@@ -3,15 +3,17 @@ import {SLOPE_WALK_THRESHOLD} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlope, applySlopeAntiGravity} from '../ground.ts'
 import {resolvePhases, COMBO_WINDOW} from '../../combat/attack_phases.ts'
 
-/** 近战挥砍倾斜角范围：最小 60°（PI/3），最大 180°（PI） */
-const TILT_MIN = Math.PI / 3
-const TILT_MAX = Math.PI
+/**
+ * 连招倾斜角序列（rad，0=垂直劈，±PI/2=横斩）：
+ * 右上斜劈 → 左横斩 → 右横斩 → 近垂直竖劈 循环。
+ * 全部角度限在 (-PI/2, PI/2) 内，保证 cos>0（蓄力后摆、挥砍前挥），
+ * 且 sin 分量提供左右方向——超出 ±90° 会把挥砍反向成后拉。
+ */
+/** （导出供展示场景等复用，单一数据源） */
+export const COMBO_TILT_TABLE = [Math.PI * 0.15, -Math.PI * 0.4, Math.PI * 0.45, Math.PI * 0.08] as const
 
-const randomTilt = (): number => {
-    const magnitude = TILT_MIN + Math.random() * (TILT_MAX - TILT_MIN)
-    const sign = Math.random() < 0.5 ? 1 : -1
-    return magnitude * sign
-}
+const nextComboTilt = (c: {swingCount: number}): number =>
+    COMBO_TILT_TABLE[c.swingCount % COMBO_TILT_TABLE.length]
 
 /**
  * 阶段调度 meta-state — 统一入口，支持武器特定的阶段子状态委托。
@@ -39,7 +41,8 @@ export const attackingHandler: StateHandler = {
         c.pendingFlinch = false
         const skill = c.skills[c.currentSkillIndex]
         if (skill?.config.type === 'melee') {
-            c.swingTilt = randomTilt()
+            c.swingTilt = nextComboTilt(c)
+            c.swingCount++
         } else {
             c.swingTilt = 0
         }
@@ -94,7 +97,8 @@ export const attackingHandler: StateHandler = {
                         c.attackedTargets.clear()
                         const nextSkill = c.skills[nextIdx]
                         if (nextSkill?.config.type === 'melee') {
-                            c.swingTilt = randomTilt()
+                            c.swingTilt = nextComboTilt(c)
+                            c.swingCount++
                         } else {
                             c.swingTilt = 0
                         }

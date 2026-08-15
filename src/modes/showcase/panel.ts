@@ -1,0 +1,317 @@
+import type {ActorStatus} from './actor.ts'
+import {SPEED_OPTIONS} from './constants.ts'
+
+/** 面板控件的回调（由模式装配注入实际控制逻辑） */
+export interface PanelCallbacks {
+    readonly onTogglePause: () => void
+    readonly onStep: () => void
+    readonly onSpeed: (speed: number) => void
+    readonly onFocus: (actorId: number | null) => void
+}
+
+/** 建行所需的静态信息 */
+export interface PanelRowInfo {
+    readonly id: number
+    readonly skillName: string
+    readonly weaponName: string
+    /** 阵营主色（css 颜色字符串） */
+    readonly colorHex: string
+}
+
+export interface ShowcasePanel {
+    /** 每帧刷新列表/详情/控件状态（内部做脏检查，避免无谓 DOM 写入） */
+    refresh: (statuses: readonly ActorStatus[], playing: boolean, speed: number, focusedId: number | null) => void
+    /** 移除全部面板 DOM 与注入样式（退出展示模式时调用） */
+    dispose: () => void
+}
+
+/** 一次性注入面板样式（返回 style 元素供 dispose 移除） */
+const injectStyles = (): HTMLStyleElement => {
+    const style = document.createElement('style')
+    style.textContent = `
+.sch-panel {
+    position: fixed; top: 16px; left: 16px; width: 336px;
+    background: rgba(0, 0, 0, .72); color: #e8e4da;
+    font: 13px/1.5 Consolas, 'Microsoft YaHei', monospace;
+    border-radius: 10px; padding: 14px 16px 12px;
+    backdrop-filter: blur(4px); user-select: none;
+}
+.sch-title { font-size: 16px; font-weight: 700; color: #ffd070; letter-spacing: 1px; }
+.sch-sub { color: #9aa3b2; font-size: 11px; margin: 2px 0 10px; }
+.sch-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.sch-btn {
+    background: #2a2f3a; color: #e8e4da; border: 1px solid #3a4150;
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit;
+}
+.sch-btn:hover { background: #353c4a; }
+.sch-btn.active { background: #4a5a3a; border-color: #7a9a5a; color: #ffe9a0; }
+.sch-select {
+    background: #2a2f3a; color: #e8e4da; border: 1px solid #3a4150;
+    border-radius: 6px; padding: 4px 6px; font: inherit; max-width: 132px;
+}
+.sch-list { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.sch-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px; border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent;
+}
+.sch-row:hover { background: rgba(255, 255, 255, .06); }
+.sch-row.focused { border-color: #ffd070; background: rgba(255, 208, 112, .08); }
+.sch-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.sch-names { flex: 1; min-width: 0; }
+.sch-skill { font-weight: 700; }
+.sch-weapon { color: #9aa3b2; font-size: 11px; margin-left: 6px; }
+.sch-mid { text-align: right; flex: none; font-size: 11px; color: #c8cdd8; min-width: 108px; }
+.sch-phase { color: #ffd070; }
+.sch-phase.done { color: #77808f; }
+.sch-rowbar { height: 3px; border-radius: 2px; background: #2a2f3a; overflow: hidden; margin-top: 3px; }
+.sch-rowfill { height: 100%; background: #7a9a5a; width: 0; }
+.sch-detail {
+    position: fixed; bottom: 16px; right: 16px; width: 268px;
+    background: rgba(0, 0, 0, .72); color: #e8e4da;
+    font: 13px/1.7 Consolas, 'Microsoft YaHei', monospace;
+    border-radius: 10px; padding: 12px 16px; display: none;
+    border: 1px solid rgba(255, 208, 112, .4);
+}
+.sch-detail .sch-title { margin-bottom: 4px; }
+.sch-totalbar { height: 6px; border-radius: 3px; background: #2a2f3a; overflow: hidden; margin: 6px 0; }
+.sch-totalfill { height: 100%; background: #ffd070; width: 0; }
+.sch-kv b { color: #ffd070; }
+`
+    document.head.appendChild(style)
+    return style
+}
+
+/** 脏检查写 textContent（值未变化时跳过 DOM 写入） */
+const setText = (el: HTMLElement, text: string): void => {
+    if (el.textContent !== text) el.textContent = text
+}
+
+/** 脏检查写进度条宽度 */
+const setBar = (el: HTMLElement, ratio: number): void => {
+    const width = `${Math.round(Math.min(Math.max(ratio, 0), 1) * 100)}%`
+    if (el.style.width !== width) el.style.width = width
+}
+
+const toDeg = (rad: number): string => `${(rad * 180 / Math.PI).toFixed(0)}°`
+
+/** 行级 DOM 引用（refresh 时只改内容不重建） */
+interface RowRefs {
+    readonly root: HTMLElement
+    readonly hit: HTMLElement
+    readonly phase: HTMLElement
+    readonly fill: HTMLElement
+}
+
+export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCallbacks): ShowcasePanel => {
+    const style = injectStyles()
+
+    /* —— 主面板（左上） —— */
+    const panel = document.createElement('div')
+    panel.className = 'sch-panel'
+
+    const title = document.createElement('div')
+    title.className = 'sch-title'
+    title.textContent = '攻击动作展示台'
+    panel.appendChild(title)
+
+    const sub = document.createElement('div')
+    sub.className = 'sch-sub'
+    sub.textContent = '全武器攻击阶段动画 · 连段衔接时序复现'
+    panel.appendChild(sub)
+
+    /* 控件行 */
+    const controls = document.createElement('div')
+    controls.className = 'sch-controls'
+
+    const pauseBtn = document.createElement('button')
+    pauseBtn.className = 'sch-btn'
+    pauseBtn.textContent = '⏸ 暂停'
+    pauseBtn.addEventListener('click', () => {
+        callbacks.onTogglePause()
+        pauseBtn.blur()
+    })
+    controls.appendChild(pauseBtn)
+
+    const stepBtn = document.createElement('button')
+    stepBtn.className = 'sch-btn'
+    stepBtn.textContent = '⏭ 单步'
+    stepBtn.addEventListener('click', () => {
+        callbacks.onStep()
+        stepBtn.blur()
+    })
+    controls.appendChild(stepBtn)
+
+    const speedBtns = SPEED_OPTIONS.map(option => {
+        const btn = document.createElement('button')
+        btn.className = 'sch-btn'
+        btn.textContent = `${option}×`
+        btn.addEventListener('click', () => {
+            callbacks.onSpeed(option)
+            btn.blur()
+        })
+        controls.appendChild(btn)
+        return {option, btn}
+    })
+
+    const focusSelect = document.createElement('select')
+    focusSelect.className = 'sch-select'
+    const noneOption = document.createElement('option')
+    noneOption.value = ''
+    noneOption.textContent = '聚焦：无'
+    focusSelect.appendChild(noneOption)
+    for (const info of infos) {
+        const opt = document.createElement('option')
+        opt.value = String(info.id)
+        opt.textContent = info.skillName
+        focusSelect.appendChild(opt)
+    }
+    focusSelect.addEventListener('change', () => {
+        callbacks.onFocus(focusSelect.value === '' ? null : Number(focusSelect.value))
+        focusSelect.blur()
+    })
+    controls.appendChild(focusSelect)
+    panel.appendChild(controls)
+
+    /* 角色列表 */
+    const list = document.createElement('div')
+    list.className = 'sch-list'
+    const rows = new Map<number, RowRefs>()
+    for (const info of infos) {
+        const root = document.createElement('div')
+        root.className = 'sch-row'
+        root.addEventListener('click', () => callbacks.onFocus(info.id))
+
+        const dot = document.createElement('span')
+        dot.className = 'sch-dot'
+        dot.style.background = info.colorHex
+        root.appendChild(dot)
+
+        const names = document.createElement('div')
+        names.className = 'sch-names'
+        const skillSpan = document.createElement('span')
+        skillSpan.className = 'sch-skill'
+        skillSpan.textContent = info.skillName
+        const weaponSpan = document.createElement('span')
+        weaponSpan.className = 'sch-weapon'
+        weaponSpan.textContent = info.weaponName
+        names.appendChild(skillSpan)
+        names.appendChild(weaponSpan)
+        root.appendChild(names)
+
+        const mid = document.createElement('div')
+        mid.className = 'sch-mid'
+        const hit = document.createElement('div')
+        const phase = document.createElement('span')
+        phase.className = 'sch-phase'
+        mid.appendChild(hit)
+        mid.appendChild(phase)
+        root.appendChild(mid)
+
+        const bar = document.createElement('div')
+        bar.className = 'sch-rowbar'
+        const fill = document.createElement('div')
+        fill.className = 'sch-rowfill'
+        bar.appendChild(fill)
+        root.appendChild(bar)
+
+        list.appendChild(root)
+        rows.set(info.id, {root, hit, phase, fill})
+    }
+    panel.appendChild(list)
+    document.body.appendChild(panel)
+
+    /* —— 聚焦详情卡（右上） —— */
+    const detail = document.createElement('div')
+    detail.className = 'sch-detail'
+    const detailTitle = document.createElement('div')
+    detailTitle.className = 'sch-title'
+    const detailHit = document.createElement('div')
+    const detailPhase = document.createElement('div')
+    const detailTotal = document.createElement('div')
+    detailTotal.textContent = '攻击总进度'
+    const totalBar = document.createElement('div')
+    totalBar.className = 'sch-totalbar'
+    const totalFill = document.createElement('div')
+    totalFill.className = 'sch-totalfill'
+    totalBar.appendChild(totalFill)
+    const detailLink = document.createElement('div')
+    const unfocusBtn = document.createElement('button')
+    unfocusBtn.className = 'sch-btn'
+    unfocusBtn.textContent = '取消聚焦'
+    unfocusBtn.addEventListener('click', () => callbacks.onFocus(null))
+    detail.appendChild(detailTitle)
+    detail.appendChild(detailHit)
+    detail.appendChild(detailPhase)
+    detail.appendChild(detailTotal)
+    detail.appendChild(totalBar)
+    detail.appendChild(detailLink)
+    detail.appendChild(unfocusBtn)
+    document.body.appendChild(detail)
+
+    const refresh = (
+        statuses: readonly ActorStatus[],
+        playing: boolean,
+        speed: number,
+        focusedId: number | null,
+    ): void => {
+        setText(pauseBtn, playing ? '⏸ 暂停' : '▶ 继续')
+
+        for (const {option, btn} of speedBtns) {
+            const active = option === speed
+            if (btn.classList.contains('active') !== active) btn.classList.toggle('active', active)
+        }
+
+        const selectValue = focusedId === null ? '' : String(focusedId)
+        if (focusSelect.value !== selectValue) focusSelect.value = selectValue
+
+        let focusedStatus: ActorStatus | undefined
+        for (const st of statuses) {
+            const refs = rows.get(st.id)
+            if (refs === undefined) continue
+
+            const focused = st.id === focusedId
+            if (refs.root.classList.contains('focused') !== focused) {
+                refs.root.classList.toggle('focused', focused)
+            }
+            if (focused) focusedStatus = st
+
+            setText(refs.hit, st.mode === 'idle'
+                ? '待机'
+                : `${st.isMelee ? `击${st.hitNumber}/${st.totalHits}` : '射击'} · ${toDeg(st.swingTilt)}`)
+            const phaseText = st.phaseName === 'idle' ? 'idle' : st.phaseName === 'done' ? 'done' : st.phaseName
+            setText(refs.phase, ` ${phaseText}`)
+            const doneClass = st.phaseName === 'done' || st.phaseName === 'idle'
+            if (refs.phase.classList.contains('done') !== doneClass) {
+                refs.phase.classList.toggle('done', doneClass)
+            }
+            setBar(refs.fill, st.phaseProgress)
+        }
+
+        /* 详情卡：仅聚焦时可见 */
+        const showDetail = focusedStatus !== undefined
+        if (detail.style.display !== (showDetail ? 'block' : 'none')) {
+            detail.style.display = showDetail ? 'block' : 'none'
+        }
+        if (focusedStatus !== undefined) {
+            const st = focusedStatus
+            setText(detailTitle, `${st.skillName} · ${st.weaponName}`)
+            setText(detailHit, st.mode === 'idle'
+                ? '状态：待机'
+                : `${st.isMelee ? `连段第 ${st.hitNumber}/${st.totalHits} 击 · tilt ${toDeg(st.swingTilt)} (${st.swingTilt.toFixed(2)} rad)` : '远程射击序列'}`)
+            setText(detailPhase, st.mode === 'idle'
+                ? '阶段：—'
+                : `阶段：${st.phaseName === 'done' ? '收势(全部阶段完成)' : st.phaseName} · ${(st.phaseProgress * 100).toFixed(0)}%`)
+            setText(detailLink, st.mode === 'idle' ? '衔接：—' : `衔接：${st.link}`)
+            setBar(totalFill, st.attackProgress)
+        }
+    }
+
+    const dispose = (): void => {
+        panel.remove()
+        detail.remove()
+        style.remove()
+    }
+
+    return {refresh, dispose}
+}

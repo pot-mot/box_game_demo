@@ -32,6 +32,8 @@ import {setupEditMode} from './modes/edit'
 import type {EditModeController} from './modes/edit'
 import {setupPlayMode} from './modes/play'
 import type {PlayModeController} from './modes/play'
+import {setupShowcaseMode} from './modes/showcase'
+import type {ShowcaseModeController} from './modes/showcase'
 import {collectWorldState, saveWorldToFile} from './save_load/serialize.ts'
 import {loadWorldFromData, clearAllEntities, type LoadWorldResult} from './save_load/deserialize.ts'
 import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
@@ -44,13 +46,16 @@ type EntitySystem = EntityInfoSource & EntityTickHandler
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
-// ── 启动页 ──
+// ── 启动页（展示模式退出后可重新拉起） ──
 
-setupStartupScreen({
-    onStart: (mode: GameMode, saveData?: SaveData) => {
-        startGame(mode, saveData)
-    },
-})
+const showStartup = (): void => {
+    setupStartupScreen({
+        onStart: (mode: GameMode, saveData?: SaveData) => {
+            startGame(mode, saveData)
+        },
+    })
+}
+showStartup()
 
 const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => {
     // --- Rapier 物理引擎初始化 ---
@@ -158,14 +163,29 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources)
     }
 
-    // --- 模式控制器（编辑/游玩）---
+    // --- 模式控制器（编辑/游玩/展示）---
     let editMode: EditModeController | undefined
     let playMode: PlayModeController | undefined
+    let showcaseMode: ShowcaseModeController | undefined
+    /* 展示模式退出（返回启动屏）后置位，终止本 RAF 循环，新循环由再次 startGame 启动 */
+    let showcaseExited = false
 
     if (mode === 'edit') {
         editMode = setupEditMode(camera, renderer, systems, allTerrainSources, terrainSource)
-    } else {
+    } else if (mode === 'play') {
         playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem, boxSpawner)
+    } else {
+        /* 展示模式：复用共享渲染器与单 RAF 循环，自建独立展示场景 */
+        showcaseMode = setupShowcaseMode({
+            renderer,
+            onExit: () => {
+                showcaseExited = true
+                /* 销毁本次装配的渲染器与画布，避免重现启动屏/再次进入模式时叠加残留 */
+                renderer.domElement.remove()
+                renderer.dispose()
+                showStartup()
+            },
+        })
     }
 
     /* ── 编辑模式：执行 / 步进状态 ── */
@@ -242,11 +262,11 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     }
 
     // --- UI ---
-    const cameraInfoUpdate = setupCameraInfo(camera)
+    const cameraInfoUpdate = mode === 'showcase' ? () => {} : setupCameraInfo(camera)
     const {updater: instructionsUpdate, toggle: toggleInstructions} = setupInstructionsPanel(() => mode)
 
-    // --- 存档快捷键 ---
-    input.onActionDown('save_world', () => {
+    // --- 存档快捷键（展示模式无世界实体，不注册） ---
+    if (mode !== 'showcase') input.onActionDown('save_world', () => {
         const cached = loadCachedSaveData()
         const state = collectWorldState(
             systemsByType,
@@ -260,7 +280,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         saveWorldToFile(state)
     })
 
-    input.onActionDown('load_world', () => {
+    if (mode !== 'showcase') input.onActionDown('load_world', () => {
         promptLoadFile((data) => {
             cacheSaveData(data)
             clearAllEntities(systemsByType, allTerrainSources)
@@ -279,13 +299,19 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         })
     })
 
-    // --- 设置面板（右上角）---
-    setupSettingsPanel(toggleInstructions, openBindingPanel)
+    // --- 设置面板（右上角齿轮） ---
+    setupSettingsPanel(
+        toggleInstructions,
+        openBindingPanel,
+        mode === 'showcase' ? () => showcaseMode?.exit() : undefined,
+    )
 
     // --- 单 RAF 循环 ---
     let lastTime = performance.now()
 
     const tick = (time: number): void => {
+        /* 展示模式已退出（返回启动屏）：终止本循环，不再排队下一帧 */
+        if (showcaseExited) return
         const delta = Math.min((time - lastTime) / 1000, MAX_DT)
         lastTime = time
 
@@ -317,7 +343,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
 
             ensureAI()
 
-            gridUpdate()
+            /* 展示场景自带跟随相机的网格，主场景网格无需更新 */
+            if (mode !== 'showcase') gridUpdate()
 
             if (mode === 'edit') {
                 editMode?.updater(delta)
@@ -326,13 +353,18 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 } else if (stepActive) {
                     characterSystem.update(FIXED_TIME_STEP)
                 }
+            } else if (mode === 'showcase') {
+                /* 展示模式：物理冻结，仅推进展示时间线（渲染在 updater 内完成） */
+                showcaseMode?.updater(delta)
             } else {
                 playMode?.updater(delta)
             }
 
-            // 双 Pass 渲染（水方块折射）
-            const waterMeshes: Mesh[] = water.getMeshes()
-            renderFrame(waterMeshes)
+            if (mode !== 'showcase') {
+                // 双 Pass 渲染（水方块折射）
+                const waterMeshes: Mesh[] = water.getMeshes()
+                renderFrame(waterMeshes)
+            }
 
             cameraInfoUpdate()
             instructionsUpdate()

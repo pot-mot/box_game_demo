@@ -31,11 +31,26 @@ export type WeaponMeshConfig =
     | { id: 'molotov';      size: number; color: number; fireColor: number }
     | { id: 'throwing_dart';len: number; color: number; tailColor: number }
 
+/** 武器静态握持姿态：装备时相对右腕 pivot 的位置偏移与欧拉角（武器本体以 +Y 为轴自握把延伸） */
+export interface WeaponGripPose {
+    readonly x: number
+    readonly y: number
+    readonly z: number
+    readonly rx: number
+    readonly ry: number
+    readonly rz: number
+}
+
 // ── 生成器返回值 ──
 
 export interface WeaponMeshResult {
     group: Group
+    /** 命中检测采样点（隐藏） */
     hitCenter: Mesh
+    /** 刀尖采样点（隐藏，刀光轨迹用；未指定时与 hitCenter 重合） */
+    tip: Mesh
+    /** 握把中心在武器本地坐标的 y（负=在原点下方，0=无握把语义）；装备时叠加偏移使握把对齐手腕 */
+    gripY: number
     cleanup: () => void
 }
 
@@ -77,7 +92,7 @@ const mesh = (geometry: BufferGeometry, mat: MeshStandardMaterial, x: number, y:
     return m
 }
 
-function finish(hitX: number, hitY: number, hitZ: number): WeaponMeshResult {
+function finish(hitX: number, hitY: number, hitZ: number, tipX = hitX, tipY = hitY, tipZ = hitZ, gripY = 0): WeaponMeshResult {
     const group = new Group()
     for (const m of _meshes) group.add(m)
 
@@ -88,16 +103,27 @@ function finish(hitX: number, hitY: number, hitZ: number): WeaponMeshResult {
     hitCenter.position.set(hitX, hitY, hitZ)
     group.add(hitCenter)
 
+    /* 刀尖采样点（刀光轨迹）：与 hitCenter 同规格的隐藏标记 */
+    const tGeo = new BoxGeometry(0.01, 0.01, 0.01)
+    const tMat = new MeshStandardMaterial({color: 0xff0000, roughness: 1, metalness: 0})
+    const tip = new Mesh(tGeo, tMat)
+    tip.visible = false
+    tip.position.set(tipX, tipY, tipZ)
+    group.add(tip)
+
     const geos = _geos.slice()
     const mats = _mats.slice()
 
     return {
         group,
         hitCenter,
+        tip,
+        gripY,
         cleanup: () => {
             for (const g of geos) g.dispose()
             for (const m of mats) m.dispose()
             hGeo.dispose(); hMat.dispose()
+            tGeo.dispose(); tMat.dispose()
         },
     }
 }
@@ -114,7 +140,7 @@ const genSword = (cfg: WeaponMeshConfig & { id: 'sword' }): WeaponMeshResult => 
     mesh(cyl(gR, gR, gLen), gm, 0, -bd * 0.25 - gLen / 2, 0)
     mesh(box(bw * 2.5, 0.02, bw), bm, 0, -bd * 0.25 - 0.015, 0)
     mesh(box(bw, bh, bd), bm, 0, bh / 2 + 0.03, 0)
-    return finish(0, bh * 0.35, 0)
+    return finish(0, bh * 0.35, 0, 0, bh + 0.03, 0, -(0.005 + (cfg.bladeLen * 0.35) / 2))
 }
 
 const genHeavySword = (cfg: WeaponMeshConfig & { id: 'heavy_sword' }): WeaponMeshResult => {
@@ -127,7 +153,7 @@ const genHeavySword = (cfg: WeaponMeshConfig & { id: 'heavy_sword' }): WeaponMes
     mesh(cyl(gR, gR, gLen), gm, 0, -bd * 0.3 - gLen / 2, 0)
     mesh(box(bw * 3, 0.03, bw), bm, 0, -bd * 0.3 - 0.02, 0)
     mesh(box(bw, bh, bd), bm, 0, bh / 2 + 0.05, 0)
-    return finish(0, bh * 0.3, 0)
+    return finish(0, bh * 0.3, 0, 0, bh + 0.05, 0, -(0.012 + (cfg.bladeLen * 0.3) / 2))
 }
 
 const genSpear = (cfg: WeaponMeshConfig & { id: 'spear' }): WeaponMeshResult => {
@@ -138,7 +164,7 @@ const genSpear = (cfg: WeaponMeshConfig & { id: 'spear' }): WeaponMeshResult => 
 
     mesh(cyl(pR, pR, cfg.poleLen), pm, 0, cfg.poleLen / 2, 0)
     mesh(box(0.05, cfg.headLen, 0.04), hm, 0, cfg.poleLen + cfg.headLen / 2, 0)
-    return finish(0, cfg.poleLen * 0.6, 0)
+    return finish(0, cfg.poleLen * 0.6, 0, 0, cfg.poleLen + cfg.headLen, 0, cfg.poleLen * 0.08)
 }
 
 const genDualAxe = (cfg: WeaponMeshConfig & { id: 'dual_axe' }): WeaponMeshResult => {
@@ -151,7 +177,7 @@ const genDualAxe = (cfg: WeaponMeshConfig & { id: 'dual_axe' }): WeaponMeshResul
     mesh(cyl(gR, gR, gLen), gm, 0, -sz * 0.1 - gLen / 2, 0)
     mesh(box(sz * 0.4, sz * 0.6, 0.03), bm, sz * 0.3, gLen * 0.1, 0, 0, Math.PI / 6)
     mesh(box(sz * 0.4, sz * 0.6, 0.03), bm, -sz * 0.3, gLen * 0.1, 0, 0, -Math.PI / 6)
-    return finish(0, gLen * 0.5, 0)
+    return finish(0, gLen * 0.5, 0, 0, gLen * 0.1 + sz * 0.3, 0, -(sz * 0.1 + (sz * 1.2) / 2))
 }
 
 const genWarHammer = (cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshResult => {
@@ -162,7 +188,7 @@ const genWarHammer = (cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshR
 
     mesh(cyl(gR, gR, gLen), gm, 0, -hsz * 0.2 - gLen / 2, 0)
     mesh(box(hsz * 0.7, hsz * 0.5, hsz * 0.7), hm, 0, gLen * 0.7, 0)
-    return finish(0, gLen * 0.4, 0)
+    return finish(0, gLen * 0.4, 0, 0, gLen * 0.7 + hsz * 0.25, 0, -(hsz * 0.2 + (hsz * 1.5) / 2))
 }
 
 const genBow = (cfg: WeaponMeshConfig & { id: 'bow' }): WeaponMeshResult => {
@@ -231,7 +257,7 @@ const genThrowingAxe = (cfg: WeaponMeshConfig & { id: 'throwing_axe' }): WeaponM
 
     mesh(cyl(gR, gR, gLen), gm, 0, -sz * 0.05 - gLen / 2, 0)
     mesh(box(sz * 0.5, sz * 0.4, 0.03), bm, 0, gLen * 0.4, 0)
-    return finish(0, gLen * 0.5, 0)
+    return finish(0, gLen * 0.5, 0, 0, gLen * 0.4 + sz * 0.2, 0)
 }
 
 const genGrenade = (cfg: WeaponMeshConfig & { id: 'grenade' }): WeaponMeshResult => {

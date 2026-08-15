@@ -94,6 +94,7 @@ src/
 ├── modes/
 │   ├── edit/                    # 编辑模式（轨道相机、键盘、指针交互）
 │   ├── play/                    # 游玩模式（第三人称、状态机驱动）
+│   ├── showcase/                # 展示模式（攻击动作展示台，复现生产动画时序）
 │   ├── startup_screen.ts
 │   └── instructions_panel.ts
 ├── ui/                          # 面板（相机HUD、属性面板、列表侧栏、设置）
@@ -102,6 +103,8 @@ src/
 │   └── style.css
 └── main.ts
 ```
+
+展示模式由启动屏第三个按钮进入（共享主页渲染器与单 RAF 循环，可返回启动屏），详见 [`docs/showcase.md`](docs/showcase.md)。
 
 ## 架构规则
 
@@ -122,6 +125,7 @@ src/
 | 文档 | 内容 |
 |------|------|
 | [`docs/ai_system.md`](docs/ai_system.md) | 角色 AI 寻路索敌系统：双层 FSM 架构、状态转移图、全量配置项、类型定义、扩展指南、核心文件索引 |
+| [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
 
 **扩展 AI 功能时**：阅读 `docs/ai_system.md` → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。
 
