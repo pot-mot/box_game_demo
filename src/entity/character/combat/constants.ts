@@ -11,3 +11,9 @@ export const BULLET_COLLISION_MASK = 0
 /** 子弹命中检测半径（需覆盖角色碰撞半径 + 一帧内子弹移动距离） */
 export const BULLET_HIT_RADIUS = 1.2
 export const BULLET_SIZE = 0.1
+
+/** 近战命中顿帧：持续时间（秒，真实时间） */
+export const HITSTOP_DURATION = 0.07
+
+/** 近战命中顿帧：时间缩放（角色子系统 dt 乘数，趋近 0 = 冻结） */
+export const HITSTOP_TIMESCALE = 0.05

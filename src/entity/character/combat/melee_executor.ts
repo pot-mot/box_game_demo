@@ -20,9 +20,13 @@ const TARGET_HIT_BOX_RADIUS_FACTOR = 1.5
 /** 受击箱高度倍率（角色碰撞半高 × 此值） */
 const TARGET_HIT_BOX_HEIGHT_FACTOR = 1.1
 
+/** 命中回调：参数为命中点世界坐标（供顿帧/相机震动等打击感系统消费） */
+export type MeleeHitCallback = (x: number, y: number, z: number) => void
+
 export const createMeleeExecutor = (
     getAllCharacters: () => readonly CharacterEntity[],
     getModel: (id: number) => CharacterModel | undefined,
+    onHit?: MeleeHitCallback,
 ): SkillExecutor => {
     const start = (
         _skill: SkillConfig,
@@ -89,6 +93,7 @@ export const createMeleeExecutor = (
                 skillId: skill.id,
             })
             combat.attackedTargets.add(target.id)
+            onHit?.(wx, wy, wz)
 
             v3Set(_tmpVec, tx - wx, 0, tz - wz)
             const len = v3Length(_tmpVec)

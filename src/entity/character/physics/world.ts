@@ -1,4 +1,4 @@
-import {type Scene, type Mesh, type LineBasicMaterial} from 'three'
+import {type Scene, type Mesh, type LineBasicMaterial, Vector3} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
@@ -29,6 +29,7 @@ import {createCharacterMesh, updateCharacterMesh} from '../render'
 import {createCharacterModel} from '../appearance/model.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
 import type {AppearanceSystem} from '../appearance/system.ts'
+import {createWeaponTrail, type WeaponTrail} from '../appearance/weapon_trail.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG} from '../validation.ts'
@@ -42,6 +43,7 @@ import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat
 import {SELECT_PALETTE} from '../appearance/constants.ts'
 import {createMeleeExecutor} from '../combat/melee_executor.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
+import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
 import type {WeaponMeshConfig} from '../appearance/weapon_mesh.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
@@ -52,6 +54,9 @@ import {resolvePhases} from '../../../character/combat/attack_phases.ts'
 
 /** Rapier 带 body/bodyHandle 反查的超类型 */
 type CharacterRigidBody = RAPIER.RigidBody
+
+/** 刀光轨迹刀尖采样复用向量（避免每帧分配） */
+const _trailTipVec = new Vector3()
 
 /** 根据 AttackConfig 解析武器模型配置 */
 const resolveWeaponMeshConfig = (attack: AttackConfig): WeaponMeshConfig => {
@@ -100,6 +105,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setupAI: (systems: readonly EntityInfoSource[]) => void
     /** 设置单角色导航感知开关 */
     setNavEnabled: (id: number, enabled: boolean) => void
+    /** 设置近战命中冲击监听器（参数为命中点世界坐标，null 清除） */
+    setOnMeleeImpact: (listener: ((x: number, y: number, z: number) => void) | null) => void
 }
 
 /** 将旧 AttackConfig 转换为 SkillSlot 数组 */
@@ -163,6 +170,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const aiTargetDirs = new Map<number, {dx: number; dz: number}>()
     const appearanceModels = new Map<number, CharacterModel>()
     const appearanceSystems = new Map<number, AppearanceSystem>()
+    const weaponTrails = new Map<number, WeaponTrail>()
     const facingAngles = new Map<number, number>()
     let nextId = 1
     let selectedId: number | undefined
@@ -186,7 +194,19 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const getAllCharacters = (): readonly CharacterEntity[] => characters
     const getModel = (id: number): CharacterModel | undefined => appearanceModels.get(id)
-    const meleeExecutor = createMeleeExecutor(getAllCharacters, getModel)
+    /** 命中顿帧计时器（真实时间递减，>0 时角色子系统 dt 缩放趋近冻结） */
+    let hitstopTimer = 0
+    /** 近战命中冲击监听器（相机震动等打击感系统注入） */
+    let meleeImpactListener: ((x: number, y: number, z: number) => void) | null = null
+
+    const setOnMeleeImpact = (listener: ((x: number, y: number, z: number) => void) | null): void => {
+        meleeImpactListener = listener
+    }
+
+    const meleeExecutor = createMeleeExecutor(getAllCharacters, getModel, (x, y, z) => {
+        hitstopTimer = HITSTOP_DURATION
+        meleeImpactListener?.(x, y, z)
+    })
     const rangedExecutor = createRangedExecutor(shared, scene)
     registerSkillExecutor('melee', meleeExecutor)
     registerSkillExecutor('ranged', rangedExecutor)
@@ -310,6 +330,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         characters.push(entity)
         appearanceModels.set(entity.id, model)
         appearanceSystems.set(entity.id, createAppearanceSystem())
+        weaponTrails.set(entity.id, createWeaponTrail(scene))
 
         const flash = createDamageFlash(entity)
         flashStates.set(entity.id, flash)
@@ -408,6 +429,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             appearanceModels.delete(entity.id)
         }
         appearanceSystems.delete(entity.id)
+        weaponTrails.get(entity.id)?.dispose()
+        weaponTrails.delete(entity.id)
         facingAngles.delete(entity.id)
 
         characters.splice(idx, 1)
@@ -470,7 +493,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.groundKeepTimer = next.groundKeepTimer
     }
 
-    const update = (dt: number): void => {
+    const update = (rawDt: number): void => {
+        /* 命中顿帧：角色子系统（状态机/动画/执行器/AI）时间缩放，物理世界不受影响 */
+        hitstopTimer = Math.max(0, hitstopTimer - rawDt)
+        const dt = hitstopTimer > 0 ? rawDt * HITSTOP_TIMESCALE : rawDt
+
         /* 清理失效接触对（销毁的实体不会产生 stopped 事件） */
         contactTracker.prune(world)
 
@@ -549,22 +576,29 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const linvel = entity.body.linvel()
                 const hSpeed = Math.hypot(linvel.x, linvel.z)
 
-                /* 计算阶段动画上下文 */
+                /* 计算阶段动画上下文（仅 attacking 状态注入阶段信息，flinching 等复用动画器时走回退路径） */
                 const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
-                const phases = activeSkill ? resolvePhases(activeSkill.config.phases) : []
+                const inAttacking = entity.stateMachine.currentState === 'attacking' && activeSkill !== undefined
+                const phases = inAttacking ? resolvePhases(activeSkill.config.phases) : []
                 const phaseDuration = entity.combat.phaseIndex < phases.length
                     ? activeSkill!.config.duration * phases[entity.combat.phaseIndex].durationRatio
                     : 1
                 const totalDuration = activeSkill?.config.duration ?? 1
+                const ctxPhaseName = inAttacking && entity.combat.phaseIndex < phases.length
+                    ? phases[entity.combat.phaseIndex].name
+                    : undefined
 
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
                     horizontalTravel: 0,
                     swingTilt: entity.combat.swingTilt,
-                    attackPhase: entity.combat.phaseIndex < phases.length ? phases[entity.combat.phaseIndex].name : undefined,
+                    attackPhase: ctxPhaseName,
                     attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
-                    attackTotalProgress: totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
+                    attackTotalProgress: inAttacking && totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
+                    attackPhases: inAttacking ? phases : undefined,
+                    attackPhaseIndex: entity.combat.phaseIndex,
+                    weaponHeld: model.weaponMesh !== null,
                 })
 
                 const vx = linvel.x
@@ -603,6 +637,20 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     model.headNeck.rotation.y = 0
                 } else {
                     model.headNeck.rotation.y = 0
+                }
+
+                /* 刀光轨迹：attacking 状态的打击/释放/旋转阶段激活，采样刀尖世界坐标 */
+                const trail = weaponTrails.get(entity.id)
+                if (trail) {
+                    const tip = model.weaponTip
+                    if (tip) {
+                        tip.getWorldPosition(_trailTipVec)
+                        const trailActive = inAttacking
+                            && (ctxPhaseName === 'strike' || ctxPhaseName === 'release' || ctxPhaseName === 'spin')
+                        trail.update(dt, _trailTipVec, trailActive)
+                    } else {
+                        trail.update(dt, _trailTipVec, false)
+                    }
                 }
             }
 
@@ -932,6 +980,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setCollisionVisible,
         setupAI,
         setNavEnabled,
+        setOnMeleeImpact,
     }
 
     return {
