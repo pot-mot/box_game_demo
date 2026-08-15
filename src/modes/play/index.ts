@@ -10,6 +10,7 @@ import type {TimerRowData} from './player_hud.ts'
 import {createPlayerHUD} from './player_hud.ts'
 import {createDeathScreen} from './death_screen.ts'
 import {DASH_DURATION, DASH_COOLDOWN} from '../../character/state_machine/constants.ts'
+import {HIT_SHAKE_DURATION, HIT_SHAKE_AMPLITUDE} from './constants.ts'
 
 export interface PlayModeController {
     updater: (dt: number) => void
@@ -50,10 +51,25 @@ export const setupPlayMode = (
         () => { location.reload() },
     )
 
+    /* 近战命中相机震动：由角色系统命中冲击回调触发，叠加在轨道相机更新之后 */
+    let shakeTime = 0
+    characterSystem.setOnMeleeImpact(() => {
+        shakeTime = HIT_SHAKE_DURATION
+    })
+    const applyHitShake = (dt: number): void => {
+        if (shakeTime <= 0) return
+        shakeTime -= dt
+        const k = Math.max(shakeTime / HIT_SHAKE_DURATION, 0) * HIT_SHAKE_AMPLITUDE
+        camera.position.x += (Math.random() * 2 - 1) * k
+        camera.position.y += (Math.random() * 2 - 1) * k
+        camera.position.z += (Math.random() * 2 - 1) * k
+    }
+
     const updater = (dt: number): void => {
         playerInput()
         characterSystem.update(dt)
         playCameraUpdate(dt)
+        applyHitShake(dt)
         healthBarUpdate(camera, dt)
 
         const player = characterSystem.getPlayerCharacter()

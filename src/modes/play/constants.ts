@@ -6,3 +6,9 @@ export const MIN_DISTANCE = 1
 export const MAX_DISTANCE = 30
 /** 相机平滑跟随速率（1/s）：抑制角色弹跳导致的摄像机抖动 */
 export const CAMERA_SMOOTH_FACTOR = 8
+
+/** 近战命中相机震动：持续时间（秒） */
+export const HIT_SHAKE_DURATION = 0.15
+
+/** 近战命中相机震动：最大位移幅度（m，随剩余时间线性衰减） */
+export const HIT_SHAKE_AMPLITUDE = 0.05
