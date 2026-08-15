@@ -14,6 +14,9 @@ export type {PeaceState}
 /** 箱子生成回调签名 */
 export type SpawnBoxCallback = (entry: BoxSpawnEntry, x: number, y: number, z: number, size: {width: number; height: number; depth: number}) => void
 
+/** AI 输入回调：移动方向 + 攻击意图 + 可选显式攻击方向（缺省取移动方向，供边逃边射等移动/攻击分离场景） */
+export type AISetInput = (dx: number, dz: number, attack: boolean, attackDX?: number, attackDZ?: number) => void
+
 /** AI 运行时上下文（扁平化，combat / peace 字段前缀区分） */
 export interface AIContext {
     characterId: number

@@ -1,6 +1,6 @@
 import type {CharacterEntity} from '../../../../character/types.ts'
 import type {PeaceConfig} from '../../../../character/ai_strategy/peace.ts'
-import type {AIContext} from '../types.ts'
+import type {AIContext, AISetInput} from '../types.ts'
 import {isBuildConfig} from '../../../../character/ai_strategy/types.ts'
 import type {PeaceState, PeaceStateHandler} from './types.ts'
 import {patrolHandler} from './states/patrol.ts'
@@ -29,16 +29,17 @@ export const updatePeaceFSM = (
     dt: number,
     ctx: AIContext,
     character: CharacterEntity,
-    setInput: (dx: number, dz: number, attack: boolean) => void,
+    setInput: AISetInput,
 ): void => {
-    const handler = PEACE_HANDLERS[ctx.peaceState]
+    let handler = PEACE_HANDLERS[ctx.peaceState]
 
     for (const t of handler.transitions) {
         if (t.guard(ctx, character)) {
             handler.exit(ctx, character)
             ctx.peaceState = t.to
             ctx.peaceStateTime = 0
-            PEACE_HANDLERS[ctx.peaceState].enter(ctx, character)
+            handler = PEACE_HANDLERS[ctx.peaceState]
+            handler.enter(ctx, character)
             break
         }
     }

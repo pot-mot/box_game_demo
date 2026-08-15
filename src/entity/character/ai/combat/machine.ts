@@ -1,6 +1,6 @@
 import type {CharacterEntity} from '../../../../character/types.ts'
 import type {CombatSubStrategy, CombatConfig} from '../../../../character/ai_strategy/combat.ts'
-import type {AIContext} from '../types.ts'
+import type {AIContext, AISetInput} from '../types.ts'
 import type {CombatState, CombatStateHandler} from './types.ts'
 import {chaseHandler} from './states/chase.ts'
 import {attackHandler} from './states/attack.ts'
@@ -47,16 +47,17 @@ export const updateCombatFSM = (
     ctx: AIContext,
     character: CharacterEntity,
     allCharacters: readonly CharacterEntity[],
-    setInput: (dx: number, dz: number, attack: boolean) => void,
+    setInput: AISetInput,
 ): void => {
-    const handler = COMBAT_HANDLERS[ctx.combatState]
+    let handler = COMBAT_HANDLERS[ctx.combatState]
 
     for (const t of handler.transitions) {
         if (t.guard(ctx, character, allCharacters)) {
             handler.exit(ctx, character)
             ctx.combatState = t.to
             ctx.combatStateTime = 0
-            COMBAT_HANDLERS[ctx.combatState].enter(ctx, character)
+            handler = COMBAT_HANDLERS[ctx.combatState]
+            handler.enter(ctx, character)
             if (ctx.combatState === 'inactive') return
             break
         }

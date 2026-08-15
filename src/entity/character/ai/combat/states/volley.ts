@@ -123,7 +123,7 @@ export const volleyHandler: CombatStateHandler = {
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return v3Length(_dir) > detRange
+                return v3Length(_dir) >= detRange
             },
         },
     ],

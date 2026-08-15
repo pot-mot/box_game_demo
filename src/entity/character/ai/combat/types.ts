@@ -1,5 +1,6 @@
 import type {CharacterEntity} from '../../../../character/types.ts'
 import type {CombatSubStrategy, CombatConfig} from '../../../../character/ai_strategy/combat.ts'
+import type {AISetInput} from '../types.ts'
 
 export type {CombatSubStrategy, CombatConfig}
 
@@ -13,7 +14,7 @@ export interface CombatTransition {
 
 export interface CombatStateHandler {
     enter: (ctx: import('../types.ts').AIContext, character: CharacterEntity) => void
-    update: (dt: number, ctx: import('../types.ts').AIContext, character: CharacterEntity, allCharacters: readonly CharacterEntity[], setInput: (dx: number, dz: number, attack: boolean) => void) => void
+    update: (dt: number, ctx: import('../types.ts').AIContext, character: CharacterEntity, allCharacters: readonly CharacterEntity[], setInput: AISetInput) => void
     exit: (ctx: import('../types.ts').AIContext, character: CharacterEntity) => void
     transitions: readonly CombatTransition[]
 }

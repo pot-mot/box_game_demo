@@ -75,8 +75,12 @@ export const fleeHandler: CombatStateHandler = {
         const isRanged = skill?.config.type === 'ranged'
 
         if (isRanged && !character.combat.attackActive && skill.cooldownTimer <= 0 && nearestDist < (skill.config as RangedSkillConfig).weapon.range) {
-            /* 远程边逃边射 */
-            setInput(ctx.combatFleeDir.x, ctx.combatFleeDir.z, true)
+            /* 边逃边射：移动保持逃跑方向，攻击方向显式指向最近敌人（否则子弹朝逃跑方向飞） */
+            if (nearestDist < Infinity) {
+                setInput(ctx.combatFleeDir.x, ctx.combatFleeDir.z, true, nearestDx / nearestDist, nearestDz / nearestDist)
+            } else {
+                setInput(ctx.combatFleeDir.x, ctx.combatFleeDir.z, false)
+            }
         } else {
             setInput(ctx.combatFleeDir.x, ctx.combatFleeDir.z, false)
         }

@@ -487,7 +487,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
             const aiCtx = aiMap.get(entity.id)
             if (aiCtx && aiEnabled) {
-                updateAI(dt, aiCtx, entity, characters, (dx, dz, attack) => {
+                updateAI(dt, aiCtx, entity, characters, (dx, dz, attack, attackDX, attackDZ) => {
                     /* 若与另一个角色有物理接触，禁止继续向其方向推挤 */
                     let finalDX = dx
                     let finalDZ = dz
@@ -523,9 +523,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                     entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 0)
                     aiTargetDirs.set(entity.id, {dx: finalDX, dz: finalDZ})
-                    if (attack && (dx !== 0 || dz !== 0)) {
-                        entity.combat.attackDirX = dx
-                        entity.combat.attackDirZ = dz
+                    if (attack) {
+                        /* 攻击方向：AI 显式指定（如边逃边射面向敌人）优先，缺省取移动方向 */
+                        const adx = attackDX ?? dx
+                        const adz = attackDZ ?? dz
+                        if (adx !== 0 || adz !== 0) {
+                            entity.combat.attackDirX = adx
+                            entity.combat.attackDirZ = adz
+                        }
                     }
                 })
             } else if (entity.isPlayer) {

@@ -1,4 +1,5 @@
 import type {PeaceSubStrategy, PeaceConfig} from '../../../../character/ai_strategy/peace.ts'
+import type {AISetInput} from '../types.ts'
 
 export type {PeaceSubStrategy, PeaceConfig}
 
@@ -12,7 +13,7 @@ export interface PeaceTransition {
 
 export interface PeaceStateHandler {
     enter: (ctx: import('../types.ts').AIContext, character: import('../../../../character/types.ts').CharacterEntity) => void
-    update: (dt: number, ctx: import('../types.ts').AIContext, character: import('../../../../character/types.ts').CharacterEntity, setInput: (dx: number, dz: number, attack: boolean) => void) => void
+    update: (dt: number, ctx: import('../types.ts').AIContext, character: import('../../../../character/types.ts').CharacterEntity, setInput: AISetInput) => void
     exit: (ctx: import('../types.ts').AIContext, character: import('../../../../character/types.ts').CharacterEntity) => void
     transitions: readonly PeaceTransition[]
 }

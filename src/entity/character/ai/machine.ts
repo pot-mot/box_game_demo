@@ -3,7 +3,7 @@ import type {CombatSubStrategy} from '../../../character/ai_strategy/combat.ts'
 import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
-import type {AIContext} from './types.ts'
+import type {AIContext, AISetInput} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
@@ -90,7 +90,7 @@ export const updateAI = (
     ctx: AIContext,
     character: CharacterEntity,
     allCharacters: readonly CharacterEntity[],
-    setInput: (dx: number, dz: number, attack: boolean) => void,
+    setInput: AISetInput,
 ): void => {
     if (character.combat.isDead) return
 

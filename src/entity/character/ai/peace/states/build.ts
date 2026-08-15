@@ -1,6 +1,7 @@
 import {v3Set, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {PeaceStateHandler} from '../types.ts'
 import {isBuildConfig, type BoxSpawnEntry} from '../../../../../character/ai_strategy/types.ts'
+import {CHARACTER_BASE_SIZE} from '../../../constants.ts'
 
 const _pos: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -34,14 +35,15 @@ export const buildHandler: PeaceStateHandler = {
         const h = randBetween(entry.minHeight, entry.maxHeight)
         const d = randBetween(entry.minDepth, entry.maxDepth)
 
-        /* 在角色周围随机位置放置 */
+        /* 在角色周围随机位置放置：箱子底部对齐地面（角色中心 y - 胶囊半高），留微小间隙防卡碰撞体 */
         const pos = character.body.translation()
         const angle = Math.random() * Math.PI * 2
         const dist = 1 + Math.random() * 1.5
         const bx = pos.x + Math.cos(angle) * dist
         const bz = pos.z + Math.sin(angle) * dist
+        const groundY = pos.y - (CHARACTER_BASE_SIZE.height * character.config.scale) / 2
 
-        v3Set(_pos, bx, pos.y, bz)
+        v3Set(_pos, bx, groundY + 0.05, bz)
 
         ctx.spawnBox(entry, _pos.x, _pos.y, _pos.z, {width: w, height: h, depth: d})
     },

@@ -30,20 +30,20 @@ export const attackHandler: CombatStateHandler = {
     exit: () => {},
     transitions: [
         {
+            /* cowardly 策略：攻击超时后立即逃跑（须先于通用超时检查，否则永远不可达） */
+            to: 'flee',
+            guard: (ctx) => {
+                if (ctx.combatStrategy !== 'cowardly') return false
+                return ctx.combatStateTime >= ctx.combatConfig.attackTimeout
+            },
+        },
+        {
             /* 攻击超时 → 调整位置 */
             to: 'chase',
             guard: (ctx) => {
                 const timeout = ctx.combatConfig.attackTimeout
                 if (timeout <= 0) return false
                 return ctx.combatStateTime >= timeout
-            },
-        },
-        {
-            /* cowardly 策略：攻击后逃跑（按策略配置的 attackTimeout） */
-            to: 'flee',
-            guard: (ctx) => {
-                if (ctx.combatStrategy !== 'cowardly') return false
-                return ctx.combatStateTime >= ctx.combatConfig.attackTimeout
             },
         },
         {
@@ -70,7 +70,7 @@ export const attackHandler: CombatStateHandler = {
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return v3Length(_dir) > detRange
+                return v3Length(_dir) >= detRange
             },
         },
     ],
