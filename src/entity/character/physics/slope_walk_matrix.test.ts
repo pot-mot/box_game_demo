@@ -47,6 +47,26 @@ const runAndStats = (
     return {fallingFrames, finalState: entity.stateMachine.currentState, states}
 }
 
+/** 统计水平前进量与卡死帧数（每帧 x 位移 < 1mm 判卡死） */
+const runAndProgress = (
+    hw: HarnessWorld,
+    entity: CharacterEntity,
+    dx: number,
+    frames: number,
+): {progressX: number; stuckFrames: number} => {
+    let gs: GroundState = initGS()
+    const startX = entity.body.translation().x
+    let stuckFrames = 0
+    let prevX = startX
+    for (let i = 0; i < frames; i++) {
+        gs = tick(hw, entity, gs, dx, 0)
+        const x = entity.body.translation().x
+        if (Math.abs(x - prevX) < 0.001) stuckFrames++
+        prevX = x
+    }
+    return {progressX: prevX - startX, stuckFrames}
+}
+
 /** 构造最低限度 CharacterModel mock（9 个动画关节用真实 three Group，避免不安全类型断言） */
 const makeJoint = (): Group => new Group()
 
@@ -78,6 +98,29 @@ const makeModelMock = (): CharacterModel => ({
     weaponMesh: null,
     recolor: () => {},
     dispose: () => {},
+})
+
+describe('walking 上坡坡度矩阵（3600 帧物理更新）', () => {
+    for (const deg of SLOPES_WALKABLE) {
+        it(`${deg}° 全程 walking 且持续前进（trimesh 内部棱回归）`, () => {
+            const hw = createHarnessWorld()
+            makeSlope(hw, Math.tan(deg * Math.PI / 180), 140, 6)
+            const x = 20
+            const y = Math.tan(deg * Math.PI / 180) * x + 0.51
+            const entity = makeChar(hw, 1, x, y, -50)
+            const r = runAndStats(hw, entity, 1, FRAMES_3600)
+            /* 平底 cuboid 时 trimesh 内部棱幽灵水平法线会把角色整帧卡死
+             *（10° 实测 219/240 帧原地不动），胶囊底面后必须消失 */
+            expect(r.fallingFrames).toBe(0)
+            expect(r.finalState).toBe('walking')
+            /* 前进量 ≥ 几何期望（speed·cosθ·时长）的 60%：
+             * projectToSlopeAtSpeed 保证总速度恒为 speed，水平分量 = speed·cosθ */
+            const p = runAndProgress(hw, entity, 1, FRAMES_3600)
+            const expected = (FRAMES_3600 / 60) * 6 * Math.cos(deg * Math.PI / 180)
+            expect(p.progressX).toBeGreaterThan(expected * 0.6)
+            expect(p.stuckFrames).toBeLessThan(FRAMES_3600 * 0.01)
+        }, TIMEOUT)
+    }
 })
 
 describe('walking 下坡坡度矩阵（3600 帧物理更新）', () => {

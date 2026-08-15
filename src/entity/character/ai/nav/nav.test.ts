@@ -583,8 +583,10 @@ describe('NavSensor 坡面检测', () => {
         expect(result.result).toBe('blocked_wall')
     })
 
-    it('23. 100° 倒悬 → 面法线 Y < 0，返回 blocked_wall', () => {
-        /* 倒悬面：宽度足够大，旋转后世界空间高度 > jumpHeight */
+    it('23. 100° 倒悬板 → 脚部高度命中面为世界空间 ~80° 坡（ny≈0.174 ≥ 0.06）→ 按可行走处理返回 clear', () => {
+        /* 倒悬面：宽 5 薄板旋转 −100°。脚部高度射线命中的是板的背面，
+         * 其世界法线 ny = −cos(−100°) ≈ +0.174，按 SLOPE_WALK_THRESHOLD 语义（80° 可走）放行。
+         * 法线已转世界空间判定，几何空间法线 (0,−1,0) 不再直接使用 */
         const overhangGeo = new BoxGeometry(5, 0.05, 2)
         const overhangMat = new MeshBasicMaterial()
         const overhang = new Mesh(overhangGeo, overhangMat)
@@ -592,6 +594,19 @@ describe('NavSensor 坡面检测', () => {
         overhang.rotation.z = (-100) * Math.PI / 180
         overhang.updateMatrixWorld()
         obstacles.push(overhang)
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.result).toBe('clear')
+    })
+
+    it('23b. 旋转 −80° 高板（世界空间法线 ny < 0）→ blocked_wall', () => {
+        /* 5m 长板旋转 −80°：命中面世界法线 ny = −cos(−80°) ≈ −0.174 < 0.06 → 障碍；
+         * 板世界高度 5·sin80° ≈ 4.9 > jumpHeight → 高墙 */
+        const slab = new Mesh(new BoxGeometry(5, 0.05, 2), new MeshBasicMaterial())
+        slab.position.set(1.0, 2.0, 0)
+        slab.rotation.z = (-80) * Math.PI / 180
+        slab.updateMatrixWorld()
+        obstacles.push(slab)
 
         const result = sensor.sense(entity, 1, 0, navConfig)
         expect(result.result).toBe('blocked_wall')
@@ -628,6 +643,73 @@ describe('NavFSM 坡面行为', () => {
         expect(result.jump).toBe(false)
         expect(navCtx.state).toBe('navigating')
         expect(result.dx).toBeGreaterThan(0)
+    })
+})
+
+/* ── C2 组：斜坡坑洞探针（上坡不误判） ── */
+
+describe('NavSensor 斜坡坑洞探针', () => {
+    let sensor: NavSensor
+    let entity: CharacterEntity
+    let navConfig: NavConfig
+    let obstacles: Mesh[]
+    let grounds: Mesh[]
+
+    beforeEach(() => {
+        obstacles = []
+        grounds = []
+        sensor = createNavSensor(() => obstacles, () => grounds, () => [])
+        entity = createCharEntity(0, 0, 0)
+        navConfig = {checkRadius: 0.5, checkDistance: 1.5, stuckTimeout: 2}
+    })
+
+    /** 大块斜坡地面（30×30 薄板绕 Z 轴旋转），模拟生产环境中地形 mesh 同时出现在障碍物与地面列表 */
+    const makeSlopeGround = (deg: number): Mesh => {
+        const m = new Mesh(new BoxGeometry(30, 0.1, 30), new MeshBasicMaterial())
+        /* 正角 = +X 方向上坡，负角 = +X 方向下坡 */
+        m.rotation.z = deg * Math.PI / 180
+        m.updateMatrixWorld()
+        return m
+    }
+
+    it('25. 20° 上坡 → 探针起点在坡面内部（必 miss），由正前方可行走命中兜底 → clear 而非 blocked_pit', () => {
+        const slope = makeSlopeGround(20)
+        obstacles.push(slope)
+        grounds.push(slope)
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.result).toBe('clear')
+        expect(result.groundAhead).toBe(true)
+    })
+
+    it('26. 45° 上坡 → clear（陡上坡同样不应误判坑洞）', () => {
+        const slope = makeSlopeGround(45)
+        obstacles.push(slope)
+        grounds.push(slope)
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.result).toBe('clear')
+        expect(result.groundAhead).toBe(true)
+    })
+
+    it('27. 30° 下坡 → 落差 1.5·tan30° ≈ 0.87 ≤ jumpHeight → clear', () => {
+        const slope = makeSlopeGround(-30)
+        obstacles.push(slope)
+        grounds.push(slope)
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.result).toBe('clear')
+        expect(result.groundAhead).toBe(true)
+    })
+
+    it('28. 60° 下坡 → 落差 1.5·tan60° ≈ 2.6 > jumpHeight → blocked_pit（不允许主动走下陡崖）', () => {
+        const slope = makeSlopeGround(-60)
+        obstacles.push(slope)
+        grounds.push(slope)
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.result).toBe('blocked_pit')
+        expect(result.groundAhead).toBe(false)
     })
 })
 

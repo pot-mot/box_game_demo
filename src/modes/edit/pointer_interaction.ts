@@ -86,7 +86,7 @@ export const setupPointerInteraction = (
             const entity = ts.getEntityList().find(e => e.mesh === hitMesh)
             if (entity) {
                 const dir = e.deltaY > 0 ? -1 : 1
-                ts.sculpt(entity.id, hitPoint.x, hitPoint.z, dir as 1 | -1)
+                ts.sculpt(entity.id, hitPoint.x, hitPoint.y, hitPoint.z, dir as 1 | -1)
                 return
             }
         }

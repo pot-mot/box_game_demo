@@ -43,7 +43,7 @@ export interface TerrainContext extends EntityInfoSource, TerrainHeightQuery {
     getSelected: () => BaseTerrainEntity | undefined
     getAll: () => BaseTerrainEntity[]
     getEntityList: () => BaseTerrainEntity[]
-    sculpt: (id: number, worldX: number, worldZ: number, direction: 1 | -1) => void
+    sculpt: (id: number, worldX: number, worldY: number, worldZ: number, direction: 1 | -1) => void
     getBody: (id: number) => RAPIER.RigidBody | undefined
     updateConfig: (id: number, partial: Partial<BaseTerrainConfig>) => void
     updatePosition: (id: number, x: number, z: number) => void

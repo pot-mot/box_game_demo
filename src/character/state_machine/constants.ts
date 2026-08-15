@@ -10,6 +10,10 @@ export const DASH_DURATION = 0.25
 export const DASH_COOLDOWN = 1.0
 /** 斜坡行走法线 Y 分量下限（cos 坡度角）。0.06 → 约 86.6°，覆盖 85° 以下斜坡；90° 垂直面（ny=0）不算着地 */
 export const SLOPE_WALK_THRESHOLD = 0.06
+/** 行走瞬态棱法线容忍下限：胶囊单点接触跨过 trimesh 网格棱线时，接触法线会瞬时读成
+ *  更陡的棱法线（如 85° 坡读到 87.6°）。此区间内仍按支撑面限速投影（总速度 = speed），
+ *  防止纯水平回退把角色沿近平垂直墙面一帧甩离表面（dev 每帧 +1m → 永久坠落） */
+export const SLOPE_TRANSIENT_MIN_NY = 0.01
 /** 从 falling 恢复到行走的法线 Y 分量下限（滞回，高于 SLOPE_WALK_THRESHOLD，防止边界抖动） */
 export const SLOPE_RECOVER_THRESHOLD = 0.08
 /** 郊狼时间：脱离地面后仍判定为着地的宽限期（秒），覆盖下坡弹跳的短暂悬空，防止误触发 falling */

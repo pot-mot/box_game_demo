@@ -198,6 +198,7 @@ interface CombatStateHandler {
 | `DASH_DURATION` | `0.25` | 冲刺持续时间（秒） |
 | `DASH_COOLDOWN` | `1.0` | 冲刺冷却时间（秒） |
 | `SLOPE_WALK_THRESHOLD` | `0.06` | 站立所需最小法线 Y（≈86.6°） |
+| `SLOPE_TRANSIENT_MIN_NY` | `0.01` | 行走瞬态棱法线容忍下限（胶囊跨 trimesh 棱线时的限速投影，防甩离墙面） |
 | `SLOPE_RECOVER_THRESHOLD` | `0.08` | 从下落恢复所需最小法线 Y |
 | `GROUND_KEEP_TIME` | `0.3` | 土狼时间（秒） |
 | `SLOPE_SINK_SPEED` | `3` | 斜坡重附着速度 |
@@ -352,7 +353,18 @@ interface LineOfSightChecker {
 
 使用 Three.js `Raycaster`（`intersectObjects(meshes, false)`）检测两点间是否有遮挡物。
 
-### 5.6 阵营与攻击倾向
+### 5.6 导航传感器（斜坡处理）
+
+**文件**：`src/entity/character/ai/nav/sensor.ts`
+
+| 机制 | 说明 |
+|------|------|
+| 世界空间法线过滤 | 命中面法线经 `normalMatrix` 转世界空间后判定可行性（`ny ≥ WALKABLE_NORMAL_MIN_Y`），地形/箱子带旋转时不会误判 |
+| 坑洞探针 | 从脚底高度向下探测 `checkDistance` 处地面，落差超过 `jumpHeight` 判为 `blocked_pit` |
+| 上坡兜底 | 上坡时探针起点位于坡面内部必然 miss，此时若正前方（hAngle=0）射线命中可行走坡面，说明地形持续向上延伸 → 视为有地面，避免误判 `blocked_pit` 导致 AI 在斜坡上无限绕行（持续 walking 不前进） |
+| 角色分离坡面补偿 | `separation.ts` 的 `separationSlopeDy()`：角色间强制分离的水平瞬移按支撑面平面方程补偿 Y（`SEPARATION_SLOPE_MIN_NY = 0.5` 以下不补偿），防止斜坡上纯水平平移把碰撞体埋进坡面（穿模 + 物理暴力弹出） |
+
+### 5.7 阵营与攻击倾向
 
 **文件**：`src/character/faction.ts`
 
@@ -393,6 +405,9 @@ interface LineOfSightChecker {
 | AI 入口 | `src/entity/character/ai/machine.ts` | `createAIMachine()`, `updateAI()`, `findNearestEnemy()` |
 | AI 类型 | `src/entity/character/ai/types.ts` | `AIContext` 接口 |
 | 视线检测 | `src/entity/character/ai/line_of_sight.ts` | `LineOfSightChecker` 实现 |
+| 导航 FSM | `src/entity/character/ai/nav/machine.ts` | navigating/steering/jumping/stuck 子状态机 |
+| 导航传感器 | `src/entity/character/ai/nav/sensor.ts` | 前方扇面射线 + 侧向扫描 + 坑洞探针（斜坡感知） |
+| 角色分离 | `src/entity/character/physics/separation.ts` | 重叠分离计算 + 斜坡 Y 补偿 |
 | 和平 FSM | `src/entity/character/ai/peace/machine.ts` | 巡逻/建造子状态机 |
 | 和平类型 | `src/entity/character/ai/peace/types.ts` | `PeaceState`, `PeaceStateHandler` |
 | 巡逻状态 | `src/entity/character/ai/peace/states/patrol.ts` | 随机路点巡逻 |

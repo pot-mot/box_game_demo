@@ -1,5 +1,6 @@
-/** 角色分离计算输入（两个角色的水平位置与半径） */
-export interface SeparationPair {
+import {SEPARATION_SLOPE_MIN_NY} from './constants.ts'
+
+/** 角色分离计算输入（两个角色的水平位置与半径） */export interface SeparationPair {
     aiX: number
     aiZ: number
     ajX: number
@@ -18,6 +19,24 @@ export interface SeparationResult {
     ajDz: number
     ajVx: number
     ajVz: number
+}
+
+/**
+ * 分离水平位移沿地面坡面的 Y 补偿量：
+ * 斜坡上纯水平 setTranslation 会把碰撞体埋进坡面（视觉穿模 + 物理暴力弹出），
+ * 按支撑面平面方程估算水平位移对应的高度变化。
+ * 离地或支撑面过陡（法线噪声会被 1/ny 放大）时不补偿，返回 0。
+ */
+export const separationSlopeDy = (
+    isOnGround: boolean,
+    normal: {readonly x: number; readonly y: number; readonly z: number},
+    dx: number,
+    dz: number,
+): number => {
+    if (!isOnGround) return 0
+    if (normal.y < SEPARATION_SLOPE_MIN_NY) return 0
+    /* +0 消除 -0（toEqual 严格区分） */
+    return -(dx * normal.x + dz * normal.z) / normal.y + 0
 }
 
 /**

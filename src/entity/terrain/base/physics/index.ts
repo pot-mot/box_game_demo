@@ -1,6 +1,6 @@
 import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
-import {createColliderForBody} from '../../../../physics/rapier_utils.ts'
+import {createColliderForBody, quatVmult} from '../../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import type {EntityPanelInfo} from '../../../box/base/types/entity_info.ts'
 import {createEmitter, type SourceEventMap} from '../../../box/base/types/event_emitter'
@@ -13,29 +13,31 @@ import {TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK} from '../../../../physi
 
 import type {BaseTerrainConfig, BaseTerrainEntity, TerrainSetupOptions, TerrainContext} from '../types'
 
-/** 从高度数组构建 Trimesh 顶点和索引 */
+/** 从高度数组构建 Trimesh 顶点和索引
+ *  顶点/三角形布局必须与 render/createTerrainMesh 完全一致：
+ *  顶点 i = x*n+z，世界坐标 (x*cs-half, heights[x][z], z*cs-half)，
+ *  三角形从上往下看为逆时针（法线朝上）。
+ *  旧版把 x/z 索引转置，碰撞面等于渲染面沿 X=Z 对角线的镜像（反射），
+ *  旋转 θ 后物理面 = 镜像 + 反向旋转 θ，物体在渲染视角下浮空 */
 const buildTrimesh = (heights: number[][], gs: number, cs: number): {vertices: Float32Array; indices: Uint32Array} => {
     const n = gs
     const count = n * n
     const vertices = new Float32Array(count * 3)
     const indices: number[] = []
     const half = ((n - 1) * cs) / 2
-    for (let r = 0; r < n; r++) {
-        for (let c = 0; c < n; c++) {
-            const idx = (r * n + c) * 3
-            vertices[idx] = c * cs - half
-            vertices[idx + 1] = heights[r][c]
-            vertices[idx + 2] = r * cs - half
+    for (let x = 0; x < n; x++) {
+        for (let z = 0; z < n; z++) {
+            const idx = (x * n + z) * 3
+            vertices[idx] = x * cs - half
+            vertices[idx + 1] = heights[x][z]
+            vertices[idx + 2] = z * cs - half
         }
     }
-    for (let r = 0; r < n - 1; r++) {
-        for (let c = 0; c < n - 1; c++) {
-            const a = r * n + c
-            const b = a + 1
-            const d = a + n
-            const e = d + 1
-            indices.push(a, b, e)
-            indices.push(a, e, d)
+    for (let x = 0; x < n - 1; x++) {
+        for (let z = 0; z < n - 1; z++) {
+            const i = x * n + z
+            indices.push(i, i + 1, i + n)
+            indices.push(i + 1, i + n + 1, i + n)
         }
     }
     return {vertices, indices: new Uint32Array(indices)}
@@ -72,6 +74,31 @@ export const createTerrainContextImpl = (
         `#${t.id}  (${t.mesh.position.x.toFixed(1)}, ${t.mesh.position.y.toFixed(1)}, ${t.mesh.position.z.toFixed(1)})  ${t.config.gridSize}×${t.config.gridSize}  h:[${t.config.minHeight},${t.config.maxHeight}]`
 
     const halfSize = (gs: number, cs: number): number => ((gs - 1) * cs) / 2
+
+    // ── 世界 ↔ 局部坐标换算（旋转感知，body 旋转为唯一真源）──
+
+    /**
+     * 世界坐标点 → 地形局部坐标（平移差后施加逆旋转）。
+     * 陷阱：直接用 worldX - position.x 只在未旋转时成立，
+     * 旋转后必须逆旋转，否则网格列映射错位（与 Trimesh 镜像 bug 同类）。
+     */
+    const worldToLocal = (t: BaseTerrainEntity, wx: number, wy: number, wz: number): {x: number; y: number; z: number} => {
+        const pos = t.body.translation()
+        const rot = t.body.rotation()
+        const inv = {x: -rot.x, y: -rot.y, z: -rot.z, w: rot.w}
+        const out = {x: 0, y: 0, z: 0}
+        quatVmult(out, inv, {x: wx - pos.x, y: wy - pos.y, z: wz - pos.z})
+        return out
+    }
+
+    /** 地形局部点 → 世界坐标 Y（把局部表面高度经旋转投回世界竖直轴） */
+    const localToWorldY = (t: BaseTerrainEntity, lx: number, ly: number, lz: number): number => {
+        const pos = t.body.translation()
+        const rot = t.body.rotation()
+        const p = {x: 0, y: 0, z: 0}
+        quatVmult(p, rot, {x: lx, y: ly, z: lz})
+        return pos.y + p.y
+    }
 
     // ── CRUD ──
 
@@ -207,15 +234,17 @@ export const createTerrainContextImpl = (
 
     // ── 雕刻 ──
 
-    const sculpt = (id: number, worldX: number, worldZ: number, direction: 1 | -1): void => {
+    const sculpt = (id: number, worldX: number, worldY: number, worldZ: number, direction: 1 | -1): void => {
         const t = entities.find(e => e.id === id)
         if (!t) return
 
         const gs = t.config.gridSize
         const cs = t.config.cellSize
         const half = halfSize(gs, cs)
-        const lx = worldX - t.mesh.position.x
-        const lz = worldZ - t.mesh.position.z
+        /* 需要完整 3D 世界点：俯仰/翻滚地形上仅 XZ 无法定位局部列 */
+        const local = worldToLocal(t, worldX, worldY, worldZ)
+        const lx = local.x
+        const lz = local.z
         if (lx < -half || lx > half || lz < -half || lz > half) return
 
         const centerX = (lx + half) / cs
@@ -272,19 +301,20 @@ export const createTerrainContextImpl = (
         const gs = t.config.gridSize
         const cs = t.config.cellSize
         const half = halfSize(gs, cs)
-        const terTrans = t.body.translation()
         for (const b of getBodies()) {
             if (b.bodyType() !== RAPIER.RigidBodyType.Dynamic) continue
             const bTrans = b.translation()
-            const lx = bTrans.x - t.mesh.position.x
-            const lz = bTrans.z - t.mesh.position.z
+            const local = worldToLocal(t, bTrans.x, bTrans.y, bTrans.z)
+            const lx = local.x
+            const lz = local.z
             if (lx < -half || lx > half || lz < -half || lz > half) continue
             const xi = Math.round((lx + half) / cs)
             const zi = Math.round((lz + half) / cs)
             if (xi < 0 || xi >= gs || zi < 0 || zi >= gs) continue
-            const terrainY = terTrans.y + t.heights[xi][zi]
+            /* 局部表面点经旋转投影回世界竖直轴 */
+            const terrainY = localToWorldY(t, lx, t.heights[xi][zi], lz)
             /* 用碰撞体形状半长估算物体底部高度（Box 读 halfExtents，Sphere 读 radius，
-             * 其余形状回退 0.5 —— 当前项目只有 Box/Sphere/Trimesh 动态体） */
+             * Capsule 读 halfHeight+radius，其余形状回退 0.5 —— 当前项目只有 Box/Sphere/Capsule/Trimesh 动态体） */
             let halfH = 0.5
             const firstCollider = b.collider(0)
             if (firstCollider) {
@@ -293,6 +323,8 @@ export const createTerrainContextImpl = (
                     halfH = shape.halfExtents.y
                 } else if (shape instanceof RAPIER.Ball) {
                     halfH = shape.radius
+                } else if (shape instanceof RAPIER.Capsule) {
+                    halfH = shape.halfHeight + shape.radius
                 }
             }
             const bottom = bTrans.y - halfH
@@ -311,13 +343,15 @@ export const createTerrainContextImpl = (
             const gs = t.config.gridSize
             const cs = t.config.cellSize
             const half = halfSize(gs, cs)
-            const lx = worldX - t.mesh.position.x
-            const lz = worldZ - t.mesh.position.z
+            /* refY 作为查询点竖直分量参与逆旋转（未旋转时与旧行为完全一致） */
+            const local = worldToLocal(t, worldX, refY, worldZ)
+            const lx = local.x
+            const lz = local.z
             if (lx < -half || lx > half || lz < -half || lz > half) continue
             const xi = Math.round((lx + half) / cs)
             const zi = Math.round((lz + half) / cs)
             if (xi < 0 || xi >= gs || zi < 0 || zi >= gs) continue
-            const h = t.mesh.position.y + t.heights[xi][zi]
+            const h = localToWorldY(t, lx, t.heights[xi][zi], lz)
             const dist = Math.abs(h - refY)
             if (dist < closestDist) {
                 closestDist = dist

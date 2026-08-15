@@ -36,7 +36,7 @@ import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import {resolveGroundState} from './ground_state.ts'
 import type {GroundContactLike} from './ground_state.ts'
-import {computeSeparation} from './separation.ts'
+import {computeSeparation, separationSlopeDy} from './separation.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
 import {SELECT_PALETTE} from '../appearance/constants.ts'
@@ -250,10 +250,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             .setTranslation(x, y, z)
         const body = world.createRigidBody(bodyDesc)
 
-        const bw = CHARACTER_BASE_SIZE.width * config.scale
-        const bh = CHARACTER_BASE_SIZE.height * config.scale
-        const bd = CHARACTER_BASE_SIZE.depth * config.scale
-        const colliderDesc = RAPIER.ColliderDesc.cuboid(bw / 2, bh / 2, bd / 2)
+        /* 胶囊（竖直）：半径 = 碰撞箱半宽，总高 = 碰撞箱高（2×halfHeight + 2×radius = bh）。
+         * 平底 cuboid 跨过 trimesh 网格顶点线时会被内部棱幽灵水平法线卡死（上坡原地卡住），
+         * 圆滑底面无挂点；rapier3d-compat 0.19/0.20 的 FIX_INTERNAL_EDGES 已损坏（开启即穿透）不可用 */
+        const capsuleRadius = (CHARACTER_BASE_SIZE.width * config.scale) / 2
+        const capsuleHalfHeight = (CHARACTER_BASE_SIZE.height * config.scale) / 2 - capsuleRadius
+        const colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, capsuleRadius)
             .setFriction(0)
             /* 密度 0：质量完全由附加质量决定，与碰撞体尺寸（scale）解耦 */
             .setDensity(0)
@@ -655,17 +657,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }, CHARACTER_SEPARATION_SPEED)
             if (!sep) continue
 
-            bodyA.setTranslation({ x: aPos.x + sep.aiDx, y: aPos.y, z: aPos.z + sep.aiDz }, true)
-            bodyB.setTranslation({ x: bPos.x + sep.ajDx, y: bPos.y, z: bPos.z + sep.ajDz }, true)
+            /* 斜坡上水平平移需要沿坡面补偿 Y，否则碰撞体埋进坡面（穿模 + 暴力弹出） */
+            const aDy = separationSlopeDy(ai.isOnGround, ai.groundNormal, sep.aiDx, sep.aiDz)
+            const bDy = separationSlopeDy(aj.isOnGround, aj.groundNormal, sep.ajDx, sep.ajDz)
+            bodyA.setTranslation({ x: aPos.x + sep.aiDx, y: aPos.y + aDy, z: aPos.z + sep.aiDz }, true)
+            bodyB.setTranslation({ x: bPos.x + sep.ajDx, y: bPos.y + bDy, z: bPos.z + sep.ajDz }, true)
 
-            ai.mesh.position.x = bodyA.translation().x
-            ai.mesh.position.z = bodyA.translation().z
-            ai.appearanceGroup.position.x = bodyA.translation().x
-            ai.appearanceGroup.position.z = bodyA.translation().z
-            aj.mesh.position.x = bodyB.translation().x
-            aj.mesh.position.z = bodyB.translation().z
-            aj.appearanceGroup.position.x = bodyB.translation().x
-            aj.appearanceGroup.position.z = bodyB.translation().z
+            const aAfter = bodyA.translation()
+            ai.mesh.position.set(aAfter.x, aAfter.y, aAfter.z)
+            ai.appearanceGroup.position.set(aAfter.x, aAfter.y, aAfter.z)
+            const bAfter = bodyB.translation()
+            aj.mesh.position.set(bAfter.x, bAfter.y, bAfter.z)
+            aj.appearanceGroup.position.set(bAfter.x, bAfter.y, bAfter.z)
 
             const aVel = bodyA.linvel()
             const bVel = bodyB.linvel()
@@ -788,10 +791,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
 
             world.removeCollider(entity.mainCollider, true)
-            const bw = CHARACTER_BASE_SIZE.width * entity.config.scale
-            const bh = CHARACTER_BASE_SIZE.height * entity.config.scale
-            const bd = CHARACTER_BASE_SIZE.depth * entity.config.scale
-            const colliderDesc = RAPIER.ColliderDesc.cuboid(bw / 2, bh / 2, bd / 2)
+            /* 胶囊参数与 spawnEntity 一致（随 scale 缩放） */
+            const capsuleRadius = (CHARACTER_BASE_SIZE.width * entity.config.scale) / 2
+            const capsuleHalfHeight = (CHARACTER_BASE_SIZE.height * entity.config.scale) / 2 - capsuleRadius
+            const colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, capsuleRadius)
                 .setFriction(0)
                 /* 密度 0：重建碰撞体不改变刚体质量（恒为 1） */
                 .setDensity(0)

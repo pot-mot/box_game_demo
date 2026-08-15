@@ -1,4 +1,4 @@
-import {Raycaster, Vector3, Box3, type Object3D} from 'three'
+import {Raycaster, Vector3, Box3, Matrix3, type Object3D, type Intersection} from 'three'
 import type {CharacterEntity} from '../../../../character/types.ts'
 import type {NavSenseOutput, NavSensor} from './types.ts'
 import type {NavConfig} from './types.ts'
@@ -12,6 +12,21 @@ const _raycaster = new Raycaster()
 const _origin = new Vector3()
 const _forward = new Vector3()
 const _right = new Vector3()
+const _normalMatrix = new Matrix3()
+const _worldNormal = new Vector3()
+
+/**
+ * 命中面法线转到世界空间后取 Y 分量：
+ * `hit.face.normal` 是几何空间法线，地形/箱子可能带旋转（setTransform），
+ * 直接读本地 Y 会把可行走坡面误判为墙壁（或反之）。
+ */
+const worldNormalY = (hit: Intersection<Object3D>): number => {
+    if (!hit.face) return 0
+    _normalMatrix.getNormalMatrix(hit.object.matrixWorld)
+    _worldNormal.copy(hit.face.normal).applyMatrix3(_normalMatrix)
+    const len = _worldNormal.length()
+    return len > 1e-6 ? _worldNormal.y / len : 0
+}
 
 export type {NavSensor}
 
@@ -76,6 +91,7 @@ export const createNavSensor = (
         let minHitDist = Infinity
         let blockTopY = -Infinity /** 命中对象的世界包围盒顶部 Y */
         let hitIsCharacter = false /** 最近命中是否来自角色 mesh */
+        let centerWalkableHit = false /** 正前方命中可行走坡面（地形向上延伸） */
 
         for (const hAngle of RAY_HORIZONTAL_ANGLES) {
             /* 将 forward 旋转 hAngle 得到水平方向 */
@@ -103,8 +119,14 @@ export const createNavSensor = (
                 const hits = _raycaster.intersectObjects(obstacles, false)
                 if (hits.length > 0 && hits[0].distance < config.checkDistance) {
                     /* 面法线过滤：可行走表面（如斜坡）不视为障碍物 */
-                    const normalY = hits[0].face?.normal.y ?? 0
-                    if (normalY >= WALKABLE_NORMAL_MIN_Y) continue
+                    const normalY = worldNormalY(hits[0])
+                    if (normalY >= WALKABLE_NORMAL_MIN_Y) {
+                        /* 上坡时坑洞探针起点位于坡面内部必然 miss，
+                         * 正前方（hAngle=0）命中可行走坡面说明地形持续向上延伸，
+                         * 不可能同时是坑洞 → 兜底视为有地面 */
+                        if (hAngle === 0) centerWalkableHit = true
+                        continue
+                    }
 
                     if (hits[0].distance < minHitDist) {
                         minHitDist = hits[0].distance
@@ -137,7 +159,7 @@ export const createNavSensor = (
             const firstHit = hits[0]
             const blocked = firstHit !== undefined
                 && firstHit.distance < config.checkDistance * 1.2
-                && (firstHit.face?.normal.y ?? 0) < WALKABLE_NORMAL_MIN_Y
+                && worldNormalY(firstHit) < WALKABLE_NORMAL_MIN_Y
 
             if (hAngle < 0 && blocked) {
                 leftClear = false
@@ -171,6 +193,10 @@ export const createNavSensor = (
         /* 回退：无地形 mesh（隐式无限平面 y=0），脚底到平面距离在跳跃高度内即安全 */
         if (!groundAhead && grounds.length === 0) {
             groundAhead = footY <= jumpHeight
+        }
+        /* 上坡时探针起点在坡面内部必然 miss，用正前方可行走坡面命中兜底 */
+        if (!groundAhead && centerWalkableHit) {
+            groundAhead = true
         }
 
         /* ── 分类 ── */

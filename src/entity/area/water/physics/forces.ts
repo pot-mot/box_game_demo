@@ -51,10 +51,13 @@ const getOverlapVolume = (
     const collider = body.collider(0)
     if (!collider) return 0
     const pos = body.translation()
-    const shape = collider.shape as unknown as { halfExtents?: { x: number; y: number; z: number }; radius?: number }
+    const shape = collider.shape as unknown as { halfExtents?: { x: number; y: number; z: number }; radius?: number; halfHeight?: number }
     let halfExt: { x: number; y: number; z: number }
     if (shape.halfExtents) {
         halfExt = shape.halfExtents
+    } else if (shape.halfHeight !== undefined && shape.radius !== undefined) {
+        /* 胶囊（角色）：AABB 半高 = halfHeight + radius，水平半宽 = radius */
+        halfExt = { x: shape.radius, y: shape.halfHeight + shape.radius, z: shape.radius }
     } else if (shape.radius !== undefined) {
         const r = shape.radius
         halfExt = { x: r, y: r, z: r }
