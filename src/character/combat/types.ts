@@ -19,6 +19,9 @@ export interface CombatComponent {
     /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍，于进入 attacking 状态时随机 */
     swingTilt: number
 
+    /** 累计挥击序号（每次进入攻击/连招推进 +1），驱动连招倾斜角循环 */
+    swingCount: number
+
     /** 攻击阶段索引（0-based），attacking meta-state 推进 */
     phaseIndex: number
     /** 当前阶段已用时间（秒） */
@@ -60,6 +63,7 @@ export const createCombatComponent = (
     attackDirX: 0,
     attackDirZ: 1,
     swingTilt: 0,
+    swingCount: 0,
     phaseIndex: 0,
     phaseTimer: 0,
     comboIndex: 0,
