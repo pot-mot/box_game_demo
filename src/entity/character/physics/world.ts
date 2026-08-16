@@ -417,12 +417,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.mesh.rotation.set(0, facingAngles.get(entity.id) ?? 0, 0)
             entity.appearanceGroup.position.set(pos.x, pos.y, pos.z)
             if (entity.isDying) {
+                /* 死亡渐隐以选中态不透明度为基线：未选中角色基线为 0（全程不可见，
+                 * 避免覆写选中态透明度导致胶囊在死亡时冒出）；选中角色自胶囊固有透明度渐隐 */
+                const fade = 1 - entity.dyingTimer / DYING_DURATION
+                const base = entity.id === selectedId ? COLLIDER_MESH_OPACITY : 0
                 const mat = entity.mesh.material
                 if (Array.isArray(mat)) {
-                    for (const m of mat) { m.transparent = true; m.opacity = 1 - entity.dyingTimer / DYING_DURATION }
+                    for (const m of mat) { m.transparent = true; m.opacity = base * fade }
                 } else {
                     mat.transparent = true
-                    mat.opacity = 1 - entity.dyingTimer / DYING_DURATION
+                    mat.opacity = base * fade
                 }
             }
         }
