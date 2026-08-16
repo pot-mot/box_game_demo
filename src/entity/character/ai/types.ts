@@ -18,8 +18,8 @@ export type SpawnBoxCallback = (entry: BoxSpawnEntry, x: number, y: number, z: n
 /** AI 输入回调：移动方向 + 攻击意图 + 可选显式攻击方向（缺省取移动方向，供边逃边射等移动/攻击分离场景） */
 export type AISetInput = (dx: number, dz: number, attack: boolean, attackDX?: number, attackDZ?: number) => void
 
-/** 武器攻击检测区域检查器：目标是否在武器命中区域内（缺失时 AI 回退圆形距离判定） */
-export type WeaponHitChecker = (character: CharacterEntity, target: CharacterEntity) => boolean
+/** 攻击检测箱检查器：目标是否在角色的攻击检测箱内（缺失时 AI 回退圆形距离判定） */
+export type AttackDetectChecker = (character: CharacterEntity, target: CharacterEntity) => boolean
 
 /** AI 运行时上下文（扁平化，combat / peace 字段前缀区分） */
 export interface AIContext {
@@ -36,8 +36,11 @@ export interface AIContext {
     /** 导航传感器（共享实例） */
     navSensor: NavSensor | null
 
-    /** 武器攻击检测区域检查器（仅近战出招触发用，缺失时回退距离判定） */
-    weaponHitChecker?: WeaponHitChecker
+    /** 攻击检测箱检查器（仅近战出招触发用，缺失时回退距离判定） */
+    attackDetectChecker?: AttackDetectChecker
+
+    /** 角色当前朝向角（rad）：视线扇形门控用，由 world.ts 注入 */
+    getFacingAngle?: () => number
 
     /** 当前活跃的 FSM */
     activeFsm: 'peace' | 'combat'

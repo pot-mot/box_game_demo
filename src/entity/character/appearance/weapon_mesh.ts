@@ -41,6 +41,21 @@ export interface WeaponGripPose {
     readonly rz: number
 }
 
+// ── 攻击判定箱（武器本地命中箱） ──
+
+/** 命中箱相对武器模型的外扩边距（略大于武器模型） */
+const WEAPON_HIT_BOX_PAD = 0.08
+
+/** 武器本地命中箱：武器本地坐标系内略包裹武器模型（以打击部位为主）的盒参数，
+ * 运行时经武器 group 的 matrixWorld 变换为世界空间 OBB 参与伤害判定 */
+export interface WeaponLocalHitBox {
+    readonly center: { readonly x: number; readonly y: number; readonly z: number }
+    readonly half: { readonly x: number; readonly y: number; readonly z: number }
+    /** 命中箱沿武器本地 +Y 轴（自握把延伸方向）的最大前伸量（含外扩边距），
+     * 即武器打击部位距握把的最远距离，供攻击检测箱推导实际攻击距离 */
+    readonly reach: number
+}
+
 // ── 生成器返回值 ──
 
 export interface WeaponMeshResult {
@@ -51,6 +66,8 @@ export interface WeaponMeshResult {
     tip: Mesh
     /** 握把中心在武器本地坐标的 y（负=在原点下方，0=无握把语义）；装备时叠加偏移使握把对齐手腕 */
     gripY: number
+    /** 攻击判定箱本地盒参数（自动外扩 WEAPON_HIT_BOX_PAD） */
+    hitBox: WeaponLocalHitBox
     cleanup: () => void
 }
 
@@ -92,9 +109,22 @@ const mesh = (geometry: BufferGeometry, mat: MeshStandardMaterial, x: number, y:
     return m
 }
 
-function finish(hitX: number, hitY: number, hitZ: number, tipX = hitX, tipY = hitY, tipZ = hitZ, gripY = 0): WeaponMeshResult {
+function finish(
+    hitX: number, hitY: number, hitZ: number,
+    tipX = hitX, tipY = hitY, tipZ = hitZ,
+    gripY = 0,
+    hbCx = hitX, hbCy = hitY, hbCz = hitZ,
+    hbHx = 0.1, hbHy = 0.1, hbHz = 0.1,
+): WeaponMeshResult {
     const group = new Group()
     for (const m of _meshes) group.add(m)
+
+    /* 命中箱统一外扩边距，保证略大于武器模型 */
+    const hitBox: WeaponLocalHitBox = {
+        center: {x: hbCx, y: hbCy, z: hbCz},
+        half: {x: hbHx + WEAPON_HIT_BOX_PAD, y: hbHy + WEAPON_HIT_BOX_PAD, z: hbHz + WEAPON_HIT_BOX_PAD},
+        reach: hbCy + hbHy + WEAPON_HIT_BOX_PAD,
+    }
 
     const hGeo = new BoxGeometry(0.01, 0.01, 0.01)
     const hMat = new MeshStandardMaterial({color: 0xff0000, roughness: 1, metalness: 0})
@@ -119,6 +149,7 @@ function finish(hitX: number, hitY: number, hitZ: number, tipX = hitX, tipY = hi
         hitCenter,
         tip,
         gripY,
+        hitBox,
         cleanup: () => {
             for (const g of geos) g.dispose()
             for (const m of mats) m.dispose()
@@ -140,7 +171,9 @@ const genSword = (cfg: WeaponMeshConfig & { id: 'sword' }): WeaponMeshResult => 
     mesh(cyl(gR, gR, gLen), gm, 0, -bd * 0.25 - gLen / 2, 0)
     mesh(box(bw * 2.5, 0.02, bw), bm, 0, -bd * 0.25 - 0.015, 0)
     mesh(box(bw, bh, bd), bm, 0, bh / 2 + 0.03, 0)
-    return finish(0, bh * 0.35, 0, 0, bh + 0.03, 0, -(0.005 + (cfg.bladeLen * 0.35) / 2))
+    /* 命中箱包裹刃部（y ∈ [0.03, bh+0.03]） */
+    return finish(0, bh * 0.35, 0, 0, bh + 0.03, 0, -(0.005 + (cfg.bladeLen * 0.35) / 2),
+        0, bh / 2 + 0.03, 0, bw, bh / 2, bd)
 }
 
 const genHeavySword = (cfg: WeaponMeshConfig & { id: 'heavy_sword' }): WeaponMeshResult => {
@@ -153,7 +186,8 @@ const genHeavySword = (cfg: WeaponMeshConfig & { id: 'heavy_sword' }): WeaponMes
     mesh(cyl(gR, gR, gLen), gm, 0, -bd * 0.3 - gLen / 2, 0)
     mesh(box(bw * 3, 0.03, bw), bm, 0, -bd * 0.3 - 0.02, 0)
     mesh(box(bw, bh, bd), bm, 0, bh / 2 + 0.05, 0)
-    return finish(0, bh * 0.3, 0, 0, bh + 0.05, 0, -(0.012 + (cfg.bladeLen * 0.3) / 2))
+    return finish(0, bh * 0.3, 0, 0, bh + 0.05, 0, -(0.012 + (cfg.bladeLen * 0.3) / 2),
+        0, bh / 2 + 0.05, 0, bw, bh / 2, bd)
 }
 
 const genSpear = (cfg: WeaponMeshConfig & { id: 'spear' }): WeaponMeshResult => {
@@ -164,7 +198,9 @@ const genSpear = (cfg: WeaponMeshConfig & { id: 'spear' }): WeaponMeshResult => 
 
     mesh(cyl(pR, pR, cfg.poleLen), pm, 0, cfg.poleLen / 2, 0)
     mesh(box(0.05, cfg.headLen, 0.04), hm, 0, cfg.poleLen + cfg.headLen / 2, 0)
-    return finish(0, cfg.poleLen * 0.6, 0, 0, cfg.poleLen + cfg.headLen, 0, cfg.poleLen * 0.08)
+    /* 命中箱包裹枪头 */
+    return finish(0, cfg.poleLen * 0.6, 0, 0, cfg.poleLen + cfg.headLen, 0, cfg.poleLen * 0.08,
+        0, cfg.poleLen + cfg.headLen / 2, 0, 0.05, cfg.headLen / 2, 0.04)
 }
 
 const genDualAxe = (cfg: WeaponMeshConfig & { id: 'dual_axe' }): WeaponMeshResult => {
@@ -177,7 +213,9 @@ const genDualAxe = (cfg: WeaponMeshConfig & { id: 'dual_axe' }): WeaponMeshResul
     mesh(cyl(gR, gR, gLen), gm, 0, -sz * 0.1 - gLen / 2, 0)
     mesh(box(sz * 0.4, sz * 0.6, 0.03), bm, sz * 0.3, gLen * 0.1, 0, 0, Math.PI / 6)
     mesh(box(sz * 0.4, sz * 0.6, 0.03), bm, -sz * 0.3, gLen * 0.1, 0, 0, -Math.PI / 6)
-    return finish(0, gLen * 0.5, 0, 0, gLen * 0.1 + sz * 0.3, 0, -(sz * 0.1 + (sz * 1.2) / 2))
+    /* 命中箱包裹双斧斧头区 */
+    return finish(0, gLen * 0.5, 0, 0, gLen * 0.1 + sz * 0.3, 0, -(sz * 0.1 + (sz * 1.2) / 2),
+        0, gLen * 0.1, 0, sz * 0.5, sz * 0.35, 0.03)
 }
 
 const genWarHammer = (cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshResult => {
@@ -188,7 +226,9 @@ const genWarHammer = (cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshR
 
     mesh(cyl(gR, gR, gLen), gm, 0, -hsz * 0.2 - gLen / 2, 0)
     mesh(box(hsz * 0.7, hsz * 0.5, hsz * 0.7), hm, 0, gLen * 0.7, 0)
-    return finish(0, gLen * 0.4, 0, 0, gLen * 0.7 + hsz * 0.25, 0, -(hsz * 0.2 + (hsz * 1.5) / 2))
+    /* 命中箱包裹锤头 */
+    return finish(0, gLen * 0.4, 0, 0, gLen * 0.7 + hsz * 0.25, 0, -(hsz * 0.2 + (hsz * 1.5) / 2),
+        0, gLen * 0.7, 0, hsz * 0.35, hsz * 0.25, hsz * 0.35)
 }
 
 const genBow = (cfg: WeaponMeshConfig & { id: 'bow' }): WeaponMeshResult => {

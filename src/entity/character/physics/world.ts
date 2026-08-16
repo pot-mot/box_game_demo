@@ -43,10 +43,12 @@ import {computeSeparation, separationSlopeDy} from './separation.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
 import {SELECT_PALETTE} from '../appearance/constants.ts'
-import {createMeleeExecutor, testWeaponHitBox} from '../combat/melee_executor.ts'
+import {createMeleeExecutor, testAttackDetect, attackDetectOBB, targetHitBoxHalves, meleeDetectRange} from '../combat/melee_executor.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
+import {createAttackHitBoxes, syncWeaponDebugBox, type AttackHitBoxes} from '../combat_vfx/hitbox_debug.ts'
+import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP} from '../ai/constants.ts'
 import type {WeaponMeshConfig} from '../appearance/weapon_mesh.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
@@ -67,6 +69,37 @@ const resolveWeaponMeshConfig = (attack: AttackConfig): WeaponMeshConfig => {
         return (MELEE_WEAPON_PRESETS[attack.weaponId ?? ''] ?? MELEE_WEAPON_PRESETS.long_sword).mesh
     }
     return (RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow).mesh
+}
+
+/* 视线扇形可视化 castFan 命中距离复用缓冲 */
+const _fanVizDists = new Float32Array(VISION_FAN_RAY_COUNT)
+
+/** 写入视线扇形调试线段顶点：扇形扫描射线（每 10° 一条，截断到遮挡点）+ 可选目标连线（无目标时退化为点） */
+const placeVisionFan = (
+    hitBoxes: AttackHitBoxes,
+    los: LineOfSightChecker | null,
+    x: number, eyeY: number, z: number,
+    yaw: number, len: number,
+    targetX?: number, targetY?: number, targetZ?: number,
+): void => {
+    const vp = hitBoxes.visionPositions
+    /* 与索敌判定同源：castFan 扫描整个扇形，射线截断到最近遮挡点（无 checker 时直达侦测半径） */
+    if (los) los.castFan(x, eyeY, z, yaw, len, _fanVizDists)
+    let p = 0
+    for (let i = 0; i < VISION_FAN_RAY_COUNT; i++) {
+        const a = yaw - VISION_FAN_HALF_ANGLE + i * VISION_FAN_RAY_STEP
+        const r = los ? Math.min(_fanVizDists[i], len) : len
+        vp[p++] = x; vp[p++] = eyeY; vp[p++] = z
+        vp[p++] = x + Math.sin(a) * r; vp[p++] = eyeY; vp[p++] = z + Math.cos(a) * r
+    }
+    /* 末段：当前目标连线（无目标时收缩为不可见点） */
+    vp[p++] = x; vp[p++] = eyeY; vp[p++] = z
+    if (targetX !== undefined && targetY !== undefined && targetZ !== undefined) {
+        vp[p++] = targetX; vp[p++] = targetY; vp[p++] = targetZ
+    } else {
+        vp[p++] = x; vp[p++] = eyeY; vp[p++] = z
+    }
+    hitBoxes.markVisionDirty()
 }
 
 /** 根据阵营取 badge 颜色 */
@@ -102,7 +135,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setCombatStrategy: (id: number, strategy: CombatSubStrategy) => void
     /** 注册箱子生成回调（供 builder AI 使用） */
     registerBoxSpawner: (fn: SpawnBoxCallback) => void
-    /** 设置碰撞体可视化 mesh 的可见性 */
+    /** 设置碰撞体可视化 mesh 与攻击判定箱调试线框的可见性 */
     setCollisionVisible: (visible: boolean) => void
     /** 配置 AI 感知（视线检查 + 导航传感器，需在所有实体系统初始化后调用） */
     setupAI: (systems: readonly EntityInfoSource[]) => void
@@ -161,6 +194,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const appearanceSystems = new Map<number, AppearanceSystem>()
     const weaponTrails = new Map<number, WeaponTrail>()
     const facingAngles = new Map<number, number>()
+    /** 攻击判定箱调试线框（edit 模式随碰撞体可视化一同显示） */
+    const attackHitBoxes = new Map<number, AttackHitBoxes>()
+    let attackHitBoxVisible = false
     let nextId = 1
     let selectedId: number | undefined
     let aiEnabled = false
@@ -192,7 +228,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         meleeImpactListener = listener
     }
 
-    const meleeExecutor = createMeleeExecutor(getAllCharacters, getModel, (x, y, z) => {
+    const meleeExecutor = createMeleeExecutor(getAllCharacters, getModel, (id) => facingAngles.get(id) ?? 0, (x, y, z) => {
         hitstopTimer = HITSTOP_DURATION
         meleeImpactListener?.(x, y, z)
     })
@@ -316,6 +352,31 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         appearanceModels.set(entity.id, model)
         appearanceSystems.set(entity.id, createAppearanceSystem())
         weaponTrails.set(entity.id, createWeaponTrail(scene))
+        const hitBoxes = createAttackHitBoxes(scene)
+        /* 生成时即定位受击箱/检测箱/视线扇形（编辑暂停态 update 不运行，避免线框滞留在原点） */
+        const th0 = targetHitBoxHalves(config.scale)
+        hitBoxes.targetBox.position.set(x, y, z)
+        hitBoxes.targetBox.scale.set(th0.x * 2, th0.y * 2, th0.z * 2)
+        hitBoxes.targetBox.visible = attackHitBoxVisible
+        const meleeRange0 = skills[0]?.config.type === 'melee'
+            ? (model.weaponHitBox !== null
+                ? meleeDetectRange(model.weaponHitBox.reach, config.scale)
+                : skills[0].config.weapon.range)
+            : undefined
+        if (meleeRange0 !== undefined) {
+            const db0 = attackDetectOBB({x, y, z}, meleeRange0, config.scale, 0)
+            hitBoxes.detectBox.position.set(db0.center.x, db0.center.y, db0.center.z)
+            hitBoxes.detectBox.scale.set(db0.half.x * 2, db0.half.y * 2, db0.half.z * 2)
+        }
+        /* 远程：射程圆环初始定位（半径 = weapon.range，贴足部高度平铺） */
+        const rangedRange0 = skills[0]?.config.type === 'ranged' ? skills[0].config.weapon.range : undefined
+        if (rangedRange0 !== undefined) {
+            hitBoxes.rangeRing.position.set(x, y - CHARACTER_BASE_SIZE.height * config.scale / 2, z)
+            hitBoxes.rangeRing.scale.set(rangedRange0, 1, rangedRange0)
+        }
+        placeVisionFan(hitBoxes, losChecker, x, y + CHARACTER_BASE_SIZE.height * config.scale * 0.4, z, 0,
+            skills[0]?.config.weapon.detectionRange ?? 8)
+        attackHitBoxes.set(entity.id, hitBoxes)
 
         const flash = createDamageFlash(entity)
         flashStates.set(entity.id, flash)
@@ -348,7 +409,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (entity.combat.isDead) continue
             const pos = entity.body.translation()
             entity.mesh.position.set(pos.x, pos.y, pos.z)
-            entity.mesh.quaternion.identity()
+            /* 碰撞箱可视化随身体朝向旋转（物理碰撞体为竖直胶囊，旋转对称不受影响） */
+            entity.mesh.rotation.set(0, facingAngles.get(entity.id) ?? 0, 0)
             entity.appearanceGroup.position.set(pos.x, pos.y, pos.z)
             if (entity.isDying) {
                 const mat = entity.mesh.material
@@ -417,6 +479,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         appearanceSystems.delete(entity.id)
         weaponTrails.get(entity.id)?.dispose()
         weaponTrails.delete(entity.id)
+        attackHitBoxes.get(entity.id)?.dispose()
+        attackHitBoxes.delete(entity.id)
         facingAngles.delete(entity.id)
 
         characters.splice(idx, 1)
@@ -630,6 +694,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const newAngle = currentAngle + diff * Math.min(ROTATION_SPEED * dt, 1)
                 facingAngles.set(entity.id, newAngle)
                 model.group.rotation.y = newAngle
+                /* 碰撞箱可视化同步跟随身体朝向 */
+                entity.mesh.rotation.y = newAngle
 
                 if (entity.isPlayer) {
                     model.headNeck.rotation.y = 0
@@ -648,6 +714,83 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         trail.update(dt, _trailTipVec, trailActive)
                     } else {
                         trail.update(dt, _trailTipVec, false)
+                    }
+                }
+
+                /* 战斗判定调试线框（edit 模式）：红色攻击判定箱（随武器 matrixWorld）、
+                 * 青色受击箱、橙色攻击检测箱（随位置/朝向）、蓝色视线扇形，
+                 * 几何均与对应判定函数同源，保证所见即所判 */
+                const hitBoxes = attackHitBoxes.get(entity.id)
+                if (hitBoxes) {
+                    const bPos = entity.body.translation()
+                    const yaw = facingAngles.get(entity.id) ?? 0
+                    const th = targetHitBoxHalves(entity.config.scale)
+                    hitBoxes.targetBox.position.set(bPos.x, bPos.y, bPos.z)
+                    hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
+                    /* 受击箱随身体朝向旋转（与判定的 OBB 几何一致） */
+                    hitBoxes.targetBox.rotation.y = yaw
+                    hitBoxes.targetBox.visible = attackHitBoxVisible
+
+                    const meleeSkill = activeSkill !== undefined && activeSkill.config.type === 'melee'
+                        ? activeSkill.config
+                        : undefined
+
+                    /* 攻击判定箱（红）：跟随武器模型位姿，尺寸 = 武器本地命中箱 */
+                    if (attackHitBoxVisible && meleeSkill !== undefined && model.weaponGroup !== null && model.weaponHitBox !== null) {
+                        model.weaponGroup.updateMatrixWorld()
+                        syncWeaponDebugBox(hitBoxes.weaponBox, model.weaponGroup.matrixWorld,
+                            model.weaponHitBox.center, model.weaponHitBox.half)
+                        hitBoxes.weaponBox.visible = true
+                    } else {
+                        hitBoxes.weaponBox.visible = false
+                    }
+
+                    /* 攻击检测箱（橙）：与角色位置/朝向绑定，深度 = 武器实际打击距离（命中箱 reach 推导） */
+                    if (attackHitBoxVisible && meleeSkill !== undefined) {
+                        const detectDepth = model.weaponHitBox !== null
+                            ? meleeDetectRange(model.weaponHitBox.reach, entity.config.scale)
+                            : meleeSkill.weapon.range
+                        const db = attackDetectOBB(bPos, detectDepth, entity.config.scale, yaw)
+                        hitBoxes.detectBox.position.set(db.center.x, db.center.y, db.center.z)
+                        hitBoxes.detectBox.scale.set(db.half.x * 2, db.half.y * 2, db.half.z * 2)
+                        hitBoxes.detectBox.rotation.y = yaw
+                        hitBoxes.detectBox.visible = true
+                    } else {
+                        hitBoxes.detectBox.visible = false
+                    }
+
+                    /* 射程圆环（橙）：远程出招门控为圆形距离判定 dist <= weapon.range，贴足部高度平铺 */
+                    const rangedSkill = activeSkill !== undefined && activeSkill.config.type === 'ranged'
+                        ? activeSkill.config
+                        : undefined
+                    if (attackHitBoxVisible && rangedSkill !== undefined) {
+                        hitBoxes.rangeRing.position.set(bPos.x, bPos.y - CHARACTER_BASE_SIZE.height * entity.config.scale / 2, bPos.z)
+                        hitBoxes.rangeRing.scale.set(rangedSkill.weapon.range, 1, rangedSkill.weapon.range)
+                        hitBoxes.rangeRing.visible = true
+                    } else {
+                        hitBoxes.rangeRing.visible = false
+                    }
+
+                    /* 视线扇形（蓝）：每 10° 一条扫描射线（截断到遮挡点），战斗目标存在时画连线 */
+                    if (attackHitBoxVisible) {
+                        const eyeY = bPos.y + CHARACTER_BASE_SIZE.height * entity.config.scale * 0.4
+                        const fanLen = activeSkill?.config.weapon.detectionRange ?? 8
+                        let tx: number | undefined
+                        let ty: number | undefined
+                        let tz: number | undefined
+                        if (aiCtx && aiCtx.activeFsm === 'combat' && aiCtx.combatTargetId !== undefined) {
+                            const target = characters.find(c => c.id === aiCtx.combatTargetId)
+                            if (target && !target.combat.isDead) {
+                                const tp = target.body.translation()
+                                tx = tp.x
+                                ty = tp.y + CHARACTER_BASE_SIZE.height * target.config.scale * 0.4
+                                tz = tp.z
+                            }
+                        }
+                        placeVisionFan(hitBoxes, losChecker, bPos.x, eyeY, bPos.z, yaw, fanLen, tx, ty, tz)
+                        hitBoxes.visionFan.visible = true
+                    } else {
+                        hitBoxes.visionFan.visible = false
                     }
                 }
             }
@@ -766,17 +909,28 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     losChecker,
                     DEFAULT_PEACE_CONFIGS[entity.peaceStrategy],
                     entity.combatStrategy,
-                    /* 武器攻击检测区域：武器模型世界位置 AABB（与伤害判定同一几何）；
-                     * 未持械/远程时返回 false/距离判定由 AI 侧回退处理 */
+                    /* 攻击检测箱：与角色位置/朝向绑定、深度由武器命中箱 reach 推导的前侧方立方体（与伤害判定箱同源）；
+                     * 远程不适用检测箱，回退圆形距离判定 */
                     (character, target) => {
-                        const model = appearanceModels.get(character.id)
-                        if (!model || !model.weaponMesh) return false
                         const skill = character.combat.skills[character.combat.currentSkillIndex]
                         if (!skill) return false
-                        model.weaponMesh.getWorldPosition(_trailTipVec)
+                        const cPos = character.body.translation()
                         const tPos = target.body.translation()
-                        return testWeaponHitBox(_trailTipVec, skill.config, tPos, target.config.scale)
+                        if (skill.config.type !== 'melee') {
+                            return Math.hypot(tPos.x - cPos.x, tPos.z - cPos.z) <= skill.config.weapon.range
+                        }
+                        /* 检测深度 = 武器实际打击距离；无命中箱（未装备模型）时回退 weapon.range */
+                        const hitBox = appearanceModels.get(character.id)?.weaponHitBox ?? null
+                        const detectDepth = hitBox !== null
+                            ? meleeDetectRange(hitBox.reach, character.config.scale)
+                            : skill.config.weapon.range
+                        return testAttackDetect(
+                            cPos, detectDepth, character.config.scale, facingAngles.get(character.id) ?? 0,
+                            tPos, target.config.scale, facingAngles.get(target.id) ?? 0,
+                        )
                     },
+                    /* 视线扇形门控用的实时朝向（findNearestEnemy 每帧读取） */
+                    () => facingAngles.get(entity.id) ?? 0,
                 )
                 if (boxSpawner) ctx.spawnBox = boxSpawner
                 if (navSensor) ctx.navSensor = navSensor
@@ -943,8 +1097,19 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const setCollisionVisible = (visible: boolean): void => {
+        attackHitBoxVisible = visible
         for (const entity of characters) {
             entity.mesh.visible = visible
+        }
+        for (const hb of attackHitBoxes.values()) {
+            hb.targetBox.visible = visible
+            /* weaponBox/detectBox/rangeRing/visionFan 由 update() 逐帧维护，此处仅在关闭时强制隐藏 */
+            if (!visible) {
+                hb.weaponBox.visible = false
+                hb.detectBox.visible = false
+                hb.rangeRing.visible = false
+                hb.visionFan.visible = false
+            }
         }
     }
 

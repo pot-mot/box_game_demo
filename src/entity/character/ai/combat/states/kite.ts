@@ -39,13 +39,13 @@ export const kiteHandler: CombatStateHandler = {
                 const timeout = ctx.combatConfig.kiteTimeout
                 if (timeout <= 0) return false
                 if (ctx.combatStateTime < timeout) return false
-                /* 需要目标在攻击距离内（近战用攻击检测区域，checker 缺失时回退距离判定） */
+                /* 需要目标在攻击距离内（近战用攻击检测箱，checker 缺失时回退距离判定） */
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill) return false
-                if (skill.config.type === 'melee' && ctx.weaponHitChecker) {
-                    return ctx.weaponHitChecker(character, target)
+                if (skill.config.type === 'melee' && ctx.attackDetectChecker) {
+                    return ctx.attackDetectChecker(character, target)
                 }
                 const pos = character.body.translation()
                 const tp = target.body.translation()

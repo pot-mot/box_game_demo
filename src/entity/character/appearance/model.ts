@@ -1,7 +1,7 @@
 import {Group, Mesh, BoxGeometry, MeshStandardMaterial, CanvasTexture, NearestFilter} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import type {CharacterModel, CharacterColorPalette} from './types.ts'
-import type {WeaponMeshConfig} from './weapon_mesh.ts'
+import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
 import {createWeaponMesh} from './weapon_mesh.ts'
 import {WEAPON_GRIP_POSES} from './constants.ts'
 import {
@@ -270,6 +270,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     let weaponGroup: Group | null = null
     let weaponHitCenter: Mesh | null = null
     let weaponTipMesh: Mesh | null = null
+    let weaponHitBoxData: WeaponLocalHitBox | null = null
     let weaponCleanup: (() => void) | null = null
     let weaponMount: Group | null = null
     let weaponGripTilt = 0
@@ -281,6 +282,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
             weaponGroup = null
             weaponHitCenter = null
             weaponTipMesh = null
+            weaponHitBoxData = null
             weaponCleanup = null
             weaponMount = null
             weaponGripTilt = 0
@@ -303,6 +305,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         weaponGroup = result.group
         weaponHitCenter = result.hitCenter
         weaponTipMesh = result.tip
+        weaponHitBoxData = result.hitBox
         weaponCleanup = result.cleanup
         weaponMount = mount
         weaponGripTilt = grip.rx
@@ -399,6 +402,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         recolor,
         get weaponMesh() { return weaponHitCenter },
         get weaponTip() { return weaponTipMesh },
+        get weaponGroup() { return weaponGroup },
+        get weaponHitBox() { return weaponHitBoxData },
         get weaponGripTilt() { return weaponGripTilt },
         dispose,
     }

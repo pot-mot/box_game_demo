@@ -32,7 +32,7 @@ AI 决策层（entity/character/ai/machine.ts）
 
 **工作流程**：
 
-1. 调用 `findNearestEnemy()` 检测敌人（条件：阵营敌对 + 在检测范围内 + 有视线无障碍）
+1. 调用 `findNearestEnemy()` 检测敌人（三重门控：阵营敌对 + 在侦测半径内 + 身前 270° 扇形内 + 扇形扫描射线无遮挡）
 2. 发现敌人 → 从 `peace` 切换到 `combat`，进入 `chase` 状态
 3. 无敌人且战斗 FSM 进入 `inactive` → 切换回 `peace`
 4. **怯懦角色**首次发现敌人且剩余 `attackBurstCount` 时，直接进入 `flee` 而非 `chase`
@@ -153,20 +153,25 @@ interface CombatStateHandler {
 }
 ```
 
-### 2.5 近战攻击检测区域（weaponHitChecker）
+### 2.5 攻击检测箱（attackDetectChecker）
 
-AI 出招门控不再用圆形距离判定（`dist <= weapon.range`），而是用与伤害判定同源的攻击检测区域：
+AI 出招门控不用圆形距离判定（`dist <= weapon.range`），而是用**攻击检测箱**——与角色位置/朝向绑定、深度由**武器实际打击距离**驱动的朝向 OBB（不同武器命中箱 reach 不同，检测箱自然不同；不再使用与实际命中距离差距过大的 `weapon.range`）：
 
 ```ts
-/** 武器命中区域判定器：目标是否在角色当前武器的攻击检测区域内 */
-export type WeaponHitChecker = (character: CharacterEntity, target: CharacterEntity) => boolean
+/** 攻击检测箱检查器：目标是否在角色的攻击检测箱内（缺失时 AI 回退圆形距离判定） */
+export type AttackDetectChecker = (character: CharacterEntity, target: CharacterEntity) => boolean
 ```
 
-- **纯函数**：`entity/character/combat/melee_executor.ts` 导出 `testWeaponHitBox(weaponPos, skill, targetPos, targetScale)`（武器模型 AABB 与目标包围盒重叠判定，伤害判定同款几何），executor 与 AI 共用。
-- **注入链路**：`world.ts` `activateAI` 创建 AI 时传入闭包：取 `appearanceModels` 的 `weaponMesh.getWorldPosition` 作为武器位置 → `testWeaponHitBox`；朝向校验由 AI 已有面向目标逻辑承担。
-- **生效点**（仅近战）：`attack.update` 出招门控、`attack → chase`（出区域）guard、`chase → attack`（入区域）guard；`detectionRange`（索敌感知半径）语义不变；远程武器不受影响。
+- **几何**：`entity/character/combat/melee_executor.ts` 导出 `attackDetectOBB(pos, range, scale, yaw)`：
+    - 深度传入值由 `meleeDetectRange(weaponHitBox.reach, scale)` 推导 = （`MELEE_ARM_FORWARD_REACH` 臂前伸量 + 命中箱 reach + `ATTACK_DETECT_REACH_MARGIN` 触发余量）× scale；命中箱 reach 与红色伤害判定箱同源，保证「检测到即可打到」；身前覆盖 = 深度 + 身体半深，身后仅 `ATTACK_DETECT_BACK_MARGIN` 少量余量
+    - 半宽 = 身体半宽 + `ATTACK_DETECT_SIDE_MARGIN`，半高 = 身体半高 + `ATTACK_DETECT_HEIGHT_MARGIN`
+    - 中心沿朝向前移 `(range - 身体半深 - 身后余量) / 2`，即主体覆盖角色前方与两侧
+    - 边距常量集中在 `entity/character/combat/constants.ts`
+- **判定**：`testAttackDetect()` 用检测箱 OBB 与目标受击箱 OBB（与碰撞箱同尺寸的竖直胶囊包围盒，随目标朝向旋转）做 15 轴 SAT 相交（`combat/obb.ts`）。
+- **注入链路**：`world.ts` `activateAI` 创建 AI 时传入闭包——近战从 `appearanceModels` 取当前武器命中箱 reach 经 `meleeDetectRange` 推导检测深度后走 `testAttackDetect`（朝向取 `facingAngles`，无命中箱时回退 `weapon.range`）；远程回退 `Math.hypot <= weapon.range` 圆形判定（保持原有行为，edit debug 以橙色射程圆环显示，半径 = `weapon.range`）。
+- **生效点**（仅近战）：`attack.update` 出招门控、`attack → chase`（出箱）guard、`chase → attack`（入箱）guard、`kite` 射程内判定；`detectionRange`（索敌感知半径）语义不变。
 - **回退**：checker 缺失（测试环境）时回退圆形距离判定，保证无装配环境下 AI 行为不变。
-- **与伤害判定的边界**：检测区域仅用于 AI 出招触发；实际伤害判定仍由 `melee_executor` 逐帧 AABB 检测执行，两者几何一致但职责分离。
+- **与伤害判定的边界**：攻击检测箱仅用于 AI 出招触发（橙色 debug 线框）；实际伤害由**攻击判定箱**（武器本地盒随 `weaponGroup.matrixWorld` 变换的世界 OBB，红色 debug 线框）与受击箱 SAT 相交决定，两者职责分离、几何不同。
 
 ---
 
@@ -356,17 +361,36 @@ const COMBAT_SUB_STRATEGIES = ['tactical', 'aggressive', 'cowardly'] as const
 const BUILDABLE_BOX_TYPES = ['box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity'] as const
 ```
 
-### 5.5 `LineOfSightChecker`
+### 5.5 `LineOfSightChecker` 与视线扇形
 
 **文件**：`src/entity/character/ai/line_of_sight.ts`
 
 ```ts
 interface LineOfSightChecker {
     hasLOS(fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number): boolean
+    /** 扇形扫描：向 yaw ±半角内发射 VISION_FAN_RAY_COUNT 条水平射线（每 10° 一条），
+     * 把每条射线最近遮挡物距离写入 out（无遮挡写 maxDist） */
+    castFan(fromX: number, fromY: number, fromZ: number, yaw: number, maxDist: number, out: Float32Array): void
 }
 ```
 
-使用 Three.js `Raycaster`（`intersectObjects(meshes, false)`）检测两点间是否有遮挡物。
+使用 Three.js `Raycaster`（`intersectObjects(meshes, false)`）检测实体遮挡，扫描射线起点取眼部高度（`height × scale × 0.4`，与 debug 可视化同源）。
+
+**270° 扇形扫描**（`machine.ts` `findNearestEnemy`）：索敌不用单条目标射线，而是用**覆盖整个扇形的扫描射线**——每 10° 一条（共 28 条，含左右边界）：
+
+1. **角度门控**：目标方位角 `atan2(dx, dz)` 与角色朝向角（`ctx.getFacingAngle()`，由 `world.ts` 的 `facingAngles` 注入）的归一化角差超出 ±`VISION_FAN_HALF_ANGLE`（135°）则不可见，即正后方 90° 为盲区。
+2. **射线遮挡**：`castFan` 懒发射（有候选才扫描一次，整帧复用），取最接近目标方位角的射线（角度量化到 10° 网格）；命中点早于目标体表（`d - 胶囊半径 - 0.05` 容差）才判遮挡——射线会命中目标自身网格，不加容差会把目标自遮挡误判为不可见。
+
+常量在 `src/entity/character/ai/constants.ts`：
+
+| 常量 | 值 | 说明 |
+|------|-----|------|
+| `VISION_FAN_ANGLE` | `π × 1.5` | 视线扇形总角（270°） |
+| `VISION_FAN_HALF_ANGLE` | `3π / 4` | 半角（±135°） |
+| `VISION_FAN_RAY_STEP` | `π / 18` | 扫描射线步长（10°） |
+| `VISION_FAN_RAY_COUNT` | `28` | 扫描射线数（270°/10° + 1） |
+
+edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：眼部高度处画全部 28 条扫描射线（与判定同源 castFan，**截断到遮挡点**，直观看到哪条射线被什么挡住），存在索敌目标时额外画到目标的连线。
 
 ### 5.6 导航传感器（斜坡处理）
 
@@ -417,9 +441,13 @@ interface LineOfSightChecker {
 
 | 层级 | 文件 | 内容 |
 |------|------|------|
-| AI 入口 | `src/entity/character/ai/machine.ts` | `createAIMachine()`, `updateAI()`, `findNearestEnemy()` |
-| AI 类型 | `src/entity/character/ai/types.ts` | `AIContext` 接口 |
-| 视线检测 | `src/entity/character/ai/line_of_sight.ts` | `LineOfSightChecker` 实现 |
+| AI 入口 | `src/entity/character/ai/machine.ts` | `createAIMachine()`, `updateAI()`, `findNearestEnemy()`（含 270° 扇形门控与扫描射线遮挡） |
+| AI 常量 | `src/entity/character/ai/constants.ts` | `VISION_FAN_ANGLE` / `VISION_FAN_HALF_ANGLE` / `VISION_FAN_RAY_STEP` / `VISION_FAN_RAY_COUNT` |
+| AI 类型 | `src/entity/character/ai/types.ts` | `AIContext` 接口、`AttackDetectChecker` |
+| 视线检测 | `src/entity/character/ai/line_of_sight.ts` | `LineOfSightChecker` 实现（`hasLOS` + `castFan` 扇形扫描） |
+| OBB 几何 | `src/entity/character/combat/obb.ts` | `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
+| 攻击检测箱 | `src/entity/character/combat/melee_executor.ts` | `attackDetectOBB` / `testAttackDetect` / `meleeDetectRange`（深度由武器命中箱 reach 推导） |
+| Debug 可视化 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/受击箱（青）/检测箱（橙）/射程圆环（橙，远程）/视线扇形（蓝） |
 | 导航 FSM | `src/entity/character/ai/nav/machine.ts` | navigating/steering/jumping/stuck 子状态机 |
 | 导航传感器 | `src/entity/character/ai/nav/sensor.ts` | 前方扇面射线 + 侧向扫描 + 坑洞探针（斜坡感知） |
 | 角色分离 | `src/entity/character/physics/separation.ts` | 重叠分离计算 + 斜坡 Y 补偿 |

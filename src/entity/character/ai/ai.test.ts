@@ -8,6 +8,7 @@ import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {AIContext} from './types.ts'
+import type {LineOfSightChecker} from './line_of_sight.ts'
 import {createNavRunContext} from './nav/machine.ts'
 import {createAIMachine, updateAI} from './machine.ts'
 import {chaseHandler} from './combat/states/chase.ts'
@@ -376,12 +377,12 @@ describe('AI 顶层调度器', () => {
     })
 })
 
-describe('AI 攻击检测区域（weaponHitChecker）', () => {
+describe('AI 攻击检测箱（attackDetectChecker）', () => {
     it('chase→attack：checker 判定未命中时不出招（即使在圆形距离内）', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
         const ctx = makeCtx('tactical', 2)
         ctx.combatState = 'chase'
-        ctx.weaponHitChecker = () => false
+        ctx.attackDetectChecker = () => false
         const enemies = [makeChar(2, 1.0, 0, 1, 'melee')]
         const guard = chaseHandler.transitions.find(t => t.to === 'attack')!
         expect(guard.guard(ctx, char, enemies)).toBe(false)
@@ -391,7 +392,7 @@ describe('AI 攻击检测区域（weaponHitChecker）', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
         const ctx = makeCtx('tactical', 2)
         ctx.combatState = 'chase'
-        ctx.weaponHitChecker = () => true
+        ctx.attackDetectChecker = () => true
         const enemies = [makeChar(2, 3, 0, 1, 'melee')]
         const guard = chaseHandler.transitions.find(t => t.to === 'attack')!
         expect(guard.guard(ctx, char, enemies)).toBe(true)
@@ -408,21 +409,21 @@ describe('AI 攻击检测区域（weaponHitChecker）', () => {
             captured.push({dx, dz, attack})
         }
 
-        ctx.weaponHitChecker = () => true
+        ctx.attackDetectChecker = () => true
         attackHandler.update(0.016, ctx, char, enemies, capture)
         expect(captured.pop()?.attack).toBe(true)
 
-        ctx.weaponHitChecker = () => false
+        ctx.attackDetectChecker = () => false
         attackHandler.update(0.016, ctx, char, enemies, capture)
         expect(captured.pop()?.attack).toBe(false)
     })
 
-    it('attack→chase：checker 判定出区域则回追击', () => {
+    it('attack→chase：checker 判定出箱则回追击', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
         const ctx = makeCtx('tactical', 2)
         ctx.combatState = 'attack'
-        ctx.weaponHitChecker = () => false
-        /* 目标在侦测范围内但出了攻击检测区域 */
+        ctx.attackDetectChecker = () => false
+        /* 目标在侦测范围内但出了攻击检测箱 */
         const enemies = [makeChar(2, 1.0, 0, 1, 'melee')]
         const allChase = attackHandler.transitions.filter(t => t.to === 'chase')
         const guard = allChase[allChase.length - 1]
@@ -438,5 +439,87 @@ describe('AI 攻击检测区域（weaponHitChecker）', () => {
         const guard = chaseHandler.transitions.find(t => t.to === 'attack')!
         expect(guard.guard(ctx, char, inRange)).toBe(true)
         expect(guard.guard(ctx, char, outRange)).toBe(false)
+    })
+})
+
+describe('视线检测 270° 扇形门控（findNearestEnemy）', () => {
+    const runDetection = (enemyX: number, enemyZ: number, facing: number): 'combat' | 'peace' => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, 8, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        ctx.getFacingAngle = () => facing
+        const enemies = [makeChar(2, enemyX, enemyZ, 1, 'melee')]
+        updateAI(0.016, ctx, char, enemies, () => {})
+        return ctx.activeFsm
+    }
+
+    it('正前方（朝向 +Z）敌人可见', () => {
+        expect(runDetection(0, 3, 0)).toBe('combat')
+    })
+
+    it('侧面 90° 敌人可见（在 270° 扇形内）', () => {
+        expect(runDetection(3, 0, 0)).toBe('combat')
+        expect(runDetection(-3, 0, 0)).toBe('combat')
+    })
+
+    it('正后方敌人不可见（90° 盲区）', () => {
+        expect(runDetection(0, -3, 0)).toBe('peace')
+    })
+
+    it('斜后方超出半角 135° 的敌人不可见', () => {
+        /* 方位角 ≈ -141° > 半角 135° */
+        expect(runDetection(-2, -2.5, 0)).toBe('peace')
+    })
+
+    it('扇形随朝向旋转：转身 180° 后原背后敌人变为可见', () => {
+        expect(runDetection(0, -3, Math.PI)).toBe('combat')
+        expect(runDetection(0, 3, Math.PI)).toBe('peace')
+    })
+})
+
+describe('视线扇形扫描射线遮挡（castFan）', () => {
+    /** 构造 stub 视线检查器：所有扇形射线统一填充给定遮挡距离（-1 = 无遮挡） */
+    const fanLos = (hitDist: number): LineOfSightChecker => ({
+        hasLOS: () => true,
+        castFan: (_fx, _fy, _fz, _yaw, maxDist, out) => {
+            out.fill(hitDist < 0 ? maxDist : Math.min(hitDist, maxDist))
+        },
+    })
+
+    const runWithLos = (los: LineOfSightChecker, enemyX: number, enemyZ: number): 'combat' | 'peace' => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, 8, los, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        const enemies = [makeChar(2, enemyX, enemyZ, 1, 'melee')]
+        updateAI(0.016, ctx, char, enemies, () => {})
+        return ctx.activeFsm
+    }
+
+    it('全部射线无遮挡 → 敌人可见', () => {
+        expect(runWithLos(fanLos(-1), 0, 3)).toBe('combat')
+    })
+
+    it('射线命中点早于目标体表 → 被遮挡不可见', () => {
+        /* 目标距离 3，遮挡物命中点 1.5 < 3 - 胶囊半径 0.125 - 容差 0.05 */
+        expect(runWithLos(fanLos(1.5), 0, 3)).toBe('peace')
+    })
+
+    it('射线命中目标自身体表 → 仍可见（不自遮挡误判）', () => {
+        /* 命中点 = 3 - 0.125（体表）≥ 3 - 0.125 - 0.05 */
+        expect(runWithLos(fanLos(3 - 0.125), 0, 3)).toBe('combat')
+    })
+
+    it('遮挡物只挡住对应方位射线：其他方向敌人仍可见', () => {
+        /* 左半扇形（射线 0–13）被挡在 0.5 处，右半无遮挡；
+         * 正前方 +Z 敌人方位角 0° → 射线索引 round(135/10) = 14，属无遮挡区 */
+        const los: LineOfSightChecker = {
+            hasLOS: () => true,
+            castFan: (_fx, _fy, _fz, _yaw, maxDist, out) => {
+                for (let i = 0; i < out.length; i++) out[i] = i < out.length / 2 ? 0.5 : maxDist
+            },
+        }
+        expect(runWithLos(los, 0, 3)).toBe('combat')
+        /* 左侧 90° 敌人（方位角 -90° → 射线索引 round(45/10) = 5）落在被挡区 → 不可见 */
+        expect(runWithLos(los, -3, 0)).toBe('peace')
     })
 })

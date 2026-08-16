@@ -100,10 +100,10 @@ export const chaseHandler: CombatStateHandler = {
                         && (skill.cooldownTimer ?? Infinity) <= 0
                 }
 
-                /* 默认：仅近战可进入攻击（攻击检测区域检查，checker 缺失时回退距离判定） */
+                /* 默认：仅近战可进入攻击（攻击检测箱检查，checker 缺失时回退距离判定） */
                 if (skill.config.type === 'ranged') return false
-                const inRegion = ctx.weaponHitChecker
-                    ? ctx.weaponHitChecker(character, target)
+                const inRegion = ctx.attackDetectChecker
+                    ? ctx.attackDetectChecker(character, target)
                     : v3Length(_dir) < skillRange
                 return inRegion && (skill.cooldownTimer ?? Infinity) <= 0
             },

@@ -306,9 +306,36 @@ idle/walking ──→ attacking (meta-state)
 
 ---
 
-## 五、动画系统重构
+## 五、伤害判定几何（攻击判定箱 / 受击箱）
 
-### 5.1 动画文件组织
+攻击相关的三个检测系统完全解耦，各自独立几何、独立 debug 可视化：
+
+| 系统 | 几何 | 职责 | edit debug |
+|------|------|------|-----------|
+| 攻击判定箱 | 武器本地盒 → 世界 OBB（随武器模型移动） | 伤害判定 | 红色线框 |
+| 攻击检测箱 | 近战：角色位置/朝向绑定的 OBB（深度 = 武器实际打击距离，由命中箱 reach 推导）；远程：圆形距离判定 `dist <= weapon.range` | AI 出招门控（见 `docs/ai_system.md` 2.5） | 近战橙色线框 / 远程橙色射程圆环 |
+| 视线检测 | 270° 扇形扫描射线（每 10° 一条）+ 角度门控 | 索敌（见 `docs/ai_system.md` 5.5） | 蓝色线条 |
+
+### 5.1 攻击判定箱（武器本地命中箱）
+
+- **来源**：武器构建时提供本地盒参数（`appearance/weapon_mesh.ts` 的 `WeaponLocalHitBox`，略包裹武器打击部位 + `WEAPON_HIT_BOX_PAD` 外扩），经 `CharacterModel.weaponGroup` / `weaponHitBox` 暴露；近战武器显式指定刃部/枪头/斧头/锤头区域，远程/投掷取默认盒。
+- **reach 字段**：命中箱沿武器本地 +Y 轴（自握把延伸方向）的最大前伸量（`center.y + half.y`，含外扩边距），即武器打击部位距握把的最远距离；攻击检测箱深度由此推导（见 `meleeDetectRange`），保证检测距离与伤害判定几何同源。
+- **运行时**：`melee_executor` 命中窗口（`attackTimer / duration` 进度 0.1–0.85，跳过蓄力前段与恢复期）内强制 `weaponGroup.updateMatrixWorld()`，取 `matrixWorld.elements` 经 `obbFromTransform`（列主序，列向量含缩放）得世界 OBB。
+- **判定**：与目标受击箱 OBB 做 15 轴 SAT 相交（`combat/obb.ts` `obbIntersect`）。判定与 debug 可视化（`combat_vfx/hitbox_debug.ts` `syncWeaponDebugBox`）同源。
+
+### 5.2 受击箱
+
+与身体碰撞箱同尺寸（竖直胶囊包围盒 = `CHARACTER_BASE_SIZE` × `scale`），中心 = body 位置，随身体朝向 yaw 旋转（`targetHurtOBB`）。攻击判定与 AI 攻击检测共用同一受击箱。
+
+### 5.3 命中结算
+
+SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次）→ `applyDamage` + 击退冲量（方向 = 武器握把 → 目标的水平方向）+ `onHit` 回调（顿帧/相机震动等打击感）。击退方向以武器握把世界位置为起点（`weaponGroup.getWorldPosition`）。
+
+---
+
+## 六、动画系统重构
+
+### 6.1 动画文件组织
 
 每个攻击子状态独立拥有自己的 `AnimationHandler` 文件，与状态文件通过命名约定 1:1 配对：
 
@@ -342,7 +369,7 @@ animators/attack/
 └── ...
 ```
 
-### 5.2 动画调度
+### 6.2 动画调度
 
 `AppearanceSystem` 按**完整状态名**查找 animator：
 
@@ -351,11 +378,11 @@ const animator = getAnimator(state)
     ?? (state.startsWith('attacking_') ? getAnimator('attacking') : getAnimator('idle'))
 ```
 
-`getAnimator` 通过判别式 Map 访问实现强类型（见第六章）。
+`getAnimator` 通过判别式 Map 访问实现强类型（见第七章）。
 
 每个 animator 文件完全自包含——直接读取 `model` 关节操作旋转，不依赖 phase config 参数。
 
-### 5.3 阶段动画预设示例
+### 6.3 阶段动画预设示例
 
 | 技能 | 阶段 | armSwingBack | armSwingForward | elbowBend | twoHanded | 描述 |
 |------|------|:---:|:---:|:---:|:---:|------|
@@ -372,15 +399,15 @@ const animator = getAnimator(state)
 | staff_orb | aim | X:-0.5, Z:0 | — | 0.3 | 是 | 法杖前指 |
 | staff_orb | release | — | X:0.8, Z:0 | 0.1 | 是 | 能量释放 |
 
-### 5.4 回退兼容
+### 6.4 回退兼容
 
 当状态对应的 animator 不存在时，回退到通用 `attackingAnim`。通用 animator 使用 `attackTotalProgress` 按比例驱动三阶段动画（0→0.3 蓄力 / 0.3→0.6 打击 / 0.6→1.0 恢复），时间轴按技能总时长（`duration + recovery`）/ `FALLBACK_ATTACK_DURATION`（0.5）等比缩放。
 
 ---
 
-## 六、强类型状态搜索
+## 七、强类型状态搜索
 
-### 6.1 类型推导
+### 7.1 类型推导
 
 所有攻击子状态名由武器预设 key + 阶段名通过模板字面量推导：
 
@@ -398,7 +425,7 @@ type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${AttackPhaseNa
 //      | ...（所有组合）
 ```
 
-### 6.2 状态机侧判别式 Map
+### 7.2 状态机侧判别式 Map
 
 ```ts
 // character/state_machine/machine.ts
@@ -411,7 +438,7 @@ const getStateHandler = <K extends string>(key: K): Record<AllStateNames, StateH
     stateHandlerMap.get(key) as Record<AllStateNames, StateHandler>[K & AllStateNames] | undefined
 ```
 
-### 6.3 动画系统侧判别式 Map
+### 7.3 动画系统侧判别式 Map
 
 ```ts
 // entity/character/appearance/system.ts
@@ -435,9 +462,9 @@ const animator = getAnimator(state)
 
 ---
 
-## 七、新增攻击状态 / 武器指南
+## 八、新增攻击状态 / 武器指南
 
-### 7.1 为新武器添加完整攻击状态
+### 8.1 为新武器添加完整攻击状态
 
 1. 在 `src/character/weapon/melee_weapon.ts`（或 `ranged_weapon.ts`）的 `PRESETS` 中添加武器预设
 2. 在 `src/character/combat/melee_skill.ts`（或 `ranged_skill.ts`）的 `PRESETS` 中添加技能预设，**必须定义 phases 数组**
@@ -447,17 +474,17 @@ const animator = getAnimator(state)
 6. 在 `src/entity/character/appearance/system.ts` 中调用 `registerAnimator(key, handler)` 注册
 7. 更新 `CombatComponent` 的 `comboChain`（如果该技能应属于连招链）
 
-### 7.2 仅使用默认行为（无专用状态文件）
+### 8.2 仅使用默认行为（无专用状态文件）
 
 仅在技能预设中定义 `phases` 数组即可。attacking meta-state 在找不到阶段专用 handler 时会使用默认行为：有移动输入时按 `moveSpeedMultiplier` 缩放 `config.speed` 驱动移动（攻击中推进/突进，同 walking 的斜坡投影/吸附逻辑）；无移动输入时衰减残留速度 + 斜坡防滑。注意不能只衰减存量速度：无限连段下 AI 长期驻留 attacking，速度会衰减到 0 且永不补充，导致攻击一段时间后站桩不动。动画回退到通用 `attackingAnim`（按 `attackTotalProgress` 比例播放）。
 
-### 7.3 新增 flinching 触发源
+### 8.3 新增 flinching 触发源
 
 在伤害回调或环境效果中设置 `combat.pendingFlinch = true`，下一帧 attacking meta-state 会通过 transition guard 检测到并转入 flinching。
 
 ---
 
-## 八、核心文件索引
+## 九、核心文件索引
 
 | 层级 | 文件 | 内容 |
 |------|------|------|
@@ -479,10 +506,15 @@ const animator = getAnimator(state)
 | **NEW** | `src/entity/character/appearance/animators/attack/` | 阶段专用 animator 文件（`{skillId}/{phaseName}.ts`） |
 | 修改 | `src/entity/character/physics/world.ts` | 传递 `phaseIndex`/`phaseTimer`/`totalProgress` 给外观系统；更新 executor 调度；`setPlayerAttack(idx, holdDuration)` 蓄力脉冲与起手守卫解析；test_weapon 装配特判 |
 | 修改 | `src/modes/play/camera.ts` | 攻击键按住计时（mousedown 记录时刻，mouseup 携带按住秒数触发，右键重击同为松开触发） |
+| **NEW** | `src/entity/character/combat/obb.ts` | OBB 类型 + `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
+| 修改 | `src/entity/character/combat/melee_executor.ts` | 伤害判定改武器 OBB × 受击箱 OBB（`testMeleeHit`）；攻击检测箱 `attackDetectOBB` / `testAttackDetect` |
+| 修改 | `src/entity/character/appearance/weapon_mesh.ts` | 武器本地命中箱 `WeaponLocalHitBox`（近战武器显式打击部位盒） |
+| 修改 | `src/entity/character/appearance/model.ts` | 暴露 `weaponGroup` / `weaponHitBox` |
+| 修改 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/受击箱（青）/检测箱（橙）/射程圆环（橙，远程）/视线扇形（蓝）五组件 debug 可视化 |
 
 ---
 
-## 九、CombatComponent 字段变更清单
+## 十、CombatComponent 字段变更清单
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -500,11 +532,11 @@ const animator = getAnimator(state)
 
 ---
 
-## 十、测试用例设计
+## 十一、测试用例设计
 
 > 测试框架：Vitest。测试文件命名为 `<被测模块>.test.ts`，与被测源文件同目录。测试使用 `DT = 1/60` 固定帧步长、内联 mock 工厂函数（`as unknown as` 窄化）、`run(sm, entity, frames)` 帧进辅助函数和 `it.each()` 参数化测试。
 
-### 10.1 AttackPhase 配置验证 — 新文件 `character/combat/attack_phases.test.ts`
+### 11.1 AttackPhase 配置验证 — 新文件 `character/combat/attack_phases.test.ts`
 
 **目的**：验证所有技能预设的 phases 配置完整且合法。
 
@@ -547,7 +579,7 @@ const animator = getAnimator(state)
 
 ---
 
-### 10.2 技能配置扩展测试 — 扩展 `melee_skill.test.ts` / `ranged_skill.test.ts`
+### 11.2 技能配置扩展测试 — 扩展 `melee_skill.test.ts` / `ranged_skill.test.ts`
 
 **目的**：在现有技能测试基础上追加 phases 和 comboChain 的验证。
 
@@ -559,7 +591,7 @@ const animator = getAnimator(state)
 
 ---
 
-### 10.3 状态机阶段调度测试 — 扩展 `machine.test.ts`
+### 11.3 状态机阶段调度测试 — 扩展 `machine.test.ts`
 
 **目的**：验证 attacking meta-state 的阶段推进和委托逻辑。
 
@@ -608,7 +640,7 @@ const makePhaseMock = (skillId: string = 'heavy_sword_slam'): CharacterEntity =>
 
 ---
 
-### 10.4 flinching 状态测试 — 新文件 `character/state_machine/states/flinching.test.ts`
+### 11.4 flinching 状态测试 — 新文件 `character/state_machine/states/flinching.test.ts`
 
 **目的**：验证受击硬直状态的触发、行为和转换。
 
@@ -662,7 +694,7 @@ const makePhaseMock = (skillId: string = 'heavy_sword_slam'): CharacterEntity =>
 
 ---
 
-### 10.5 连招系统测试 — 可合入 `machine.test.ts` 或新文件
+### 11.5 连招系统测试 — 可合入 `machine.test.ts` 或新文件
 
 **目的**：验证连招链的推进、中断和超时。
 
@@ -700,7 +732,7 @@ const makePhaseMock = (skillId: string = 'heavy_sword_slam'): CharacterEntity =>
 
 ---
 
-### 10.6 中断优先级测试 — 可合入 `machine.test.ts`
+### 11.6 中断优先级测试 — 可合入 `machine.test.ts`
 
 **目的**：验证各种中断源的优先级顺序。
 
@@ -714,7 +746,7 @@ const makePhaseMock = (skillId: string = 'heavy_sword_slam'): CharacterEntity =>
 
 ---
 
-### 10.7 动画系统测试 — 新文件 `entity/character/appearance/attack_anim.test.ts`
+### 11.7 动画系统测试 — 新文件 `entity/character/appearance/attack_anim.test.ts`
 
 **目的**：验证 AnimationContext 的阶段信息传递和 animator 回退。
 
@@ -739,7 +771,7 @@ const makePhaseMock = (skillId: string = 'heavy_sword_slam'): CharacterEntity =>
 
 ---
 
-### 10.8 强类型状态名测试 — 可合入 `attack_phases.test.ts`
+### 11.8 强类型状态名测试 — 可合入 `attack_phases.test.ts`
 
 **目的**：验证模板字面量类型推导的正确性。
 
@@ -753,7 +785,7 @@ const makePhaseMock = (skillId: string = 'heavy_sword_slam'): CharacterEntity =>
 
 ---
 
-### 10.9 测试文件清单
+### 11.9 测试文件清单
 
 | 测试文件 | 对应被测模块 | 类型 |
 |----------|-------------|------|

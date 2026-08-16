@@ -1,5 +1,5 @@
 import type {Group, Mesh} from 'three'
-import type { WeaponMeshConfig } from './weapon_mesh.ts'
+import type { WeaponMeshConfig, WeaponLocalHitBox } from './weapon_mesh.ts'
 import type { AttackPhase, AttackPhaseName } from '../../../character/combat/attack_phases.ts'
 
 /** 角色配色 palette */
@@ -57,6 +57,12 @@ export interface CharacterModel {
 
     /** 当前武器刀尖采样点（null = 未装备），供刀光轨迹使用 */
     readonly weaponTip: Mesh | null
+
+    /** 当前武器模型根节点（null = 未装备），命中箱 OBB 的世界变换来源 */
+    readonly weaponGroup: Group | null
+
+    /** 当前武器攻击判定箱本地盒参数（null = 未装备），略大于武器模型 */
+    readonly weaponHitBox: WeaponLocalHitBox | null
 
     /** 当前武器静态握持前倾角 rx（rad，未装备 = 0），供动画器攻击时对齐抵消 */
     readonly weaponGripTilt: number

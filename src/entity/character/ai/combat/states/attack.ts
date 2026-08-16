@@ -17,9 +17,9 @@ export const attackHandler: CombatStateHandler = {
         const skill = character.combat.skills[character.combat.currentSkillIndex]
         if (!skill) { setInput(0, 0, false); return }
 
-        /* 出招门控：目标在武器攻击检测区域内才出招（checker 缺失时回退圆形距离判定） */
-        const inHitRegion = ctx.weaponHitChecker
-            ? ctx.weaponHitChecker(character, target)
+        /* 出招门控：目标在攻击检测箱内才出招（checker 缺失时回退圆形距离判定） */
+        const inHitRegion = ctx.attackDetectChecker
+            ? ctx.attackDetectChecker(character, target)
             : dist <= skill.config.weapon.range
         if (!inHitRegion) { setInput(0, 0, false); return }
 
@@ -63,9 +63,9 @@ export const attackHandler: CombatStateHandler = {
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                /* 出攻击检测区域 → 追击（checker 缺失时回退距离判定） */
-                const outOfRegion = ctx.weaponHitChecker
-                    ? !ctx.weaponHitChecker(character, target)
+                /* 出攻击检测箱 → 追击（checker 缺失时回退距离判定） */
+                const outOfRegion = ctx.attackDetectChecker
+                    ? !ctx.attackDetectChecker(character, target)
                     : v3Length(_dir) > (skill?.config.weapon.range ?? 1.5)
                 return outOfRegion && v3Length(_dir) < detRange
             },
