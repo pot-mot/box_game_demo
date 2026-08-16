@@ -177,6 +177,8 @@ export const collectWorldState = (
                 health: e.combat.health,
                 position: vec3ToTuple(e.body.translation()),
                 quaternion: quatToTuple(e.body.rotation()),
+                /* 刚体 lockRotations，朝向不在 body 上，单独从 facingAngles 持久化 */
+                facing: character.getFacing(e.id),
             })
         }
     }

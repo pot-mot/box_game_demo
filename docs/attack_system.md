@@ -316,6 +316,8 @@ idle/walking ──→ attacking (meta-state)
 | 攻击检测箱 | 近战：角色位置/朝向绑定的 OBB（尺寸与偏移由武器 `detectBox` 配置驱动）；远程：圆形距离判定 `dist <= weapon.range` | AI 出招门控（见 `docs/ai_system.md` 2.5） | 近战橙色线框 / 远程橙色射程圆环 |
 | 视线检测 | 270° 扇形扫描射线（每 10° 一条）+ 角度门控 | 索敌（见 `docs/ai_system.md` 5.5） | 蓝色线条 |
 
+> **显示范围**：上述 debug 信息与碰撞胶囊体**仅对被选中的角色显示**（`world.ts` `refreshSelectionVisibility`）：未选中角色的胶囊不透明度降为 0（保留 mesh 供射线拾取），五组件线框全部隐藏；选中切换/面板瞬移（`setTransform`）/朝向修改（`setFacing`，0-360°）时经 `placeDebugBoxes` 重新定位，编辑暂停态（update 不运行）也能即时同步。
+
 ### 5.1 攻击判定箱（武器本地命中箱）
 
 - **来源**：武器构建时提供本地盒参数（`appearance/weapon_mesh.ts` 的 `WeaponLocalHitBox`，略包裹武器打击部位 + `WEAPON_HIT_BOX_PAD` 外扩），经 `CharacterModel.weaponGroup` / `weaponHitBox` 暴露；近战武器显式指定刃部/枪头/斧头/锤头区域，远程/投掷取默认盒。

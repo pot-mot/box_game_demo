@@ -129,6 +129,8 @@ export interface SavableCharacter {
     health: number
     position: Vec3JSON
     quaternion: QuatJSON
+    /** 朝向角（度，0-360，0 = 世界 +Z 前方）；刚体 lockRotations 不参与旋转，朝向单独持久化 */
+    facing?: number
 }
 
 // ── 模式信息（强类型嵌套）──

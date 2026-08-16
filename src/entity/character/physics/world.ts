@@ -28,6 +28,7 @@ import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_s
 import {createAIMachine, updateAI} from '../ai/machine.ts'
 import {processNav} from '../ai/nav/machine.ts'
 import {createCharacterMesh, updateCharacterMesh} from '../render'
+import {COLLIDER_MESH_OPACITY} from '../render/constants.ts'
 import {createCharacterModel} from '../appearance/model.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
 import type {AppearanceSystem} from '../appearance/system.ts'
@@ -137,6 +138,10 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     registerBoxSpawner: (fn: SpawnBoxCallback) => void
     /** 设置碰撞体可视化 mesh 与攻击判定箱调试线框的可见性 */
     setCollisionVisible: (visible: boolean) => void
+    /** 获取角色朝向角（度，0-360，0 = 世界 +Z 前方） */
+    getFacing: (id: number) => number
+    /** 设置角色朝向角（度，自动归一到 0-360，编辑暂停态亦即时生效） */
+    setFacing: (id: number, degrees: number) => void
     /** 配置 AI 感知（视线检查 + 导航传感器，需在所有实体系统初始化后调用） */
     setupAI: (systems: readonly EntityInfoSource[]) => void
     /** 设置单角色导航感知开关 */
@@ -295,6 +300,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     ): CharacterEntity => {
         const mesh = createCharacterMesh(config)
         mesh.position.set(x, y, z)
+        /* 默认按未选中处理：胶囊不透明度置 0（选中后由 refreshSelectionVisibility 恢复；
+         * 不能用 visible=false，射线拾取会跳过不可见对象导致无法点选） */
+        const spawnMat = mesh.material
+        if (Array.isArray(spawnMat)) {
+            for (const m of spawnMat) m.opacity = 0
+        } else {
+            spawnMat.opacity = 0
+        }
         scene.add(mesh)
 
         const model = createCharacterModel(config, faction)
@@ -364,26 +377,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         appearanceSystems.set(entity.id, createAppearanceSystem())
         weaponTrails.set(entity.id, createWeaponTrail(scene))
         const hitBoxes = createAttackHitBoxes(scene)
-        /* 生成时即定位受击箱/检测箱/视线扇形（编辑暂停态 update 不运行，避免线框滞留在原点） */
-        const th0 = targetHitBoxHalves(config.scale)
-        hitBoxes.targetBox.position.set(x, y, z)
-        hitBoxes.targetBox.scale.set(th0.x * 2, th0.y * 2, th0.z * 2)
-        hitBoxes.targetBox.visible = attackHitBoxVisible
-        const meleeSkill0 = skills[0]?.config
-        if (meleeSkill0 !== undefined && meleeSkill0.type === 'melee') {
-            const db0 = attackDetectOBB({x, y, z}, meleeSkill0.weapon.detectBox, config.scale, 0)
-            hitBoxes.detectBox.position.set(db0.center.x, db0.center.y, db0.center.z)
-            hitBoxes.detectBox.scale.set(db0.half.x * 2, db0.half.y * 2, db0.half.z * 2)
-        }
-        /* 远程：射程圆环初始定位（半径 = weapon.range，贴足部高度平铺） */
-        const rangedRange0 = skills[0]?.config.type === 'ranged' ? skills[0].config.weapon.range : undefined
-        if (rangedRange0 !== undefined) {
-            hitBoxes.rangeRing.position.set(x, y - CHARACTER_BASE_SIZE.height * config.scale / 2, z)
-            hitBoxes.rangeRing.scale.set(rangedRange0, 1, rangedRange0)
-        }
-        placeVisionFan(hitBoxes, losChecker, x, y + CHARACTER_BASE_SIZE.height * config.scale * 0.4, z, 0,
-            skills[0]?.config.weapon.detectionRange ?? 8)
         attackHitBoxes.set(entity.id, hitBoxes)
+        /* 生成时即定位调试线框（编辑暂停态 update 不运行，避免线框滞留在原点）；
+         * 可见性由选中状态驱动（refreshSelectionVisibility），未选中时全部隐藏 */
+        placeDebugBoxes(entity, x, y, z, 0)
 
         const flash = createDamageFlash(entity)
         flashStates.set(entity.id, flash)
@@ -447,8 +444,72 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 entity.wireframe = line
             }
         }
+        /* 选中变更：刷新胶囊透明度与调试线框归属（仅选中角色显示） */
+        refreshSelectionVisibility()
     }
     const getSelectedId = (): number | undefined => selectedId
+
+    /** 定位单个角色的调试线框（受击箱/检测箱或射程圆环/视线扇形）并按当前选中与 debug 开关设可见性，
+     * 供生成/面板瞬移（setTransform）/选中切换复用，保证编辑暂停态（update 不运行）线框也随位置同步 */
+    const placeDebugBoxes = (entity: CharacterEntity, x: number, y: number, z: number, yaw: number): void => {
+        const hitBoxes = attackHitBoxes.get(entity.id)
+        if (!hitBoxes) return
+        const show = attackHitBoxVisible && entity.id === selectedId
+        const th = targetHitBoxHalves(entity.config.scale)
+        hitBoxes.targetBox.position.set(x, y, z)
+        hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
+        hitBoxes.targetBox.rotation.y = yaw
+        hitBoxes.targetBox.visible = show
+        const skill = entity.combat.skills[entity.combat.currentSkillIndex]?.config
+        if (skill !== undefined && skill.type === 'melee') {
+            const db = attackDetectOBB({x, y, z}, skill.weapon.detectBox, entity.config.scale, yaw)
+            hitBoxes.detectBox.position.set(db.center.x, db.center.y, db.center.z)
+            hitBoxes.detectBox.scale.set(db.half.x * 2, db.half.y * 2, db.half.z * 2)
+            hitBoxes.detectBox.rotation.y = yaw
+            hitBoxes.detectBox.visible = show
+        } else {
+            hitBoxes.detectBox.visible = false
+        }
+        if (skill !== undefined && skill.type === 'ranged') {
+            /* 射程圆环：半径 = weapon.range，贴足部高度平铺 */
+            hitBoxes.rangeRing.position.set(x, y - CHARACTER_BASE_SIZE.height * entity.config.scale / 2, z)
+            hitBoxes.rangeRing.scale.set(skill.weapon.range, 1, skill.weapon.range)
+            hitBoxes.rangeRing.visible = show
+        } else {
+            hitBoxes.rangeRing.visible = false
+        }
+        placeVisionFan(hitBoxes, losChecker, x, y + CHARACTER_BASE_SIZE.height * entity.config.scale * 0.4, z, yaw,
+            skill?.weapon.detectionRange ?? 8)
+        hitBoxes.visionFan.visible = show
+        /* 攻击判定箱（红）需逐帧跟随武器 matrixWorld，暂停态不强行显示，由 update() 维护 */
+        if (!show) hitBoxes.weaponBox.visible = false
+    }
+
+    /** 刷新选中态可视化：胶囊体/受击箱/检测块/判定箱/检测射线等仅被选中角色显示；
+     * 未选中角色胶囊不透明度降为 0（保留 mesh 本身供射线拾取，不能设 visible=false） */
+    const refreshSelectionVisibility = (): void => {
+        for (const entity of characters) {
+            const mat = entity.mesh.material
+            const opacity = entity.id === selectedId ? COLLIDER_MESH_OPACITY : 0
+            if (Array.isArray(mat)) {
+                for (const m of mat) m.opacity = opacity
+            } else {
+                mat.opacity = opacity
+            }
+            const hb = attackHitBoxes.get(entity.id)
+            if (!hb) continue
+            if (attackHitBoxVisible && entity.id === selectedId) {
+                const p = entity.body.translation()
+                placeDebugBoxes(entity, p.x, p.y, p.z, facingAngles.get(entity.id) ?? 0)
+            } else {
+                hb.targetBox.visible = false
+                hb.weaponBox.visible = false
+                hb.detectBox.visible = false
+                hb.rangeRing.visible = false
+                hb.visionFan.visible = false
+            }
+        }
+    }
 
     const remove = (id: number): void => {
         const idx = characters.findIndex(c => c.id === id)
@@ -731,6 +792,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                  * 几何均与对应判定函数同源，保证所见即所判 */
                 const hitBoxes = attackHitBoxes.get(entity.id)
                 if (hitBoxes) {
+                    /* debug 信息仅被选中角色显示（与 refreshSelectionVisibility 的门控一致） */
+                    const showDebug = attackHitBoxVisible && entity.id === selectedId
                     const bPos = entity.body.translation()
                     const yaw = facingAngles.get(entity.id) ?? 0
                     const th = targetHitBoxHalves(entity.config.scale)
@@ -738,14 +801,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
                     /* 受击箱随身体朝向旋转（与判定的 OBB 几何一致） */
                     hitBoxes.targetBox.rotation.y = yaw
-                    hitBoxes.targetBox.visible = attackHitBoxVisible
+                    hitBoxes.targetBox.visible = showDebug
 
                     const meleeSkill = activeSkill !== undefined && activeSkill.config.type === 'melee'
                         ? activeSkill.config
                         : undefined
 
                     /* 攻击判定箱（红）：跟随武器模型位姿，尺寸 = 武器本地命中箱 */
-                    if (attackHitBoxVisible && meleeSkill !== undefined && model.weaponGroup !== null && model.weaponHitBox !== null) {
+                    if (showDebug && meleeSkill !== undefined && model.weaponGroup !== null && model.weaponHitBox !== null) {
                         model.weaponGroup.updateMatrixWorld()
                         syncWeaponDebugBox(hitBoxes.weaponBox, model.weaponGroup.matrixWorld,
                             model.weaponHitBox.center, model.weaponHitBox.half)
@@ -755,7 +818,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
 
                     /* 攻击检测箱（橙）：与角色位置/朝向绑定，尺寸与偏移由武器 detectBox 配置驱动 */
-                    if (attackHitBoxVisible && meleeSkill !== undefined) {
+                    if (showDebug && meleeSkill !== undefined) {
                         const db = attackDetectOBB(bPos, meleeSkill.weapon.detectBox, entity.config.scale, yaw)
                         hitBoxes.detectBox.position.set(db.center.x, db.center.y, db.center.z)
                         hitBoxes.detectBox.scale.set(db.half.x * 2, db.half.y * 2, db.half.z * 2)
@@ -769,7 +832,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     const rangedSkill = activeSkill !== undefined && activeSkill.config.type === 'ranged'
                         ? activeSkill.config
                         : undefined
-                    if (attackHitBoxVisible && rangedSkill !== undefined) {
+                    if (showDebug && rangedSkill !== undefined) {
                         hitBoxes.rangeRing.position.set(bPos.x, bPos.y - CHARACTER_BASE_SIZE.height * entity.config.scale / 2, bPos.z)
                         hitBoxes.rangeRing.scale.set(rangedSkill.weapon.range, 1, rangedSkill.weapon.range)
                         hitBoxes.rangeRing.visible = true
@@ -778,7 +841,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
 
                     /* 视线扇形（蓝）：每 10° 一条扫描射线（截断到遮挡点），战斗目标存在时画连线 */
-                    if (attackHitBoxVisible) {
+                    if (showDebug) {
                         const eyeY = bPos.y + CHARACTER_BASE_SIZE.height * entity.config.scale * 0.4
                         const fanLen = activeSkill?.config.weapon.detectionRange ?? 8
                         let tx: number | undefined
@@ -995,6 +1058,30 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (!entity) return
         entity.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true)
         entity.mesh.position.set(pos.x, pos.y, pos.z)
+        /* 外观动画体一同瞬移（暂停态 syncPositions 不运行，否则模型滞留旧位置） */
+        entity.appearanceGroup.position.set(pos.x, pos.y, pos.z)
+        placeDebugBoxes(entity, pos.x, pos.y, pos.z, facingAngles.get(id) ?? 0)
+    }
+
+    const getFacing = (id: number): number => {
+        const rad = facingAngles.get(id) ?? 0
+        let deg = (rad * 180 / Math.PI) % 360
+        if (deg < 0) deg += 360
+        return Math.round(deg * 10) / 10
+    }
+
+    const setFacing = (id: number, degrees: number): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        const normalized = ((degrees % 360) + 360) % 360
+        const yaw = normalized * Math.PI / 180
+        facingAngles.set(id, yaw)
+        /* 暂停态 update 不运行，碰撞胶囊与外观模型立即同步朝向 */
+        entity.mesh.rotation.set(0, yaw, 0)
+        const model = appearanceModels.get(id)
+        if (model) model.group.rotation.y = yaw
+        const p = entity.body.translation()
+        placeDebugBoxes(entity, p.x, p.y, p.z, yaw)
     }
 
     const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number): void => {
@@ -1104,16 +1191,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         for (const entity of characters) {
             entity.mesh.visible = visible
         }
-        for (const hb of attackHitBoxes.values()) {
-            hb.targetBox.visible = visible
-            /* weaponBox/detectBox/rangeRing/visionFan 由 update() 逐帧维护，此处仅在关闭时强制隐藏 */
-            if (!visible) {
-                hb.weaponBox.visible = false
-                hb.detectBox.visible = false
-                hb.rangeRing.visible = false
-                hb.visionFan.visible = false
-            }
-        }
+        /* 按选中状态重刷全部调试线框可见性（关闭时全部隐藏，开启时仅选中角色显示） */
+        refreshSelectionVisibility()
     }
 
     const registerBoxSpawner = (fn: SpawnBoxCallback): void => {
@@ -1155,6 +1234,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setCombatStrategy,
         registerBoxSpawner,
         setCollisionVisible,
+        getFacing,
+        setFacing,
         setupAI,
         setNavEnabled,
         setOnMeleeImpact,

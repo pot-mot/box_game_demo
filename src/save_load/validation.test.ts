@@ -175,6 +175,21 @@ describe('validateSaveData', () => {
         }
     })
 
+    it('character facing 朝向角 — 可选字段，旧存档缺省时为 undefined，越界拒绝', () => {
+        const withFacing = validateSaveData({entities: [{type: 'character', facing: 270}]})
+        const e0 = withFacing.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.facing).toBe(270)
+        }
+        const withoutFacing = validateSaveData({entities: [{type: 'character'}]})
+        const e1 = withoutFacing.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.facing).toBeUndefined()
+        }
+        expect(() => validateSaveData({entities: [{type: 'character', facing: 400}]})).toThrow()
+        expect(() => validateSaveData({entities: [{type: 'character', facing: -1}]})).toThrow()
+    })
+
     it('最小合法存档 — box/common 各字段取默认值', () => {
         const data = {entities: [{type: 'box/common'}]}
         const result = validateSaveData(data)

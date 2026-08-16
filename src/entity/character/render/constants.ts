@@ -7,3 +7,5 @@ export const RANGED_EMISSIVE = 0x001133
 export const COLLIDER_CAPSULE_CAP_SEGMENTS = 6
 /** 碰撞体可视化胶囊：圆周细分段数 */
 export const COLLIDER_CAPSULE_RADIAL_SEGMENTS = 16
+/** 碰撞体可视化胶囊：被选中时的不透明度（未选中降为 0，但保留 mesh 供射线拾取） */
+export const COLLIDER_MESH_OPACITY = 0.35

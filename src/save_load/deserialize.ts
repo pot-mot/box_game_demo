@@ -104,7 +104,11 @@ export const loadWorldFromData = (
                 break
             }
             case 'character': {
-                character?.add(entity.config, x, y, z, quat, {health: entity.health})
+                const spawned = character?.add(entity.config, x, y, z, quat, {health: entity.health})
+                /* 朝向恢复（旧存档无 facing 字段时保持缺省 0） */
+                if (spawned !== undefined && entity.facing !== undefined) {
+                    character?.setFacing(spawned.id, entity.facing)
+                }
                 break
             }
         }

@@ -175,6 +175,8 @@ const SavableCharacter = z.object({
     health: z.number().default(15),
     position: Vec3,
     quaternion: Quat,
+    /* 朝向角（度）：旧存档无此字段时缺省为 0（+Z 前方） */
+    facing: z.number().min(0).max(360).optional(),
 })
 
 const SavableEntity = z.discriminatedUnion('type', [

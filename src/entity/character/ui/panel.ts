@@ -82,6 +82,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const posX = createLabeledNumberInput(el, 'X', {step: '0.01'})
     const posY = createLabeledNumberInput(el, 'Y', {step: '0.01'})
     const posZ = createLabeledNumberInput(el, 'Z', {step: '0.01'})
+    const facingDeg = createLabeledNumberInput(el, 'Facing°', {min: '0', max: '360', step: '1', value: '0'})
 
     el.appendChild(createSection('Config'))
     const speed = createLabeledNumberInput(el, 'Speed', {min: '0.1', step: '0.1', value: '6'})
@@ -417,6 +418,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             posX.value = sel.mesh.position.x.toFixed(2)
             posY.value = sel.mesh.position.y.toFixed(2)
             posZ.value = sel.mesh.position.z.toFixed(2)
+            facingDeg.value = String(Math.round(ctx.getFacing?.(sel.id) ?? 0))
 
             speed.value = String(sel.config.speed)
             jumpH.value = String(sel.config.jumpHeight)
@@ -474,6 +476,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 ctx.setTransform?.(cur.id,
                     {x: parseFloat(posX.value), y: parseFloat(posY.value), z: parseFloat(posZ.value)},
                 )
+                /* 朝向（0-360°，0 = 世界 +Z 前方）：归一化后写入 facingAngles */
+                const fd = parseFloat(facingDeg.value)
+                if (!isNaN(fd)) ctx.setFacing?.(cur.id, fd)
                 if (playerCheck.checked) ctx.markPlayer(cur.id)
                 else if (cur.isPlayer) ctx.unmarkPlayer()
                 const isPlayer = playerCheck.checked

@@ -1,7 +1,7 @@
 import {CapsuleGeometry, Mesh, MeshStandardMaterial} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
-import {COLLIDER_CAPSULE_CAP_SEGMENTS, COLLIDER_CAPSULE_RADIAL_SEGMENTS} from './constants.ts'
+import {COLLIDER_CAPSULE_CAP_SEGMENTS, COLLIDER_CAPSULE_RADIAL_SEGMENTS, COLLIDER_MESH_OPACITY} from './constants.ts'
 
 /** 创建与物理碰撞体参数一致的可视化胶囊：
  * 半径 = 碰撞箱半宽，总高 = 碰撞箱高（length + 2×radius = height×scale，
@@ -21,7 +21,7 @@ export const createCharacterMesh = (config: CharacterConfig): Mesh => {
         roughness: 0.4,
         metalness: 0.1,
         transparent: true,
-        opacity: 0.35,
+        opacity: COLLIDER_MESH_OPACITY,
     })
     const mesh = new Mesh(geom, mat)
     mesh.castShadow = false
