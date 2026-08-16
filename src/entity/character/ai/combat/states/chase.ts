@@ -2,12 +2,20 @@ import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_ut
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
 import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
+import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
 export const chaseHandler: CombatStateHandler = {
     enter: () => {},
     update: (_dt, ctx, character, allCharacters, setInput) => {
+        /* 卡死重试绕行阶段：按偏转方向侧向移动，打破贴脸顶牛/正面被堵 */
+        if (ctx.combatDetourTimer > 0) {
+            ctx.combatDetourTimer -= _dt
+            setInput(ctx.combatDetourX, ctx.combatDetourZ, false)
+            return
+        }
+
         const target = allCharacters.find(c => c.id === ctx.combatTargetId)
         if (!target || target.combat.isDead) { setInput(0, 0, false); return }
 
@@ -109,6 +117,7 @@ export const chaseHandler: CombatStateHandler = {
             },
         },
         {
+            /* 脱战：目标死亡/消失，或拉开到侦测半径 × 滞回系数之外（与进入阈值形成滞回） */
             to: 'inactive',
             guard: (ctx, character, allCharacters) => {
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
@@ -118,7 +127,7 @@ export const chaseHandler: CombatStateHandler = {
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return v3Length(_dir) >= detRange
+                return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },
     ],

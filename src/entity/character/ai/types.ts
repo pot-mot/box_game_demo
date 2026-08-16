@@ -53,6 +53,12 @@ export interface AIContext {
     stallAnchorZ: number
     /** 卡死放弃战斗后的重新接敌冷却（秒） */
     combatReentryTimer: number
+    /** combat 内连续卡死重试次数（确认移动/重新接敌时重置，达上限才放弃战斗） */
+    combatStallRetries: number
+    /** combat 卡死重试绕行方向与剩余时长（秒）：chase 期间按此方向侧向移动 */
+    combatDetourX: number
+    combatDetourZ: number
+    combatDetourTimer: number
 
     /* ── 战斗 FSM 状态 ── */
     combatState: CombatState

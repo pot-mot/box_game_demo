@@ -5,7 +5,7 @@ import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {AIContext, AISetInput, AttackDetectChecker} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
-import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, CHASE_LEASH_RADIUS} from './constants.ts'
+import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, CHASE_LEASH_RADIUS, COMBAT_STALL_MAX_RETRIES, COMBAT_STALL_DETOUR_DURATION} from './constants.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
@@ -98,6 +98,10 @@ export const createAIMachine = (
         stallAnchorX: spawnX,
         stallAnchorZ: spawnZ,
         combatReentryTimer: 0,
+        combatStallRetries: 0,
+        combatDetourX: 0,
+        combatDetourZ: 0,
+        combatDetourTimer: 0,
 
         /* 战斗 FSM 字段 */
         combatState: 'inactive',
@@ -127,7 +131,7 @@ export const createAIMachine = (
 }
 
 /** 卡死恢复：按当前活跃 FSM 分发自救动作 */
-const recoverFromStall = (ctx: AIContext): void => {
+const recoverFromStall = (ctx: AIContext, character: CharacterEntity, allCharacters: readonly CharacterEntity[]): void => {
     if (ctx.activeFsm === 'peace') {
         /* 巡逻/建造：重掷路点（新路点大概率换方向，卡缝/贴人状态自然解除） */
         rerollWaypoint(ctx)
@@ -149,7 +153,48 @@ const recoverFromStall = (ctx: AIContext): void => {
         }
         return
     }
-    /* 其他战斗状态卡死：强制放弃并进入重新接敌冷却（避免超时→立刻回追的空转） */
+    /* 其他战斗状态卡死：先横向绕行重试（重掷接近路线、打破贴脸顶牛/正面被堵），
+     * 重试达上限仍卡死才放弃战斗，避免对峙一卡就退战 */
+    ctx.combatStallRetries += 1
+    if (ctx.combatStallRetries < COMBAT_STALL_MAX_RETRIES) {
+        ctx.combatState = 'chase'
+        ctx.combatStateTime = 0
+        /* 朝目标方向随机偏转 ±60°〜120° 形成绕行：侧向移动可脱离接触推挤闸门的正面清零 */
+        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
+        let dx = 0
+        let dz = 0
+        if (target && !target.combat.isDead) {
+            const pos = character.body.translation()
+            const tp = target.body.translation()
+            dx = tp.x - pos.x
+            dz = tp.z - pos.z
+        }
+        const len = Math.hypot(dx, dz)
+        if (len < STALL_INPUT_EPS) {
+            /* 无目标时取随机方向 */
+            const a = Math.random() * Math.PI * 2
+            dx = Math.sin(a)
+            dz = Math.cos(a)
+        } else {
+            dx /= len
+            dz /= len
+            const sign = Math.random() < 0.5 ? -1 : 1
+            const angle = sign * (Math.PI / 3 + Math.random() * Math.PI / 3)
+            const cosA = Math.cos(angle)
+            const sinA = Math.sin(angle)
+            const rx = dx * cosA - dz * sinA
+            const rz = dx * sinA + dz * cosA
+            dx = rx
+            dz = rz
+        }
+        ctx.combatDetourX = dx
+        ctx.combatDetourZ = dz
+        ctx.combatDetourTimer = COMBAT_STALL_DETOUR_DURATION
+        return
+    }
+    /* 重试耗尽：强制放弃并进入重新接敌冷却（避免超时→立刻回追的空转） */
+    ctx.combatStallRetries = 0
+    ctx.combatDetourTimer = 0
     ctx.activeFsm = 'peace'
     ctx.peaceState = 'patrol'
     ctx.peaceStateTime = 0
@@ -165,6 +210,7 @@ const updateStallDetection = (
     dt: number,
     ctx: AIContext,
     character: CharacterEntity,
+    allCharacters: readonly CharacterEntity[],
     intentDX: number,
     intentDZ: number,
     attacking: boolean,
@@ -186,10 +232,11 @@ const updateStallDetection = (
     }
     const travel = Math.hypot(pos.x - ctx.stallAnchorX, pos.z - ctx.stallAnchorZ)
     if (travel > STALL_CHECK_TRAVEL) {
-        /* 确认在动：推进锚点并清零 */
+        /* 确认在动：推进锚点并清零（含 combat 卡死重试计数） */
         ctx.stallTimer = 0
         ctx.stallAnchorX = pos.x
         ctx.stallAnchorZ = pos.z
+        ctx.combatStallRetries = 0
         return
     }
     ctx.stallTimer += dt
@@ -197,7 +244,7 @@ const updateStallDetection = (
     ctx.stallTimer = 0
     ctx.stallAnchorX = pos.x
     ctx.stallAnchorZ = pos.z
-    recoverFromStall(ctx)
+    recoverFromStall(ctx, character, allCharacters)
 }
 
 /** 受击转战斗（仇恨）：被击中时清除接敌冷却并强制锁定攻击者，
@@ -218,6 +265,9 @@ export const notifyAIDamaged = (
     ctx.combatState = 'chase'
     ctx.combatStateTime = 0
     ctx.combatTargetId = sourceId
+    /* 新一场战斗：重置卡死重试计数与残留绕行 */
+    ctx.combatStallRetries = 0
+    ctx.combatDetourTimer = 0
 }
 
 export const updateAI = (
@@ -242,6 +292,9 @@ export const updateAI = (
             ctx.combatState = 'chase'
             ctx.combatStateTime = 0
             ctx.combatTargetId = enemy.id
+            /* 新一场战斗：重置卡死重试计数与残留绕行 */
+            ctx.combatStallRetries = 0
+            ctx.combatDetourTimer = 0
         }
     } else if (ctx.activeFsm === 'combat') {
         /* 无敌人且战斗态 → 检查是否可退出 */
@@ -305,5 +358,5 @@ export const updateAI = (
 
     /* 静止自检：决策层对被截断输入的兜底（接触阻断/nav stuck 清零后由这里触发自救）；
      * 攻击意图或攻击动作进行中视为有效战斗，不计入卡死 */
-    updateStallDetection(dt, ctx, character, intentDX, intentDZ, intentAttack || character.combat.attackActive)
+    updateStallDetection(dt, ctx, character, allCharacters, intentDX, intentDZ, intentAttack || character.combat.attackActive)
 }

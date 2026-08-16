@@ -214,13 +214,17 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 |------|----------|
 | peace（patrol/build） | 重掷路点（`patrol.ts` 的 `rerollWaypoint`） |
 | combat `flee` | 逃跑方向旋转 ±60°〜120° 换被堵轴（不放弃战斗） |
-| combat 其他状态 | 强制放弃：回 peace/patrol 并置 `combatReentryTimer` |
+| combat 其他状态 | 先横向绕行重试（朝目标偏转 ±60°〜120° 输出 `COMBAT_STALL_DETOUR_DURATION` 绕行脉冲，重置为 chase），连续卡死达 `COMBAT_STALL_MAX_RETRIES` 才放弃：回 peace/patrol 并置 `combatReentryTimer`。重试计数在确认移动/重新接敌时重置 |
+
+绕行重试的侧向移动可脱离接触推挤闸门的正面清零，打破贴脸顶牛/正面被堵；避免对峙一卡就退战。
 
 **重新接敌冷却**（`combatReentryTimer`）：卡死放弃战斗后，冷却（`COMBAT_REENTRY_COOLDOWN`）耗尽前即使检测到敌人也不进入 combat，同时根治"超时 → peace → 下帧立刻回 chase"的空转循环。aggressive 的 `chaseTimeout = 0`（永不放弃追击）依赖此兜底而不会死锁。
 
 **追击活动半径**（`CHASE_LEASH_RADIUS`）：`chase` 状态下每帧检查距出生点的水平距离，超出半径即放弃战斗并进入接敌冷却。防止同速目标永远追不上时把角色拖向无限远（平行走到天边的根因之一）。
 
 **受击转战斗（仇恨）**（`notifyAIDamaged`，由 `world.ts` 的 `onDamageTaken` 回调调用）：被击中时清除接敌冷却并强制进入 combat 锁定攻击者，解决和平态被背后/视野外攻击不还手、冷却期内挨打不反应的问题。友军误伤（`attackTendency` 为 false）不强制开战；攻击者已死亡时不锁定（冷却仍被清除）。伤害回调签名透传 `DamageEvent`（`onDamageTaken(amount, event)`，`character/combat/damage.ts` + `targetable.ts`）。
+
+**脱战距离滞回**（`COMBAT_LOSE_RANGE_FACTOR`）：各战斗状态（chase/approach/attack/kite/volley）的"目标超距 → inactive"守卫阈值为 `detectionRange × 2`，与进入战斗用的 `detectionRange` 形成滞回：防止边界抖动、以及受击仇恨目标在侦测半径外（如远程狙击）时 combat 一闪即灭（表现为"被打仍处 peace"）。目标死亡/消失仍立即退出。
 
 **相关常量**（`ai/constants.ts`）：
 
@@ -231,6 +235,9 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 | `STALL_TIMEOUT` | `2.0` | 静止恢复触发时长（秒） |
 | `COMBAT_REENTRY_COOLDOWN` | `3.0` | 战斗放弃后重新接敌冷却（秒） |
 | `CHASE_LEASH_RADIUS` | `20` | 追击活动半径（m），距出生点超出则放弃追击 |
+| `COMBAT_STALL_MAX_RETRIES` | `3` | combat 卡死横向绕行重试上限，达上限才放弃战斗 |
+| `COMBAT_STALL_DETOUR_DURATION` | `1.0` | 卡死重试绕行脉冲时长（秒） |
+| `COMBAT_LOSE_RANGE_FACTOR` | `2` | 脱战距离滞回系数（放弃阈值 = detectionRange × 系数） |
 
 **nav stuck 倒退逃逸**（`nav/machine.ts`）：stuck 状态累计超过 `config.stuckTimeout` 后，输出 `STUCK_ESCAPE_DURATION`（0.5s）的"意图反向倒退 + 跳跃"逃逸脉冲尝试物理挣脱（对墙/坑均安全），随后重新评估路径。与决策层静止检测构成两级防线：先倒退挣脱，仍无效才重掷路点/放弃目标。
 
@@ -299,7 +306,7 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 
 | 参数 | tactical | aggressive | cowardly | 说明 |
 |------|----------|------------|----------|------|
-| `chaseTimeout` | **5** | **0** (永不过期) | **1.5** | 追击超时（秒） |
+| `chaseTimeout` | **10** | **0** (永不过期) | **1.5** | 追击超时（秒） |
 | `approachTimeout` | **4** | **0** (永不过期) | **1** | 接近超时（秒） |
 | `volleyTimeout` | **8** | **4** | **1.5** | 齐射超时（秒） |
 | `kiteTimeout` | **3** | **1.5** | **1** | 风筝超时（秒） |

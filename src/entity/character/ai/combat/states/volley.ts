@@ -1,6 +1,7 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
+import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -123,7 +124,7 @@ export const volleyHandler: CombatStateHandler = {
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return v3Length(_dir) >= detRange
+                return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },
     ],

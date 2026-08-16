@@ -23,7 +23,7 @@ export interface CombatConfig {
 /** 各战斗子策略默认配置 */
 export const DEFAULT_COMBAT_CONFIGS: Record<CombatSubStrategy, CombatConfig> = {
     tactical: {
-        chaseTimeout: 5,
+        chaseTimeout: 10,
         approachTimeout: 4,
         volleyTimeout: 8,
         kiteTimeout: 3,

@@ -37,6 +37,10 @@ export const initCombatContext = (
     ctx.combatStrafeTimer = 0
     ctx.combatFleeDir = {x: 0, z: 0}
     ctx.combatBurstAttackCount = 0
+    ctx.combatStallRetries = 0
+    ctx.combatDetourX = 0
+    ctx.combatDetourZ = 0
+    ctx.combatDetourTimer = 0
     ctx.combatStrategy = strategy
     ctx.combatConfig = config
 }

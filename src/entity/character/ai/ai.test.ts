@@ -7,11 +7,12 @@ import {DEFAULT_COMBAT_CONFIGS, type CombatConfig} from '../../../character/ai_s
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
-import type {AIContext} from './types.ts'
+import type {AIContext, AISetInput} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
 import {createNavRunContext, processNav} from './nav/machine.ts'
 import type {NavSensor, NavSenseOutput} from './nav/types.ts'
 import {createAIMachine, updateAI, notifyAIDamaged} from './machine.ts'
+import {updateCombatFSM} from './combat/machine.ts'
 import {chaseHandler} from './combat/states/chase.ts'
 import {attackHandler} from './combat/states/attack.ts'
 import {approachHandler} from './combat/states/approach.ts'
@@ -80,6 +81,10 @@ const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: numb
         stallAnchorX: 0,
         stallAnchorZ: 0,
         combatReentryTimer: 0,
+        combatStallRetries: 0,
+        combatDetourX: 0,
+        combatDetourZ: 0,
+        combatDetourTimer: 0,
         combatState: 'chase',
         combatStateTime: 0,
         combatTargetId: targetId,
@@ -129,21 +134,33 @@ describe('AI 状态转换 — chase (近战)', () => {
         expect(guard.guard(ctx, char, enemies)).toBe(false)
     })
 
-    it('超出侦测范围回到 inactive', () => {
+    it('超出脱战阈值（侦测范围 × 滞回系数）回到 inactive', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
         const ctx = makeCtx('tactical', 2)
         ctx.combatState = 'chase'
-        const enemies = [makeChar(2, 12, 0, 1, 'melee')]
+        /* 长剑 detRange=8，脱战阈值 16：17m 超出 */
+        const enemies = [makeChar(2, 17, 0, 1, 'melee')]
         const allInactive = chaseHandler.transitions.filter(t => t.to === 'inactive')
         const guard = allInactive[allInactive.length - 1]
         expect(guard.guard(ctx, char, enemies)).toBe(true)
+    })
+
+    it('超出侦测范围但未达脱战阈值 → 保持战斗（距离滞回，受击仇恨目标超距时不闪退）', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'chase'
+        /* 12m：在 detRange(8)〜脱战阈值(16) 之间 */
+        const enemies = [makeChar(2, 12, 0, 1, 'melee')]
+        const allInactive = chaseHandler.transitions.filter(t => t.to === 'inactive')
+        const guard = allInactive[allInactive.length - 1]
+        expect(guard.guard(ctx, char, enemies)).toBe(false)
     })
 
     it('追逐超时回到 inactive', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
         const ctx = makeCtx('tactical', 2)
         ctx.combatState = 'chase'
-        ctx.combatStateTime = 6
+        ctx.combatStateTime = 11
         const enemies = [makeChar(2, 3, 0, 1, 'melee')]
         const guard = chaseHandler.transitions.find(t => t.to === 'inactive')!
         expect(guard.guard(ctx, char, enemies)).toBe(true)
@@ -196,7 +213,7 @@ describe('AI 状态转换 — approach', () => {
         const char = makeChar(1, 0, 0, 0, 'ranged')
         const ctx = makeCtx('tactical', 2)
         ctx.combatState = 'approach'
-        const enemies = [makeChar(2, 25, 0, 1, 'ranged')]
+        const enemies = [makeChar(2, 45, 0, 1, 'ranged')]
         const guard = approachHandler.transitions.find(t => t.to === 'inactive')!
         expect(guard.guard(ctx, char, enemies)).toBe(true)
     })
@@ -289,7 +306,7 @@ describe('AI 状态转换 — attack (近战)', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
         const ctx = makeCtx('tactical', 2)
         ctx.combatState = 'attack'
-        const enemies = [makeChar(2, 12, 0, 1, 'melee')]
+        const enemies = [makeChar(2, 17, 0, 1, 'melee')]
         const guard = attackHandler.transitions.find(t => t.to === 'inactive')!
         expect(guard.guard(ctx, char, enemies)).toBe(true)
     })
@@ -574,8 +591,8 @@ describe('静止检测与卡死自愈', () => {
         expect(ctx.waypoint.z).toBe(10)
     })
 
-    it('combat：卡死超时 → 强制放弃并进入重新接敌冷却', () => {
-        const {char, pos} = makeMovableChar(1, 0, 'melee')
+    it('combat：卡死先横向绕行重试，连续卡死达上限才放弃并进入接敌冷却', () => {
+        const {char} = makeMovableChar(1, 0, 'melee')
         const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
         const enemy = makeChar(2, 3, 0, 1, 'melee')
 
@@ -584,8 +601,20 @@ describe('静止检测与卡死自愈', () => {
         expect(ctx.activeFsm).toBe('combat')
         expect(ctx.combatState).toBe('chase')
 
-        /* 卡死累积 2.5s → 静止恢复强制放弃（早于 chaseTimeout 5s） */
-        for (let i = 0; i < 5; i++) updateAI(0.5, ctx, char, [char, enemy], () => {})
+        /* 卡死累积 2.0s → 第 1 次重试：保持战斗，输出绕行脉冲 */
+        for (let i = 0; i < 4; i++) updateAI(0.5, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatState).toBe('chase')
+        expect(ctx.combatStallRetries).toBe(1)
+        expect(ctx.combatDetourTimer).toBeGreaterThan(0)
+
+        /* 第 2 次卡死继续重试，仍不放弃 */
+        for (let i = 0; i < 4; i++) updateAI(0.5, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatStallRetries).toBe(2)
+
+        /* 第 3 次卡死达上限 → 放弃战斗 + 接敌冷却 */
+        for (let i = 0; i < 4; i++) updateAI(0.5, ctx, char, [char, enemy], () => {})
         expect(ctx.activeFsm).toBe('peace')
         expect(ctx.combatState).toBe('inactive')
         expect(ctx.combatReentryTimer).toBeGreaterThan(0)
@@ -593,14 +622,25 @@ describe('静止检测与卡死自愈', () => {
         /* 冷却期内敌人仍在侦测范围也不重新接敌 */
         updateAI(0.5, ctx, char, [char, enemy], () => {})
         expect(ctx.activeFsm).toBe('peace')
+    })
 
-        /* 冷却耗尽后恢复接敌（恢复移动后不再触发静止恢复；沿 Z 轴移动保持与敌人的追击距离） */
-        for (let i = 0; i < 6; i++) {
-            pos.z += 0.6
-            updateAI(0.5, ctx, char, [char, enemy], () => {})
-        }
-        expect(ctx.activeFsm).toBe('combat')
-        expect(ctx.combatState).toBe('chase')
+    it('combat：绕行重试期间 chase 按偏转方向输出移动输入', () => {
+        const {char} = makeMovableChar(1, 0, 'melee')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatDetourX = 0
+        ctx.combatDetourZ = 1
+        ctx.combatDetourTimer = 0.8
+        const enemy = makeChar(2, 3, 0, 1, 'melee')
+        let gotDX = 99
+        let gotDZ = 99
+        const setInput: AISetInput = (dx, dz) => { gotDX = dx; gotDZ = dz }
+
+        updateCombatFSM(0.5, ctx, char, [char, enemy], setInput)
+
+        /* 绕行阶段不朝目标（+X）而是按偏转方向（+Z）移动，并消耗计时 */
+        expect(gotDX).toBe(0)
+        expect(gotDZ).toBe(1)
+        expect(ctx.combatDetourTimer).toBeCloseTo(0.3)
     })
 
     it('combat：flee 卡死仅重掷逃跑方向，不放弃战斗', () => {
@@ -695,6 +735,23 @@ describe('受击转战斗（仇恨）', () => {
 
         expect(ctx.combatReentryTimer).toBe(0)
         expect(ctx.activeFsm).toBe('peace')
+    })
+
+    it('peace 态被侦测范围外的攻击者击中 → 进入 combat 且持续追击不闪退（距离滞回）', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        /* 攻击者在 12m：超出侦测半径 8（findNearestEnemy 看不见），但未达脱战阈值 16 */
+        const attacker = makeChar(2, 12, 0, 1, 'ranged')
+
+        notifyAIDamaged(ctx, char, [char, attacker], 2)
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatTargetId).toBe(2)
+
+        /* 后续帧：敌情检查看不到攻击者，但 chase 距离滞回维持战斗，持续向目标追击 */
+        for (let i = 0; i < 5; i++) updateAI(0.1, ctx, char, [char, attacker], () => {})
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatState).toBe('chase')
     })
 })
 

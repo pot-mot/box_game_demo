@@ -18,3 +18,10 @@ export const STALL_TIMEOUT = 2.0
 export const COMBAT_REENTRY_COOLDOWN = 3.0
 /** 追击活动半径（m）：距出生点超过该值时放弃追击，防止同速目标把角色拖向无限远 */
 export const CHASE_LEASH_RADIUS = 20
+/** combat 卡死横向绕行重试的最大次数：达到后仍卡死才放弃战斗 */
+export const COMBAT_STALL_MAX_RETRIES = 3
+/** combat 卡死重试的绕行时长（秒）：偏转方向侧向移动，打破贴脸顶牛/正面被堵 */
+export const COMBAT_STALL_DETOUR_DURATION = 1.0
+/** 脱战距离滞回系数：放弃战斗的距离阈值 = detectionRange × 系数（进入用 detectionRange），
+ * 防止边界抖动/受击仇恨目标超距时 combat 一闪即灭 */
+export const COMBAT_LOSE_RANGE_FACTOR = 2
