@@ -16,7 +16,7 @@ export const applyDamage = (
         health: number
         maxHealth: number
         readonly damageModifiers?: readonly DamageModifier[]
-        onDamageTaken: ((amount: number) => void) | null
+        onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
         onDeath: (() => void) | null
     },
     event: DamageEvent,
@@ -28,7 +28,7 @@ export const applyDamage = (
         }
     }
     target.health = Math.max(0, target.health - finalEvent.finalAmount)
-    target.onDamageTaken?.(finalEvent.finalAmount)
+    target.onDamageTaken?.(finalEvent.finalAmount, finalEvent)
 
     if (target.health <= 0) {
         target.onDeath?.()

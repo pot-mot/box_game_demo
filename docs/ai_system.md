@@ -206,7 +206,7 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 
 AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触推挤阻断**（与另一角色物理接触且输入指向对方时清零，`world.ts` setInput 闭包）与 **nav stuck**（前方受阻且两侧无通路）。清零后决策层若不自检，会永远站桩在 `idle|combat:chase`、`falling|peace:patrol` 等状态。静止检测就是决策层的兜底：
 
-**检测**（`machine.ts` `updateStallDetection`）：包装 `setInput` 记录每帧**意图方向**（过滤前）。意图模长 ≥ `STALL_INPUT_EPS` 且相对锚点的水平位移不超过 `STALL_CHECK_TRAVEL` 时累积 `stallTimer`，超过 `STALL_TIMEOUT` 触发恢复；无意图（路点等待/射程内站桩）或确认在动时重置锚点与计时。
+**检测**（`machine.ts` `updateStallDetection`）：包装 `setInput` 记录每帧**意图方向**（过滤前）。意图模长 ≥ `STALL_INPUT_EPS` 且相对锚点的水平位移不超过 `STALL_CHECK_TRAVEL` 时累积 `stallTimer`，超过 `STALL_TIMEOUT` 触发恢复；无意图（路点等待/射程内站桩）或确认在动时重置锚点与计时。**交火豁免**：有攻击意图或攻击动作进行中（`attackActive`）视为有效战斗行为并重置基准——面对面对峙位移为零属正常，不得误判为卡死而中断战斗。
 
 **恢复动作**（`recoverFromStall`，按活跃 FSM 分发）：
 
@@ -218,6 +218,10 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 
 **重新接敌冷却**（`combatReentryTimer`）：卡死放弃战斗后，冷却（`COMBAT_REENTRY_COOLDOWN`）耗尽前即使检测到敌人也不进入 combat，同时根治"超时 → peace → 下帧立刻回 chase"的空转循环。aggressive 的 `chaseTimeout = 0`（永不放弃追击）依赖此兜底而不会死锁。
 
+**追击活动半径**（`CHASE_LEASH_RADIUS`）：`chase` 状态下每帧检查距出生点的水平距离，超出半径即放弃战斗并进入接敌冷却。防止同速目标永远追不上时把角色拖向无限远（平行走到天边的根因之一）。
+
+**受击转战斗（仇恨）**（`notifyAIDamaged`，由 `world.ts` 的 `onDamageTaken` 回调调用）：被击中时清除接敌冷却并强制进入 combat 锁定攻击者，解决和平态被背后/视野外攻击不还手、冷却期内挨打不反应的问题。友军误伤（`attackTendency` 为 false）不强制开战；攻击者已死亡时不锁定（冷却仍被清除）。伤害回调签名透传 `DamageEvent`（`onDamageTaken(amount, event)`，`character/combat/damage.ts` + `targetable.ts`）。
+
 **相关常量**（`ai/constants.ts`）：
 
 | 常量 | 值 | 说明 |
@@ -226,6 +230,7 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 | `STALL_CHECK_TRAVEL` | `0.5` | 视为"在动"的位移阈值（m） |
 | `STALL_TIMEOUT` | `2.0` | 静止恢复触发时长（秒） |
 | `COMBAT_REENTRY_COOLDOWN` | `3.0` | 战斗放弃后重新接敌冷却（秒） |
+| `CHASE_LEASH_RADIUS` | `20` | 追击活动半径（m），距出生点超出则放弃追击 |
 
 **nav stuck 倒退逃逸**（`nav/machine.ts`）：stuck 状态累计超过 `config.stuckTimeout` 后，输出 `STUCK_ESCAPE_DURATION`（0.5s）的"意图反向倒退 + 跳跃"逃逸脉冲尝试物理挣脱（对墙/坑均安全），随后重新评估路径。与决策层静止检测构成两级防线：先倒退挣脱，仍无效才重掷路点/放弃目标。
 

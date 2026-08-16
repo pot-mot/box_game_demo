@@ -11,7 +11,7 @@ import type {AIContext} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
 import {createNavRunContext, processNav} from './nav/machine.ts'
 import type {NavSensor, NavSenseOutput} from './nav/types.ts'
-import {createAIMachine, updateAI} from './machine.ts'
+import {createAIMachine, updateAI, notifyAIDamaged} from './machine.ts'
 import {chaseHandler} from './combat/states/chase.ts'
 import {attackHandler} from './combat/states/attack.ts'
 import {approachHandler} from './combat/states/approach.ts'
@@ -617,6 +617,84 @@ describe('静止检测与卡死自愈', () => {
 
         expect(ctx.activeFsm).toBe('combat')
         expect(ctx.combatState).toBe('flee')
+    })
+
+    it('combat：面对面持续交火（有攻击意图）不被静止检测误判为卡死', () => {
+        const {char} = makeMovableChar(1, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        /* 敌人距 1m：在回退检测范围 1.5 内 → chase→attack，持续输出攻击意图 */
+        const enemy = makeChar(2, 1, 0, 1, 'melee')
+
+        /* 首帧接敌 */
+        updateAI(0.016, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('combat')
+
+        /* 位移始终为零（被接触闸门阻断的峙峙态）但持续交火：
+         * 远超过 STALL_TIMEOUT 2s 也不应放弃战斗 */
+        for (let i = 0; i < 60; i++) updateAI(0.05, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatState).not.toBe('inactive')
+    })
+
+    it('combat：追击超出活动半径 → 放弃并进入接敌冷却，冷却期内不重新接敌', () => {
+        const {char, pos} = makeMovableChar(1, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'aggressive')
+        /* 被同速目标拖到距出生点 25m（> CHASE_LEASH_RADIUS 20），敌人仍在侦测范围 */
+        pos.x = 25
+        const enemy = makeChar(2, 26, 0, 1, 'melee')
+        /* 预置为追击中（模拟已被拖远的既成状态） */
+        ctx.activeFsm = 'combat'
+        ctx.combatState = 'chase'
+        ctx.combatTargetId = 2
+
+        /* leash 生效：放弃战斗 + 冷却，且后续帧敌人再近也不接敌 */
+        for (let i = 0; i < 3; i++) updateAI(0.5, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('peace')
+        expect(ctx.combatState).toBe('inactive')
+        expect(ctx.combatReentryTimer).toBeGreaterThan(0)
+    })
+})
+
+describe('受击转战斗（仇恨）', () => {
+    it('peace 态被敌方击中 → 强制进入 combat 并锁定攻击者', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        ctx.combatReentryTimer = 2.5
+        const attacker = makeChar(2, 0, -2, 1, 'melee')
+
+        notifyAIDamaged(ctx, char, [char, attacker], 2)
+
+        /* 接敌冷却被清除，强制 combat 且目标锁定为攻击者（即使攻击来自背后盲区） */
+        expect(ctx.combatReentryTimer).toBe(0)
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatState).toBe('chase')
+        expect(ctx.combatTargetId).toBe(2)
+    })
+
+    it('同阵营误伤不强制开战', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        const ally = makeChar(3, 1, 0, 0, 'melee')
+
+        notifyAIDamaged(ctx, char, [char, ally], 3)
+
+        expect(ctx.activeFsm).toBe('peace')
+        expect(ctx.combatTargetId).toBeUndefined()
+    })
+
+    it('攻击者已死亡时不锁定（冷却仍被清除）', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        ctx.combatReentryTimer = 2.5
+        const dead = makeChar(2, 1, 0, 1, 'melee', {isDead: true})
+
+        notifyAIDamaged(ctx, char, [char, dead], 2)
+
+        expect(ctx.combatReentryTimer).toBe(0)
+        expect(ctx.activeFsm).toBe('peace')
     })
 })
 

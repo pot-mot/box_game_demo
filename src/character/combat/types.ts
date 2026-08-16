@@ -1,7 +1,7 @@
 import type { Faction, AttackTendency, TendencyConfig } from '../faction.ts'
 import type { SkillSlot } from './skill_types.ts'
 import { createDashSkillSlot, type DashSkillConfig } from './dash_skill.ts'
-import type { DamageModifier } from './damage.ts'
+import type { DamageEvent, DamageModifier } from './damage.ts'
 
 /** 攻击结果码 */
 export const ATTACK_RESULT_CODES = ['ok', 'cooldown', 'dead', 'already_attacking', 'no_valid_skill'] as const
@@ -44,7 +44,7 @@ export interface CombatComponent {
 
     readonly damageModifiers: readonly DamageModifier[]
 
-    onDamageTaken: ((amount: number) => void) | null
+    onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
     onDamageDealt: ((amount: number) => void) | null
     onDeath: (() => void) | null
 }

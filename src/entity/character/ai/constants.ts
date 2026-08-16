@@ -16,3 +16,5 @@ export const STALL_CHECK_TRAVEL = 0.5
 export const STALL_TIMEOUT = 2.0
 /** 战斗卡死强制放弃后的重新接敌冷却（秒），防止超时→peace→立即回 chase 的空转循环 */
 export const COMBAT_REENTRY_COOLDOWN = 3.0
+/** 追击活动半径（m）：距出生点超过该值时放弃追击，防止同速目标把角色拖向无限远 */
+export const CHASE_LEASH_RADIUS = 20

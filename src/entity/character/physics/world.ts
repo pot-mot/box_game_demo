@@ -25,7 +25,7 @@ import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import type {SpawnBoxCallback} from '../ai/types.ts'
 import {createNavSensor, type NavSensor} from '../ai/nav/sensor.ts'
 import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_sight.ts'
-import {createAIMachine, updateAI} from '../ai/machine.ts'
+import {createAIMachine, updateAI, notifyAIDamaged} from '../ai/machine.ts'
 import {processNav} from '../ai/nav/machine.ts'
 import {createCharacterMesh, updateCharacterMesh} from '../render'
 import {COLLIDER_MESH_OPACITY} from '../render/constants.ts'
@@ -385,11 +385,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const flash = createDamageFlash(entity)
         flashStates.set(entity.id, flash)
         const originalOnDamage = flash.onDamage
-        entity.combat.onDamageTaken = (amount: number) => {
+        entity.combat.onDamageTaken = (amount: number, event) => {
             originalOnDamage(amount)
             /* 攻击中被击中时标记硬直；受击保护窗口内不再触发，防止无限连段锁死（伤害照常） */
             if (entity.combat.attackActive && entity.combat.health > 0 && entity.combat.flinchImmunityTimer <= 0) {
                 entity.combat.pendingFlinch = true
+            }
+            /* 受击转战斗（仇恨）：被背后/视野外攻击或接敌冷却期内挨打时强制还击 */
+            const aiCtx = aiMap.get(entity.id)
+            if (aiCtx && entity.combat.health > 0) {
+                notifyAIDamaged(aiCtx, entity, characters, event.sourceId)
             }
         }
 

@@ -5,7 +5,7 @@ import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {AIContext, AISetInput, AttackDetectChecker} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
-import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN} from './constants.ts'
+import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, CHASE_LEASH_RADIUS} from './constants.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
@@ -159,15 +159,24 @@ const recoverFromStall = (ctx: AIContext): void => {
     ctx.combatReentryTimer = COMBAT_REENTRY_COOLDOWN
 }
 
-/** 静止检测记账：有移动意图但长时间无水平位移则触发恢复 */
+/** 静止检测记账：有移动意图但长时间无水平位移则触发恢复；
+ * 攻击中（有攻击意图或攻击动作进行中）视为有效战斗行为，不计入卡死 */
 const updateStallDetection = (
     dt: number,
     ctx: AIContext,
     character: CharacterEntity,
     intentDX: number,
     intentDZ: number,
+    attacking: boolean,
 ): void => {
     const pos = character.body.translation()
+    if (attacking) {
+        /* 正在交火：面对面对峙位移为零属正常，重置检测基准 */
+        ctx.stallTimer = 0
+        ctx.stallAnchorX = pos.x
+        ctx.stallAnchorZ = pos.z
+        return
+    }
     if (Math.hypot(intentDX, intentDZ) < STALL_INPUT_EPS) {
         /* 无移动意图（路点等待/射程内站桩等）：重置检测基准 */
         ctx.stallTimer = 0
@@ -189,6 +198,26 @@ const updateStallDetection = (
     ctx.stallAnchorX = pos.x
     ctx.stallAnchorZ = pos.z
     recoverFromStall(ctx)
+}
+
+/** 受击转战斗（仇恨）：被击中时清除接敌冷却并强制锁定攻击者，
+ * 解决和平态被背后/视野外攻击不还手、冷却期内挨打不反应的问题 */
+export const notifyAIDamaged = (
+    ctx: AIContext,
+    character: CharacterEntity,
+    allCharacters: readonly CharacterEntity[],
+    sourceId: number,
+): void => {
+    if (character.combat.isDead) return
+    ctx.combatReentryTimer = 0
+    const source = allCharacters.find(c => c.id === sourceId)
+    if (!source || source.combat.isDead) return
+    /* 友军误伤不强制开战 */
+    if (!character.combat.attackTendency(character.combat.faction, source.combat.faction)) return
+    ctx.activeFsm = 'combat'
+    ctx.combatState = 'chase'
+    ctx.combatStateTime = 0
+    ctx.combatTargetId = sourceId
 }
 
 export const updateAI = (
@@ -223,16 +252,32 @@ export const updateAI = (
         }
     }
 
-    /* 包装 setInput 记录本帧意图方向（过滤前），供静止检测使用 */
+    /* 包装 setInput 记录本帧意图方向与攻击意图（过滤前），供静止检测使用 */
     let intentDX = 0
     let intentDZ = 0
+    let intentAttack = false
     const trackedSetInput: AISetInput = (dx, dz, attack, attackDX, attackDZ) => {
         intentDX = dx
         intentDZ = dz
+        if (attack) intentAttack = true
         setInput(dx, dz, attack, attackDX, attackDZ)
     }
 
     if (ctx.activeFsm === 'combat') {
+        /* 追击活动半径：被同速目标拖离出生点过远时放弃，防止平行追到无限远 */
+        if (ctx.combatState === 'chase') {
+            const pos = character.body.translation()
+            const leash = Math.hypot(pos.x - ctx.spawnPoint.x, pos.z - ctx.spawnPoint.z)
+            if (leash > CHASE_LEASH_RADIUS) {
+                ctx.activeFsm = 'peace'
+                ctx.peaceState = 'patrol'
+                ctx.peaceStateTime = 0
+                ctx.combatState = 'inactive'
+                ctx.waitTimer = 0
+                rerollWaypoint(ctx)
+                ctx.combatReentryTimer = COMBAT_REENTRY_COOLDOWN
+            }
+        }
         /* cowardly 首次发现有敌人直接进入 flee */
         if (enemy && ctx.combatStrategy === 'cowardly' && ctx.combatState === 'chase' && ctx.combatStateTime === 0) {
             if (ctx.combatBurstAttackCount < ctx.combatConfig.attackBurstCount) {
@@ -247,11 +292,18 @@ export const updateAI = (
             ctx.activeFsm = 'peace'
             ctx.peaceState = 'patrol'
             ctx.peaceStateTime = 0
+            /* 敌人仍存活可见时施加接敌冷却：防止超时→peace→下帧立即回 chase 的
+             * 空转循环（同速目标永追不上时会演变为平行走到无限远） */
+            const enemyChar = enemy ? allCharacters.find(c => c.id === enemy.id) : undefined
+            if (enemyChar && !enemyChar.combat.isDead) {
+                ctx.combatReentryTimer = Math.max(ctx.combatReentryTimer, COMBAT_REENTRY_COOLDOWN)
+            }
         }
     } else {
         updatePeaceFSM(dt, ctx, character, trackedSetInput)
     }
 
-    /* 静止自检：决策层对被截断输入的兜底（接触阻断/nav stuck 清零后由这里触发自救） */
-    updateStallDetection(dt, ctx, character, intentDX, intentDZ)
+    /* 静止自检：决策层对被截断输入的兜底（接触阻断/nav stuck 清零后由这里触发自救）；
+     * 攻击意图或攻击动作进行中视为有效战斗，不计入卡死 */
+    updateStallDetection(dt, ctx, character, intentDX, intentDZ, intentAttack || character.combat.attackActive)
 }
