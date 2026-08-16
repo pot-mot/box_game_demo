@@ -9,9 +9,6 @@ describe('ATTACK_PRESETS.melee', () => {
     it('type 为 melee', () => {
         expect(ATTACK_PRESETS.melee.type).toBe('melee')
     })
-    it('range 为正数', () => {
-        expect(ATTACK_PRESETS.melee.range).toBeGreaterThan(0)
-    })
     it('damage 为正数', () => {
         expect(ATTACK_PRESETS.melee.damage).toBeGreaterThan(0)
     })
@@ -27,8 +24,8 @@ describe('ATTACK_PRESETS.ranged', () => {
     it('type 为 ranged', () => {
         expect(ATTACK_PRESETS.ranged.type).toBe('ranged')
     })
-    it('range 大于近战', () => {
-        expect(ATTACK_PRESETS.ranged.range).toBeGreaterThan(ATTACK_PRESETS.melee.range)
+    it('range 为正数', () => {
+        expect(ATTACK_PRESETS.ranged.range).toBeGreaterThan(0)
     })
     it('damage 为正数', () => {
         expect(ATTACK_PRESETS.ranged.damage).toBeGreaterThan(0)

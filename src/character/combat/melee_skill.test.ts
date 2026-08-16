@@ -104,11 +104,8 @@ describe('buildMeleeSkillSlots（4 槽结构与链闭合）', () => {
         expect(slots[3].config.weapon.damage).toBeCloseTo(lightDamage * 1.6)
     })
 
-    it('overrides 覆写伤害/侦测范围，段时长取预设', () => {
-        const slots = buildMeleeSkillSlots('short_sword', {damage: 99, range: 5})
-        for (const slot of slots) {
-            expect(slot.config.weapon.range).toBe(5)
-        }
+    it('overrides 覆写伤害，段时长取预设', () => {
+        const slots = buildMeleeSkillSlots('short_sword', {damage: 99})
         expect(slots[0].config.weapon.damage).toBe(99)
         expect(slots[1].config.weapon.damage).toBeCloseTo(99 * 1.6)
         expect(slots[0].config.duration).toBe(MELEE_LIGHT_DURATION)

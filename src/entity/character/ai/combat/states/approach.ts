@@ -1,6 +1,7 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
+import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -83,7 +84,9 @@ export const approachHandler: CombatStateHandler = {
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill) return false
                 const cooldownOk = (skill.cooldownTimer ?? Infinity) <= 0
-                return v3Length(_dir) < skill.config.weapon.range && cooldownOk
+                /* 近战无射程概念，用检测回退常量默认值 */
+                const skillRange = skill.config.type === 'melee' ? MELEE_FALLBACK_DETECT_RANGE : skill.config.weapon.range
+                return v3Length(_dir) < skillRange && cooldownOk
             },
         },
         {

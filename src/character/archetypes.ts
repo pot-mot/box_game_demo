@@ -7,7 +7,6 @@ export interface MeleeAttackConfig {
     type: 'melee'
     /** MELEE_WEAPON_PRESETS 的 key（可选，默认 'long_sword'） */
     weaponId?: string
-    range: number
     damage: number
     cooldown: number
     duration: number
@@ -34,7 +33,6 @@ export type AttackConfig = MeleeAttackConfig | RangedAttackConfig
 export const ATTACK_PRESETS = {
     melee: {
         type: 'melee' as const,
-        range: 1.5,
         damage: 3,
         cooldown: 0.5,
         duration: 0.3,

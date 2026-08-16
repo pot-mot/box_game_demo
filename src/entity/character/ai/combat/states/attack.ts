@@ -1,5 +1,6 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
+import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -17,10 +18,11 @@ export const attackHandler: CombatStateHandler = {
         const skill = character.combat.skills[character.combat.currentSkillIndex]
         if (!skill) { setInput(0, 0, false); return }
 
-        /* 出招门控：目标在攻击检测箱内才出招（checker 缺失时回退圆形距离判定） */
+        /* 出招门控：目标在攻击检测箱内才出招（checker 缺失时回退圆形距离判定；近战无射程概念用常量默认值） */
+        const fallbackRange = skill.config.type === 'ranged' ? skill.config.weapon.range : MELEE_FALLBACK_DETECT_RANGE
         const inHitRegion = ctx.attackDetectChecker
             ? ctx.attackDetectChecker(character, target)
-            : dist <= skill.config.weapon.range
+            : dist <= fallbackRange
         if (!inHitRegion) { setInput(0, 0, false); return }
 
         const len = dist > 0.001 ? dist : 1
@@ -63,10 +65,11 @@ export const attackHandler: CombatStateHandler = {
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                /* 出攻击检测箱 → 追击（checker 缺失时回退距离判定） */
+                /* 出攻击检测箱 → 追击（checker 缺失时回退距离判定；近战用常量默认值） */
+                const fallbackRange = skill?.config.type === 'ranged' ? skill.config.weapon.range : MELEE_FALLBACK_DETECT_RANGE
                 const outOfRegion = ctx.attackDetectChecker
                     ? !ctx.attackDetectChecker(character, target)
-                    : v3Length(_dir) > (skill?.config.weapon.range ?? 1.5)
+                    : v3Length(_dir) > fallbackRange
                 return outOfRegion && v3Length(_dir) < detRange
             },
         },

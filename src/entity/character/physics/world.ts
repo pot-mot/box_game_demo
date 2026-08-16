@@ -43,7 +43,7 @@ import {computeSeparation, separationSlopeDy} from './separation.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
 import {SELECT_PALETTE} from '../appearance/constants.ts'
-import {createMeleeExecutor, testAttackDetect, attackDetectOBB, targetHitBoxHalves, meleeDetectRange} from '../combat/melee_executor.ts'
+import {createMeleeExecutor, testAttackDetect, attackDetectOBB, targetHitBoxHalves} from '../combat/melee_executor.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
@@ -150,9 +150,9 @@ const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
     if (attack.type === 'melee') {
         /* test_weapon：测试专用武器，走自定义 6 槽守卫链装配（不进生产预设表） */
         if ((attack.weaponId ?? '') === TEST_WEAPON_ID) return buildTestWeaponSkillSlots()
-        /* 近战 = 4 技能槽双链（轻1/重1/轻2/重2）；伤害/侦测范围沿用存档覆写，
+        /* 近战 = 4 技能槽双链（轻1/重1/轻2/重2）；伤害沿用存档覆写，
          * 段时长/阶段/链结构/起手冷却取预设（存档 duration 不再决定攻击时长） */
-        return buildMeleeSkillSlots(attack.weaponId ?? '', {damage: attack.damage, range: attack.range})
+        return buildMeleeSkillSlots(attack.weaponId ?? '', {damage: attack.damage})
     }
     const weaponPreset = RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow
     const skill: SkillConfig = {
@@ -247,15 +247,26 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     /** 玩家攻击脉冲携带的按键按住时长（秒），帧末与脉冲一同归零 */
     let playerAttackHoldDuration = 0
 
+    /** 列表行当前状态文本：角色 FSM 状态；AI 激活时追加 AI 双层 FSM（和平/战斗层:子状态）；死亡显示 dead */
+    const stateLabelOf = (ch: CharacterEntity): string => {
+        if (ch.combat.isDead) return 'dead'
+        const ai = aiMap.get(ch.id)
+        if (ai === undefined) return ch.stateMachine.currentState
+        return ai.activeFsm === 'combat'
+            ? `${ch.stateMachine.currentState}|combat:${ai.combatState}`
+            : `${ch.stateMachine.currentState}|peace:${ai.peaceState}`
+    }
+
     const refreshPlayerLabel = (): void => {
-        for (const pi of panelInfos) {
-            const ch = characters.find(c => c.id === pi.id)
-            if (!ch) continue
+        const infoById = new Map(panelInfos.map(pi => [pi.id, pi]))
+        for (const ch of characters) {
+            const pi = infoById.get(ch.id)
+            if (!pi) continue
             const playerPrefix = ch.isPlayer ? '▶ Player: ' : ''
             const skill = ch.combat.skills[ch.combat.currentSkillIndex]
             const weaponName = skill?.config.weapon.id ?? '?'
             const weaponDmg = skill?.config.weapon.damage ?? 0
-            pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weaponDmg})  spd:${ch.config.speed}`
+            pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weaponDmg})  spd:${ch.config.speed}  [${stateLabelOf(ch)}]`
             pi.badgeLabel = ch.isPlayer ? 'P' : `F${ch.combat.faction}`
             pi.badgeColor = factionBadgeColor(ch.combat.faction, ch.isPlayer)
         }
@@ -358,13 +369,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         hitBoxes.targetBox.position.set(x, y, z)
         hitBoxes.targetBox.scale.set(th0.x * 2, th0.y * 2, th0.z * 2)
         hitBoxes.targetBox.visible = attackHitBoxVisible
-        const meleeRange0 = skills[0]?.config.type === 'melee'
-            ? (model.weaponHitBox !== null
-                ? meleeDetectRange(model.weaponHitBox.reach, config.scale)
-                : skills[0].config.weapon.range)
-            : undefined
-        if (meleeRange0 !== undefined) {
-            const db0 = attackDetectOBB({x, y, z}, meleeRange0, config.scale, 0)
+        const meleeSkill0 = skills[0]?.config
+        if (meleeSkill0 !== undefined && meleeSkill0.type === 'melee') {
+            const db0 = attackDetectOBB({x, y, z}, meleeSkill0.weapon.detectBox, config.scale, 0)
             hitBoxes.detectBox.position.set(db0.center.x, db0.center.y, db0.center.z)
             hitBoxes.detectBox.scale.set(db0.half.x * 2, db0.half.y * 2, db0.half.z * 2)
         }
@@ -399,7 +406,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const spawnAt = (x: number, y: number, z: number): void => {
         const wp = MELEE_WEAPON_PRESETS.long_sword
-        const meleePreset: AttackConfig = {type: 'melee', range: wp.range, damage: wp.damage, cooldown: 0, duration: MELEE_LIGHT_DURATION}
+        const meleePreset: AttackConfig = {type: 'melee', damage: wp.damage, cooldown: 0, duration: MELEE_LIGHT_DURATION}
         const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
         select(entity.id)
     }
@@ -745,12 +752,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         hitBoxes.weaponBox.visible = false
                     }
 
-                    /* 攻击检测箱（橙）：与角色位置/朝向绑定，深度 = 武器实际打击距离（命中箱 reach 推导） */
+                    /* 攻击检测箱（橙）：与角色位置/朝向绑定，尺寸与偏移由武器 detectBox 配置驱动 */
                     if (attackHitBoxVisible && meleeSkill !== undefined) {
-                        const detectDepth = model.weaponHitBox !== null
-                            ? meleeDetectRange(model.weaponHitBox.reach, entity.config.scale)
-                            : meleeSkill.weapon.range
-                        const db = attackDetectOBB(bPos, detectDepth, entity.config.scale, yaw)
+                        const db = attackDetectOBB(bPos, meleeSkill.weapon.detectBox, entity.config.scale, yaw)
                         hitBoxes.detectBox.position.set(db.center.x, db.center.y, db.center.z)
                         hitBoxes.detectBox.scale.set(db.half.x * 2, db.half.y * 2, db.half.z * 2)
                         hitBoxes.detectBox.rotation.y = yaw
@@ -883,6 +887,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         for (let i = characters.length - 1; i >= 0; i--) {
             if (characters[i].combat.isDead) remove(characters[i].id)
         }
+
+        /* 列表行状态实时刷新（状态机/AI 状态每帧可能变化） */
+        refreshPlayerLabel()
     }
 
     let losChecker: LineOfSightChecker | null = null
@@ -909,7 +916,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     losChecker,
                     DEFAULT_PEACE_CONFIGS[entity.peaceStrategy],
                     entity.combatStrategy,
-                    /* 攻击检测箱：与角色位置/朝向绑定、深度由武器命中箱 reach 推导的前侧方立方体（与伤害判定箱同源）；
+                    /* 攻击检测箱：与角色位置/朝向绑定、尺寸与偏移由武器 detectBox 配置驱动的前侧方立方体；
                      * 远程不适用检测箱，回退圆形距离判定 */
                     (character, target) => {
                         const skill = character.combat.skills[character.combat.currentSkillIndex]
@@ -919,13 +926,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         if (skill.config.type !== 'melee') {
                             return Math.hypot(tPos.x - cPos.x, tPos.z - cPos.z) <= skill.config.weapon.range
                         }
-                        /* 检测深度 = 武器实际打击距离；无命中箱（未装备模型）时回退 weapon.range */
-                        const hitBox = appearanceModels.get(character.id)?.weaponHitBox ?? null
-                        const detectDepth = hitBox !== null
-                            ? meleeDetectRange(hitBox.reach, character.config.scale)
-                            : skill.config.weapon.range
                         return testAttackDetect(
-                            cPos, detectDepth, character.config.scale, facingAngles.get(character.id) ?? 0,
+                            cPos, skill.config.weapon.detectBox, character.config.scale, facingAngles.get(character.id) ?? 0,
                             tPos, target.config.scale, facingAngles.get(target.id) ?? 0,
                         )
                     },

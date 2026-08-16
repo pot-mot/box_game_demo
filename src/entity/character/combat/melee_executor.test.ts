@@ -1,8 +1,12 @@
 import {describe, it, expect} from 'vitest'
-import {targetHitBoxHalves, testMeleeHit, testAttackDetect, attackDetectOBB, meleeDetectRange} from './melee_executor.ts'
-import {MELEE_ARM_FORWARD_REACH, ATTACK_DETECT_REACH_MARGIN} from './constants.ts'
+import {targetHitBoxHalves, testMeleeHit, testAttackDetect, attackDetectOBB} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
+import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
+
+/* 攻击检测箱夹具（与 long_sword / spear 预设一致）：前缘 = offset.z + size.z/2 */
+const swordDetectBox: MeleeDetectBox = {size: {x: 0.45, y: 1.1, z: 1.3}, offset: {x: 0, y: 0, z: 0.45}}
+const spearDetectBox: MeleeDetectBox = {size: {x: 0.4, y: 1.1, z: 2.1}, offset: {x: 0, y: 0, z: 0.85}}
 
 /** 组装「yaw 旋转 + 平移」的 4×4 列主序矩阵（与 Three.js matrixWorld.elements 布局一致） */
 const yawMatrix = (px: number, py: number, pz: number, yaw: number): readonly number[] => {
@@ -66,7 +70,7 @@ describe('testMeleeHit（武器 OBB × 受击箱 OBB）', () => {
     })
 })
 
-describe('meleeDetectRange / 武器命中箱 reach（检测深度由武器实际打击距离驱动）', () => {
+describe('武器命中箱 reach（命中箱前伸量几何属性）', () => {
     it('reach = 命中箱沿武器轴最大前伸量（center.y + half.y）', () => {
         const sword = createWeaponMesh({id: 'sword', bladeLen: 0.5, color: 0, gripColor: 0})
         expect(sword.hitBox.reach).toBeCloseTo(sword.hitBox.center.y + sword.hitBox.half.y)
@@ -80,55 +84,50 @@ describe('meleeDetectRange / 武器命中箱 reach（检测深度由武器实际
         sword.cleanup()
         spear.cleanup()
     })
-
-    it('检测深度 = 臂前伸量 + 武器 reach + 触发余量，随 scale 缩放', () => {
-        const base = MELEE_ARM_FORWARD_REACH + 0.46 + ATTACK_DETECT_REACH_MARGIN
-        expect(meleeDetectRange(0.46, 1)).toBeCloseTo(base)
-        expect(meleeDetectRange(0.46, 2)).toBeCloseTo(base * 2)
-    })
-
-    it('检测深度与实际命中距离同量级（远小于旧 weapon.range 的 1.5）', () => {
-        const sword = createWeaponMesh({id: 'sword', bladeLen: 0.5, color: 0, gripColor: 0})
-        expect(meleeDetectRange(sword.hitBox.reach, 1)).toBeLessThan(1.2)
-        sword.cleanup()
-    })
 })
 
-describe('attackDetectOBB / testAttackDetect（攻击检测箱）', () => {
-    /* scale=1 身体半宽 0.125 / 半高 0.5 / 半深 ≈ 0.081 */
-    it('几何参数：覆盖身前 range、身后少量余量、两侧略宽于身体', () => {
-        const box = attackDetectOBB({x: 0, y: 0, z: 0}, 1.5, 1, 0)
-        const bd = CHARACTER_BASE_SIZE.depth / 2
-        /* 半深 = (range + bd + back)/2 > range/2；中心前移 = (range - bd - back)/2 */
-        expect(box.half.z).toBeGreaterThan(1.5 / 2)
-        expect(box.half.z * 2 - 1.5).toBeCloseTo(bd + 0.1)
-        expect(box.half.x).toBeGreaterThan(CHARACTER_BASE_SIZE.width / 2)
-        expect(box.half.y).toBeGreaterThan(CHARACTER_BASE_SIZE.height / 2)
+describe('attackDetectOBB / testAttackDetect（攻击检测箱由武器 detectBox 驱动）', () => {
+    it('几何参数：半长 = size/2，中心 = 身体位置 + 偏移（yaw=0 时沿 +Z）', () => {
+        const box = attackDetectOBB({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0)
+        expect(box.half.x).toBeCloseTo(0.45 / 2)
+        expect(box.half.y).toBeCloseTo(1.1 / 2)
+        expect(box.half.z).toBeCloseTo(1.3 / 2)
+        expect(box.center.x).toBeCloseTo(0)
+        expect(box.center.y).toBeCloseTo(0)
+        expect(box.center.z).toBeCloseTo(0.45)
     })
 
-    it('身前目标命中，超出 range 未命中', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.5, 1, 0, {x: 0, y: 0, z: 1.0}, 1, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.5, 1, 0, {x: 0, y: 0, z: 1.7}, 1, 0)).toBe(false)
+    it('尺寸与偏移随角色 scale 等比缩放', () => {
+        const box = attackDetectOBB({x: 0, y: 0, z: 0}, swordDetectBox, 2, 0)
+        expect(box.half.z).toBeCloseTo(1.3)
+        expect(box.center.z).toBeCloseTo(0.9)
     })
 
-    it('身后盲区：仅覆盖贴背余量', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.5, 1, 0, {x: 0, y: 0, z: -0.15}, 1, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.5, 1, 0, {x: 0, y: 0, z: -0.5}, 1, 0)).toBe(false)
+    it('身前目标命中，超出检测箱前缘未命中', () => {
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.0}, 1, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.4}, 1, 0)).toBe(false)
     })
 
-    it('侧面覆盖略宽于身体碰撞箱', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.5, 1, 0, {x: 0.3, y: 0, z: 0}, 1, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.5, 1, 0, {x: 0.4, y: 0, z: 0}, 1, 0)).toBe(false)
+    it('身后覆盖由 offset - size/2 决定（少量贴背余量）', () => {
+        /* 后缘 = 0.45 - 0.65 = -0.2 */
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.15}, 1, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.4}, 1, 0)).toBe(false)
     })
 
-    it('深度随武器 range 变化（不同武器攻击距离差异）', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 2.5, 1, 0, {x: 0, y: 0, z: 2.2}, 1, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.0, 1, 0, {x: 0, y: 0, z: 2.2}, 1, 0)).toBe(false)
+    it('侧面覆盖由 size.x 决定', () => {
+        /* 侧向半宽 0.225 + 目标半宽 0.125 → x=0.3 命中，x=0.4 未命中 */
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0.3, y: 0, z: 0}, 1, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0.4, y: 0, z: 0}, 1, 0)).toBe(false)
+    })
+
+    it('深度随武器 detectBox 变化（长枪显著远于短刃）', () => {
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, spearDetectBox, 1, 0, {x: 0, y: 0, z: 1.8}, 1, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.8}, 1, 0)).toBe(false)
     })
 
     it('检测箱随角色朝向旋转：转 90° 后前方由 +Z 变为 +X', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.5, 1, Math.PI / 2, {x: 1.0, y: 0, z: 0}, 1, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 1.0, y: 0, z: 0}, 1, 0)).toBe(true)
         /* 原 +Z 方向变为侧方，超出侧向半宽 */
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, 1.5, 1, Math.PI / 2, {x: 0, y: 0, z: 1.0}, 1, 0)).toBe(false)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 0, y: 0, z: 1.0}, 1, 0)).toBe(false)
     })
 })

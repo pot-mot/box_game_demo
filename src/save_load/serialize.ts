@@ -153,7 +153,6 @@ export const collectWorldState = (
                         ? {
                             type: 'melee' as const,
                             weaponId: e.combat.skills[0].config.weapon.id,
-                            range: e.combat.skills[0].config.weapon.range,
                             damage: e.combat.skills[0].config.weapon.damage,
                             cooldown: e.combat.skills[0].config.cooldown,
                             duration: e.combat.skills[0].config.duration,

@@ -6,15 +6,9 @@ import type {SkillConfig} from '../../../character/combat/skill_types.ts'
 import {applyDamage} from '../../../character/combat/damage.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
-import {
-    ATTACK_DETECT_SIDE_MARGIN,
-    ATTACK_DETECT_HEIGHT_MARGIN,
-    ATTACK_DETECT_BACK_MARGIN,
-    MELEE_ARM_FORWARD_REACH,
-    ATTACK_DETECT_REACH_MARGIN,
-} from './constants.ts'
 import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from './obb.ts'
 import type {CharacterModel} from '../appearance/types.ts'
+import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
 
 const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
 const _tmpVec3 = new Vector3()
@@ -61,39 +55,29 @@ export const testMeleeHit = (
     )
 
 /**
- * 近战攻击检测深度（身体中心 → 检测箱前缘）：由武器实际打击距离驱动 ——
- * 持械臂前伸量 + 武器命中箱沿武器轴的前伸量（weaponHitBox.reach，与红色判定箱同源），
- * 另加少量触发余量。不再使用 weapon.range（其与实际命中距离差距过大）。
- */
-export const meleeDetectRange = (weaponReach: number, scale: number): number =>
-    (MELEE_ARM_FORWARD_REACH + weaponReach + ATTACK_DETECT_REACH_MARGIN) * scale
-
-/**
  * 攻击检测箱 OBB（AI 出招门控专用，与伤害判定箱解耦）：
- * 与角色位置/朝向绑定，覆盖身体前方（深度 = meleeDetectRange 推导的武器实际打击距离）
- * 与两侧（宽度 = 身体碰撞箱宽 + 边距），略大于身体碰撞箱。
- * 深度随武器命中箱 reach 变化 —— 不同武器的攻击距离差异由此自然表达。
+ * 由近战武器的 detectBox 配置显式驱动（盒尺寸 + 相对身体中心偏移，
+ * 局部 +Z = 朝向），按角色 scale 缩放并随角色 yaw 旋转到世界空间。
  */
 export const attackDetectOBB = (
     pos: Vec3Like,
-    range: number,
+    detectBox: MeleeDetectBox,
     scale: number,
     yaw: number,
 ): OBB => {
-    const bw = CHARACTER_BASE_SIZE.width * scale / 2
-    const bh = CHARACTER_BASE_SIZE.height * scale / 2
-    const bd = CHARACTER_BASE_SIZE.depth * scale / 2
-    /* 本地（forward = +Z）：z ∈ [-bd - back, range]，覆盖前方与贴背目标；
-     * 盒中心前移 centerZ，经 yaw 旋转到世界空间（local +Z → (sin, 0, cos)） */
-    const halfZ = (range + bd + ATTACK_DETECT_BACK_MARGIN) / 2
-    const centerZ = (range - bd - ATTACK_DETECT_BACK_MARGIN) / 2
+    const ox = detectBox.offset.x * scale
+    const oy = detectBox.offset.y * scale
+    const oz = detectBox.offset.z * scale
+    /* 局部偏移绕 Y 轴旋转 yaw（local +Z → (sin, 0, cos)） */
+    const sin = Math.sin(yaw)
+    const cos = Math.cos(yaw)
     return yawOBB(
-        pos.x + Math.sin(yaw) * centerZ,
-        pos.y,
-        pos.z + Math.cos(yaw) * centerZ,
-        bw + ATTACK_DETECT_SIDE_MARGIN,
-        bh + ATTACK_DETECT_HEIGHT_MARGIN,
-        halfZ,
+        pos.x + ox * cos + oz * sin,
+        pos.y + oy,
+        pos.z - ox * sin + oz * cos,
+        detectBox.size.x * scale / 2,
+        detectBox.size.y * scale / 2,
+        detectBox.size.z * scale / 2,
         yaw,
     )
 }
@@ -101,7 +85,7 @@ export const attackDetectOBB = (
 /** 攻击检测：检测箱 OBB 与目标受击箱 OBB 相交判定（AI 出招触发用） */
 export const testAttackDetect = (
     charPos: Vec3Like,
-    range: number,
+    detectBox: MeleeDetectBox,
     scale: number,
     yaw: number,
     targetPos: Vec3Like,
@@ -109,7 +93,7 @@ export const testAttackDetect = (
     targetYaw: number,
 ): boolean =>
     obbIntersect(
-        attackDetectOBB(charPos, range, scale, yaw),
+        attackDetectOBB(charPos, detectBox, scale, yaw),
         targetHurtOBB(targetPos, targetScale, targetYaw),
     )
 

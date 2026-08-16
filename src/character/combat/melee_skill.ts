@@ -133,7 +133,6 @@ export const MELEE_SKILL_PRESETS: Record<string, MeleeSkillConfig> = (() => {
 /** buildMeleeSkillSlots 覆写项 — 存档 AttackConfig 的数值注入 */
 export interface MeleeSkillSlotOverrides {
     readonly damage?: number
-    readonly range?: number
 }
 
 /**
@@ -141,14 +140,13 @@ export interface MeleeSkillSlotOverrides {
  * - 槽 0 = 轻击键起手、槽 1 = 重击键起手
  * - 循环链：轻1↔轻2、重1↔重2（comboChain 指向链中下一段）
  * - 起手槽标 isChainEntry；普通攻击冷却恒 0（节奏由动作/恢复时间形成）
- * - 伤害/侦测范围可被存档覆写，段时长/阶段/链结构取预设
+ * - 伤害可被存档覆写，段时长/阶段/链结构取预设
  */
 export const buildMeleeSkillSlots = (weaponId: string, overrides: MeleeSkillSlotOverrides = {}): SkillSlot[] => {
     const baseWeapon = MELEE_WEAPON_PRESETS[weaponId] ?? MELEE_WEAPON_PRESETS.long_sword
     const weaponOf = (damageMul: number): MeleeWeaponConfig => ({
         ...baseWeapon,
         damage: (overrides.damage ?? baseWeapon.damage) * damageMul,
-        range: overrides.range ?? baseWeapon.range,
     })
     const configOf = (slot: MeleeChainSlot, damageMul: number): MeleeSkillConfig => {
         const preset = MELEE_SKILL_PRESETS[`${baseWeapon.id}_${slot}`]

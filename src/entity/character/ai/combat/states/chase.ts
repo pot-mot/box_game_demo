@@ -1,6 +1,7 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
+import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -94,17 +95,16 @@ export const chaseHandler: CombatStateHandler = {
                 if (!skill) return false
 
                 /* aggressive 策略：远程也可进入攻击（远程保持距离判定） */
-                const skillRange = skill.config.weapon.range
                 if (ctx.combatStrategy === 'aggressive' && skill.config.type === 'ranged') {
-                    return v3Length(_dir) < skillRange
+                    return v3Length(_dir) < skill.config.weapon.range
                         && (skill.cooldownTimer ?? Infinity) <= 0
                 }
 
-                /* 默认：仅近战可进入攻击（攻击检测箱检查，checker 缺失时回退距离判定） */
+                /* 默认：仅近战可进入攻击（攻击检测箱检查，checker 缺失时回退常量距离判定） */
                 if (skill.config.type === 'ranged') return false
                 const inRegion = ctx.attackDetectChecker
                     ? ctx.attackDetectChecker(character, target)
-                    : v3Length(_dir) < skillRange
+                    : v3Length(_dir) < MELEE_FALLBACK_DETECT_RANGE
                 return inRegion && (skill.cooldownTimer ?? Infinity) <= 0
             },
         },

@@ -48,7 +48,6 @@ const meleeSaveConfig = (overrides?: Partial<CharacterSaveConfig>): CharacterSav
     attackSlot: {
         type: 'melee',
         weaponId: 'long_sword',
-        range: 1.5,
         damage: 3,
         cooldown: 0.5,
         duration: 0.3,
@@ -63,7 +62,6 @@ const meleeSaveConfig = (overrides?: Partial<CharacterSaveConfig>): CharacterSav
 const meleeAttackSlot = (damage: number): CharacterSaveConfig['attackSlot'] => ({
     type: 'melee',
     weaponId: 'long_sword',
-    range: 1.5,
     damage,
     cooldown: 0.5,
     duration: 0.3,
@@ -100,6 +98,7 @@ describe('角色 panelInfo 同步', () => {
         expect(row!.rowText).toContain('HP:15/15')
         expect(row!.rowText).toContain('long_sword(3)')
         expect(row!.rowText).toContain('spd:6')
+        expect(row!.rowText).toContain('[idle]')
         expect(row!.badgeLabel).toBe('F0')
     })
 
@@ -139,6 +138,19 @@ describe('角色 panelInfo 同步', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.remove(id)
         expect(system.panelInfo.find(p => p.id === id)).toBeUndefined()
+    })
+
+    it('update() 每帧将状态段与状态机当前状态同步（离开 idle 后行文本跟随变化）', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        system.markPlayer(id)
+        system.setPlayerMove(1, 0, false, 1, 0)
+        system.update(1 / 60)
+        const entity = system.getAll().find(e => e.id === id)!
+        const row = system.panelInfo.find(p => p.id === id)
+        /* 有移动输入后状态机离开 idle，状态段须即时反映 */
+        expect(entity.stateMachine.currentState).not.toBe('idle')
+        expect(row!.rowText).toContain(`[${entity.stateMachine.currentState}]`)
+        system.setPlayerMove(0, 0, false, 1, 0)
     })
 
     it('角色刚体质量恒为 1（击退力度回归保护），修改 scale 不影响质量', () => {

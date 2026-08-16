@@ -1,6 +1,7 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
+import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -49,7 +50,9 @@ export const kiteHandler: CombatStateHandler = {
                 }
                 const pos = character.body.translation()
                 const tp = target.body.translation()
-                return Math.hypot(tp.x - pos.x, tp.z - pos.z) < skill.config.weapon.range
+                /* 近战无射程概念，用检测回退常量默认值 */
+                const fallbackRange = skill.config.type === 'melee' ? MELEE_FALLBACK_DETECT_RANGE : skill.config.weapon.range
+                return Math.hypot(tp.x - pos.x, tp.z - pos.z) < fallbackRange
             },
         },
         {

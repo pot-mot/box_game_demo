@@ -22,10 +22,10 @@ export const TEST_WEAPON_CHARGE_HOLD = 0.5
 
 export const TEST_WEAPON: MeleeWeaponConfig = {
     id: TEST_WEAPON_ID, type: 'melee',
-    damage: 3, range: 1.6,
+    damage: 3,
     knockbackForce: 4, knockbackY: 2,
-    arcAngle: Math.PI * 0.6, arcRadius: 0.4, arcTilt: 0,
     detectionRange: 8,
+    detectBox: {size: {x: 0.45, y: 1.1, z: 1.3}, offset: {x: 0, y: 0, z: 0.45}},
     mesh: {id: 'sword', bladeLen: 0.45, color: 0x55cc88, gripColor: 0x334433},
 }
 

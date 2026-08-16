@@ -21,25 +21,6 @@ describe('MELEE_WEAPON_PRESETS', () => {
         expect(MELEE_WEAPON_PRESETS[key].damage).toBeGreaterThan(0)
     })
 
-    it.each(presetIds)('%s 的 range > 0', (key) => {
-        expect(MELEE_WEAPON_PRESETS[key].range).toBeGreaterThan(0)
-    })
-
-    it.each(presetIds)('%s 的 detectionRange >= range', (key) => {
-        const w = MELEE_WEAPON_PRESETS[key]
-        expect(w.detectionRange).toBeGreaterThanOrEqual(w.range)
-    })
-
-    it.each(presetIds)('%s 的 arcAngle 在 (0, PI*1.5] 之间', (key) => {
-        const a = MELEE_WEAPON_PRESETS[key].arcAngle
-        expect(a).toBeGreaterThan(0)
-        expect(a).toBeLessThanOrEqual(Math.PI * 1.5)
-    })
-
-    it.each(presetIds)('%s 的 arcRadius > 0', (key) => {
-        expect(MELEE_WEAPON_PRESETS[key].arcRadius).toBeGreaterThan(0)
-    })
-
     it.each(presetIds)('%s 的 knockbackForce > 0', (key) => {
         expect(MELEE_WEAPON_PRESETS[key].knockbackForce).toBeGreaterThan(0)
     })
@@ -55,17 +36,20 @@ describe('MELEE_WEAPON_PRESETS', () => {
         }
     })
 
-    it('spear 攻击距离最远', () => {
-        const spear = MELEE_WEAPON_PRESETS.spear.range
-        for (const [, w] of presets) {
-            expect(w.range).toBeLessThanOrEqual(spear)
-        }
+    it.each(presetIds)('%s 的 detectBox 尺寸分量为正、前缘在身体前方', (key) => {
+        const {size, offset} = MELEE_WEAPON_PRESETS[key].detectBox
+        expect(size.x).toBeGreaterThan(0)
+        expect(size.y).toBeGreaterThan(0)
+        expect(size.z).toBeGreaterThan(0)
+        /* 前缘 = offset.z + size.z/2，须位于身体前方 */
+        expect(offset.z + size.z / 2).toBeGreaterThan(0)
     })
 
-    it('dual_axe arcAngle 最宽', () => {
-        const axe = MELEE_WEAPON_PRESETS.dual_axe.arcAngle
+    it('spear 的 detectBox 前缘最远（长杆武器攻击距离优势）', () => {
+        const front = (w: MeleeWeaponConfig): number => w.detectBox.offset.z + w.detectBox.size.z / 2
+        const spearFront = front(MELEE_WEAPON_PRESETS.spear)
         for (const [, w] of presets) {
-            expect(w.arcAngle).toBeLessThanOrEqual(axe)
+            expect(front(w)).toBeLessThanOrEqual(spearFront)
         }
     })
 

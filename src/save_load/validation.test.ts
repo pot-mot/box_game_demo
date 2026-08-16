@@ -60,7 +60,7 @@ describe('validateSaveData', () => {
             {type: 'fragment/common', config: {mass: 0.1, friction: 0.3, lifetime: 5, maxLifetime: 5}, data: {renderVertices: [0, 0, 0, 1, 1, 1, 1, 0, 0], renderIndices: [0, 1, 2], hullVertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], hullFaces: [[0, 1, 2]], centroid: [0, 0, 0], massRatio: 1, boxSize: [1, 1, 1]}},
             {type: 'character', config: {
                 speed: 6, jumpHeight: 2, scale: 1,
-                attackSlot: {type: 'melee', range: 1.5, damage: 3, cooldown: 0.5, duration: 0.3},
+                attackSlot: {type: 'melee', damage: 3, cooldown: 0.5, duration: 0.3},
                 tendency: {tendencyId: 'hostileExceptSelf'},
                 faction: 0, maxHealth: 15, isPlayer: false,
             }, health: 15},
@@ -123,7 +123,7 @@ describe('validateSaveData', () => {
                 type: 'character',
                 config: {
                     speed: 6, jumpHeight: 2, scale: 1,
-                    attackSlot: {type: 'melee', range: 1.5, damage: 3, cooldown: 0.5, duration: 0.3},
+                    attackSlot: {type: 'melee', damage: 3, cooldown: 0.5, duration: 0.3},
                     tendency: {tendencyId: 'hostileExceptSelf'},
                     faction: 0, maxHealth: 15,
                 },
@@ -191,7 +191,7 @@ describe('validateSaveData', () => {
         }
     })
 
-    it('旧存档含废弃字段 radius 通过校验（静默丢弃）', () => {
+    it('旧存档含废弃字段（radius / attackSlot.range）通过校验（静默丢弃）', () => {
         const data = {
             entities: [{
                 type: 'character',
@@ -200,6 +200,7 @@ describe('validateSaveData', () => {
                     jumpHeight: 2,
                     radius: 0.125,
                     height: 1,
+                    /* 旧版近战存档携带已废弃的 range 字段，zod 默认剥离未知键 */
                     attackSlot: {type: 'melee', range: 1.5, damage: 3, cooldown: 0.5, duration: 0.3},
                     tendency: {tendencyId: 'hostileExceptSelf'},
                     faction: 0,

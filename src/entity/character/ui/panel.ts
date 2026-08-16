@@ -11,7 +11,7 @@ import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
 import {RANGED_SKILL_PRESETS} from '../../../character/combat/ranged_skill.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
 
-const MELEE_WEAPON_OPTIONS = Object.entries(MELEE_WEAPON_PRESETS).map(([key, w]) => ({value: key, label: `${w.id} (dmg:${w.damage} rng:${w.range})`}))
+const MELEE_WEAPON_OPTIONS = Object.entries(MELEE_WEAPON_PRESETS).map(([key, w]) => ({value: key, label: `${w.id} (dmg:${w.damage})`}))
 const RANGED_WEAPON_OPTIONS = Object.entries(RANGED_WEAPON_PRESETS).map(([key, w]) => ({
     value: key, label: `${w.id} (dmg:${w.damage} rng:${w.range})${
         w.spreadCount ? ' [Shotgun]' : w.explosionRadius ? ' [Explosion]' : w.homingStrength ? ' [Homing]' : w.throwAngle ? ' [Throw]' : ''
@@ -29,7 +29,6 @@ const autoFillFromWeapon = (weaponId: string, type: 'melee' | 'ranged', fields: 
 }): void => {
     const w = type === 'melee' ? MELEE_WEAPON_PRESETS[weaponId] : RANGED_WEAPON_PRESETS[weaponId]
     if (!w) return
-    fields.atkRange.value = String(w.range)
     fields.atkDmg.value = String(w.damage)
     const sk = SKILL_MAP[w.id]
     if (sk) {
@@ -38,6 +37,7 @@ const autoFillFromWeapon = (weaponId: string, type: 'melee' | 'ranged', fields: 
     }
     if (type === 'ranged') {
         const rw = w as RangedWeaponConfig
+        fields.atkRange.value = String(rw.range)
         fields.bulletSpeed.value = String(rw.projectileSpeed)
         fields.bulletKB.value = String(rw.knockbackForce)
         fields.bulletLife.value = String(rw.projectileLifetime)
@@ -290,8 +290,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     }
 
     const showRanged = () => {
+        const isRanged = atkSelect.value === 'ranged'
+        /* 近战实际打击距离由武器几何驱动，Range 输入框仅对远程生效 */
+        atkRange.parentElement!.style.display = isRanged ? '' : 'none';
         [bulletSpeed, bulletKB, bulletLife].forEach(input => {
-            input.parentElement!.style.display = atkSelect.value === 'ranged' ? '' : 'none'
+            input.parentElement!.style.display = isRanged ? '' : 'none'
         })
     }
 
@@ -442,7 +445,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 })
             } else {
                 weaponSelect.value = ''
-                atkRange.value = String(skill?.config.weapon.range ?? 1.5)
+                if (skill?.config.type === 'ranged') atkRange.value = String(skill.config.weapon.range)
                 atkDmg.value = String(skill?.config.weapon.damage ?? 3)
                 atkCD.value = String(skill?.config.cooldown ?? 0)
                 atkDuration.value = String(skill?.config.duration ?? 0.3)
@@ -538,7 +541,6 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 } : {
                     type: 'melee',
                     weaponId: selectedWeaponId,
-                    range: parseFloat(atkRange.value),
                     damage: parseFloat(atkDmg.value),
                     cooldown: parseFloat(atkCD.value),
                     duration: parseFloat(atkDuration.value),
