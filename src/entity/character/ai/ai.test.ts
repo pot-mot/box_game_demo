@@ -1,4 +1,4 @@
-import {describe, it, expect} from 'vitest'
+import {describe, it, expect, vi, afterEach} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createSkillSlot} from '../../../character/combat/skill_types.ts'
 import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
@@ -9,7 +9,8 @@ import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {AIContext} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
-import {createNavRunContext} from './nav/machine.ts'
+import {createNavRunContext, processNav} from './nav/machine.ts'
+import type {NavSensor, NavSenseOutput} from './nav/types.ts'
 import {createAIMachine, updateAI} from './machine.ts'
 import {chaseHandler} from './combat/states/chase.ts'
 import {attackHandler} from './combat/states/attack.ts'
@@ -75,6 +76,10 @@ const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: numb
         nav: createNavRunContext(true),
         navSensor: null,
         activeFsm: 'combat',
+        stallTimer: 0,
+        stallAnchorX: 0,
+        stallAnchorZ: 0,
+        combatReentryTimer: 0,
         combatState: 'chase',
         combatStateTime: 0,
         combatTargetId: targetId,
@@ -349,7 +354,7 @@ describe('AI 状态转换 — flee', () => {
 describe('AI 顶层调度器', () => {
     it('无敌人时运行和平 FSM', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
-        const ctx = createAIMachine(char, 0, 0, 0, 8, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
         ctx.activeFsm = 'peace'
         const inputs: Array<{dx: number; dz: number; attack: boolean}> = []
         updateAI(0.016, ctx, char, [], (dx, dz, attack) => inputs.push({dx, dz, attack}))
@@ -358,7 +363,7 @@ describe('AI 顶层调度器', () => {
 
     it('发现敌人时切换到 combat', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
-        const ctx = createAIMachine(char, 0, 0, 0, 8, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
         ctx.activeFsm = 'peace'
         const enemies = [makeChar(2, 3, 0, 1, 'melee')]
         updateAI(0.016, ctx, char, enemies, () => {})
@@ -368,7 +373,7 @@ describe('AI 顶层调度器', () => {
 
     it('cowardly 发现敌人直接进 flee', () => {
         const char = makeChar(1, 0, 0, 0, 'melee', undefined, 'cowardly')
-        const ctx = createAIMachine(char, 0, 0, 0, 8, null, DEFAULT_PEACE_CONFIGS.patrol, 'cowardly')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'cowardly')
         ctx.activeFsm = 'peace'
         const enemies = [makeChar(2, 3, 0, 1, 'melee')]
         updateAI(0.016, ctx, char, enemies, () => {})
@@ -445,7 +450,7 @@ describe('AI 攻击检测箱（attackDetectChecker）', () => {
 describe('视线检测 270° 扇形门控（findNearestEnemy）', () => {
     const runDetection = (enemyX: number, enemyZ: number, facing: number): 'combat' | 'peace' => {
         const char = makeChar(1, 0, 0, 0, 'melee')
-        const ctx = createAIMachine(char, 0, 0, 0, 8, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
         ctx.activeFsm = 'peace'
         ctx.getFacingAngle = () => facing
         const enemies = [makeChar(2, enemyX, enemyZ, 1, 'melee')]
@@ -488,7 +493,7 @@ describe('视线扇形扫描射线遮挡（castFan）', () => {
 
     const runWithLos = (los: LineOfSightChecker, enemyX: number, enemyZ: number): 'combat' | 'peace' => {
         const char = makeChar(1, 0, 0, 0, 'melee')
-        const ctx = createAIMachine(char, 0, 0, 0, 8, los, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        const ctx = createAIMachine(char, 0, 0, 0, los, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
         ctx.activeFsm = 'peace'
         const enemies = [makeChar(2, enemyX, enemyZ, 1, 'melee')]
         updateAI(0.016, ctx, char, enemies, () => {})
@@ -521,5 +526,134 @@ describe('视线扇形扫描射线遮挡（castFan）', () => {
         expect(runWithLos(los, 0, 3)).toBe('combat')
         /* 左侧 90° 敌人（方位角 -90° → 射线索引 round(45/10) = 5）落在被挡区 → 不可见 */
         expect(runWithLos(los, -3, 0)).toBe('peace')
+    })
+})
+
+describe('静止检测与卡死自愈', () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
+    /** 构造位置可变的角色（测试中可模拟移动/静止） */
+    const makeMovableChar = (id: number, faction: number, skillType: 'melee' | 'ranged') => {
+        const char = makeChar(id, 0, 0, faction, skillType)
+        const pos = {x: 0, y: 0, z: 0}
+        char.body = {translation: () => pos} as unknown as CharacterEntity['body']
+        return {char, pos}
+    }
+
+    it('peace：有移动意图但长时间无位移 → 重掷路点', () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0.9)
+        const {char} = makeMovableChar(1, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        ctx.waypoint = {x: 10, y: 0, z: 10}
+
+        /* STALL_TIMEOUT = 2.0s：4 帧 × 0.5s 后触发恢复 */
+        for (let i = 0; i < 4; i++) updateAI(0.5, ctx, char, [char], () => {})
+
+        /* 路点已重掷（mock random = 0.9 → 出生点 + 0.4 × patrolRadius × 0.8 × 2 = 3.2） */
+        expect(ctx.waypoint.x).toBeCloseTo(3.2)
+        expect(ctx.waypoint.z).toBeCloseTo(3.2)
+        expect(ctx.stallTimer).toBe(0)
+    })
+
+    it('peace：正常移动不累积静止计时', () => {
+        const {char, pos} = makeMovableChar(1, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        ctx.waypoint = {x: 10, y: 0, z: 10}
+
+        for (let i = 0; i < 6; i++) {
+            pos.x += 0.3
+            updateAI(0.5, ctx, char, [char], () => {})
+        }
+
+        /* 位移持续超过锚点阈值，未触发恢复，路点不变 */
+        expect(ctx.waypoint.x).toBe(10)
+        expect(ctx.waypoint.z).toBe(10)
+    })
+
+    it('combat：卡死超时 → 强制放弃并进入重新接敌冷却', () => {
+        const {char, pos} = makeMovableChar(1, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        const enemy = makeChar(2, 3, 0, 1, 'melee')
+
+        /* 第一帧发现敌人进入 combat chase */
+        updateAI(0.5, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatState).toBe('chase')
+
+        /* 卡死累积 2.5s → 静止恢复强制放弃（早于 chaseTimeout 5s） */
+        for (let i = 0; i < 5; i++) updateAI(0.5, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('peace')
+        expect(ctx.combatState).toBe('inactive')
+        expect(ctx.combatReentryTimer).toBeGreaterThan(0)
+
+        /* 冷却期内敌人仍在侦测范围也不重新接敌 */
+        updateAI(0.5, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('peace')
+
+        /* 冷却耗尽后恢复接敌（恢复移动后不再触发静止恢复；沿 Z 轴移动保持与敌人的追击距离） */
+        for (let i = 0; i < 6; i++) {
+            pos.z += 0.6
+            updateAI(0.5, ctx, char, [char, enemy], () => {})
+        }
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatState).toBe('chase')
+    })
+
+    it('combat：flee 卡死仅重掷逃跑方向，不放弃战斗', () => {
+        const {char} = makeMovableChar(1, 0, 'melee')
+        const ctx = makeCtx('cowardly', 2)
+        ctx.combatState = 'flee'
+        ctx.activeFsm = 'combat'
+        /* 拉长 fleeDuration，排除超时转出的干扰 */
+        ctx.combatConfig = {...DEFAULT_COMBAT_CONFIGS.cowardly, fleeDuration: 100}
+        ctx.combatFleeDir = {x: 1, z: 0}
+        const enemy = makeChar(2, 3, 0, 1, 'melee')
+
+        for (let i = 0; i < 5; i++) updateAI(0.5, ctx, char, [char, enemy], () => {})
+
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatState).toBe('flee')
+    })
+})
+
+describe('nav stuck 倒退逃逸', () => {
+    /** 永远报墙且两侧无通路的传感器 */
+    const blockedSensor: NavSensor = {
+        sense: (): NavSenseOutput => ({
+            result: 'blocked_wall',
+            obstacleDistance: 1,
+            obstacleHeight: 2,
+            leftClear: false,
+            rightClear: false,
+            groundAhead: false,
+        }),
+    }
+    const navChar = {body: {translation: () => ({x: 0, y: 0, z: 0})}} as unknown as CharacterEntity
+
+    it('stuck 超时前保持零输出', () => {
+        const ctx = createNavRunContext(true)
+        ctx.state = 'stuck'
+        const out = processNav(0.5, ctx, navChar, blockedSensor, 1, 0)
+        expect(out).toEqual({dx: 0, dz: 0, jump: false})
+    })
+
+    it('卡住超过 stuckTimeout → 意图反向倒退 + 跳跃的逃逸脉冲', () => {
+        const ctx = createNavRunContext(true)
+        ctx.state = 'stuck'
+        /* stuckTimeout = 2.0：前 3 帧累计 1.5s，保持静止 */
+        for (let i = 0; i < 3; i++) {
+            const out = processNav(0.5, ctx, navChar, blockedSensor, 1, 0)
+            expect(out.jump).toBe(false)
+            expect(out.dx).toBe(0)
+        }
+        /* 第 4 帧累计 2.0s → 触发逃逸（意图 +X → 朝 -X 倒退） */
+        const out = processNav(0.5, ctx, navChar, blockedSensor, 1, 0)
+        expect(out.dx).toBe(-1)
+        expect(out.dz).toBeCloseTo(0)
+        expect(out.jump).toBe(true)
     })
 })

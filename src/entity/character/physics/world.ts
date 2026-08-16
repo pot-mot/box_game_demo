@@ -617,7 +617,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
 
                     entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 0)
-                    aiTargetDirs.set(entity.id, {dx: finalDX, dz: finalDZ})
+                    /* 记录意图方向（过滤前）：驱动朝向持续对准目标/路点，被接触阻断/nav 卡住时
+                     * 仍能转正朝向，保证攻击检测箱门控与发射方向可用（过滤后方向会清零导致朝向自锁） */
+                    aiTargetDirs.set(entity.id, {dx, dz})
                     if (attack) {
                         /* 攻击方向：AI 显式指定（如边逃边射面向敌人）优先，缺省取移动方向 */
                         const adx = attackDX ?? dx
@@ -912,7 +914,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const ctx = createAIMachine(
                     entity,
                     pos.x, pos.y, pos.z,
-                    entity.combat.skills[entity.combat.currentSkillIndex]?.config.weapon.detectionRange ?? 8,
                     losChecker,
                     DEFAULT_PEACE_CONFIGS[entity.peaceStrategy],
                     entity.combatStrategy,

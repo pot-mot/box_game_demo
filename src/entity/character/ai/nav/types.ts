@@ -29,7 +29,7 @@ export interface NavConfig {
     checkRadius: number
     /** 前方检测距离 */
     checkDistance: number
-    /** 卡住判定超时（秒，legacy AI 使用） */
+    /** 卡住判定超时（秒）：FSM 模式触发倒退逃逸，legacy 模式卡死清零 */
     stuckTimeout: number
 }
 
@@ -41,8 +41,10 @@ export interface NavRunContext {
     steerAngle: number
     /** steering 状态下的选定偏转方向：1=左，-1=右 */
     steerDirection: number
-    /** 卡住累计计时（legacy 模式使用） */
+    /** 卡住累计计时（FSM 模式用于触发倒退逃逸，legacy 模式用于卡死清零） */
     stuckTimer: number
+    /** 倒退逃逸脉冲剩余时长（秒），>0 时输出意图反向 + 跳跃 */
+    escapeTimer: number
     /** 上帧记录位置（legacy 模式使用） */
     lastPosX: number
     lastPosZ: number

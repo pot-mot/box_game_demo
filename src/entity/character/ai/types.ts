@@ -45,6 +45,15 @@ export interface AIContext {
     /** 当前活跃的 FSM */
     activeFsm: 'peace' | 'combat'
 
+    /* ── 静止检测（卡死自愈） ── */
+    /** 连续"有移动意图但无位移"的累计时长（秒） */
+    stallTimer: number
+    /** 位移检测锚点（上次确认在动时的位置） */
+    stallAnchorX: number
+    stallAnchorZ: number
+    /** 卡死放弃战斗后的重新接敌冷却（秒） */
+    combatReentryTimer: number
+
     /* ── 战斗 FSM 状态 ── */
     combatState: CombatState
     combatStateTime: number

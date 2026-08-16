@@ -6,3 +6,13 @@ export const VISION_FAN_HALF_ANGLE = VISION_FAN_ANGLE / 2
 export const VISION_FAN_RAY_STEP = Math.PI / 18
 /** 扇形扫描射线数：270° / 10° + 1 = 28（含左右边界射线） */
 export const VISION_FAN_RAY_COUNT = Math.floor(VISION_FAN_ANGLE / VISION_FAN_RAY_STEP) + 1
+
+/* ── 静止检测（卡死自愈） ── */
+/** 有移动意图的最小输入模长（与动作层 walking 守卫阈值一致） */
+export const STALL_INPUT_EPS = 0.001
+/** 检测窗口内水平位移超过该值（m）即视为"在动"，刷新锚点与计时 */
+export const STALL_CHECK_TRAVEL = 0.5
+/** 持续有移动意图但无位移超过该时长（秒）→ 触发卡死恢复 */
+export const STALL_TIMEOUT = 2.0
+/** 战斗卡死强制放弃后的重新接敌冷却（秒），防止超时→peace→立即回 chase 的空转循环 */
+export const COMBAT_REENTRY_COOLDOWN = 3.0

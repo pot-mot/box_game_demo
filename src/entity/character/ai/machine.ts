@@ -5,11 +5,12 @@ import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {AIContext, AISetInput, AttackDetectChecker} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
-import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP} from './constants.ts'
+import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN} from './constants.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
 import {fleeHandler} from './combat/states/flee.ts'
+import {rerollWaypoint} from './peace/states/patrol.ts'
 import {createNavRunContext} from './nav/machine.ts'
 
 /* 扇形扫描射线命中距离复用缓冲（由 castFan 写入，避免每帧分配） */
@@ -76,7 +77,6 @@ const findNearestEnemy = (
 export const createAIMachine = (
     character: CharacterEntity,
     spawnX: number, spawnY: number, spawnZ: number,
-    detectionRange: number,
     losChecker: LineOfSightChecker | null = null,
     peaceConfig: PeaceConfig = DEFAULT_PEACE_CONFIGS.patrol,
     combatStrategy: CombatSubStrategy = 'tactical',
@@ -92,6 +92,12 @@ export const createAIMachine = (
         nav: createNavRunContext(character.navEnabled),
         navSensor: null,
         activeFsm: 'peace',
+
+        /* 静止检测（卡死自愈）字段 */
+        stallTimer: 0,
+        stallAnchorX: spawnX,
+        stallAnchorZ: spawnZ,
+        combatReentryTimer: 0,
 
         /* 战斗 FSM 字段 */
         combatState: 'inactive',
@@ -115,10 +121,74 @@ export const createAIMachine = (
 
     initCombatContext(ctx, combatStrategy, DEFAULT_COMBAT_CONFIGS[combatStrategy])
     initPeaceContext(ctx, peaceConfig)
-    ctx.waypoint.x = spawnX + (Math.random() - 0.5) * detectionRange * 1.2
-    ctx.waypoint.z = spawnZ + (Math.random() - 0.5) * detectionRange * 1.2
+    rerollWaypoint(ctx)
 
     return ctx
+}
+
+/** 卡死恢复：按当前活跃 FSM 分发自救动作 */
+const recoverFromStall = (ctx: AIContext): void => {
+    if (ctx.activeFsm === 'peace') {
+        /* 巡逻/建造：重掷路点（新路点大概率换方向，卡缝/贴人状态自然解除） */
+        rerollWaypoint(ctx)
+        ctx.waitTimer = 0
+        return
+    }
+    if (ctx.combatState === 'flee') {
+        /* 逃跑卡死：仅重掷逃跑方向（旋转 ±60°〜120° 换被堵轴），不轻易放弃战斗 */
+        const sign = Math.random() < 0.5 ? -1 : 1
+        const angle = sign * (Math.PI / 3 + Math.random() * Math.PI / 3)
+        const cosA = Math.cos(angle)
+        const sinA = Math.sin(angle)
+        const fx = ctx.combatFleeDir.x * cosA - ctx.combatFleeDir.z * sinA
+        const fz = ctx.combatFleeDir.x * sinA + ctx.combatFleeDir.z * cosA
+        const fl = Math.hypot(fx, fz)
+        if (fl > STALL_INPUT_EPS) {
+            ctx.combatFleeDir.x = fx / fl
+            ctx.combatFleeDir.z = fz / fl
+        }
+        return
+    }
+    /* 其他战斗状态卡死：强制放弃并进入重新接敌冷却（避免超时→立刻回追的空转） */
+    ctx.activeFsm = 'peace'
+    ctx.peaceState = 'patrol'
+    ctx.peaceStateTime = 0
+    ctx.combatState = 'inactive'
+    ctx.waitTimer = 0
+    rerollWaypoint(ctx)
+    ctx.combatReentryTimer = COMBAT_REENTRY_COOLDOWN
+}
+
+/** 静止检测记账：有移动意图但长时间无水平位移则触发恢复 */
+const updateStallDetection = (
+    dt: number,
+    ctx: AIContext,
+    character: CharacterEntity,
+    intentDX: number,
+    intentDZ: number,
+): void => {
+    const pos = character.body.translation()
+    if (Math.hypot(intentDX, intentDZ) < STALL_INPUT_EPS) {
+        /* 无移动意图（路点等待/射程内站桩等）：重置检测基准 */
+        ctx.stallTimer = 0
+        ctx.stallAnchorX = pos.x
+        ctx.stallAnchorZ = pos.z
+        return
+    }
+    const travel = Math.hypot(pos.x - ctx.stallAnchorX, pos.z - ctx.stallAnchorZ)
+    if (travel > STALL_CHECK_TRAVEL) {
+        /* 确认在动：推进锚点并清零 */
+        ctx.stallTimer = 0
+        ctx.stallAnchorX = pos.x
+        ctx.stallAnchorZ = pos.z
+        return
+    }
+    ctx.stallTimer += dt
+    if (ctx.stallTimer < STALL_TIMEOUT) return
+    ctx.stallTimer = 0
+    ctx.stallAnchorX = pos.x
+    ctx.stallAnchorZ = pos.z
+    recoverFromStall(ctx)
 }
 
 export const updateAI = (
@@ -130,12 +200,15 @@ export const updateAI = (
 ): void => {
     if (character.combat.isDead) return
 
+    /* 卡死放弃战斗后的重新接敌冷却递减 */
+    ctx.combatReentryTimer = Math.max(0, ctx.combatReentryTimer - dt)
+
     /* ── 统一敌情检测 ── */
     const enemy = findNearestEnemy(ctx, character, allCharacters)
 
     if (enemy) {
-        /* 有敌人 → 切到战斗 FSM */
-        if (ctx.activeFsm !== 'combat') {
+        /* 有敌人 → 切到战斗 FSM（重新接敌冷却期内不进入，配合卡死放弃形成强制游走窗口） */
+        if (ctx.activeFsm !== 'combat' && ctx.combatReentryTimer <= 0) {
             ctx.activeFsm = 'combat'
             ctx.combatState = 'chase'
             ctx.combatStateTime = 0
@@ -150,6 +223,15 @@ export const updateAI = (
         }
     }
 
+    /* 包装 setInput 记录本帧意图方向（过滤前），供静止检测使用 */
+    let intentDX = 0
+    let intentDZ = 0
+    const trackedSetInput: AISetInput = (dx, dz, attack, attackDX, attackDZ) => {
+        intentDX = dx
+        intentDZ = dz
+        setInput(dx, dz, attack, attackDX, attackDZ)
+    }
+
     if (ctx.activeFsm === 'combat') {
         /* cowardly 首次发现有敌人直接进入 flee */
         if (enemy && ctx.combatStrategy === 'cowardly' && ctx.combatState === 'chase' && ctx.combatStateTime === 0) {
@@ -159,7 +241,7 @@ export const updateAI = (
                 fleeHandler.enter(ctx, character)
             }
         }
-        updateCombatFSM(dt, ctx, character, allCharacters, setInput)
+        updateCombatFSM(dt, ctx, character, allCharacters, trackedSetInput)
         /* combat FSM 可能把状态切到 inactive */
         if (ctx.combatState === 'inactive') {
             ctx.activeFsm = 'peace'
@@ -167,6 +249,9 @@ export const updateAI = (
             ctx.peaceStateTime = 0
         }
     } else {
-        updatePeaceFSM(dt, ctx, character, setInput)
+        updatePeaceFSM(dt, ctx, character, trackedSetInput)
     }
+
+    /* 静止自检：决策层对被截断输入的兜底（接触阻断/nav stuck 清零后由这里触发自救） */
+    updateStallDetection(dt, ctx, character, intentDX, intentDZ)
 }

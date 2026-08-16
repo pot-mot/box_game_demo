@@ -33,9 +33,10 @@ AI 决策层（entity/character/ai/machine.ts）
 **工作流程**：
 
 1. 调用 `findNearestEnemy()` 检测敌人（三重门控：阵营敌对 + 在侦测半径内 + 身前 270° 扇形内 + 扇形扫描射线无遮挡）
-2. 发现敌人 → 从 `peace` 切换到 `combat`，进入 `chase` 状态
+2. 发现敌人 → 从 `peace` 切换到 `combat`，进入 `chase` 状态（`combatReentryTimer` 重新接敌冷却期内不进入，见 3.5）
 3. 无敌人且战斗 FSM 进入 `inactive` → 切换回 `peace`
 4. **怯懦角色**首次发现敌人且剩余 `attackBurstCount` 时，直接进入 `flee` 而非 `chase`
+5. **静止自检**：每帧 FSM 执行后检查"有移动意图但无位移"，超时触发卡死恢复（见 3.5）
 
 ### 2.2 和平子 FSM
 
@@ -181,6 +182,7 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 - 在出生点 `patrolRadius * 0.8` 范围内**随机生成路点**
 - 直接朝路点移动（调用 `stateMachine.setInput(dx, 0, dz, false)`），无避障
 - 距路点 0.3 单位内视为到达，等待 `[waitTimeMin, waitTimeMax]` 秒后选择新路点
+- 路点不可达时由静止检测（见 3.5）超时重掷，不会永远朝不可达路点挤
 
 ### 3.2 追击移动（`chase.ts` / `approach.ts`）
 
@@ -199,6 +201,35 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 
 - 每 2 秒随机切换侧向方向（左/右）
 - 在目标周围切向移动并射击
+
+### 3.5 卡死检测与自愈（静止检测）
+
+AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触推挤阻断**（与另一角色物理接触且输入指向对方时清零，`world.ts` setInput 闭包）与 **nav stuck**（前方受阻且两侧无通路）。清零后决策层若不自检，会永远站桩在 `idle|combat:chase`、`falling|peace:patrol` 等状态。静止检测就是决策层的兜底：
+
+**检测**（`machine.ts` `updateStallDetection`）：包装 `setInput` 记录每帧**意图方向**（过滤前）。意图模长 ≥ `STALL_INPUT_EPS` 且相对锚点的水平位移不超过 `STALL_CHECK_TRAVEL` 时累积 `stallTimer`，超过 `STALL_TIMEOUT` 触发恢复；无意图（路点等待/射程内站桩）或确认在动时重置锚点与计时。
+
+**恢复动作**（`recoverFromStall`，按活跃 FSM 分发）：
+
+| 场景 | 恢复动作 |
+|------|----------|
+| peace（patrol/build） | 重掷路点（`patrol.ts` 的 `rerollWaypoint`） |
+| combat `flee` | 逃跑方向旋转 ±60°〜120° 换被堵轴（不放弃战斗） |
+| combat 其他状态 | 强制放弃：回 peace/patrol 并置 `combatReentryTimer` |
+
+**重新接敌冷却**（`combatReentryTimer`）：卡死放弃战斗后，冷却（`COMBAT_REENTRY_COOLDOWN`）耗尽前即使检测到敌人也不进入 combat，同时根治"超时 → peace → 下帧立刻回 chase"的空转循环。aggressive 的 `chaseTimeout = 0`（永不放弃追击）依赖此兜底而不会死锁。
+
+**相关常量**（`ai/constants.ts`）：
+
+| 常量 | 值 | 说明 |
+|------|-----|------|
+| `STALL_INPUT_EPS` | `0.001` | 有移动意图的最小输入模长 |
+| `STALL_CHECK_TRAVEL` | `0.5` | 视为"在动"的位移阈值（m） |
+| `STALL_TIMEOUT` | `2.0` | 静止恢复触发时长（秒） |
+| `COMBAT_REENTRY_COOLDOWN` | `3.0` | 战斗放弃后重新接敌冷却（秒） |
+
+**nav stuck 倒退逃逸**（`nav/machine.ts`）：stuck 状态累计超过 `config.stuckTimeout` 后，输出 `STUCK_ESCAPE_DURATION`（0.5s）的"意图反向倒退 + 跳跃"逃逸脉冲尝试物理挣脱（对墙/坑均安全），随后重新评估路径。与决策层静止检测构成两级防线：先倒退挣脱，仍无效才重掷路点/放弃目标。
+
+**朝向规则**：AI 朝向由意图方向（过滤前）驱动（`world.ts` `aiTargetDirs`），被清零闸门拦住时仍持续转向目标/路点，保证攻击检测箱门控与发射方向可用（若用过滤后方向，被卡住时朝向冻结会与检测箱门控互锁）。
 
 ---
 
@@ -271,7 +302,7 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 | `fleeDuration` | **0** | **0** | **2.5** | 逃跑持续时间（秒） |
 | `attackBurstCount` | **0** | **0** | **2** | 逃跑后攻击爆发次数 |
 
-> 值为 `0` 表示"永不过期"（如 aggressive 的 chase/approach 永不超时）。
+> 值为 `0` 表示"永不过期"（如 aggressive 的 chase/approach 永不超时），卡死兜底由静止检测承担（见 3.5）。
 
 ### 4.4 近战武器 AI 配置
 
@@ -447,7 +478,7 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 | OBB 几何 | `src/entity/character/combat/obb.ts` | `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
 | 攻击检测箱 | `src/entity/character/combat/melee_executor.ts` | `attackDetectOBB` / `testAttackDetect`（几何由武器 `detectBox` 配置驱动） |
 | Debug 可视化 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/受击箱（青）/检测箱（橙）/射程圆环（橙，远程）/视线扇形（蓝） |
-| 导航 FSM | `src/entity/character/ai/nav/machine.ts` | navigating/steering/jumping/stuck 子状态机 |
+| 导航 FSM | `src/entity/character/ai/nav/machine.ts` | navigating/steering/jumping/stuck 子状态机（stuck 超时输出倒退逃逸脉冲） |
 | 导航传感器 | `src/entity/character/ai/nav/sensor.ts` | 前方扇面射线 + 侧向扫描 + 坑洞探针（斜坡感知） |
 | 角色分离 | `src/entity/character/physics/separation.ts` | 重叠分离计算 + 斜坡 Y 补偿 |
 | 和平 FSM | `src/entity/character/ai/peace/machine.ts` | 巡逻/建造子状态机 |

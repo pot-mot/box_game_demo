@@ -1,7 +1,7 @@
 import type {CharacterEntity} from '../../../../character/types.ts'
 import type {NavRunContext, NavState, NavStateHandler, NavSensor, NavSenseOutput} from './types.ts'
 import {DEFAULT_CHECK_RADIUS, DEFAULT_CHECK_DISTANCE, DEFAULT_STUCK_TIMEOUT} from './constants.ts'
-import {STEER_ANGLE_MIN, STEER_ANGLE_MAX, STEER_ANGLE_STEP} from './constants.ts'
+import {STEER_ANGLE_MIN, STEER_ANGLE_MAX, STEER_ANGLE_STEP, STUCK_ESCAPE_DURATION} from './constants.ts'
 
 /**
  * 在原始方向附近搜索一个畅通的方向角度
@@ -67,7 +67,11 @@ const senseOrCache = (
 }
 
 const navigatingHandler: NavStateHandler = {
-    enter: (_ctx, _entity) => {},
+    enter: (ctx, _entity) => {
+        /* 回到正常导航：清零卡住计时与逃逸脉冲 */
+        ctx.stuckTimer = 0
+        ctx.escapeTimer = 0
+    },
     update: (dt, ctx, entity, sensor, intendedDX, intendedDZ) => {
         ctx.stateTime += dt
 
@@ -301,13 +305,34 @@ const jumpingHandler: NavStateHandler = {
 
 /* ── stuck 状态 ── */
 const stuckHandler: NavStateHandler = {
-    enter: (_ctx, _entity) => {},
+    enter: (ctx, _entity) => {
+        ctx.stuckTimer = 0
+        ctx.escapeTimer = 0
+    },
     update: (dt, ctx, entity, sensor, intendedDX, intendedDZ) => {
         ctx.stateTime += dt
 
+        const fLen = Math.hypot(intendedDX, intendedDZ)
+
+        /* 倒退逃逸脉冲阶段：朝意图反向倒退 + 跳跃，尝试物理挣脱（对墙/坑均安全） */
+        if (ctx.escapeTimer > 0) {
+            ctx.escapeTimer -= dt
+            if (fLen < 0.001) return {dx: 0, dz: 0, jump: false}
+            return {dx: -intendedDX / fLen, dz: -intendedDZ / fLen, jump: true}
+        }
+
+        /* 卡住累计超过 stuckTimeout → 触发一次逃逸脉冲 */
+        ctx.stuckTimer += dt
+        if (ctx.stuckTimer >= ctx.config.stuckTimeout) {
+            ctx.stuckTimer = 0
+            ctx.escapeTimer = STUCK_ESCAPE_DURATION
+            if (fLen > 0.001) {
+                return {dx: -intendedDX / fLen, dz: -intendedDZ / fLen, jump: true}
+            }
+        }
+
         /* 定期检查路径是否恢复 */
         if (ctx.stateTime > 1.0) {
-            const fLen = Math.hypot(intendedDX, intendedDZ)
             if (fLen > 0.001) {
                 const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config)
                 if (sense.result === 'clear') {
@@ -351,6 +376,7 @@ export const createNavRunContext = (enabled: boolean): NavRunContext => ({
     steerAngle: 0,
     steerDirection: 1,
     stuckTimer: 0,
+    escapeTimer: 0,
     lastPosX: 0,
     lastPosZ: 0,
     preSense: null,

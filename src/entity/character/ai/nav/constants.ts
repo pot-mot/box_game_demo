@@ -14,6 +14,9 @@ export const WALKABLE_NORMAL_MIN_Y = 0.06
 /** 卡住判定距离阈值 */
 export const STUCK_DIST_THRESHOLD = 0.01
 
+/** stuck 状态倒退逃逸脉冲时长（秒）：卡住超过 stuckTimeout 后朝意图反向倒退 + 跳跃尝试物理挣脱 */
+export const STUCK_ESCAPE_DURATION = 0.5
+
 /** 射线垂直仰角采样（弧度） */
 export const RAY_PITCH_ANGLES = [0, Math.PI / 18] // 0°, 10°
 
