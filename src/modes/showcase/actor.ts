@@ -7,20 +7,18 @@ import type {AppearanceSystem} from '../../entity/character/appearance/system.ts
 import type {WeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import type {NameLabel} from './label.ts'
-import {COMBO_WINDOW, resolvePhases} from '../../character/combat/attack_phases.ts'
+import {resolvePhases} from '../../character/combat/attack_phases.ts'
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
-import type {SkillConfig} from '../../character/combat/skill_types.ts'
+import type {SkillSlot} from '../../character/combat/skill_types.ts'
 import {
     ACTOR_JUMP_HEIGHT,
     ACTOR_SCALE,
     ACTOR_SPEED,
-    COMBO_INPUT_RATIO,
-    COMBO_TILT_TABLE,
+    CHAIN_PAUSE_AFTER_POS,
+    CHAIN_PAUSE_IDLE,
     DIMMED_OPACITY,
     IDLE_LEAD,
     IDLE_TRAIL,
-    RECOMBO_IDLE,
-    TOTAL_COMBO_HITS,
 } from './constants.ts'
 
 /** 本击衔接方式标签（供人工审查连段推进路径） */
@@ -35,7 +33,7 @@ export interface ActorStatus {
     readonly weaponName: string
     readonly isMelee: boolean
     readonly mode: 'idle' | 'attacking'
-    /** 当前击（1 起，idle 时为下一次起手的击号） */
+    /** 当前段（1 起，idle 时为下一段的段号） */
     readonly hitNumber: number
     readonly totalHits: number
     /** 当前挥砍倾斜角（rad，远程恒 0） */
@@ -44,9 +42,9 @@ export interface ActorStatus {
     readonly phaseName: AttackPhaseName | 'idle' | 'done'
     /** 当前阶段进度 0-1 */
     readonly phaseProgress: number
-    /** 攻击总进度 0-1 */
+    /** 当前段总进度 0-1 */
     readonly attackProgress: number
-    /** 本击的衔接方式 */
+    /** 本段的衔接方式 */
     readonly link: LinkLabel
 }
 
@@ -68,7 +66,8 @@ export interface ShowcaseActor {
 export interface ShowcaseActorInit {
     readonly id: number
     readonly scene: Scene
-    readonly skill: SkillConfig
+    /** 技能槽：近战 = buildMeleeSkillSlots 的 4 槽，远程 = 单槽 */
+    readonly slots: readonly SkillSlot[]
     readonly faction: number
     readonly x: number
     readonly z: number
@@ -90,29 +89,33 @@ interface MaterialSnapshot {
  *
  * 数据流（与生产 physics/world.ts + character/state_machine/states/attacking.ts 逐段对应）：
  * 1. 时间线调度镜像 attackingHandler.update：attackTimer/phaseTimer 递增 →
- *    阶段推进（durationRatio × duration）→ 连段推进（cancellable + 窗口未过期时重置计时）→
- *    完成判定（全部阶段完成 && attackTimer >= duration → idle）。
- * 2. 动画注入镜像 world.ts L579-602：按相同字段构造 AnimationContext 交给
- *    createAppearanceSystem()（阶段信息直接来自技能预设的 phases，绕开生产装配
- *    路径中 attackToSkillSlots 丢失 phases 的缺陷）。
- * 3. 刀光镜像 world.ts L642-654：strike/release/spin 阶段激活，采样 weaponTip。
+ *    阶段推进（durationRatio × duration）→ 最终阶段完整播完时的段末推进
+ *    （缓冲恒有值 → 重置计时切换下一段，不出 attacking 状态）→
+ *    脚本播完或链间停顿 → idle。
+ * 2. 近战演示脚本 [轻1, 轻2, 重1, 重2]：轻链两段连续推进 → 停顿（模拟松开攻击键）→
+ *    重链两段连续推进 → 收尾待机 → 循环。段间衔接为"段末推进"（不再有 cancellable 中途取消）。
+ * 3. 动画注入镜像 world.ts：AnimationContext 携带 attackSkillId，段切换触发动画键变化
+ *    走快照混合（修复旧版段切换单帧姿态跳变）。
+ * 4. 刀光镜像 world.ts：strike/release/spin 阶段激活，采样 weaponTip。
  *
- * 展示场景省略的部分（与生产差异，见报告）：物理速度缩放（moveSpeedMultiplier）、
- * 命中执行器、hitstop、hitbox——攻击中角色静止站立。
+ * 展示场景省略的部分（与生产差异）：物理速度缩放（moveSpeedMultiplier）、
+ * 命中执行器、hitstop、hitbox、冷却——攻击中角色静止站立。
  */
 export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
-    const {id, scene, skill, faction, x, z, skillName, weaponName} = init
-    const isMelee = skill.type === 'melee'
-    const totalHits = isMelee ? TOTAL_COMBO_HITS : 1
-
-    /* 模型直接引用技能预设的 phases —— 绝不走生产装配（那里 phases 字段会丢失） */
-    const phases = resolvePhases(skill.phases)
+    const {id, scene, slots, faction, x, z, skillName, weaponName} = init
+    if (slots.length === 0) {
+        throw new Error(`[showcase] actor ${id} 技能槽为空`)
+    }
+    const isMelee = slots[0].config.type === 'melee'
+    /* 演示脚本：近战按 轻1→轻2→重1→重2 播完整双链，远程单槽单段 */
+    const script: readonly number[] = isMelee ? [0, 2, 1, 3] : [0]
+    const totalHits = script.length
 
     const model: CharacterModel = createCharacterModel(
         {speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: ACTOR_SCALE},
         faction,
     )
-    model.equipWeapon(skill.weapon.mesh)
+    model.equipWeapon(slots[0].config.weapon.mesh)
 
     const anchor = new Group()
     anchor.position.set(x, 0, z)
@@ -131,131 +134,113 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     let attackTimer = 0
     let phaseTimer = 0
     let phaseIndex = 0
-    let comboTimer = 0
-    let swingCount = 0
     let swingTilt = 0
-    /** 当前击号（1 起；完整播完或段内推进时递增） */
-    let hitNumber = 1
-    /** 模拟玩家按住攻击键（cancellable 阶段过半后置位，消费或本击结束后复位） */
-    let attackHeld = false
-    /** 本击是否计划演示段内推进（击 1 与最后一击完整播放，中间各击尝试推进） */
-    let planAdvance = false
-    /** 本击衔接方式（进入攻击时取 pendingLink，段内推进直接覆盖） */
+    /** 当前脚本位置（0 起；段末推进/重新起链时移动） */
+    let scriptPos = 0
+    /** 本段衔接方式（进入攻击时取 pendingLink，段末推进直接覆盖） */
     let link: LinkLabel = '—'
     let pendingLink: LinkLabel = isMelee ? '首次起手' : '—'
-    /** 连段全部完成，待机结束后重置循环（swingCount 归零，tilt 序列从头演示） */
+    /** 双链播完，收尾待机结束后重置循环（scriptPos 归零重新起手） */
     let resetPending = false
 
-    /** 进入攻击 —— 镜像 attackingHandler.enter（省略物理 wakeUp/attackedTargets） */
-    const enterAttack = (): void => {
+    /** 当前段技能槽（script 位置 → 槽下标） */
+    const currentSlot = (): SkillSlot => slots[script[scriptPos] ?? 0]
+
+    /** 进入指定脚本位置的段 —— 镜像 attackingHandler.enter（省略物理 wakeUp/attackedTargets） */
+    const enterSegment = (pos: number, nextLink: LinkLabel): void => {
+        scriptPos = pos
         mode = 'attacking'
         stateTime = 0
         attackTimer = 0
         phaseIndex = 0
         phaseTimer = 0
-        comboTimer = COMBO_WINDOW
-        attackHeld = false
-        if (isMelee) {
-            /* tilt 按挥砍次数轮转 —— 与 nextComboTilt(c) 相同公式 */
-            swingTilt = COMBO_TILT_TABLE[swingCount % COMBO_TILT_TABLE.length]
-            swingCount++
-            planAdvance = hitNumber > 1 && hitNumber < totalHits
-        } else {
-            /* 远程攻击 tilt 恒 0 */
-            swingTilt = 0
-            planAdvance = false
-        }
-        link = pendingLink
-        pendingLink = '重新起手'
+        /* 段固有倾斜角 —— 与 attacking.enter 的 c.swingTilt = skill.swingTilt ?? 0 一致 */
+        const config = currentSlot().config
+        swingTilt = config.type === 'melee' ? (config.swingTilt ?? 0) : 0
+        link = nextLink
     }
 
-    /** 攻击时间线 —— 镜像 attackingHandler.update 的调度部分（省略物理/位移缩放） */
+    /** 攻击时间线 —— 镜像 attackingHandler.update 的调度部分（省略物理/位移缩放/冷却） */
     const advanceAttack = (dt: number): void => {
         /* 状态时长累加 —— 镜像生产 world.ts 传入 entity.stateMachine.stateTime 的累加语义：
-         * enterAttack（状态切换）置 0、段内推进不重置；aim/spin 微颤与头部摆动依赖它 */
+         * enterSegment（状态切换）置 0、段末推进不重置；aim/spin 微颤与头部摆动依赖它 */
         stateTime += dt
         attackTimer += dt
         phaseTimer += dt
-        /* 连招窗口倒计时 */
-        comboTimer = Math.max(0, comboTimer - dt)
 
-        /* 阶段推进（镜像 L64-76） */
+        const config = currentSlot().config
+        const phases = resolvePhases(config.phases)
+
+        /* 阶段推进（镜像 attacking.update 阶段调度） */
         if (phaseIndex < phases.length) {
-            const phaseDuration = skill.duration * phases[phaseIndex].durationRatio
+            const phaseDuration = config.duration * phases[phaseIndex].durationRatio
             if (phaseTimer >= phaseDuration) {
                 if (phaseIndex < phases.length - 1) {
                     phaseIndex++
                     phaseTimer = 0
                 } else {
-                    /* 最终阶段完成，标记所有阶段已结束 */
+                    /* 最终阶段完整播完 */
                     phaseIndex = phases.length
                 }
             }
         }
 
-        /* 连段推进（镜像 L79-108）：等价于 comboChain 指向同技能自身的推进分支 ——
-         * 重置计时并轮转 tilt；phaseIndex 归零后动画器 prevPhase 为空，
-         * startPose 取 NEUTRAL，产生与生产一致的衔接跳变（已知 bug，原样复现） */
-        if (planAdvance && phaseIndex < phases.length) {
-            const phase = phases[phaseIndex]
-            const phaseDuration = Math.max(skill.duration * phase.durationRatio, 1e-6)
-            /* 模拟玩家输入：cancellable 阶段过半后按住攻击键 */
-            if (phase.cancellable && !attackHeld && phaseTimer / phaseDuration >= COMBO_INPUT_RATIO) {
-                attackHeld = true
-            }
-            if (phase.cancellable && attackHeld && comboTimer > 0) {
-                attackTimer = 0
-                phaseIndex = 0
-                phaseTimer = 0
-                comboTimer = COMBO_WINDOW
-                swingTilt = COMBO_TILT_TABLE[swingCount % COMBO_TILT_TABLE.length]
-                swingCount++
-                hitNumber++
-                attackHeld = false
-                planAdvance = hitNumber < totalHits
-                link = '段内推进'
+        /* 段末推进（镜像 attacking.update 的缓冲消费分支）：
+         * 演示中缓冲恒有值（模拟玩家持续按键）→ 切换下一段、重置计时、取新段 tilt，不出 attacking 状态 */
+        if (phaseIndex >= phases.length && scriptPos < totalHits - 1) {
+            if (scriptPos === CHAIN_PAUSE_AFTER_POS && isMelee) {
+                /* 轻链播完 → 停顿（模拟玩家松开攻击键）→ 重新起手段进重链 */
+                mode = 'idle'
+                stateTime = 0
+                idleDuration = CHAIN_PAUSE_IDLE
+                pendingLink = '重新起手'
+                scriptPos++
                 return
             }
+            /* 同链段末推进：attackTimer/phaseIndex/phaseTimer 重置，stateTime 保留 */
+            attackTimer = 0
+            phaseTimer = 0
+            phaseIndex = 0
+            scriptPos++
+            const nextConfig = currentSlot().config
+            swingTilt = nextConfig.type === 'melee' ? (nextConfig.swingTilt ?? 0) : 0
+            link = '段内推进'
+            return
         }
 
-        /* 完成判定（镜像 idle 转换 guard：全部阶段完成 && 总时长达标；站立恒有支撑） */
-        if (phaseIndex >= phases.length && attackTimer >= skill.duration) {
+        /* 收尾判定：脚本最后一段播完 → 进收尾待机，循环重置 */
+        if (phaseIndex >= phases.length) {
             mode = 'idle'
             stateTime = 0
-            attackHeld = false
-            if (hitNumber >= totalHits) {
-                idleDuration = IDLE_TRAIL
-                resetPending = true
-            } else {
-                /* 本击未能在段内推进（无可取消阶段 / 窗口过期）→ 走"播完 → 重新起手"路径 */
-                hitNumber++
-                idleDuration = RECOMBO_IDLE
-            }
+            idleDuration = IDLE_TRAIL
+            resetPending = true
         }
     }
 
-    /** 待机时间线：计时结束进入下一击（或重置循环后重新起手） */
+    /** 待机时间线：计时结束进入下一段（循环重置后重新起手） */
     const advanceIdle = (dt: number): void => {
         stateTime += dt
         if (stateTime >= idleDuration) {
             if (resetPending) {
-                swingCount = 0
-                hitNumber = 1
+                scriptPos = 0
                 resetPending = false
                 pendingLink = isMelee ? '首次起手' : '—'
             }
-            enterAttack()
+            enterSegment(scriptPos, pendingLink)
         }
     }
 
     /**
-     * 动画注入 —— 镜像 world.ts L579-654：
-     * 构造 AnimationContext（同名同语义）→ system.update（状态切换自动检测）→ 刀光采样。
+     * 动画注入 —— 镜像 world.ts 动画上下文装配：
+     * 构造 AnimationContext（同名同语义，含 attackSkillId）→ system.update（动画键 = state:skillId，
+     * 段切换触发快照混合）→ 刀光采样。
      */
     const applyAnimation = (dt: number): void => {
         const inAttacking = mode === 'attacking'
+        const config = currentSlot().config
+        const phases = resolvePhases(config.phases)
         const phaseDuration = phaseIndex < phases.length
-            ? skill.duration * phases[phaseIndex].durationRatio
+            ? config.duration * phases[phaseIndex].durationRatio
             : 1
         const ctxPhaseName: AttackPhaseName | undefined = inAttacking && phaseIndex < phases.length
             ? phases[phaseIndex].name
@@ -269,9 +254,10 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             swingTilt,
             attackPhase: ctxPhaseName,
             attackPhaseProgress: phaseDuration > 0 ? phaseTimer / phaseDuration : 0,
-            attackTotalProgress: inAttacking && skill.duration > 0 ? attackTimer / skill.duration : 0,
+            attackTotalProgress: inAttacking && config.duration > 0 ? attackTimer / config.duration : 0,
             attackPhases: inAttacking ? phases : undefined,
             attackPhaseIndex: phaseIndex,
+            attackSkillId: inAttacking ? config.id : undefined,
             weaponHeld: model.weaponMesh !== null,
         }
         system.update(dt, model, inAttacking ? 'attacking' : 'idle', ctx)
@@ -296,23 +282,27 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         applyAnimation(dt)
     }
 
-    const status = (): ActorStatus => ({
-        id,
-        skillId: skill.id,
-        skillName,
-        weaponName,
-        isMelee,
-        mode,
-        hitNumber,
-        totalHits,
-        swingTilt,
-        phaseName: mode === 'idle' ? 'idle' : phaseIndex < phases.length ? phases[phaseIndex].name : 'done',
-        phaseProgress: mode === 'idle'
-            ? 0
-            : Math.min(Math.max(phaseIndex < phases.length ? phaseTimer / (skill.duration * phases[phaseIndex].durationRatio) : 1, 0), 1),
-        attackProgress: mode === 'idle' ? 0 : Math.min(Math.max(attackTimer / skill.duration, 0), 1),
-        link: mode === 'attacking' ? link : '—',
-    })
+    const status = (): ActorStatus => {
+        const config = currentSlot().config
+        const phases = resolvePhases(config.phases)
+        return {
+            id,
+            skillId: config.id,
+            skillName,
+            weaponName,
+            isMelee,
+            mode,
+            hitNumber: scriptPos + 1,
+            totalHits,
+            swingTilt,
+            phaseName: mode === 'idle' ? 'idle' : phaseIndex < phases.length ? phases[phaseIndex].name : 'done',
+            phaseProgress: mode === 'idle'
+                ? 0
+                : Math.min(Math.max(phaseIndex < phases.length ? phaseTimer / (config.duration * phases[phaseIndex].durationRatio) : 1, 0), 1),
+            attackProgress: mode === 'idle' ? 0 : Math.min(Math.max(attackTimer / config.duration, 0), 1),
+            link: mode === 'attacking' ? link : '—',
+        }
+    }
 
     /* —— 头顶名称标签：sprite 挂锚点、dispose 句柄留存，随 dispose 统一回收 —— */
     let labelDispose: (() => void) | null = null
@@ -327,7 +317,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     const setDimmed = (on: boolean): void => {
         if (on === dimmed) return
         dimmed = on
-        /* 刀光 mesh 挂在 scene 根（不在 anchor 子树内），单独下发压暗系数；
+        /* 刀光 Mesh 挂在 scene 根（不在 anchor 子树内），单独下发压暗系数；
          * 其材质 opacity 每帧由 update 覆写，须用缩放系数而非直接改材质 */
         trail.setOpacityScale(on ? DIMMED_OPACITY : 1)
         if (on) {

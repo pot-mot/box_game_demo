@@ -2,8 +2,8 @@
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from './machine.ts'
 import type {CharacterStateMachine} from './types.ts'
-import {createSkillSlot} from '../combat/skill_types.ts'
-import {MELEE_SKILL_PRESETS} from '../combat/melee_skill.ts'
+import {buildMeleeSkillSlots, MELEE_LIGHT_CHAIN_COOLDOWN} from '../combat/melee_skill.ts'
+import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
 import type {CharacterEntity} from '../types.ts'
 
 const DT = 1 / 60
@@ -11,7 +11,8 @@ const DT = 1 / 60
 /** 构造可驱动状态机的完整 CharacterEntity mock（真实 entity body mock + stateMachine）。
  *  mock 仅覆盖状态机路径使用到的接口子集，集中窄化一次避免测试体散落断言转换 */
 const makeMock = (): CharacterEntity => {
-    const slot = createSkillSlot(MELEE_SKILL_PRESETS.long_sword_slash)
+    /* 短剑 4 槽双链：[轻1, 重1, 轻2, 重2]，循环 comboChain */
+    const slots = buildMeleeSkillSlots('short_sword')
     const mockBody = {
         linvel: (): {x: number; y: number; z: number} => ({x: state.velocityX, y: state.velocityY, z: state.velocityZ}),
         setLinvel: ({x, y, z}: {x: number; y: number; z: number}): void => {
@@ -48,10 +49,10 @@ const makeMock = (): CharacterEntity => {
             attackTendency: () => true,
             tendencyConfig: {tendencyId: 'hostileExceptSelf'},
             onDamageTaken: null, onDeath: null, onDamageDealt: null,
-            skills: [slot], currentSkillIndex: 0,
+            skills: slots, currentSkillIndex: 0,
             attackActive: false, attackTimer: 0,
             attackedTargets: new Set(), attackDirX: 0, attackDirZ: 0, swingTilt: 0,
-            phaseIndex: 0, phaseTimer: 0, comboIndex: 0, comboTimer: 0, pendingFlinch: false,
+            phaseIndex: 0, phaseTimer: 0, chainEntryIndex: 0, bufferedSkillIndex: -1, pendingFlinch: false, flinchImmunityTimer: 0,
         } as unknown as CharacterEntity['combat'],
         stateMachine: createCharacterStateMachine(),
     }
@@ -193,8 +194,9 @@ describe('攻击/冲刺在陡坡结束', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        e.stateMachine.setInput(1, 0, false, true, false, 0)
-        run(e.stateMachine, e, 25)
+        /* 松开攻击键：无缓冲，当前段播完后收招 */
+        e.stateMachine.setInput(1, 0, false, false, false, 0)
+        run(e.stateMachine, e, 30)
         expect(e.stateMachine.currentState).toBe('falling')
     })
 
@@ -203,8 +205,8 @@ describe('攻击/冲刺在陡坡结束', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        e.stateMachine.setInput(1, 0, false, true, false, 0)
-        run(e.stateMachine, e, 25)
+        e.stateMachine.setInput(1, 0, false, false, false, 0)
+        run(e.stateMachine, e, 30)
         expect(e.stateMachine.currentState).toBe('walking')
     })
 
@@ -255,6 +257,8 @@ describe('斜坡防滑', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
+        /* 松开攻击键避免缓冲连段，仅验证段内速度清零 */
+        e.stateMachine.setInput(0, 0, false, false, false, 0)
         const b = e.body as unknown as {setLinvel: (v: {x: number; y: number; z: number}) => void; linvel: () => {x: number; y: number; z: number}}
         for (let i = 0; i < 12; i++) {
             b.setLinvel({x: 0.1, y: -0.05, z: 0})
@@ -312,5 +316,141 @@ describe('跳跃', () => {
             if (e.stateMachine.currentState !== 'jumping') break
         }
         expect(e.stateMachine.currentState).toBe('falling')
+    })
+})
+
+describe('输入缓冲连段（轻/重双链）', () => {
+    const enterAttacking = (e: CharacterEntity, skillIndex = 0): void => {
+        e.stateMachine.setInput(0, 0, false, true, false, skillIndex)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+    }
+
+    /** 逐帧跑到 currentSkillIndex 为指定值（限帧防死循环） */
+    const runUntilSkill = (e: CharacterEntity, idx: number, maxFrames = 90): void => {
+        for (let i = 0; i < maxFrames && e.combat.currentSkillIndex !== idx; i++) {
+            e.stateMachine.update(DT, e)
+        }
+    }
+
+    it('段末才推进：段中不推进（即使缓冲存在）', () => {
+        const e = makeMock()
+        enterAttacking(e, 0)
+        /* 持续按住轻击：缓冲恒有值 */
+        e.stateMachine.setInput(0, 0, false, true, false, 0)
+        run(e.stateMachine, e, 13)
+        /* 段中（轻 1 时长 0.4s，strike 0.2s 已过、未到段末） */
+        expect(e.combat.currentSkillIndex).toBe(0)
+        expect(e.combat.phaseIndex).toBe(1)
+        /* 段末推进到轻 2（链中下一段），不出 attacking 状态 */
+        runUntilSkill(e, 2)
+        expect(e.combat.currentSkillIndex).toBe(2)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        /* 推进时计时器重置 */
+        expect(e.combat.attackTimer).toBeLessThan(0.1)
+    })
+
+    it('缓冲缺失则当前段完整播完后收招', () => {
+        const e = makeMock()
+        enterAttacking(e, 0)
+        e.stateMachine.setInput(0, 0, false, false, false, 0)
+        run(e.stateMachine, e, 30)
+        expect(e.stateMachine.currentState).toBe('idle')
+        expect(e.combat.currentSkillIndex).toBe(0)
+    })
+
+    it('轻链无限循环：按住轻击 0→2→0', () => {
+        const e = makeMock()
+        enterAttacking(e, 0)
+        e.stateMachine.setInput(0, 0, false, true, false, 0)
+        runUntilSkill(e, 2)
+        expect(e.combat.currentSkillIndex).toBe(2)
+        runUntilSkill(e, 0)
+        expect(e.combat.currentSkillIndex).toBe(0)
+        expect(e.stateMachine.currentState).toBe('attacking')
+    })
+
+    it('链内免冷却：链推进期间起手槽冷却不生效', () => {
+        const e = makeMock()
+        enterAttacking(e, 0)
+        e.stateMachine.setInput(0, 0, false, true, false, 0)
+        runUntilSkill(e, 2)
+        runUntilSkill(e, 0)
+        expect(e.combat.skills[0].cooldownTimer).toBe(0)
+        expect(e.combat.skills[2].cooldownTimer).toBe(0)
+    })
+
+    it('链终止冷却只挂起手槽，不惩罚链中段', () => {
+        const e = makeMock()
+        enterAttacking(e, 0)
+        /* 推进到轻 2 后松开：轻 2 播完收招 */
+        e.stateMachine.setInput(0, 0, false, true, false, 0)
+        runUntilSkill(e, 2)
+        e.stateMachine.setInput(0, 0, false, false, false, 0)
+        run(e.stateMachine, e, 30)
+        expect(e.stateMachine.currentState).toBe('idle')
+        /* 轻链终止冷却 0.3s 挂轻 1（起手槽），轻 2 不受惩罚 */
+        expect(e.combat.skills[0].cooldownTimer).toBeCloseTo(MELEE_LIGHT_CHAIN_COOLDOWN)
+        expect(e.combat.skills[2].cooldownTimer).toBe(0)
+    })
+
+    it('中途按重击键：段末切到重链并更新起手槽', () => {
+        const e = makeMock()
+        enterAttacking(e, 0)
+        /* 轻 1 段中改按重击键（槽 1） */
+        e.stateMachine.setInput(0, 0, false, true, false, 1)
+        runUntilSkill(e, 1)
+        expect(e.combat.currentSkillIndex).toBe(1)
+        expect(e.combat.chainEntryIndex).toBe(1)
+        expect(e.stateMachine.currentState).toBe('attacking')
+    })
+})
+
+describe('受击硬直与保护窗口', () => {
+    const enterAttacking = (e: CharacterEntity): void => {
+        e.stateMachine.setInput(0, 0, false, true, false, 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+    }
+
+    it('默认阶段行为：移动输入驱动推进（速度 = config.speed × moveSpeedMultiplier）', () => {
+        const e = makeMock()
+        enterAttacking(e)
+        /* 按住攻击同时推移动方向（镜像 AI attack 状态的 setInput(adx, adz, true)）；
+         * 轻 1 strike 阶段 moveSpeedMultiplier = 0.3，speed = 6 → 1.8 */
+        e.stateMachine.setInput(1, 0, false, true, false, 0)
+        e.stateMachine.update(DT, e)
+        const b = e.body as unknown as {linvel: () => {x: number; y: number; z: number}}
+        expect(b.linvel().x).toBeCloseTo(6 * 0.3, 5)
+        expect(e.stateMachine.currentState).toBe('attacking')
+    })
+
+    it('攻击中被击中（pendingFlinch）立即进入 flinching 并中断攻击', () => {
+        const e = makeMock()
+        enterAttacking(e)
+        /* 持续按住攻击：若无硬直中断会走缓冲连段，验证硬直优先级更高 */
+        e.stateMachine.setInput(0, 0, false, true, false, 0)
+        e.combat.pendingFlinch = true
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('flinching')
+        expect(e.combat.attackActive).toBe(false)
+        expect(e.combat.bufferedSkillIndex).toBe(-1)
+        expect(e.combat.pendingFlinch).toBe(false)
+    })
+
+    it('硬直播完退回 idle，退出时挂 FLINCH_IMMUNITY_DURATION 保护窗口', () => {
+        const e = makeMock()
+        enterAttacking(e)
+        e.stateMachine.setInput(0, 0, false, false, false, 0)
+        e.combat.pendingFlinch = true
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('flinching')
+        /* FLINCH_DURATION = 0.1s，逐帧跑到退出（限帧防死循环） */
+        for (let i = 0; i < 30 && e.stateMachine.currentState === 'flinching'; i++) {
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.stateMachine.currentState).toBe('idle')
+        /* 退出时挂免硬直窗口（状态机不递减，由 world 主循环递减），防无限连段锁死 */
+        expect(e.combat.flinchImmunityTimer).toBeCloseTo(FLINCH_IMMUNITY_DURATION)
     })
 })

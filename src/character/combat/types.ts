@@ -16,22 +16,21 @@ export interface CombatComponent {
     attackDirX: number
     attackDirZ: number
 
-    /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍，于进入 attacking 状态时随机 */
+    /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍，取自当前段配置的固有倾斜角 */
     swingTilt: number
-
-    /** 累计挥击序号（每次进入攻击/连招推进 +1），驱动连招倾斜角循环 */
-    swingCount: number
 
     /** 攻击阶段索引（0-based），attacking meta-state 推进 */
     phaseIndex: number
     /** 当前阶段已用时间（秒） */
     phaseTimer: number
-    /** 连招链当前位置（0 = 第一招） */
-    comboIndex: number
-    /** 连招输入窗口计时器（秒，到期归零终止连招） */
-    comboTimer: number
+    /** 本次起链的起手槽索引（链终止冷却挂在该槽上） */
+    chainEntryIndex: number
+    /** 缓冲的下一段技能索引（-1 = 无缓冲）；段末完整播完后消费推进 */
+    bufferedSkillIndex: number
     /** 是否被标记为受击硬直 */
     pendingFlinch: boolean
+    /** 受击保护剩余时间（秒）：flinching 退出后的免硬直窗口，防止无限连段把目标永久锁在受击状态；伤害不受影响 */
+    flinchImmunityTimer: number
 
     faction: Faction
     attackTendency: AttackTendency
@@ -63,12 +62,12 @@ export const createCombatComponent = (
     attackDirX: 0,
     attackDirZ: 1,
     swingTilt: 0,
-    swingCount: 0,
     phaseIndex: 0,
     phaseTimer: 0,
-    comboIndex: 0,
-    comboTimer: 0,
+    chainEntryIndex: 0,
+    bufferedSkillIndex: -1,
     pendingFlinch: false,
+    flinchImmunityTimer: 0,
     faction,
     attackTendency,
     tendencyConfig,

@@ -31,7 +31,7 @@ const makeChar = (
     combatStrategy: CombatSubStrategy = 'tactical',
 ): CharacterEntity => {
     const skillPreset = skillType === 'melee'
-        ? MELEE_SKILL_PRESETS.long_sword_slash
+        ? MELEE_SKILL_PRESETS.long_sword_light_1
         : RANGED_SKILL_PRESETS.longbow_shot
     const slot = createSkillSlot(skillPreset)
     slot.cooldownTimer = overrides?.cooldownTimer ?? 0
@@ -50,7 +50,7 @@ const makeChar = (
             currentSkillIndex: 0,
             attackedTargets: new Set(),
             attackDirX: 0, attackDirZ: 0, swingTilt: 0,
-            phaseIndex: 0, phaseTimer: 0, comboIndex: 0, comboTimer: 0, pendingFlinch: false,
+            phaseIndex: 0, phaseTimer: 0, chainEntryIndex: 0, bufferedSkillIndex: -1, pendingFlinch: false, flinchImmunityTimer: 0,
         },
         config: {speed: 0, jumpHeight: 0, scale: 1},
         mesh: null!, appearanceGroup: null!,
@@ -373,5 +373,70 @@ describe('AI 顶层调度器', () => {
         updateAI(0.016, ctx, char, enemies, () => {})
         expect(ctx.activeFsm).toBe('combat')
         expect(ctx.combatState).toBe('flee')
+    })
+})
+
+describe('AI 攻击检测区域（weaponHitChecker）', () => {
+    it('chase→attack：checker 判定未命中时不出招（即使在圆形距离内）', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'chase'
+        ctx.weaponHitChecker = () => false
+        const enemies = [makeChar(2, 1.0, 0, 1, 'melee')]
+        const guard = chaseHandler.transitions.find(t => t.to === 'attack')!
+        expect(guard.guard(ctx, char, enemies)).toBe(false)
+    })
+
+    it('chase→attack：checker 判定命中才进攻击（即使超出圆形距离）', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'chase'
+        ctx.weaponHitChecker = () => true
+        const enemies = [makeChar(2, 3, 0, 1, 'melee')]
+        const guard = chaseHandler.transitions.find(t => t.to === 'attack')!
+        expect(guard.guard(ctx, char, enemies)).toBe(true)
+    })
+
+    it('attack update：checker 命中才发攻击输入', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'attack'
+        const enemies = [makeChar(2, 1.0, 0, 1, 'melee')]
+
+        const captured: {dx: number; dz: number; attack: boolean}[] = []
+        const capture = (dx: number, dz: number, attack: boolean): void => {
+            captured.push({dx, dz, attack})
+        }
+
+        ctx.weaponHitChecker = () => true
+        attackHandler.update(0.016, ctx, char, enemies, capture)
+        expect(captured.pop()?.attack).toBe(true)
+
+        ctx.weaponHitChecker = () => false
+        attackHandler.update(0.016, ctx, char, enemies, capture)
+        expect(captured.pop()?.attack).toBe(false)
+    })
+
+    it('attack→chase：checker 判定出区域则回追击', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'attack'
+        ctx.weaponHitChecker = () => false
+        /* 目标在侦测范围内但出了攻击检测区域 */
+        const enemies = [makeChar(2, 1.0, 0, 1, 'melee')]
+        const allChase = attackHandler.transitions.filter(t => t.to === 'chase')
+        const guard = allChase[allChase.length - 1]
+        expect(guard.guard(ctx, char, enemies)).toBe(true)
+    })
+
+    it('checker 缺失时回退圆形距离判定', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'chase'
+        const inRange = [makeChar(2, 1.0, 0, 1, 'melee')]
+        const outRange = [makeChar(2, 3, 0, 1, 'melee')]
+        const guard = chaseHandler.transitions.find(t => t.to === 'attack')!
+        expect(guard.guard(ctx, char, inRange)).toBe(true)
+        expect(guard.guard(ctx, char, outRange)).toBe(false)
     })
 })

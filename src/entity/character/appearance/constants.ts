@@ -142,15 +142,15 @@ const GRIP_NEUTRAL: WeaponGripPose = {x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0}
  * 近战武器 rx 保持小角度，攻击时腕关节会动态对齐抵消 rx 使武器与前臂共线（guard 位）。
  */
 export const WEAPON_GRIP_POSES: Record<WeaponMeshId, WeaponGripPose> = {
-    /* 剑类：垂持贴臂、刃尖微前倾（与其他近战一致）；攻击时腕部对齐抵消 rx 至共线 guard 位，剑随手臂向前挥出 */
-    sword:       {x: 0, y: 0, z: 0, rx: -0.25, ry: 0, rz: 0},
-    heavy_sword: {x: 0, y: 0, z: 0, rx: -0.25, ry: 0, rz: 0},
+    /* 剑类：戒备位——刃尖朝上微前倾，武器收至体侧前方；攻击时腕部对齐抵消 rx 至共线 guard 位 */
+    sword:       {x: 0, y: 0, z: 0, rx: -0.1, ry: 0, rz: 0},
+    heavy_sword: {x: 0, y: 0, z: 0, rx: -0.12, ry: 0, rz: 0},
     /* 长杆类：竖提、微外八（与臂近乎共线，利于刺击） */
     spear:       {x: 0, y: 0, z: 0, rx: 0.05, ry: 0, rz: -0.12},
     staff:       {x: 0, y: 0, z: 0, rx: 0.05, ry: 0, rz: 0.1},
-    /* 斧锤类：头朝上贴臂前倾 */
-    dual_axe:    {x: 0, y: 0, z: 0, rx: -0.25, ry: 0, rz: 0},
-    war_hammer:  {x: 0, y: 0, z: 0, rx: -0.4, ry: Math.PI / 4, rz: 0},
+    /* 斧锤类：头朝上微前倾（小幅调整，本轮以剑类为主） */
+    dual_axe:    {x: 0, y: 0, z: 0, rx: -0.2, ry: 0, rz: 0},
+    war_hammer:  {x: 0, y: 0, z: 0, rx: -0.3, ry: Math.PI / 4, rz: 0},
     throwing_axe:{x: 0, y: 0, z: 0, rx: -0.3, ry: 0, rz: 0},
     /* 远程类：携带态枪口/弓臂朝下前倾 */
     bow:         {x: 0, y: 0, z: 0, rx: -0.15, ry: 0, rz: 0},
@@ -171,17 +171,17 @@ export const TWO_HAND_GRIP = {x: -1.1, y: -0.5, elbow: 0.25} as const
 /** 挥砍时腕部刃面偏转系数（rotation.y = swingTilt × 系数，横斩时刃面转水平） */
 export const WRIST_EDGE_YAW_FACTOR = 1.0
 
-/** 持械待机：持械臂摆动幅度（rad） */
-export const WEAPON_IDLE_SWAY = 0.02
+/** 持械戒备位：肩前举角（rad，负值 = 前摆，刃尖朝上收至体侧前方） */
+export const WEAPON_READY_SHOULDER = -0.45
 
-/** 持械待机：持械肘自然弯曲（rad） */
-export const WEAPON_IDLE_ELBOW = 0.22
+/** 持械戒备位：肘弯曲（rad，加大弯曲使武器竖持体前） */
+export const WEAPON_READY_ELBOW = 0.85
+
+/** 持械戒备位：持械臂微摆幅度（rad，武器竖持微摆） */
+export const WEAPON_READY_SWAY = 0.03
 
 /** 持械行走：持械臂摆动幅度（rad，远小于空手摆臂） */
 export const WEAPON_WALK_ARM_SWING = 0.12
-
-/** 持械行走：持械肘固定弯曲（rad） */
-export const WEAPON_WALK_ELBOW = 0.18
 
 // ── 攻击动力链 ──
 

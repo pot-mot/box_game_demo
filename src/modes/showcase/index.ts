@@ -8,9 +8,10 @@ import type {ShowcaseActor} from './actor.ts'
 import {createNameLabel} from './label.ts'
 import {createPanel} from './panel.ts'
 import type {PanelRowInfo} from './panel.ts'
-import {MELEE_SKILL_PRESETS} from '../../character/combat/melee_skill.ts'
+import {buildMeleeSkillSlots} from '../../character/combat/melee_skill.ts'
 import {RANGED_SKILL_PRESETS} from '../../character/combat/ranged_skill.ts'
-import type {SkillConfig} from '../../character/combat/skill_types.ts'
+import type {SkillSlot} from '../../character/combat/skill_types.ts'
+import {createSkillSlot} from '../../character/combat/skill_types.ts'
 import {SELECT_PALETTE} from '../../entity/character/appearance/constants.ts'
 import {
     CLICK_SLOP_PX,
@@ -46,18 +47,16 @@ export interface ShowcaseModeHost {
     readonly onExit: () => void
 }
 
-/** 按清单解析技能配置（直接引用预设，保证 phases 完整） */
-const resolveSkillConfig = (skillId: string, kind: 'melee' | 'ranged'): SkillConfig => {
+/** 按清单解析技能槽（近战 = 武器 4 槽双链，远程 = 单槽；phases 完整来自预设） */
+const resolveSkillSlots = (skillId: string, kind: 'melee' | 'ranged'): SkillSlot[] => {
     if (kind === 'melee') {
-        if (!(skillId in MELEE_SKILL_PRESETS)) {
-            throw new Error(`[showcase] 未知的近战技能 id: ${skillId}`)
-        }
-        return MELEE_SKILL_PRESETS[skillId]
+        /* skillId 为武器 id：装配 [轻1, 重1, 轻2, 重2] 循环链 */
+        return buildMeleeSkillSlots(skillId)
     }
     if (!(skillId in RANGED_SKILL_PRESETS)) {
         throw new Error(`[showcase] 未知的远程技能 id: ${skillId}`)
     }
-    return RANGED_SKILL_PRESETS[skillId]
+    return [createSkillSlot(RANGED_SKILL_PRESETS[skillId])]
 }
 
 /**
@@ -84,13 +83,13 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i]
             if (entry === undefined) continue
-            const skill = resolveSkillConfig(entry.skillId, kind)
+            const slots = resolveSkillSlots(entry.skillId, kind)
             const skillName = displayNameOf(SKILL_DISPLAY_NAMES, entry.skillId)
-            const weaponName = displayNameOf(WEAPON_DISPLAY_NAMES, skill.weapon.id)
+            const weaponName = displayNameOf(WEAPON_DISPLAY_NAMES, slots[0].config.weapon.id)
             const actor = createShowcaseActor({
                 id: actors.length,
                 scene: sceneCtx.scene,
-                skill,
+                slots,
                 faction: nextFaction++,
                 x: (i - (entries.length - 1) / 2) * spacing,
                 z: rowZ,

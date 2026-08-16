@@ -93,17 +93,19 @@ export const chaseHandler: CombatStateHandler = {
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
                 if (!skill) return false
 
-                /* aggressive 策略：远程也可进入攻击 */
+                /* aggressive 策略：远程也可进入攻击（远程保持距离判定） */
                 const skillRange = skill.config.weapon.range
-                if (ctx.combatStrategy === 'aggressive') {
+                if (ctx.combatStrategy === 'aggressive' && skill.config.type === 'ranged') {
                     return v3Length(_dir) < skillRange
                         && (skill.cooldownTimer ?? Infinity) <= 0
                 }
 
-                /* 默认：仅近战可进入攻击 */
+                /* 默认：仅近战可进入攻击（攻击检测区域检查，checker 缺失时回退距离判定） */
                 if (skill.config.type === 'ranged') return false
-                return v3Length(_dir) < skillRange
-                    && (skill.cooldownTimer ?? Infinity) <= 0
+                const inRegion = ctx.weaponHitChecker
+                    ? ctx.weaponHitChecker(character, target)
+                    : v3Length(_dir) < skillRange
+                return inRegion && (skill.cooldownTimer ?? Infinity) <= 0
             },
         },
         {

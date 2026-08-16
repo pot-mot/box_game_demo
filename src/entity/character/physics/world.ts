@@ -10,7 +10,7 @@ import {resolveTendency} from '../../../character/faction.ts'
 import {createCombatComponent} from '../../../character/combat/types.ts'
 import type { AttackResult } from '../../../character/combat/types.ts'
 import {createSkillSlot, type SkillConfig, type SkillSlot} from '../../../character/combat/skill_types.ts'
-import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
+import {buildMeleeSkillSlots, MELEE_LIGHT_DURATION, MELEE_LIGHT_CHAIN_COOLDOWN} from '../../../character/combat/melee_skill.ts'
 import {MELEE_WEAPON_PRESETS} from '../../../character/weapon/melee_weapon.ts'
 import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
@@ -41,7 +41,7 @@ import {computeSeparation, separationSlopeDy} from './separation.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
 import {SELECT_PALETTE} from '../appearance/constants.ts'
-import {createMeleeExecutor} from '../combat/melee_executor.ts'
+import {createMeleeExecutor, testWeaponHitBox} from '../combat/melee_executor.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
@@ -112,27 +112,9 @@ export interface CharacterEntitySystem extends EntityInfoSource {
 /** 将旧 AttackConfig 转换为 SkillSlot 数组 */
 const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
     if (attack.type === 'melee') {
-        const weaponPreset = MELEE_WEAPON_PRESETS[attack.weaponId ?? ''] ?? MELEE_WEAPON_PRESETS.long_sword
-        const skill: SkillConfig = {
-            id: attack.weaponId ?? 'custom_melee',
-            type: 'melee',
-            cooldown: attack.cooldown,
-            duration: attack.duration,
-            weapon: {
-                id: weaponPreset.id,
-                type: 'melee',
-                damage: attack.damage,
-                range: attack.range,
-                knockbackForce: weaponPreset.knockbackForce,
-                knockbackY: weaponPreset.knockbackY,
-                arcAngle: weaponPreset.arcAngle,
-                arcRadius: weaponPreset.arcRadius,
-                arcTilt: weaponPreset.arcTilt,
-                detectionRange: weaponPreset.detectionRange,
-                mesh: weaponPreset.mesh,
-            },
-        }
-        return [createSkillSlot(skill)]
+        /* 近战 = 4 技能槽双链（轻1/重1/轻2/重2）；伤害/侦测范围沿用存档覆写，
+         * 段时长/阶段/链结构/链终止冷却取预设（存档 duration 不再决定攻击时长） */
+        return buildMeleeSkillSlots(attack.weaponId ?? '', {damage: attack.damage, range: attack.range})
     }
     const weaponPreset = RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow
     const skill: SkillConfig = {
@@ -289,11 +271,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const id = nextId++
         const stateMachine = createCharacterStateMachine()
         const skills = attackToSkillSlots(attackSlot)
-        if (isPlayer && attackSlot.type === 'melee') {
-            /* 玩家近战专属：追加重击技能作为副槽，并挂连招链 */
-            skills.push(createSkillSlot(MELEE_SKILL_PRESETS.heavy_sword_slam))
-            skills[0].comboChain = ['heavy_sword_slam']
-        }
         const maxHP = attackSlot.type === 'melee' ? 15 : 8
 
         const combat = createCombatComponent(
@@ -337,8 +314,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const originalOnDamage = flash.onDamage
         entity.combat.onDamageTaken = (amount: number) => {
             originalOnDamage(amount)
-            /* 攻击中被击中时标记硬直 */
-            if (entity.combat.attackActive && entity.combat.health > 0) {
+            /* 攻击中被击中时标记硬直；受击保护窗口内不再触发，防止无限连段锁死（伤害照常） */
+            if (entity.combat.attackActive && entity.combat.health > 0 && entity.combat.flinchImmunityTimer <= 0) {
                 entity.combat.pendingFlinch = true
             }
         }
@@ -352,7 +329,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const spawnAt = (x: number, y: number, z: number): void => {
-        const meleePreset: AttackConfig = {type: 'melee', range: MELEE_SKILL_PRESETS.long_sword_slash.weapon.range, damage: MELEE_SKILL_PRESETS.long_sword_slash.weapon.damage, cooldown: MELEE_SKILL_PRESETS.long_sword_slash.cooldown, duration: MELEE_SKILL_PRESETS.long_sword_slash.duration}
+        const wp = MELEE_WEAPON_PRESETS.long_sword
+        const meleePreset: AttackConfig = {type: 'melee', range: wp.range, damage: wp.damage, cooldown: MELEE_LIGHT_CHAIN_COOLDOWN, duration: MELEE_LIGHT_DURATION}
         const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
         select(entity.id)
     }
@@ -460,9 +438,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const setPlayerAttack = (skillIndex?: number): AttackResult => {
         const player = getPlayerCharacter()
         if (!player || player.combat.isDead) return 'dead'
-        if (player.combat.attackActive) return 'already_attacking'
         const idx = skillIndex ?? 0
         if (idx < 0 || idx >= player.combat.skills.length) return 'no_valid_skill'
+        if (player.combat.attackActive) {
+            /* 攻击中不再拒绝：写入单帧脉冲，由 attacking 缓冲逻辑在段末推进（续链/切链） */
+            playerAttackPending = true
+            playerAttackSkillIndex = idx
+            return 'ok'
+        }
         const skill = player.combat.skills[idx]
         if (skill.cooldownTimer > 0) return 'cooldown'
         playerAttackPending = true
@@ -509,6 +492,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 sk.cooldownTimer = Math.max(0, sk.cooldownTimer - dt)
             }
             entity.dashCooldownTimer = Math.max(0, entity.dashCooldownTimer - dt)
+            entity.combat.flinchImmunityTimer = Math.max(0, entity.combat.flinchImmunityTimer - dt)
             flashStates.get(entity.id)?.tick(dt)
             checkGround(entity, dt)
 
@@ -593,6 +577,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     horizontalSpeed: hSpeed,
                     horizontalTravel: 0,
                     swingTilt: entity.combat.swingTilt,
+                    attackSkillId: inAttacking ? activeSkill!.config.id : undefined,
                     attackPhase: ctxPhaseName,
                     attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
                     attackTotalProgress: inAttacking && totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
@@ -767,6 +752,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     losChecker,
                     DEFAULT_PEACE_CONFIGS[entity.peaceStrategy],
                     entity.combatStrategy,
+                    /* 武器攻击检测区域：武器模型世界位置 AABB（与伤害判定同一几何）；
+                     * 未持械/远程时返回 false/距离判定由 AI 侧回退处理 */
+                    (character, target) => {
+                        const model = appearanceModels.get(character.id)
+                        if (!model || !model.weaponMesh) return false
+                        const skill = character.combat.skills[character.combat.currentSkillIndex]
+                        if (!skill) return false
+                        model.weaponMesh.getWorldPosition(_trailTipVec)
+                        const tPos = target.body.translation()
+                        return testWeaponHitBox(_trailTipVec, skill.config, tPos, target.config.scale)
+                    },
                 )
                 if (boxSpawner) ctx.spawnBox = boxSpawner
                 if (navSensor) ctx.navSensor = navSensor
@@ -870,10 +866,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
         if (newAttackSlot) {
             entity.combat.skills = attackToSkillSlots(newAttackSlot)
-            if (entity.isPlayer && newAttackSlot.type === 'melee') {
-                entity.combat.skills.push(createSkillSlot(MELEE_SKILL_PRESETS.heavy_sword_slam))
-                entity.combat.skills[0].comboChain = ['heavy_sword_slam']
-            }
+            entity.combat.currentSkillIndex = 0
+            entity.combat.chainEntryIndex = 0
+            entity.combat.bufferedSkillIndex = -1
             const model = appearanceModels.get(entity.id)
             if (model) {
                 model.equipWeapon(resolveWeaponMeshConfig(newAttackSlot))

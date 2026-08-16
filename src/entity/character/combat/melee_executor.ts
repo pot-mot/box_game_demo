@@ -23,6 +23,33 @@ const TARGET_HIT_BOX_HEIGHT_FACTOR = 1.1
 /** 命中回调：参数为命中点世界坐标（供顿帧/相机震动等打击感系统消费） */
 export type MeleeHitCallback = (x: number, y: number, z: number) => void
 
+/**
+ * 武器命中箱 AABB 检测（纯函数）：武器命中箱与目标受击箱是否重叠。
+ * 伤害判定与 AI 攻击检测区域共用同一几何。
+ */
+export const testWeaponHitBox = (
+    weaponPos: {x: number; y: number; z: number},
+    skill: SkillConfig,
+    targetPos: {x: number; y: number; z: number},
+    targetScale: number,
+): boolean => {
+    /* 武器命中箱半长 */
+    const whw = WEAPON_HIT_BOX_HALF_XY
+    const whh = skill.weapon.range * WEAPON_HIT_BOX_HALF_Y_FACTOR
+    const tw = CHARACTER_BASE_SIZE.width * targetScale
+    const td = CHARACTER_BASE_SIZE.depth * targetScale
+    const th = CHARACTER_BASE_SIZE.height * targetScale
+    const thw = tw / 2 * TARGET_HIT_BOX_RADIUS_FACTOR
+    const thd = td / 2 * TARGET_HIT_BOX_RADIUS_FACTOR
+    const thh = th / 2 * TARGET_HIT_BOX_HEIGHT_FACTOR
+
+    /* AABB-AABB 重叠检测 */
+    if (Math.abs(weaponPos.x - targetPos.x) > whw + thw) return false
+    if (Math.abs(weaponPos.y - targetPos.y) > whh + thh) return false
+    if (Math.abs(weaponPos.z - targetPos.z) > whw + thd) return false
+    return true
+}
+
 export const createMeleeExecutor = (
     getAllCharacters: () => readonly CharacterEntity[],
     getModel: (id: number) => CharacterModel | undefined,
@@ -59,10 +86,6 @@ export const createMeleeExecutor = (
         const wy = _tmpVec3.y
         const wz = _tmpVec3.z
 
-        /* 武器命中箱半长 */
-        const whw = WEAPON_HIT_BOX_HALF_XY
-        const whh = skill.weapon.range * WEAPON_HIT_BOX_HALF_Y_FACTOR
-
         for (const target of getAllCharacters()) {
             if (target.id === entity.id) continue
             if (target.combat.isDead) continue
@@ -71,19 +94,9 @@ export const createMeleeExecutor = (
 
             const tTrans = target.body.translation()
             const tx = tTrans.x
-            const ty = tTrans.y
             const tz = tTrans.z
-            const tw = CHARACTER_BASE_SIZE.width * target.config.scale
-            const td = CHARACTER_BASE_SIZE.depth * target.config.scale
-            const th = CHARACTER_BASE_SIZE.height * target.config.scale
-            const thw = tw / 2 * TARGET_HIT_BOX_RADIUS_FACTOR
-            const thd = td / 2 * TARGET_HIT_BOX_RADIUS_FACTOR
-            const thh = th / 2 * TARGET_HIT_BOX_HEIGHT_FACTOR
 
-            /* AABB-AABB 重叠检测 */
-            if (Math.abs(wx - tx) > whw + thw) continue
-            if (Math.abs(wy - ty) > whh + thh) continue
-            if (Math.abs(wz - tz) > whw + thd) continue
+            if (!testWeaponHitBox(_tmpVec3, skill, tTrans, target.config.scale)) continue
 
             applyDamage(target.combat, {
                 sourceId: entity.id,

@@ -92,7 +92,7 @@ const createCharEntity = (
             attackDirX: 0,
             attackDirZ: 0,
             swingTilt: 0,
-            phaseIndex: 0, phaseTimer: 0, comboIndex: 0, comboTimer: 0, pendingFlinch: false,
+            phaseIndex: 0, phaseTimer: 0, chainEntryIndex: 0, bufferedSkillIndex: -1, pendingFlinch: false, flinchImmunityTimer: 0,
         },
         stateMachine: {
             currentState: 'idle',

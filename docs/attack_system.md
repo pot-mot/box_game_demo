@@ -101,53 +101,66 @@ skill.duration = 0.5s
 
 ---
 
-## 三、连招系统
+## 三、连段系统（链段即技能 + 输入缓冲）
 
-### 3.1 连招链定义
+### 3.1 技能槽结构：每把近战武器 = 4 个技能槽
 
-在 `SkillSlot` 上新增可选字段：
+每把近战武器由 `buildMeleeSkillSlots(weaponId, overrides)` 装配 4 个技能槽（链段即技能）：
+
+| 槽 | 链段 id | 动作（短剑基准） | strike 时长 | recovery | swingTilt |
+|---|---|---|---|---|---|
+| 0 | `{weapon}_light_1` | 上至下竖劈 | 0.2s | 0.2s | 0（竖劈） |
+| 1 | `{weapon}_heavy_1` | 水平横向挥砍 | 0.3s | 0.2s | ≈π/2（左向横斩） |
+| 2 | `{weapon}_light_2` | 水平向前戳 | 0.2s | 0.2s | —（thrust 不受倾斜角影响） |
+| 3 | `{weapon}_heavy_2` | 斜向挥砍 | 0.3s | 0.2s | ≈-π/4（右向斜劈） |
+
+- 槽 0 = 轻击键起手、槽 1 = 重击键起手；起手槽标 `isChainEntry`。
+- `SkillSlot.comboChain` 语义：`[下一段 skillId]`，**循环链**（轻1↔轻2、重1↔重2），持续输入即 1→2→1→2 无限循环。
+- 段时长预设固定（轻 0.4s / 重 0.5s）；链终止冷却轻 0.3s / 重 0.6s，**只挂起手槽**；重段伤害 = 轻段 × 1.6。
+- `MeleeSkillConfig.swingTilt`：段固有挥砍倾斜角（确定性，非随机轮转），`attacking.enter` 与段末推进时写入 `c.swingTilt`。
 
 ```ts
 export interface SkillSlot {
     readonly config: SkillConfig
     cooldownTimer: number
-    /** 连招链：本技能后可接的技能 ID 列表，按顺序执行 */
-    readonly comboChain?: readonly string[]
+    /** 连招链：本段后可接的技能 ID（循环链） */
+    comboChain?: readonly string[]
+    /** 链起手槽标记：切链时更新 chainEntryIndex，链终止冷却只挂起手槽 */
+    isChainEntry?: boolean
 }
 ```
 
-例：长刀连招链 `['long_sword_slash', 'long_sword_slash', 'heavy_sword_slam']` — 两下轻砍接一下重击。
+### 3.2 输入缓冲连段（段末推进）
 
-### 3.2 连招推进
-
-在 `CombatComponent` 上新增运行时状态：
+`CombatComponent` 运行时状态：
 
 ```ts
-/** 当前连招中的位置（0 = 第一招） */
-comboIndex: number
-/** 连招输入窗口计时器（秒，窗口内可接下一招） */
-comboTimer: number
+/** 本次起链的起手槽索引（exit 时链终止冷却挂到该槽） */
+chainEntryIndex: number
+/** 缓冲的目标技能槽索引（-1 = 无缓冲） */
+bufferedSkillIndex: number
 ```
 
-推进流程：
+推进流程（`attackingHandler.update`）：
 
 ```
-attacking meta-state update(dt):
-  ├─ 当前阶段 cancellable && input.attack === true && comboTimer > 0
-  │    → 检查 comboChain[comboIndex + 1] 是否可用（冷却就绪）
-  │    → 中断当前攻击，comboIndex++，enter 下一技能的攻击
-  │
-  ├─ comboTimer <= 0
-  │    → 窗口关闭，comboIndex 重置为 0，正常走完所有阶段
-  │
-  └─ 其他 → 正常推进阶段
+attacking update(dt):
+  ├─ 阶段照常推进（strike → recovery）
+  ├─ input.attack 为真 → resolveBufferedSkillIndex(c, input.skillIndex) 写缓冲：
+  │    ├─ 请求槽与当前同链（当前段/链中下一段/本链起手槽）→ 缓冲链中下一段（免冷却）
+  │    ├─ 请求槽是另一链起手槽且冷却完毕 → 缓冲切链
+  │    └─ 其余 → 不缓冲（新输入可覆写旧缓冲 = 中途改键切链）
+  ├─ 最终阶段（recovery）完整播完 && 缓冲存在
+  │    → 切换到目标槽：重置 attackTimer/phaseIndex/phaseTimer/attackedTargets，
+  │      取新段 swingTilt，**不出 attacking 状态**（链内推进不检查冷却）
+  └─ 无缓冲 → 播完后正常走 transition 退出（exit 时仅对起手槽置链终止冷却）
 ```
 
-**combo 超时**：当前技能 duration 结束 + `COMBO_WINDOW`（默认 0.3s）后 `comboTimer` 归零，连招终止。
+**玩家侧**：`world.ts` `setPlayerAttack(idx)` 攻击中不再拒绝，写单帧脉冲经 `input.attack + skillIndex` 由上述解析消费；**AI 侧**：`attack` 状态持续 `setInput(..., attack=true, ..., 0)` → 缓冲恒有值，自动无限走轻链，无需感知链结构。
 
-### 3.3 NPC AI 的连招
+### 3.3 确定性挥砍方向
 
-AI 无需感知连招链。AI combat FSM 的 `attack` 状态在战斗 engagement 期间持续保持 `attack = true`，attacking meta-state 在 `cancellable` 阶段检测到 `input.attack === true` 时自动推进连招链。AI 不需要知道链有多长、当前在第几段。
+旧版 `COMBO_TILT_TABLE` 按挥砍次数轮转倾斜角（起手方向取决于历史，表现为“随机挥出”）已删除；每段方向的唯一来源是预设的 `swingTilt`，同段每次播放方向一致。
 
 ---
 
@@ -164,17 +177,19 @@ export const CHARACTER_STATES = [
 ] as const
 ```
 
-**触发条件**：`CombatComponent.onDamageTaken` 回调中，若 `attackActive === true`（攻击/技能释放中被击中），设置 `combat.pendingFlinch = true`。
+**触发条件**：`CombatComponent.onDamageTaken` 回调中，若 `attackActive === true`（攻击/技能释放中被击中）且 `flinchImmunityTimer <= 0`，设置 `combat.pendingFlinch = true`。
+
+**受击保护窗口（防 stagger-lock）**：无限连段每段都会清空 `attackedTargets` 反复命中同一目标，若每次命中都能触发硬直，被击方每次重新起攻都会被下一击打断，永久锁在受击状态。因此 `flinching.exit` 挂 `flinchImmunityTimer = FLINCH_IMMUNITY_DURATION`（0.5s，> 轻链段间隔 0.4s），窗口内伤害照常结算但不再触发新硬直，保证被击方至少一个完整的反击/脱身窗口；计时器由 `world.ts` 主循环逐帧递减。
 
 **flinching 状态行为**：
 
 | 方法 | 行为 |
 |------|------|
-| `enter` | `attackActive = false`，触发技能冷却（被打断惩罚），`comboIndex = 0`，速度归零，`pendingFlinch = false` |
-| `update` | 速度持续归零，不响应移动输入，`body.wakeUp()` |
-| `exit` | 无特殊清理 |
+| `enter` | `attackActive = false`，`pendingFlinch = false`，`bufferedSkillIndex = -1`，阶段计时归零，速度归零（打断惩罚由 attacking.exit 的链终止冷却承担） |
+| `update` | 速度持续归零，不响应移动输入 |
+| `exit` | 挂受击保护窗口 `flinchImmunityTimer = FLINCH_IMMUNITY_DURATION` |
 
-**动画**：短暂后仰 + 手臂弹开，持续 0.25s（`FLINCH_DURATION`）。
+**动画**：短暂后仰 + 手臂弹开，持续 0.1s（`FLINCH_DURATION`）。
 
 **转换规则**（所有状态均需添加）：
 
@@ -186,11 +201,11 @@ export const CHARACTER_STATES = [
 // 优先级：dying > flinching > 其他转换
 ```
 
-### 4.2 Combo 输入取消（软中断）
+### 4.2 输入缓冲连段（软中断）
 
-- 仅在 `cancellable === true` 的阶段接受取消
-- 取消时当前技能进入冷却，**不**触发额外惩罚
-- 在 `comboTimer > 0` 窗口内检测到新的 `input.attack === true` 时执行
+- 攻击中按攻击键只写缓冲，不打断当前段；当前段（含 recovery）完整播完后才消费缓冲推进
+- 链内推进免冷却；收招时链终止冷却只挂起手槽，不惩罚链中段
+- 中途改按另一链的键 = 段末切链（需该起手槽冷却完毕）
 
 ### 4.3 Dash / Jump 取消（自中断）
 
@@ -359,7 +374,7 @@ const animator = getAnimator(state)
 
 ### 7.2 仅使用默认行为（无专用状态文件）
 
-仅在技能预设中定义 `phases` 数组即可。attacking meta-state 在找不到阶段专用 handler 时会使用默认行为（按 `moveSpeedMultiplier` 减速 + 斜坡防滑）。动画回退到通用 `attackingAnim`（按 `attackTotalProgress` 比例播放）。
+仅在技能预设中定义 `phases` 数组即可。attacking meta-state 在找不到阶段专用 handler 时会使用默认行为：有移动输入时按 `moveSpeedMultiplier` 缩放 `config.speed` 驱动移动（攻击中推进/突进，同 walking 的斜坡投影/吸附逻辑）；无移动输入时衰减残留速度 + 斜坡防滑。注意不能只衰减存量速度：无限连段下 AI 长期驻留 attacking，速度会衰减到 0 且永不补充，导致攻击一段时间后站桩不动。动画回退到通用 `attackingAnim`（按 `attackTotalProgress` 比例播放）。
 
 ### 7.3 新增 flinching 触发源
 
@@ -397,12 +412,13 @@ const animator = getAnimator(state)
 | `attackActive` | `boolean` | 保留 |
 | `attackTimer` | `number` | 保留，攻击总计时 |
 | `attackedTargets` | `Set<number>` | 保留 |
-| `swingTilt` | `number` | 保留（在阶段动画中使用） |
+| `swingTilt` | `number` | 保留（段固有倾斜角，enter/段末推进时从预设写入，非随机） |
 | **NEW** `phaseIndex` | `number` | 当前所在阶段索引（0-based） |
 | **NEW** `phaseTimer` | `number` | 当前阶段已用时间（秒） |
-| **NEW** `comboIndex` | `number` | 连招链当前位置 |
-| **NEW** `comboTimer` | `number` | 连招输入窗口剩余时间（秒） |
+| **NEW** `chainEntryIndex` | `number` | 本次起链的起手槽索引（链终止冷却挂该槽） |
+| **NEW** `bufferedSkillIndex` | `number` | 缓冲的目标技能槽索引（-1 = 无缓冲，段末消费） |
 | **NEW** `pendingFlinch` | `boolean` | 是否被标记为需要受击硬直 |
+| **NEW** `flinchImmunityTimer` | `number` | 受击保护剩余时间（秒）：flinching 退出后免再触发硬直，防无限连段锁死；伤害不受影响 |
 
 ---
 

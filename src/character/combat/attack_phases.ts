@@ -87,47 +87,6 @@ const FALLBACK_PHASE: AttackPhase = {
     animConfig: DEFAULT_ANIM,
 }
 
-/**
- * 近战阶段预设 — 按武器分类。
- *
- * 动画语义（各阶段定义"阶段末姿态"，相邻阶段自动链式衔接）：
- * - windup/draw：末姿态 = {X: backX·cosTilt, Z: backZ + backX·sinTilt, 肘: elbowBend, 前倾: bodyLean}
- * - aim/spin：维持蓄力姿态（同 windup 末姿态）
- * - strike/release：末姿态 = {X: forwardX·cosTilt, Z: forwardX·sinTilt, 肘: elbowBend, 前倾: bodyLean}
- * - recovery：末姿态 = 归位（X/Z 归零，肘/前倾取本阶段配置）
- */
-export const MELEE_PHASE_PRESETS: Record<string, readonly AttackPhase[]> = {
-    short_sword_slash: [
-        {name: 'strike', durationRatio: 0.65, moveSpeedMultiplier: 0.4, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -0.6, armSwingForwardX: 1.0, elbowBend: 0.1, bodyLean: 0.08}},
-        {name: 'recovery', durationRatio: 0.35, moveSpeedMultiplier: 0.5, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: 1.0, armSwingForwardX: 0, elbowBend: 0, bodyLean: 0}},
-    ],
-    long_sword_slash: [
-        {name: 'windup', durationRatio: 0.2, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, elbowBend: 0.5}},
-        {name: 'strike', durationRatio: 0.4, moveSpeedMultiplier: 0.1, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, armSwingForwardX: 2.0, elbowBend: 0.1, bodyLean: 0.12}},
-        {name: 'recovery', durationRatio: 0.4, moveSpeedMultiplier: 0.4, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: 2.0, armSwingForwardX: 0, elbowBend: 0, bodyLean: 0}},
-    ],
-    heavy_sword_slam: [
-        {name: 'windup', durationRatio: 0.35, moveSpeedMultiplier: 0.1, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -2.0, armSwingBackZ: 0, armSwingForwardX: 0, elbowBend: 0.8, bodyLean: -0.12, twoHanded: true}},
-        {name: 'strike', durationRatio: 0.3, moveSpeedMultiplier: 0, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -2.0, armSwingForwardX: 2.5, elbowBend: -0.1, bodyLean: 0.2, twoHanded: true}},
-        {name: 'recovery', durationRatio: 0.35, moveSpeedMultiplier: 0.2, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: 2.5, armSwingForwardX: 0, elbowBend: 0, bodyLean: 0, twoHanded: true, easing: 'ease_out'}},
-    ],
-    spear_thrust: [
-        {name: 'windup', durationRatio: 0.15, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, elbowBend: 0.9, attackType: 'thrust', twoHanded: true}},
-        {name: 'strike', durationRatio: 0.35, moveSpeedMultiplier: 0.1, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, armSwingForwardX: -1.2, elbowBend: 0, bodyLean: 0.15, attackType: 'thrust', twoHanded: true}},
-        {name: 'recovery', durationRatio: 0.5, moveSpeedMultiplier: 0.4, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.2, armSwingForwardX: 0, elbowBend: 0.15, attackType: 'thrust', twoHanded: true, easing: 'ease_out'}},
-    ],
-    dual_axe_spin: [
-        {name: 'windup', durationRatio: 0.1, moveSpeedMultiplier: 0.5, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -0.5, armSwingBackZ: -3.0, armSwingForwardX: 0, elbowBend: 0.2, attackType: 'spin'}},
-        {name: 'spin', durationRatio: 0.7, moveSpeedMultiplier: 0.5, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -0.5, armSwingBackZ: -3.0, armSwingForwardX: 0, elbowBend: 0.2, attackType: 'spin'}},
-        {name: 'recovery', durationRatio: 0.2, moveSpeedMultiplier: 0.6, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -0.5, armSwingBackZ: 0, armSwingForwardX: 0, elbowBend: 0, attackType: 'spin', easing: 'ease_out'}},
-    ],
-    war_hammer_smash: [
-        {name: 'windup', durationRatio: 0.35, moveSpeedMultiplier: 0.08, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -2.2, armSwingBackZ: 0, armSwingForwardX: 0, elbowBend: 0.9, bodyLean: -0.2, twoHanded: true}},
-        {name: 'strike', durationRatio: 0.25, moveSpeedMultiplier: 0, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -2.2, armSwingForwardX: 2.8, elbowBend: -0.15, bodyLean: 0.3, twoHanded: true}},
-        {name: 'recovery', durationRatio: 0.4, moveSpeedMultiplier: 0.15, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: 2.8, armSwingForwardX: 0, elbowBend: 0, bodyLean: 0, twoHanded: true, easing: 'ease_out'}},
-    ],
-}
-
 /** 远程阶段预设 — 按武器分类（swingTilt=0，X 幅值直接生效） */
 export const RANGED_PHASE_PRESETS: Record<string, readonly AttackPhase[]> = {
     longbow_shot: [
@@ -168,11 +127,14 @@ export const RANGED_PHASE_PRESETS: Record<string, readonly AttackPhase[]> = {
     ],
 }
 
-/** 连招输入窗口（秒）—— 攻击结束后在此时间内接受下一招输入 */
-export const COMBO_WINDOW = 0.3
-
 /** 受击硬直持续时间（秒） */
-export const FLINCH_DURATION = 0.25
+export const FLINCH_DURATION = 0.1
+
+/** 受击保护窗口（秒）：硬直结束后免再触发硬直的时长。
+ *  无限连段每段都会清空 attackedTargets 反复命中同一目标，若无保护窗口，
+ *  被击方每次重新起攻都会被下一击打断，永久锁在受击状态（stagger-lock）。
+ *  取 0.5s > 轻链段间隔 0.4s，保证被击方至少一个完整的反击/脱身窗口；伤害不受影响。 */
+export const FLINCH_IMMUNITY_DURATION = 0.5
 
 /** 解析阶段数组：未定义时返回回退单阶段 */
 export const resolvePhases = (phases: readonly AttackPhase[] | undefined): readonly AttackPhase[] =>

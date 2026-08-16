@@ -76,6 +76,8 @@ export interface AnimationContext {
     readonly horizontalTravel: number
     /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍 */
     readonly swingTilt: number
+    /** 当前攻击技能 id（仅 attacking 状态有效）— 链段切换时作为动画键触发姿态混合 */
+    readonly attackSkillId: string | undefined
     /** 当前攻击阶段名（仅在 attacking 状态有效，其他状态为 undefined） */
     readonly attackPhase: AttackPhaseName | undefined
     /** 当前阶段进度 0-1（phaseTimer / phaseDuration） */

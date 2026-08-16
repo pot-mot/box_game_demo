@@ -1,24 +1,23 @@
-import {COMBO_TILT_TABLE} from '../../character/state_machine/states/attacking.ts'
-
 // ── 展示清单 ──
 
-/** 展示角色清单条目：每个技能一个角色 */
+/** 展示角色清单条目：近战按武器（每武器一个角色播完整双链）、远程按技能 */
 export interface ShowcaseRosterEntry {
+    /** 近战 = 武器 id（MELEE_WEAPON_PRESETS 键），远程 = 技能 id（RANGED_SKILL_PRESETS 键） */
     readonly skillId: string
     readonly kind: 'melee' | 'ranged'
 }
 
 /**
- * 全部攻击技能的展示清单（6 近战 + 9 远程）。
- * skillId 必须与 MELEE_SKILL_PRESETS / RANGED_SKILL_PRESETS 的键一致。
+ * 全部攻击技能的展示清单（6 近战武器 + 9 远程技能）。
+ * 近战每武器一个角色播完整双链（轻1→轻2 → 停顿 → 重1→重2）。
  */
 export const SHOWCASE_ROSTER: readonly ShowcaseRosterEntry[] = [
-    {skillId: 'short_sword_slash', kind: 'melee'},
-    {skillId: 'long_sword_slash', kind: 'melee'},
-    {skillId: 'heavy_sword_slam', kind: 'melee'},
-    {skillId: 'spear_thrust', kind: 'melee'},
-    {skillId: 'dual_axe_spin', kind: 'melee'},
-    {skillId: 'war_hammer_smash', kind: 'melee'},
+    {skillId: 'short_sword', kind: 'melee'},
+    {skillId: 'long_sword', kind: 'melee'},
+    {skillId: 'heavy_sword', kind: 'melee'},
+    {skillId: 'spear', kind: 'melee'},
+    {skillId: 'dual_axe', kind: 'melee'},
+    {skillId: 'war_hammer', kind: 'melee'},
     {skillId: 'longbow_shot', kind: 'ranged'},
     {skillId: 'crossbow_bolt', kind: 'ranged'},
     {skillId: 'shotgun_blast', kind: 'ranged'},
@@ -30,14 +29,14 @@ export const SHOWCASE_ROSTER: readonly ShowcaseRosterEntry[] = [
     {skillId: 'throwing_dart_fling', kind: 'ranged'},
 ]
 
-/** 技能中文名（键 = 技能 id） */
+/** 技能中文名（近战键 = 武器 id，远程键 = 技能 id） */
 export const SKILL_DISPLAY_NAMES: Record<string, string> = {
-    short_sword_slash: '短剑挥斩',
-    long_sword_slash: '长剑挥斩',
-    heavy_sword_slam: '巨剑重劈',
-    spear_thrust: '长枪突刺',
-    dual_axe_spin: '双斧旋斩',
-    war_hammer_smash: '战锤猛砸',
+    short_sword: '短剑轻/重双链',
+    long_sword: '长剑轻/重双链',
+    heavy_sword: '巨剑轻/重双链',
+    spear: '长枪轻/重双链',
+    dual_axe: '双斧轻/重双链',
+    war_hammer: '战锤轻/重双链',
     longbow_shot: '长弓射击',
     crossbow_bolt: '弩箭速射',
     shotgun_blast: '霰弹轰击',
@@ -74,33 +73,19 @@ export const displayNameOf = (map: Record<string, string>, key: string): string 
 
 // ── 连段时序 ──
 
-/**
- * 连招倾斜角序列（rad）—— 直接引用生产状态机 attacking.ts 的源头常量并转出
- * （单一数据源，源头调整时此处自动跟随）。
- * 右上斜劈 → 左横斩 → 右横斩 → 近垂直竖劈，循环。
- */
-export {COMBO_TILT_TABLE}
-
-/** 近战连段演示总击数（= COMBO_TILT_TABLE 长度，逐个 tilt 各演示一击） */
-export const TOTAL_COMBO_HITS = COMBO_TILT_TABLE.length
-
-/**
- * 模拟玩家连打输入的触发点：进入 cancellable 阶段后达到此进度（0-1）即按住攻击键。
- * 取 0.5 兼顾两点——heavy_sword 的 cancellable 阶段是 windup（过早触发会把起手全吞掉），
- * 同时留足 comboTimer 余量（部分武器 recovery 后半程窗口已过期）。
- */
-export const COMBO_INPUT_RATIO = 0.5
+/** 链内段停顿序号：轻链播完后插入停顿再接重链（script 下标，仅近战生效） */
+export const CHAIN_PAUSE_AFTER_POS = 1
 
 // ── 循环时间线（秒） ──
 
 /** 循环起始待机时长（完整攻击展示前的缓冲） */
 export const IDLE_LEAD = 1.0
 
-/** 循环收尾待机时长（第 4 击播完后的缓冲） */
+/** 循环收尾待机时长（重链播完后的缓冲） */
 export const IDLE_TRAIL = 1.2
 
-/** 段内推进失败（无可取消阶段/连招窗口过期）后、重新起手前的待机时长 */
-export const RECOMBO_IDLE = 0.35
+/** 轻链与重链之间的停顿时长（模拟玩家松开攻击键） */
+export const CHAIN_PAUSE_IDLE = 0.6
 
 // ── 角色布局 ──
 

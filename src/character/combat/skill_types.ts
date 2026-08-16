@@ -14,6 +14,8 @@ export interface SkillSlot {
     cooldownTimer: number
     /** 连招链：本技能后可接的技能 ID 列表，按顺序执行（undefined = 无连招） */
     comboChain?: readonly string[]
+    /** 链起手槽标记：切链时更新 chainEntryIndex，链终止冷却只挂起手槽 */
+    isChainEntry?: boolean
 }
 
 /** 创建技能槽 */

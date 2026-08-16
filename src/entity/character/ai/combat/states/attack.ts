@@ -15,13 +15,20 @@ export const attackHandler: CombatStateHandler = {
         const dist = v3Length(_dir)
 
         const skill = character.combat.skills[character.combat.currentSkillIndex]
-        if (!skill || dist > skill.config.weapon.range) { setInput(0, 0, false); return }
+        if (!skill) { setInput(0, 0, false); return }
+
+        /* 出招门控：目标在武器攻击检测区域内才出招（checker 缺失时回退圆形距离判定） */
+        const inHitRegion = ctx.weaponHitChecker
+            ? ctx.weaponHitChecker(character, target)
+            : dist <= skill.config.weapon.range
+        if (!inHitRegion) { setInput(0, 0, false); return }
 
         const len = dist > 0.001 ? dist : 1
         const adx = _dir.x / len
         const adz = _dir.z / len
 
-        if (!character.combat.attackActive && skill.cooldownTimer <= 0) {
+        /* 攻击中持续按住 attack → 缓冲自动续链；未攻击时冷却完毕才起链 */
+        if (character.combat.attackActive || skill.cooldownTimer <= 0) {
             setInput(adx, adz, true)
         } else {
             setInput(0, 0, false)
@@ -55,9 +62,12 @@ export const attackHandler: CombatStateHandler = {
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const skillRange = skill?.config.weapon.range ?? 1.5
                 const detRange = skill?.config.weapon.detectionRange ?? 8
-                return v3Length(_dir) > skillRange && v3Length(_dir) < detRange
+                /* 出攻击检测区域 → 追击（checker 缺失时回退距离判定） */
+                const outOfRegion = ctx.weaponHitChecker
+                    ? !ctx.weaponHitChecker(character, target)
+                    : v3Length(_dir) > (skill?.config.weapon.range ?? 1.5)
+                return outOfRegion && v3Length(_dir) < detRange
             },
         },
         {

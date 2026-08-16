@@ -2,27 +2,29 @@
 
 入口：主页 http://localhost:5173/（`pnpm dev`）启动屏第三个按钮"展示模式"；不再有独立 URL。面板"⏻ 返回启动屏"可退出并重进其他模式（退出即释放面板/监听/场景资源）。
 
-## 展示清单（15 技能，每技能一个角色循环播放）
+## 展示清单（15 角色，每角色循环播放）
 
-- 近战 6（前排）：短剑挥斩 / 长剑挥斩 / 巨剑重劈 / 长枪突刺 / 双斧旋斩 / 战锤猛砸
-- 远程 9（后排）：长弓射击 / 弩箭速射 / 霰弹轰击 / 法杖能量球 / 魔杖追踪弹 / 飞斧投掷 / 手雷投掷 / 燃烧瓶投掷 / 飞镖疾掷
-- 近战按 `COMBO_TILT_TABLE`（attacking.ts 导出）4 个倾斜角逐击演示连段；远程播 draw → aim → release（不发射弹丸）。
+- 近战 6（前排）：短剑 / 长剑 / 巨剑 / 长枪 / 双斧 / 战锤 —— 每武器一个角色播完整双链。
+- 远程 9（后排）：长弓射击 / 弩箭速射 / 霰弹轰击 / 法杖能量球 / 魔杖追踪弹 / 飞斧投掷 / 手雷投掷 / 燃烧瓶投掷 / 飞镖疾掷。
+- 近战双链循环演示：轻链（轻1 竖劈/直刺 → 轻2）→ 停顿 0.6s（模拟松开攻击键）→ 重链（重1 横斩 → 重2 斜劈）→ 收尾待机 → 循环。每段 tilt 为段固有值（确定性，非轮转）。
+- 远程播 draw → aim → release（不发射弹丸）。
 
 ## 面板与控制
 
-- 左侧信息面板：技能/武器名、当前击号、阶段名与进度条、衔接方式（首次起手/段内推进/重新起手）。
+- 左侧信息面板：技能/武器名、当前段号（轻1/轻2/重1/重2）、阶段名与进度条、衔接方式（首次起手/段内推进/重新起手）。
 - 按钮：暂停/继续（或空格，防按住 auto-repeat）、单步（暂停时逐帧）、速度 0.1/0.25/0.5/1×、返回启动屏。
 - 点击角色或下拉聚焦（Esc 取消），其余角色变暗（含刀光）。
 - 相机：左键旋转 / 右键平移 / **滚轮缩放仅自由视角生效，聚焦期间（含过渡）锁定，退出后回归进入前的视角距离**。
 
 ## 与生产代码的镜像关系
 
-- 连段时序镜像 `src/character/state_machine/states/attacking.ts`：阶段推进、cancellable + COMBO_WINDOW 内推进、tilt 轮转。
-- 动画注入镜像 `src/entity/character/physics/world.ts`：按同名同语义字段构造 `AnimationContext` 交给 `createAppearanceSystem()`；阶段数据直接取技能预设 `phases`（绕开生产装配 attackToSkillSlots 丢 phases 的缺陷）。
+- 连段时序镜像 `src/character/state_machine/states/attacking.ts`：阶段推进、**段末推进**（最终阶段 recovery 完整播完后消费缓冲切换下一段，不出 attacking 状态）、段固有 `swingTilt`。
+- 技能槽装配镜像生产：近战直接调用 `buildMeleeSkillSlots(weaponId)` 获得 4 槽循环双链（槽 0=轻1、槽 1=重1、槽 2=轻2、槽 3=重2），远程单槽。
+- 动画注入镜像 `src/entity/character/physics/world.ts`：按同名同语义字段构造 `AnimationContext`（含 `attackSkillId`）交给 `createAppearanceSystem()`；段切换触发动画键（`state:skillId`）变化走快照混合，衔接平滑。
 - 装配遵循 modes 约定：`src/modes/showcase/index.ts` 返回 updater 由主页单 RAF 调度，复用共享渲染器、自建独立 Three 场景。
 
 ## 刻意差异（均已在代码注释标注）
 
 - 站立攻击：`horizontalSpeed` / `horizontalTravel` 恒 0（生产为物理体实时速度）；物理世界冻结不步进。
-- 单武器连段：等价于 comboChain 指向自身技能的推进分支。
-- **连段推进时的单帧姿态跳变（startPose 取 NEUTRAL）是生产已知 bug 的原样复现，用于人工确认，非展示场景缺陷。**
+- 缓冲恒有值：演示中假设玩家持续按键，段末自动推进；链间停顿模拟松键。
+- 省略冷却/hitbox/hitstop/命中执行器 —— 展示场景仅播动作时序。

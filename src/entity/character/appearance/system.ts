@@ -53,6 +53,8 @@ export interface AppearanceSystem {
 export const createAppearanceSystem = (): AppearanceSystem => {
     let currentState: CharacterState | null = null
     let currentModel: CharacterModel | null = null
+    /* 动画键：state + attacking 时的技能 id，链段切换也触发姿态混合 */
+    let currentAnimKey: string | null = null
     /* 水平速度 EMA 平滑：coyote 吸附/弹跳导致的速度突变不直接传导到动画频率 */
     let smoothedSpeed = 0
     /* 累计水平位移（平滑速度积分）：单调递增，供位移驱动动画使用（相位永不回退） */
@@ -62,7 +64,7 @@ export const createAppearanceSystem = (): AppearanceSystem => {
     let blendT = 0
 
     const onStateChange = (from: CharacterState | null, to: CharacterState, model: CharacterModel): void => {
-        const placeholderCtx = {stateTime: 0, horizontalSpeed: 0, horizontalTravel: 0, swingTilt: 0, attackPhase: undefined, attackPhaseProgress: 0, attackTotalProgress: 0, attackPhases: undefined, attackPhaseIndex: 0, weaponHeld: false}
+        const placeholderCtx = {stateTime: 0, horizontalSpeed: 0, horizontalTravel: 0, swingTilt: 0, attackSkillId: undefined, attackPhase: undefined, attackPhaseProgress: 0, attackTotalProgress: 0, attackPhases: undefined, attackPhaseIndex: 0, weaponHeld: false}
         /* 在旧状态 exit 归零之前抓取当前关节姿态，作为混合起点 */
         if (from && currentModel === model) {
             blendFrom = snapshotJoints(model)
@@ -79,9 +81,15 @@ export const createAppearanceSystem = (): AppearanceSystem => {
     }
 
     const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {
-        if (state !== currentState || model !== currentModel) {
+        /* 动画键：attacking 状态下附加技能 id，链段切换（同 state 不同段）也触发快照混合，
+         * 新段动画从上一段末姿态平滑进入，消除单帧姿态跳变 */
+        const animKey = state === 'attacking' && ctx.attackSkillId !== undefined
+            ? `${state}:${ctx.attackSkillId}`
+            : state
+        if (animKey !== currentAnimKey || model !== currentModel) {
             onStateChange(currentState, state, model)
-            /* 状态切换时对齐新状态初值，避免旧状态速度平滑残留 */
+            currentAnimKey = animKey
+            /* 动画键切换时对齐新状态初值，避免旧状态速度平滑残留 */
             smoothedSpeed = ctx.horizontalSpeed
             travel = 0
         }

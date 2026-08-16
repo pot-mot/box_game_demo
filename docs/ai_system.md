@@ -97,7 +97,7 @@ kite
   └→ inactive    (敌人超出范围)
 
 attack
-  ├→ chase       (超时 或 敌人在检测范围不在攻击范围)
+  ├→ chase       (超时 或 目标出攻击检测区域)
   ├→ flee        (cowardly，attackTimeout 后)
   └→ inactive    (敌人超出检测范围)
 
@@ -152,6 +152,21 @@ interface CombatStateHandler {
     transitions: readonly CombatTransition[]
 }
 ```
+
+### 2.5 近战攻击检测区域（weaponHitChecker）
+
+AI 出招门控不再用圆形距离判定（`dist <= weapon.range`），而是用与伤害判定同源的攻击检测区域：
+
+```ts
+/** 武器命中区域判定器：目标是否在角色当前武器的攻击检测区域内 */
+export type WeaponHitChecker = (character: CharacterEntity, target: CharacterEntity) => boolean
+```
+
+- **纯函数**：`entity/character/combat/melee_executor.ts` 导出 `testWeaponHitBox(weaponPos, skill, targetPos, targetScale)`（武器模型 AABB 与目标包围盒重叠判定，伤害判定同款几何），executor 与 AI 共用。
+- **注入链路**：`world.ts` `activateAI` 创建 AI 时传入闭包：取 `appearanceModels` 的 `weaponMesh.getWorldPosition` 作为武器位置 → `testWeaponHitBox`；朝向校验由 AI 已有面向目标逻辑承担。
+- **生效点**（仅近战）：`attack.update` 出招门控、`attack → chase`（出区域）guard、`chase → attack`（入区域）guard；`detectionRange`（索敌感知半径）语义不变；远程武器不受影响。
+- **回退**：checker 缺失（测试环境）时回退圆形距离判定，保证无装配环境下 AI 行为不变。
+- **与伤害判定的边界**：检测区域仅用于 AI 出招触发；实际伤害判定仍由 `melee_executor` 逐帧 AABB 检测执行，两者几何一致但职责分离。
 
 ---
 

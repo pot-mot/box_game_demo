@@ -1,19 +1,37 @@
 import type {StateHandler} from '../types.ts'
-import {SLOPE_WALK_THRESHOLD} from '../constants.ts'
-import {shouldFall, isSupportedOn, projectToSlope, applySlopeAntiGravity} from '../ground.ts'
-import {resolvePhases, COMBO_WINDOW} from '../../combat/attack_phases.ts'
+import type {CombatComponent} from '../../combat/types.ts'
+import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../constants.ts'
+import {shouldFall, isSupportedOn, projectToSlope, projectToSlopeAtSpeed, applySlopeAntiGravity, applySlopeSink} from '../ground.ts'
+import {resolvePhases} from '../../combat/attack_phases.ts'
+
+/** 取近战段固有倾斜角（确定性，非随机） */
+const segmentSwingTilt = (c: CombatComponent, skillIndex: number): number => {
+    const skill = c.skills[skillIndex]
+    if (skill?.config.type === 'melee') return skill.config.swingTilt ?? 0
+    return 0
+}
 
 /**
- * 连招倾斜角序列（rad，0=垂直劈，±PI/2=横斩）：
- * 右上斜劈 → 左横斩 → 右横斩 → 近垂直竖劈 循环。
- * 全部角度限在 (-PI/2, PI/2) 内，保证 cos>0（蓄力后摆、挥砍前挥），
- * 且 sin 分量提供左右方向——超出 ±90° 会把挥砍反向成后拉。
+ * 解析缓冲目标：按下攻击键时决定段末要推进到哪个技能槽
+ * - 请求槽与当前同链（当前段/链中下一段/本链起手槽）→ 推进到链中下一段，免冷却
+ * - 请求槽是另一链的起手槽且冷却完毕 → 切链
+ * - 其余（无链/索引越界/冷却中）→ 不缓冲
  */
-/** （导出供展示场景等复用，单一数据源） */
-export const COMBO_TILT_TABLE = [Math.PI * 0.15, -Math.PI * 0.4, Math.PI * 0.45, Math.PI * 0.08] as const
-
-const nextComboTilt = (c: {swingCount: number}): number =>
-    COMBO_TILT_TABLE[c.swingCount % COMBO_TILT_TABLE.length]
+const resolveBufferedSkillIndex = (c: CombatComponent, reqIndex: number): number => {
+    const reqSkill = c.skills[reqIndex]
+    if (!reqSkill) return -1
+    const cur = c.skills[c.currentSkillIndex]
+    const chainNextId = cur?.comboChain?.[0]
+    const chainNextIdx = chainNextId !== undefined
+        ? c.skills.findIndex(s => s.config.id === chainNextId)
+        : -1
+    const inReqChain = reqIndex === c.currentSkillIndex
+        || reqIndex === chainNextIdx
+        || reqIndex === c.chainEntryIndex
+    if (inReqChain && chainNextIdx !== -1) return chainNextIdx
+    if (reqSkill.isChainEntry && reqSkill.cooldownTimer <= 0) return reqIndex
+    return -1
+}
 
 /**
  * 阶段调度 meta-state — 统一入口，支持武器特定的阶段子状态委托。
@@ -35,17 +53,11 @@ export const attackingHandler: StateHandler = {
         c.attackTimer = 0
         c.phaseIndex = 0
         c.phaseTimer = 0
-        c.comboIndex = 0
-        c.comboTimer = COMBO_WINDOW
+        c.chainEntryIndex = c.currentSkillIndex
+        c.bufferedSkillIndex = -1
         c.attackedTargets.clear()
         c.pendingFlinch = false
-        const skill = c.skills[c.currentSkillIndex]
-        if (skill?.config.type === 'melee') {
-            c.swingTilt = nextComboTilt(c)
-            c.swingCount++
-        } else {
-            c.swingTilt = 0
-        }
+        c.swingTilt = segmentSwingTilt(c, c.currentSkillIndex)
         entity.body.wakeUp()
     },
     update: (dt, input, entity) => {
@@ -55,9 +67,6 @@ export const attackingHandler: StateHandler = {
 
         const skill = c.skills[c.currentSkillIndex]
         if (!skill) return
-
-        /* 连招窗口倒计时 */
-        c.comboTimer = Math.max(0, c.comboTimer - dt)
 
         const phases = resolvePhases(skill.config.phases)
 
@@ -76,37 +85,30 @@ export const attackingHandler: StateHandler = {
             }
         }
 
-        /* 连招推进：当前阶段可取消且有攻击输入且窗口未关闭 */
-        if (c.phaseIndex < phases.length) {
-            const phase = phases[c.phaseIndex]
-            if (phase.cancellable && input.attack && c.comboTimer > 0) {
-                const comboChain = c.skills[c.currentSkillIndex]?.comboChain
-                if (comboChain && c.comboIndex < comboChain.length) {
-                    const nextSkillId = comboChain[c.comboIndex]
-                    const nextIdx = c.skills.findIndex(s => s.config.id === nextSkillId)
-                    if (nextIdx !== -1 && c.skills[nextIdx].cooldownTimer <= 0) {
-                        /* 当前技能进入冷却 */
-                        skill.cooldownTimer = skill.config.cooldown
-                        /* 连招推进到下一技能 */
-                        c.currentSkillIndex = nextIdx
-                        c.comboIndex = 0
-                        c.attackTimer = 0
-                        c.phaseIndex = 0
-                        c.phaseTimer = 0
-                        c.comboTimer = COMBO_WINDOW
-                        c.attackedTargets.clear()
-                        const nextSkill = c.skills[nextIdx]
-                        if (nextSkill?.config.type === 'melee') {
-                            c.swingTilt = nextComboTilt(c)
-                            c.swingCount++
-                        } else {
-                            c.swingTilt = 0
-                        }
-                        entity.body.wakeUp()
-                        return
-                    }
-                }
+        /* 缓冲写入：AI 侧按住 attack 持续写入；玩家侧由 setPlayerAttack 直接写 bufferedSkillIndex。
+         * 新输入可覆写旧缓冲（中途改按另一键 = 切链） */
+        if (input.attack) {
+            const resolved = resolveBufferedSkillIndex(c, input.skillIndex)
+            if (resolved >= 0) c.bufferedSkillIndex = resolved
+        }
+
+        /* 缓冲连段推进：最终阶段（recovery）完整播完后才消费缓冲，不检查冷却（冷却只挡起链） */
+        if (c.phaseIndex >= phases.length && c.bufferedSkillIndex >= 0) {
+            const nextIdx = c.bufferedSkillIndex
+            const nextSkill = c.skills[nextIdx]
+            if (nextSkill) {
+                c.bufferedSkillIndex = -1
+                c.currentSkillIndex = nextIdx
+                if (nextSkill.isChainEntry) c.chainEntryIndex = nextIdx
+                c.attackTimer = 0
+                c.phaseIndex = 0
+                c.phaseTimer = 0
+                c.attackedTargets.clear()
+                c.swingTilt = segmentSwingTilt(c, nextIdx)
+                entity.body.wakeUp()
+                return
             }
+            c.bufferedSkillIndex = -1
         }
 
         /* 委托到阶段子状态 handler 或默认行为 */
@@ -123,29 +125,43 @@ export const attackingHandler: StateHandler = {
                 attackPhase: phases[c.phaseIndex].name,
             })
         } else {
-            /* 默认阶段行为 */
+            /* 默认阶段行为：moveSpeedMultiplier 缩放输入驱动的移动速度（攻击中推进/突进）。
+             * 无限连段下 AI 长期驻留 attacking，若只衰减存量速度会衰减到 0 且永不补充，
+             * 导致攻击一段时间后站桩不动；无移动输入时才衰减残留速度（站桩出招） */
             const moveMul = c.phaseIndex < phases.length
                 ? phases[c.phaseIndex].moveSpeedMultiplier
                 : 0.3
-            const linvel = entity.body.linvel()
-            const vx = linvel.x * moveMul
-            const vz = linvel.z * moveMul
-            if (!projectToSlope(entity, 0, 0, SLOPE_WALK_THRESHOLD)) {
-                entity.body.setLinvel({x: vx, y: linvel.y, z: vz}, true)
+            const inputLen = Math.hypot(input.dx, input.dz)
+            if (inputLen > 0.001) {
+                const speed = entity.config.speed * moveMul
+                const dx = input.dx / inputLen
+                const dz = input.dz / inputLen
+                if (!projectToSlopeAtSpeed(entity, dx, dz, speed, SLOPE_WALK_THRESHOLD)) {
+                    /* 行走阈值以下接触：可能是瞬态棱法线伪影，同 walking 保留二级投影防甩离表面 */
+                    if (!projectToSlopeAtSpeed(entity, dx, dz, speed, SLOPE_TRANSIENT_MIN_NY)) {
+                        const linvel = entity.body.linvel()
+                        entity.body.setLinvel({x: dx * speed, y: linvel.y, z: dz * speed}, true)
+                    }
+                } else {
+                    applySlopeSink(entity)
+                }
             } else {
-                applySlopeAntiGravity(entity)
+                const linvel = entity.body.linvel()
+                if (!projectToSlope(entity, 0, 0, SLOPE_WALK_THRESHOLD)) {
+                    entity.body.setLinvel({x: linvel.x * moveMul, y: linvel.y, z: linvel.z * moveMul}, true)
+                } else {
+                    applySlopeAntiGravity(entity)
+                }
             }
         }
     },
     exit: (entity) => {
         const c = entity.combat
         c.attackActive = false
-        const skill = c.skills[c.currentSkillIndex]
-        if (skill) skill.cooldownTimer = skill.config.cooldown
-        /* 连招终止时重置索引；正常退出时 comboIndex 由连招推进逻辑维护 */
-        if (c.comboTimer <= 0) {
-            c.comboIndex = 0
-        }
+        c.bufferedSkillIndex = -1
+        /* 链终止冷却只挂起手槽，不惩罚链中段 */
+        const entry = c.skills[c.chainEntryIndex]
+        if (entry) entry.cooldownTimer = entry.config.cooldown
     },
     transitions: [
         {

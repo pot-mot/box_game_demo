@@ -2,8 +2,9 @@ import {describe, it, expect} from 'vitest'
 import {
     applyEasing, strikeCurve,
     ATTACK_PHASES, EASING_TYPES, ATTACK_TYPES,
-    MELEE_PHASE_PRESETS, RANGED_PHASE_PRESETS, resolvePhases,
+    RANGED_PHASE_PRESETS, resolvePhases,
 } from './attack_phases.ts'
+import {MELEE_SKILL_PRESETS, MELEE_CHAIN_SLOTS} from './melee_skill.ts'
 
 describe('applyEasing', () => {
     it('端点恒等：f(0)=0, f(1)=1', () => {
@@ -73,8 +74,9 @@ describe('strikeCurve（末端加速打击曲线）', () => {
 })
 
 describe('阶段预设完整性', () => {
+    /* 近战链段预设的 phases + 远程阶段预设 */
     const allPresets: Record<string, readonly unknown[]> = {
-        ...MELEE_PHASE_PRESETS,
+        ...Object.fromEntries(Object.entries(MELEE_SKILL_PRESETS).map(([id, s]) => [id, s.phases ?? []])),
         ...RANGED_PHASE_PRESETS,
     }
 
@@ -104,6 +106,53 @@ describe('阶段预设完整性', () => {
     it('resolvePhases 空数组回退到单阶段', () => {
         expect(resolvePhases(undefined)).toHaveLength(1)
         expect(resolvePhases([])).toHaveLength(1)
-        expect(resolvePhases(MELEE_PHASE_PRESETS.long_sword_slash)).toHaveLength(3)
+        expect(resolvePhases(MELEE_SKILL_PRESETS.long_sword_light_1.phases)).toHaveLength(2)
+    })
+})
+
+describe('近战链段预设约束（比例/类型/tilt 确定性）', () => {
+    const weaponIds = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
+
+    it('每把武器 4 段齐全（strike + recovery 两段式）', () => {
+        for (const weaponId of weaponIds) {
+            for (const slot of MELEE_CHAIN_SLOTS) {
+                const preset = MELEE_SKILL_PRESETS[`${weaponId}_${slot}`]
+                expect(preset, `${weaponId}_${slot}`).toBeDefined()
+                expect(preset.phases).toHaveLength(2)
+                expect(preset.phases?.[0].name).toBe('strike')
+                expect(preset.phases?.[1].name).toBe('recovery')
+            }
+        }
+    })
+
+    it('轻段 strike:recovery = 1:1，重段 = 3:2', () => {
+        for (const weaponId of weaponIds) {
+            for (const slot of MELEE_CHAIN_SLOTS) {
+                const preset = MELEE_SKILL_PRESETS[`${weaponId}_${slot}`]
+                const strike = preset.phases?.[0].durationRatio ?? 0
+                const isLight = slot === 'light_1' || slot === 'light_2'
+                expect(strike, `${weaponId}_${slot}`).toBeCloseTo(isLight ? 0.5 : 0.6, 6)
+            }
+        }
+    })
+
+    it('段动作类型：轻1 竖斩 / 轻2 直刺 / 重1 横斩 / 重2 斜劈', () => {
+        for (const weaponId of weaponIds) {
+            const strikeType = (slot: string): string =>
+                MELEE_SKILL_PRESETS[`${weaponId}_${slot}`].phases?.[0].animConfig.attackType ?? ''
+            expect(strikeType('light_1')).toBe('slash')
+            expect(strikeType('light_2')).toBe('thrust')
+            expect(strikeType('heavy_1')).toBe('slash')
+            expect(strikeType('heavy_2')).toBe('slash')
+        }
+    })
+
+    it('swingTilt 段固有确定性：轻1/轻2=0，重1=左向横斩，重2=右向斜劈', () => {
+        for (const weaponId of weaponIds) {
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_light_1`].swingTilt ?? 0).toBe(0)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_light_2`].swingTilt ?? 0).toBe(0)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_1`].swingTilt).toBeGreaterThan(Math.PI * 0.4)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_2`].swingTilt).toBeLessThan(0)
+        }
     })
 })

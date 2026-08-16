@@ -1,5 +1,5 @@
 import type {AnimationHandler} from '../types.ts'
-import {WEAPON_IDLE_SWAY, WEAPON_IDLE_ELBOW} from '../constants.ts'
+import {WEAPON_READY_SHOULDER, WEAPON_READY_ELBOW, WEAPON_READY_SWAY} from '../constants.ts'
 
 export const idleAnim: AnimationHandler = {
     enter: (model) => {
@@ -17,13 +17,15 @@ export const idleAnim: AnimationHandler = {
         const t = ctx.stateTime
         void dt
 
-        /* 持械时持械臂收敛为贴身微摆，武器随前臂自然携带 */
-        const rightSway = Math.sin(t * 1.8) * (ctx.weaponHeld ? WEAPON_IDLE_SWAY : 0.06)
+        /* 持械时持械臂戒备位（肩微前举 + 肘弯加大 + 武器竖持微摆），空手自然下垂微摆 */
+        const rightSway = ctx.weaponHeld
+            ? WEAPON_READY_SHOULDER + Math.sin(t * 1.8) * WEAPON_READY_SWAY
+            : Math.sin(t * 1.8) * 0.06
         const armSway = Math.sin(t * 1.8) * 0.06
         model.rightArmShoulder.rotation.x = rightSway
         model.leftArmShoulder.rotation.x = -armSway
 
-        model.rightArmElbow.rotation.x = ctx.weaponHeld ? WEAPON_IDLE_ELBOW : 0.08
+        model.rightArmElbow.rotation.x = ctx.weaponHeld ? WEAPON_READY_ELBOW : 0.08
         model.leftArmElbow.rotation.x = 0.08
 
         model.rightLegHip.rotation.x = 0
