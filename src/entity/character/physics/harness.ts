@@ -14,6 +14,7 @@ import {computeSeparation, separationSlopeDy} from './separation.ts'
 import {CHARACTER_SEPARATION_SPEED, CHARACTER_LINEAR_DAMPING} from './constants.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {createSkillSlot} from '../../../character/combat/skill_types.ts'
+import {createDashSkillSlot} from '../../../character/combat/dash_skill.ts'
 import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE} from '../constants.ts'
@@ -96,7 +97,6 @@ export const makeChar = (
         combatStrategy: 'tactical',
         isDying: false,
         dyingTimer: 0,
-        dashCooldownTimer: 0,
         /* 测试专用最小 combat mock（集中窄化一次，避免测试文件散落 as unknown as） */
         combat: {
             faction: 0,
@@ -110,6 +110,7 @@ export const makeChar = (
             onDeath: null,
             onDamageDealt: null,
             skills: [slot],
+            dashSkill: createDashSkillSlot(),
             currentSkillIndex: 0,
             attackActive: false,
             attackTimer: 0,

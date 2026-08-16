@@ -8,8 +8,12 @@ import type { SkillSlot } from './skill_types.ts'
 export interface MeleeSkillConfig {
     readonly id: string
     readonly type: 'melee'
+    /** 冷却时间（秒）— 普通攻击为 0；非 0 时从触发时刻开始计时，只挡起手 */
     readonly cooldown: number
+    /** 动作时间（秒）— 动作阶段（windup/strike 等，不含恢复）的总时长 */
     readonly duration: number
+    /** 恢复时间（秒）— 动作结束后的后摇时长（0 = 无恢复段） */
+    readonly recovery: number
     readonly weapon: MeleeWeaponConfig
     /** 攻击阶段序列（undefined = 使用默认单阶段） */
     readonly phases?: readonly AttackPhase[]
@@ -19,14 +23,14 @@ export interface MeleeSkillConfig {
 
 /* ── 链段节奏（短剑精调基准，其余近战沿用，后续逐一修正） ── */
 
-/** 轻段总时长（秒）：strike:recovery = 1:1 */
-export const MELEE_LIGHT_DURATION = 0.4
-/** 重段总时长（秒）：strike:recovery = 3:2 */
-export const MELEE_HEAVY_DURATION = 0.5
-/** 轻链终止冷却（秒）— 挂轻击起手槽 */
-export const MELEE_LIGHT_CHAIN_COOLDOWN = 0.3
-/** 重链终止冷却（秒）— 挂重击起手槽 */
-export const MELEE_HEAVY_CHAIN_COOLDOWN = 0.6
+/** 轻段动作时间（秒）— 仅挥砍动作，不含后摇 */
+export const MELEE_LIGHT_DURATION = 0.2
+/** 重段动作时间（秒）— 仅挥砍动作，不含后摇 */
+export const MELEE_HEAVY_DURATION = 0.3
+/** 轻段恢复时间（秒）— 动作结束后的后摇 */
+export const MELEE_LIGHT_RECOVERY = 0.2
+/** 重段恢复时间（秒）— 动作结束后的后摇 */
+export const MELEE_HEAVY_RECOVERY = 0.2
 /** 重段伤害倍率（相对武器基础伤害） */
 const HEAVY_DAMAGE_MULTIPLIER = 1.6
 
@@ -84,13 +88,12 @@ const segmentTilt = (slot: MeleeChainSlot): number => {
     }
 }
 
-/** 生成单个链段的阶段序列（strike + recovery） */
+/** 生成单个链段的阶段序列（strike 动作段 + recovery 恢复段；
+ * strike 时长由 config.duration 决定（ratio = 1），recovery 时长取 config.recovery（ratio 不参与计算） */
 const buildSegmentPhases = (slot: MeleeChainSlot, style: MeleeChainStyle): readonly AttackPhase[] => {
-    const isLight = slot === 'light_1' || slot === 'light_2'
-    const strikeRatio = isLight ? 0.5 : 0.6
     return [
-        {name: 'strike', durationRatio: strikeRatio, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: strikeAnim(slot, style)},
-        {name: 'recovery', durationRatio: 1 - strikeRatio, moveSpeedMultiplier: 0.35, cancellable: false, animConfig: {...DEFAULT_ANIM, elbowBend: 0.2, bodyLean: 0, twoHanded: style.twoHanded}},
+        {name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: strikeAnim(slot, style)},
+        {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.35, cancellable: false, animConfig: {...DEFAULT_ANIM, elbowBend: 0.2, bodyLean: 0, twoHanded: style.twoHanded}},
     ]
 }
 
@@ -100,13 +103,13 @@ const buildWeaponChainConfigs = (weaponId: string): Record<MeleeChainSlot, Melee
     const style = MELEE_CHAIN_STYLES[weapon.id] ?? DEFAULT_CHAIN_STYLE
     const make = (slot: MeleeChainSlot): MeleeSkillConfig => {
         const isLight = slot === 'light_1' || slot === 'light_2'
-        const isEntry = slot === 'light_1' || slot === 'heavy_1'
         return {
             id: `${weapon.id}_${slot}`,
             type: 'melee',
-            /* 链终止冷却只挂起手槽，链中段不设冷却 */
-            cooldown: !isEntry ? 0 : isLight ? MELEE_LIGHT_CHAIN_COOLDOWN : MELEE_HEAVY_CHAIN_COOLDOWN,
+            /* 普通攻击无冷却：节奏由动作时间 + 恢复时间自然形成 */
+            cooldown: 0,
             duration: isLight ? MELEE_LIGHT_DURATION : MELEE_HEAVY_DURATION,
+            recovery: isLight ? MELEE_LIGHT_RECOVERY : MELEE_HEAVY_RECOVERY,
             weapon,
             phases: buildSegmentPhases(slot, style),
             swingTilt: segmentTilt(slot),
@@ -131,15 +134,13 @@ export const MELEE_SKILL_PRESETS: Record<string, MeleeSkillConfig> = (() => {
 export interface MeleeSkillSlotOverrides {
     readonly damage?: number
     readonly range?: number
-    /** 覆写链终止冷却（同时作用于轻/重起手槽） */
-    readonly cooldown?: number
 }
 
 /**
  * 装配近战武器技能槽：[轻1, 重1, 轻2, 重2]
  * - 槽 0 = 轻击键起手、槽 1 = 重击键起手
  * - 循环链：轻1↔轻2、重1↔重2（comboChain 指向链中下一段）
- * - 起手槽标 isChainEntry，链终止冷却挂起手槽
+ * - 起手槽标 isChainEntry；普通攻击冷却恒 0（节奏由动作/恢复时间形成）
  * - 伤害/侦测范围可被存档覆写，段时长/阶段/链结构取预设
  */
 export const buildMeleeSkillSlots = (weaponId: string, overrides: MeleeSkillSlotOverrides = {}): SkillSlot[] => {
@@ -149,15 +150,13 @@ export const buildMeleeSkillSlots = (weaponId: string, overrides: MeleeSkillSlot
         damage: (overrides.damage ?? baseWeapon.damage) * damageMul,
         range: overrides.range ?? baseWeapon.range,
     })
-    const configOf = (slot: MeleeChainSlot, damageMul: number, cooldown?: number): MeleeSkillConfig => {
+    const configOf = (slot: MeleeChainSlot, damageMul: number): MeleeSkillConfig => {
         const preset = MELEE_SKILL_PRESETS[`${baseWeapon.id}_${slot}`]
-        return {...preset, cooldown: cooldown ?? preset.cooldown, weapon: weaponOf(damageMul)}
+        return {...preset, weapon: weaponOf(damageMul)}
     }
-    const lightCooldown = overrides.cooldown ?? MELEE_LIGHT_CHAIN_COOLDOWN
-    const heavyCooldown = overrides.cooldown ?? MELEE_HEAVY_CHAIN_COOLDOWN
     return [
-        {config: configOf('light_1', 1, lightCooldown), cooldownTimer: 0, comboChain: [`${baseWeapon.id}_light_2`], isChainEntry: true},
-        {config: configOf('heavy_1', HEAVY_DAMAGE_MULTIPLIER, heavyCooldown), cooldownTimer: 0, comboChain: [`${baseWeapon.id}_heavy_2`], isChainEntry: true},
+        {config: configOf('light_1', 1), cooldownTimer: 0, comboChain: [`${baseWeapon.id}_light_2`], isChainEntry: true},
+        {config: configOf('heavy_1', HEAVY_DAMAGE_MULTIPLIER), cooldownTimer: 0, comboChain: [`${baseWeapon.id}_heavy_2`], isChainEntry: true},
         {config: configOf('light_2', 1), cooldownTimer: 0, comboChain: [`${baseWeapon.id}_light_1`]},
         {config: configOf('heavy_2', HEAVY_DAMAGE_MULTIPLIER), cooldownTimer: 0, comboChain: [`${baseWeapon.id}_heavy_1`]},
     ]

@@ -2,10 +2,10 @@ import {describe, it, expect} from 'vitest'
 import {
     buildMeleeSkillSlots,
     MELEE_CHAIN_SLOTS,
-    MELEE_HEAVY_CHAIN_COOLDOWN,
     MELEE_HEAVY_DURATION,
-    MELEE_LIGHT_CHAIN_COOLDOWN,
+    MELEE_HEAVY_RECOVERY,
     MELEE_LIGHT_DURATION,
+    MELEE_LIGHT_RECOVERY,
     MELEE_SKILL_PRESETS,
     type MeleeSkillConfig,
 } from './melee_skill.ts'
@@ -28,19 +28,23 @@ describe('MELEE_SKILL_PRESETS（链段预设）', () => {
         expect(MELEE_SKILL_PRESETS[key].type).toBe('melee')
     })
 
-    it('轻段时长统一 0.4s，重段时长统一 0.5s', () => {
+    it('轻段动作 0.2s + 恢复 0.2s，重段动作 0.3s + 恢复 0.2s', () => {
         for (const weaponId of weaponIds) {
             expect(MELEE_SKILL_PRESETS[`${weaponId}_light_1`].duration).toBe(MELEE_LIGHT_DURATION)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_light_1`].recovery).toBe(MELEE_LIGHT_RECOVERY)
             expect(MELEE_SKILL_PRESETS[`${weaponId}_light_2`].duration).toBe(MELEE_LIGHT_DURATION)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_light_2`].recovery).toBe(MELEE_LIGHT_RECOVERY)
             expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_1`].duration).toBe(MELEE_HEAVY_DURATION)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_1`].recovery).toBe(MELEE_HEAVY_RECOVERY)
             expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_2`].duration).toBe(MELEE_HEAVY_DURATION)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_2`].recovery).toBe(MELEE_HEAVY_RECOVERY)
         }
     })
 
-    it('链终止冷却只挂起手段（_1），链中段（_2）冷却为 0', () => {
+    it('普通攻击冷却全为 0（节奏由动作/恢复时间形成）', () => {
         for (const weaponId of weaponIds) {
-            expect(MELEE_SKILL_PRESETS[`${weaponId}_light_1`].cooldown).toBe(MELEE_LIGHT_CHAIN_COOLDOWN)
-            expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_1`].cooldown).toBe(MELEE_HEAVY_CHAIN_COOLDOWN)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_light_1`].cooldown).toBe(0)
+            expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_1`].cooldown).toBe(0)
             expect(MELEE_SKILL_PRESETS[`${weaponId}_light_2`].cooldown).toBe(0)
             expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_2`].cooldown).toBe(0)
         }
@@ -108,15 +112,9 @@ describe('buildMeleeSkillSlots（4 槽结构与链闭合）', () => {
         expect(slots[0].config.weapon.damage).toBe(99)
         expect(slots[1].config.weapon.damage).toBeCloseTo(99 * 1.6)
         expect(slots[0].config.duration).toBe(MELEE_LIGHT_DURATION)
+        expect(slots[0].config.recovery).toBe(MELEE_LIGHT_RECOVERY)
         expect(slots[1].config.duration).toBe(MELEE_HEAVY_DURATION)
-    })
-
-    it('overrides.cooldown 同时覆写轻/重起手槽链终止冷却', () => {
-        const slots = buildMeleeSkillSlots('short_sword', {cooldown: 1.5})
-        expect(slots[0].config.cooldown).toBe(1.5)
-        expect(slots[1].config.cooldown).toBe(1.5)
-        expect(slots[2].config.cooldown).toBe(0)
-        expect(slots[3].config.cooldown).toBe(0)
+        expect(slots[1].config.recovery).toBe(MELEE_HEAVY_RECOVERY)
     })
 
     it('全部近战武器均可装配出闭合双链', () => {

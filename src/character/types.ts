@@ -50,9 +50,6 @@ export interface CharacterEntity {
     isDying: boolean
     dyingTimer: number
 
-    /** 冲刺冷却计时（秒，0 = 可用） */
-    dashCooldownTimer: number
-
     combat: CombatComponent
 
     stateMachine: CharacterStateMachine

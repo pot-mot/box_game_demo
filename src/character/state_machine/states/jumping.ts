@@ -59,7 +59,7 @@ export const jumpingHandler: StateHandler = {
         },
         {
             to: 'dashing',
-            guard: (input, entity) => input.sprint && entity.dashCooldownTimer <= 0,
+            guard: (input, entity) => input.sprint && entity.combat.dashSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',

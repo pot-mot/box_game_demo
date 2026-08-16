@@ -210,8 +210,8 @@ export type WeaponHitChecker = (character: CharacterEntity, target: CharacterEnt
 | `AIR_DAMPING` | `0.95` | 空中摩擦 |
 | `AIR_CONTROL_FACTOR` | `0.15` | 空中操控系数 |
 | `DASH_SPEED_MULTIPLIER` | `2` | 冲刺速度倍率 |
-| `DASH_DURATION` | `0.25` | 冲刺持续时间（秒） |
-| `DASH_COOLDOWN` | `1.0` | 冲刺冷却时间（秒） |
+| `DASH_DURATION` | `0.25` | 冲刺动作时间（秒）；定义已迁至 `character/combat/dash_skill.ts`（冲刺技能三计时属性），本处仅转出 |
+| `DASH_COOLDOWN` | `1.0` | 冲刺冷却时间（秒）；同上 |
 | `SLOPE_WALK_THRESHOLD` | `0.06` | 站立所需最小法线 Y（≈86.6°） |
 | `SLOPE_TRANSIENT_MIN_NY` | `0.01` | 行走瞬态棱法线容忍下限（胶囊跨 trimesh 棱线时的限速投影，防甩离墙面） |
 | `SLOPE_RECOVER_THRESHOLD` | `0.08` | 从下落恢复所需最小法线 Y |

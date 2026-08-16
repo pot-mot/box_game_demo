@@ -5,6 +5,7 @@ import {createNavSensor} from './sensor.ts'
 import {createNavRunContext, processNav} from './machine.ts'
 import type {NavSensor, NavRunContext, NavConfig} from './types.ts'
 import type {CharacterEntity} from '../../../../character/types.ts'
+import {createDashSkillSlot} from '../../../../character/combat/dash_skill.ts'
 import {CHARACTER_BASE_SIZE} from '../../constants.ts'
 
 const FIXED_DT = 1 / 60
@@ -79,7 +80,6 @@ const createCharEntity = (
         combatStrategy: 'tactical' as const,
         isDying: false,
         dyingTimer: 0,
-        dashCooldownTimer: 0,
         combat: {
             faction: 0,
             isDead: false,
@@ -87,6 +87,7 @@ const createCharEntity = (
             attackTendency: () => false,
             tendencyConfig: {tendencyId: 'hostileExceptSelf' as const},
             skills: [],
+            dashSkill: createDashSkillSlot(),
             currentSkillIndex: 0,
             attackedTargets: new Set(),
             attackDirX: 0,
@@ -484,12 +485,12 @@ const createCharOnBox = (boxTopY: number): CharacterEntity => {
         airborneTime: 0, groundedTime: 0, rowText: 'OnBox',
         isPlayer: false, navEnabled: true,
         peaceStrategy: 'patrol' as const, combatStrategy: 'tactical' as const,
-        isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
+        isDying: false, dyingTimer: 0,
         combat: {
             faction: 0, isDead: false, attackActive: false,
             attackTendency: () => false,
             tendencyConfig: {tendencyId: 'hostileExceptSelf' as const},
-            skills: [], currentSkillIndex: 0,
+            skills: [], dashSkill: createDashSkillSlot(), currentSkillIndex: 0,
             attackedTargets: new Set(), attackDirX: 0, attackDirZ: 0, swingTilt: 0,
         },
         stateMachine: {

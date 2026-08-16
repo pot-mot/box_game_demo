@@ -2,7 +2,7 @@ import {describe, it, expect} from 'vitest'
 import {
     applyEasing, strikeCurve,
     ATTACK_PHASES, EASING_TYPES, ATTACK_TYPES,
-    RANGED_PHASE_PRESETS, resolvePhases,
+    RANGED_PHASE_PRESETS, resolvePhases, phaseDurationOf,
 } from './attack_phases.ts'
 import {MELEE_SKILL_PRESETS, MELEE_CHAIN_SLOTS} from './melee_skill.ts'
 
@@ -125,13 +125,12 @@ describe('近战链段预设约束（比例/类型/tilt 确定性）', () => {
         }
     })
 
-    it('轻段 strike:recovery = 1:1，重段 = 3:2', () => {
+    it('strike ratio = 1，recovery ratio = 0（恢复时长取 config.recovery 不参与分摊）', () => {
         for (const weaponId of weaponIds) {
             for (const slot of MELEE_CHAIN_SLOTS) {
                 const preset = MELEE_SKILL_PRESETS[`${weaponId}_${slot}`]
-                const strike = preset.phases?.[0].durationRatio ?? 0
-                const isLight = slot === 'light_1' || slot === 'light_2'
-                expect(strike, `${weaponId}_${slot}`).toBeCloseTo(isLight ? 0.5 : 0.6, 6)
+                expect(preset.phases?.[0].durationRatio, `${weaponId}_${slot} strike`).toBe(1)
+                expect(preset.phases?.[1].durationRatio, `${weaponId}_${slot} recovery`).toBe(0)
             }
         }
     })
@@ -154,5 +153,24 @@ describe('近战链段预设约束（比例/类型/tilt 确定性）', () => {
             expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_1`].swingTilt).toBeGreaterThan(Math.PI * 0.4)
             expect(MELEE_SKILL_PRESETS[`${weaponId}_heavy_2`].swingTilt).toBeLessThan(0)
         }
+    })
+})
+
+describe('phaseDurationOf（单阶段时长）', () => {
+    const preset = MELEE_SKILL_PRESETS['short_sword_light_1']
+    const phases = preset.phases ?? []
+
+    it('动作阶段按 durationRatio 从动作时间分摊', () => {
+        expect(phaseDurationOf(phases[0], preset.duration, preset.recovery)).toBeCloseTo(preset.duration * phases[0].durationRatio)
+    })
+
+    it('recovery 阶段取 config.recovery（ratio 不参与）', () => {
+        expect(phaseDurationOf(phases[1], preset.duration, preset.recovery)).toBeCloseTo(preset.recovery)
+        expect(phaseDurationOf(phases[1], preset.duration, 0.7)).toBeCloseTo(0.7)
+    })
+
+    it('段总时长 = 动作时间 + 恢复时间', () => {
+        const total = phases.reduce((sum, p) => sum + phaseDurationOf(p, preset.duration, preset.recovery), 0)
+        expect(total).toBeCloseTo(preset.duration + preset.recovery)
     })
 })

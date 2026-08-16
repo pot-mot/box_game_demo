@@ -80,7 +80,7 @@ export const DEFAULT_ANIM: AttackAnimConfig = {
     overshootRatio: 0.1,
 }
 
-/** 回退单阶段：与重构前行为完全一致 */
+/** 回退单阶段：与重构前行为完全一致（无独立恢复段，duration 即全程） */
 const FALLBACK_PHASE: AttackPhase = {
     name: 'strike', durationRatio: 1,
     moveSpeedMultiplier: 0.3, cancellable: false,
@@ -139,6 +139,14 @@ export const FLINCH_IMMUNITY_DURATION = 0.5
 /** 解析阶段数组：未定义时返回回退单阶段 */
 export const resolvePhases = (phases: readonly AttackPhase[] | undefined): readonly AttackPhase[] =>
     phases !== undefined && phases.length > 0 ? phases : [FALLBACK_PHASE]
+
+/**
+ * 单阶段时长：recovery 阶段取技能配置的恢复时间（config.recovery），
+ * 其余动作阶段按 durationRatio 从动作时间（config.duration）中分摊（动作阶段比例和应为 1）。
+ * 技能总时长 = duration + recovery。
+ */
+export const phaseDurationOf = (phase: AttackPhase, duration: number, recovery: number): number =>
+    phase.name === 'recovery' ? recovery : duration * phase.durationRatio
 
 // ── 强类型推导 ──
 

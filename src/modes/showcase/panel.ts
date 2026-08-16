@@ -1,4 +1,4 @@
-import type {ActorStatus} from './actor.ts'
+import type {ActorStatus, SkillTimerStatus} from './actor.ts'
 import {SPEED_OPTIONS} from './constants.ts'
 
 /** 面板控件的回调（由模式装配注入实际控制逻辑） */
@@ -76,6 +76,15 @@ const injectStyles = (): HTMLStyleElement => {
 .sch-detail .sch-title { margin-bottom: 4px; }
 .sch-totalbar { height: 6px; border-radius: 3px; background: #2a2f3a; overflow: hidden; margin: 6px 0; }
 .sch-totalfill { height: 100%; background: #ffd070; width: 0; }
+.sch-skillhead { display: flex; gap: 4px; font-size: 9px; color: #9aa3b2; margin-top: 6px; }
+.sch-skillhead .sch-skillspacer { min-width: 56px; flex: none; }
+.sch-skillhead span { flex: 1; text-align: center; }
+.sch-skillrow { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+.sch-skilllabel { opacity: .7; min-width: 56px; font-size: 10px; flex: none; }
+.sch-cell { flex: 1; min-width: 0; }
+.sch-cellbar { height: 4px; background: #2a2f3a; border-radius: 2px; overflow: hidden; }
+.sch-cellfill { height: 100%; width: 0; border-radius: 2px; }
+.sch-celltext { font-size: 9px; text-align: center; opacity: .85; }
 .sch-kv b { color: #ffd070; }
 `
     document.head.appendChild(style)
@@ -91,6 +100,12 @@ const setText = (el: HTMLElement, text: string): void => {
 const setBar = (el: HTMLElement, ratio: number): void => {
     const width = `${Math.round(Math.min(Math.max(ratio, 0), 1) * 100)}%`
     if (el.style.width !== width) el.style.width = width
+}
+
+/** 脏检查写填充条颜色 */
+const setFill = (el: HTMLElement, ratio: number, color: string): void => {
+    setBar(el, ratio)
+    if (el.style.background !== color) el.style.background = color
 }
 
 const toDeg = (rad: number): string => `${(rad * 180 / Math.PI).toFixed(0)}°`
@@ -236,6 +251,20 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     totalFill.className = 'sch-totalfill'
     totalBar.appendChild(totalFill)
     const detailLink = document.createElement('div')
+
+    /* 技能计时区块（与 play HUD 同语义：每段一行，动作/恢复/冷却三格） */
+    const skillsHeader = document.createElement('div')
+    skillsHeader.className = 'sch-skillhead'
+    const headSpacer = document.createElement('span')
+    headSpacer.className = 'sch-skillspacer'
+    skillsHeader.appendChild(headSpacer)
+    for (const h of ['动作', '恢复', '冷却']) {
+        const span = document.createElement('span')
+        span.textContent = h
+        skillsHeader.appendChild(span)
+    }
+    const skillsList = document.createElement('div')
+
     const unfocusBtn = document.createElement('button')
     unfocusBtn.className = 'sch-btn'
     unfocusBtn.textContent = '取消聚焦'
@@ -245,9 +274,73 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     detail.appendChild(detailPhase)
     detail.appendChild(detailTotal)
     detail.appendChild(totalBar)
+    detail.appendChild(skillsHeader)
+    detail.appendChild(skillsList)
     detail.appendChild(detailLink)
     detail.appendChild(unfocusBtn)
     document.body.appendChild(detail)
+
+    /* —— 技能计时行：聚焦对象切换时重建，每帧只刷内容 —— */
+    interface TimerCellRefs {
+        readonly root: HTMLElement
+        readonly fill: HTMLElement
+        readonly text: HTMLElement
+    }
+    const makeTimerCell = (): TimerCellRefs => {
+        const cell = document.createElement('div')
+        cell.className = 'sch-cell'
+        const bar = document.createElement('div')
+        bar.className = 'sch-cellbar'
+        const fill = document.createElement('div')
+        fill.className = 'sch-cellfill'
+        bar.appendChild(fill)
+        const text = document.createElement('div')
+        text.className = 'sch-celltext'
+        cell.appendChild(bar)
+        cell.appendChild(text)
+        return {root: cell, fill, text}
+    }
+    let timerBuiltFor: number | null = null
+    let timerRows: {readonly cells: readonly [TimerCellRefs, TimerCellRefs, TimerCellRefs]}[] = []
+    const rebuildTimerRows = (timers: readonly SkillTimerStatus[]): void => {
+        skillsList.replaceChildren()
+        timerRows = timers.map(t => {
+            const row = document.createElement('div')
+            row.className = 'sch-skillrow'
+            const label = document.createElement('span')
+            label.className = 'sch-skilllabel'
+            label.textContent = t.label
+            row.appendChild(label)
+            const action = makeTimerCell()
+            const recovery = makeTimerCell()
+            const cooldown = makeTimerCell()
+            row.appendChild(action.root)
+            row.appendChild(recovery.root)
+            row.appendChild(cooldown.root)
+            skillsList.appendChild(row)
+            return {cells: [action, recovery, cooldown] as const}
+        })
+    }
+    /** 动作/恢复格：计时中填充，否则静态显示配置时长 */
+    const applyElapsedCell = (cell: TimerCellRefs, elapsed: number, total: number, color: string): void => {
+        if (elapsed >= 0 && total > 0) {
+            setFill(cell.fill, elapsed / total, color)
+            setText(cell.text, `${elapsed.toFixed(2)}s`)
+        } else {
+            setFill(cell.fill, 0, 'transparent')
+            setText(cell.text, total > 0 ? `${total.toFixed(2)}s` : '-')
+        }
+    }
+    /** 冷却格：触发瞬间满条随冷却排空（同 play HUD）；无冷却常显 0.0s */
+    const applyCooldownCell = (cell: TimerCellRefs, t: SkillTimerStatus): void => {
+        if (t.cooldown > 0) {
+            setFill(cell.fill, t.cooldownRemaining / t.cooldown, t.cooldownRemaining > 0 ? '#ff6644' : '#4488ff')
+            setText(cell.text, `${t.cooldownRemaining.toFixed(1)}s`)
+        } else {
+            setFill(cell.fill, 0, 'transparent')
+            setText(cell.text, '0.0s')
+        }
+    }
 
     const refresh = (
         statuses: readonly ActorStatus[],
@@ -304,6 +397,19 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
                 : `阶段：${st.phaseName === 'done' ? '收势(全部阶段完成)' : st.phaseName} · ${(st.phaseProgress * 100).toFixed(0)}%`)
             setText(detailLink, st.mode === 'idle' ? '衔接：—' : `衔接：${st.link}`)
             setBar(totalFill, st.attackProgress)
+
+            /* 技能三计时器：与 play HUD 同规则逐格刷新 */
+            if (timerBuiltFor !== st.id) {
+                rebuildTimerRows(st.slotTimers)
+                timerBuiltFor = st.id
+            }
+            st.slotTimers.forEach((t, i) => {
+                const row = timerRows[i]
+                if (row === undefined) return
+                applyElapsedCell(row.cells[0], t.actionElapsed, t.duration, '#ffaa00')
+                applyElapsedCell(row.cells[1], t.recoveryElapsed, t.recovery, '#44ccff')
+                applyCooldownCell(row.cells[2], t)
+            })
         }
     }
 

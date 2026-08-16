@@ -114,7 +114,8 @@ const MeleeAttackSchema = z.object({
     weaponId: z.string().optional(),
     range: z.number().positive(),
     damage: z.number().positive(),
-    cooldown: z.number().positive(),
+    /* 冷却允许 0：普通攻击无冷却，节奏由动作/恢复时间形成 */
+    cooldown: z.number().min(0),
     duration: z.number().positive(),
 })
 
@@ -123,7 +124,8 @@ const RangedAttackSchema = z.object({
     weaponId: z.string().optional(),
     range: z.number().positive(),
     damage: z.number().positive(),
-    cooldown: z.number().positive(),
+    /* 冷却允许 0：普通攻击默认无冷却（存档/面板仍可配置非 0 值） */
+    cooldown: z.number().min(0),
     duration: z.number().positive(),
     bulletSpeed: z.number().positive(),
     bulletKnockback: z.number(),
@@ -138,7 +140,7 @@ const TendencyConfigSchema = z.object({
 })
 
 /** character 存档共享默认值（供内联 schema .default() 和外层 CHARACTER_SAVE_CONFIG_DEFAULTS 共用） */
-const CHARACTER_SAVE_ATTACK_DEFAULT = {type: 'melee' as const, weaponId: 'short_sword' as const, range: 1.5, damage: 3, cooldown: 0.5, duration: 0.3}
+const CHARACTER_SAVE_ATTACK_DEFAULT = {type: 'melee' as const, weaponId: 'short_sword' as const, range: 1.5, damage: 3, cooldown: 0, duration: 0.3}
 const CHARACTER_SAVE_TENDENCY_DEFAULT = {tendencyId: 'hostileExceptSelf' as const}
 
 const CharacterConfigInner = z.object({

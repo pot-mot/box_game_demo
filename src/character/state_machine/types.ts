@@ -10,6 +10,8 @@ export interface CharacterInput {
     attack: boolean
     skillIndex: number
     sprint: boolean
+    /** 攻击键按住时长（秒，仅 attack 为真的脉冲帧有意义）：连段守卫用它区分点按/长按（蓄力） */
+    attackHoldDuration: number
 }
 
 export interface MachineContext {
@@ -37,7 +39,7 @@ export interface CharacterStateMachine {
     readonly stateTime: number
     onStateChange: ((from: CharacterState, to: CharacterState) => void) | null
 
-    setInput(dx: number, dz: number, jump: boolean, attack: boolean, sprint?: boolean, skillIndex?: number): void
+    setInput(dx: number, dz: number, jump: boolean, attack: boolean, sprint?: boolean, skillIndex?: number, attackHoldDuration?: number): void
     update(dt: number, entity: CharacterEntity): void
     reset(): void
 }

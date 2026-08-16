@@ -1,6 +1,7 @@
 import type {StateHandler} from '../types.ts'
 import {GROUND_DAMPING, SLOPE_WALK_THRESHOLD, STATE_FLIP_MIN_TIME} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlope, applySlopeAntiGravity} from '../ground.ts'
+import {resolveEntrySkillIndex} from '../../combat/combo_guard.ts'
 
 export const idleHandler: StateHandler = {
     enter: () => {},
@@ -20,10 +21,9 @@ export const idleHandler: StateHandler = {
         { to: 'walking', guard: (input) => Math.hypot(input.dx, input.dz) > 0.001 },
         {
             to: 'attacking',
-            guard: (input, entity) => {
-                const skill = entity.combat.skills[input.skillIndex]
-                return input.attack && (skill?.cooldownTimer ?? Infinity) <= 0
-            },
+            /* 起手选择：键组内按守卫（蓄力/方向组合键）与冷却解析，存在候选才进入 */
+            guard: (input, entity) => input.attack
+                && resolveEntrySkillIndex(entity.combat, input.skillIndex, {dx: input.dx, dz: input.dz, holdDuration: input.attackHoldDuration}) >= 0,
         },
         {
             to: 'jumping',
@@ -32,7 +32,7 @@ export const idleHandler: StateHandler = {
         },
         {
             to: 'dashing',
-            guard: (input, entity) => input.sprint && entity.dashCooldownTimer <= 0,
+            guard: (input, entity) => input.sprint && entity.combat.dashSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',

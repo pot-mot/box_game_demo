@@ -444,7 +444,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 weaponSelect.value = ''
                 atkRange.value = String(skill?.config.weapon.range ?? 1.5)
                 atkDmg.value = String(skill?.config.weapon.damage ?? 3)
-                atkCD.value = String(skill?.config.cooldown ?? 0.5)
+                atkCD.value = String(skill?.config.cooldown ?? 0)
                 atkDuration.value = String(skill?.config.duration ?? 0.3)
                 if (skill?.config.type === 'ranged') {
                     bulletSpeed.value = String(skill.config.weapon.projectileSpeed)

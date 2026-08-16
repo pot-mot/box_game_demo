@@ -1,6 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {applyExplosionDamage} from './explosion.ts'
+import {createDashSkillSlot} from './dash_skill.ts'
 
 /** 构造最低限度 CharacterEntity mock */
 const makeMock = (id: number, x: number, y: number, z: number, hp: number, faction: number, isDead: boolean): Parameters<typeof applyExplosionDamage>[6] => ({
@@ -16,14 +17,14 @@ const makeMock = (id: number, x: number, y: number, z: number, hp: number, facti
     } as unknown as Parameters<typeof applyExplosionDamage>[6]['body'],
     mainCollider: undefined as unknown as RAPIER.Collider,
     isOnGround: true, groundNormal: { x: 0, y: 1, z: 0 }, groundKeepTimer: 0, airborneTime: 0, groundedTime: 0,
-    rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
+    rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', isDying: false, dyingTimer: 0,
     combat: {
         faction, health: hp, maxHealth: hp, isDead,
         damageModifiers: [],
         attackTendency: (a: number, b: number) => a !== b,
         tendencyConfig: {tendencyId: 'hostileExceptSelf'},
         onDamageTaken: null, onDeath: null, onDamageDealt: null,
-        skills: [], currentSkillIndex: 0, attackActive: false, attackTimer: 0,
+        skills: [], dashSkill: createDashSkillSlot(), currentSkillIndex: 0, attackActive: false, attackTimer: 0,
         attackedTargets: new Set(), attackDirX: 0, attackDirZ: 0, swingTilt: 0,
         phaseIndex: 0, phaseTimer: 0, chainEntryIndex: 0, bufferedSkillIndex: -1, pendingFlinch: false, flinchImmunityTimer: 0,
     } as Parameters<typeof applyExplosionDamage>[6]['combat'],

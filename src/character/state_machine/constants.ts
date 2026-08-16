@@ -4,10 +4,8 @@ export const AIR_DAMPING = 0.95
 export const AIR_CONTROL_FACTOR = 0.15
 /** 冲刺速度倍率 */
 export const DASH_SPEED_MULTIPLIER = 2
-/** 冲刺持续时间（秒） */
-export const DASH_DURATION = 0.25
-/** 冲刺冷却时间（秒） */
-export const DASH_COOLDOWN = 1.0
+/* 冲刺计时已整合进技能系统，见 character/combat/dash_skill.ts（保持转出以兼容既有导入） */
+export {DASH_DURATION, DASH_COOLDOWN} from '../combat/dash_skill.ts'
 /** 斜坡行走法线 Y 分量下限（cos 坡度角）。0.06 → 约 86.6°，覆盖 85° 以下斜坡；90° 垂直面（ny=0）不算着地 */
 export const SLOPE_WALK_THRESHOLD = 0.06
 /** 行走瞬态棱法线容忍下限：胶囊单点接触跨过 trimesh 网格棱线时，接触法线会瞬时读成

@@ -1,5 +1,5 @@
 import type {StateHandler} from '../types.ts'
-import {DASH_SPEED_MULTIPLIER, DASH_DURATION, DASH_COOLDOWN, SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../constants.ts'
+import {DASH_SPEED_MULTIPLIER, DASH_DURATION, SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlopeAtSpeed, applySlopeSink} from '../ground.ts'
 
 /** 进入冲刺时锁定的方向 */
@@ -20,7 +20,7 @@ export const dashingHandler: StateHandler = {
             dashDirX = Math.sin(angle)
             dashDirZ = Math.cos(angle)
         }
-        entity.dashCooldownTimer = DASH_COOLDOWN
+        entity.combat.dashSkill.cooldownTimer = entity.combat.dashSkill.config.cooldown
         entity.body.wakeUp()
     },
     update: (_dt, _input, entity) => {

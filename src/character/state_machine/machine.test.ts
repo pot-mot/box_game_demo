@@ -2,7 +2,10 @@
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from './machine.ts'
 import type {CharacterStateMachine} from './types.ts'
-import {buildMeleeSkillSlots, MELEE_LIGHT_CHAIN_COOLDOWN} from '../combat/melee_skill.ts'
+import {buildMeleeSkillSlots} from '../combat/melee_skill.ts'
+import {createDashSkillSlot, DASH_COOLDOWN} from '../combat/dash_skill.ts'
+import {buildTestWeaponSkillSlots, TEST_WEAPON_CHARGE_HOLD} from '../combat/test_weapon.ts'
+import type {SkillSlot} from '../combat/skill_types.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
 import type {CharacterEntity} from '../types.ts'
 
@@ -10,9 +13,7 @@ const DT = 1 / 60
 
 /** 构造可驱动状态机的完整 CharacterEntity mock（真实 entity body mock + stateMachine）。
  *  mock 仅覆盖状态机路径使用到的接口子集，集中窄化一次避免测试体散落断言转换 */
-const makeMock = (): CharacterEntity => {
-    /* 短剑 4 槽双链：[轻1, 重1, 轻2, 重2]，循环 comboChain */
-    const slots = buildMeleeSkillSlots('short_sword')
+const makeMock = (slots: SkillSlot[] = buildMeleeSkillSlots('short_sword')): CharacterEntity => {
     const mockBody = {
         linvel: (): {x: number; y: number; z: number} => ({x: state.velocityX, y: state.velocityY, z: state.velocityZ}),
         setLinvel: ({x, y, z}: {x: number; y: number; z: number}): void => {
@@ -42,14 +43,14 @@ const makeMock = (): CharacterEntity => {
         groundKeepTimer: 0,
         airborneTime: 0, groundedTime: 0,
         rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
-        isDying: false, dyingTimer: 0, dashCooldownTimer: 0,
+        isDying: false, dyingTimer: 0,
         combat: {
             faction: 0, health: 100, maxHealth: 100, isDead: false,
             damageModifiers: [],
             attackTendency: () => true,
             tendencyConfig: {tendencyId: 'hostileExceptSelf'},
             onDamageTaken: null, onDeath: null, onDamageDealt: null,
-            skills: slots, currentSkillIndex: 0,
+            skills: slots, dashSkill: createDashSkillSlot(), currentSkillIndex: 0,
             attackActive: false, attackTimer: 0,
             attackedTargets: new Set(), attackDirX: 0, attackDirZ: 0, swingTilt: 0,
             phaseIndex: 0, phaseTimer: 0, chainEntryIndex: 0, bufferedSkillIndex: -1, pendingFlinch: false, flinchImmunityTimer: 0,
@@ -61,6 +62,92 @@ const makeMock = (): CharacterEntity => {
 const run = (sm: CharacterStateMachine, e: CharacterEntity, frames: number): void => {
     for (let i = 0; i < frames; i++) sm.update(DT, e)
 }
+
+describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
+    const makeTest = (): CharacterEntity => makeMock(buildTestWeaponSkillSlots())
+
+    it('轻击键点按（hold=0）起手 = tap（索引 1，守卫变体未通过 → 兜底）', () => {
+        const e = makeTest()
+        e.stateMachine.setInput(0, 0, false, true, false, 0, 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        expect(e.combat.currentSkillIndex).toBe(1)
+    })
+
+    it('轻击键长按 >= 阈值起手 = charge（索引 0，守卫变体优先）', () => {
+        const e = makeTest()
+        e.stateMachine.setInput(0, 0, false, true, false, 0, TEST_WEAPON_CHARGE_HOLD)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        expect(e.combat.currentSkillIndex).toBe(0)
+    })
+
+    it('重击键起手 = heavy_1（索引 2，entryGroup 映射）', () => {
+        const e = makeTest()
+        e.stateMachine.setInput(0, 0, false, true, false, 1, 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        expect(e.combat.currentSkillIndex).toBe(2)
+    })
+
+    it('起手槽全冷却时不进入 attacking', () => {
+        const e = makeTest()
+        e.combat.skills[0].cooldownTimer = 1
+        e.combat.skills[1].cooldownTimer = 1
+        e.stateMachine.setInput(0, 0, false, true, false, 0, 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('idle')
+    })
+
+    it('段末缓冲：同键组 + 有移动输入 → 方向变体 thrust（索引 3）', () => {
+        const e = makeTest()
+        e.stateMachine.setInput(0, 0, false, true, false, 0, 0)
+        e.stateMachine.update(DT, e)
+        expect(e.combat.currentSkillIndex).toBe(1)
+        /* 按住攻击键并带方向：缓冲逐帧解析为 thrust（hasMoveInput 通过） */
+        e.stateMachine.setInput(1, 0, false, true, false, 0, 0)
+        run(e.stateMachine, e, 30)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        expect(e.combat.currentSkillIndex).toBe(3)
+    })
+
+    it('段末缓冲：同键组 + 无移动输入 → 兜底 light_2（索引 4）', () => {
+        const e = makeTest()
+        e.stateMachine.setInput(0, 0, false, true, false, 0, 0)
+        e.stateMachine.update(DT, e)
+        e.stateMachine.setInput(0, 0, false, true, false, 0, 0)
+        run(e.stateMachine, e, 30)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        expect(e.combat.currentSkillIndex).toBe(4)
+    })
+
+    it('charge 无链：播完无缓冲回 idle', () => {
+        const e = makeTest()
+        e.stateMachine.setInput(0, 0, false, true, false, 0, TEST_WEAPON_CHARGE_HOLD)
+        e.stateMachine.update(DT, e)
+        expect(e.combat.currentSkillIndex).toBe(0)
+        e.stateMachine.setInput(0, 0, false, false, false, 0, 0)
+        run(e.stateMachine, e, 60)
+        expect(e.stateMachine.currentState).toBe('idle')
+    })
+
+    it('蓄力段触发即挂冷却（charge 槽），点按兜底不受影响', () => {
+        const e = makeTest()
+        e.stateMachine.setInput(0, 0, false, true, false, 0, TEST_WEAPON_CHARGE_HOLD)
+        e.stateMachine.update(DT, e)
+        /* 触发即挂冷却（单测无主循环递减，冷却值保持满值） */
+        expect(e.combat.skills[0].cooldownTimer).toBe(e.combat.skills[0].config.cooldown)
+        e.stateMachine.setInput(0, 0, false, false, false, 0, 0)
+        run(e.stateMachine, e, 60)
+        expect(e.stateMachine.currentState).toBe('idle')
+        expect(e.combat.skills[0].cooldownTimer).toBeGreaterThan(0)
+        /* 点按仍可起手（tap 槽冷却独立） */
+        e.stateMachine.setInput(0, 0, false, true, false, 0, 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        expect(e.combat.currentSkillIndex).toBe(1)
+    })
+})
 
 describe('平地移动', () => {
     it('平地（ny=1）行走不切 falling', () => {
@@ -222,12 +309,13 @@ describe('攻击/冲刺在陡坡结束', () => {
         expect(e.stateMachine.currentState).toBe('falling')
     })
 
-    it('dashing 在平地冲刺结束进入 walking', () => {
+    it('dashing 在平地冲刺结束进入 walking，起手即挂冲刺冷却', () => {
         const e = makeMock()
         e.stateMachine.setInput(1, 0, false, false, true)
         e.stateMachine.update(DT, e)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('dashing')
+        expect(e.combat.dashSkill.cooldownTimer).toBe(DASH_COOLDOWN)
         run(e.stateMachine, e, 17)
         expect(e.stateMachine.currentState).toBe('walking')
     })
@@ -339,7 +427,7 @@ describe('输入缓冲连段（轻/重双链）', () => {
         /* 持续按住轻击：缓冲恒有值 */
         e.stateMachine.setInput(0, 0, false, true, false, 0)
         run(e.stateMachine, e, 13)
-        /* 段中（轻 1 时长 0.4s，strike 0.2s 已过、未到段末） */
+        /* 段中（轻 1 总时长 0.4s = 动作 0.2s + 恢复 0.2s，动作已过、未到段末） */
         expect(e.combat.currentSkillIndex).toBe(0)
         expect(e.combat.phaseIndex).toBe(1)
         /* 段末推进到轻 2（链中下一段），不出 attacking 状态 */
@@ -370,27 +458,16 @@ describe('输入缓冲连段（轻/重双链）', () => {
         expect(e.stateMachine.currentState).toBe('attacking')
     })
 
-    it('链内免冷却：链推进期间起手槽冷却不生效', () => {
+    it('普通攻击无冷却：起手/链中段冷却恒 0，链推进不受阻塞', () => {
         const e = makeMock()
         enterAttacking(e, 0)
+        /* 普通攻击 cooldown = 0：触发时不挂冷却 */
+        expect(e.combat.skills[0].cooldownTimer).toBe(0)
         e.stateMachine.setInput(0, 0, false, true, false, 0)
         runUntilSkill(e, 2)
         runUntilSkill(e, 0)
+        /* 循环链回到轻 1：全程无冷却阻塞；轻 2（链中段）同样恒 0 */
         expect(e.combat.skills[0].cooldownTimer).toBe(0)
-        expect(e.combat.skills[2].cooldownTimer).toBe(0)
-    })
-
-    it('链终止冷却只挂起手槽，不惩罚链中段', () => {
-        const e = makeMock()
-        enterAttacking(e, 0)
-        /* 推进到轻 2 后松开：轻 2 播完收招 */
-        e.stateMachine.setInput(0, 0, false, true, false, 0)
-        runUntilSkill(e, 2)
-        e.stateMachine.setInput(0, 0, false, false, false, 0)
-        run(e.stateMachine, e, 30)
-        expect(e.stateMachine.currentState).toBe('idle')
-        /* 轻链终止冷却 0.3s 挂轻 1（起手槽），轻 2 不受惩罚 */
-        expect(e.combat.skills[0].cooldownTimer).toBeCloseTo(MELEE_LIGHT_CHAIN_COOLDOWN)
         expect(e.combat.skills[2].cooldownTimer).toBe(0)
     })
 

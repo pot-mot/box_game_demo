@@ -7,13 +7,15 @@ import {applyFreeFlightMovement} from '../free_flight.ts'
 const CLICK_DRAG_THRESHOLD = 5
 
 export interface MouseAttackCallbacks {
-    onLightAttack: () => void
-    onHeavyAttack: () => void
+    /** 轻击（左键松开且未拖拽），参数 = 按住时长（秒，用于蓄力守卫） */
+    onLightAttack: (holdSeconds: number) => void
+    /** 重击（右键松开），参数 = 按住时长（秒，用于蓄力守卫） */
+    onHeavyAttack: (holdSeconds: number) => void
 }
 
 /**
  * 游玩模式相机：有玩家 → 第三人称环绕（平滑跟随目标，抑制角色弹跳导致的抖动）；无玩家 → 自由飞行。
- * 左键拖拽旋转相机，左键短按触发轻击，右键触发重击。
+ * 左键拖拽旋转相机，左键短按松开触发轻击，右键松开触发重击；均携带按住时长供蓄力守卫区分点按/长按。
  */
 export const setupPlayCamera = (
     camera: PerspectiveCamera,
@@ -28,6 +30,9 @@ export const setupPlayCamera = (
     let isDown = false
     /** 左键按下后累计移动距离（像素），用于区分 click / drag */
     let dragDist = 0
+    /** 攻击键按下时刻（performance.now()，undefined = 未按下），松开时算按住时长 */
+    let leftDownAt: number | undefined
+    let rightDownAt: number | undefined
     /** 平滑后的跟随目标（EMA），避免角色弹跳直接传导到相机 */
     const smoothedTarget = new Vector3()
     let hasSmoothedTarget = false
@@ -36,24 +41,37 @@ export const setupPlayCamera = (
         if (e.button === 0) {
             isDown = true
             dragDist = 0
+            leftDownAt = performance.now()
             element.focus()
         }
         if (e.button === 2) {
             e.preventDefault()
-            mouseAttack?.onHeavyAttack()
+            rightDownAt = performance.now()
         }
     })
     element.addEventListener('contextmenu', (e: Event) => {
         e.preventDefault()
         isDown = false
+        leftDownAt = undefined
+        rightDownAt = undefined
     })
-    window.addEventListener('blur', () => { isDown = false })
+    window.addEventListener('blur', () => {
+        isDown = false
+        leftDownAt = undefined
+        rightDownAt = undefined
+    })
     window.addEventListener('mouseup', (e: MouseEvent) => {
         if (e.button === 0) {
-            if (isDown && dragDist < CLICK_DRAG_THRESHOLD) {
-                mouseAttack?.onLightAttack()
+            if (isDown && dragDist < CLICK_DRAG_THRESHOLD && leftDownAt !== undefined) {
+                mouseAttack?.onLightAttack((performance.now() - leftDownAt) / 1000)
             }
             isDown = false
+            leftDownAt = undefined
+        }
+        if (e.button === 2 && rightDownAt !== undefined) {
+            /* 重击改在松开时触发：携带按住时长，支持右键蓄力 */
+            mouseAttack?.onHeavyAttack((performance.now() - rightDownAt) / 1000)
+            rightDownAt = undefined
         }
     })
     window.addEventListener('mousemove', (e: MouseEvent) => {

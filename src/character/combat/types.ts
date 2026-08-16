@@ -1,5 +1,6 @@
 import type { Faction, AttackTendency, TendencyConfig } from '../faction.ts'
 import type { SkillSlot } from './skill_types.ts'
+import { createDashSkillSlot, type DashSkillConfig } from './dash_skill.ts'
 import type { DamageModifier } from './damage.ts'
 
 /** 攻击结果码 */
@@ -9,6 +10,8 @@ export type AttackResult = typeof ATTACK_RESULT_CODES[number]
 /** 角色战斗组件 — 从 CharacterEntity 中分离的所有战斗相关状态 */
 export interface CombatComponent {
     skills: SkillSlot[]
+    /** 冲刺技能槽（移动技能，独立于攻击技能列表，冷却挡起手） */
+    dashSkill: SkillSlot<DashSkillConfig>
     currentSkillIndex: number
     attackActive: boolean
     attackTimer: number
@@ -23,7 +26,7 @@ export interface CombatComponent {
     phaseIndex: number
     /** 当前阶段已用时间（秒） */
     phaseTimer: number
-    /** 本次起链的起手槽索引（链终止冷却挂在该槽上） */
+    /** 本次起链的起手槽索引（决定当前链键组） */
     chainEntryIndex: number
     /** 缓冲的下一段技能索引（-1 = 无缓冲）；段末完整播完后消费推进 */
     bufferedSkillIndex: number
@@ -55,6 +58,7 @@ export const createCombatComponent = (
     maxHealth: number,
 ): CombatComponent => ({
     skills,
+    dashSkill: createDashSkillSlot(),
     currentSkillIndex: 0,
     attackActive: false,
     attackTimer: 0,

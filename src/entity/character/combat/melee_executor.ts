@@ -78,7 +78,8 @@ export const createMeleeExecutor = (
 
         const duration = combat.skills[combat.currentSkillIndex]?.config.duration ?? 0.3
         const progress = combat.attackTimer / duration
-        /* 在挥砍阶段（进度 0.1–0.85）检测命中，跳过蓄力前段和恢复末段 */
+        /* duration = 动作时间（不含恢复）：在挥砍动作阶段（进度 0.1–0.85）检测命中，
+         * 跳过蓄力前段；恢复期内 attackTimer > duration，progress 越界自然跳过 */
         if (progress < 0.1 || progress > 0.85) return
 
         model.weaponMesh.getWorldPosition(_tmpVec3)

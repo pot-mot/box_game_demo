@@ -7,9 +7,10 @@ import type {AppearanceSystem} from '../../entity/character/appearance/system.ts
 import type {WeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import type {NameLabel} from './label.ts'
-import {resolvePhases} from '../../character/combat/attack_phases.ts'
+import {resolvePhases, phaseDurationOf} from '../../character/combat/attack_phases.ts'
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
 import type {SkillSlot} from '../../character/combat/skill_types.ts'
+import {MELEE_CHAIN_SLOTS} from '../../character/combat/melee_skill.ts'
 import {
     ACTOR_JUMP_HEIGHT,
     ACTOR_SCALE,
@@ -24,6 +25,29 @@ import {
 /** 本击衔接方式标签（供人工审查连段推进路径） */
 export const LINK_LABELS = ['首次起手', '段内推进', '重新起手', '—'] as const
 export type LinkLabel = typeof LINK_LABELS[number]
+
+/** 面板展示用的单个技能槽计时快照（与 play HUD 三计时器同语义） */
+export interface SkillTimerStatus {
+    readonly label: string
+    readonly duration: number
+    readonly recovery: number
+    readonly cooldown: number
+    /** 动作已进行时间（秒）；-1 = 本段未在播动作段 */
+    readonly actionElapsed: number
+    /** 恢复已进行时间（秒）；-1 = 未进入恢复段 */
+    readonly recoveryElapsed: number
+    /** 冷却剩余时间（秒，触发时刻满值递减） */
+    readonly cooldownRemaining: number
+}
+
+/** 段显示名：近战链段取段后缀（light_1 等），其余技能取 id 尾段（shot 等） */
+const slotLabel = (id: string): string => {
+    for (const slot of MELEE_CHAIN_SLOTS) {
+        if (id.endsWith(`_${slot}`)) return slot
+    }
+    const idx = id.lastIndexOf('_')
+    return idx >= 0 ? id.slice(idx + 1) : id
+}
 
 /** 面板展示用的角色运行状态快照 */
 export interface ActorStatus {
@@ -46,6 +70,8 @@ export interface ActorStatus {
     readonly attackProgress: number
     /** 本段的衔接方式 */
     readonly link: LinkLabel
+    /** 每技能槽一行的三计时器快照（动作/恢复/冷却，与 play HUD 一致） */
+    readonly slotTimers: readonly SkillTimerStatus[]
 }
 
 export interface ShowcaseActor {
@@ -89,7 +115,7 @@ interface MaterialSnapshot {
  *
  * 数据流（与生产 physics/world.ts + character/state_machine/states/attacking.ts 逐段对应）：
  * 1. 时间线调度镜像 attackingHandler.update：attackTimer/phaseTimer 递增 →
- *    阶段推进（durationRatio × duration）→ 最终阶段完整播完时的段末推进
+ *    阶段推进（phaseDurationOf：动作阶段按 ratio 分摊 duration，recovery 取 config.recovery）→ 最终阶段完整播完时的段末推进
  *    （缓冲恒有值 → 重置计时切换下一段，不出 attacking 状态）→
  *    脚本播完或链间停顿 → idle。
  * 2. 近战演示脚本 [轻1, 轻2, 重1, 重2]：轻链两段连续推进 → 停顿（模拟松开攻击键）→
@@ -99,7 +125,8 @@ interface MaterialSnapshot {
  * 4. 刀光镜像 world.ts：strike/release/spin 阶段激活，采样 weaponTip。
  *
  * 展示场景省略的部分（与生产差异）：物理速度缩放（moveSpeedMultiplier）、
- * 命中执行器、hitstop、hitbox、冷却——攻击中角色静止站立。
+ * 命中执行器、hitstop、hitbox——攻击中角色静止站立。冷却计时仅镜像展示（触发即挂、逐帧递减），
+ * 不阻断脚本推进。
  */
 export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     const {id, scene, slots, faction, x, z, skillName, weaponName} = init
@@ -142,6 +169,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     let pendingLink: LinkLabel = isMelee ? '首次起手' : '—'
     /** 双链播完，收尾待机结束后重置循环（scriptPos 归零重新起手） */
     let resetPending = false
+    /** 每槽冷却剩余时间（镜像生产：段触发即挂自身冷却，逐帧递减；仅展示不挡推进） */
+    const cooldownTimers: number[] = slots.map(() => 0)
 
     /** 当前段技能槽（script 位置 → 槽下标） */
     const currentSlot = (): SkillSlot => slots[script[scriptPos] ?? 0]
@@ -158,9 +187,11 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         const config = currentSlot().config
         swingTilt = config.type === 'melee' ? (config.swingTilt ?? 0) : 0
         link = nextLink
+        /* 触发即挂自身冷却（镜像生产起手 enter） */
+        cooldownTimers[scriptPos] = config.cooldown
     }
 
-    /** 攻击时间线 —— 镜像 attackingHandler.update 的调度部分（省略物理/位移缩放/冷却） */
+    /** 攻击时间线 —— 镜像 attackingHandler.update 的调度部分（省略物理/位移缩放） */
     const advanceAttack = (dt: number): void => {
         /* 状态时长累加 —— 镜像生产 world.ts 传入 entity.stateMachine.stateTime 的累加语义：
          * enterSegment（状态切换）置 0、段末推进不重置；aim/spin 微颤与头部摆动依赖它 */
@@ -173,7 +204,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
 
         /* 阶段推进（镜像 attacking.update 阶段调度） */
         if (phaseIndex < phases.length) {
-            const phaseDuration = config.duration * phases[phaseIndex].durationRatio
+            const phaseDuration = phaseDurationOf(phases[phaseIndex], config.duration, config.recovery)
             if (phaseTimer >= phaseDuration) {
                 if (phaseIndex < phases.length - 1) {
                     phaseIndex++
@@ -205,6 +236,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             const nextConfig = currentSlot().config
             swingTilt = nextConfig.type === 'melee' ? (nextConfig.swingTilt ?? 0) : 0
             link = '段内推进'
+            /* 链中段触发同样挂自身冷却（镜像生产段末推进） */
+            cooldownTimers[scriptPos] = nextConfig.cooldown
             return
         }
 
@@ -240,7 +273,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         const config = currentSlot().config
         const phases = resolvePhases(config.phases)
         const phaseDuration = phaseIndex < phases.length
-            ? config.duration * phases[phaseIndex].durationRatio
+            ? phaseDurationOf(phases[phaseIndex], config.duration, config.recovery)
             : 1
         const ctxPhaseName: AttackPhaseName | undefined = inAttacking && phaseIndex < phases.length
             ? phases[phaseIndex].name
@@ -254,7 +287,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             swingTilt,
             attackPhase: ctxPhaseName,
             attackPhaseProgress: phaseDuration > 0 ? phaseTimer / phaseDuration : 0,
-            attackTotalProgress: inAttacking && config.duration > 0 ? attackTimer / config.duration : 0,
+            /* 总进度分母 = 动作时间 + 恢复时间（镜像 world.ts totalDuration） */
+            attackTotalProgress: inAttacking && config.duration + config.recovery > 0 ? attackTimer / (config.duration + config.recovery) : 0,
             attackPhases: inAttacking ? phases : undefined,
             attackPhaseIndex: phaseIndex,
             attackSkillId: inAttacking ? config.id : undefined,
@@ -274,6 +308,10 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     }
 
     const update = (dt: number): void => {
+        /* 冷却递减（镜像 world.ts 技能冷却循环） */
+        for (let i = 0; i < cooldownTimers.length; i++) {
+            cooldownTimers[i] = Math.max(0, cooldownTimers[i] - dt)
+        }
         if (mode === 'attacking') {
             advanceAttack(dt)
         } else {
@@ -298,9 +336,24 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             phaseName: mode === 'idle' ? 'idle' : phaseIndex < phases.length ? phases[phaseIndex].name : 'done',
             phaseProgress: mode === 'idle'
                 ? 0
-                : Math.min(Math.max(phaseIndex < phases.length ? phaseTimer / (config.duration * phases[phaseIndex].durationRatio) : 1, 0), 1),
-            attackProgress: mode === 'idle' ? 0 : Math.min(Math.max(attackTimer / config.duration, 0), 1),
+                : Math.min(Math.max(phaseIndex < phases.length ? phaseTimer / phaseDurationOf(phases[phaseIndex], config.duration, config.recovery) : 1, 0), 1),
+            attackProgress: mode === 'idle' ? 0 : Math.min(Math.max(attackTimer / (config.duration + config.recovery), 0), 1),
             link: mode === 'attacking' ? link : '—',
+            /* 每槽三计时器快照：当前段按 attackTimer 切分动作/恢复两格，冷却取递减值 */
+            slotTimers: slots.map((slot, i) => {
+                const cfg = slot.config
+                const active = mode === 'attacking' && script[scriptPos] === i
+                const t = attackTimer
+                return {
+                    label: slotLabel(cfg.id),
+                    duration: cfg.duration,
+                    recovery: cfg.recovery,
+                    cooldown: cfg.cooldown,
+                    actionElapsed: active && t <= cfg.duration ? t : -1,
+                    recoveryElapsed: active && cfg.recovery > 0 && t > cfg.duration ? t - cfg.duration : -1,
+                    cooldownRemaining: cooldownTimers[i] ?? 0,
+                }
+            }),
         }
     }
 

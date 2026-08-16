@@ -6,11 +6,20 @@ import type {SpawnBoxCallback} from '../../entity/character/ai/types.ts'
 import {setupPlayerKeyboard} from './keyboard.ts'
 import {setupPlayCamera} from './camera.ts'
 import {setupHealthBars} from './health_bar.ts'
-import type {TimerRowData} from './player_hud.ts'
+import type {SkillTimerRowData, TimerCellData, TimerRowData} from './player_hud.ts'
 import {createPlayerHUD} from './player_hud.ts'
 import {createDeathScreen} from './death_screen.ts'
-import {DASH_DURATION, DASH_COOLDOWN} from '../../character/state_machine/constants.ts'
+import {MELEE_CHAIN_SLOTS} from '../../character/combat/melee_skill.ts'
 import {HIT_SHAKE_DURATION, HIT_SHAKE_AMPLITUDE} from './constants.ts'
+
+/** 技能显示名：近战链段取段后缀（light_1 / heavy_2 等），其余技能取 id 尾段（shot / charge 等） */
+const skillLabel = (id: string): string => {
+    for (const slot of MELEE_CHAIN_SLOTS) {
+        if (id.endsWith(`_${slot}`)) return slot
+    }
+    const idx = id.lastIndexOf('_')
+    return idx >= 0 ? id.slice(idx + 1) : id
+}
 
 export interface PlayModeController {
     updater: (dt: number) => void
@@ -33,8 +42,8 @@ export const setupPlayMode = (
     const playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () =>
         characterSystem.getPlayerCharacter()?.mesh.position,
         {
-            onLightAttack: () => characterSystem.setPlayerAttack(0),
-            onHeavyAttack: () => characterSystem.setPlayerAttack(1),
+            onLightAttack: (held) => characterSystem.setPlayerAttack(0, held),
+            onHeavyAttack: (held) => characterSystem.setPlayerAttack(1, held),
         },
     )
     const healthBarUpdate = setupHealthBars(
@@ -76,52 +85,53 @@ export const setupPlayMode = (
         if (player) {
             hadPlayer = true
             hud.setVisible(true)
-            const skill = player.combat.skills[player.combat.currentSkillIndex]
-            const isDashing = player.stateMachine.currentState === 'dashing'
 
             const timers: TimerRowData[] = []
 
-            if (player.combat.attackActive) {
-                const dur = skill?.config.duration ?? 0
-                timers.push({
-                    label: 'ATK',
-                    fillRatio: dur > 0 ? Math.min(1, player.combat.attackTimer / dur) : 0,
-                    fillColor: '#ffaa00',
-                    text: `${player.combat.attackTimer.toFixed(1)}s / ${dur.toFixed(1)}s`,
-                    visible: true,
-                })
-            }
+            /* 每技能一行：动作时间 + 恢复时间 + 冷却时间 三个计时器 */
+            const skillTimers: SkillTimerRowData[] = []
+            const emptyCell = (text: string): TimerCellData => ({fillRatio: 0, fillColor: 'transparent', text})
 
-            if (isDashing) {
-                timers.push({
-                    label: 'DASH',
-                    fillRatio: Math.min(1, player.stateMachine.stateTime / DASH_DURATION),
-                    fillColor: '#44ff44',
-                    text: `${player.stateMachine.stateTime.toFixed(1)}s / ${DASH_DURATION.toFixed(1)}s`,
-                    visible: true,
-                })
-            } else {
-                const cd = player.dashCooldownTimer
-                timers.push({
-                    label: 'DASH',
-                    fillRatio: cd > 0 ? 1 - cd / DASH_COOLDOWN : 1,
-                    fillColor: cd > 0 ? '#ff6644' : '#44ff44',
-                    text: cd > 0 ? `${cd.toFixed(1)}s` : 'RDY',
-                    visible: true,
-                })
-            }
+            /* 冷却单元格：触发瞬间满条，随冷却流逝排空（cooldownTimer 递减）；就绪/无冷却时显示 0.0 */
+            const cooldownCell = (cd: number, cdMax: number): TimerCellData => cdMax > 0
+                ? {
+                    fillRatio: cd / cdMax,
+                    fillColor: cd > 0 ? '#ff6644' : '#4488ff',
+                    text: `${cd.toFixed(1)}s`,
+                }
+                : emptyCell('0.0s')
+
+            /* 冲刺技能（移动技能）：只有动作与冷却两段，动作期间用状态机驻留时间填充 */
+            const dash = player.combat.dashSkill
+            const dashCfg = dash.config
+            const dashing = player.stateMachine.currentState === 'dashing'
+            skillTimers.push({
+                label: dashCfg.id,
+                action: dashing
+                    ? {fillRatio: Math.min(1, player.stateMachine.stateTime / dashCfg.duration), fillColor: '#ffaa00', text: `${player.stateMachine.stateTime.toFixed(2)}s`}
+                    : emptyCell(`${dashCfg.duration.toFixed(2)}s`),
+                recovery: emptyCell('-'),
+                cooldown: cooldownCell(dash.cooldownTimer, dashCfg.cooldown),
+            })
 
             for (let i = 0; i < player.combat.skills.length; i++) {
                 const s = player.combat.skills[i]
-                const cd = s.cooldownTimer
-                const cdMax = s.config.cooldown
-                timers.push({
-                    label: `SK${i}`,
-                    fillRatio: cdMax > 0 ? 1 - cd / cdMax : 1,
-                    fillColor: cd > 0 ? '#ff6644' : '#4488ff',
-                    text: cd > 0 ? `${cd.toFixed(1)}s` : 'RDY',
-                    visible: true,
-                })
+                const cfg = s.config
+                const isActive = player.combat.attackActive && player.combat.currentSkillIndex === i
+                const t = player.combat.attackTimer
+
+                /* 动作计时：attackTimer 处于 [0, duration] 区间时填充 */
+                const action: TimerCellData = isActive && cfg.duration > 0 && t <= cfg.duration
+                    ? {fillRatio: Math.min(1, t / cfg.duration), fillColor: '#ffaa00', text: `${t.toFixed(2)}s`}
+                    : emptyCell(cfg.duration > 0 ? `${cfg.duration.toFixed(2)}s` : '-')
+
+                /* 恢复计时：attackTimer 越过 duration 后填充（recovery = 0 的技能无恢复段） */
+                const recovery: TimerCellData = isActive && cfg.recovery > 0 && t > cfg.duration
+                    ? {fillRatio: Math.min(1, (t - cfg.duration) / cfg.recovery), fillColor: '#44ccff', text: `${(t - cfg.duration).toFixed(2)}s`}
+                    : emptyCell(cfg.recovery > 0 ? `${cfg.recovery.toFixed(2)}s` : '-')
+
+                /* 冷却计时：从触发时刻开始（cooldownTimer 递减），就绪/无冷却时显示 0.0 */
+                skillTimers.push({label: skillLabel(cfg.id), action, recovery, cooldown: cooldownCell(s.cooldownTimer, cfg.cooldown)})
             }
 
             hud.update({
@@ -130,6 +140,7 @@ export const setupPlayMode = (
                 stateName: player.stateMachine.currentState,
                 stateTime: player.stateMachine.stateTime,
                 timers,
+                skillTimers,
             })
         } else {
             hud.setVisible(false)

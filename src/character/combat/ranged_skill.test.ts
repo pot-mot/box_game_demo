@@ -30,17 +30,16 @@ describe('RANGED_SKILL_PRESETS', () => {
         expect(RANGED_SKILL_PRESETS[key].type).toBe('ranged')
     })
 
-    it.each(presetIds)('%s 的 cooldown > 0', (key) => {
-        expect(RANGED_SKILL_PRESETS[key].cooldown).toBeGreaterThan(0)
+    it.each(presetIds)('%s 的 cooldown 为 0（普通攻击无冷却）', (key) => {
+        expect(RANGED_SKILL_PRESETS[key].cooldown).toBe(0)
     })
 
     it.each(presetIds)('%s 的 duration > 0', (key) => {
         expect(RANGED_SKILL_PRESETS[key].duration).toBeGreaterThan(0)
     })
 
-    it.each(presetIds)('%s 的 duration <= cooldown', (key) => {
-        const s = RANGED_SKILL_PRESETS[key]
-        expect(s.duration).toBeLessThanOrEqual(s.cooldown)
+    it.each(presetIds)('%s 的 recovery 为 0（远程普通攻击无恢复段）', (key) => {
+        expect(RANGED_SKILL_PRESETS[key].recovery).toBe(0)
     })
 
     it.each(presetIds)('%s 的 weapon 引用正确的武器预设', (key) => {
@@ -49,21 +48,21 @@ describe('RANGED_SKILL_PRESETS', () => {
         expect(skill.weapon).toBe(RANGED_WEAPON_PRESETS[expectedWeaponKey])
     })
 
-    it('crossbow_bolt 冷却比 longbow_shot 长', () => {
-        expect(RANGED_SKILL_PRESETS.crossbow_bolt.cooldown).toBeGreaterThan(RANGED_SKILL_PRESETS.longbow_shot.cooldown)
+    it('crossbow_bolt 动作时间比 longbow_shot 短', () => {
+        expect(RANGED_SKILL_PRESETS.crossbow_bolt.duration).toBeLessThan(RANGED_SKILL_PRESETS.longbow_shot.duration)
     })
 
-    it('grenade_throw 冷却最长', () => {
-        const cd = RANGED_SKILL_PRESETS.grenade_throw.cooldown
+    it('grenade_throw 动作时间最长', () => {
+        const dur = RANGED_SKILL_PRESETS.grenade_throw.duration
         for (const [, s] of presets) {
-            expect(s.cooldown).toBeLessThanOrEqual(cd)
+            expect(s.duration).toBeLessThanOrEqual(dur)
         }
     })
 
-    it('throwing_dart_fling 冷却最短', () => {
-        const cd = RANGED_SKILL_PRESETS.throwing_dart_fling.cooldown
+    it('throwing_dart_fling 动作时间最短', () => {
+        const dur = RANGED_SKILL_PRESETS.throwing_dart_fling.duration
         for (const [, s] of presets) {
-            expect(s.cooldown).toBeGreaterThanOrEqual(cd)
+            expect(s.duration).toBeGreaterThanOrEqual(dur)
         }
     })
 

@@ -10,7 +10,9 @@ import {resolveTendency} from '../../../character/faction.ts'
 import {createCombatComponent} from '../../../character/combat/types.ts'
 import type { AttackResult } from '../../../character/combat/types.ts'
 import {createSkillSlot, type SkillConfig, type SkillSlot} from '../../../character/combat/skill_types.ts'
-import {buildMeleeSkillSlots, MELEE_LIGHT_DURATION, MELEE_LIGHT_CHAIN_COOLDOWN} from '../../../character/combat/melee_skill.ts'
+import {buildMeleeSkillSlots, MELEE_LIGHT_DURATION} from '../../../character/combat/melee_skill.ts'
+import {resolveEntrySkillIndex} from '../../../character/combat/combo_guard.ts'
+import {TEST_WEAPON_ID, TEST_WEAPON, buildTestWeaponSkillSlots} from '../../../character/combat/test_weapon.ts'
 import {MELEE_WEAPON_PRESETS} from '../../../character/weapon/melee_weapon.ts'
 import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
@@ -50,7 +52,7 @@ import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entit
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {createWireframe, cleanupWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
-import {resolvePhases} from '../../../character/combat/attack_phases.ts'
+import {resolvePhases, phaseDurationOf} from '../../../character/combat/attack_phases.ts'
 
 /** Rapier 带 body/bodyHandle 反查的超类型 */
 type CharacterRigidBody = RAPIER.RigidBody
@@ -61,6 +63,7 @@ const _trailTipVec = new Vector3()
 /** 根据 AttackConfig 解析武器模型配置 */
 const resolveWeaponMeshConfig = (attack: AttackConfig): WeaponMeshConfig => {
     if (attack.type === 'melee') {
+        if (attack.weaponId === TEST_WEAPON_ID) return TEST_WEAPON.mesh
         return (MELEE_WEAPON_PRESETS[attack.weaponId ?? ''] ?? MELEE_WEAPON_PRESETS.long_sword).mesh
     }
     return (RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow).mesh
@@ -80,7 +83,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     markPlayer: (id: number) => void
     unmarkPlayer: () => void
     setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, sprint?: boolean) => void
-    setPlayerAttack: (skillIndex?: number) => import('../../../character/combat/types.ts').AttackResult
+    setPlayerAttack: (skillIndex?: number, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
     getPlayerCharacter: () => CharacterEntity | undefined
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
@@ -112,16 +115,20 @@ export interface CharacterEntitySystem extends EntityInfoSource {
 /** 将旧 AttackConfig 转换为 SkillSlot 数组 */
 const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
     if (attack.type === 'melee') {
+        /* test_weapon：测试专用武器，走自定义 6 槽守卫链装配（不进生产预设表） */
+        if ((attack.weaponId ?? '') === TEST_WEAPON_ID) return buildTestWeaponSkillSlots()
         /* 近战 = 4 技能槽双链（轻1/重1/轻2/重2）；伤害/侦测范围沿用存档覆写，
-         * 段时长/阶段/链结构/链终止冷却取预设（存档 duration 不再决定攻击时长） */
+         * 段时长/阶段/链结构/起手冷却取预设（存档 duration 不再决定攻击时长） */
         return buildMeleeSkillSlots(attack.weaponId ?? '', {damage: attack.damage, range: attack.range})
     }
     const weaponPreset = RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow
     const skill: SkillConfig = {
         id: attack.weaponId ?? 'custom_ranged',
         type: 'ranged',
+        /* 远程普通攻击默认无冷却；存档/面板仍可配置非 0 值（触发时开始计时，只挡起手） */
         cooldown: attack.cooldown,
         duration: attack.duration,
+        recovery: 0,
         weapon: {
             id: weaponPreset.id,
             type: 'ranged',
@@ -201,6 +208,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     let playerAttackSkillIndex = 0
+    /** 玩家攻击脉冲携带的按键按住时长（秒），帧末与脉冲一同归零 */
+    let playerAttackHoldDuration = 0
 
     const refreshPlayerLabel = (): void => {
         for (const pi of panelInfos) {
@@ -298,7 +307,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             combatStrategy,
             isDying: false,
             dyingTimer: 0,
-            dashCooldownTimer: 0,
             combat,
             stateMachine,
         }
@@ -330,7 +338,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const spawnAt = (x: number, y: number, z: number): void => {
         const wp = MELEE_WEAPON_PRESETS.long_sword
-        const meleePreset: AttackConfig = {type: 'melee', range: wp.range, damage: wp.damage, cooldown: MELEE_LIGHT_CHAIN_COOLDOWN, duration: MELEE_LIGHT_DURATION}
+        const meleePreset: AttackConfig = {type: 'melee', range: wp.range, damage: wp.damage, cooldown: 0, duration: MELEE_LIGHT_DURATION}
         const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
         select(entity.id)
     }
@@ -435,21 +443,26 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         playerForwardZ = forwardZ
     }
 
-    const setPlayerAttack = (skillIndex?: number): AttackResult => {
+    const setPlayerAttack = (skillIndex?: number, holdDuration?: number): AttackResult => {
         const player = getPlayerCharacter()
         if (!player || player.combat.isDead) return 'dead'
         const idx = skillIndex ?? 0
         if (idx < 0 || idx >= player.combat.skills.length) return 'no_valid_skill'
+        const hold = holdDuration ?? 0
         if (player.combat.attackActive) {
             /* 攻击中不再拒绝：写入单帧脉冲，由 attacking 缓冲逻辑在段末推进（续链/切链） */
             playerAttackPending = true
             playerAttackSkillIndex = idx
+            playerAttackHoldDuration = hold
             return 'ok'
         }
-        const skill = player.combat.skills[idx]
-        if (skill.cooldownTimer > 0) return 'cooldown'
+        /* 非攻击中：按键组 + 守卫（蓄力/方向）+ 冷却解析起手，无候选才拒绝
+         * （不能只查 skills[idx] 冷却：同键组守卫变体与兜底槽冷却相互独立） */
+        const entry = resolveEntrySkillIndex(player.combat, idx, {dx: playerDx, dz: playerDz, holdDuration: hold})
+        if (entry === -1) return 'cooldown'
         playerAttackPending = true
         playerAttackSkillIndex = idx
+        playerAttackHoldDuration = hold
         return 'ok'
     }
 
@@ -491,7 +504,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             for (const sk of entity.combat.skills) {
                 sk.cooldownTimer = Math.max(0, sk.cooldownTimer - dt)
             }
-            entity.dashCooldownTimer = Math.max(0, entity.dashCooldownTimer - dt)
+            entity.combat.dashSkill.cooldownTimer = Math.max(0, entity.combat.dashSkill.cooldownTimer - dt)
             entity.combat.flinchImmunityTimer = Math.max(0, entity.combat.flinchImmunityTimer - dt)
             flashStates.get(entity.id)?.tick(dt)
             checkGround(entity, dt)
@@ -545,7 +558,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 })
             } else if (entity.isPlayer) {
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerSprint, playerAttackSkillIndex)
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerSprint, playerAttackSkillIndex, playerAttackHoldDuration)
                 if (playerAttackPending) {
                     entity.combat.attackDirX = playerForwardX
                     entity.combat.attackDirZ = playerForwardZ
@@ -565,9 +578,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const inAttacking = entity.stateMachine.currentState === 'attacking' && activeSkill !== undefined
                 const phases = inAttacking ? resolvePhases(activeSkill.config.phases) : []
                 const phaseDuration = entity.combat.phaseIndex < phases.length
-                    ? activeSkill!.config.duration * phases[entity.combat.phaseIndex].durationRatio
+                    ? phaseDurationOf(phases[entity.combat.phaseIndex], activeSkill!.config.duration, activeSkill!.config.recovery)
                     : 1
-                const totalDuration = activeSkill?.config.duration ?? 1
+                const totalDuration = activeSkill !== undefined ? activeSkill.config.duration + activeSkill.config.recovery : 1
                 const ctxPhaseName = inAttacking && entity.combat.phaseIndex < phases.length
                     ? phases[entity.combat.phaseIndex].name
                     : undefined
@@ -718,6 +731,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
 
         playerAttackPending = false
+        playerAttackHoldDuration = 0
         playerJump = false
         playerSprint = false
 
