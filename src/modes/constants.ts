@@ -1,4 +1,4 @@
-export const GAME_MODE_VALUES = ['edit', 'play', 'showcase'] as const
+export const GAME_MODE_VALUES = ['edit', 'play', 'showcase', 'bone_edit'] as const
 export type GameMode = typeof GAME_MODE_VALUES[number]
 
 /** 鼠标拖拽旋转灵敏度（edit 和 play 模式共用） */

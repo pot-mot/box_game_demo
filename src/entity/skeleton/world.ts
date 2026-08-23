@@ -1,7 +1,7 @@
 import {Mesh, type Scene} from 'three'
 import type {PanelContext} from '../box/base/ui'
 import type {Skeleton} from '../../skeleton/skeleton.ts'
-import {skeletonFromDefinition} from '../../skeleton/anim/serialization.ts'
+import {skeletonFromDefinition, type SkeletonDefinition} from '../../skeleton/anim/serialization.ts'
 import {createJointVisuals, type JointVisuals} from './render/joint_groups.ts'
 import {assembleCharacterAppearance, resizeBoneParts, type CharacterAppearance} from './appearance/assemble.ts'
 import {buildCharacterSkeletonDefinition} from './preset.ts'
@@ -30,6 +30,8 @@ export interface SkeletonEntity {
 export interface SkeletonEntitiesContext {
     /** 新建人形预设骨架实体并聚焦 */
     addPreset: (name?: string) => SkeletonEntity
+    /** 从骨架定义重建实体（导入/undo 用）并聚焦 */
+    addFromDefinition: (definition: SkeletonDefinition, name?: string) => SkeletonEntity
     remove: (id: number) => void
     getEntityList: () => readonly SkeletonEntity[]
     getFocus: () => SkeletonEntity | undefined
@@ -53,8 +55,11 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
     let focusId: number | undefined
     let selection: SkeletonSelection | undefined
 
-    const addPreset = (name?: string): SkeletonEntity => {
-        const skeleton = skeletonFromDefinition(buildCharacterSkeletonDefinition())
+    const addPreset = (name?: string): SkeletonEntity =>
+        addFromDefinition(buildCharacterSkeletonDefinition(), name)
+
+    const addFromDefinition = (definition: SkeletonDefinition, name?: string): SkeletonEntity => {
+        const skeleton = skeletonFromDefinition(definition)
         const visuals = createJointVisuals(skeleton, scene)
         const appearance = assembleCharacterAppearance(visuals.groups, PRESET_PALETTE)
         resizeBoneParts(skeleton, appearance)
@@ -129,6 +134,7 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
 
     const ctxWithoutPanel = {
         addPreset,
+        addFromDefinition,
         remove,
         getEntityList: (): readonly SkeletonEntity[] => [...entities.values()],
         getFocus,

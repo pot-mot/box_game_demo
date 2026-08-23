@@ -211,11 +211,14 @@ export const collectWorldState = (
         if (cameraInfo) playEntry.cameraInfo = cameraInfo
         if (playEntry.cameraInfo) modeInfo.play = playEntry
         // 不清除 edit 数据
+    } else if (mode === 'bone_edit') {
+        if (cameraInfo) modeInfo.boneEdit = {cameraInfo}
+        // 不清除 edit/play 数据
     }
 
     return {
         entities,
-        modeInfo: modeInfo.edit || modeInfo.play ? modeInfo : undefined,
+        modeInfo: modeInfo.edit || modeInfo.play || modeInfo.boneEdit ? modeInfo : undefined,
     }
 }
 

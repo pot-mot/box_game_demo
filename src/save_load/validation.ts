@@ -201,6 +201,9 @@ const ModeInfo = z.object({
     play: z.object({
         cameraInfo: CameraInfo.optional(),
     }).optional(),
+    boneEdit: z.object({
+        cameraInfo: CameraInfo.optional(),
+    }).optional(),
 })
 
 const SaveDataSchema = z.object({

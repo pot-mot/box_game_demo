@@ -1,7 +1,12 @@
 import {type PerspectiveCamera} from 'three'
-import {ORBIT_SENSITIVITY} from "../constants.ts";
+import {ORBIT_SENSITIVITY} from './constants.ts'
+import {getInputRegistry} from '../input/registry.ts'
+import {applyFreeFlightMovement} from './free_flight.ts'
 
-/** 编辑模式：鼠标拖拽旋转相机（偏航/俯仰），监听 mousedown/mousemove/mouseup */
+/**
+ * 鼠标拖拽旋转相机（偏航/俯仰）：edit 与 bone_edit 模式共用。
+ * 监听 mousedown/mousemove/mouseup（仅左键拖拽旋转）。
+ */
 export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement): {setOrientation: (yaw: number, pitch: number) => void} => {
     let yaw = 0
     let pitch = 0
@@ -32,4 +37,23 @@ export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement)
             applyRotation()
         },
     }
+}
+
+/**
+ * WASD+EQ 第一人称相机移动（edit 与 bone_edit 模式共用）。
+ * 支持启用/禁用（setEnabled）；返回 updater 函数，由主循环每帧调用。
+ */
+export const setupKeyboardCamera = (camera: PerspectiveCamera): {
+    updater: () => void
+    setEnabled: (v: boolean) => void
+} => {
+    const input = getInputRegistry()
+    let enabled = true
+
+    const updater = (): void => {
+        if (!enabled) return
+        applyFreeFlightMovement(camera, input)
+    }
+
+    return {updater, setEnabled: (v: boolean) => { enabled = v } }
 }

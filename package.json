@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
+    "@potmot/command-history": "^0.0.1",
     "three": "^0.185.1",
     "zod": "^4.4.3"
   }

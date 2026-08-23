@@ -45,6 +45,15 @@ const MOUSE_INSTRUCTIONS_SHOWCASE = [
     '鼠标左键点击 聚焦角色',
 ]
 
+const MOUSE_INSTRUCTIONS_BONE_EDIT = [
+    '鼠标左键拖拽 旋转视角',
+    '鼠标左键点击 选中关节/骨骼',
+    '拖拽关节   移动（IK 模式牵引）',
+    '拖拽骨骼段  旋转 tail 子树',
+    '双击时间轴  添加关键帧',
+    'Ctrl+滚轮  时间轴缩放',
+]
+
 /** 在说明面板中需要显示的键盘动作顺序 */
 const INSTRUCTION_ORDER: readonly InputAction[] = [
     'move_forward', 'move_backward', 'move_left', 'move_right',
@@ -84,6 +93,8 @@ export const setupInstructionsPanel = (getMode: () => GameMode): {
             title.textContent = '=== 编辑模式操作说明 ==='
         } else if (mode === 'showcase') {
             title.textContent = '=== 展示模式操作说明 ==='
+        } else if (mode === 'bone_edit') {
+            title.textContent = '=== 骨骼动画编辑模式操作说明 ==='
         } else {
             title.textContent = '=== 游玩模式操作说明 ==='
         }
@@ -95,7 +106,9 @@ export const setupInstructionsPanel = (getMode: () => GameMode): {
             ? MOUSE_INSTRUCTIONS_EDIT
             : mode === 'showcase'
                 ? MOUSE_INSTRUCTIONS_SHOWCASE
-                : MOUSE_INSTRUCTIONS_PLAY
+                : mode === 'bone_edit'
+                    ? MOUSE_INSTRUCTIONS_BONE_EDIT
+                    : MOUSE_INSTRUCTIONS_PLAY
         for (const text of mouseItems) {
             const div = document.createElement('div')
             div.style.cssText = LINE_CSS
@@ -103,7 +116,7 @@ export const setupInstructionsPanel = (getMode: () => GameMode): {
             list.appendChild(div)
         }
 
-        /* 键盘操作（从注册表动态生成） */
+        /* 键盘操作（从注册表动态生成）；bone_edit 显示全部（含编辑工具键） */
         for (const action of INSTRUCTION_ORDER) {
             /* 编辑模式专用动作在游玩模式中隐藏 */
             if (mode === 'play' && EDIT_ONLY_ACTIONS.has(action)) continue
@@ -115,6 +128,16 @@ export const setupInstructionsPanel = (getMode: () => GameMode): {
             div.style.cssText = LINE_CSS
             div.textContent = `${keyStr} \u3000\u3000${ACTION_LABELS[action]}`
             list.appendChild(div)
+        }
+
+        /* 时间轴编辑键（静态） */
+        if (mode === 'bone_edit') {
+            for (const text of ['Ctrl+Z / Ctrl+Shift+Z \u3000\u3000撤销 / 重做', 'Ctrl+C / Ctrl+V \u3000\u3000复制 / 粘贴关键帧', 'Delete \u3000\u3000\u3000\u3000删除选中关键帧']) {
+                const div = document.createElement('div')
+                div.style.cssText = LINE_CSS
+                div.textContent = text
+                list.appendChild(div)
+            }
         }
     }
 

@@ -34,6 +34,8 @@ import {setupPlayMode} from './modes/play'
 import type {PlayModeController} from './modes/play'
 import {setupShowcaseMode} from './modes/showcase'
 import type {ShowcaseModeController} from './modes/showcase'
+import {setupBoneEditMode} from './modes/bone_edit'
+import type {BoneEditModeController} from './modes/bone_edit'
 import {collectWorldState, saveWorldToFile} from './save_load/serialize.ts'
 import {loadWorldFromData, clearAllEntities, type LoadWorldResult} from './save_load/deserialize.ts'
 import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
@@ -163,10 +165,11 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources)
     }
 
-    // --- 模式控制器（编辑/游玩/展示）---
+    // --- 模式控制器（编辑/游玩/展示/骨骼动画）---
     let editMode: EditModeController | undefined
     let playMode: PlayModeController | undefined
     let showcaseMode: ShowcaseModeController | undefined
+    let boneEditMode: BoneEditModeController | undefined
     /* 展示模式退出（返回启动屏）后置位，终止本 RAF 循环，新循环由再次 startGame 启动 */
     let showcaseExited = false
 
@@ -174,7 +177,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         editMode = setupEditMode(camera, renderer, systems, allTerrainSources, terrainSource)
     } else if (mode === 'play') {
         playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem, boxSpawner)
-    } else {
+    } else if (mode === 'showcase') {
         /* 展示模式：复用共享渲染器与单 RAF 循环，自建独立展示场景 */
         showcaseMode = setupShowcaseMode({
             renderer,
@@ -186,6 +189,9 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 showStartup()
             },
         })
+    } else {
+        /* 骨骼动画编辑模式：复用主场景，物理冻结，仅编辑骨骼节点/段与动画轨道 */
+        boneEditMode = setupBoneEditMode(camera, renderer, scene)
     }
 
     /* ── 编辑模式：执行 / 步进状态 ── */
@@ -259,14 +265,21 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             if (loadResult.playCameraPos) camera.position.set(loadResult.playCameraPos.x, loadResult.playCameraPos.y, loadResult.playCameraPos.z)
             if (loadResult.playCameraRot) camera.rotation.set(loadResult.playCameraRot.x, loadResult.playCameraRot.y, loadResult.playCameraRot.z)
         }
+        if (mode === 'bone_edit') {
+            if (loadResult.boneEditCameraPos) camera.position.set(loadResult.boneEditCameraPos.x, loadResult.boneEditCameraPos.y, loadResult.boneEditCameraPos.z)
+            if (loadResult.boneEditCameraRot) {
+                camera.rotation.set(loadResult.boneEditCameraRot.x, loadResult.boneEditCameraRot.y, loadResult.boneEditCameraRot.z)
+                boneEditMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
+            }
+        }
     }
 
     // --- UI ---
     const cameraInfoUpdate = mode === 'showcase' ? () => {} : setupCameraInfo(camera)
     const {updater: instructionsUpdate, toggle: toggleInstructions} = setupInstructionsPanel(() => mode)
 
-    // --- 存档快捷键（展示模式无世界实体，不注册） ---
-    if (mode !== 'showcase') input.onActionDown('save_world', () => {
+    // --- 存档快捷键（展示模式无世界实体、骨骼动画模式走独立资产导入导出，均不注册） ---
+    if (mode !== 'showcase' && mode !== 'bone_edit') input.onActionDown('save_world', () => {
         const cached = loadCachedSaveData()
         const state = collectWorldState(
             systemsByType,
@@ -280,7 +293,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         saveWorldToFile(state)
     })
 
-    if (mode !== 'showcase') input.onActionDown('load_world', () => {
+    if (mode !== 'showcase' && mode !== 'bone_edit') input.onActionDown('load_world', () => {
         promptLoadFile((data) => {
             cacheSaveData(data)
             clearAllEntities(systemsByType, allTerrainSources)
@@ -356,6 +369,9 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             } else if (mode === 'showcase') {
                 /* 展示模式：物理冻结，仅推进展示时间线（渲染在 updater 内完成） */
                 showcaseMode?.updater(delta)
+            } else if (mode === 'bone_edit') {
+                /* 骨骼动画编辑模式：物理冻结，推进视窗交互与时间轴 */
+                boneEditMode?.updater(delta)
             } else {
                 playMode?.updater(delta)
             }

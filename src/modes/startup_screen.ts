@@ -53,6 +53,9 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
     const showcaseBtn = makeBtn('展示模式')
     btnRow.appendChild(showcaseBtn)
 
+    const boneEditBtn = makeBtn('骨骼动画', ';background:#1a3a2c;border-color:#2a6a4c')
+    btnRow.appendChild(boneEditBtn)
+
     // 导入存档
     const importRow = document.createElement('div')
     importRow.style.cssText = 'font:14px system-ui,sans-serif;color:#888;display:flex;align-items:center;justify-content:center;gap:8px'
@@ -140,4 +143,5 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
     editBtn.addEventListener('click', () => dismiss('edit'))
     playBtn.addEventListener('click', () => dismiss('play'))
     showcaseBtn.addEventListener('click', () => dismiss('showcase'))
+    boneEditBtn.addEventListener('click', () => dismiss('bone_edit'))
 }

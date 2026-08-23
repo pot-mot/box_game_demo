@@ -33,6 +33,7 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
         materials.push(material)
         geometries.push(geometry)
         const gizmo = new Mesh(geometry, material)
+        gizmo.userData.jointId = joint.id
         gizmos.set(joint.id, gizmo)
         group.add(gizmo)
     }

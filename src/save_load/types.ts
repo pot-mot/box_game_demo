@@ -147,6 +147,9 @@ export interface ModeInfoJSON {
     play?: {
         cameraInfo?: CameraInfoJSON
     }
+    boneEdit?: {
+        cameraInfo?: CameraInfoJSON
+    }
 }
 
 /** 完整存档数据结构 */

@@ -7,11 +7,8 @@ import {createSkeletonBone} from '../bone.ts'
 import type {
     BoneAnimationClip,
     BoneEventRecord,
-    BoneEventTrack,
     BoneJointKeyframeRecord,
-    BoneJointTrack,
     BoneSegmentKeyframeRecord,
-    BoneSegmentTrack,
 } from './types.ts'
 import type {TransitionSpec} from '../transition.ts'
 
@@ -115,44 +112,76 @@ const AssetSchema = z.object({
 
 // ── 领域 ↔ JSON 转换 ──
 
-const transitionToJSON = (spec: TransitionSpec): unknown => spec
-const transitionFromJSON = (raw: z.infer<typeof TransitionSpecSchema>): TransitionSpec => raw
+/** 关键帧记录/轨道的 JSON-safe 形状（undo 快照/独立导入导出用） */
+export interface JointRecordJSON {
+    readonly time: number
+    readonly position: readonly [number, number, number]
+    readonly rotation: readonly [number, number, number, number]
+}
+export interface SegmentRecordJSON {
+    readonly time: number
+    readonly roll: number
+}
+export interface EventRecordJSON {
+    readonly time: number
+    readonly eventName: string
+    readonly params?: Readonly<Record<string, string | number>>
+}
+export interface JointTrackJSON {
+    readonly targetId: string
+    readonly interpolation: TransitionSpec
+    readonly records: readonly JointRecordJSON[]
+}
+export interface SegmentTrackJSON {
+    readonly targetId: string
+    readonly interpolation: TransitionSpec
+    readonly records: readonly SegmentRecordJSON[]
+}
+export interface EventTrackJSON {
+    readonly records: readonly EventRecordJSON[]
+}
+export interface ClipJSON {
+    readonly name: string
+    readonly duration: number
+    readonly loop: boolean
+    readonly jointTracks: readonly JointTrackJSON[]
+    readonly boneTracks: readonly SegmentTrackJSON[]
+    readonly eventTracks: readonly EventTrackJSON[]
+}
 
-const jointRecordToJSON = (record: BoneJointKeyframeRecord): unknown => ({
+const jointRecordToJSON = (record: BoneJointKeyframeRecord): JointRecordJSON => ({
     time: record.time,
-    position: record.position.toArray(),
-    rotation: record.rotation.toArray(),
+    position: [record.position.x, record.position.y, record.position.z],
+    rotation: [record.rotation.x, record.rotation.y, record.rotation.z, record.rotation.w],
 })
-const jointRecordFromJSON = (raw: z.infer<typeof JointRecordSchema>): BoneJointKeyframeRecord => ({
+const jointRecordFromJSON = (raw: JointRecordJSON): BoneJointKeyframeRecord => ({
     time: raw.time,
     position: new Vector3().fromArray(raw.position),
     rotation: new Quaternion().fromArray(raw.rotation),
 })
 
-const segmentRecordToJSON = (record: BoneSegmentKeyframeRecord): unknown => ({
+const segmentRecordToJSON = (record: BoneSegmentKeyframeRecord): SegmentRecordJSON => ({
     time: record.time,
     roll: record.roll,
 })
-const segmentRecordFromJSON = (raw: z.infer<typeof SegmentRecordSchema>): BoneSegmentKeyframeRecord => ({
-    time: raw.time,
-    roll: raw.roll,
-})
+const segmentRecordFromJSON = (raw: SegmentRecordJSON): BoneSegmentKeyframeRecord => raw
 
-const eventRecordToJSON = (record: BoneEventRecord): unknown => record
-const eventRecordFromJSON = (raw: z.infer<typeof EventRecordSchema>): BoneEventRecord => raw
+const eventRecordToJSON = (record: BoneEventRecord): EventRecordJSON => record
+const eventRecordFromJSON = (raw: EventRecordJSON): BoneEventRecord => raw
 
-const clipToJSON = (clip: BoneAnimationClip): unknown => ({
+/** 序列化单个 clip 为 JSON-safe 形状（undo 快照/独立导出用） */
+export const clipToJSON = (clip: BoneAnimationClip): ClipJSON => ({
     name: clip.name,
     duration: clip.duration,
     loop: clip.loop,
     jointTracks: clip.jointTracks.map(track => ({
         targetId: track.targetId,
-        interpolation: transitionToJSON(track.interpolation),
+        interpolation: track.interpolation,
         records: track.records.map(jointRecordToJSON),
     })),
     boneTracks: clip.boneTracks.map(track => ({
         targetId: track.targetId,
-        interpolation: transitionToJSON(track.interpolation),
+        interpolation: track.interpolation,
         records: track.records.map(segmentRecordToJSON),
     })),
     eventTracks: clip.eventTracks.map(track => ({
@@ -160,21 +189,22 @@ const clipToJSON = (clip: BoneAnimationClip): unknown => ({
     })),
 })
 
-const clipFromJSON = (raw: z.infer<typeof ClipSchema>): BoneAnimationClip => ({
+/** 从 JSON-safe 形状还原 clip（undo 快照/独立导入用；数据需先经 zod 校验或来自 clipToJSON） */
+export const clipFromJSON = (raw: ClipJSON): BoneAnimationClip => ({
     name: raw.name,
     duration: raw.duration,
     loop: raw.loop,
-    jointTracks: raw.jointTracks.map((track): BoneJointTrack => ({
+    jointTracks: raw.jointTracks.map(track => ({
         targetId: track.targetId,
-        interpolation: transitionFromJSON(track.interpolation),
+        interpolation: track.interpolation,
         records: track.records.map(jointRecordFromJSON),
     })),
-    boneTracks: raw.boneTracks.map((track): BoneSegmentTrack => ({
+    boneTracks: raw.boneTracks.map(track => ({
         targetId: track.targetId,
-        interpolation: transitionFromJSON(track.interpolation),
+        interpolation: track.interpolation,
         records: track.records.map(segmentRecordFromJSON),
     })),
-    eventTracks: raw.eventTracks.map((track): BoneEventTrack => ({
+    eventTracks: raw.eventTracks.map(track => ({
         records: track.records.map(eventRecordFromJSON),
     })),
 })

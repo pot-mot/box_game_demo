@@ -11,6 +11,9 @@ importers:
       '@dimforge/rapier3d-compat':
         specifier: ^0.20.0
         version: 0.20.0
+      '@potmot/command-history':
+        specifier: ^0.0.1
+        version: 0.0.1
       three:
         specifier: ^0.185.1
         version: 0.185.1
@@ -70,6 +73,9 @@ packages:
     resolution: {integrity: sha512-9zOJ6ZQRAena31MpOH9VSzIz8Ou3YJ/wtY/eQm5T2uhfhG7/U3COrMS8xOtUrZrp9OgdmzEnIYODye3nY1VqzA==}
     engines: {node: '>=20'}
     hasBin: true
+
+  '@potmot/command-history@0.0.1':
+    resolution: {integrity: sha512-5pjJy+tBJ0WVPyoiiTdlb55i8Ke+6DSY0FxeycgR7SnIqPGuHFNNp3w1nVVoSQZfoKEAvzFQWnKCgSZtqA9Tgw==}
 
   '@rolldown/binding-android-arm64@1.1.5':
     resolution: {integrity: sha512-lZg8fqIv2v7FF237bwMgzGZEJvGL79/s5knJ/i6FmsGF4XXlzccZ4jb+TrFIxtSSxFtIpdsgrPZeMk1I9AFcyQ==}
@@ -363,6 +369,9 @@ packages:
   meshoptimizer@1.1.1:
     resolution: {integrity: sha512-oRFNWJRDA/WTrVj7NWvqa5HqE1t9MYDj2VaWirQCzCCrAd2GHrqR/sQezCxiWATPNlKTcRaPRHPJwIRoPBAp5g==}
 
+  mitt@3.0.1:
+    resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
+
   nanoid@3.3.16:
     resolution: {integrity: sha512-bzlKTyNJ7+LdGIIwy8ijFpIqEQIvafahV7eYykJ8Cvh42EdJeODoJ6gUJXpQJvej1BddH8OqTXZNE/KfbWAu8Q==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
@@ -587,6 +596,10 @@ snapshots:
   '@playwright/test@1.62.0':
     dependencies:
       playwright: 1.62.0
+
+  '@potmot/command-history@0.0.1':
+    dependencies:
+      mitt: 3.0.1
 
   '@rolldown/binding-android-arm64@1.1.5':
     optional: true
@@ -822,6 +835,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   meshoptimizer@1.1.1: {}
+
+  mitt@3.0.1: {}
 
   nanoid@3.3.16: {}
 

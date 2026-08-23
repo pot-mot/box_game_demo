@@ -33,6 +33,8 @@ export interface LoadWorldResult {
     editCameraRot?: {x: number; y: number; z: number}
     playCameraPos?: {x: number; y: number; z: number}
     playCameraRot?: {x: number; y: number; z: number}
+    boneEditCameraPos?: {x: number; y: number; z: number}
+    boneEditCameraRot?: {x: number; y: number; z: number}
 }
 
 const vec3FromTuple = (t?: [number, number, number]): {x: number; y: number; z: number} | undefined =>
@@ -116,11 +118,14 @@ export const loadWorldFromData = (
 
     const ei = data.modeInfo?.edit
     const pi = data.modeInfo?.play
+    const bi = data.modeInfo?.boneEdit
 
     return {
         editCameraPos: vec3FromTuple(ei?.cameraInfo?.position),
         editCameraRot: vec3FromTuple(ei?.cameraInfo?.rotate),
         playCameraPos: vec3FromTuple(pi?.cameraInfo?.position),
         playCameraRot: vec3FromTuple(pi?.cameraInfo?.rotate),
+        boneEditCameraPos: vec3FromTuple(bi?.cameraInfo?.position),
+        boneEditCameraRot: vec3FromTuple(bi?.cameraInfo?.rotate),
     }
 }

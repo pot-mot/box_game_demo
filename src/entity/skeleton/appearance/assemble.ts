@@ -53,6 +53,9 @@ export const assembleCharacterAppearance = (
             ? createHeadBoxPart(w, h, d, palette)
             : createTwoFaceBoxPart(w, h, d, paletteKey === 'body' ? palette.bodyColor : palette.legColor)
         part.mesh.position.y = -h / 2
+        /* 拾取标记：部件归属的挂载关节与骨骼段 */
+        part.mesh.userData.jointId = jointId
+        if (boneId !== undefined) part.mesh.userData.boneId = boneId
         group.add(part.mesh)
         const binding: BonePartBinding = {boneId, part, baseHeight: h}
         parts.push(binding)
