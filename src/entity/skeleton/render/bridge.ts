@@ -41,8 +41,15 @@ export const createSkeletonFromGroups = (
         for (const [jointId, group] of groupByJointId) {
             const joint = skeleton.findJoint(jointId)
             if (joint === undefined) continue
-            group.position.copy(joint.position)
-            group.quaternion.copy(joint.rotation)
+            if (joint.parent === undefined) {
+                /* 根关节位移以场景为真源（角色：body 位置经 syncPositions 写入 model.group；
+                 * 动画只驱动旋转）——从 Group 读回根位置保持骨架一致，不覆盖外部管理的位置 */
+                joint.position.copy(group.position)
+                group.quaternion.copy(joint.rotation)
+            } else {
+                group.position.copy(joint.position)
+                group.quaternion.copy(joint.rotation)
+            }
         }
     }
 

@@ -50,21 +50,23 @@ describe('场景真源桥接（createSkeletonFromGroups）', () => {
         expect(bridge.findJoint('tip')!.position.x).toBe(1)
     })
 
-    it('领域局部修改 → updateWorldTransforms 写回 Group（场景图级联生效）', () => {
+    it('领域局部修改 → updateWorldTransforms 写回 Group（非根关节，场景图级联生效）', () => {
         const {root, mid, tip, scene} = buildGroups()
         const bridge = createSkeletonFromGroups([
             {jointId: 'root', group: root},
             {jointId: 'mid', group: mid},
             {jointId: 'tip', group: tip},
         ])
-        bridge.findJoint('mid')!.position.set(0, 3, 0)
+        connectJoint(bridge.findJoint('root')!, bridge.findJoint('mid')!)
+        connectJoint(bridge.findJoint('mid')!, bridge.findJoint('tip')!)
+        bridge.findJoint('tip')!.position.set(0, 3, 0)
         bridge.updateWorldTransforms()
-        expect(mid.position.y).toBe(3)
+        expect(tip.position.y).toBe(3)
         scene.updateMatrixWorld(true)
         expect(tip.getWorldPosition(new Vector3()).y).toBe(3)
     })
 
-    it('applyPose 写局部并同步 Group（非根关节；根位移由外部管理不被覆盖）', () => {
+    it('applyPose 写局部并同步 Group（非根关节；根位移以场景为真源不被覆盖）', () => {
         const {root, mid, tip} = buildGroups()
         const bridge = createSkeletonFromGroups([
             {jointId: 'root', group: root},
@@ -74,14 +76,16 @@ describe('场景真源桥接（createSkeletonFromGroups）', () => {
         connectJoint(bridge.findJoint('root')!, bridge.findJoint('mid')!)
         connectJoint(bridge.findJoint('mid')!, bridge.findJoint('tip')!)
         const pose = bridge.readPose()
-        /* 根位置先由外部设定，pose 尝试清零根位移 —— 应被保留 */
-        bridge.findJoint('root')!.position.set(5, 0, 3)
+        /* 根位置由外部 Group 管理：外部先写 root 位置，pose 尝试清零根位移 —— 应被保留 */
+        root.position.set(5, 0, 3)
         pose.jointPoses.get('root')!.position.set(0, 0, 0)
         pose.jointPoses.get('tip')!.position.set(0, 4, 0)
         bridge.applyPose(pose)
-        /* 根位置不被动画覆盖 */
+        /* 根 Group 位置不被动画覆盖（外部管理值保留） */
         expect(root.position.x).toBe(5)
         expect(root.position.z).toBe(3)
+        /* 骨架根从 Group 读回保持一致 */
+        expect(bridge.findJoint('root')!.position.x).toBe(5)
         /* 非根关节照常写入并同步 Group */
         expect(tip.position.y).toBe(4)
     })

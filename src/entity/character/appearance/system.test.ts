@@ -46,12 +46,18 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
     it('进入 idle 后多帧推进：头部呼吸摆动（证明 clip 播放器在播放，未修复时静止首帧）', () => {
         const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const sys = createAppearanceSystem()
+        /* 模型根位置由外部物理管理（模拟 syncPositions 写入） */
+        model.group.position.set(3, 1, -2)
         /* 驱动若干帧（stateTime 随帧累加） */
         for (let i = 0; i < 30; i++) {
             sys.update(1 / 60, model, 'idle', makeCtx({stateTime: i / 60}))
         }
         /* 头部应有呼吸摆动（sin(t·2.5)·0.02），而非静止 0 */
         expect(Math.abs(model.headNeck.rotation.x)).toBeGreaterThan(1e-4)
+        /* 根位置不被动画覆盖（角色不飞回原点 / 材质跟随 body） */
+        expect(model.group.position.x).toBe(3)
+        expect(model.group.position.y).toBe(1)
+        expect(model.group.position.z).toBe(-2)
         /* 继续推进，摆动相位变化 → 值与首帧不同 */
         const first = model.headNeck.rotation.x
         for (let i = 30; i < 90; i++) {
