@@ -439,15 +439,16 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 - 每个技能生成攻击 clip（单段或整链），由 attacking 状态机三计时驱动：`phaseTimer/phaseDuration` → clip 时间 seek 映射；
 - **变速语义**（评审修正）：现有生产配置各阶段时长均为技能静态配置（`phaseDurationOf` = `duration × ratio` / `config.recovery`），无运行时时长源——预烘焙 clip 按静态配置时长录制，生产环境 `speed = 1`，满足无回归；`setSpeed` 保留用于「行走滑步对齐」及未来引入运行时可变段长（如随属性变化的 recovery）时按比例整体缩放，且需重新评估 §8.6 命中窗口一致性约束；
-- 打击手感曲线：`strike_peak` 预设（两段二阶贝塞尔拼接，数学与现有 `strikeCurve` 完全一致，§4.6）保证无回归；
-- overshoot 惯性过冲、aim/spin 微颤、弓步腿角链式插值、腕部偏转、头部侧偏**全部烘焙为关键帧**（评审决议：全量轨道化）；
-- `swingTilt` 段参数（评审决议：**预烘焙多套 clip**）：每技能 × 每 tilt 值烘焙一套独立 clip，`attackType`（slash/thrust/spin）同样体现在 clip 中，纯数据无程序化旋转。
+- **烘焙实现（M4b）**：`appearance/clips/attack_clips.ts` 提取旧 attacking.ts 全部公式（阶段末姿态、链式 lerp、`strike_peak` 末端加速、overshoot 惯性过冲、aim/spin 微颤、弓步腿角、腕部刃面偏转、左臂平衡/扶柄、头部侧偏/微晃），按 60fps 烘焙为 clip；`t`（clip 时间）经阶段时长累加映射为阶段跨度（`spanAt`），全部完成后维持末阶段 p=1（clamp）；无阶段信息走虚拟三阶段回退（时长 = `FALLBACK_ATTACK_DURATION`）；
+- `swingTilt` 段参数（评审决议：**预烘焙多套 clip**）：swingTilt 为技能段固有配置（`skill.config.swingTilt`），每技能段单一 clip 即含对应 tilt；`attackType`（slash/thrust/spin）由阶段配置内置于 clip；`gripTilt`（武器静态握持前倾）作为生成参数随模型武器装配；
+- **运行时驱动**：attacking 状态 = 普通播放器播放（clip 时长 = duration + recovery，与状态机计时天然同步，speed=1）；链段切换（动画键 `attacking:skillId` 变化）→ 重建播放器 + 快照混合；进入 attacking/链段切换时合成 `hitbox_off` 事件关闭旧命中窗口（新 clip 的 hitbox_on 稍后重新打开）；
+- `appearance/animators/` 目录已全部删除（8 状态全量 clip 化）。
 
 ### 8.4 命中判定迁移（动画事件轨道）
 
-- 攻击 clip 的**事件轨道**记录 `hitbox_on` / `hitbox_off` 事件（参数含武器挂点名），替代状态机阶段计时窗口；
-- `melee_executor` 改为读取播放器 `onEvent` 状态：事件开启命中窗口、窗口内每帧维持现有「`weaponGroup.matrixWorld` OBB × 受击箱 SAT」判定、事件关闭窗口；
-- **时序要求**（评审修正）：a) 播放器 updater 必须在同一 tick 内先于 `executor.update` 执行（顺序纳入 M4b 验收），窗口开关不滞后一帧；b) 当 hitbox_on 与 hitbox_off 落在同一 `(fromTime, toTime]` 采样区间（短窗口或大 dt），窗口仍至少覆盖一个执行帧——播放器对区间内 on/off 成对出现的事件强制保留一帧窗口（在事件时间点补发一次判定），保证判定不因帧量化漏空；
+- 攻击 clip 的**事件轨道**记录 `hitbox_on` / `hitbox_off` 事件（时间 = 0.1 / 0.85 × 动作时长，与旧 executor 窗口一致），替代状态机阶段计时窗口；
+- `melee_executor` 改为事件驱动（`setHitWindow(active)`）：事件开启命中窗口、窗口内每帧维持现有「`weaponGroup.matrixWorld` OBB × 受击箱 SAT」判定、事件关闭窗口；接线在 `entity/character/physics/world.ts`：`createAppearanceSystem({onAttackEvent})` 把播放器事件路由到 executor；
+- **时序要求**（评审修正）：a) 播放器 updater 在同一 tick 内先于 `executor.update` 执行（characterSystem.update 内 appearance 在前、executor 在后）；b) 当 hitbox_on 与 hitbox_off 落在同一 `(fromTime, toTime]` 采样区间（短窗口或大 dt），窗口仍至少覆盖一个执行帧——播放器对区间内成对事件强制保留一帧窗口（增量触发顺序保证 on 先于 off）；
 - 收益：命中窗口与视觉动画天然同步，动画编辑后无需人工对齐窗口参数；伤害结算逻辑不变。
 
 ### 8.5 补全项（新系统带来的增量能力）
@@ -459,9 +460,9 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 ### 8.6 迁移验收标准
 
-- 全部状态动画由 clip 驱动（`animators/` 目录移除）；
+- 全部状态动画由 clip 驱动（`animators/` 目录已移除）；
 - 攻击阶段姿态与迁移前采样一致（回归测试）；`strike_peak` 曲线与 `strikeCurve` 输出逐点一致；
-- 命中窗口由事件轨道驱动，伤害判定行为不变；播放器 updater 先于 `executor.update` 执行，成对事件同帧时窗口仍至少覆盖一个执行帧（§8.4 时序要求）；
+- 命中窗口由事件轨道驱动，伤害判定行为不变；播放器 updater 先于 `executor.update` 执行（§8.4 时序要求）；
 - 双手武器左手实时贴合握柄（IK）；clip applyPose 与 IK 写入分层顺序生效；
 - showcase 与 play 共用同一动画资产来源。
 
@@ -482,6 +483,8 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `skeleton/anim/serialization.test.ts` | 资产 JSON 往返、非法数据拒绝、缺省字段兜底（zod default）、formatVersion、ikRootLevel 持久化 |
 | `entity/skeleton/render/bridge.test.ts` | 场景真源桥接：Group 局部读入骨架、领域修改写回 Group（场景图级联）、applyPose/rotateBone 经桥接生效、syncFromScene 外部修改读回、与普通骨架 FK 一致 |
 | `entity/character/appearance/clips/base_clips.test.ts` | 基础状态 clip 烘焙回归：采样姿态与公式一致（容差 1.7°）、循环 wrap 无缝、持械变体差异、非循环 clamp 末帧；角色模型桥接（自动建连/applyPose 写回 Group/syncFromScene） |
+| `entity/character/appearance/clips/attack_clips.test.ts` | 攻击 clip 烘焙回归：时长 = 动作+恢复、事件轨时间（0.1/0.85 动作进度）、strike_peak 曲线生效、overshoot 起始姿态、恢复归零、无阶段回退、tilt 腕部偏转、缓存复用 |
+| `entity/character/combat/melee_executor.test.ts` | 命中窗口由 setHitWindow 开关（关闭时早退、非近战不受影响） |
 | `modes/bone_edit/history.test.ts` | 撤销重做集成：命令注册与执行、undo/redo 往返恢复一致、批量命令（executeBatch）单步撤销、嵌套禁止语义、canUndo/canRedo 状态、remove_joint 命令（关节 + 关联段一体撤销/恢复）（`@potmot/command-history`） |
 | `entity/character` 迁移测试 | 骨架桥接同步（关节 ↔ Group 读写一致）、clip 化 animator 关键时间点姿态快照一致性（迁移回归）、事件轨道命中窗口与旧计时窗口时间区间一致 |
 

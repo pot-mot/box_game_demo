@@ -1,8 +1,14 @@
-import {describe, it, expect} from 'vitest'
-import {targetHitBoxHalves, testMeleeHit, testAttackDetect, attackDetectOBB} from './melee_executor.ts'
+import {describe, it, expect, vi} from 'vitest'
+import {targetHitBoxHalves, testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
+import type {SkillConfig} from '../../../character/combat/skill_types.ts'
+import type {ExecutorContext} from '../../../character/combat/executor.ts'
+import type {CharacterEntity} from '../../../character/types.ts'
+import type RAPIER from '@dimforge/rapier3d-compat'
+import {buildMeleeSkillSlots} from '../../../character/combat/melee_skill.ts'
+import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 
 /* 攻击检测箱夹具（与 long_sword / spear 预设一致）：前缘 = offset.z + size.z/2 */
 const swordDetectBox: MeleeDetectBox = {size: {x: 0.45, y: 1.1, z: 1.3}, offset: {x: 0, y: 0, z: 0.45}}
@@ -129,5 +135,54 @@ describe('attackDetectOBB / testAttackDetect（攻击检测箱由武器 detectBo
         expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 1.0, y: 0, z: 0}, 1, 0)).toBe(true)
         /* 原 +Z 方向变为侧方，超出侧向半宽 */
         expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 0, y: 0, z: 1.0}, 1, 0)).toBe(false)
+    })
+})
+
+describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
+    const makeSkill = (): SkillConfig => {
+        const slot = buildMeleeSkillSlots('short_sword')[0]
+        if (slot.config.type !== 'melee') throw new Error('测试需要近战技能配置')
+        return slot.config
+    }
+    const makeEntity = (): CharacterEntity => ({
+        id: 1,
+        config: {speed: 6, jumpHeight: 2, scale: 1},
+        mesh: null!,
+        wireframe: undefined,
+        appearanceGroup: {rotation: {y: 0}} as unknown as CharacterEntity['appearanceGroup'],
+        body: {translation: () => ({x: 0, y: 0, z: 0})} as unknown as CharacterEntity['body'],
+        mainCollider: undefined as unknown as RAPIER.Collider,
+        isOnGround: true,
+        groundNormal: {x: 0, y: 1, z: 0},
+        groundKeepTimer: 0,
+        airborneTime: 0, groundedTime: 0,
+        rowText: '',
+        navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
+        isDying: false, dyingTimer: 0,
+        combat: {skills: [makeSkill()], currentSkillIndex: 0} as unknown as CharacterEntity['combat'],
+        stateMachine: createCharacterStateMachine(),
+    })
+
+    it('窗口关闭时 update 早退（getModel 不被调用）', () => {
+        const getModel = vi.fn()
+        const executor = createMeleeExecutor(() => [], getModel, () => 0)
+        const skill = makeSkill()
+        executor.update(0.016, skill, makeEntity().combat, makeEntity(), {} as ExecutorContext)
+        expect(getModel).not.toHaveBeenCalled()
+        executor.setHitWindow(true)
+        executor.update(0.016, skill, makeEntity().combat, makeEntity(), {} as ExecutorContext)
+        expect(getModel).toHaveBeenCalled()
+        executor.setHitWindow(false)
+        getModel.mockClear()
+        executor.update(0.016, skill, makeEntity().combat, makeEntity(), {} as ExecutorContext)
+        expect(getModel).not.toHaveBeenCalled()
+    })
+
+    it('非近战技能早退（ranged 不受窗口影响）', () => {
+        const getModel = vi.fn()
+        const executor = createMeleeExecutor(() => [], getModel, () => 0)
+        executor.setHitWindow(true)
+        executor.update(0.016, {type: 'ranged'} as SkillConfig, makeEntity().combat, makeEntity(), {} as ExecutorContext)
+        expect(getModel).not.toHaveBeenCalled()
     })
 })

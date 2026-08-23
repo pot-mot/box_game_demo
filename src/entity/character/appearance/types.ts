@@ -86,10 +86,14 @@ export interface AnimationContext {
     readonly attackPhaseProgress: number
     /** 攻击总进度 0-1（attackTimer / totalDuration） */
     readonly attackTotalProgress: number
-    /** 当前技能的完整阶段序列（仅 attacking 状态有效，其他状态为 undefined）— 供动画器做相邻阶段姿态衔接 */
+    /** 当前技能完整阶段序列（仅 attacking 状态有效，其他状态为 undefined）— 供攻击 clip 生成器使用 */
     readonly attackPhases: readonly AttackPhase[] | undefined
     /** 当前阶段索引（与 attackPhases 配套，越界表示全部阶段已完成） */
     readonly attackPhaseIndex: number
+    /** 当前攻击动作时长 duration（秒，技能配置，攻击 clip 时间轴映射用） */
+    readonly attackDuration: number
+    /** 当前攻击恢复时长 recovery（秒，技能配置） */
+    readonly attackRecovery: number
     /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
     readonly weaponHeld: boolean
 }

@@ -224,6 +224,8 @@ describe('郊狼过程动画与摄像机平滑', () => {
                     attackPhases: undefined,
                     attackPhaseIndex: 0,
                     attackSkillId: undefined,
+                    attackDuration: 1,
+                    attackRecovery: 0,
                     weaponHeld: false,
                 })
                 if (state !== prevState) {

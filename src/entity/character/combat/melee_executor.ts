@@ -40,6 +40,8 @@ export const targetHurtOBB = (
 /**
  * 攻击判定：武器命中箱 OBB（由武器模型 matrixWorld 变换本地盒得到，随武器位置与姿态移动）
  * 与目标受击箱 OBB 相交检测。武器本地盒由武器构建时提供（略大于武器模型）。
+ * 命中窗口由攻击动画事件轨道驱动（hitbox_on/off，见 attack_clips.ts），
+ * 不再由状态机计时窗口控制 —— 窗口与视觉动画天然同步。
  */
 export const testMeleeHit = (
     weaponMatrixElements: readonly number[],
@@ -100,12 +102,24 @@ export const testAttackDetect = (
 /** 命中回调：参数为命中点世界坐标（供顿帧/相机震动等打击感系统消费） */
 export type MeleeHitCallback = (x: number, y: number, z: number) => void
 
+/** 近战执行器：命中窗口由攻击动画事件轨道驱动（setHitWindow），窗口内每帧 OBB SAT 判定 */
+export interface MeleeExecutor extends SkillExecutor {
+    setHitWindow: (active: boolean) => void
+}
+
 export const createMeleeExecutor = (
     getAllCharacters: () => readonly CharacterEntity[],
     getModel: (id: number) => CharacterModel | undefined,
     getFacingAngle: (id: number) => number,
     onHit?: MeleeHitCallback,
-): SkillExecutor => {
+): MeleeExecutor => {
+    /** 命中窗口状态：由攻击动画事件轨道（hitbox_on/off）开关 */
+    let hitWindowActive = false
+
+    const setHitWindow = (active: boolean): void => {
+        hitWindowActive = active
+    }
+
     const start = (
         _skill: SkillConfig,
         _combat: CombatComponent,
@@ -124,14 +138,10 @@ export const createMeleeExecutor = (
         _ctx: ExecutorContext,
     ): void => {
         if (skill.type !== 'melee') return
+        /* 命中窗口关闭（动画事件轨 hitbox_off 或攻击尚未进入打击阶段）时不检测 */
+        if (!hitWindowActive) return
         const model = getModel(entity.id)
         if (!model || !model.weaponGroup || !model.weaponHitBox) return
-
-        const duration = combat.skills[combat.currentSkillIndex]?.config.duration ?? 0.3
-        const progress = combat.attackTimer / duration
-        /* duration = 动作时间（不含恢复）：在挥砍动作阶段（进度 0.1–0.85）检测命中，
-         * 跳过蓄力前段；恢复期内 attackTimer > duration，progress 越界自然跳过 */
-        if (progress < 0.1 || progress > 0.85) return
 
         /* matrixWorld 在渲染器绘制前可能滞后，先强制刷新武器子树变换 */
         model.weaponGroup.updateMatrixWorld()
@@ -191,5 +201,5 @@ export const createMeleeExecutor = (
         // 无需清理
     }
 
-    return {type: 'melee', start, update, end}
+    return {type: 'melee', start, update, end, setHitWindow}
 }

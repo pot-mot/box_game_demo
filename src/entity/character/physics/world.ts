@@ -240,6 +240,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const rangedExecutor = createRangedExecutor(shared, scene)
     registerSkillExecutor('melee', meleeExecutor)
     registerSkillExecutor('ranged', rangedExecutor)
+    /* 攻击动画事件轨道 → 近战命中窗口（hitbox_on/off，与视觉动画同步） */
+    const onAttackEvent = (record: {eventName: string}): void => {
+        if (record.eventName === 'hitbox_on') meleeExecutor.setHitWindow(true)
+        if (record.eventName === 'hitbox_off') meleeExecutor.setHitWindow(false)
+    }
     /** 追踪当前激活的近战攻击（用于 start/end 生命周期） */
     const activatedAttacks = new Set<number>()
     /** 受击闪红状态 */
@@ -374,7 +379,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         bodyCharMap.set(body.handle, entity)
         characters.push(entity)
         appearanceModels.set(entity.id, model)
-        appearanceSystems.set(entity.id, createAppearanceSystem())
+        appearanceSystems.set(entity.id, createAppearanceSystem({onAttackEvent}))
         weaponTrails.set(entity.id, createWeaponTrail(scene))
         const hitBoxes = createAttackHitBoxes(scene)
         attackHitBoxes.set(entity.id, hitBoxes)
@@ -739,6 +744,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     attackTotalProgress: inAttacking && totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
                     attackPhases: inAttacking ? phases : undefined,
                     attackPhaseIndex: entity.combat.phaseIndex,
+                    attackDuration: activeSkill?.config.duration ?? 1,
+                    attackRecovery: activeSkill?.config.recovery ?? 0,
                     weaponHeld: model.weaponMesh !== null,
                 })
 

@@ -292,6 +292,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             attackPhases: inAttacking ? phases : undefined,
             attackPhaseIndex: phaseIndex,
             attackSkillId: inAttacking ? config.id : undefined,
+            attackDuration: config.duration,
+            attackRecovery: config.recovery,
             weaponHeld: model.weaponMesh !== null,
         }
         system.update(dt, model, inAttacking ? 'attacking' : 'idle', ctx)

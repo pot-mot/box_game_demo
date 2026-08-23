@@ -1,17 +1,18 @@
 import type {CharacterState} from '../../../character/state_machine/types.ts'
 import type {Group} from 'three'
-import type {CharacterModel, AnimationHandler, AnimationContext} from './types.ts'
+import type {CharacterModel, AnimationContext} from './types.ts'
 import {createBoneAnimationPlayer} from '../../../skeleton/anim/player.ts'
+import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
 import {getBaseClip} from './clips/base_clips.ts'
+import {getAttackClip} from './clips/attack_clips.ts'
 import {createCharacterSkeletonBridge} from './skeleton_bridge.ts'
 import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
-import {attackingAnim} from './animators/attacking.ts'
-import {HORIZONTAL_SPEED_SMOOTHING, STATE_BLEND_DURATION} from './constants.ts'
+import {STATE_BLEND_DURATION} from './constants.ts'
 
-/** clip 驱动的状态（attacking 在 M4b 迁移前保留旧 animator 路径） */
-const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'dashing', 'flinching']
+/** clip 驱动的状态（全部 8 状态；基础状态用基础生成器，attacking 用攻击生成器） */
+const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'dashing', 'flinching', 'attacking']
 
-type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'dashing' | 'flinching'
+type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'dashing' | 'flinching' | 'attacking'
 
 const isClipState = (state: CharacterState): state is ClipState => CLIP_STATES.includes(state)
 
@@ -38,24 +39,26 @@ const snapshotJoints = (model: CharacterModel): JointSnapshot[] => [
     px: joint.position.x, py: joint.position.y, pz: joint.position.z,
 }))
 
+export interface AppearanceSystemOptions {
+    /** 攻击动画事件回调（hitbox_on/off → 近战命中窗口开关） */
+    onAttackEvent?: (record: BoneEventRecord) => void
+}
+
 export interface AppearanceSystem {
     onStateChange: (from: CharacterState | null, to: CharacterState, model: CharacterModel, weaponHeld: boolean) => void
     update: (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext) => void
 }
 
-export const createAppearanceSystem = (): AppearanceSystem => {
+export const createAppearanceSystem = (options?: AppearanceSystemOptions): AppearanceSystem => {
+    const onAttackEvent = options?.onAttackEvent
     let currentState: CharacterState | null = null
     let currentModel: CharacterModel | null = null
-    /* 动画键：state + attacking 时的技能 id + weaponHeld 变体，链段切换也触发姿态混合 */
+    /* 动画键：state + attacking 时的技能 id + weaponHeld 变体（attacking 恒持械不加后缀） */
     let currentAnimKey: string | null = null
-    /* 水平速度 EMA 平滑（仅旧 attacking 路径使用，clip 状态不再注入） */
-    let smoothedSpeed = 0
-    /* 累计水平位移（平滑速度积分）：单调递增，供位移驱动动画使用（相位永不回退） */
-    let travel = 0
     /* 状态切换瞬间的关节快照：新状态动画输出向快照混合，消除关节角突跳 */
     let blendFrom: readonly JointSnapshot[] | null = null
     let blendT = 0
-    /* clip 播放器（基础状态）/ 桥接骨架（以场景为真源） */
+    /* clip 播放器（全部状态）/ 桥接骨架（以场景为真源） */
     let bridge: SkeletonSceneBridge | undefined
     let player: ReturnType<typeof createBoneAnimationPlayer> | undefined
 
@@ -65,56 +68,64 @@ export const createAppearanceSystem = (): AppearanceSystem => {
         bridge = undefined
     }
 
-    const setupClip = (state: ClipState, model: CharacterModel, weaponHeld: boolean): void => {
+    const setupClip = (state: ClipState, model: CharacterModel, ctx: AnimationContext): void => {
         teardownClip()
         bridge = createCharacterSkeletonBridge(model)
-        player = createBoneAnimationPlayer(bridge, getBaseClip(state, weaponHeld))
+        if (state === 'attacking') {
+            /* 攻击 clip：技能配置静态时长 + 段固有 tilt + 武器握持前倾；事件轨驱动命中窗口 */
+            const phases = ctx.attackPhases
+            const clip = getAttackClip({
+                skillId: ctx.attackSkillId ?? 'attack',
+                duration: ctx.attackDuration,
+                recovery: ctx.attackRecovery,
+                phases,
+                tilt: ctx.swingTilt,
+                gripTilt: model.weaponGripTilt,
+            })
+            player = createBoneAnimationPlayer(bridge, clip)
+            player.onEvent = (record) => onAttackEvent?.(record)
+            player.play()
+        } else {
+            player = createBoneAnimationPlayer(bridge, getBaseClip(state, ctx.weaponHeld))
+        }
     }
 
     const onStateChange = (from: CharacterState | null, to: CharacterState, model: CharacterModel, weaponHeld: boolean): void => {
-        /* 在旧状态 exit 归零之前抓取当前关节姿态，作为混合起点 */
+        /* 在旧动画归零之前抓取当前关节姿态，作为混合起点 */
         if (from !== null && currentModel === model) {
             blendFrom = snapshotJoints(model)
             blendT = 0
-            if (!isClipState(from)) {
-                attackingAnim.exit(model, placeholderCtx())
-            }
         } else {
             blendFrom = null
         }
         currentState = to
         currentModel = model
+        const ctx = placeholderCtx(weaponHeld)
         if (isClipState(to)) {
-            setupClip(to, model, weaponHeld)
+            /* 攻击进入/链段切换：先关闭旧命中窗口（新 clip 的 hitbox_on 稍后重新打开） */
+            if (to === 'attacking') {
+                onAttackEvent?.({time: 0, eventName: 'hitbox_off'})
+            }
+            setupClip(to, model, ctx)
             player?.seek(0)
         } else {
             teardownClip()
-            attackingAnim.enter(model, placeholderCtx())
         }
     }
 
     const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {
-        /* 动画键：attacking 状态下附加技能 id；weaponHeld 区分持械变体 */
-        const weaponSuffix = ctx.weaponHeld ? ':w' : ':n'
+        /* 动画键：attacking 状态下附加技能 id；基础状态 weaponHeld 区分持械变体 */
         const animKey = state === 'attacking' && ctx.attackSkillId !== undefined
-            ? `${state}:${ctx.attackSkillId}${weaponSuffix}`
-            : `${state}${weaponSuffix}`
+            ? `attacking:${ctx.attackSkillId}`
+            : `${state}${ctx.weaponHeld ? ':w' : ':n'}`
         if (animKey !== currentAnimKey || model !== currentModel) {
             onStateChange(currentState, state, model, ctx.weaponHeld)
             currentAnimKey = animKey
-            /* 动画键切换时对齐新状态初值，避免旧状态速度平滑残留 */
-            smoothedSpeed = ctx.horizontalSpeed
-            travel = 0
         }
 
-        if (isClipState(state) && player !== undefined) {
-            /* clip 路径：播放器推进 → applyPose 写骨架 → 桥接写回 Group（场景图级联） */
+        /* 统一 clip 路径：播放器推进 → applyPose 写骨架 → 桥接写回 Group（场景图级联） */
+        if (player !== undefined) {
             player.updater(dt)
-        } else {
-            /* 旧 attacking 路径（M4b 迁移后移除） */
-            smoothedSpeed += (ctx.horizontalSpeed - smoothedSpeed) * HORIZONTAL_SPEED_SMOOTHING
-            travel += smoothedSpeed * dt
-            attackingAnim.update(dt, model, {...ctx, horizontalSpeed: smoothedSpeed, horizontalTravel: travel})
         }
 
         /* 状态过渡混合：新动画输出向切换前快照加权收敛（三次 ease-out） */
@@ -137,11 +148,9 @@ export const createAppearanceSystem = (): AppearanceSystem => {
     return {onStateChange, update}
 }
 
-const placeholderCtx = (): AnimationContext => ({
+const placeholderCtx = (weaponHeld: boolean): AnimationContext => ({
     stateTime: 0, horizontalSpeed: 0, horizontalTravel: 0, swingTilt: 0,
     attackSkillId: undefined, attackPhase: undefined, attackPhaseProgress: 0,
-    attackTotalProgress: 0, attackPhases: undefined, attackPhaseIndex: 0, weaponHeld: false,
+    attackTotalProgress: 0, attackPhases: undefined, attackPhaseIndex: 0,
+    attackDuration: 1, attackRecovery: 0, weaponHeld,
 })
-
-/** 旧 attacking animator（M4b 迁移后删除） */
-export type {AnimationHandler}
