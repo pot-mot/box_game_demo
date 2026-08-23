@@ -1,14 +1,10 @@
 import type {Group, Mesh} from 'three'
-import type { WeaponMeshConfig, WeaponLocalHitBox } from './weapon_mesh.ts'
-import type { AttackPhase, AttackPhaseName } from '../../../character/combat/attack_phases.ts'
+import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
+import type {AttackPhase, AttackPhaseName} from '../../../character/combat/attack_phases.ts'
+import type {BoxPartPalette} from '../../../render/box_parts.ts'
 
-/** 角色配色 palette */
-export interface CharacterColorPalette {
-    readonly skinColor: number
-    readonly hairColor: number
-    readonly bodyColor: number
-    readonly legColor: number
-}
+/** 角色配色 palette（方块人部件共享，见 render/box_parts） */
+export type CharacterColorPalette = BoxPartPalette
 
 /** 方块人外观模型，暴露所有关节 pivot 供动画系统直接操纵 */
 export interface CharacterModel {

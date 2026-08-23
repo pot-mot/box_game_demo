@@ -44,7 +44,12 @@ export interface Skeleton {
     readPose: () => SkeletonPose
 }
 
-export const createSkeleton = (): Skeleton => {
+export interface SkeletonOptions {
+    /** 每次 updateWorldTransforms 完成后回调（桥接场景用于把局部 pose 写回 three Group） */
+    readonly onWorldUpdate?: () => void
+}
+
+export const createSkeleton = (options?: SkeletonOptions): Skeleton => {
     const joints = new Map<string, SkeletonJoint>()
     const bones = new Map<string, SkeletonBone>()
     const world = new Map<string, WorldTransform>()
@@ -150,6 +155,7 @@ export const createSkeleton = (): Skeleton => {
                 dfs(joint, origin, identity)
             }
         }
+        options?.onWorldUpdate?.()
     }
 
     const getWorldPosition = (jointId: string): Vector3 | undefined => world.get(jointId)?.position

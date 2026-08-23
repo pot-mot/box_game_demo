@@ -1,9 +1,9 @@
-import {Group, Mesh, BoxGeometry, MeshStandardMaterial, CanvasTexture, NearestFilter} from 'three'
+import {Group, Mesh} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import type {CharacterModel, CharacterColorPalette} from './types.ts'
 import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
 import {createWeaponMesh} from './weapon_mesh.ts'
-import {WEAPON_GRIP_POSES} from './constants.ts'
+import {WEAPON_GRIP_POSES, SELECT_PALETTE} from './constants.ts'
 import {
     HEAD_RATIO,
     BODY_RATIO,
@@ -13,122 +13,23 @@ import {
     LEG_WIDTH_RATIO,
     ARM_X_GAP,
     LEG_X_GAP,
-    MODEL_ROUGHNESS,
     BODY_DEPTH_RATIO,
-    BACK_DARKEN_RATIO,
-    SIDE_DARKEN_RATIO,
-    FACE_CANVAS_SIZE,
-    SELECT_PALETTE,
-    darken,
     MODEL_BASE_HEIGHT,
     MODEL_BASE_WIDTH,
-} from './constants.ts'
-
-interface TrackedMesh {
-    mesh: Mesh
-    geometry: BoxGeometry
-    materials: readonly MeshStandardMaterial[]
-}
-
-/** BoxGeometry 面序：0=+X右, 1=-X左, 2=+Y顶, 3=-Y底, 4=+Z前, 5=-Z后 */
-const createMaterial = (color: number, map?: CanvasTexture): MeshStandardMaterial => {
-    /* 仅在 map 非 undefined 时传入该字段 —— 显式传 {map: undefined} 会触发
-     * Three.js setValues 的 "parameter 'map' has value of undefined" 警告
-     * （每次角色构造 59 个无贴图材质，showcase 场景 15 角色一次性刷屏 885 条） */
-    if (map === undefined) {
-        return new MeshStandardMaterial({color, roughness: MODEL_ROUGHNESS, metalness: 0.1})
-    }
-    return new MeshStandardMaterial({color, roughness: MODEL_ROUGHNESS, metalness: 0.1, map})
-}
-
-/** 创建正面亮 / 侧面暗 / 背面最暗的多材质 Box */
-const createTwoFaceBox = (w: number, h: number, d: number, frontColor: number): TrackedMesh => {
-    const geometry = new BoxGeometry(w, h, d)
-    const sideColor = darken(frontColor, SIDE_DARKEN_RATIO)
-    const backColor2 = darken(frontColor, BACK_DARKEN_RATIO)
-    const mats = [
-        createMaterial(sideColor),
-        createMaterial(sideColor),
-        createMaterial(frontColor),
-        createMaterial(darken(frontColor, 0.6)),
-        createMaterial(frontColor),
-        createMaterial(backColor2),
-    ]
-    const mesh = new Mesh(geometry, mats)
-    mesh.castShadow = true
-    return {mesh, geometry, materials: mats}
-}
-
-/** 创建头部：前面=脸部 CanvasTexture，其他面=头发色 */
-const createHeadBox = (w: number, h: number, d: number, palette: CharacterColorPalette): TrackedMesh => {
-    const geometry = new BoxGeometry(w, h, d)
-    const faceTexture = drawFaceCanvas(palette.skinColor)
-
-    const mats = [
-        createMaterial(palette.hairColor),
-        createMaterial(palette.hairColor),
-        createMaterial(palette.hairColor),
-        createMaterial(palette.skinColor),
-        createMaterial(palette.skinColor, faceTexture),
-        createMaterial(darken(palette.hairColor, 0.8)),
-    ]
-    const mesh = new Mesh(geometry, mats)
-    mesh.castShadow = true
-    return {mesh, geometry, materials: mats}
-}
-
-/** Canvas 绘制像素风脸部 */
-const drawFaceCanvas = (skinColor: number): CanvasTexture => {
-    const size = FACE_CANVAS_SIZE
-    const canvas = document.createElement('canvas')
-    canvas.width = size
-    canvas.height = size
-    const ctx = canvas.getContext('2d')!
-
-    const r = (skinColor >> 16) & 0xff
-    const g = (skinColor >> 8) & 0xff
-    const b = skinColor & 0xff
-    ctx.fillStyle = `rgb(${r},${g},${b})`
-    ctx.fillRect(0, 0, size, size)
-
-    const ex = 38
-    const ey = 46
-    const ew = 11
-    const eh = 13
-
-    ctx.fillStyle = '#ffffff'
-    ctx.beginPath()
-    ctx.ellipse(ex, ey, ew, eh, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.ellipse(size - ex, ey, ew, eh, 0, 0, Math.PI * 2)
-    ctx.fill()
-
-    ctx.fillStyle = '#1a1a1a'
-    ctx.beginPath()
-    ctx.ellipse(ex + 2, ey + 1, 5, 6, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.ellipse(size - ex - 2, ey + 1, 5, 6, 0, 0, Math.PI * 2)
-    ctx.fill()
-
-    ctx.strokeStyle = '#332020'
-    ctx.lineWidth = 3
-    ctx.lineCap = 'round'
-    ctx.beginPath()
-    ctx.arc(size / 2, 70, 16, 0.15 * Math.PI, 0.85 * Math.PI)
-    ctx.stroke()
-
-    const texture = new CanvasTexture(canvas)
-    texture.minFilter = NearestFilter
-    texture.magFilter = NearestFilter
-    return texture
-}
+} from '../../../render/constants.ts'
+import {
+    createTwoFaceBoxPart,
+    createHeadBoxPart,
+    recolorTwoFaceBoxPart,
+    recolorHeadBoxPart,
+    disposeBoxPart,
+    type TrackedBoxPart,
+} from '../../../render/box_parts.ts'
 
 /** 构建完整的方块人模型 Group 层级，返回模型引用 + 武器挂载点 */
 export const createCharacterModel = (config: CharacterConfig, faction: number): CharacterModel => {
-    const palette = SELECT_PALETTE(faction)
-    const tracked: TrackedMesh[] = []
+    const palette: CharacterColorPalette = SELECT_PALETTE(faction)
+    const tracked: TrackedBoxPart[] = []
 
     const H = MODEL_BASE_HEIGHT
     const bodyW = MODEL_BASE_WIDTH
@@ -165,36 +66,36 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     // ── 右腿 ──
     const rightLegHip = new Group()
     rightLegHip.position.set(hipX, hipY, 0)
-    const rightThighTM = createTwoFaceBox(legW, hipH, legD, palette.legColor)
-    rightThighTM.mesh.position.y = -hipH / 2
-    rightLegHip.add(rightThighTM.mesh)
-    tracked.push(rightThighTM)
+    const rightThighPart = createTwoFaceBoxPart(legW, hipH, legD, palette.legColor)
+    rightThighPart.mesh.position.y = -hipH / 2
+    rightLegHip.add(rightThighPart.mesh)
+    tracked.push(rightThighPart)
 
     const rightLegKnee = new Group()
     rightLegKnee.position.y = -hipH
     rightLegHip.add(rightLegKnee)
-    const rightShinTM = createTwoFaceBox(shinW, shinH, shinD, palette.legColor)
-    rightShinTM.mesh.position.y = -shinH / 2
-    rightLegKnee.add(rightShinTM.mesh)
-    tracked.push(rightShinTM)
+    const rightShinPart = createTwoFaceBoxPart(shinW, shinH, shinD, palette.legColor)
+    rightShinPart.mesh.position.y = -shinH / 2
+    rightLegKnee.add(rightShinPart.mesh)
+    tracked.push(rightShinPart)
 
     group.add(rightLegHip)
 
     // ── 左腿 ──
     const leftLegHip = new Group()
     leftLegHip.position.set(-hipX, hipY, 0)
-    const leftThighTM = createTwoFaceBox(legW, hipH, legD, palette.legColor)
-    leftThighTM.mesh.position.y = -hipH / 2
-    leftLegHip.add(leftThighTM.mesh)
-    tracked.push(leftThighTM)
+    const leftThighPart = createTwoFaceBoxPart(legW, hipH, legD, palette.legColor)
+    leftThighPart.mesh.position.y = -hipH / 2
+    leftLegHip.add(leftThighPart.mesh)
+    tracked.push(leftThighPart)
 
     const leftLegKnee = new Group()
     leftLegKnee.position.y = -hipH
     leftLegHip.add(leftLegKnee)
-    const leftShinTM = createTwoFaceBox(shinW, shinH, shinD, palette.legColor)
-    leftShinTM.mesh.position.y = -shinH / 2
-    leftLegKnee.add(leftShinTM.mesh)
-    tracked.push(leftShinTM)
+    const leftShinPart = createTwoFaceBoxPart(shinW, shinH, shinD, palette.legColor)
+    leftShinPart.mesh.position.y = -shinH / 2
+    leftLegKnee.add(leftShinPart.mesh)
+    tracked.push(leftShinPart)
 
     group.add(leftLegHip)
 
@@ -203,26 +104,26 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     spine.position.set(0, hipY, 0)
     group.add(spine)
 
-    const bodyTM = createTwoFaceBox(bodyW, bodyH, bodyD, palette.bodyColor)
-    bodyTM.mesh.position.y = bodyH / 2
-    spine.add(bodyTM.mesh)
-    tracked.push(bodyTM)
+    const bodyPart = createTwoFaceBoxPart(bodyW, bodyH, bodyD, palette.bodyColor)
+    bodyPart.mesh.position.y = bodyH / 2
+    spine.add(bodyPart.mesh)
+    tracked.push(bodyPart)
 
     // ── 右臂 ──
     const rightArmShoulder = new Group()
     rightArmShoulder.position.set(shoulderX, bodyH, 0)
-    const rightUpperArmTM = createTwoFaceBox(armW, upperArmH, armD, palette.bodyColor)
-    rightUpperArmTM.mesh.position.y = -upperArmH / 2
-    rightArmShoulder.add(rightUpperArmTM.mesh)
-    tracked.push(rightUpperArmTM)
+    const rightUpperArmPart = createTwoFaceBoxPart(armW, upperArmH, armD, palette.bodyColor)
+    rightUpperArmPart.mesh.position.y = -upperArmH / 2
+    rightArmShoulder.add(rightUpperArmPart.mesh)
+    tracked.push(rightUpperArmPart)
 
     const rightArmElbow = new Group()
     rightArmElbow.position.y = -upperArmH
     rightArmShoulder.add(rightArmElbow)
-    const rightForearmTM = createTwoFaceBox(forearmW, forearmH, forearmD, palette.bodyColor)
-    rightForearmTM.mesh.position.y = -forearmH / 2
-    rightArmElbow.add(rightForearmTM.mesh)
-    tracked.push(rightForearmTM)
+    const rightForearmPart = createTwoFaceBoxPart(forearmW, forearmH, forearmD, palette.bodyColor)
+    rightForearmPart.mesh.position.y = -forearmH / 2
+    rightArmElbow.add(rightForearmPart.mesh)
+    tracked.push(rightForearmPart)
 
     const rightHandPivot = new Group()
     rightHandPivot.position.y = -forearmH
@@ -237,18 +138,18 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     // ── 左臂 ──
     const leftArmShoulder = new Group()
     leftArmShoulder.position.set(-shoulderX, bodyH, 0)
-    const leftUpperArmTM = createTwoFaceBox(armW, upperArmH, armD, palette.bodyColor)
-    leftUpperArmTM.mesh.position.y = -upperArmH / 2
-    leftArmShoulder.add(leftUpperArmTM.mesh)
-    tracked.push(leftUpperArmTM)
+    const leftUpperArmPart = createTwoFaceBoxPart(armW, upperArmH, armD, palette.bodyColor)
+    leftUpperArmPart.mesh.position.y = -upperArmH / 2
+    leftArmShoulder.add(leftUpperArmPart.mesh)
+    tracked.push(leftUpperArmPart)
 
     const leftArmElbow = new Group()
     leftArmElbow.position.y = -upperArmH
     leftArmShoulder.add(leftArmElbow)
-    const leftForearmTM = createTwoFaceBox(forearmW, forearmH, forearmD, palette.bodyColor)
-    leftForearmTM.mesh.position.y = -forearmH / 2
-    leftArmElbow.add(leftForearmTM.mesh)
-    tracked.push(leftForearmTM)
+    const leftForearmPart = createTwoFaceBoxPart(forearmW, forearmH, forearmD, palette.bodyColor)
+    leftForearmPart.mesh.position.y = -forearmH / 2
+    leftArmElbow.add(leftForearmPart.mesh)
+    tracked.push(leftForearmPart)
 
     const leftHandPivot = new Group()
     leftHandPivot.position.y = -forearmH
@@ -259,10 +160,10 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     // ── 头 ──
     const headNeck = new Group()
     headNeck.position.y = bodyH
-    const headTM = createHeadBox(headW, headH, headW, palette)
-    headTM.mesh.position.y = headH / 2
-    headNeck.add(headTM.mesh)
-    tracked.push(headTM)
+    const headPart = createHeadBoxPart(headW, headH, headW, palette)
+    headPart.mesh.position.y = headH / 2
+    headNeck.add(headPart.mesh)
+    tracked.push(headPart)
     spine.add(headNeck)
 
     group.scale.set(config.scale, config.scale, config.scale)
@@ -312,63 +213,24 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         rightWristPivot.add(mount)
     }
 
-    /** 安全获取 mesh 的 6 面材质数组，非 MeshStandardMaterial 时返回 undefined */
-    const getBoxMaterials = (mesh: Mesh): MeshStandardMaterial[] | undefined => {
-        const mats = mesh.material
-        if (Array.isArray(mats) && mats.length >= 6 && mats[0] instanceof MeshStandardMaterial) {
-            return mats as MeshStandardMaterial[]
-        }
-        return undefined
-    }
-
-    /** 按 frontColor 原地更新 twoFaceBox 的 6 面材质颜色 */
-    const updateTwoFaceBoxColors = (mesh: Mesh, frontColor: number): void => {
-        const mats = getBoxMaterials(mesh)
-        if (!mats) return
-        const sideColor = darken(frontColor, SIDE_DARKEN_RATIO)
-        const backColor = darken(frontColor, BACK_DARKEN_RATIO)
-        mats[0].color.set(sideColor)
-        mats[1].color.set(sideColor)
-        mats[2].color.set(frontColor)
-        mats[3].color.set(darken(frontColor, 0.6))
-        mats[4].color.set(frontColor)
-        mats[5].color.set(backColor)
-    }
-
-    /** 根据新调色板原地更新所有部位材质颜色 */
-    const recolor = (palette: CharacterColorPalette): void => {
-        updateTwoFaceBoxColors(bodyTM.mesh, palette.bodyColor)
-        updateTwoFaceBoxColors(rightUpperArmTM.mesh, palette.bodyColor)
-        updateTwoFaceBoxColors(rightForearmTM.mesh, palette.bodyColor)
-        updateTwoFaceBoxColors(leftUpperArmTM.mesh, palette.bodyColor)
-        updateTwoFaceBoxColors(leftForearmTM.mesh, palette.bodyColor)
-        updateTwoFaceBoxColors(rightThighTM.mesh, palette.legColor)
-        updateTwoFaceBoxColors(rightShinTM.mesh, palette.legColor)
-        updateTwoFaceBoxColors(leftThighTM.mesh, palette.legColor)
-        updateTwoFaceBoxColors(leftShinTM.mesh, palette.legColor)
-
-        const headMats = getBoxMaterials(headTM.mesh)
-        if (headMats) {
-            headMats[0].color.set(palette.hairColor)
-            headMats[1].color.set(palette.hairColor)
-            headMats[2].color.set(palette.hairColor)
-            headMats[3].color.set(palette.skinColor)
-            headMats[4].color.set(palette.skinColor)
-            headMats[5].color.set(darken(palette.hairColor, 0.8))
-
-            const oldTexture = headMats[4].map
-            if (oldTexture) oldTexture.dispose()
-            headMats[4].map = drawFaceCanvas(palette.skinColor)
-            headMats[4].needsUpdate = true
-        }
+    /** 根据新调色板原地更新所有部位材质颜色（不重建几何体） */
+    const recolor = (newPalette: CharacterColorPalette): void => {
+        recolorTwoFaceBoxPart(bodyPart.mesh, newPalette.bodyColor)
+        recolorTwoFaceBoxPart(rightUpperArmPart.mesh, newPalette.bodyColor)
+        recolorTwoFaceBoxPart(rightForearmPart.mesh, newPalette.bodyColor)
+        recolorTwoFaceBoxPart(leftUpperArmPart.mesh, newPalette.bodyColor)
+        recolorTwoFaceBoxPart(leftForearmPart.mesh, newPalette.bodyColor)
+        recolorTwoFaceBoxPart(rightThighPart.mesh, newPalette.legColor)
+        recolorTwoFaceBoxPart(rightShinPart.mesh, newPalette.legColor)
+        recolorTwoFaceBoxPart(leftThighPart.mesh, newPalette.legColor)
+        recolorTwoFaceBoxPart(leftShinPart.mesh, newPalette.legColor)
+        recolorHeadBoxPart(headPart.mesh, newPalette)
     }
 
     const dispose = (): void => {
         removeWeapon()
-        for (const tm of tracked.splice(0)) {
-            tm.mesh.removeFromParent()
-            tm.geometry.dispose()
-            for (const mat of tm.materials) mat.dispose()
+        for (const part of tracked.splice(0)) {
+            disposeBoxPart(part)
         }
     }
 
@@ -376,27 +238,27 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         group,
         spine,
         headNeck,
-        head: headTM.mesh,
-        body: bodyTM.mesh,
+        head: headPart.mesh,
+        body: bodyPart.mesh,
         rightArmShoulder,
-        rightUpperArm: rightUpperArmTM.mesh,
+        rightUpperArm: rightUpperArmPart.mesh,
         rightArmElbow,
-        rightForearm: rightForearmTM.mesh,
+        rightForearm: rightForearmPart.mesh,
         rightHandPivot,
         rightWristPivot,
         leftArmShoulder,
-        leftUpperArm: leftUpperArmTM.mesh,
+        leftUpperArm: leftUpperArmPart.mesh,
         leftArmElbow,
-        leftForearm: leftForearmTM.mesh,
+        leftForearm: leftForearmPart.mesh,
         leftHandPivot,
         rightLegHip,
-        rightThigh: rightThighTM.mesh,
+        rightThigh: rightThighPart.mesh,
         rightLegKnee,
-        rightShin: rightShinTM.mesh,
+        rightShin: rightShinPart.mesh,
         leftLegHip,
-        leftThigh: leftThighTM.mesh,
+        leftThigh: leftThighPart.mesh,
         leftLegKnee,
-        leftShin: leftShinTM.mesh,
+        leftShin: leftShinPart.mesh,
         equipWeapon,
         removeWeapon,
         recolor,
