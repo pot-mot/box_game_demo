@@ -281,6 +281,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
 
         const ctx: AnimationContext = {
             stateTime,
+            /* 展示场景站立攻击：速度恒 0（生产为物理体实时速度） */
+            horizontalSpeed: 0,
             swingTilt,
             attackPhase: ctxPhaseName,
             attackPhaseProgress: phaseDuration > 0 ? phaseTimer / phaseDuration : 0,

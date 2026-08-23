@@ -61,7 +61,7 @@ describe('基础状态 clip 生成器', () => {
                     ? ((t % meta.duration) + meta.duration) % meta.duration
                     : t
                 const sampled = sampleClip(clip, t)
-                const reference = BASE_POSE_SAMPLERS[state](refT, {weaponHeld: false})
+                const reference = BASE_POSE_SAMPLERS[state](refT, {weaponHeld: false, horizontalSpeed: 0})
                 for (const jointId of CHARACTER_JOINT_IDS) {
                     const sampledQuat = sampled.jointPoses.get(jointId)?.rotation
                     expect(sampledQuat).toBeDefined()

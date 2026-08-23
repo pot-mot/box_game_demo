@@ -207,8 +207,11 @@ describe('郊狼过程动画与摄像机平滑', () => {
             for (let i = 0; i < FRAMES_3600; i++) {
                 gs = tick(hw, entity, gs, -1, 0)
                 const state = entity.stateMachine.currentState
+                const linvel = entity.body.linvel()
+                const hSpeed = Math.hypot(linvel.x, linvel.z)
                 sys.update(DT, model, state, {
                     stateTime: entity.stateMachine.stateTime,
+                    horizontalSpeed: hSpeed,
                     swingTilt: 0,
                     attackPhase: undefined,
                     attackPhaseProgress: 0,
@@ -227,7 +230,7 @@ describe('郊狼过程动画与摄像机平滑', () => {
                     prevPhaseVel = undefined
                     continue
                 }
-                /* M4a 起 walking 固定频率（不再注入速度）：t = 6 × stateTime，相位单调性由 stateTime 保证 */
+                /* walking 相位由播放器 time 驱动（t = 6×stateTime），相位单调性由播放器累加保证 */
                 const phaseVel = 6
                 const t = 6 * entity.stateMachine.stateTime
                 if (prevT !== undefined) {
@@ -238,7 +241,7 @@ describe('郊狼过程动画与摄像机平滑', () => {
                 prevPhaseVel = phaseVel
             }
             expect(phaseRegress).toBe(0)
-            /* 固定频率后相位速率恒为 6，无跳变 */
+            /* 播放器 time 单调累加，相位速率恒为 6，无跳变 */
             expect(maxPhaseVelJump).toBeLessThan(1e-9)
         }, TIMEOUT)
 

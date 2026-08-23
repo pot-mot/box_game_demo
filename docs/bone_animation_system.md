@@ -431,8 +431,9 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - 8 个状态 animator 重制为关键帧 clip：**所有效果全量轨道化**——呼吸摆动、走路摆臂、overshoot、微颤、弓步链式插值、腕部刃面偏转、头部摆动全部烘焙进关键帧，不保留程序化 modifier（评审决议）；
 - **烘焙实现（M4a）**：`appearance/pose_fns.ts` 提取旧 animator 公式为纯函数（`PoseSampler`），`appearance/clips/base_clips.ts` 按 60fps 采样烘焙为 `BoneAnimationClip`（插值 `bezier_quad+none` 线性，与旧 lerp 一致）；循环动画采样一个周期含末帧（wrap 无缝），非循环采样全程（clamp 保持末帧）；拐点（跳跃伸臂等斜率突变处）线性插值固有误差 ≤1.7°，视觉不可感知；
 - 周期效果（呼吸/摆臂）录为循环区间关键帧（wrap 无缝）；
-- **行走不再注入 horizontalSpeed**（评审决议：先固定频率循环，若滑步明显再按需用 `setSpeed` 按速度比例对齐并设变速上下限）：行走动画为固定频率循环 clip（基准频率 6 rad/s ≈ 原式 3.6 m/s 匀速）；falling 腿间距固定为速度 0 基准；`AnimationContext` 的 `horizontalSpeed/horizontalTravel` 字段仅在旧 attacking 路径仍注入（M4b 迁移后移除）；
-- `appearance/system.ts` 改为 clip 调度器：动画键（`state` / `state:skillId` + `weaponHeld` 变体后缀 `:w/:n`）→ 选择 clip → 播放器 seek/play；角色模型经 `appearance/skeleton_bridge.ts`（`createCharacterSkeletonBridge`，基于 `createSkeletonFromGroups` autoConnect 自动按 Group 层级建连）桥接为骨架，播放器 `applyPose` 经桥接写回 Group（场景图级联）；状态切换混合（评审决议：**加权混合**）：新 clip 采样姿态 × w + 旧姿态快照 × (1−w)，w 在 0.15s（`STATE_BLEND_DURATION`）内按三次 ease-out 从 0 → 1，与现状手感一致；
+- **行走步频随速度（保留 horizontalSpeed）**：`AnimationContext.horizontalSpeed` 恢复注入；行走 clip 固定基准步频（6 rad/s ≈ 原式 3.6 m/s 匀速），播放器 `setSpeed = walkSpeedScale(speed)`（`clamp(speed/3.7, 0.5, 2)`）实现步频随水平速度变速，消除低速滑步/高速频率失真；
+- **下落腿张开随速度**：falling 腿张开量 `legSpread = min(speed,4)×0.04` 按速度离散档（0-4）烘焙 clip，运行时按 `fallingSpeedTier(speed)` 选择（动画键含速度档，速度变化触发 clip 切换）；
+- `appearance/system.ts` 改为 clip 调度器：动画键（`state` / `attacking:skillId` / `falling:速度档` + `weaponHeld` 变体后缀 `:w/:n`）→ 选择 clip → 播放器 seek/play；角色模型经 `appearance/skeleton_bridge.ts`（`createCharacterSkeletonBridge`，基于 `createSkeletonFromGroups` autoConnect 自动按 Group 层级建连）桥接为骨架，播放器 `applyPose` 经桥接写回 Group（场景图级联）；状态切换混合（评审决议：**加权混合**）：新 clip 采样姿态 × w + 旧姿态快照 × (1−w)，w 在 0.15s（`STATE_BLEND_DURATION`）内按三次 ease-out 从 0 → 1，与现状手感一致；
 - attacking 状态在 M4b 迁移前保留旧 animator 路径（`attackingAnim` 直写 Group + 旧快照混合逻辑），基础状态全部 clip 驱动；旧 animator 目录保留至 M4b 完成后删除。
 
 ### 8.3 攻击动画迁移
@@ -456,7 +457,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - **双手武器 IK**：attacking 状态下左肩标记 IK 根，左手腕链（左肩→左肘→左腕）每帧 `solveCcd` 追「右腕 + 武器轴方向 × 0.45m」握柄点，替换固定假握；分层顺序（评审决议）：clip `applyPose` 先写全骨架 → IK 后写覆盖左臂链 → 快照混合；
 - **动画复用**：AI/玩家/showcase 同源 clip（消除三处镜像逻辑）；
 - **可视编辑**：所有攻击 clip 可在编辑模式直接编辑调优（含事件轨道、缓动曲线）；
-- **字段清理（M4c）**：`AnimationContext.horizontalSpeed/horizontalTravel` 已移除（基础状态与攻击全部固定频率/静态时长，不再注入速度参数）；slope_walk_matrix 测试同步改为固定相位驱动。
+- **速度相关体态**：恢复 `AnimationContext.horizontalSpeed`，行走步频随速度（播放器 setSpeed 变速）、falling 腿张开随速度（离散档 clip）；`horizontalTravel` 不再注入（行走相位由播放器 time 单调累加，无需位移积分）。
 
 ### 8.6 迁移验收标准
 
@@ -485,6 +486,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `entity/character/appearance/clips/base_clips.test.ts` | 基础状态 clip 烘焙回归：采样姿态与公式一致（容差 1.7°）、循环 wrap 无缝、持械变体差异、非循环 clamp 末帧；角色模型桥接（自动建连/applyPose 写回 Group/syncFromScene） |
 | `entity/character/appearance/clips/attack_clips.test.ts` | 攻击 clip 烘焙回归：时长 = 动作+恢复、事件轨时间（0.1/0.85 动作进度）、strike_peak 曲线生效、overshoot 起始姿态、恢复归零、无阶段回退、tilt 腕部偏转、缓存复用 |
 | `entity/character/combat/melee_executor.test.ts` | 命中窗口由 setHitWindow 开关（关闭时早退、非近战不受影响） |
+| `entity/character/appearance/system.test.ts` | 基础动画实际播放（play() 回归：idle 呼吸摆动、walking 摆腿随帧变化）、falling 腿张开随水平速度（速度档切换 clip） |
 | `modes/bone_edit/history.test.ts` | 撤销重做集成：命令注册与执行、undo/redo 往返恢复一致、批量命令（executeBatch）单步撤销、嵌套禁止语义、canUndo/canRedo 状态、remove_joint 命令（关节 + 关联段一体撤销/恢复）（`@potmot/command-history`） |
 | `entity/character` 迁移测试 | 骨架桥接同步（关节 ↔ Group 读写一致）、clip 化 animator 关键时间点姿态快照一致性（迁移回归）、事件轨道命中窗口与旧计时窗口时间区间一致 |
 

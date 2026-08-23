@@ -718,6 +718,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const model = appearanceModels.get(entity.id)
             const sys = appearanceSystems.get(entity.id)
             if (model && sys) {
+                const linvel = entity.body.linvel()
+                const hSpeed = Math.hypot(linvel.x, linvel.z)
                 /* 计算阶段动画上下文（仅 attacking 状态注入阶段信息） */
                 const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
                 const inAttacking = entity.stateMachine.currentState === 'attacking' && activeSkill !== undefined
@@ -732,6 +734,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
+                    horizontalSpeed: hSpeed,
                     swingTilt: entity.combat.swingTilt,
                     attackSkillId: inAttacking ? activeSkill!.config.id : undefined,
                     attackPhase: ctxPhaseName,

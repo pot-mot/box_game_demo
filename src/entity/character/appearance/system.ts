@@ -3,13 +3,13 @@ import {Group} from 'three'
 import type {CharacterModel, AnimationContext} from './types.ts'
 import {createBoneAnimationPlayer} from '../../../skeleton/anim/player.ts'
 import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
-import {getBaseClip} from './clips/base_clips.ts'
+import {getBaseClip, fallingSpeedTier} from './clips/base_clips.ts'
 import {getAttackClip} from './clips/attack_clips.ts'
 import {createCharacterSkeletonBridge} from './skeleton_bridge.ts'
 import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
 import {resolveIkChain, solveCcd} from '../../../skeleton/ik.ts'
 import {DEFAULT_IK_MAX_ITERATIONS, DEFAULT_IK_TOLERANCE} from '../../../skeleton/constants.ts'
-import {STATE_BLEND_DURATION} from './constants.ts'
+import {STATE_BLEND_DURATION, walkSpeedScale} from './constants.ts'
 
 /** 双手武器副手握柄沿武器轴（前臂延伸方向）的偏移距离（米） */
 const TWO_HAND_GRIP_OFFSET = 0.45
@@ -50,7 +50,7 @@ export interface AppearanceSystemOptions {
 }
 
 export interface AppearanceSystem {
-    onStateChange: (from: CharacterState | null, to: CharacterState, model: CharacterModel, weaponHeld: boolean) => void
+    onStateChange: (from: CharacterState | null, to: CharacterState, model: CharacterModel, ctx: AnimationContext) => void
     update: (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext) => void
 }
 
@@ -94,7 +94,12 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             player.onEvent = (record) => onAttackEvent?.(record)
             player.play()
         } else {
-            player = createBoneAnimationPlayer(bridge, getBaseClip(state, ctx.weaponHeld))
+            player = createBoneAnimationPlayer(bridge, getBaseClip(state, ctx.weaponHeld, ctx.horizontalSpeed))
+            player.play()
+            /* 行走：步频随水平速度变速 */
+            if (state === 'walking') {
+                player.setSpeed(walkSpeedScale(ctx.horizontalSpeed))
+            }
         }
     }
 
@@ -119,7 +124,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         }
     }
 
-    const onStateChange = (from: CharacterState | null, to: CharacterState, model: CharacterModel, weaponHeld: boolean): void => {
+    const onStateChange = (from: CharacterState | null, to: CharacterState, model: CharacterModel, ctx: AnimationContext): void => {
         /* 在旧动画归零之前抓取当前关节姿态，作为混合起点 */
         if (from !== null && currentModel === model) {
             blendFrom = snapshotJoints(model)
@@ -129,12 +134,12 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         }
         currentState = to
         currentModel = model
-        const ctx = placeholderCtx(weaponHeld)
         if (isClipState(to)) {
             /* 攻击进入/链段切换：先关闭旧命中窗口（新 clip 的 hitbox_on 稍后重新打开） */
             if (to === 'attacking') {
                 onAttackEvent?.({time: 0, eventName: 'hitbox_off'})
             }
+            /* 用真实 ctx 生成 clip（falling 速度档 / attacking 阶段配置等依赖当前上下文） */
             setupClip(to, model, ctx)
             player?.seek(0)
         } else {
@@ -143,18 +148,24 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     }
 
     const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {
-        /* 动画键：attacking 状态下附加技能 id；基础状态 weaponHeld 区分持械变体 */
+        /* 动画键：attacking 附加技能 id；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
         const animKey = state === 'attacking' && ctx.attackSkillId !== undefined
             ? `attacking:${ctx.attackSkillId}`
-            : `${state}${ctx.weaponHeld ? ':w' : ':n'}`
+            : state === 'falling'
+                ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${ctx.weaponHeld ? ':w' : ':n'}`
+                : `${state}${ctx.weaponHeld ? ':w' : ':n'}`
         if (animKey !== currentAnimKey || model !== currentModel) {
-            onStateChange(currentState, state, model, ctx.weaponHeld)
+            onStateChange(currentState, state, model, ctx)
             currentAnimKey = animKey
         }
 
         /* 统一 clip 路径：播放器推进 → applyPose 写骨架 → 桥接写回 Group（场景图级联） */
         if (player !== undefined) {
             player.updater(dt)
+            /* 行走：步频随水平速度变速 */
+            if (state === 'walking') {
+                player.setSpeed(walkSpeedScale(ctx.horizontalSpeed))
+            }
             /* 双手武器 IK（applyPose 后、混合前：IK 覆盖左臂链，评审分层顺序） */
             if (state === 'attacking') {
                 applyTwoHandedIk(ctx)
@@ -180,10 +191,3 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
 
     return {onStateChange, update}
 }
-
-const placeholderCtx = (weaponHeld: boolean): AnimationContext => ({
-    stateTime: 0, swingTilt: 0,
-    attackSkillId: undefined, attackPhase: undefined, attackPhaseProgress: 0,
-    attackTotalProgress: 0, attackPhases: undefined, attackPhaseIndex: 0,
-    attackDuration: 1, attackRecovery: 0, weaponHeld,
-})

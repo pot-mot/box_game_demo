@@ -37,9 +37,10 @@ export interface PoseState {
 
 const ZERO: JointEulerState = {rx: 0, ry: 0, rz: 0}
 
-/** 生成器上下文（评审决议：不注入 horizontalSpeed；weaponHeld 仍区分姿态） */
+/** 生成器上下文（horizontalSpeed 用于 falling 腿张开随速度；行走步频由播放器 setSpeed 变速） */
 export interface PoseContext {
     readonly weaponHeld: boolean
+    readonly horizontalSpeed: number
 }
 
 /** 固定步频（rad/s）：原式在 3.6 m/s 匀速时频率 ≈5.9，取整 6 保持基准视觉 */
@@ -132,18 +133,19 @@ const jumpingPose = (t: number): PoseState => {
     }
 }
 
-const fallingPose = (t: number): PoseState => {
+const fallingPose = (t: number, speed: number): PoseState => {
     const armZ = 0.3 + Math.sin(t * 0.8) * 0.1
+    /* 腿随水平速度张开（与 master 一致：legSpread = min(speed,4) × 0.04） */
+    const legSpread = Math.min(speed, 4) * 0.04
     return {
         rightArmShoulder: {rx: -1.2, ry: 0, rz: armZ},
         rightArmElbow: {rx: 0.3, ry: 0, rz: 0},
         rightWristPivot: ZERO,
         leftArmShoulder: {rx: -1.2, ry: 0, rz: -armZ},
         leftArmElbow: {rx: 0.3, ry: 0, rz: 0},
-        /* 评审决议：不注入 horizontalSpeed，legSpread 取 0（速度 0 基准） */
-        rightLegHip: {rx: -0.15, ry: 0, rz: 0},
+        rightLegHip: {rx: -0.15 - legSpread, ry: 0, rz: 0},
         rightLegKnee: {rx: 0.1, ry: 0, rz: 0},
-        leftLegHip: {rx: -0.15, ry: 0, rz: 0},
+        leftLegHip: {rx: -0.15 + legSpread, ry: 0, rz: 0},
         leftLegKnee: {rx: 0.1, ry: 0, rz: 0},
         headNeck: {rx: 0.15, ry: 0, rz: 0},
         spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
@@ -211,12 +213,12 @@ const flinchingPose = (t: number): PoseState => {
 
 export type PoseSampler = (t: number, ctx: PoseContext) => PoseState
 
-/** 基础状态 → 姿态采样器（公式与旧 animators 一一对应，评审决议：固定频率、不注入 horizontalSpeed） */
+/** 基础状态 → 姿态采样器（公式与旧 animators 一一对应；falling 腿张开随速度，行走步频由播放器变速） */
 export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'dashing' | 'flinching', PoseSampler> = {
     idle: (t, ctx) => idlePose(t, ctx),
     walking: (t, ctx) => walkingPose(t * WALK_CYCLE_FREQ, ctx),
     jumping: (t) => jumpingPose(t),
-    falling: (t) => fallingPose(t),
+    falling: (t, ctx) => fallingPose(t, ctx.horizontalSpeed),
     dying: (t) => dyingPose(t),
     dashing: (t) => dashingPose(t),
     flinching: (t) => flinchingPose(t),

@@ -82,12 +82,14 @@ const poseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, {position:
 }
 
 /**
- * 基础状态 clip 生成器：按固定采样率烘焙姿态公式为关键帧（运行时纯 clip 播放，无程序化 modifier）。
+ * 基础状态 clip 生成器：按固定采样率烘焙姿态公式为关键帧（运行时纯 clip 播放）。
+ * horizontalSpeed 仅影响 falling（腿张开随速度，离散档）；行走步频由播放器 setSpeed 变速。
  * 循环动画采样 [0, duration]（含末帧，wrap 无缝由采样器处理）；非循环采样全程。
  */
 export const buildBaseClip = (
     state: keyof typeof BASE_POSE_SAMPLERS,
     weaponHeld: boolean,
+    horizontalSpeed = 0,
 ): BoneAnimationClip => {
     const meta = BASE_CLIP_META[state]
     const sampler = BASE_POSE_SAMPLERS[state]
@@ -96,7 +98,7 @@ export const buildBaseClip = (
         const records: {time: number; position: Vector3; rotation: Quaternion}[] = []
         for (let i = 0; i < frameCount; i++) {
             const t = meta.duration * i / (frameCount - 1)
-            const record = poseToRecord(sampler(t, {weaponHeld})).get(jointId)!
+            const record = poseToRecord(sampler(t, {weaponHeld, horizontalSpeed})).get(jointId)!
             records.push({time: t, position: record.position, rotation: record.rotation})
         }
         return {
@@ -117,14 +119,23 @@ export const buildBaseClip = (
     }
 }
 
-/** 基础状态 clip 缓存（按 state + weaponHeld 惰性生成） */
+/** falling 腿张开速度档（legSpread = min(speed,4)×0.04，取整档避免频繁切 clip） */
+export const fallingSpeedTier = (horizontalSpeed: number): number =>
+    Math.min(Math.max(Math.round(Math.min(horizontalSpeed, 4)), 0), 4)
+
+/** 基础状态 clip 缓存（按 state + weaponHeld + falling 速度档惰性生成） */
 const clipCache = new Map<string, BoneAnimationClip>()
 
-export const getBaseClip = (state: keyof typeof BASE_POSE_SAMPLERS, weaponHeld: boolean): BoneAnimationClip => {
-    const key = `${state}:${weaponHeld ? 'w' : 'n'}`
+export const getBaseClip = (
+    state: keyof typeof BASE_POSE_SAMPLERS,
+    weaponHeld: boolean,
+    horizontalSpeed = 0,
+): BoneAnimationClip => {
+    const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
+    const key = `${state}:${weaponHeld ? 'w' : 'n'}${speedKey}`
     const cached = clipCache.get(key)
     if (cached !== undefined) return cached
-    const clip = buildBaseClip(state, weaponHeld)
+    const clip = buildBaseClip(state, weaponHeld, horizontalSpeed)
     clipCache.set(key, clip)
     return clip
 }

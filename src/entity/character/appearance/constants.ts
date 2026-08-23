@@ -37,6 +37,17 @@ export const SELECT_PALETTE = (faction: number): CharacterColorPalette => {
 /** 髋部 pivot 基准高度（模型本地 Y），由 render 层共享常量提供 */
 export {HIP_Y} from '../../../render/constants.ts'
 
+/** 行走动画基准步频对应速度（m/s）：WALK_CYCLE_FREQ=6 rad/s 时 master 公式 1.2+1.3×speed=6 → speed≈3.69 */
+export const WALK_BASE_SPEED = 3.7
+
+/** 行走播放变速比例上下限（步频随速度，clamp 防止过慢/过快滑步） */
+export const WALK_SPEED_MIN_SCALE = 0.5
+export const WALK_SPEED_MAX_SCALE = 2
+
+/** 行走速度 → 播放变速比例 */
+export const walkSpeedScale = (speed: number): number =>
+    Math.max(WALK_SPEED_MIN_SCALE, Math.min(WALK_SPEED_MAX_SCALE, speed / WALK_BASE_SPEED))
+
 /** 行走速度归一化上限（m/s），用于动画周期计算 */
 export const WALK_ANIM_MAX_SPEED = 6.0
 
