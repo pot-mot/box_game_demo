@@ -1,9 +1,8 @@
 import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
-import {Vec3} from 'cannon-es'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
-import {createColliderForBody, quatVmult, setBodyMass} from '../../../../physics/rapier_utils.ts'
+import {createColliderForBody, quatVmult, setBodyMass, type RapVector3} from '../../../../physics/rapier_utils.ts'
 import type {VelocitySnapshots} from '../../../../physics/velocity_snapshots.ts'
 import type {DestructibleConfig, DestructibleBox, DestructionBoxAddOptions, DestructionEntityContext, CollisionRecord} from '../types'
 import type {FragmentEntityContext} from '../../../fragment/common/types'
@@ -384,7 +383,7 @@ export const setupDestructibleBoxes = (
                 const bodyPos = pb.body.translation()
                 const bodyRot = pb.body.rotation()
                 const invRot = { x: -bodyRot.x, y: -bodyRot.y, z: -bodyRot.z, w: bodyRot.w }
-                const localSeeds: Vec3[] = []
+                const localSeeds: RapVector3[] = []
                 for (const h of history) {
                     const offset = {
                         x: h.contactPoint[0] - bodyPos.x,
@@ -393,7 +392,7 @@ export const setupDestructibleBoxes = (
                     }
                     const local = { x: 0, y: 0, z: 0 }
                     quatVmult(local, invRot, offset)
-                    localSeeds.push(new Vec3(local.x, local.y, local.z))
+                    localSeeds.push({x: local.x, y: local.y, z: local.z})
                 }
 
                 pb.fragments = computeFractureFromPoints(

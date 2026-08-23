@@ -4,7 +4,7 @@
 
 AI 系统采用**双层有限状态机（FSM）**架构：
 
-1. **角色动作状态机**（底层）— 7 个状态，负责移动/战斗的物理执行
+1. **角色动作状态机**（底层）— 8 个状态，负责移动/战斗的物理执行
 2. **AI 决策状态机**（上层）— 又分为 **和平 FSM** 和 **战斗 FSM**，负责决策
 
 ```
@@ -13,9 +13,9 @@ AI 决策层（entity/character/ai/machine.ts）
   └── 战斗子 FSM: chase / approach / volley / kite / attack / flee / inactive
         ↓ 设置输入 (dx, dz, attack)
 角色动作层（character/state_machine/）
-  └── idle / walking / jumping / falling / attacking / dying / dashing
+  └── idle / walking / jumping / falling / attacking / dying / dashing / flinching
         ↓ 操作物理体
- cannon-es Body
+  rapier3d-compat RigidBody
 ```
 
 **关键：无传统寻路算法**。所有移动均为目标方向的直接向量移动，无障碍物避让。
@@ -28,7 +28,7 @@ AI 决策层（entity/character/ai/machine.ts）
 
 **文件**：`src/entity/character/ai/machine.ts`
 
-**入口函数**：`updateAI(dt, entity, losChecker)` — 每帧由 `entity/character/physics/world.ts:453` 调用
+**入口函数**：`updateAI(dt, ctx, character, allCharacters, setInput)` — 每帧由 `entity/character/physics/world.ts:655` 调用
 
 **工作流程**：
 
@@ -511,6 +511,6 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 | 武器配置 | `src/character/weapon/melee_weapon.ts` | 近战武器 AI 参数 |
 | 武器配置 | `src/character/weapon/ranged_weapon.ts` | 远程武器 AI 参数 |
 | 阵营系统 | `src/character/faction.ts` | 阵营与攻击倾向 |
-| 角色动作 FSM | `src/character/state_machine/` | 7 状态动作层 FSM |
+| 角色动作 FSM | `src/character/state_machine/` | 8 状态动作层 FSM |
 | 集成入口 | `src/entity/character/physics/world.ts` | AI 逐帧调用点 |
 | AI 测试 | `src/entity/character/ai/ai.test.ts` | FSM 转移测试 |
