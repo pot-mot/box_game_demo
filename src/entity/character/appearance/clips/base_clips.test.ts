@@ -1,6 +1,6 @@
 import {describe, it, expect, beforeAll, vi} from 'vitest'
 import {Euler, Quaternion, Vector3} from 'three'
-import {buildBaseClip, CHARACTER_JOINT_IDS} from './base_clips.ts'
+import {buildBaseClip, CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
 import {sampleClip} from '../../../../skeleton/anim/sampling.ts'
 import {createCharacterSkeletonBridge} from '../skeleton_bridge.ts'
@@ -103,6 +103,20 @@ describe('基础状态 clip 生成器', () => {
         const qBeyond = beyond.jointPoses.get('group')!.rotation
         expect(qEnd.angleTo(qBeyond)).toBeLessThan(1e-6)
     })
+
+    it('关节 position 保持静止局部位置（头部等部位不被拉回原点）', () => {
+        const clip = buildBaseClip('idle', false)
+        const sampled = sampleClip(clip, 0.3)
+        for (const jointId of CHARACTER_JOINT_IDS) {
+            const rest = CHARACTER_JOINT_REST_POSITIONS[jointId]
+            const pos = sampled.jointPoses.get(jointId)!.position
+            expect(pos.x).toBeCloseTo(rest[0])
+            expect(pos.y).toBeCloseTo(rest[1])
+            expect(pos.z).toBeCloseTo(rest[2])
+        }
+        /* 头部静止位置在颈部上方，而非原点 */
+        expect(sampled.jointPoses.get('headNeck')!.position.y).toBeCloseTo(0.36)
+    })
 })
 
 describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
@@ -110,13 +124,18 @@ describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
         stubCanvas2d()
     })
 
-    it('绑定全部可动画关节（Group 层级自动建连）', () => {
+    it('绑定全部可动画关节 + rightHandPivot（Group 层级自动建连）', () => {
         const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const bridge = createCharacterSkeletonBridge(model)
-        expect(bridge.joints.size).toBe(CHARACTER_JOINT_IDS.length)
+        /* CHARACTER_JOINT_IDS + rightHandPivot */
+        expect(bridge.joints.size).toBe(CHARACTER_JOINT_IDS.length + 1)
+        expect(bridge.findJoint('rightHandPivot')).toBeDefined()
         /* Group 层级 → 骨架树一致：spine 的父是 group */
         expect(bridge.findJoint('spine')!.parent?.id).toBe('group')
         expect(bridge.findJoint('rightArmShoulder')!.parent?.id).toBe('spine')
+        expect(bridge.findJoint('rightArmElbow')!.parent?.id).toBe('rightArmShoulder')
+        expect(bridge.findJoint('rightHandPivot')!.parent?.id).toBe('rightArmElbow')
+        expect(bridge.findJoint('rightWristPivot')!.parent?.id).toBe('rightHandPivot')
         expect(bridge.findJoint('rightLegHip')!.parent?.id).toBe('group')
         model.dispose()
     })

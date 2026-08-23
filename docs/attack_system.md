@@ -355,50 +355,48 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 
 ---
 
-## 六、动画系统
+## 六、动画系统（骨骼 clip 化，M4 迁移后）
+
+> 攻击动画已迁移至骨骼动画系统（`docs/bone_animation_system.md`）：原 `animators/` 目录全部删除，程序化阶段公式烘焙为关键帧 clip，命中窗口由动画事件轨道驱动。
 
 ### 6.1 动画文件组织
 
-`entity/character/appearance/animators/` 下**每个基础状态一个文件**，共 8 个，与状态机基础状态一一对应：
+`entity/character/appearance/` 下按「姿态公式 → clip 生成器 → 调度器」组织：
 
 ```
-animators/
-├── idle.ts          ← AnimationHandler
-├── walking.ts
-├── jumping.ts
-├── falling.ts
-├── attacking.ts     ← 攻击阶段通用动画器（数据驱动，见 6.3）
-├── dying.ts
-├── dashing.ts
-└── flinching.ts
+appearance/
+├── pose_fns.ts            ← 基础状态姿态纯函数（公式提取自旧 animator，固定频率）
+├── clips/
+│   ├── base_clips.ts      ← 基础状态 clip 生成器（60fps 烘焙，循环 wrap/非循环 clamp，weaponHeld 变体）
+│   ├── attack_clips.ts    ← 攻击 clip 生成器（阶段公式全量烘焙 + hitbox 事件轨）
+│   └── *.test.ts
+├── skeleton_bridge.ts     ← 角色模型 Group ↔ 骨架桥接（以场景为真源）
+└── system.ts              ← clip 调度器（动画键 → 播放器 → 快照加权混合）
 ```
-
-没有 `animators/attack/` 子目录——攻击阶段动画由 `attackingAnim` 统一驱动，各阶段的差异完全来自 `AttackPhase.animConfig` 参数。
 
 ### 6.2 动画调度
 
-`AppearanceSystem`（`system.ts`）通过静态 `ANIMATION_HANDLERS: Record<CharacterState, AnimationHandler>` 按状态名查找 animator；编译期类型安全由 `Record` 的穷尽性保证。
+`AppearanceSystem`（`system.ts`）为 clip 调度器：
 
-- **动画键**：attacking 状态下附加技能 id（`state:skillId`），链段切换（同状态不同段）也触发快照混合，新段动画从上一段末姿态平滑进入。
-- **快照混合**：状态/键切换瞬间抓取全部关节快照，新动画输出按三次 ease-out 向快照收敛（`STATE_BLEND_DURATION`），消除关节角突跳。
-- 每个 animator 完全自包含——直接读取 `model` 关节操作旋转。
+- **动画键**：基础状态 `${state}:${weaponHeld?'w':'n'}`；attacking 附加技能 id（`attacking:${skillId}`），链段切换触发快照混合。
+- **快照加权混合**：状态/键切换瞬间抓取全部关节快照，新 clip 采样输出 × w + 快照 × (1−w)（w 三次 ease-out，`STATE_BLEND_DURATION`）。
+- **桥接**：模型关节经 `createCharacterSkeletonBridge`（Group 层级自动建连）绑定为骨架，播放器 `applyPose` 写骨架 → 桥接写回 Group（场景图级联）。
+- **双手武器 IK**：attacking 且 `twoHanded` 时左腕链（左肩 IK 根 → 左肘 → 左腕）每帧 `solveCcd` 追「右腕 + 武器轴 × 0.45m」握柄点（applyPose 先写、IK 后写）。
 
-### 6.3 attackingAnim 阶段驱动
+### 6.3 攻击 clip 生成（attack_clips.ts）
 
-`attackingAnim.update` 从 `AnimationContext` 读取阶段信息（`attackPhases` / `attackPhaseIndex` / `attackPhaseProgress` / `attackTotalProgress`），是唯一的攻击动画器：
+`buildAttackClip({skillId, duration, recovery, phases, tilt, gripTilt})` 按 60fps 烘焙阶段公式：
 
-- **阶段末姿态**：`phaseEndPose(phase, tilt)` 按阶段名语义解释 `animConfig`：
-    - `windup`/`draw`：蓄力末姿态（手臂后摆 + 反向拧腰）
-    - `aim`/`spin`：维持蓄力姿态；`spin` 躯干拧转一整圈（旋转横扫本体）
-    - `strike`/`release`：肘伸展 + 躯干前倾 + 顺向拧腰过正 / 刺击探身（`attackType='thrust'` 叠加脊柱前移）
-    - `recovery`：肩/腰归零，肘/前倾残留由配置决定
-- **插值**：上一阶段末姿态 → 本阶段末姿态链式插值；`strike`/`release` 用 `strikeCurve`（速度峰值在 `strikePeakRatio`，末端加速挥砍），其余阶段按配置 `easing`；恢复阶段起点叠加 `overshootRatio` 惯性过冲。
-- **挥砍分解**：仅 `attackType='slash'` 的阶段受 `swingTilt` 分解（肩 X/Z 分量按 cos/sin 分配）；刺击/旋转动作轨迹固定。
-- **附加驱动**：弓步（腿角随 lunge 量链式插值 + 重心下沉）、左臂（双手扶柄 / 单手平衡反摆）、腕部刃面偏转、头部侧偏与摆动、瞄准/旋转阶段的持械微颤。
+- **阶段末姿态**：`phaseEndPose(phase, tilt)` 按阶段名语义解释 `animConfig`（windup/draw 蓄力、aim/spin 维持、strike/release 随动、recovery 归位）——公式与旧 attackingAnim 逐行一致；
+- **插值**：上一阶段末姿态 → 本阶段末姿态链式插值；`strike`/`release` 用 `strikeCurve`（末端加速峰值在 `strikePeakRatio`），其余按 `easing`；恢复起点叠加 `overshootRatio` 惯性过冲；aim/spin 叠加持械微颤；
+- **附加驱动**：弓步腿角 + 重心下沉、左臂（双手扶柄 / 单手平衡反摆）、腕部刃面偏转（`gripTilt` 抵消 + `swingTilt` 横斩偏转）、头部侧偏与摆动；
+- **时间映射**：`spanAt(t)` 按阶段时长（`phaseDurationOf`）累加定位阶段跨度，全部完成后维持末阶段 p=1（clamp）；
+- **事件轨**：近战命中窗口 `hitbox_on` @ 0.1×duration、`hitbox_off` @ 0.85×duration（与旧 executor 计时窗口一致，驱动 `melee_executor.setHitWindow`）；
+- **swingTilt** 为技能段固有配置（`MeleeSkillConfig.swingTilt`），每技能段单一 clip 内嵌对应 tilt；clip 缓存按 skillId + gripTilt + duration/recovery。
 
 ### 6.4 无阶段信息回退
 
-当 `attackPhases` 缺失时，`attackingAnim` 回退为虚拟三阶段（`FALLBACK_PHASES`，windup/strike/recovery），按 `attackTotalProgress` 映射进度（0→`FALLBACK_WINDUP_END_RATIO` 蓄力 / →`FALLBACK_STRIKE_END_RATIO` 打击 / →1 恢复），时间轴以 `FALLBACK_ATTACK_DURATION`（0.5）归一，保持阶段化之前的视觉基线。
+`attackPhases` 缺失时生成器回退虚拟三阶段（`FALLBACK_PHASES`），clip 时长 = `FALLBACK_ATTACK_DURATION`（0.5），按总进度映射（同旧 6.4 语义）。
 
 ### 6.5 阶段动画参数示例
 
@@ -407,7 +405,7 @@ animators/
 | heavy_sword_slam | windup | X:-2.0, Z:0 | — | 0.8 | 是 | 双手举过头顶 |
 | heavy_sword_slam | strike | — | X:2.5, Z:0 | -0.1 | 是 | 全力下砸 |
 | heavy_sword_slam | recovery | — | — | 0→0 | 是 | 缓慢收刀 |
-| short_sword_slash | strike | X:-0.6, Z:±random | X:1.0, Z:±random | 0.1 | 否 | 快速横斩 + tilt |
+| short_sword_slash | strike | X:-0.6, Z:±tilt | X:1.0, Z:±tilt | 0.1 | 否 | 快速横斩 + tilt |
 | short_sword_slash | recovery | — | — | 0→0 | 否 | 单臂收回 |
 | spear_thrust | windup | X:-0.8, Z:0 | — | 0.3 | 是 | 双手后拉 |
 | spear_thrust | strike | — | X:1.8, Z:0 | 0 | 是 | 直线前刺 |
@@ -416,6 +414,8 @@ animators/
 | longbow_shot | release | — | X:1.2, Z:0 | 0 | 是 | 释放 + 弦回弹 |
 | staff_orb | aim | X:-0.5, Z:0 | — | 0.3 | 是 | 法杖前指 |
 | staff_orb | release | — | X:0.8, Z:0 | 0.1 | 是 | 能量释放 |
+
+参数改动后由 clip 生成器自动重新烘焙（缓存按参数 key 失效），无需改动画代码。
 
 ---
 
@@ -435,10 +435,8 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     idle: idleHandler, walking: walkingHandler, /* ... */ flinching: flinchingHandler,
 }
 
-// entity/character/appearance/system.ts
-const ANIMATION_HANDLERS: Record<CharacterState, AnimationHandler> = {
-    idle: idleAnim, walking: walkingAnim, /* ... */ flinching: flinchingAnim,
-}
+// entity/character/appearance/system.ts —— M4 迁移后为 clip 调度器（CLIP_STATES 覆盖全部状态，
+// 姿态由 clips/base_clips + clips/attack_clips 生成器提供，不再有 AnimationHandler Record）
 ```
 
 ### 7.2 阶段子状态：运行时注册表

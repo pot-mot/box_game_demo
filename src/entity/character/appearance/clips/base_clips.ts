@@ -1,6 +1,14 @@
 import {Euler, Quaternion, Vector3} from 'three'
 import type {BoneAnimationClip} from '../../../../skeleton/anim/types.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
+import {
+    MODEL_BASE_HEIGHT,
+    MODEL_BASE_WIDTH,
+    BODY_RATIO,
+    LEG_RATIO,
+    ARM_X_GAP,
+    LEG_X_GAP,
+} from '../../../../render/constants.ts'
 
 /** 可动画关节 id 列表（与 CharacterModel 关节一一对应，顺序固定） */
 export const CHARACTER_JOINT_IDS = [
@@ -20,25 +28,56 @@ export const CHARACTER_JOINT_IDS = [
 
 export type CharacterJointId = typeof CHARACTER_JOINT_IDS[number]
 
+/* ── 关节静止局部位置（模型 Group 层级，相对父关节；由 render 比例常量推导）。
+ *   动画只改旋转，关节 position 固定 —— 播放器 applyPose 写回这些静止值，防止头部等部位被拉回原点 ── */
+const REST_BODY_H = MODEL_BASE_HEIGHT * BODY_RATIO
+const REST_LEG_H = MODEL_BASE_HEIGHT * LEG_RATIO
+const REST_UPPER_ARM_H = REST_BODY_H / 2
+const REST_HIP_H = REST_LEG_H / 2
+const REST_SHOULDER_X = MODEL_BASE_WIDTH / 2 + ARM_X_GAP
+const REST_HIP_X = LEG_X_GAP
+
+export const CHARACTER_JOINT_REST_POSITIONS: Readonly<Record<CharacterJointId, readonly [number, number, number]>> = {
+    rightArmShoulder: [REST_SHOULDER_X, REST_BODY_H, 0],
+    rightArmElbow: [0, -REST_UPPER_ARM_H, 0],
+    rightWristPivot: [0, 0, 0],
+    leftArmShoulder: [-REST_SHOULDER_X, REST_BODY_H, 0],
+    leftArmElbow: [0, -REST_UPPER_ARM_H, 0],
+    rightLegHip: [REST_HIP_X, 0, 0],
+    rightLegKnee: [0, -REST_HIP_H, 0],
+    leftLegHip: [-REST_HIP_X, 0, 0],
+    leftLegKnee: [0, -REST_HIP_H, 0],
+    headNeck: [0, REST_BODY_H, 0],
+    spine: [0, 0, 0],
+    group: [0, 0, 0],
+}
+
 /** 采样率（fps）：关键帧密度，插值误差 < 1% 波幅 */
 const SAMPLE_FPS = 60
 
 const eulerOf = (state: {rx: number; ry: number; rz: number}): Euler => new Euler(state.rx, state.ry, state.rz)
 
+/** 关节静止位置（动画只改旋转；spine 例外，spine.position 有前倾/下沉动画） */
+const restPositionOf = (jointId: CharacterJointId): Vector3 =>
+    new Vector3().fromArray([...CHARACTER_JOINT_REST_POSITIONS[jointId]])
+
 const poseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, {position: Vector3; rotation: Quaternion}> => {
     const map = new Map<CharacterJointId, {position: Vector3; rotation: Quaternion}>()
-    map.set('rightArmShoulder', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.rightArmShoulder))})
-    map.set('rightArmElbow', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.rightArmElbow))})
-    map.set('rightWristPivot', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.rightWristPivot))})
-    map.set('leftArmShoulder', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.leftArmShoulder))})
-    map.set('leftArmElbow', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.leftArmElbow))})
-    map.set('rightLegHip', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.rightLegHip))})
-    map.set('rightLegKnee', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.rightLegKnee))})
-    map.set('leftLegHip', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.leftLegHip))})
-    map.set('leftLegKnee', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.leftLegKnee))})
-    map.set('headNeck', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.headNeck))})
-    map.set('spine', {position: new Vector3().fromArray([...pose.spine.position]), rotation: new Quaternion().setFromEuler(eulerOf(pose.spine.rotation))})
-    map.set('group', {position: new Vector3(), rotation: new Quaternion().setFromEuler(eulerOf(pose.group.rotation))})
+    const set = (jointId: CharacterJointId, rotation: {rx: number; ry: number; rz: number}, position: Vector3 = restPositionOf(jointId)): void => {
+        map.set(jointId, {position, rotation: new Quaternion().setFromEuler(eulerOf(rotation))})
+    }
+    set('rightArmShoulder', pose.rightArmShoulder)
+    set('rightArmElbow', pose.rightArmElbow)
+    set('rightWristPivot', pose.rightWristPivot)
+    set('leftArmShoulder', pose.leftArmShoulder)
+    set('leftArmElbow', pose.leftArmElbow)
+    set('rightLegHip', pose.rightLegHip)
+    set('rightLegKnee', pose.rightLegKnee)
+    set('leftLegHip', pose.leftLegHip)
+    set('leftLegKnee', pose.leftLegKnee)
+    set('headNeck', pose.headNeck)
+    set('spine', pose.spine.rotation, new Vector3().fromArray([...pose.spine.position]))
+    set('group', pose.group.rotation)
     return map
 }
 

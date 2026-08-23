@@ -35,7 +35,7 @@ import {
     LUNGE_RANGED_AIM,
     LUNGE_RANGED_RELEASE,
 } from '../constants.ts'
-import {CHARACTER_JOINT_IDS, type CharacterJointId} from './base_clips.ts'
+import {CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS, type CharacterJointId} from './base_clips.ts'
 import type {PoseState} from '../pose_fns.ts'
 
 /** 阶段末姿态（公式与旧 attacking.ts 完全一致） */
@@ -353,8 +353,11 @@ const attackPoseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, {pos
     }
     for (const jointId of CHARACTER_JOINT_IDS) {
         const e = joints[jointId]
+        const position = jointId === 'spine'
+            ? new Vector3().fromArray([...pose.spine.position])
+            : new Vector3().fromArray([...CHARACTER_JOINT_REST_POSITIONS[jointId]])
         map.set(jointId, {
-            position: jointId === 'spine' ? new Vector3().fromArray([...pose.spine.position]) : new Vector3(),
+            position,
             rotation: new Quaternion().setFromEuler(new Euler(e.rx, e.ry, e.rz)),
         })
     }
