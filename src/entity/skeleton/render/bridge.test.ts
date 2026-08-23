@@ -64,17 +64,26 @@ describe('场景真源桥接（createSkeletonFromGroups）', () => {
         expect(tip.getWorldPosition(new Vector3()).y).toBe(3)
     })
 
-    it('applyPose 写局部并同步 Group', () => {
+    it('applyPose 写局部并同步 Group（非根关节；根位移由外部管理不被覆盖）', () => {
         const {root, mid, tip} = buildGroups()
         const bridge = createSkeletonFromGroups([
             {jointId: 'root', group: root},
             {jointId: 'mid', group: mid},
             {jointId: 'tip', group: tip},
         ])
+        connectJoint(bridge.findJoint('root')!, bridge.findJoint('mid')!)
+        connectJoint(bridge.findJoint('mid')!, bridge.findJoint('tip')!)
         const pose = bridge.readPose()
-        pose.jointPoses.get('mid')!.position.set(0, 4, 0)
+        /* 根位置先由外部设定，pose 尝试清零根位移 —— 应被保留 */
+        bridge.findJoint('root')!.position.set(5, 0, 3)
+        pose.jointPoses.get('root')!.position.set(0, 0, 0)
+        pose.jointPoses.get('tip')!.position.set(0, 4, 0)
         bridge.applyPose(pose)
-        expect(mid.position.y).toBe(4)
+        /* 根位置不被动画覆盖 */
+        expect(root.position.x).toBe(5)
+        expect(root.position.z).toBe(3)
+        /* 非根关节照常写入并同步 Group */
+        expect(tip.position.y).toBe(4)
     })
 
     it('rotateBone 经桥接生效（tail 子树旋转并写回 Group）', () => {

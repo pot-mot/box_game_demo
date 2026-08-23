@@ -188,4 +188,24 @@ describe('骨架 pose 读写', () => {
         ghostPose.set('ghost', {position: new Vector3(9, 9, 9), rotation: new Quaternion()})
         expect(() => skeleton.applyPose({jointPoses: ghostPose, boneRolls: pose.boneRolls})).not.toThrow()
     })
+
+    it('applyPose 不写根关节位置（根位移由外部管理，动画只驱动旋转）', () => {
+        const skeleton = createSkeleton()
+        const a = createSkeletonJoint('a', 'a')
+        const b = createSkeletonJoint('b', 'b')
+        connectJoint(a, b)
+        a.position.set(5, 0, 3)
+        skeleton.addJoint(a)
+        skeleton.addJoint(b)
+        /* 构建根关节位移被清零的 pose（模拟 clip 记录根位置为原点） */
+        const pose = skeleton.readPose()
+        pose.jointPoses.get('a')!.position.set(0, 0, 0)
+        pose.jointPoses.get('a')!.rotation.setFromAxisAngle(new Vector3(0, 1, 0), 1)
+        skeleton.applyPose(pose)
+        /* 根位置保持外部设定值，不被动画覆盖 */
+        expect(skeleton.findJoint('a')!.position.x).toBe(5)
+        expect(skeleton.findJoint('a')!.position.z).toBe(3)
+        /* 子关节位置照常写入 */
+        expect(skeleton.findJoint('b')!.position.x).toBe(0)
+    })
 })

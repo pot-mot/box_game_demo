@@ -166,8 +166,14 @@ export const createSkeleton = (options?: SkeletonOptions): Skeleton => {
         for (const [jointId, jointPose] of pose.jointPoses) {
             const joint = joints.get(jointId)
             if (joint === undefined) continue
-            joint.position.copy(jointPose.position)
-            joint.rotation.copy(jointPose.rotation)
+            if (joint.parent === undefined) {
+                /* 根关节位移由外部管理（角色桥接：body 位置经 syncPositions 写入），
+                 * 动画只驱动旋转 —— 避免 clip 把根位置写为原点导致模型飞回坐标原点 */
+                joint.rotation.copy(jointPose.rotation)
+            } else {
+                joint.position.copy(jointPose.position)
+                joint.rotation.copy(jointPose.rotation)
+            }
         }
         for (const [id, roll] of pose.boneRolls) {
             const bone = bones.get(id)
