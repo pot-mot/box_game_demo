@@ -1,6 +1,6 @@
 import {Group} from 'three'
 import {createSkeleton, type Skeleton} from '../../../skeleton/skeleton.ts'
-import {createSkeletonJoint} from '../../../skeleton/joint.ts'
+import {connectJoint, createSkeletonJoint} from '../../../skeleton/joint.ts'
 
 /** 关节 ↔ three Group 绑定 */
 export interface GroupJointBinding {
@@ -19,15 +19,22 @@ export interface SkeletonSceneBridge extends Skeleton {
 
 /**
  * 创建桥接骨架：为每个绑定自动创建同名关节并注册。
+ * autoConnect = true 时按 three Group 父子关系自动建立关节树连接
+ * （bindings 中 group.parent 命中的绑定互为父子）。
  * 骨骼段由调用方按需 addBone。
  */
-export const createSkeletonFromGroups = (bindings: readonly GroupJointBinding[]): SkeletonSceneBridge => {
+export const createSkeletonFromGroups = (
+    bindings: readonly GroupJointBinding[],
+    autoConnect = false,
+): SkeletonSceneBridge => {
     const groupByJointId = new Map<string, Group>()
-    for (const {jointId, group} of bindings) {
-        if (groupByJointId.has(jointId)) {
-            throw new Error(`createSkeletonFromGroups 失败：关节 id 重复（${jointId}）`)
+    const bindingByGroup = new Map<Group, GroupJointBinding>()
+    for (const binding of bindings) {
+        if (groupByJointId.has(binding.jointId)) {
+            throw new Error(`createSkeletonFromGroups 失败：关节 id 重复（${binding.jointId}）`)
         }
-        groupByJointId.set(jointId, group)
+        groupByJointId.set(binding.jointId, binding.group)
+        bindingByGroup.set(binding.group, binding)
     }
 
     const writeBackToGroups = (): void => {
@@ -40,8 +47,23 @@ export const createSkeletonFromGroups = (bindings: readonly GroupJointBinding[])
     }
 
     const skeleton = createSkeleton({onWorldUpdate: writeBackToGroups})
+    const jointsById = new Map<string, ReturnType<typeof createSkeletonJoint>>()
     for (const {jointId} of bindings) {
-        skeleton.addJoint(createSkeletonJoint(jointId, jointId))
+        const joint = createSkeletonJoint(jointId, jointId)
+        jointsById.set(jointId, joint)
+        skeleton.addJoint(joint)
+    }
+    if (autoConnect) {
+        for (const {jointId, group} of bindings) {
+            if (group.parent === null || !(group.parent instanceof Group)) continue
+            const parentBinding = bindingByGroup.get(group.parent)
+            if (parentBinding === undefined) continue
+            const parent = jointsById.get(parentBinding.jointId)
+            const child = jointsById.get(jointId)
+            if (parent !== undefined && child !== undefined) {
+                connectJoint(parent, child)
+            }
+        }
     }
 
     const syncFromScene = (): void => {

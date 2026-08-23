@@ -429,9 +429,11 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 ### 8.2 状态动画全量轨道化（无程序化 modifier）
 
 - 8 个状态 animator 重制为关键帧 clip：**所有效果全量轨道化**——呼吸摆动、走路摆臂、overshoot、微颤、弓步链式插值、腕部刃面偏转、头部摆动全部烘焙进关键帧，不保留程序化 modifier（评审决议）；
+- **烘焙实现（M4a）**：`appearance/pose_fns.ts` 提取旧 animator 公式为纯函数（`PoseSampler`），`appearance/clips/base_clips.ts` 按 60fps 采样烘焙为 `BoneAnimationClip`（插值 `bezier_quad+none` 线性，与旧 lerp 一致）；循环动画采样一个周期含末帧（wrap 无缝），非循环采样全程（clamp 保持末帧）；拐点（跳跃伸臂等斜率突变处）线性插值固有误差 ≤1.7°，视觉不可感知；
 - 周期效果（呼吸/摆臂）录为循环区间关键帧（wrap 无缝）；
-- **行走不再注入 horizontalSpeed**（评审决议：先固定频率循环，若滑步明显再按需用 `setSpeed` 按速度比例对齐并设变速上下限）：行走动画为固定频率循环 clip；`AnimationContext` 的 `horizontalSpeed/horizontalTravel` 字段在迁移后移除；
-- `appearance/system.ts` 改为 clip 调度器：动画键（`state` / `state:skillId`）→ 选择 clip → 播放器 seek/play；状态切换混合（评审决议：**加权混合**）：新 clip 采样姿态 × w + 旧姿态快照 × (1−w)，w 在 0.15s（`STATE_BLEND_DURATION`）内按三次 ease-out 从 0 → 1，与现状手感一致。
+- **行走不再注入 horizontalSpeed**（评审决议：先固定频率循环，若滑步明显再按需用 `setSpeed` 按速度比例对齐并设变速上下限）：行走动画为固定频率循环 clip（基准频率 6 rad/s ≈ 原式 3.6 m/s 匀速）；falling 腿间距固定为速度 0 基准；`AnimationContext` 的 `horizontalSpeed/horizontalTravel` 字段仅在旧 attacking 路径仍注入（M4b 迁移后移除）；
+- `appearance/system.ts` 改为 clip 调度器：动画键（`state` / `state:skillId` + `weaponHeld` 变体后缀 `:w/:n`）→ 选择 clip → 播放器 seek/play；角色模型经 `appearance/skeleton_bridge.ts`（`createCharacterSkeletonBridge`，基于 `createSkeletonFromGroups` autoConnect 自动按 Group 层级建连）桥接为骨架，播放器 `applyPose` 经桥接写回 Group（场景图级联）；状态切换混合（评审决议：**加权混合**）：新 clip 采样姿态 × w + 旧姿态快照 × (1−w)，w 在 0.15s（`STATE_BLEND_DURATION`）内按三次 ease-out 从 0 → 1，与现状手感一致；
+- attacking 状态在 M4b 迁移前保留旧 animator 路径（`attackingAnim` 直写 Group + 旧快照混合逻辑），基础状态全部 clip 驱动；旧 animator 目录保留至 M4b 完成后删除。
 
 ### 8.3 攻击动画迁移
 
@@ -479,6 +481,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `skeleton/anim/player.test.ts` | 播放推进、loop 回绕、非循环停止 + onFinished、seek、setSpeed 变速、onEvent 增量触发不重不漏、applyPose 写入骨架 |
 | `skeleton/anim/serialization.test.ts` | 资产 JSON 往返、非法数据拒绝、缺省字段兜底（zod default）、formatVersion、ikRootLevel 持久化 |
 | `entity/skeleton/render/bridge.test.ts` | 场景真源桥接：Group 局部读入骨架、领域修改写回 Group（场景图级联）、applyPose/rotateBone 经桥接生效、syncFromScene 外部修改读回、与普通骨架 FK 一致 |
+| `entity/character/appearance/clips/base_clips.test.ts` | 基础状态 clip 烘焙回归：采样姿态与公式一致（容差 1.7°）、循环 wrap 无缝、持械变体差异、非循环 clamp 末帧；角色模型桥接（自动建连/applyPose 写回 Group/syncFromScene） |
 | `modes/bone_edit/history.test.ts` | 撤销重做集成：命令注册与执行、undo/redo 往返恢复一致、批量命令（executeBatch）单步撤销、嵌套禁止语义、canUndo/canRedo 状态、remove_joint 命令（关节 + 关联段一体撤销/恢复）（`@potmot/command-history`） |
 | `entity/character` 迁移测试 | 骨架桥接同步（关节 ↔ Group 读写一致）、clip 化 animator 关键时间点姿态快照一致性（迁移回归）、事件轨道命中窗口与旧计时窗口时间区间一致 |
 
