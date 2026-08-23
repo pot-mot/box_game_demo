@@ -359,17 +359,16 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 ### 6.1 渲染映射（`entity/skeleton/render/`，以场景为真源）
 
 - **权威姿态源 = three 场景图**（评审决议）：桥接模式下关节直接读写对应 `Group` 的 position/quaternion，世界变换一律从 three 读取（`Group.getWorldPosition/getWorldQuaternion`）；领域层 `updateWorldTransforms`/FK 仅服务于纯领域计算与单元测试，桥接场景不双算，避免漂移；
-- 桥接适配器：`createSkeletonFromGroups(entries: {jointId, group}[])` 生成绑定 `Skeleton`（领域 API 写局部 pose 时同步 Group，读世界变换时取自 Group）；
-- `createJointVisual`：关节 gizmo（小立方体，选中高亮/线框）；
-- `syncVisuals`（updater）：每帧从 three 场景图同步 gizmo 位置（场景图自身已逐帧 `updateMatrixWorld`，无需额外 FK）；
-- 预设：`buildCharacterSkeletonDefinition()` 输出与方块人同构的骨架定义（joint = spine/headNeck/双臂肩肘腕/双腿髋膝 + ikRootLevel 标注），外观部件装配见 6.2。
+- 桥接适配器：`createSkeletonFromGroups(entries: {jointId, group}[])` 生成绑定 `Skeleton`（领域 API 写局部 pose 时同步 Group，读世界变换时取自 Group）；**根关节位移以场景为真源**（角色经 `syncPositions`、bone_edit 经场景锚点），桥接写回时对根关节从 Group 读回位置、只写出旋转；
+- **骨骼可视化（编辑模式）**：关节 = **小球**（`SphereGeometry`，`JOINT_GIZMO_RADIUS`），骨骼段 = **菱形连接段**（`OctahedronGeometry` 挂 head 关节 Group 下，位置 = 段局部中点、方向对准 head→tail、沿段方向拉伸 `scale.y = length`；段长过小隐藏）；关节小球带 `userData.jointId`、菱形带 `userData.boneId + jointId`（拾取）；选中高亮 `setSelectedVisual`（joint 高亮小球 / bone 高亮菱形为高亮色），`clearSelectedVisuals` 还原；
+- `resizeBoneVisuals`：段长变化（面板/IK 调整）后更新菱形；
+- 预设：`buildCharacterSkeletonDefinition()` 输出与方块人同构的骨架定义（joint = spine/headNeck/双臂肩肘腕/双腿髋膝 + ikRootLevel 标注）。
 
-### 6.2 外观部件装载（`entity/skeleton/appearance/`）
+### 6.2 外观部件装载（`entity/skeleton/appearance/`，备用）
 
-**本期不实现雕刻**（评审决议：雕刻相关内容已从方案移除）：
+**编辑模式默认使用骨骼可视化（小球 + 菱形，见 6.1）；外观部件装载保留为可插拔的备用 visual 装载器**：
 
-- 复用 `entity/character/appearance/model.ts` 的部件构造逻辑，重构出可复用的部件工厂（四肢/躯干/头部件 = BoxGeometry + 六面材质），按骨骼段装配到关节上（部件随 head 关节变换、长度随 `bone.length` 缩放）；
-- 人形预设 = `buildCharacterSkeletonDefinition()` 骨架 + 外观部件装配，编辑模式下即可直接编辑方块人外观骨骼；
+- 复用 `render/box_parts.ts` 的部件工厂（四肢/躯干/头部件 = BoxGeometry + 六面材质），按骨骼段装配到关节上（部件随 head 关节变换、长度随 `bone.length` 缩放）；
 - 渲染层与骨架解耦（visual 装载器可插拔），为未来外部 obj/blender 模型导入预留设计空间（本期不实现）。
 
 ### 6.3 属性面板（`entity/skeleton/ui/panel.ts`）
@@ -394,7 +393,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 指针交互（`modes/bone_edit/pointer.ts`，click-threshold + `intersectObjects(meshes, false)` 模式）：
 
-- **聚焦骨架**：左键点击骨架关节/gizmo 或侧栏骨架条目切换 activeSkeleton；非聚焦骨架灰显、不可编辑；
+- **聚焦骨架**：左键点击骨架关节小球/骨骼菱形或侧栏骨架条目切换 activeSkeleton；非聚焦骨架灰显、不可编辑；
 - **左键选中**关节/骨骼 → `focusPanel` 打开属性面板；
 - **拖动关节**：沿相机平行平面平移（世界转局部写 `joint.position` → 场景图自动级联）；
 - **拖动骨骼**：绕 head 旋转 tail 子树（`rotateBone`）；
@@ -482,7 +481,8 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `skeleton/anim/sampling.test.ts` | 关键帧精确命中、帧间各策略插值、slerp、wrap 末帧→首帧无缝、clamp、缺邻 nearest、空轨 undefined、`sampleEvents` 区间边界（左开右闭） |
 | `skeleton/anim/player.test.ts` | 播放推进、loop 回绕、非循环停止 + onFinished、seek、setSpeed 变速、onEvent 增量触发不重不漏、applyPose 写入骨架 |
 | `skeleton/anim/serialization.test.ts` | 资产 JSON 往返、非法数据拒绝、缺省字段兜底（zod default）、formatVersion、ikRootLevel 持久化 |
-| `entity/skeleton/render/bridge.test.ts` | 场景真源桥接：Group 局部读入骨架、领域修改写回 Group（场景图级联）、applyPose/rotateBone 经桥接生效、syncFromScene 外部修改读回、与普通骨架 FK 一致 |
+| `entity/skeleton/render/bridge.test.ts` | 场景真源桥接：Group 局部读入骨架、领域修改写回 Group（场景图级联）、applyPose/rotateBone 经桥接生效、syncFromScene 外部修改读回、根位移以场景为真源 |
+| `entity/skeleton/render/joint_groups.test.ts` | 骨骼可视化：关节小球（SphereGeometry）/骨骼段菱形（OctahedronGeometry 对准 head→tail）、拾取标记、选中高亮与还原、resizeBoneVisuals 随段长更新 |
 | `entity/character/appearance/clips/base_clips.test.ts` | 基础状态 clip 烘焙回归：采样姿态与公式一致（容差 1.7°）、循环 wrap 无缝、持械变体差异、非循环 clamp 末帧；角色模型桥接（自动建连/applyPose 写回 Group/syncFromScene） |
 | `entity/character/appearance/clips/attack_clips.test.ts` | 攻击 clip 烘焙回归：时长 = 动作+恢复、事件轨时间（0.1/0.85 动作进度）、strike_peak 曲线生效、overshoot 起始姿态、恢复归零、无阶段回退、tilt 腕部偏转、缓存复用 |
 | `entity/character/combat/melee_executor.test.ts` | 命中窗口由 setHitWindow 开关（关闭时早退、非近战不受影响） |

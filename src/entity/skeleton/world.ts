@@ -3,10 +3,8 @@ import type {PanelContext} from '../box/base/ui'
 import type {Skeleton} from '../../skeleton/skeleton.ts'
 import {skeletonFromDefinition, type SkeletonDefinition} from '../../skeleton/anim/serialization.ts'
 import {createJointVisuals, type JointVisuals} from './render/joint_groups.ts'
-import {assembleCharacterAppearance, resizeBoneParts, type CharacterAppearance} from './appearance/assemble.ts'
 import {buildCharacterSkeletonDefinition} from './preset.ts'
 import {createSkeletonPanel} from './ui/panel.ts'
-import {PRESET_PALETTE} from './constants.ts'
 import {focusPanel} from '../../ui/entity_control_panel.ts'
 
 /** 骨架实体选中项 */
@@ -15,14 +13,14 @@ export interface SkeletonSelection {
     readonly id: string
 }
 
-/** 骨架实体（纯视觉，不创建物理 body；编辑模式物理冻结） */
+/** 骨架实体（纯视觉，不创建物理 body；编辑模式物理冻结）。
+ *  骨骼可视化：关节 = 小球，骨骼段 = 菱形连接段 */
 export interface SkeletonEntity {
     readonly id: number
     readonly name: string
     readonly skeleton: Skeleton
     readonly visuals: JointVisuals
-    readonly appearance: CharacterAppearance
-    /** 可拾取网格（gizmo + 外观部件） */
+    /** 可拾取网格（关节小球 + 骨骼段菱形） */
     readonly meshes: readonly Mesh[]
 }
 
@@ -61,15 +59,12 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
     const addFromDefinition = (definition: SkeletonDefinition, name?: string): SkeletonEntity => {
         const skeleton = skeletonFromDefinition(definition)
         const visuals = createJointVisuals(skeleton, scene)
-        const appearance = assembleCharacterAppearance(visuals.groups, PRESET_PALETTE)
-        resizeBoneParts(skeleton, appearance)
         const entity: SkeletonEntity = {
             id: nextId,
             name: name ?? `骨架${nextId}`,
             skeleton,
             visuals,
-            appearance,
-            meshes: [...visuals.gizmos.values(), ...appearance.partMeshes],
+            meshes: [...visuals.gizmos.values(), ...visuals.boneVisuals.values()],
         }
         nextId += 1
         entities.set(entity.id, entity)
@@ -80,7 +75,6 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
     const remove = (id: number): void => {
         const entity = entities.get(id)
         if (entity === undefined) return
-        entity.appearance.cleanup()
         entity.visuals.cleanup()
         entities.delete(id)
         if (focusId === id) {
@@ -114,7 +108,7 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
     const refresh = (): void => {
         for (const entity of entities.values()) {
             entity.skeleton.updateWorldTransforms()
-            resizeBoneParts(entity.skeleton, entity.appearance)
+            entity.visuals.resizeBoneVisuals()
         }
     }
 

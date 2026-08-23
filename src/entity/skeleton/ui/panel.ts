@@ -2,7 +2,7 @@ import {Euler} from 'three'
 import type {PanelContext} from '../../box/base/ui'
 import {connectJoint, disconnectJoint, createSkeletonJoint} from '../../../skeleton/joint.ts'
 import {setBoneLength, setBoneRoll} from '../../../skeleton/bone.ts'
-import {setGizmoSelected} from '../render/joint_groups.ts'
+import {setSelectedVisual, clearSelectedVisuals} from '../render/joint_groups.ts'
 import type {SkeletonSelection, SkeletonEntity} from '../world.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
@@ -215,14 +215,14 @@ export const createSkeletonPanel = (ctx: SkeletonPanelContext): PanelContext => 
         } else {
             renderBonePanel(ctx, container)
         }
-        setGizmoSelected(entity.visuals.gizmos, selection.id, true)
+        /* 选中高亮：关节小球 / 骨骼段菱形 */
+        setSelectedVisual(entity.visuals, selection, true)
     }
 
     const destroy = (): void => {
         const entity = ctx.getFocus()
-        const selection = ctx.getSelection()
-        if (entity !== undefined && selection !== undefined && selection.kind === 'joint') {
-            setGizmoSelected(entity.visuals.gizmos, selection.id, false)
+        if (entity !== undefined) {
+            clearSelectedVisuals(entity.visuals)
         }
     }
 
