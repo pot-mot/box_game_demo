@@ -718,10 +718,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const model = appearanceModels.get(entity.id)
             const sys = appearanceSystems.get(entity.id)
             if (model && sys) {
-                const linvel = entity.body.linvel()
-                const hSpeed = Math.hypot(linvel.x, linvel.z)
-
-                /* 计算阶段动画上下文（仅 attacking 状态注入阶段信息，flinching 等复用动画器时走回退路径） */
+                /* 计算阶段动画上下文（仅 attacking 状态注入阶段信息） */
                 const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
                 const inAttacking = entity.stateMachine.currentState === 'attacking' && activeSkill !== undefined
                 const phases = inAttacking ? resolvePhases(activeSkill.config.phases) : []
@@ -735,8 +732,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
-                    horizontalSpeed: hSpeed,
-                    horizontalTravel: 0,
                     swingTilt: entity.combat.swingTilt,
                     attackSkillId: inAttacking ? activeSkill!.config.id : undefined,
                     attackPhase: ctxPhaseName,
@@ -749,8 +744,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     weaponHeld: model.weaponMesh !== null,
                 })
 
-                const vx = linvel.x
-                const vz = linvel.z
+                const vx = entity.body.linvel().x
+                const vz = entity.body.linvel().z
                 const currentAngle = facingAngles.get(entity.id) ?? 0
 
                 let targetAngle: number

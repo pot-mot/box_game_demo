@@ -453,10 +453,10 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 ### 8.5 补全项（新系统带来的增量能力）
 
-- **双手武器 IK**：左手腕 IK 链（左肩→左肘→左腕，`ikRootLevel` 标记肩）`solveCcd` 追武器 `TWO_HAND_GRIP` 世界点，替换固定假握；
-- **IK 与 clip 的写入分层**（评审修正）：每帧先 `sampleClip` → `applyPose` 写全骨架 → 再对 IK 链关节执行 `solveCcd` 覆盖局部 rotation（IK 后写、最后生效），顺序固定，避免两套写入互相覆盖；
+- **双手武器 IK**：attacking 状态下左肩标记 IK 根，左手腕链（左肩→左肘→左腕）每帧 `solveCcd` 追「右腕 + 武器轴方向 × 0.45m」握柄点，替换固定假握；分层顺序（评审决议）：clip `applyPose` 先写全骨架 → IK 后写覆盖左臂链 → 快照混合；
 - **动画复用**：AI/玩家/showcase 同源 clip（消除三处镜像逻辑）；
-- **可视编辑**：所有攻击 clip 可在编辑模式直接编辑调优（含事件轨道、缓动曲线）。
+- **可视编辑**：所有攻击 clip 可在编辑模式直接编辑调优（含事件轨道、缓动曲线）；
+- **字段清理（M4c）**：`AnimationContext.horizontalSpeed/horizontalTravel` 已移除（基础状态与攻击全部固定频率/静态时长，不再注入速度参数）；slope_walk_matrix 测试同步改为固定相位驱动。
 
 ### 8.6 迁移验收标准
 

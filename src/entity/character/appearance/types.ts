@@ -70,12 +70,10 @@ export interface CharacterModel {
     dispose: () => void
 }
 
-/** 动画上下文，由 animation system 每帧传入 */
+/** 动画上下文，由 animation system 每帧传入（M4c：horizontalSpeed/horizontalTravel 已移除，
+ *  行走/下落动画固定频率，不再由速度参数驱动） */
 export interface AnimationContext {
     readonly stateTime: number
-    readonly horizontalSpeed: number
-    /** 累计水平位移（m）：由动画系统按平滑速度积分，单调递增，供位移驱动动画使用 */
-    readonly horizontalTravel: number
     /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍 */
     readonly swingTilt: number
     /** 当前攻击技能 id（仅 attacking 状态有效）— 链段切换时作为动画键触发姿态混合 */

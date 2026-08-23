@@ -15,7 +15,6 @@ import {
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {GroundState} from './ground_state.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
-import {WALK_ANIM_MAX_SPEED, HORIZONTAL_SPEED_SMOOTHING} from '../appearance/constants.ts'
 import {CAMERA_SMOOTH_FACTOR} from '../../../modes/play/constants.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 
@@ -204,19 +203,12 @@ describe('郊狼过程动画与摄像机平滑', () => {
             let prevPhaseVel: number | undefined
             let phaseRegress = 0
             let maxPhaseVelJump = 0
-            /* 与 appearance/system.ts 一致的 EMA 平滑与位移积分（状态切换时重置） */
-            let smoothedSpeed = 0
-            let travel = 0
             let prevState: string | undefined
             for (let i = 0; i < FRAMES_3600; i++) {
                 gs = tick(hw, entity, gs, -1, 0)
                 const state = entity.stateMachine.currentState
-                const linvel = entity.body.linvel()
-                const hSpeed = Math.hypot(linvel.x, linvel.z)
                 sys.update(DT, model, state, {
                     stateTime: entity.stateMachine.stateTime,
-                    horizontalSpeed: hSpeed,
-                    horizontalTravel: 0,
                     swingTilt: 0,
                     attackPhase: undefined,
                     attackPhaseProgress: 0,
@@ -228,23 +220,16 @@ describe('郊狼过程动画与摄像机平滑', () => {
                     attackRecovery: 0,
                     weaponHeld: false,
                 })
-                if (state !== prevState) {
-                    smoothedSpeed = hSpeed
-                    travel = 0
-                    prevState = state
-                } else {
-                    smoothedSpeed += (hSpeed - smoothedSpeed) * HORIZONTAL_SPEED_SMOOTHING
-                }
-                travel += smoothedSpeed * DT
+                if (state !== prevState) prevState = state
                 if (i < WARMUP_FRAMES) continue
                 if (state !== 'walking') {
                     prevT = undefined
                     prevPhaseVel = undefined
                     continue
                 }
-                /* 与 walkingAnim 一致：t = 1.2×stateTime + 1.3×travel，相位速度 = 1.2 + 1.3×speed */
-                const phaseVel = 1.2 + 1.3 * Math.min(smoothedSpeed, WALK_ANIM_MAX_SPEED)
-                const t = 1.2 * entity.stateMachine.stateTime + 1.3 * travel
+                /* M4a 起 walking 固定频率（不再注入速度）：t = 6 × stateTime，相位单调性由 stateTime 保证 */
+                const phaseVel = 6
+                const t = 6 * entity.stateMachine.stateTime
                 if (prevT !== undefined) {
                     if (t < prevT - 1e-6) phaseRegress++
                     if (prevPhaseVel !== undefined) maxPhaseVelJump = Math.max(maxPhaseVelJump, Math.abs(phaseVel - prevPhaseVel))
@@ -253,9 +238,8 @@ describe('郊狼过程动画与摄像机平滑', () => {
                 prevPhaseVel = phaseVel
             }
             expect(phaseRegress).toBe(0)
-            /* Rapier trimesh 棱接触法线伪影会产生单帧 hSpeed 尖峰（85° 实测 EMA 传导后
-               相位速率跳变 ≤ 2.2），阈值从 1.0 放宽到 3.0，仍能拦截持续性速率震荡 */
-            expect(maxPhaseVelJump).toBeLessThan(3.0)
+            /* 固定频率后相位速率恒为 6，无跳变 */
+            expect(maxPhaseVelJump).toBeLessThan(1e-9)
         }, TIMEOUT)
 
         it(`walking 下坡 ${deg}° 摄像机帧间位移平滑`, () => {
