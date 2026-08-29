@@ -1,7 +1,7 @@
 import type {CharacterEntity} from '../../../../character/types.ts'
 import type {NavRunContext, NavState, NavStateHandler, NavSensor, NavSenseOutput} from './types.ts'
 import {DEFAULT_CHECK_RADIUS, DEFAULT_CHECK_DISTANCE, DEFAULT_STUCK_TIMEOUT} from './constants.ts'
-import {STEER_ANGLE_MIN, STEER_ANGLE_MAX, STEER_ANGLE_STEP, STUCK_ESCAPE_DURATION} from './constants.ts'
+import {STEER_ANGLE_MIN, STEER_ANGLE_MAX, STEER_ANGLE_STEP, STUCK_ESCAPE_DURATION, STUCK_ESCAPE_MAX_RETRIES} from './constants.ts'
 
 /**
  * 在原始方向附近搜索一个畅通的方向角度
@@ -308,6 +308,8 @@ const stuckHandler: NavStateHandler = {
     enter: (ctx, _entity) => {
         ctx.stuckTimer = 0
         ctx.escapeTimer = 0
+        /* 新一次 stuck episode：重置逃逸脉冲预算 */
+        ctx.escapeCount = 0
     },
     update: (dt, ctx, entity, sensor, intendedDX, intendedDZ) => {
         ctx.stateTime += dt
@@ -321,10 +323,16 @@ const stuckHandler: NavStateHandler = {
             return {dx: -intendedDX / fLen, dz: -intendedDZ / fLen, jump: true}
         }
 
-        /* 卡住累计超过 stuckTimeout → 触发一次逃逸脉冲 */
+        /* 卡住累计超过 stuckTimeout → 触发一次逃逸脉冲。
+         * 连续脉冲受预算上限约束：耗尽后停止原地重复反向跳（否则坑底/墙角会
+         * 无限 idle→jumping→falling→idle 连跳），交由决策层静止检测兜底 */
         ctx.stuckTimer += dt
         if (ctx.stuckTimer >= ctx.config.stuckTimeout) {
             ctx.stuckTimer = 0
+            if (ctx.escapeCount >= STUCK_ESCAPE_MAX_RETRIES) {
+                return {dx: 0, dz: 0, jump: false}
+            }
+            ctx.escapeCount += 1
             ctx.escapeTimer = STUCK_ESCAPE_DURATION
             if (fLen > 0.001) {
                 return {dx: -intendedDX / fLen, dz: -intendedDZ / fLen, jump: true}
@@ -377,6 +385,7 @@ export const createNavRunContext = (enabled: boolean): NavRunContext => ({
     steerDirection: 1,
     stuckTimer: 0,
     escapeTimer: 0,
+    escapeCount: 0,
     lastPosX: 0,
     lastPosZ: 0,
     preSense: null,

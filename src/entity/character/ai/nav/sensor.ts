@@ -176,11 +176,14 @@ export const createNavSensor = (
         _raycaster.set(_origin, new Vector3(0, -1, 0))
 
         let groundAhead = false
+        /* 探针是否完全未命中任何 mesh（下方只剩隐式无限平面 y=0，需要回退判定） */
+        let probeMissed = true
         /* 同时检查地面 mesh 和障碍 mesh（角色可能站在箱子上，箱子也应视为地面） */
         const probeTargets = [...grounds as Object3D[], ...obstacles]
         if (probeTargets.length > 0) {
             const groundHits = _raycaster.intersectObjects(probeTargets, false)
             if (groundHits.length > 0) {
+                probeMissed = false
                 /* 命中点距离在跳跃高度范围内则判定为可安全到达 */
                 groundAhead = groundHits[0].distance <= jumpHeight
             }
@@ -190,8 +193,10 @@ export const createNavSensor = (
             groundAhead = true
         }
 
-        /* 回退：无地形 mesh（隐式无限平面 y=0），脚底到平面距离在跳跃高度内即安全 */
-        if (!groundAhead && grounds.length === 0) {
+        /* 回退：探针完全未命中 → 下方只剩隐式无限平面 y=0（物理地面，非 mesh）。
+         * 脚底到平面距离在跳跃高度内即安全可走（角色在基础平面/浅坑内不误判坑洞）；
+         * 超出跳跃高度则是真实落差（悬崖/深坑），保持 blocked_pit 阻止主动下跳 */
+        if (!groundAhead && probeMissed) {
             groundAhead = footY <= jumpHeight
         }
         /* 上坡时探针起点在坡面内部必然 miss，用正前方可行走坡面命中兜底 */

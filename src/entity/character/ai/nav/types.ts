@@ -45,6 +45,8 @@ export interface NavRunContext {
     stuckTimer: number
     /** 倒退逃逸脉冲剩余时长（秒），>0 时输出意图反向 + 跳跃 */
     escapeTimer: number
+    /** 本次 stuck episode 已触发的倒退逃逸脉冲次数（受 STUCK_ESCAPE_MAX_RETRIES 上限约束） */
+    escapeCount: number
     /** 上帧记录位置（legacy 模式使用） */
     lastPosX: number
     lastPosZ: number

@@ -239,7 +239,9 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 | `COMBAT_STALL_DETOUR_DURATION` | `1.0` | 卡死重试绕行脉冲时长（秒） |
 | `COMBAT_LOSE_RANGE_FACTOR` | `2` | 脱战距离滞回系数（放弃阈值 = detectionRange × 系数） |
 
-**nav stuck 倒退逃逸**（`nav/machine.ts`）：stuck 状态累计超过 `config.stuckTimeout` 后，输出 `STUCK_ESCAPE_DURATION`（0.5s）的"意图反向倒退 + 跳跃"逃逸脉冲尝试物理挣脱（对墙/坑均安全），随后重新评估路径。与决策层静止检测构成两级防线：先倒退挣脱，仍无效才重掷路点/放弃目标。
+**nav stuck 倒退逃逸**（`nav/machine.ts`）：stuck 状态累计超过 `config.stuckTimeout` 后，输出 `STUCK_ESCAPE_DURATION`（0.5s）的"意图反向倒退 + 跳跃"逃逸脉冲尝试物理挣脱（对墙/坑均安全），随后重新评估路径。**逃逸脉冲受预算上限约束**（`STUCK_ESCAPE_MAX_RETRIES`，单次 stuck episode 内 2 次）：耗尽后停止原地重复反向跳，交由决策层静止检测兜底（绕行/重掷/放弃战斗）——否则坑底/墙角会陷入 `idle → jumping → falling → idle` 的无限向后连跳。与决策层静止检测构成两级防线：先倒退挣脱，仍无效才重掷路点/放弃目标。
+
+**静止检测的逃逸位移豁免**：`updateStallDetection` 判定"确认在动"时排除 nav stuck 期间的位移（`ctx.nav.state !== 'stuck'` 才重置锚点与 `combatStallRetries`）。逃逸脉冲的倒退跳跃位移不解决卡死，若计入会持续重置卡死重试计数，导致永不放弃战斗。
 
 **朝向规则**：AI 朝向由意图方向（过滤前）驱动（`world.ts` `aiTargetDirs`），被清零闸门拦住时仍持续转向目标/路点，保证攻击检测箱门控与发射方向可用（若用过滤后方向，被卡住时朝向冻结会与检测箱门控互锁）。
 
@@ -442,6 +444,7 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 |------|------|
 | 世界空间法线过滤 | 命中面法线经 `normalMatrix` 转世界空间后判定可行性（`ny ≥ WALKABLE_NORMAL_MIN_Y`），地形/箱子带旋转时不会误判 |
 | 坑洞探针 | 从脚底高度向下探测 `checkDistance` 处地面，落差超过 `jumpHeight` 判为 `blocked_pit` |
+| 隐式平面回退 | 探针完全未命中任何 mesh 时，下方只剩隐式无限平面 y=0（物理地面非 mesh）：脚底到平面距离 `footY ≤ jumpHeight` 即视为可走（角色在 y=0 基础平面上不误判坑洞），超出则为真实落差（悬崖/深坑）。与旧实现（仅 `grounds.length === 0` 时回退）的区别：有地形 mesh 存在时基础平面同样可见，修复"从 terrain 跌落到 y=0 后所有方向都被判 blocked_pit"的卡死 |
 | 上坡兜底 | 上坡时探针起点位于坡面内部必然 miss，此时若正前方（hAngle=0）射线命中可行走坡面，说明地形持续向上延伸 → 视为有地面，避免误判 `blocked_pit` 导致 AI 在斜坡上无限绕行（持续 walking 不前进） |
 | 角色分离坡面补偿 | `separation.ts` 的 `separationSlopeDy()`：角色间强制分离的水平瞬移按支撑面平面方程补偿 Y（`SEPARATION_SLOPE_MIN_NY = 0.5` 以下不补偿），防止斜坡上纯水平平移把碰撞体埋进坡面（穿模 + 物理暴力弹出） |
 

@@ -3,6 +3,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import {Mesh, BoxGeometry, MeshBasicMaterial, Object3D} from 'three'
 import {createNavSensor} from './sensor.ts'
 import {createNavRunContext, processNav} from './machine.ts'
+import {STUCK_ESCAPE_DURATION, STUCK_ESCAPE_MAX_RETRIES} from './constants.ts'
 import type {NavSensor, NavRunContext, NavConfig} from './types.ts'
 import type {CharacterEntity} from '../../../../character/types.ts'
 import {createDashSkillSlot} from '../../../../character/combat/dash_skill.ts'
@@ -163,18 +164,20 @@ describe('NavSensor 传感器检测', () => {
         expect(result.obstacleHeight).toBeLessThanOrEqual(entity.config.jumpHeight)
     })
 
-    it('4. 前方地形断裂 → 探针超出跳跃高度未命中 → blocked_pit', () => {
-        /* 小片地形，角色站在边缘，探头位置前方无地面 */
+    it('4. 前方地形断裂 → 探针未命中且落差超跳跃高度 → blocked_pit', () => {
+        /* 高台地形（顶面 y=3），角色站在边缘，探头位置前方无地面且落差超过 jumpHeight */
         const smallGround = new Mesh(
             new BoxGeometry(1, 0.1, 1),
             new MeshBasicMaterial(),
         )
-        smallGround.position.set(-0.5, -0.05, 0)
+        smallGround.position.set(-0.5, 2.95, 0)
         smallGround.updateMatrixWorld()
         grounds.length = 0
         grounds.push(smallGround)
+        mockBodyOf(entity).position.y = 3
 
-        /* checkDistance = 1.5，探头在 x=1.5，超出 1×1 地形范围 */
+        /* checkDistance = 1.5，探头在 x=1.5，超出 1×1 地形范围；
+         * 隐式平面 y=0 距脚底 2.6 > jumpHeight → 真实落差，判为坑洞 */
         const result = sensor.sense(entity, 1, 0, navConfig)
         expect(result.result).toBe('blocked_pit')
         expect(result.groundAhead).toBe(false)
@@ -199,6 +202,30 @@ describe('NavSensor 传感器检测', () => {
         const result = sensor.sense(entity, 1, 0, navConfig)
         expect(result.groundAhead).toBe(true)
         expect(result.result).toBe('clear')
+    })
+
+    it('4d. 有地形 mesh + 探针 miss（角色在隐式基础平面 y=0）→ 回退隐式平面 → clear', () => {
+        /* 回归：角色从 terrain 跌落到 y=0 基础平面，地形 mesh 存在但远离角色，
+         * 探针点不在其覆盖内 → 向下必 miss。此时下方只剩隐式无限平面 y=0，
+         * 脚底到平面距离（footY=0.1）≤ jumpHeight → 平坦地面不得误判为坑洞 */
+        grounds.length = 0
+        grounds.push(createBoxMesh(50, 0.5, 0, 1, 1, 1))
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.groundAhead).toBe(true)
+        expect(result.result).toBe('clear')
+    })
+
+    it('4e. 有地形 mesh + 角色高处（footY > jumpHeight）+ 探针 miss → blocked_pit（保留悬崖判定）', () => {
+        /* 角色站在高处（footY = 3 - 0.5 + 0.1 = 2.6 > jumpHeight=2），探针 miss：
+         * 隐式平面在跳跃高度之外 → 真实落差，仍须判为坑洞（不允许主动走下陡崖） */
+        grounds.length = 0
+        grounds.push(createBoxMesh(50, 0.5, 0, 1, 1, 1))
+        mockBodyOf(entity).position.y = 3
+
+        const result = sensor.sense(entity, 1, 0, navConfig)
+        expect(result.groundAhead).toBe(false)
+        expect(result.result).toBe('blocked_pit')
     })
 
     it('5. 前方有墙 + 左侧通畅', () => {
@@ -327,12 +354,13 @@ describe('NavFSM 导航状态机', () => {
     })
 
     it('11. 坑洞 + 侧面通畅 + nav 开启 → 绕行', () => {
-        /* 小片地形，角色站在边缘，前方悬空 */
+        /* 高台地形，角色站在边缘，前方是真实深坑（落差 > jumpHeight） */
         grounds.length = 0
         const smallGround = new Mesh(new BoxGeometry(1, 0.1, 1), new MeshBasicMaterial())
-        smallGround.position.set(-0.5, -0.05, 0)
+        smallGround.position.set(-0.5, 2.95, 0)
         smallGround.updateMatrixWorld()
         grounds.push(smallGround)
+        mockBodyOf(entity).position.y = 3
 
         processNav(FIXED_DT, navCtx, entity, sensor, 1, 0)
         /* blocked_pit，但左右均无墙，应进入 steering */
@@ -384,6 +412,38 @@ describe('NavFSM 导航状态机', () => {
             expect(r.dz).toBe(0)
             expect(navCtx.state).toBe('stuck')
         }
+    })
+
+    it('13b. 四面围墙 → stuck 倒退逃逸脉冲受预算上限约束：耗尽后停止跳跃输出 idle', () => {
+        /* 回归：坑底/墙角场景中 stuck 会每 stuckTimeout 重复输出"反向+跳跃"逃逸脉冲，
+         * 导致动作层无限 idle→jumping→falling→idle 连跳。逃逸脉冲次数必须受上限约束 */
+        obstacles.push(
+            createBoxMesh(1.5, 2.0, 0, 3, 4, 3),   // 大包围
+        )
+
+        processNav(FIXED_DT, navCtx, entity, sensor, 1, 0)
+        expect(navCtx.state).toBe('stuck')
+
+        /* 单次脉冲帧数上限 = 触发帧 + 0.5s 内逐帧递减帧数（浮点下最多 31 帧）+ 余量 */
+        const perPulse = Math.ceil(STUCK_ESCAPE_DURATION / FIXED_DT) + 2
+
+        /* 运行 10s（600 帧）：跳跃帧总数不得超过预算上限 × 单脉冲帧数 */
+        let jumpFrames = 0
+        for (let i = 0; i < 600; i++) {
+            const r = processNav(FIXED_DT, navCtx, entity, sensor, 1, 0)
+            if (r.jump) jumpFrames++
+            expect(navCtx.state).toBe('stuck')
+        }
+        expect(jumpFrames).toBeLessThanOrEqual(STUCK_ESCAPE_MAX_RETRIES * perPulse)
+
+        /* 预算耗尽后（最后 2 秒）不再输出跳跃，保持 stuck 待命输出 idle */
+        let tailJumps = 0
+        for (let i = 0; i < 120; i++) {
+            const r = processNav(FIXED_DT, navCtx, entity, sensor, 1, 0)
+            if (r.jump) tailJumps++
+            expect(navCtx.state).toBe('stuck')
+        }
+        expect(tailJumps).toBe(0)
     })
 
     it('14. 畅通路径 + nav 开启 → 持续 navigating', () => {

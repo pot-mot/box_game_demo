@@ -231,8 +231,10 @@ const updateStallDetection = (
         return
     }
     const travel = Math.hypot(pos.x - ctx.stallAnchorX, pos.z - ctx.stallAnchorZ)
-    if (travel > STALL_CHECK_TRAVEL) {
-        /* 确认在动：推进锚点并清零（含 combat 卡死重试计数） */
+    if (travel > STALL_CHECK_TRAVEL && ctx.nav.state !== 'stuck') {
+        /* 确认在动：推进锚点并清零（含 combat 卡死重试计数）。
+         * nav stuck 期间的倒退逃逸位移不计入：反向跳跃不解决卡死，若计入会
+         * 持续重置锚点与重试计数，导致坑底/墙角永不放弃战斗（无限向后连跳） */
         ctx.stallTimer = 0
         ctx.stallAnchorX = pos.x
         ctx.stallAnchorZ = pos.z

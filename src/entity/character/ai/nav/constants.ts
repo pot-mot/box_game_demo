@@ -17,6 +17,10 @@ export const STUCK_DIST_THRESHOLD = 0.01
 /** stuck 状态倒退逃逸脉冲时长（秒）：卡住超过 stuckTimeout 后朝意图反向倒退 + 跳跃尝试物理挣脱 */
 export const STUCK_ESCAPE_DURATION = 0.5
 
+/** 单次 stuck episode 内连续倒退逃逸脉冲上限：耗尽后停止原地重复反向跳，
+ *  交由决策层静止检测兜底（绕行/重掷/放弃战斗），避免坑底/墙角无限连跳 */
+export const STUCK_ESCAPE_MAX_RETRIES = 2
+
 /** 射线垂直仰角采样（弧度） */
 export const RAY_PITCH_ANGLES = [0, Math.PI / 18] // 0°, 10°
 

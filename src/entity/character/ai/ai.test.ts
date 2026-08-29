@@ -624,6 +624,50 @@ describe('静止检测与卡死自愈', () => {
         expect(ctx.activeFsm).toBe('peace')
     })
 
+    it('combat：nav stuck 逃逸期间的倒退位移不重置静止检测（重试计数持续累计，达上限后放弃战斗）', () => {
+        /* 回归：坑底/墙角中 nav stuck 每 2s 输出"反向+跳跃"逃逸脉冲，倒退位移若被计入
+         * "确认在动"会持续重置锚点与 combatStallRetries，导致永不放弃战斗（无限向后连跳） */
+        const {char, pos} = makeMovableChar(1, 0, 'melee')
+        const enemyPos = {x: 3, y: 0, z: 0}
+        const enemy = makeChar(2, 3, 0, 1, 'melee')
+        enemy.body = {translation: () => enemyPos} as unknown as CharacterEntity['body']
+        const ctx = createAIMachine(char, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'combat'
+        ctx.combatState = 'chase'
+        ctx.combatTargetId = 2
+        /* 模拟 nav FSM 处于 stuck：逃逸脉冲输出期间意图方向恒为追击方向（向前） */
+        ctx.nav.state = 'stuck'
+
+        /* 首帧接敌：无位移，stallTimer 开始累计 */
+        updateAI(0.5, ctx, char, [char, enemy], () => {})
+        expect(ctx.activeFsm).toBe('combat')
+        expect(ctx.combatStallRetries).toBe(0)
+
+        /* 每帧向后倒退 1.2m（逃逸脉冲的向后跳跃位移），目标同步后退保持相对距离 3m：
+         * nav stuck 期间该位移不计入"确认在动" → stallTimer 持续累计 */
+        const step = (): void => {
+            pos.x -= 1.2
+            enemyPos.x -= 1.2
+            updateAI(0.5, ctx, char, [char, enemy], () => {})
+        }
+
+        /* 累计 2.0s（首帧 0.5 + 3 帧 × 0.5）→ 触发第 1 次卡死恢复：横向绕行，重试计数 = 1
+         * （旧逻辑会被倒退位移重置为 0，导致永不放弃战斗） */
+        for (let i = 0; i < 3; i++) step()
+        expect(ctx.combatStallRetries).toBe(1)
+        expect(ctx.combatDetourTimer).toBeGreaterThan(0)
+
+        /* 继续 4 帧 → 第 2 次重试 */
+        for (let i = 0; i < 4; i++) step()
+        expect(ctx.combatStallRetries).toBe(2)
+
+        /* 再 4 帧 → 达上限（3 次）→ 放弃战斗 + 接敌冷却 */
+        for (let i = 0; i < 4; i++) step()
+        expect(ctx.activeFsm).toBe('peace')
+        expect(ctx.combatState).toBe('inactive')
+        expect(ctx.combatReentryTimer).toBeGreaterThan(0)
+    })
+
     it('combat：绕行重试期间 chase 按偏转方向输出移动输入', () => {
         const {char} = makeMovableChar(1, 0, 'melee')
         const ctx = makeCtx('tactical', 2)
