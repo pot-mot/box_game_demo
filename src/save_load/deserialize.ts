@@ -4,6 +4,8 @@ import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {EntityType} from '../entity/constants.ts'
 import type {SaveData, FragmentDataJSON, EntitySourceMap} from './types.ts'
+import {SAVE_FORMAT_VERSION} from './types.ts'
+import {CHARACTER_BASE_SIZE} from '../entity/character/constants.ts'
 
 /** JSON-safe 格式 → FragmentData */
 const jsonToFragmentData = (j: FragmentDataJSON): FragmentData => ({
@@ -58,6 +60,8 @@ export const loadWorldFromData = (
     const frag = getSource('fragment/common')
     const character = getSource('character')
     const terrain = terrainSources[0]
+    /* v1 旧档：character 位置为身体中心，需下移半高迁移到脚底原点语义 */
+    const legacyCharacterPos = (data.version ?? 1) < SAVE_FORMAT_VERSION
 
     for (const entity of data.entities) {
         const [x, y, z] = entity.position
@@ -106,7 +110,10 @@ export const loadWorldFromData = (
                 break
             }
             case 'character': {
-                const spawned = character?.add(entity.config, x, y, z, quat, {health: entity.health})
+                /* 旧档迁移：身体中心 Y → 脚底原点 Y */
+                const halfH = (CHARACTER_BASE_SIZE.height * entity.config.scale) / 2
+                const feetY = legacyCharacterPos ? y - halfH : y
+                const spawned = character?.add(entity.config, x, feetY, z, quat, {health: entity.health})
                 /* 朝向恢复（旧存档无 facing 字段时保持缺省 0） */
                 if (spawned !== undefined && entity.facing !== undefined) {
                     character?.setFacing(spawned.id, entity.facing)

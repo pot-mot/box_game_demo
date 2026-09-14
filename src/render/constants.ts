@@ -86,5 +86,5 @@ export const SIDE_DARKEN_RATIO = 0.85
 /** 面部 Canvas 纹理尺寸（像素） */
 export const FACE_CANVAS_SIZE = 128
 
-/** 髋部 pivot 基准高度（模型本地 Y）：-H/2 + legH，spine 重置基准 */
-export const HIP_Y = -MODEL_BASE_HEIGHT / 2 + MODEL_BASE_HEIGHT * LEG_RATIO
+/** 髋部 pivot 基准高度（模型本地 Y）：模型原点在脚底，髋部 = 腿长，spine 重置基准 */
+export const HIP_Y = MODEL_BASE_HEIGHT * LEG_RATIO

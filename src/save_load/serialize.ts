@@ -4,6 +4,8 @@ import type {TerrainContext} from '../entity/terrain/base/types'
 import type {GameMode} from '../modes/constants'
 import type {EntityType} from '../entity/constants.ts'
 import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON, ModeInfoJSON, CameraInfoJSON, EntitySourceMap} from './types.ts'
+import {SAVE_FORMAT_VERSION} from './types.ts'
+import {CHARACTER_BASE_SIZE} from '../entity/character/constants.ts'
 
 /** 将 {x, y, z} 转为 [x, y, z] */
 const vec3ToTuple = (v: {x: number; y: number; z: number}): [number, number, number] =>
@@ -141,6 +143,9 @@ export const collectWorldState = (
     const character = getSource('character')
     if (character?.getAll) {
         for (const e of character.getAll()) {
+            /* position 存脚底原点（实体原点语义）：物理身体中心回退半高 */
+            const bodyPos = e.body.translation()
+            const halfH = (CHARACTER_BASE_SIZE.height * e.config.scale) / 2
             entities.push({
                 type: 'character',
                     config: {
@@ -175,7 +180,7 @@ export const collectWorldState = (
                     navEnabled: e.navEnabled,
                 },
                 health: e.combat.health,
-                position: vec3ToTuple(e.body.translation()),
+                position: [bodyPos.x, bodyPos.y - halfH, bodyPos.z],
                 quaternion: quatToTuple(e.body.rotation()),
                 /* 刚体 lockRotations，朝向不在 body 上，单独从 facingAngles 持久化 */
                 facing: character.getFacing(e.id),
@@ -217,6 +222,7 @@ export const collectWorldState = (
     }
 
     return {
+        version: SAVE_FORMAT_VERSION,
         entities,
         modeInfo: modeInfo.edit || modeInfo.play || modeInfo.boneEdit ? modeInfo : undefined,
     }

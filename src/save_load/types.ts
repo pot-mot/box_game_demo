@@ -8,6 +8,9 @@ import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/typ
 import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/common/types'
 import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
 
+/** 当前存档格式版本：v2 起 character 的 position 语义改为脚底原点（旧档为身体中心） */
+export const SAVE_FORMAT_VERSION = 2
+
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
 /** JSON-safe 四元数 */
@@ -154,6 +157,8 @@ export interface ModeInfoJSON {
 
 /** 完整存档数据结构 */
 export interface SaveData {
+    /** 存档格式版本（缺省视为 v1：character 位置为身体中心，加载时迁移） */
+    version?: number
     entities: SavableEntity[]
     modeInfo?: ModeInfoJSON
 }

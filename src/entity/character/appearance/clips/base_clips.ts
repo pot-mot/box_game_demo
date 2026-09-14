@@ -43,12 +43,13 @@ export const CHARACTER_JOINT_REST_POSITIONS: Readonly<Record<CharacterJointId, r
     rightWristPivot: [0, 0, 0],
     leftArmShoulder: [-REST_SHOULDER_X, REST_BODY_H, 0],
     leftArmElbow: [0, -REST_UPPER_ARM_H, 0],
-    rightLegHip: [REST_HIP_X, 0, 0],
+    /* 模型原点在脚底：group 直接子关节（双腿髋/spine）位于腿长高度 */
+    rightLegHip: [REST_HIP_X, REST_LEG_H, 0],
     rightLegKnee: [0, -REST_HIP_H, 0],
-    leftLegHip: [-REST_HIP_X, 0, 0],
+    leftLegHip: [-REST_HIP_X, REST_LEG_H, 0],
     leftLegKnee: [0, -REST_HIP_H, 0],
     headNeck: [0, REST_BODY_H, 0],
-    spine: [0, 0, 0],
+    spine: [0, REST_LEG_H, 0],
     group: [0, 0, 0],
 }
 

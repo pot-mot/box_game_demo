@@ -56,7 +56,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     const upperArmH = bodyH / 2
     const forearmH = bodyH / 2
 
-    const hipY = -H / 2 + legH
+    /* 模型原点在脚底（地面）：髋部关节高度 = 腿长，躯干/头向上延伸，腿向下垂到 y=0 */
+    const hipY = legH
 
     const shoulderX = bodyW / 2 + ARM_X_GAP
     const hipX = LEG_X_GAP

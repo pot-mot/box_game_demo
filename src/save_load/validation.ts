@@ -207,6 +207,8 @@ const ModeInfo = z.object({
 })
 
 const SaveDataSchema = z.object({
+    /** 格式版本（缺省 1 = 旧档：character 位置为身体中心，加载时迁移到脚底原点） */
+    version: z.number().int().positive().default(1),
     entities: z.array(SavableEntity),
     modeInfo: ModeInfo.optional(),
 })

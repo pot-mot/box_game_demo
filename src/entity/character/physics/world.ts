@@ -103,6 +103,10 @@ const placeVisionFan = (
     hitBoxes.markVisionDirty()
 }
 
+/** 角色实体原点（脚底）到物理刚体中心（胶囊中心）的 Y 向偏移 */
+const originToCenterY = (config: CharacterConfig): number =>
+    (CHARACTER_BASE_SIZE.height * config.scale) / 2
+
 /** 根据阵营取 badge 颜色 */
 const factionBadgeColor = (faction: number, isPlayer: boolean): string => {
     if (isPlayer) return '#ffaa00'
@@ -304,6 +308,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         navEnabled: boolean = true,
     ): CharacterEntity => {
         const mesh = createCharacterMesh(config)
+        /* 实体原点在脚底：mesh/外观模型定位到原点，物理刚体（胶囊）中心上移半高 */
+        const halfH = originToCenterY(config)
         mesh.position.set(x, y, z)
         /* 默认按未选中处理：胶囊不透明度置 0（选中后由 refreshSelectionVisibility 恢复；
          * 不能用 visible=false，射线拾取会跳过不可见对象导致无法点选） */
@@ -323,7 +329,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
             .lockRotations()
             .setLinearDamping(CHARACTER_LINEAR_DAMPING)
-            .setTranslation(x, y, z)
+            .setTranslation(x, y + halfH, z)
         const body = world.createRigidBody(bodyDesc)
 
         /* 胶囊（竖直）：半径 = 碰撞箱半宽，总高 = 碰撞箱高（2×halfHeight + 2×radius = bh）。
@@ -384,8 +390,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const hitBoxes = createAttackHitBoxes(scene)
         attackHitBoxes.set(entity.id, hitBoxes)
         /* 生成时即定位调试线框（编辑暂停态 update 不运行，避免线框滞留在原点）；
-         * 可见性由选中状态驱动（refreshSelectionVisibility），未选中时全部隐藏 */
-        placeDebugBoxes(entity, x, y, z, 0)
+         * 可见性由选中状态驱动（refreshSelectionVisibility），未选中时全部隐藏；
+         * placeDebugBoxes 接收的是物理中心坐标 */
+        placeDebugBoxes(entity, x, y + halfH, z, 0)
 
         const flash = createDamageFlash(entity)
         flashStates.set(entity.id, flash)
@@ -422,10 +429,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         for (const entity of characters) {
             if (entity.combat.isDead) continue
             const pos = entity.body.translation()
-            entity.mesh.position.set(pos.x, pos.y, pos.z)
+            /* 实体原点在脚底：物理中心回退半高得到原点 Y */
+            const originY = pos.y - originToCenterY(entity.config)
+            entity.mesh.position.set(pos.x, originY, pos.z)
             /* 碰撞箱可视化随身体朝向旋转（物理碰撞体为竖直胶囊，旋转对称不受影响） */
             entity.mesh.rotation.set(0, facingAngles.get(entity.id) ?? 0, 0)
-            entity.appearanceGroup.position.set(pos.x, pos.y, pos.z)
+            entity.appearanceGroup.position.set(pos.x, originY, pos.z)
             if (entity.isDying) {
                 /* 死亡渐隐以选中态不透明度为基线：未选中角色基线为 0（全程不可见，
                  * 避免覆写选中态透明度导致胶囊在死亡时冒出）；选中角色自胶囊固有透明度渐隐 */
@@ -941,11 +950,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             bodyB.setTranslation({ x: bPos.x + sep.ajDx, y: bPos.y + bDy, z: bPos.z + sep.ajDz }, true)
 
             const aAfter = bodyA.translation()
-            ai.mesh.position.set(aAfter.x, aAfter.y, aAfter.z)
-            ai.appearanceGroup.position.set(aAfter.x, aAfter.y, aAfter.z)
+            ai.mesh.position.set(aAfter.x, aAfter.y - originToCenterY(ai.config), aAfter.z)
+            ai.appearanceGroup.position.set(aAfter.x, aAfter.y - originToCenterY(ai.config), aAfter.z)
             const bAfter = bodyB.translation()
-            aj.mesh.position.set(bAfter.x, bAfter.y, bAfter.z)
-            aj.appearanceGroup.position.set(bAfter.x, bAfter.y, bAfter.z)
+            aj.mesh.position.set(bAfter.x, bAfter.y - originToCenterY(aj.config), bAfter.z)
+            aj.appearanceGroup.position.set(bAfter.x, bAfter.y - originToCenterY(aj.config), bAfter.z)
 
             const aVel = bodyA.linvel()
             const bVel = bodyB.linvel()
@@ -1070,7 +1079,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const setTransform = (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
-        entity.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true)
+        /* pos 为脚底原点：物理刚体（胶囊）中心上移半高 */
+        const halfH = originToCenterY(entity.config)
+        entity.body.setTranslation({ x: pos.x, y: pos.y + halfH, z: pos.z }, true)
         entity.mesh.position.set(pos.x, pos.y, pos.z)
         /* 外观动画体一同瞬移（暂停态 syncPositions 不运行，否则模型滞留旧位置） */
         entity.appearanceGroup.position.set(pos.x, pos.y, pos.z)
@@ -1085,7 +1096,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         )
         const model = appearanceModels.get(id)
         if (model) model.group.rotation.y = yaw
-        placeDebugBoxes(entity, pos.x, pos.y, pos.z, yaw)
+        placeDebugBoxes(entity, pos.x, pos.y + halfH, pos.z, yaw)
     }
 
     const getFacing = (id: number): number => {
@@ -1115,6 +1126,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
         if (charCfg.jumpHeight !== undefined) entity.config.jumpHeight = charCfg.jumpHeight
         if (charCfg.scale !== undefined) {
+            /* 脚底原点锚定：先记录旧原点 Y，scale 变更后物理中心按新半高重定位（脚底不动） */
+            const bodyPos = entity.body.translation()
+            const originY = bodyPos.y - originToCenterY(entity.config)
             entity.config.scale = charCfg.scale
 
             const model = appearanceModels.get(entity.id)
@@ -1136,6 +1150,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             /* 重建后刷新总质量（碰撞体密度 0，质量仍为 1） */
             setBodyMass(entity.body, 1)
             entity.body.wakeUp()
+            /* 物理中心随新半高上移，mesh/外观模型原点（脚底）保持不变 */
+            entity.body.setTranslation({ x: bodyPos.x, y: originY + originToCenterY(entity.config), z: bodyPos.z }, true)
 
             updateCharacterMesh(entity.mesh, entity.config.scale)
             if (entity.wireframe) {

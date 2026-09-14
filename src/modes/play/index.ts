@@ -1,4 +1,4 @@
-import {type Scene, type PerspectiveCamera, type WebGLRenderer} from 'three'
+import {Vector3, type Scene, type PerspectiveCamera, type WebGLRenderer} from 'three'
 import type {SharedWorld} from '../../physics/world.ts'
 import type {TerrainContext} from '../../entity/terrain/base/types'
 import type {CharacterEntitySystem} from '../../entity/character/physics/world.ts'
@@ -39,12 +39,19 @@ export const setupPlayMode = (
     characterSystem.registerBoxSpawner(boxSpawner)
 
     const playerInput = setupPlayerKeyboard(camera, characterSystem)
-    const playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () =>
-        characterSystem.getPlayerCharacter()?.mesh.position,
-        {
-            onLightAttack: (held) => characterSystem.setPlayerAttack(0, held),
-            onHeavyAttack: (held) => characterSystem.setPlayerAttack(1, held),
-        },
+    /* 相机跟随目标取身体中心（mesh 原点在脚底，直接用 mesh.position 会导致相机压低） */
+    const cameraTarget = new Vector3()
+    const playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () => {
+        const player = characterSystem.getPlayerCharacter()
+        if (!player) return undefined
+        const t = player.body.translation()
+        cameraTarget.set(t.x, t.y, t.z)
+        return cameraTarget
+    },
+    {
+        onLightAttack: (held) => characterSystem.setPlayerAttack(0, held),
+        onHeavyAttack: (held) => characterSystem.setPlayerAttack(1, held),
+    },
     )
     const healthBarUpdate = setupHealthBars(
         scene,
