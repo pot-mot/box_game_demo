@@ -137,7 +137,11 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     const dismiss = (mode: GameMode): void => {
         overlay.remove()
-        handlers.onStart(mode, importedData ?? cachedData)
+        /* 展示/骨骼动画模式为独立干净场景，不加载存档元素 */
+        const saveData = mode === 'showcase' || mode === 'bone_edit'
+            ? undefined
+            : importedData ?? cachedData
+        handlers.onStart(mode, saveData)
     }
 
     editBtn.addEventListener('click', () => dismiss('edit'))

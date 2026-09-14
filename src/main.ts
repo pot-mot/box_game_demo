@@ -158,11 +158,14 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     characterSystem.registerBoxSpawner(boxSpawner)
 
     // --- 从缓存/导入文件加载实体（必须在 mode setup 之前，确保角色存在后再激活 AI）---
-    const dataToLoad = saveData ?? loadCachedSaveData()
     let loadResult: LoadWorldResult | undefined
-    if (dataToLoad) {
-        clearAllEntities(systemsByType, allTerrainSources)
-        loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources)
+    /* 展示/骨骼动画模式为独立干净场景，不加载存档元素 */
+    if (mode === 'edit' || mode === 'play') {
+        const dataToLoad = saveData ?? loadCachedSaveData()
+        if (dataToLoad) {
+            clearAllEntities(systemsByType, allTerrainSources)
+            loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources)
+        }
     }
 
     // --- 模式控制器（编辑/游玩/展示/骨骼动画）---
@@ -264,13 +267,6 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         if (mode === 'play') {
             if (loadResult.playCameraPos) camera.position.set(loadResult.playCameraPos.x, loadResult.playCameraPos.y, loadResult.playCameraPos.z)
             if (loadResult.playCameraRot) camera.rotation.set(loadResult.playCameraRot.x, loadResult.playCameraRot.y, loadResult.playCameraRot.z)
-        }
-        if (mode === 'bone_edit') {
-            if (loadResult.boneEditCameraPos) camera.position.set(loadResult.boneEditCameraPos.x, loadResult.boneEditCameraPos.y, loadResult.boneEditCameraPos.z)
-            if (loadResult.boneEditCameraRot) {
-                camera.rotation.set(loadResult.boneEditCameraRot.x, loadResult.boneEditCameraRot.y, loadResult.boneEditCameraRot.z)
-                boneEditMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
-            }
         }
     }
 
