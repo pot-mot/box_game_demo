@@ -1,11 +1,13 @@
 import {Mesh, type Scene} from 'three'
 import type {PanelContext} from '../box/base/ui'
-import type {Skeleton} from '../../skeleton/skeleton.ts'
+import type {Skeleton, JointCascadeSettings} from '../../skeleton/skeleton.ts'
 import {skeletonFromDefinition, type SkeletonDefinition} from '../../skeleton/anim/serialization.ts'
-import {createJointVisuals, type JointVisuals} from './render/joint_groups.ts'
+import {createJointVisuals, createRotationGizmo, disposeRotationGizmo, type JointVisuals} from './render/joint_groups.ts'
+import {assembleCharacterAppearance, resizeBoneParts, type CharacterAppearance} from './appearance/assemble.ts'
 import {buildCharacterSkeletonDefinition} from './preset.ts'
 import {createSkeletonPanel} from './ui/panel.ts'
 import {focusPanel} from '../../ui/entity_control_panel.ts'
+import {DEFAULT_CASCADE_DEPTH, DEFAULT_CASCADE_ENABLED, PRESET_PALETTE} from './constants.ts'
 
 /** 骨架实体选中项 */
 export interface SkeletonSelection {
@@ -14,13 +16,16 @@ export interface SkeletonSelection {
 }
 
 /** 骨架实体（纯视觉，不创建物理 body；编辑模式物理冻结）。
- *  骨骼可视化：关节 = 小球，骨骼段 = 菱形连接段 */
+ *  骨骼可视化：关节 = 小球，骨骼段 = 细长菱形连接段；外观部件 = 方块人模型层（随关节 Group 变换）。 */
 export interface SkeletonEntity {
     readonly id: number
     readonly name: string
+    /** 桥接骨架（写局部 pose 时同步 Group，场景图级联；实体编辑以它为真源） */
     readonly skeleton: Skeleton
     readonly visuals: JointVisuals
-    /** 可拾取网格（关节小球 + 骨骼段菱形） */
+    /** 方块人外观部件（模型层，骨骼层覆盖其上） */
+    readonly appearance: CharacterAppearance
+    /** 可拾取网格（关节小球 + 骨骼段菱形 + 外观部件） */
     readonly meshes: readonly Mesh[]
 }
 
@@ -36,8 +41,10 @@ export interface SkeletonEntitiesContext {
     focus: (id: number) => void
     select: (selection: SkeletonSelection | undefined) => void
     getSelection: () => SkeletonSelection | undefined
-    /** 全部可拾取网格 */
+    /** 全部可拾取网格（含选中关节的旋转指针） */
     getMeshes: () => readonly Mesh[]
+    /** 级联编辑设置（面板与指针共享的可变对象） */
+    getCascadeSettings: () => JointCascadeSettings
     /** 领域编辑后刷新：FK + 写回场景图 + 部件按骨骼段长度缩放 */
     refresh: () => void
     /** 以场景为真源：聚焦骨架从 Group 读回局部 */
@@ -52,19 +59,37 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
     let nextId = 1
     let focusId: number | undefined
     let selection: SkeletonSelection | undefined
+    /* 选中关节的旋转指针（方向三角形），随选中变化创建/销毁 */
+    let rotationGizmo: Mesh | undefined
+    /* 级联编辑设置：面板修改、指针读取 */
+    const cascadeSettings: JointCascadeSettings = {
+        enabled: DEFAULT_CASCADE_ENABLED,
+        depth: DEFAULT_CASCADE_DEPTH,
+    }
+
+    const disposeRotationGizmoMesh = (): void => {
+        if (rotationGizmo !== undefined) {
+            disposeRotationGizmo(rotationGizmo)
+            rotationGizmo = undefined
+        }
+    }
 
     const addPreset = (name?: string): SkeletonEntity =>
         addFromDefinition(buildCharacterSkeletonDefinition(), name)
 
     const addFromDefinition = (definition: SkeletonDefinition, name?: string): SkeletonEntity => {
-        const skeleton = skeletonFromDefinition(definition)
-        const visuals = createJointVisuals(skeleton, scene)
+        /* 领域骨架仅作构建可视化（关节树/骨骼）的脚手架 */
+        const scaffold = skeletonFromDefinition(definition)
+        const visuals = createJointVisuals(scaffold, scene)
+        /* 模型层：方块人外观部件装配到关节 Group 上（随骨架变换） */
+        const appearance = assembleCharacterAppearance(visuals.groups, PRESET_PALETTE)
         const entity: SkeletonEntity = {
             id: nextId,
             name: name ?? `骨架${nextId}`,
-            skeleton,
+            skeleton: visuals.bridge,
             visuals,
-            meshes: [...visuals.gizmos.values(), ...visuals.boneVisuals.values()],
+            appearance,
+            meshes: [...visuals.gizmos.values(), ...visuals.boneVisuals.values(), ...appearance.partMeshes],
         }
         nextId += 1
         entities.set(entity.id, entity)
@@ -76,12 +101,14 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
         const entity = entities.get(id)
         if (entity === undefined) return
         entity.visuals.cleanup()
+        entity.appearance.cleanup()
         entities.delete(id)
         if (focusId === id) {
             focusId = [...entities.keys()][0]
         }
         if (selection !== undefined) {
             selection = undefined
+            disposeRotationGizmoMesh()
             focusPanel(undefined)
         }
     }
@@ -93,11 +120,21 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
         if (!entities.has(id)) return
         focusId = id
         selection = undefined
+        disposeRotationGizmoMesh()
         focusPanel(undefined)
     }
 
     const select = (next: SkeletonSelection | undefined): void => {
         selection = next
+        disposeRotationGizmoMesh()
+        /* 选中关节 → 显示方向三角形指针（旋转手柄） */
+        if (next !== undefined && next.kind === 'joint') {
+            const entity = getFocus()
+            const group = entity?.visuals.groups.get(next.id)
+            if (entity !== undefined && group !== undefined) {
+                rotationGizmo = createRotationGizmo(group, next.id)
+            }
+        }
         if (next === undefined) {
             focusPanel(undefined)
             return
@@ -109,6 +146,7 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
         for (const entity of entities.values()) {
             entity.skeleton.updateWorldTransforms()
             entity.visuals.resizeBoneVisuals()
+            resizeBoneParts(entity.skeleton, entity.appearance)
         }
     }
 
@@ -135,7 +173,12 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
         focus,
         select,
         getSelection: (): SkeletonSelection | undefined => selection,
-        getMeshes: (): readonly Mesh[] => [...entities.values()].flatMap(e => e.meshes),
+        getMeshes: (): readonly Mesh[] => {
+            const meshes = [...entities.values()].flatMap(e => e.meshes)
+            if (rotationGizmo !== undefined) meshes.push(rotationGizmo)
+            return meshes
+        },
+        getCascadeSettings: (): JointCascadeSettings => cascadeSettings,
         refresh,
         syncFromScene,
         updater,
@@ -144,6 +187,7 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
     const panel = createSkeletonPanel({
         getFocus,
         getSelection: (): SkeletonSelection | undefined => selection,
+        getCascadeSettings: (): JointCascadeSettings => cascadeSettings,
         refresh,
         reopen: (): void => {
             if (selection !== undefined) focusPanel(panel)

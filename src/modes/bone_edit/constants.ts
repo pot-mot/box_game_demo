@@ -39,3 +39,6 @@ export const ONION_SKIN_STEP = 0.1
 
 /** 洋葱皮副本关节盒尺寸（米） */
 export const ONION_SKIN_JOINT_SIZE = 0.015
+
+/** 变换 Gizmo 缩放系数（根据相机距离调整视觉大小；关节尺寸较小，系数低于 edit 模式的 0.15） */
+export const GIZMO_SCALE_FACTOR = 0.12

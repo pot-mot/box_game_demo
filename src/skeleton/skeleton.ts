@@ -267,6 +267,112 @@ export const translateJointSubtree = (
     skeleton.updateWorldTransforms()
 }
 
+/** 级联编辑设置（编辑器面板可变的共享对象）：
+ *  enabled = 是否级联调整子节点；depth = 级联层数（1 = 仅直接子节点跟随） */
+export interface JointCascadeSettings {
+    enabled: boolean
+    depth: number
+}
+
+/** 收集 joint 子树中级联范围之外的后代（层级 > depth，需保持世界变换的节点）；
+ *  depth = 0 时收集全部后代（级联关闭：仅本节点变化） */
+const collectDescendantsBeyondDepth = (joint: SkeletonJoint, depth: number): readonly SkeletonJoint[] => {
+    const out: SkeletonJoint[] = []
+    const visit = (node: SkeletonJoint, level: number): void => {
+        for (const child of node.children) {
+            if (level > depth) out.push(child)
+            visit(child, level + 1)
+        }
+    }
+    visit(joint, 1)
+    return out
+}
+
+/** 记录一组关节的当前世界变换（级联编辑前快照，值为克隆） */
+const snapshotWorldTransforms = (
+    skeleton: Skeleton,
+    joints: readonly SkeletonJoint[],
+): Map<string, {position: Vector3; rotation: Quaternion}> => {
+    const before = new Map<string, {position: Vector3; rotation: Quaternion}>()
+    for (const joint of joints) {
+        const pos = skeleton.getWorldPosition(joint.id)
+        const rot = skeleton.getWorldRotation(joint.id)
+        if (pos !== undefined && rot !== undefined) {
+            before.set(joint.id, {position: pos.clone(), rotation: rot.clone()})
+        }
+    }
+    return before
+}
+
+/** 把 joints 的世界变换恢复为 before 记录值（写回局部后重算世界变换，
+ *  父节点世界优先取 newWorld（同批恢复的节点），否则取当前缓存（跟随编辑的节点）） */
+const restoreWorldTransforms = (
+    skeleton: Skeleton,
+    joints: readonly SkeletonJoint[],
+    before: ReadonlyMap<string, {position: Vector3; rotation: Quaternion}>,
+): void => {
+    const newWorld = new Map<string, WorldTransform>()
+    for (const joint of joints) {
+        const b = before.get(joint.id)
+        if (b === undefined) continue
+        newWorld.set(joint.id, {position: b.position.clone(), rotation: b.rotation.clone()})
+    }
+    writeLocalsFromWorld(skeleton, joints, newWorld)
+    skeleton.updateWorldTransforms()
+}
+
+/**
+ * 级联平移：按设置移动 joint（世界位移 delta）。
+ * 级联层数内的后代随 FK 刚体跟随，层数外的后代保持原世界变换（链在级联边界处断开）。
+ * settings.enabled = false 时仅本关节变化（等价 depth 0）。
+ */
+export const translateJointCascade = (
+    skeleton: Skeleton,
+    joint: SkeletonJoint,
+    delta: Vector3,
+    settings: JointCascadeSettings,
+): void => {
+    skeleton.updateWorldTransforms()
+    const restore = collectDescendantsBeyondDepth(joint, settings.enabled ? settings.depth : 0)
+    const before = snapshotWorldTransforms(skeleton, restore)
+    const parent = joint.parent
+    if (parent === undefined) {
+        joint.position.add(delta)
+    } else {
+        const parentRot = skeleton.getWorldRotation(parent.id)
+        if (parentRot !== undefined) {
+            joint.position.add(delta.clone().applyQuaternion(parentRot.clone().invert()))
+        }
+    }
+    skeleton.updateWorldTransforms()
+    restoreWorldTransforms(skeleton, restore, before)
+}
+
+/**
+ * 级联旋转：绕 joint 自身世界位置施加世界旋转（预乘语义）。
+ * 级联层数内的后代随 FK 刚体旋转，层数外的后代保持原世界变换。
+ * settings.enabled = false 时仅本关节旋转（等价 depth 0）。
+ */
+export const rotateJointCascade = (
+    skeleton: Skeleton,
+    joint: SkeletonJoint,
+    rotation: Quaternion,
+    settings: JointCascadeSettings,
+): void => {
+    skeleton.updateWorldTransforms()
+    const restore = collectDescendantsBeyondDepth(joint, settings.enabled ? settings.depth : 0)
+    const before = snapshotWorldTransforms(skeleton, restore)
+    const parent = joint.parent
+    const parentRot = parent !== undefined ? skeleton.getWorldRotation(parent.id) : undefined
+    /* 世界预乘旋转 → 关节局部：localQ = parent⁻¹ · Q · parent（父旋转共轭） */
+    const localQ = parentRot !== undefined
+        ? parentRot.clone().invert().multiply(rotation).multiply(parentRot)
+        : rotation.clone()
+    joint.rotation.premultiply(localQ)
+    skeleton.updateWorldTransforms()
+    restoreWorldTransforms(skeleton, restore, before)
+}
+
 /** 收集 target 的全部后代（含自身），父先子后（DFS） */
 const collectSubtree = (target: SkeletonJoint): readonly SkeletonJoint[] => {
     const out: SkeletonJoint[] = []

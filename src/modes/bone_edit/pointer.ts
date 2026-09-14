@@ -1,19 +1,23 @@
-﻿import {Plane, Raycaster, Vector2, Vector3, type PerspectiveCamera} from 'three'
+import {Plane, Quaternion, Raycaster, Vector2, Vector3, type PerspectiveCamera} from 'three'
 import type {SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
 import {resolveIkChain, solveCcd} from '../../skeleton/ik.ts'
 import {DEFAULT_IK_MAX_ITERATIONS, DEFAULT_IK_TOLERANCE} from '../../skeleton/constants.ts'
 import {rotateBone} from '../../skeleton/bone.ts'
+import {rotateJointCascade, translateJointCascade} from '../../skeleton/skeleton.ts'
 import type {BoneEditHistory} from './history.ts'
 import {DRAG_CLICK_THRESHOLD} from './constants.ts'
+import {isGizmoActive} from './gizmo_pointer.ts'
 
 /** 骨骼段拖拽旋转灵敏度（rad/px） */
 const ROT_SENSITIVITY = 0.012
 
-/** 命中信息：gizmo → 关节；外观部件 → 骨骼段（或挂载关节） */
+/** 命中信息：gizmo → 关节；外观部件 → 骨骼段（或挂载关节）；旋转指针 → 关节（rotHandle） */
 export interface PickHit {
     readonly kind: 'joint' | 'bone'
     readonly jointId: string
     readonly boneId: string | undefined
+    /** 命中选中关节的方向三角形指针（旋转拖拽手柄） */
+    readonly rotHandle?: boolean
 }
 
 /** 视窗指针交互：拾取/拖拽/IK 牵引（全鼠标，无新增快捷键） */
@@ -30,6 +34,7 @@ export const setupBoneEditPointer = (
 
     let dragJoint: {jointId: string; grabOffset: Vector3} | undefined
     let dragBone: {boneId: string} | undefined
+    let dragRotateJoint: {jointId: string} | undefined
     let downPos = {x: 0, y: 0}
     let moved = false
 
@@ -42,6 +47,9 @@ export const setupBoneEditPointer = (
             const userData = hit.object.userData
             const jointId = userData?.jointId
             if (typeof jointId === 'string') {
+                if (userData?.rotHandle === true) {
+                    return {kind: 'joint', jointId, boneId: undefined, rotHandle: true}
+                }
                 return {kind: 'joint', jointId, boneId: undefined}
             }
             const boneId = userData?.boneId
@@ -84,16 +92,26 @@ export const setupBoneEditPointer = (
                 return
             }
         }
-        /* 平移模式：目标世界位置 → 局部（相对父关节世界） */
-        const parent = joint.parent
-        if (parent === undefined) {
-            joint.position.copy(finalPos)
-        } else {
-            const parentWorldPos = skeleton.getWorldPosition(parent.id)
-            const parentWorldRot = skeleton.getWorldRotation(parent.id)
-            if (parentWorldPos === undefined || parentWorldRot === undefined) return
-            joint.position.copy(finalPos.sub(parentWorldPos).applyQuaternion(parentWorldRot.clone().invert()))
-        }
+        /* 平移模式：目标世界位置 → 世界位移 → 级联平移（级联范围外后代保持世界变换） */
+        const currentWorld = skeleton.getWorldPosition(joint.id)
+        if (currentWorld === undefined) return
+        translateJointCascade(skeleton, joint, finalPos.clone().sub(currentWorld), world.getCascadeSettings())
+        world.refresh()
+    }
+
+    /** 旋转指针拖拽：绕相机右轴/上轴旋转选中关节（级联按设置传播到子节点） */
+    const applyJointRotationDrag = (dx: number, dy: number): void => {
+        const entity = world.getFocus()
+        if (entity === undefined || dragRotateJoint === undefined) return
+        const skeleton = entity.skeleton
+        const joint = skeleton.findJoint(dragRotateJoint.jointId)
+        if (joint === undefined) return
+        const cameraDir = camera.getWorldDirection(new Vector3())
+        const right = new Vector3().crossVectors(cameraDir, camera.up).normalize()
+        /* 世界预乘旋转：先绕相机右轴，再绕相机上轴（与骨骼段拖拽手感一致） */
+        const qRight = new Quaternion().setFromAxisAngle(right, -dx * ROT_SENSITIVITY)
+        const qUp = new Quaternion().setFromAxisAngle(camera.up, -dy * ROT_SENSITIVITY)
+        rotateJointCascade(skeleton, joint, qUp.multiply(qRight), world.getCascadeSettings())
         world.refresh()
     }
 
@@ -112,6 +130,8 @@ export const setupBoneEditPointer = (
 
     const onMouseDown = (e: MouseEvent): void => {
         if (e.button !== 0) return
+        /** gizmo 拖拽进行中，跳过原有指针逻辑 */
+        if (isGizmoActive()) return
         downPos = {x: e.clientX, y: e.clientY}
         moved = false
         const hit = pick(e.clientX, e.clientY)
@@ -121,6 +141,12 @@ export const setupBoneEditPointer = (
         const skeleton = entity.skeleton
 
         if (hit.kind === 'joint') {
+            if (hit.rotHandle === true) {
+                /* 旋转指针：进入旋转拖拽 */
+                dragRotateJoint = {jointId: hit.jointId}
+                history.startEdit()
+                return
+            }
             const joint = skeleton.findJoint(hit.jointId)
             const jointWorld = skeleton.getWorldPosition(hit.jointId)
             if (joint === undefined || jointWorld === undefined) return
@@ -138,13 +164,15 @@ export const setupBoneEditPointer = (
     }
 
     const onMouseMove = (e: MouseEvent): void => {
-        if (dragJoint === undefined && dragBone === undefined) return
+        if (dragJoint === undefined && dragBone === undefined && dragRotateJoint === undefined) return
         if (!moved) {
             const dist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y)
             if (dist < DRAG_CLICK_THRESHOLD) return
             moved = true
         }
-        if (dragJoint !== undefined) {
+        if (dragRotateJoint !== undefined) {
+            applyJointRotationDrag(e.movementX, e.movementY)
+        } else if (dragJoint !== undefined) {
             const target = rayPlaneTarget(e.clientX, e.clientY)
             if (target !== undefined) applyJointDrag(target)
         } else if (dragBone !== undefined) {
@@ -153,7 +181,7 @@ export const setupBoneEditPointer = (
     }
 
     const onMouseUp = (e: MouseEvent): void => {
-        if (dragJoint !== undefined || dragBone !== undefined) {
+        if (dragJoint !== undefined || dragBone !== undefined || dragRotateJoint !== undefined) {
             if (!moved) {
                 /* 未拖拽 = 点击选中 */
                 const hit = pick(e.clientX, e.clientY)
@@ -163,6 +191,7 @@ export const setupBoneEditPointer = (
         }
         dragJoint = undefined
         dragBone = undefined
+        dragRotateJoint = undefined
         moved = false
     }
 

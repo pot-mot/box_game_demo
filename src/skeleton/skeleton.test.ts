@@ -1,6 +1,6 @@
 import {describe, it, expect} from 'vitest'
 import {Quaternion, Vector3} from 'three'
-import {createSkeleton} from './skeleton.ts'
+import {createSkeleton, rotateJointCascade, translateJointCascade} from './skeleton.ts'
 import {createSkeletonJoint, connectJoint} from './joint.ts'
 import {createSkeletonBone} from './bone.ts'
 
@@ -207,5 +207,115 @@ describe('骨架 pose 读写', () => {
         expect(skeleton.findJoint('a')!.position.z).toBe(3)
         /* 子关节位置照常写入 */
         expect(skeleton.findJoint('b')!.position.x).toBe(0)
+    })
+})
+
+/** 构建三层链 root → a → b → c：a 世界 (0,1,0)、b 世界 (0,2,0)、c 世界 (0,3,0) */
+const buildTriChain = (): ReturnType<typeof createSkeleton> => {
+    const skeleton = createSkeleton()
+    const root = createSkeletonJoint('root', 'root')
+    const a = createSkeletonJoint('a', 'a')
+    const b = createSkeletonJoint('b', 'b')
+    const c = createSkeletonJoint('c', 'c')
+    connectJoint(root, a)
+    connectJoint(a, b)
+    connectJoint(b, c)
+    a.position.set(0, 1, 0)
+    b.position.set(0, 1, 0)
+    c.position.set(0, 1, 0)
+    skeleton.addJoint(root)
+    skeleton.addJoint(a)
+    skeleton.addJoint(b)
+    skeleton.addJoint(c)
+    return skeleton
+}
+
+describe('级联编辑（translateJointCascade / rotateJointCascade）', () => {
+    it('级联关：仅本关节平移，全部后代保持世界位置', () => {
+        const skeleton = buildTriChain()
+        skeleton.updateWorldTransforms()
+        const bBefore = skeleton.getWorldPosition('b')!.clone()
+        const cBefore = skeleton.getWorldPosition('c')!.clone()
+        translateJointCascade(skeleton, skeleton.findJoint('a')!, new Vector3(1, 0, 0), {enabled: false, depth: 0})
+        expect(skeleton.getWorldPosition('a')!.x).toBeCloseTo(1)
+        expect(skeleton.getWorldPosition('b')!.distanceTo(bBefore)).toBeLessThan(1e-9)
+        expect(skeleton.getWorldPosition('c')!.distanceTo(cBefore)).toBeLessThan(1e-9)
+    })
+
+    it('级联开 depth=1：直接子跟随、孙代钉住', () => {
+        const skeleton = buildTriChain()
+        skeleton.updateWorldTransforms()
+        const cBefore = skeleton.getWorldPosition('c')!.clone()
+        translateJointCascade(skeleton, skeleton.findJoint('a')!, new Vector3(1, 0, 0), {enabled: true, depth: 1})
+        expect(skeleton.getWorldPosition('a')!.x).toBeCloseTo(1)
+        expect(skeleton.getWorldPosition('b')!.x).toBeCloseTo(1)
+        expect(skeleton.getWorldPosition('b')!.y).toBeCloseTo(2)
+        expect(skeleton.getWorldPosition('c')!.distanceTo(cBefore)).toBeLessThan(1e-9)
+    })
+
+    it('级联开 depth 覆盖全树：全部后代刚体跟随', () => {
+        const skeleton = buildTriChain()
+        skeleton.updateWorldTransforms()
+        translateJointCascade(skeleton, skeleton.findJoint('a')!, new Vector3(1, 0, 0), {enabled: true, depth: 8})
+        expect(skeleton.getWorldPosition('a')!.x).toBeCloseTo(1)
+        expect(skeleton.getWorldPosition('b')!.x).toBeCloseTo(1)
+        expect(skeleton.getWorldPosition('c')!.x).toBeCloseTo(1)
+        expect(skeleton.getWorldPosition('c')!.y).toBeCloseTo(3)
+    })
+
+    it('级联旋转：子代刚体旋转、孙代保持世界变换', () => {
+        /* 水平链：a (0,1,0)、b (1,1,0)、c (2,1,0) */
+        const skeleton = createSkeleton()
+        const root = createSkeletonJoint('root', 'root')
+        const a = createSkeletonJoint('a', 'a')
+        const b = createSkeletonJoint('b', 'b')
+        const c = createSkeletonJoint('c', 'c')
+        connectJoint(root, a)
+        connectJoint(a, b)
+        connectJoint(b, c)
+        a.position.set(0, 1, 0)
+        b.position.set(1, 0, 0)
+        c.position.set(1, 0, 0)
+        skeleton.addJoint(root)
+        skeleton.addJoint(a)
+        skeleton.addJoint(b)
+        skeleton.addJoint(c)
+        skeleton.updateWorldTransforms()
+        const cBefore = skeleton.getWorldPosition('c')!.clone()
+        const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2)
+        rotateJointCascade(skeleton, skeleton.findJoint('a')!, q, {enabled: true, depth: 1})
+        /* b（直接子）绕 a 刚体旋转：(1,0,0) → (0,0,-1) */
+        expect(skeleton.getWorldPosition('b')!.x).toBeCloseTo(0)
+        expect(skeleton.getWorldPosition('b')!.z).toBeCloseTo(-1)
+        expect(skeleton.getWorldPosition('b')!.y).toBeCloseTo(1)
+        /* c（深度 2 > 1）钉住 */
+        expect(skeleton.getWorldPosition('c')!.distanceTo(cBefore)).toBeLessThan(1e-9)
+        /* 关节自身旋转已写入 */
+        expect(skeleton.findJoint('a')!.rotation.angleTo(q)).toBeLessThan(1e-6)
+    })
+
+    it('级联旋转全开：整链刚体旋转', () => {
+        const skeleton = createSkeleton()
+        const root = createSkeletonJoint('root', 'root')
+        const a = createSkeletonJoint('a', 'a')
+        const b = createSkeletonJoint('b', 'b')
+        const c = createSkeletonJoint('c', 'c')
+        connectJoint(root, a)
+        connectJoint(a, b)
+        connectJoint(b, c)
+        a.position.set(0, 1, 0)
+        b.position.set(1, 0, 0)
+        c.position.set(1, 0, 0)
+        skeleton.addJoint(root)
+        skeleton.addJoint(a)
+        skeleton.addJoint(b)
+        skeleton.addJoint(c)
+        skeleton.updateWorldTransforms()
+        const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2)
+        rotateJointCascade(skeleton, skeleton.findJoint('a')!, q, {enabled: true, depth: 8})
+        expect(skeleton.getWorldPosition('b')!.x).toBeCloseTo(0)
+        expect(skeleton.getWorldPosition('b')!.z).toBeCloseTo(-1)
+        expect(skeleton.getWorldPosition('c')!.x).toBeCloseTo(0)
+        expect(skeleton.getWorldPosition('c')!.z).toBeCloseTo(-2)
     })
 })

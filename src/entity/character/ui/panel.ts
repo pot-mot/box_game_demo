@@ -408,6 +408,74 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         refreshBoxTypeList()
     }
 
+    /** 仅刷新位置/朝向字段（gizmo 拖拽/物理模拟后调用） */
+    const refreshPositionValues = (): void => {
+        /* 输入框聚焦中不刷新，避免覆盖用户输入 */
+        if (el.contains(document.activeElement)) return
+        const sel = getSelected()
+        if (!sel) return
+        posX.value = sel.mesh.position.x.toFixed(2)
+        posY.value = sel.mesh.position.y.toFixed(2)
+        posZ.value = sel.mesh.position.z.toFixed(2)
+        facingDeg.value = String(Math.round(ctx.getFacing?.(sel.id) ?? 0))
+    }
+
+    /** 刷新全部配置字段（仅 render 时调用一次） */
+    const refreshFullConfig = (): void => {
+        const sel = getSelected()
+        if (!sel) return
+
+        speed.value = String(sel.config.speed)
+        jumpH.value = String(sel.config.jumpHeight)
+        scale.value = String(sel.config.scale)
+
+        const skill = sel.combat.skills[sel.combat.currentSkillIndex]
+        maxHP.value = String(sel.combat.maxHealth)
+        curHP.value = String(sel.combat.health)
+        faction.value = String(sel.combat.faction)
+        tendSelect.value = sel.combat.tendencyConfig.tendencyId
+        targetFactionsInput.value = sel.combat.tendencyConfig.targetFactions?.join(',') ?? ''
+        showTargetFactions()
+
+        const skillType = skill?.config.type ?? 'melee'
+        atkSelect.value = skillType
+        currentType = skillType as 'melee' | 'ranged'
+        populateWeaponOptions(weaponSelect, currentType)
+
+        const weaponId = skill?.config.weapon.id ?? ''
+        if (MELEE_WEAPON_PRESETS[weaponId] || RANGED_WEAPON_PRESETS[weaponId]) {
+            weaponSelect.value = weaponId
+            autoFillFromWeapon(weaponId, currentType, {
+                atkRange, atkDmg, atkCD, atkDuration,
+                bulletSpeed, bulletKB, bulletLife,
+                weaponTag,
+            })
+        } else {
+            weaponSelect.value = ''
+            if (skill?.config.type === 'ranged') atkRange.value = String(skill.config.weapon.range)
+            atkDmg.value = String(skill?.config.weapon.damage ?? 3)
+            atkCD.value = String(skill?.config.cooldown ?? 0)
+            atkDuration.value = String(skill?.config.duration ?? 0.3)
+            if (skill?.config.type === 'ranged') {
+                bulletSpeed.value = String(skill.config.weapon.projectileSpeed)
+                bulletKB.value = String(skill.config.weapon.knockbackForce)
+                bulletLife.value = String(skill.config.weapon.projectileLifetime)
+            }
+            weaponTag.textContent = ''
+        }
+
+        playerCheck.checked = sel.isPlayer
+        peaceSelect.value = sel.peaceStrategy
+        combatSelect.value = sel.combatStrategy
+        navCheck.checked = sel.navEnabled
+        aiSection.style.display = sel.isPlayer ? 'none' : ''
+        peaceRow.style.display = sel.isPlayer ? 'none' : ''
+        combatRow.style.display = sel.isPlayer ? 'none' : ''
+        navRow.style.display = sel.isPlayer ? 'none' : ''
+        buildSection.style.display = (!sel.isPlayer && sel.peaceStrategy === 'build') ? '' : 'none'
+        showRanged()
+    }
+
     return {
         render: (container: HTMLElement) => {
             const sel = getSelected()
@@ -415,66 +483,15 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             container.appendChild(el)
             el.style.display = 'block'
 
-            posX.value = sel.mesh.position.x.toFixed(2)
-            posY.value = sel.mesh.position.y.toFixed(2)
-            posZ.value = sel.mesh.position.z.toFixed(2)
-            facingDeg.value = String(Math.round(ctx.getFacing?.(sel.id) ?? 0))
-
-            speed.value = String(sel.config.speed)
-            jumpH.value = String(sel.config.jumpHeight)
-            scale.value = String(sel.config.scale)
-
-            const skill = sel.combat.skills[sel.combat.currentSkillIndex]
-            maxHP.value = String(sel.combat.maxHealth)
-            curHP.value = String(sel.combat.health)
-            faction.value = String(sel.combat.faction)
-            tendSelect.value = sel.combat.tendencyConfig.tendencyId
-            targetFactionsInput.value = sel.combat.tendencyConfig.targetFactions?.join(',') ?? ''
-            showTargetFactions()
-
-            const skillType = skill?.config.type ?? 'melee'
-            atkSelect.value = skillType
-            currentType = skillType as 'melee' | 'ranged'
-            populateWeaponOptions(weaponSelect, currentType)
-
-            const weaponId = skill?.config.weapon.id ?? ''
-            if (MELEE_WEAPON_PRESETS[weaponId] || RANGED_WEAPON_PRESETS[weaponId]) {
-                weaponSelect.value = weaponId
-                autoFillFromWeapon(weaponId, currentType, {
-                    atkRange, atkDmg, atkCD, atkDuration,
-                    bulletSpeed, bulletKB, bulletLife,
-                    weaponTag,
-                })
-            } else {
-                weaponSelect.value = ''
-                if (skill?.config.type === 'ranged') atkRange.value = String(skill.config.weapon.range)
-                atkDmg.value = String(skill?.config.weapon.damage ?? 3)
-                atkCD.value = String(skill?.config.cooldown ?? 0)
-                atkDuration.value = String(skill?.config.duration ?? 0.3)
-                if (skill?.config.type === 'ranged') {
-                    bulletSpeed.value = String(skill.config.weapon.projectileSpeed)
-                    bulletKB.value = String(skill.config.weapon.knockbackForce)
-                    bulletLife.value = String(skill.config.weapon.projectileLifetime)
-                }
-                weaponTag.textContent = ''
-            }
-
-            playerCheck.checked = sel.isPlayer
-            peaceSelect.value = sel.peaceStrategy
-            combatSelect.value = sel.combatStrategy
-            navCheck.checked = sel.navEnabled
-            aiSection.style.display = sel.isPlayer ? 'none' : ''
-            peaceRow.style.display = sel.isPlayer ? 'none' : ''
-            combatRow.style.display = sel.isPlayer ? 'none' : ''
-            navRow.style.display = sel.isPlayer ? 'none' : ''
-            buildSection.style.display = (!sel.isPlayer && sel.peaceStrategy === 'build') ? '' : 'none'
-            showRanged()
+            refreshPositionValues()
+            refreshFullConfig()
 
             const onApply = () => {
                 const cur = getSelected()
                 if (!cur) return
-                ctx.setTransform?.(cur.id,
+                ctx.setTransform(cur.id,
                     {x: parseFloat(posX.value), y: parseFloat(posY.value), z: parseFloat(posZ.value)},
+                    {x: 0, y: 0, z: 0},
                 )
                 /* 朝向（0-360°，0 = 世界 +Z 前方）：归一化后写入 facingAngles */
                 const fd = parseFloat(facingDeg.value)
@@ -567,5 +584,6 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         destroy: () => {
             el.remove()
         },
+        update: refreshPositionValues,
     }
 }

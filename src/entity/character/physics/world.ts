@@ -126,7 +126,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     activateAI: () => void
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
     getAll: () => readonly CharacterEntity[]
-    setTransform: (id: number, pos: {x: number; y: number; z: number}) => void
+    setTransform: (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}) => void
     updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number) => void
     /** 设置单个角色的和平策略 */
     setPeaceStrategy: (id: number, strategy: PeaceSubStrategy) => void
@@ -1067,14 +1067,25 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         return {id: entity.id}
     }
 
-    const setTransform = (id: number, pos: {x: number; y: number; z: number}): void => {
+    const setTransform = (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
         entity.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true)
         entity.mesh.position.set(pos.x, pos.y, pos.z)
         /* 外观动画体一同瞬移（暂停态 syncPositions 不运行，否则模型滞留旧位置） */
         entity.appearanceGroup.position.set(pos.x, pos.y, pos.z)
-        placeDebugBoxes(entity, pos.x, pos.y, pos.z, facingAngles.get(id) ?? 0)
+        /* 朝向：gizmo 旋转弧（Y 轴）映射到角色朝向角；
+         * X/Z 保留视觉倾斜（物理胶囊 lockRotations，body 不受影响） */
+        const yaw = rotDeg.y * Math.PI / 180
+        facingAngles.set(id, yaw)
+        entity.mesh.rotation.set(
+            rotDeg.x * Math.PI / 180,
+            yaw,
+            rotDeg.z * Math.PI / 180,
+        )
+        const model = appearanceModels.get(id)
+        if (model) model.group.rotation.y = yaw
+        placeDebugBoxes(entity, pos.x, pos.y, pos.z, yaw)
     }
 
     const getFacing = (id: number): number => {

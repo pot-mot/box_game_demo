@@ -1,4 +1,5 @@
 import {
+    ConeGeometry,
     Group,
     Mesh,
     MeshBasicMaterial,
@@ -9,16 +10,23 @@ import {
 } from 'three'
 import type {Skeleton} from '../../../skeleton/skeleton.ts'
 import {createSkeletonFromGroups, type SkeletonSceneBridge} from './bridge.ts'
+import {createSkeletonBone} from '../../../skeleton/bone.ts'
 import {
     BONE_DIAMOND_COLOR,
     BONE_DIAMOND_MIN_LENGTH,
     BONE_DIAMOND_SELECTED_COLOR,
+    BONE_DIAMOND_THICKNESS,
     JOINT_GIZMO_COLOR,
     JOINT_GIZMO_RADIUS,
     JOINT_GIZMO_SELECTED_COLOR,
+    ROTATION_GIZMO_COLOR,
+    ROTATION_GIZMO_HEIGHT,
+    ROTATION_GIZMO_OFFSET,
+    ROTATION_GIZMO_RADIUS,
 } from '../constants.ts'
 
-/** 骨骼可视化：关节 = 小球，骨骼段 = 菱形（连接段），Group 层级以骨架关节树为真源 */
+/** 骨骼可视化：关节 = 小球，骨骼段 = 细长菱形（连接段），Group 层级以骨架关节树为真源。
+ *  骨骼层（小球/菱形/旋转指针）以 x-ray 覆盖方式压在模型层上方（depthTest=false + renderOrder=1）。 */
 export interface JointVisuals {
     /** 骨架根容器（挂入 scene；整体移动 = 移动骨架） */
     readonly rootGroup: Group
@@ -28,8 +36,9 @@ export interface JointVisuals {
     readonly gizmos: ReadonlyMap<string, Mesh>
     /** 骨骼段 id → 菱形 mesh（head→tail 连接段，选中改色用） */
     readonly boneVisuals: ReadonlyMap<string, Mesh>
+    /** 桥接骨架：与实体骨架同一对象（写局部 pose 时同步 Group），实体骨架以它为真源 */
     readonly bridge: SkeletonSceneBridge
-    /** 按骨骼段 length 更新菱形（段长变化后调用，如面板/IK 调整） */
+    /** 按 head→tail 实际距离更新菱形（关节拖拽/面板/IK 调整后调用） */
     resizeBoneVisuals: () => void
     cleanup: () => void
 }
@@ -40,7 +49,9 @@ export interface BoneEditSelection {
     readonly id: string
 }
 
-/** 按骨架关节树创建 Group 层级 + 关节小球 + 骨骼段菱形，并建立场景真源桥接 */
+/** 按骨架关节树创建 Group 层级 + 关节小球 + 骨骼段菱形，并建立场景真源桥接：
+ *  桥接骨架与传入骨架同构（复制关节局部 pose/ikRootLevel/骨骼段），此后实体以桥接骨架为骨架对象，
+ *  updateWorldTransforms 经 onWorldUpdate 把局部 pose 写回 Group（场景图级联）。 */
 export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisuals => {
     const rootGroup = new Group()
     scene.add(rootGroup)
@@ -49,17 +60,18 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
     const gizmos = new Map<string, Mesh>()
     const boneVisuals = new Map<string, Mesh>()
     const materials: MeshBasicMaterial[] = []
-    const geometries: (SphereGeometry | OctahedronGeometry)[] = []
+    const geometries: (SphereGeometry | OctahedronGeometry | ConeGeometry)[] = []
 
-    /* 关节小球 */
+    /* 关节小球（骨骼层覆盖渲染：忽略深度、后绘制） */
     for (const joint of skeleton.joints.values()) {
         const group = new Group()
         groups.set(joint.id, group)
         const geometry = new SphereGeometry(JOINT_GIZMO_RADIUS, 16, 12)
-        const material = new MeshBasicMaterial({color: JOINT_GIZMO_COLOR})
+        const material = new MeshBasicMaterial({color: JOINT_GIZMO_COLOR, depthTest: false, depthWrite: false})
         materials.push(material)
         geometries.push(geometry)
         const gizmo = new Mesh(geometry, material)
+        gizmo.renderOrder = 1
         gizmo.userData.jointId = joint.id
         gizmos.set(joint.id, gizmo)
         group.add(gizmo)
@@ -77,48 +89,69 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
         rootGroup.add(group)
     }
 
-    /* 骨骼段菱形：挂在 head group 下（head→tail 为父子链，段方向在 head 局部空间恒定），
-     * 位置 = 段局部中点、方向对准段、沿段方向拉伸 */
+    /* 桥接骨架：按 Group 层级自动建连（与关节树一致） */
+    const bridge = createSkeletonFromGroups(
+        [...groups.entries()].map(([jointId, group]) => ({jointId, group})),
+        true,
+    )
+    /* 复制关节局部 pose 与 ikRootLevel 到桥接骨架（初始化 Group 定位数据） */
+    for (const joint of skeleton.joints.values()) {
+        const target = bridge.findJoint(joint.id)
+        if (target === undefined) continue
+        target.position.copy(joint.position)
+        target.rotation.copy(joint.rotation)
+        target.ikRootLevel = joint.ikRootLevel
+    }
+    /* 骨骼段复制到桥接骨架（菱形/面板/时间轴以桥接骨架的 bones 为准） */
+    for (const bone of skeleton.bones.values()) {
+        const head = bridge.findJoint(bone.head.id)
+        const tail = bridge.findJoint(bone.tail.id)
+        if (head === undefined || tail === undefined) continue
+        bridge.addBone(createSkeletonBone(bone.name, head, tail, bone.length, bone.id))
+    }
+
+    /* 骨骼段菱形：挂在 head group 下，位置 = 段局部中点、方向对准 head→tail、
+     * 沿段方向拉伸（厚度 = BONE_DIAMOND_THICKNESS）；长度取两端关节实际距离，始终连接两节点 */
     const resizeBoneVisuals = (): void => {
-        for (const bone of skeleton.bones.values()) {
+        for (const bone of bridge.bones.values()) {
             const mesh = boneVisuals.get(bone.id)
             if (mesh === undefined) continue
-            const dir = bone.tail.position.clone()
-            const len = bone.length > 0 ? bone.length : dir.length()
+            const headPos = bridge.getWorldPosition(bone.head.id)
+            const tailPos = bridge.getWorldPosition(bone.tail.id)
+            const headRot = bridge.getWorldRotation(bone.head.id)
+            if (headPos === undefined || tailPos === undefined || headRot === undefined) continue
+            /* tail 在 head 局部空间的偏移（菱形挂在 head group 下） */
+            const local = tailPos.clone().sub(headPos).applyQuaternion(headRot.clone().invert())
+            const len = local.length()
             if (len <= BONE_DIAMOND_MIN_LENGTH) {
                 mesh.visible = false
                 continue
             }
             mesh.visible = true
-            if (dir.lengthSq() < 1e-9) {
-                dir.set(0, 1, 0)
-            } else {
-                dir.normalize()
-            }
-            mesh.position.copy(bone.tail.position).multiplyScalar(0.5)
+            const dir = len > 1e-9 ? local.clone().normalize() : new Vector3(0, 1, 0)
+            mesh.position.copy(local).multiplyScalar(0.5)
             mesh.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), dir)
-            mesh.scale.set(1, len, 1)
+            mesh.scale.set(BONE_DIAMOND_THICKNESS, len, BONE_DIAMOND_THICKNESS)
         }
     }
 
-    for (const bone of skeleton.bones.values()) {
+    for (const bone of bridge.bones.values()) {
         const headGroup = groups.get(bone.head.id)
         if (headGroup === undefined) continue
         const geometry = new OctahedronGeometry(0.5, 0)
-        const material = new MeshBasicMaterial({color: BONE_DIAMOND_COLOR})
+        const material = new MeshBasicMaterial({color: BONE_DIAMOND_COLOR, depthTest: false, depthWrite: false})
         materials.push(material)
         geometries.push(geometry)
         const diamond = new Mesh(geometry, material)
+        diamond.renderOrder = 1
         diamond.userData.boneId = bone.id
         diamond.userData.jointId = bone.head.id
         boneVisuals.set(bone.id, diamond)
         headGroup.add(diamond)
     }
+    /* 把复制到桥接骨架的局部 pose 写回 Group（初始化场景图），再更新菱形 */
+    bridge.updateWorldTransforms()
     resizeBoneVisuals()
-
-    const bridge = createSkeletonFromGroups(
-        [...groups.entries()].map(([jointId, group]) => ({jointId, group})),
-    )
 
     const cleanup = (): void => {
         for (const gizmo of gizmos.values()) gizmo.removeFromParent()
@@ -129,6 +162,30 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
     }
 
     return {rootGroup, groups, gizmos, boneVisuals, bridge, resizeBoneVisuals, cleanup}
+}
+
+/** 创建旋转指针（方向三角形）：3 棱圆锥，尖端指向局部 +Z，挂到选中关节 Group 下（随关节旋转） */
+export const createRotationGizmo = (group: Group, jointId: string): Mesh => {
+    const geometry = new ConeGeometry(ROTATION_GIZMO_RADIUS, ROTATION_GIZMO_HEIGHT, 3)
+    const material = new MeshBasicMaterial({color: ROTATION_GIZMO_COLOR, depthTest: false, depthWrite: false})
+    const mesh = new Mesh(geometry, material)
+    /* 圆锥默认尖端 +Y，旋转 π/2 使尖端指向局部 +Z */
+    mesh.rotation.x = Math.PI / 2
+    mesh.position.set(0, 0, ROTATION_GIZMO_OFFSET)
+    mesh.renderOrder = 1
+    mesh.userData.jointId = jointId
+    mesh.userData.rotHandle = true
+    group.add(mesh)
+    return mesh
+}
+
+/** 销毁旋转指针（从 Group 移除并释放几何/材质） */
+export const disposeRotationGizmo = (mesh: Mesh): void => {
+    mesh.removeFromParent()
+    mesh.geometry.dispose()
+    if (mesh.material instanceof MeshBasicMaterial) {
+        mesh.material.dispose()
+    }
 }
 
 /** 设置选中高亮：joint 高亮小球、bone 高亮菱形 */

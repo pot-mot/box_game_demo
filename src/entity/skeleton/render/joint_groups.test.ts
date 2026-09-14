@@ -3,8 +3,8 @@ import {Mesh, MeshBasicMaterial, OctahedronGeometry, Scene, SphereGeometry} from
 import {createSkeleton} from '../../../skeleton/skeleton.ts'
 import {createSkeletonJoint, connectJoint} from '../../../skeleton/joint.ts'
 import {createSkeletonBone} from '../../../skeleton/bone.ts'
-import {createJointVisuals, setSelectedVisual, clearSelectedVisuals} from './joint_groups.ts'
-import {BONE_DIAMOND_COLOR, BONE_DIAMOND_SELECTED_COLOR, JOINT_GIZMO_COLOR, JOINT_GIZMO_SELECTED_COLOR} from '../constants.ts'
+import {createJointVisuals, createRotationGizmo, disposeRotationGizmo, setSelectedVisual, clearSelectedVisuals} from './joint_groups.ts'
+import {BONE_DIAMOND_COLOR, BONE_DIAMOND_SELECTED_COLOR, BONE_DIAMOND_THICKNESS, JOINT_GIZMO_COLOR, JOINT_GIZMO_SELECTED_COLOR} from '../constants.ts'
 
 /** 构建 root → mid → tail 链（mid 沿 +Y 偏移 2，tail 沿 +Y 偏移 1，骨骼段 len=1） */
 const buildSkeleton = (): ReturnType<typeof createSkeleton> => {
@@ -42,11 +42,12 @@ describe('骨骼可视化（关节小球 + 骨骼段菱形）', () => {
         const diamond = visuals.boneVisuals.get('mid_bone')!
         expect(diamond).toBeInstanceOf(Mesh)
         expect(diamond.geometry).toBeInstanceOf(OctahedronGeometry)
-        /* 菱形挂 head（mid）group 下：局部位置 = tail 局部中点（0, 0.5, 0），方向 +Y，拉伸到段长 */
+        /* 菱形挂 head（mid）group 下：局部位置 = tail 局部中点（0, 0.5, 0），方向 +Y，拉伸到实际距离，细长厚度 */
         const midGroup = visuals.groups.get('mid')!
         expect(diamond.parent).toBe(midGroup)
         expect(diamond.position.y).toBeCloseTo(0.5)
         expect(diamond.scale.y).toBeCloseTo(1)
+        expect(diamond.scale.x).toBeCloseTo(BONE_DIAMOND_THICKNESS)
         visuals.cleanup()
     })
 
@@ -83,18 +84,49 @@ describe('骨骼可视化（关节小球 + 骨骼段菱形）', () => {
         visuals.cleanup()
     })
 
-    it('resizeBoneVisuals 随段长更新菱形（面板/IK 调整后）', () => {
+    it('resizeBoneVisuals 随关节位置更新菱形（始终连接 head→tail 实际距离）', () => {
         const skeleton = buildSkeleton()
         const visuals = createJointVisuals(skeleton, new Scene())
-        const bone = skeleton.findBone('mid_bone')!
-        bone.length = 2
-        visuals.resizeBoneVisuals()
         const diamond = visuals.boneVisuals.get('mid_bone')!
+        expect(diamond.scale.y).toBeCloseTo(1)
+        /* 移动 tail 关节（局部 +Y 偏移 1 → 实际距离 2），菱形跟随拉伸 */
+        visuals.bridge.findJoint('tail')!.position.set(0, 2, 0)
+        visuals.bridge.updateWorldTransforms()
+        visuals.resizeBoneVisuals()
         expect(diamond.scale.y).toBeCloseTo(2)
         /* 段长过小隐藏（退化段） */
-        bone.length = 0.001
+        visuals.bridge.findJoint('tail')!.position.set(0, 0.001, 0)
+        visuals.bridge.updateWorldTransforms()
         visuals.resizeBoneVisuals()
         expect(diamond.visible).toBe(false)
+        visuals.cleanup()
+    })
+
+    it('旋转指针（方向三角形）创建/挂载/销毁', () => {
+        const skeleton = buildSkeleton()
+        const visuals = createJointVisuals(skeleton, new Scene())
+        const group = visuals.groups.get('mid')!
+        const gizmo = createRotationGizmo(group, 'mid')
+        expect(gizmo.parent).toBe(group)
+        expect(gizmo.userData.jointId).toBe('mid')
+        expect(gizmo.userData.rotHandle).toBe(true)
+        disposeRotationGizmo(gizmo)
+        expect(gizmo.parent).toBeNull()
+        visuals.cleanup()
+    })
+
+    it('骨骼层覆盖渲染：小球/菱形 depthTest=false + renderOrder=1（压模型层上方）', () => {
+        const skeleton = buildSkeleton()
+        const visuals = createJointVisuals(skeleton, new Scene())
+        for (const gizmo of visuals.gizmos.values()) {
+            const material = gizmo.material as MeshBasicMaterial
+            expect(material.depthTest).toBe(false)
+            expect(gizmo.renderOrder).toBe(1)
+        }
+        const diamond = visuals.boneVisuals.get('mid_bone')!
+        const material = diamond.material as MeshBasicMaterial
+        expect(material.depthTest).toBe(false)
+        expect(diamond.renderOrder).toBe(1)
         visuals.cleanup()
     })
 })

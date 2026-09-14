@@ -40,3 +40,5 @@ export const focusPanel = (panel: PanelContext | undefined): void => {
         c.style.display = 'none'
     }
 }
+
+export const getCurrentPanel = (): PanelContext | undefined => currentPanel

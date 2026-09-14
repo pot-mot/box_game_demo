@@ -44,22 +44,28 @@ export const createWaterPanel = (ctx: Omit<WaterEntityContext, 'panel'>): PanelC
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
+    const refreshValues = (): void => {
+        /* 输入框聚焦中不刷新，避免覆盖用户输入 */
+        if (el.contains(document.activeElement)) return
+        const sel = ctx.getSelected()
+        if (!sel) return
+        posX.value = sel.mesh.position.x.toFixed(2)
+        posY.value = sel.mesh.position.y.toFixed(2)
+        posZ.value = sel.mesh.position.z.toFixed(2)
+        rotX.value = (sel.mesh.rotation.x * 180 / Math.PI).toFixed(1)
+        rotY.value = (sel.mesh.rotation.y * 180 / Math.PI).toFixed(1)
+        rotZ.value = (sel.mesh.rotation.z * 180 / Math.PI).toFixed(1)
+        sizeX.value = String(sel.config.width)
+        sizeY.value = String(sel.config.height)
+        sizeZ.value = String(sel.config.depth)
+        density.value = String(sel.config.density)
+    }
+
     return {
         render: (container: HTMLElement) => {
-            const sel = ctx.getSelected()
-            if (!sel) return
             container.appendChild(el)
             el.style.display = 'block'
-            posX.value = sel.mesh.position.x.toFixed(2)
-            posY.value = sel.mesh.position.y.toFixed(2)
-            posZ.value = sel.mesh.position.z.toFixed(2)
-            rotX.value = (sel.mesh.rotation.x * 180 / Math.PI).toFixed(1)
-            rotY.value = (sel.mesh.rotation.y * 180 / Math.PI).toFixed(1)
-            rotZ.value = (sel.mesh.rotation.z * 180 / Math.PI).toFixed(1)
-            sizeX.value = String(sel.config.width)
-            sizeY.value = String(sel.config.height)
-            sizeZ.value = String(sel.config.depth)
-            density.value = String(sel.config.density)
+            refreshValues()
 
             applyBtn.onclick = () => {
                 const cur = ctx.getSelected()
@@ -88,5 +94,6 @@ export const createWaterPanel = (ctx: Omit<WaterEntityContext, 'panel'>): PanelC
         destroy: () => {
             el.remove()
         },
+        update: refreshValues,
     }
 }

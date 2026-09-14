@@ -1,16 +1,20 @@
 import {Euler} from 'three'
 import type {PanelContext} from '../../box/base/ui'
+import type {JointCascadeSettings} from '../../../skeleton/skeleton.ts'
 import {connectJoint, disconnectJoint, createSkeletonJoint} from '../../../skeleton/joint.ts'
 import {setBoneLength, setBoneRoll} from '../../../skeleton/bone.ts'
 import {setSelectedVisual, clearSelectedVisuals} from '../render/joint_groups.ts'
 import type {SkeletonSelection, SkeletonEntity} from '../world.ts'
-import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
+import {createLabeledNumberInput, createNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
+import {CASCADE_DEPTH_MAX} from '../constants.ts'
 
 /** 面板所需的实体上下文（由 world 装配，两阶段初始化） */
 export interface SkeletonPanelContext {
     getFocus: () => SkeletonEntity | undefined
     getSelection: () => SkeletonSelection | undefined
+    /** 级联编辑设置（开关 + 层数，面板修改、指针读取） */
+    getCascadeSettings: () => JointCascadeSettings
     /** 领域编辑后刷新：FK + 写回场景图 + 部件缩放 */
     refresh: () => void
     /** 重开面板（选中变化后由 world 调用） */
@@ -25,13 +29,13 @@ const valueOf = (input: HTMLInputElement): number => {
 }
 
 /** 关节属性面板：位置/旋转/IK 根级别/父关节/添加子关节/删除 */
-const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): void => {
+const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): (() => void) => {
     const entity = ctx.getFocus()
     const selection = ctx.getSelection()
-    if (entity === undefined || selection === undefined || selection.kind !== 'joint') return
+    if (entity === undefined || selection === undefined || selection.kind !== 'joint') return () => {}
     const skeleton = entity.skeleton
     const joint = skeleton.findJoint(selection.id)
-    if (joint === undefined) return
+    if (joint === undefined) return () => {}
 
     const title = document.createElement('div')
     title.style.cssText = 'font-weight:600;margin-bottom:4px'
@@ -56,6 +60,49 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): vo
     const rotY = createLabeledNumberInput(rotRow, 'Y', {value: String(euler.y)})
     const rotZ = createLabeledNumberInput(rotRow, 'Z', {value: String(euler.z)})
     container.appendChild(rotRow)
+
+    /* 级联编辑（拖拽平移/旋转时子节点跟随策略） */
+    container.appendChild(createSection('级联编辑'))
+    const settings = ctx.getCascadeSettings()
+    const cascadeRow = document.createElement('div')
+    cascadeRow.style.cssText = 'display:flex;align-items:center;gap:8px'
+    const cascadeCheck = document.createElement('input')
+    cascadeCheck.type = 'checkbox'
+    cascadeCheck.checked = settings.enabled
+    const cascadeLabelEl = document.createElement('label')
+    cascadeLabelEl.textContent = '级联子节点'
+    cascadeLabelEl.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer'
+    cascadeLabelEl.appendChild(cascadeCheck)
+    const depthInput = createNumberInput({
+        value: String(settings.depth),
+        min: '1',
+        max: String(CASCADE_DEPTH_MAX),
+        step: '1',
+        style: 'width:48px',
+    })
+    const depthLabelEl = document.createElement('label')
+    depthLabelEl.textContent = '层数 '
+    depthLabelEl.style.cssText = 'display:flex;align-items:center;gap:4px'
+    depthLabelEl.appendChild(depthInput)
+    cascadeRow.appendChild(cascadeLabelEl)
+    cascadeRow.appendChild(depthLabelEl)
+    container.appendChild(cascadeRow)
+    const cascadeHint = document.createElement('div')
+    cascadeHint.style.cssText = 'color:#889;font-size:10px;margin-top:2px'
+    cascadeHint.textContent = '开：子节点（≤层数）跟随调整，层数外后代保持原位；关：仅本节点变化'
+    container.appendChild(cascadeHint)
+
+    cascadeCheck.addEventListener('change', () => {
+        settings.enabled = cascadeCheck.checked
+    })
+    depthInput.addEventListener('change', () => {
+        const raw = parseFloat(depthInput.value)
+        const clamped = Number.isNaN(raw)
+            ? 1
+            : Math.max(1, Math.min(CASCADE_DEPTH_MAX, Math.round(raw)))
+        settings.depth = clamped
+        depthInput.value = String(clamped)
+    })
 
     /* IK 根级别 */
     container.appendChild(createSection('IK 根级别'))
@@ -148,16 +195,29 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): vo
         ctx.refresh()
         ctx.reopen()
     })
+
+    /** 返回刷新函数：gizmo 拖拽时实时更新位置/旋转输入值 */
+    return (): void => {
+        const cur = ctx.getFocus()?.skeleton.findJoint(selection.id)
+        if (cur === undefined) return
+        posX.value = String(cur.position.x)
+        posY.value = String(cur.position.y)
+        posZ.value = String(cur.position.z)
+        const curEuler = new Euler().setFromQuaternion(cur.rotation, EULER_ORDER)
+        rotX.value = String(curEuler.x)
+        rotY.value = String(curEuler.y)
+        rotZ.value = String(curEuler.z)
+    }
 }
 
 /** 骨骼段属性面板：长度（面板输入）/roll/删除 */
-const renderBonePanel = (ctx: SkeletonPanelContext, container: HTMLElement): void => {
+const renderBonePanel = (ctx: SkeletonPanelContext, container: HTMLElement): (() => void) => {
     const entity = ctx.getFocus()
     const selection = ctx.getSelection()
-    if (entity === undefined || selection === undefined || selection.kind !== 'bone') return
+    if (entity === undefined || selection === undefined || selection.kind !== 'bone') return () => {}
     const skeleton = entity.skeleton
     const bone = skeleton.findBone(selection.id)
-    if (bone === undefined) return
+    if (bone === undefined) return () => {}
 
     const title = document.createElement('div')
     title.style.cssText = 'font-weight:600;margin-bottom:4px'
@@ -195,11 +255,21 @@ const renderBonePanel = (ctx: SkeletonPanelContext, container: HTMLElement): voi
         ctx.refresh()
         ctx.reopen()
     })
+
+    /** 骨骼段无 gizmo 拖拽场景，返回空刷新 */
+    return () => {}
 }
 
 /** 骨骼实体属性面板（PanelContext 协议，焦点在 focusPanel 容器） */
 export const createSkeletonPanel = (ctx: SkeletonPanelContext): PanelContext => {
+    /** 当前面板的刷新函数（render 时赋值，由 update 调用） */
+    let refreshValues: (() => void) | undefined
+    /** 面板容器（render 时赋值，update 用于焦点检查） */
+    let panelContainer: HTMLElement | undefined
+
     const render = (container: HTMLElement): void => {
+        panelContainer = container
+        refreshValues = undefined
         const entity = ctx.getFocus()
         if (entity === undefined) {
             container.textContent = '未创建骨架实体'
@@ -211,9 +281,9 @@ export const createSkeletonPanel = (ctx: SkeletonPanelContext): PanelContext => 
             return
         }
         if (selection.kind === 'joint') {
-            renderJointPanel(ctx, container)
+            refreshValues = renderJointPanel(ctx, container)
         } else {
-            renderBonePanel(ctx, container)
+            refreshValues = renderBonePanel(ctx, container)
         }
         /* 选中高亮：关节小球 / 骨骼段菱形 */
         setSelectedVisual(entity.visuals, selection, true)
@@ -224,7 +294,14 @@ export const createSkeletonPanel = (ctx: SkeletonPanelContext): PanelContext => 
         if (entity !== undefined) {
             clearSelectedVisuals(entity.visuals)
         }
+        refreshValues = undefined
     }
 
-    return {render, destroy}
+    const update = (): void => {
+        /* 输入框聚焦中不刷新，避免覆盖用户输入 */
+        if (panelContainer?.contains(document.activeElement) === true) return
+        refreshValues?.()
+    }
+
+    return {render, destroy, update}
 }

@@ -68,7 +68,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
 
     // --- 渲染系统 ---
     const {scene, camera, renderer} = createRenderContext(app)
-    const renderFrame = setupRefractionPass(scene, camera, renderer)
+    const {renderFrame, excludeFromBackground} = setupRefractionPass(scene, camera, renderer)
 
     // --- 无限地面网格 ---
     const gridUpdate = setupInfiniteGrid(scene, camera)
@@ -174,7 +174,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     let showcaseExited = false
 
     if (mode === 'edit') {
-        editMode = setupEditMode(camera, renderer, systems, allTerrainSources, terrainSource)
+        editMode = setupEditMode(camera, renderer, scene, systems, allTerrainSources, terrainSource, excludeFromBackground)
     } else if (mode === 'play') {
         playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem, boxSpawner)
     } else if (mode === 'showcase') {
@@ -191,7 +191,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         })
     } else {
         /* 骨骼动画编辑模式：复用主场景，物理冻结，仅编辑骨骼节点/段与动画轨道 */
-        boneEditMode = setupBoneEditMode(camera, renderer, scene)
+        boneEditMode = setupBoneEditMode(camera, renderer, scene, excludeFromBackground)
     }
 
     /* ── 编辑模式：执行 / 步进状态 ── */
