@@ -53,7 +53,7 @@ export const assembleCharacterAppearance = (
         const part = paletteKey === 'head'
             ? createHeadBoxPart(w, h, d, palette)
             : createTwoFaceBoxPart(w, h, d, paletteKey === 'body' ? palette.bodyColor : palette.legColor)
-        /* 默认部件从挂载关节向下延伸（肢体/头）；躯干例外：髋部关节向上延伸至肩部 */
+        /* 默认部件从挂载关节向下延伸（肢体）；躯干/头等向上挂载部件由 offsetY 显式给出 */
         part.mesh.position.y = offsetY ?? -h / 2
         /* 拾取标记：部件归属的挂载关节与骨骼段 */
         part.mesh.userData.jointId = jointId
@@ -65,9 +65,10 @@ export const assembleCharacterAppearance = (
         if (boneId !== undefined) boneParts.set(boneId, binding)
     }
 
-    /* 躯干：从髋部（spine 关节）向上延伸至肩部；头 / 肢体默认向下挂 */
+    /* 躯干：从髋部（spine 关节）向上延伸至肩部；头：从颈根（headNeck）向上延伸（与生产模型一致）；
+     * 肢体默认从挂载关节向下延伸 */
     mount('spine', undefined, s.bodyW, s.bodyH, s.bodyD, 'body', s.bodyH / 2)
-    mount('headNeck', undefined, s.headW, s.headH, s.headW, 'head')
+    mount('headNeck', undefined, s.headW, s.headH, s.headW, 'head', s.headH / 2)
 
     mount('rightArmShoulder', 'rightUpperArm', s.armW, s.upperArmH, s.armD, 'body')
     mount('rightArmElbow', 'rightForearm', s.armW * 0.8, s.forearmH, s.armD * 0.8, 'body')

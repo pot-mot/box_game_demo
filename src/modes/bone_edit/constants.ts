@@ -42,3 +42,20 @@ export const ONION_SKIN_JOINT_SIZE = 0.015
 
 /** 变换 Gizmo 缩放系数（根据相机距离调整视觉大小；关节尺寸较小，系数低于 edit 模式的 0.15） */
 export const GIZMO_SCALE_FACTOR = 0.12
+
+// ── 进入模式时的初始取景（把目标骨架居中于渲染视窗）──
+
+/** 初始取景相机偏航（rad，0 = 从 +Z 正面看向角色脸部） */
+export const VIEW_YAW = 0
+
+/** 初始取景相机相对骨架中心的仰角（rad，正值 = 略高于视线、俯视角色） */
+export const VIEW_ELEVATION = 0.15
+
+/** 初始取景包围盒适配余量（>1 为四周留边；2.2 使角色约占可视高度六成，不顶到画布上沿） */
+export const VIEW_FIT_MARGIN = 2.2
+
+/** 初始取景最小观察距离（米，避免小骨架贴近穿模） */
+export const VIEW_MIN_DISTANCE = 1.5
+
+/** 初始取景可见区域高度比例下限（时间轴面板拉到最高时仍可用的取景高度） */
+export const VIEW_MIN_VISIBLE_RATIO = 0.2

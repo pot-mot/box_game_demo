@@ -360,9 +360,14 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 - **权威姿态源 = three 场景图**（评审决议）：桥接模式下关节直接读写对应 `Group` 的 position/quaternion，世界变换一律从 three 读取（`Group.getWorldPosition/getWorldQuaternion`）；领域层 `updateWorldTransforms`/FK 仅服务于纯领域计算与单元测试，桥接场景不双算，避免漂移；
 - 桥接适配器：`createSkeletonFromGroups(entries: {jointId, group}[])` 生成绑定 `Skeleton`（领域 API 写局部 pose 时同步 Group，读世界变换时取自 Group）；**根关节位移以场景为真源**（角色经 `syncPositions`、bone_edit 经场景锚点），桥接写回时对根关节从 Group 读回位置、只写出旋转；
-- **骨骼可视化（编辑模式）**：关节 = **小球**（`SphereGeometry`，`JOINT_GIZMO_RADIUS`），骨骼段 = **菱形连接段**（`OctahedronGeometry` 挂 head 关节 Group 下，位置 = 段局部中点、方向对准 head→tail、沿段方向拉伸 `scale.y = length`；段长过小隐藏）；关节小球带 `userData.jointId`、菱形带 `userData.boneId + jointId`（拾取）；选中高亮 `setSelectedVisual`（joint 高亮小球 / bone 高亮菱形为高亮色），`clearSelectedVisuals` 还原；
+- **骨骼可视化（编辑模式）**：关节 = **小球**（`SphereGeometry`，`JOINT_GIZMO_RADIUS`），骨骼段 = **菱形连接段**（`OctahedronGeometry` 挂 head 关节 Group 下，位置 = 段局部中点、方向对准 head→tail、沿段方向拉伸 `scale.y = length`；段长过小隐藏）；
+  **细线化约定**：`BONE_DIAMOND_THICKNESS` 与小球直径同量级（0.05，约 1/5 身宽），旋转指针半径/高度/偏移随小球半径同步缩放（保持“锥半径 < 小球半径”避免遮挡拾取），否则 x-ray 覆盖的骨骼层会把模型糊住；
+  关节小球带 `userData.jointId`、菱形带 `userData.boneId + jointId`（拾取）；选中高亮 `setSelectedVisual`（joint 高亮小球 / bone 高亮菱形为高亮色），`clearSelectedVisuals` 还原；
 - `resizeBoneVisuals`：段长变化（面板/IK 调整）后更新菱形；
-- 预设：`buildCharacterSkeletonDefinition()` 输出与方块人同构的骨架定义（joint = spine/headNeck/双臂肩肘腕/双腿髋膝 + ikRootLevel 标注）。
+- 预设：`buildCharacterSkeletonDefinition()` 输出与方块人同构的骨架定义（joint = 髋部/颈根/头顶/双臂肩肘腕/双腿髋膝 + ikRootLevel 标注）。
+  **锚点约定：`root` = 脚底（世界 y=0，与生产模型 `group` 原点一致）**，`spine`（髋部）与双腿髋关节抬升到腿高 `HIP_Y`，因此角色站在网格地面上而不是半身陷入地面；
+  骨骼段均为沿脊柱/肢体方向的有效正长段（`torso` = 髋部→肩部、`head` = 颈根→头顶），不再保留 root→髋部的退化零长段；
+  外观部件挂载方向与生产模型一致：躯干自髋部**向上**延伸至肩部、头自颈根**向上**延伸（`headNeck` 关节即肩线，头块不会倒挂进躯干），肢体默认自挂载关节向下延伸。
 
 ### 6.2 外观部件装载（`entity/skeleton/appearance/`，备用）
 
@@ -385,6 +390,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - `modes/constants.ts` 的 `GAME_MODE_VALUES` 增加 `'bone_edit'`；启动屏新增第 4 个按钮「骨骼动画」；`main.ts` 模式分支接入 `setupBoneEditMode`；
 - **相机写入存档**：`save_load/types.ts` 的 `ModeInfoJSON` 增加 `boneEditCameraPos/Rot`，serialize/deserialize 按既有模式合并逻辑扩展（§11 决议）；
 - 物理世界冻结（类比 showcase）；装配返回 `{updater, exit}`，updater 由单 RAF 调度；返回主页面走 `window.location.reload()`；
+- **初始取景**：进入模式时按聚焦骨架的世界包围盒（`Box3.setFromObject(rootGroup)`）自动摆相机——`yaw = 0` 从 +Z 正面对准角色脸部，距离按身长/身宽与相机 fov、aspect 适配（`VIEW_FIT_MARGIN`/`VIEW_MIN_DISTANCE`），俯仰取 `VIEW_ELEVATION` 轻微俯视；因时间轴面板遮住画布底部，可见区域中心高于画布中心，故再叠加 `atan(面板高占比 × tan(fov/2))` 的下压补偿，使角色落在**可视区**中心；
 - **快捷键最小化**（评审决议）：仅新增 `edit_undo`（Ctrl+Z）/ `edit_redo`（Ctrl+Shift+Z）两个**全局输入动作**（用户指定，经 input 注册表）；时间轴内的 Ctrl+滚轮缩放、Ctrl+C/V 复制粘贴、Shift 多选为标准编辑交互，**不注册为全局动作**，仅在时间轴面板获得焦点时响应；相机键盘移动复用 edit 模式既有绑定。
 
 ### 7.2 上方视窗交互（全鼠标，与 edit 模式基本一致）
@@ -397,6 +403,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - **左键选中**关节/骨骼 → `focusPanel` 打开属性面板；
 - **拖动关节**：沿相机平行平面平移（世界转局部写 `joint.position` → 场景图自动级联）；
 - **拖动骨骼**：绕 head 旋转 tail 子树（`rotateBone`）；
+- **拖拽互斥**：命中关节/骨骼即进入拖拽时经 `setOrbitEnabled(false)` 挂起轨道相机旋转，只保留骨骼拖拽（orbit 的 mousedown 先于 window 级监听触发，但其 mousemove 才读 enabled，故后置 false 仍能阻断本轮旋转）；释放/窗口失焦兜底恢复；空白区域拖动仍旋转相机；
 - **IK 牵引**：选中关节且 IK 模式开 → 拖拽时 `resolveIkChain` 回溯 IK 根 → 每帧 `solveCcd` 追目标点；
 - `length` 调整仅在属性面板输入（评审决议，滚轮不控制长度）。
 
@@ -483,6 +490,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `skeleton/anim/serialization.test.ts` | 资产 JSON 往返、非法数据拒绝、缺省字段兜底（zod default）、formatVersion、ikRootLevel 持久化 |
 | `entity/skeleton/render/bridge.test.ts` | 场景真源桥接：Group 局部读入骨架、领域修改写回 Group（场景图级联）、applyPose/rotateBone 经桥接生效、syncFromScene 外部修改读回、根位移以场景为真源 |
 | `entity/skeleton/render/joint_groups.test.ts` | 骨骼可视化：关节小球（SphereGeometry）/骨骼段菱形（OctahedronGeometry 对准 head→tail）、拾取标记、选中高亮与还原、resizeBoneVisuals 随段长更新 |
+| `entity/skeleton/preset.test.ts` | 预设骨架锚点与段：root 为脚底锚点（关节最低点 y=0、最高点头顶 y=基准高）、髋部抬至 `HIP_Y`、颈根与肩同高、`torso`/`head` 段端点与正长度 |
 | `entity/character/appearance/clips/base_clips.test.ts` | 基础状态 clip 烘焙回归：采样姿态与公式一致（容差 1.7°）、循环 wrap 无缝、持械变体差异、非循环 clamp 末帧；角色模型桥接（自动建连/applyPose 写回 Group/syncFromScene） |
 | `entity/character/appearance/clips/attack_clips.test.ts` | 攻击 clip 烘焙回归：时长 = 动作+恢复、事件轨时间（0.1/0.85 动作进度）、strike_peak 曲线生效、overshoot 起始姿态、恢复归零、无阶段回退、tilt 腕部偏转、缓存复用 |
 | `entity/character/combat/melee_executor.test.ts` | 命中窗口由 setHitWindow 开关（关闭时早退、非近战不受影响） |

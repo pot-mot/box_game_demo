@@ -20,13 +20,17 @@ export interface PickHit {
     readonly rotHandle?: boolean
 }
 
-/** 视窗指针交互：拾取/拖拽/IK 牵引（全鼠标，无新增快捷键） */
+/** 视窗指针交互：拾取/拖拽/IK 牵引（全鼠标，无新增快捷键）。
+ *  命中关节/骨骼即进入拖拽时暂停轨道相机旋转（setOrbitEnabled），只保留骨骼拖拽；
+ *  orbit 的 mousedown 在画布目标阶段先于本模块的 window 级监听执行，但其在 mousemove 时才读 enabled，
+ *  故在本回调内置 false 即可阻断本轮相机旋转。 */
 export const setupBoneEditPointer = (
     world: SkeletonEntitiesContext,
     camera: PerspectiveCamera,
     history: BoneEditHistory,
     getIkEnabled: () => boolean,
     onPicked: (hit: PickHit) => void,
+    setOrbitEnabled: (v: boolean) => void,
 ): {destroy: () => void} => {
     const raycaster = new Raycaster()
     const ndc = new Vector2()
@@ -35,6 +39,8 @@ export const setupBoneEditPointer = (
     let dragJoint: {jointId: string; grabOffset: Vector3} | undefined
     let dragBone: {boneId: string} | undefined
     let dragRotateJoint: {jointId: string} | undefined
+    /** 本次拖拽是否已暂停轨道相机（仅挂起过才在结束时恢复，避免干扰 gizmo 的开关） */
+    let orbitSuspended = false
     let downPos = {x: 0, y: 0}
     let moved = false
 
@@ -145,21 +151,27 @@ export const setupBoneEditPointer = (
                 /* 旋转指针：进入旋转拖拽 */
                 dragRotateJoint = {jointId: hit.jointId}
                 history.startEdit()
-                return
+            } else {
+                const joint = skeleton.findJoint(hit.jointId)
+                const jointWorld = skeleton.getWorldPosition(hit.jointId)
+                if (joint !== undefined && jointWorld !== undefined) {
+                    dragJoint = {jointId: hit.jointId, grabOffset: new Vector3()}
+                    dragPlaneThrough(jointWorld)
+                    const startTarget = rayPlaneTarget(e.clientX, e.clientY)
+                    if (startTarget !== undefined) {
+                        dragJoint.grabOffset.copy(jointWorld.clone().sub(startTarget))
+                    }
+                    history.startEdit()
+                }
             }
-            const joint = skeleton.findJoint(hit.jointId)
-            const jointWorld = skeleton.getWorldPosition(hit.jointId)
-            if (joint === undefined || jointWorld === undefined) return
-            dragJoint = {jointId: hit.jointId, grabOffset: new Vector3()}
-            dragPlaneThrough(jointWorld)
-            const startTarget = rayPlaneTarget(e.clientX, e.clientY)
-            if (startTarget !== undefined) {
-                dragJoint.grabOffset.copy(jointWorld.clone().sub(startTarget))
-            }
-            history.startEdit()
         } else if (hit.boneId !== undefined) {
             dragBone = {boneId: hit.boneId}
             history.startEdit()
+        }
+        /** 已占用本次左键（只保留骨骼拖拽）→ 暂停相机旋转 */
+        if (dragJoint !== undefined || dragBone !== undefined || dragRotateJoint !== undefined) {
+            orbitSuspended = true
+            setOrbitEnabled(false)
         }
     }
 
@@ -180,6 +192,21 @@ export const setupBoneEditPointer = (
         }
     }
 
+    /** 释放本次拖拽占用的状态并恢复相机旋转 */
+    const releaseDrag = (): void => {
+        if (dragJoint !== undefined || dragBone !== undefined || dragRotateJoint !== undefined) {
+            history.endEdit()
+        }
+        dragJoint = undefined
+        dragBone = undefined
+        dragRotateJoint = undefined
+        moved = false
+        if (orbitSuspended) {
+            orbitSuspended = false
+            setOrbitEnabled(true)
+        }
+    }
+
     const onMouseUp = (e: MouseEvent): void => {
         if (dragJoint !== undefined || dragBone !== undefined || dragRotateJoint !== undefined) {
             if (!moved) {
@@ -187,23 +214,26 @@ export const setupBoneEditPointer = (
                 const hit = pick(e.clientX, e.clientY)
                 if (hit !== undefined) onPicked(hit)
             }
-            history.endEdit()
         }
-        dragJoint = undefined
-        dragBone = undefined
-        dragRotateJoint = undefined
-        moved = false
+        releaseDrag()
+    }
+
+    /** 窗口失焦兜底：丢失 mouseup 时结束拖拽，避免相机旋转被永久挂起 */
+    const onBlur = (): void => {
+        releaseDrag()
     }
 
     window.addEventListener('mousedown', onMouseDown)
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('blur', onBlur)
 
     return {
         destroy: () => {
             window.removeEventListener('mousedown', onMouseDown)
             window.removeEventListener('mousemove', onMouseMove)
             window.removeEventListener('mouseup', onMouseUp)
+            window.removeEventListener('blur', onBlur)
         },
     }
 }

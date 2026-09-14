@@ -1,5 +1,5 @@
-/** 关节小球半径（米） */
-export const JOINT_GIZMO_RADIUS = 0.06
+/** 关节小球半径（米）：直径与骨骼段菱形厚度同量级（0.05），避免骨骼层糊住模型 */
+export const JOINT_GIZMO_RADIUS = 0.025
 
 /** 关节小球默认颜色 */
 export const JOINT_GIZMO_COLOR = 0x4a9eff
@@ -14,19 +14,19 @@ export const BONE_DIAMOND_COLOR = 0x9a7bff
 export const BONE_DIAMOND_SELECTED_COLOR = 0xffcc44
 
 /** 骨骼段菱形厚度（x/z 缩放，米；OctahedronGeometry 基准半径 0.5，细长连接段） */
-export const BONE_DIAMOND_THICKNESS = 0.14
+export const BONE_DIAMOND_THICKNESS = 0.05
 
 /** 骨骼段菱形最小可见长度（米，小于该值隐藏，避免退化段显示为点） */
 export const BONE_DIAMOND_MIN_LENGTH = 0.005
 
 /** 旋转指针（方向三角形）半径（米，小于关节小球半径避免遮挡小球正面拾取） */
-export const ROTATION_GIZMO_RADIUS = 0.025
+export const ROTATION_GIZMO_RADIUS = 0.015
 
 /** 旋转指针（方向三角形）高度（米，圆锥尖指向局部 +Z） */
-export const ROTATION_GIZMO_HEIGHT = 0.16
+export const ROTATION_GIZMO_HEIGHT = 0.1
 
 /** 旋转指针沿局部 +Z 的偏移（米，露出关节小球） */
-export const ROTATION_GIZMO_OFFSET = 0.06
+export const ROTATION_GIZMO_OFFSET = 0.035
 
 /** 旋转指针颜色 */
 export const ROTATION_GIZMO_COLOR = 0xffa020

@@ -1,5 +1,5 @@
-import {type PerspectiveCamera, type Scene, type WebGLRenderer, type Object3D} from 'three'
-import {setupSkeletonEntities, type SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
+import {Box3, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer, type Object3D} from 'three'
+import {setupSkeletonEntities, type SkeletonEntitiesContext, type SkeletonEntity} from '../../entity/skeleton/world.ts'
 import {setupMouseOrbit, setupKeyboardCamera} from '../camera_common.ts'
 import {createAnimationStore, type AnimationStore} from './animation_store.ts'
 import {setupBoneEditHistory, type BoneEditHistory} from './history.ts'
@@ -7,7 +7,7 @@ import {setupTimelinePanel, type TimelinePanel} from './timeline.ts'
 import {setupBoneEditPointer} from './pointer.ts'
 import {setupBoneGizmoPointer} from './gizmo_pointer.ts'
 import {createTransformGizmo} from '../edit/transform_gizmo.ts'
-import {GIZMO_SCALE_FACTOR} from './constants.ts'
+import {GIZMO_SCALE_FACTOR, VIEW_ELEVATION, VIEW_FIT_MARGIN, VIEW_MIN_DISTANCE, VIEW_MIN_VISIBLE_RATIO, VIEW_YAW} from './constants.ts'
 import {skeletonToDefinition, clipToJSON, type SkeletonDefinition, type ClipJSON} from '../../skeleton/anim/serialization.ts'
 import {focusPanel, getCurrentPanel} from '../../ui/entity_control_panel.ts'
 
@@ -74,6 +74,33 @@ export const setupBoneEditMode = (
 
     timeline = setupTimelinePanel(world, store, history)
 
+    /** 初始取景：按包围盒把聚焦骨架放到视窗中心。
+     *  时间轴面板遮挡画布底部，可见区域中心高于画布中心，故相机需额外下压等同偏移角。 */
+    const frameFocus = (entity: SkeletonEntity | undefined): void => {
+        if (entity === undefined) return
+        const box = new Box3().setFromObject(entity.visuals.rootGroup)
+        if (box.isEmpty()) return
+        const center = box.getCenter(new Vector3())
+        const size = box.getSize(new Vector3())
+        const halfTanV = Math.tan((camera.fov * Math.PI) / 360)
+        const halfTanH = halfTanV * camera.aspect
+        const panelRatio = timeline.container.getBoundingClientRect().height / window.innerHeight
+        const visibleRatio = Math.min(1, Math.max(VIEW_MIN_VISIBLE_RATIO, 1 - panelRatio))
+        /** 竖向（身长）为约束轴并扣除面板遮挡，横向按 aspect 兜底（自定义骨架可能宽于高） */
+        const dist = Math.max(
+            VIEW_MIN_DISTANCE,
+            Math.max(size.y / (2 * halfTanV * visibleRatio), size.x / (2 * halfTanH)) * VIEW_FIT_MARGIN,
+        )
+        camera.position.set(
+            center.x,
+            center.y + dist * Math.sin(VIEW_ELEVATION),
+            center.z + dist * Math.cos(VIEW_ELEVATION),
+        )
+        /** 俯仰 = 仰角取负（俯视目标）再减去可见区域中心偏移补偿，使目标落在可视区中心 */
+        orbit.setOrientation(VIEW_YAW, -VIEW_ELEVATION - Math.atan((1 - visibleRatio) * halfTanV))
+    }
+    frameFocus(world.getFocus())
+
     /* 变换 Gizmo */
     const gizmo = createTransformGizmo()
     scene.add(gizmo.group)
@@ -89,7 +116,8 @@ export const setupBoneEditMode = (
         }
         focusPanel(world.panel)
     }
-    setupBoneEditPointer(world, camera, history, () => timeline.isIkEnabled(), onPicked)
+    /* 指针交互（拾取/拖拽/IK 牵引）：命中骨骼时挂起轨道相机旋转，仅保留拖拽 */
+    setupBoneEditPointer(world, camera, history, () => timeline.isIkEnabled(), onPicked, orbit.setEnabled)
 
     /* Gizmo 指针交互（拦截 gizmo 部件拖拽） */
     const gizmoPointer = setupBoneGizmoPointer(world, camera, gizmo, history, orbit.setEnabled)
