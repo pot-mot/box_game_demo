@@ -10,6 +10,7 @@ import {
     TERRAIN_COLLISION_MASK,
 } from '../../../physics/constants.ts'
 import {resolveGroundState, type GroundState} from './ground_state.ts'
+import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {computeSeparation, separationSlopeDy} from './separation.ts'
 import {CHARACTER_SEPARATION_SPEED, CHARACTER_LINEAR_DAMPING} from './constants.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
@@ -69,7 +70,7 @@ export const makeChar = (
             .setFriction(0)
             /* 密度 0（与生产一致） */
             .setDensity(0)
-            .setCollisionGroups((CHARACTER_COLLISION_GROUP << 16) | (CHARACTER_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, 'character'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         body,
     )
@@ -144,7 +145,7 @@ export const makeStaticBox = (
             .setFriction(0.5)
             /* 密度 0（与生产一致：质量完全由附加质量决定） */
             .setDensity(0)
-            .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'box'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         body,
     )
@@ -171,7 +172,7 @@ export const makeDynamicBox = (
             .setFriction(0.5)
             /* 密度 0（与生产一致） */
             .setDensity(0)
-            .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'box'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         body,
     )
@@ -217,7 +218,7 @@ export const makeSlope = (
         hw.shared.world,
         RAPIER.ColliderDesc.trimesh(vertices, new Uint32Array(indices))
             .setFriction(0.5)
-            .setCollisionGroups((TERRAIN_COLLISION_GROUP << 16) | (TERRAIN_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK, 'terrain'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         body,
     )
@@ -247,7 +248,7 @@ export const makeWall = (hw: HarnessWorld, thetaDeg: number): RAPIER.RigidBody =
         RAPIER.ColliderDesc.cuboid(40, 40, 0.5)
             .setTranslation(0, 0, -0.5)
             .setFriction(0.5)
-            .setCollisionGroups((TERRAIN_COLLISION_GROUP << 16) | (TERRAIN_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK, 'terrain'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         body,
     )

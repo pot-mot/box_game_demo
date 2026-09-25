@@ -2,6 +2,7 @@ import {type Scene} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {categoryCollisionGroups} from '../../../../physics/collision_category.ts'
 import {createColliderForBody, setBodyMass} from '../../../../physics/rapier_utils.ts'
 import type {CommonBoxConfig, CommonBox, CommonEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
@@ -71,7 +72,7 @@ export const setupCommonBoxes = (
             .setFriction(0.5)
             /* 密度 0：质量完全由附加质量决定，与箱子尺寸解耦 */
             .setDensity(0)
-            .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'box'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
         if (!isStatic) {
@@ -159,7 +160,7 @@ export const setupCommonBoxes = (
                 .setFriction(0.5)
                 /* 密度 0：重建碰撞体不改变刚体质量 */
                 .setDensity(0)
-                .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+                .setCollisionGroups(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'box'))
                 .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
             const pos = pb.body.translation()

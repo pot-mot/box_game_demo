@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import {GRAVITY, GROUND_Y} from './constants.ts'
+import {GRAVITY, GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from './constants.ts'
+import {categoryCollisionGroups} from './collision_category.ts'
 import {createCollisionEventBus, type CollisionEventBus} from './collision_events.ts'
 
 export interface SharedWorld {
@@ -26,6 +27,8 @@ export const createSharedWorld = (): SharedWorld => {
     world.createCollider(
         RAPIER.ColliderDesc.cuboid(200, 1, 200)
             .setFriction(0.5)
+            /* 显式声明为默认组 + ground 类别（原先不设置 = 全 membership，交互对完全等价） */
+            .setCollisionGroups(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'ground'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         groundBody,
     )

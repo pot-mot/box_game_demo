@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import {Mesh, MeshBasicMaterial, SphereGeometry, type Scene} from 'three'
-import {v3Set, v3Length, type RapVector3} from '../../../physics/rapier_utils.ts'
+import {v3Set, v3Length, type RapVector3, type RapQuaternion} from '../../../physics/rapier_utils.ts'
 import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
@@ -9,10 +9,24 @@ import type {SkillConfig} from '../../../character/combat/skill_types.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import {applyDamage} from '../../../character/combat/damage.ts'
 import {applyExplosionDamage} from '../../../character/combat/explosion.ts'
+import {DEFAULT_BULLET_PASS_THROUGH_CATEGORIES, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import {
+    collisionCategoryMask,
+    isBlockingGeometry,
+    maskIncludesCategory,
+    matchesCategoryMask,
+} from '../../../physics/collision_category.ts'
 import {BULLET_SIZE, BULLET_COLLISION_GROUP, BULLET_COLLISION_MASK, BULLET_HIT_RADIUS} from './constants.ts'
 
 const BULLET_GEOMETRY = new SphereGeometry(0.08, 4, 4)
 const BULLET_MATERIAL_POOL = new Map<number, MeshBasicMaterial>()
+
+/** 子弹恒不旋转：形状扫描使用恒等旋转 */
+const IDENTITY_ROTATION: RapQuaternion = {x: 0, y: 0, z: 0, w: 1}
+
+/** 形状扫描的复用入参（避免逐帧分配） */
+const _sweepOrigin: RapVector3 = {x: 0, y: 0, z: 0}
+const _sweepVelocity: RapVector3 = {x: 0, y: 0, z: 0}
 
 interface BulletInstance {
     body: RAPIER.RigidBody
@@ -26,6 +40,12 @@ interface BulletInstance {
     lifetime: number
     homingStrength: number
     explosionRadius: number
+    /** 可穿过类别的位掩码（命中这些类别继续飞行） */
+    passThroughMask: number
+    /** 上一帧位置 —— 形状扫描起点（逐帧覆盖，避免每帧分配向量） */
+    prevX: number
+    prevY: number
+    prevZ: number
 }
 
 const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
@@ -40,23 +60,36 @@ const getPlayerFactionMaterial = (faction: number): MeshBasicMaterial => {
     return mat
 }
 
+/**
+ * 形状扫描过滤：是否为「会挡下子弹」的碰撞体。
+ * 1. 落在可穿过类别掩码内 → 放行（子弹穿过）；
+ * 2. 其它已标注类别的场景几何（箱子 / 碎片 / 地形 / 世界地面）→ 阻挡；
+ * 3. 角色类别与未标注类别的碰撞体（武器、其它子弹）→ 不参与扫描（角色另走宽容半径判定）。
+ */
+const blocksBullet = (collider: RAPIER.Collider, passThroughMask: number): boolean => {
+    const groups = collider.collisionGroups()
+    if (matchesCategoryMask(groups, passThroughMask)) return false
+    return isBlockingGeometry(groups)
+}
+
 export const createRangedExecutor = (
     shared: SharedWorld,
     scene: Scene,
-): SkillExecutor & { updateBullets: (dt: number, allCharacters: readonly CharacterEntity[]) => void; clear: () => void } => {
+): SkillExecutor & {
+    updateBullets: (dt: number, allCharacters: readonly CharacterEntity[]) => void
+    getBulletCount: () => number
+    clear: () => void
+} => {
     const {world} = shared
     const bullets: BulletInstance[] = []
     const firedThisAttack = new Set<number>()
+    /* 形状扫描形状（半径 = 子弹碰撞体半径）：与物理/视觉尺寸同源，避免命中判定漂移 */
+    const bulletShape = new RAPIER.Ball(BULLET_SIZE)
 
     const fireBulletInternal = (
         character: CharacterEntity,
         direction: RapVector3,
-        speed: number,
-        damage: number,
-        knockbackForce: number,
-        lifetime: number,
-        homingStrength: number,
-        explosionRadius: number,
+        weapon: RangedWeaponConfig,
         throwAngle: number,
     ): void => {
         const spawnPos = character.body.translation()
@@ -78,8 +111,8 @@ export const createRangedExecutor = (
         const collider = createColliderForBody(world, colliderDesc, body)
         setBodyMass(body, 0.01)
 
-        const hSpeed = speed * Math.cos(throwAngle)
-        const vSpeed = speed * Math.sin(throwAngle)
+        const hSpeed = weapon.projectileSpeed * Math.cos(throwAngle)
+        const vSpeed = weapon.projectileSpeed * Math.sin(throwAngle)
         body.setLinvel({x: direction.x * hSpeed, y: vSpeed, z: direction.z * hSpeed}, true)
 
         const material = getPlayerFactionMaterial(character.combat.faction)
@@ -95,11 +128,17 @@ export const createRangedExecutor = (
             ownerId: character.id,
             ownerFaction: character.combat.faction,
             ownerAttackTendency: character.combat.attackTendency,
-            damage,
-            knockbackForce,
-            lifetime,
-            homingStrength,
-            explosionRadius,
+            damage: weapon.damage,
+            knockbackForce: weapon.knockbackForce,
+            lifetime: weapon.projectileLifetime,
+            homingStrength: weapon.homingStrength ?? 0,
+            explosionRadius: weapon.explosionRadius ?? 0,
+            passThroughMask: collisionCategoryMask(
+                weapon.passThroughCategories ?? DEFAULT_BULLET_PASS_THROUGH_CATEGORIES,
+            ),
+            prevX: bt.x,
+            prevY: bt.y,
+            prevZ: bt.z,
         })
     }
 
@@ -149,21 +188,11 @@ export const createRangedExecutor = (
                 const px = fixedDx * cosOff - fixedDz * sinOff
                 const pz = fixedDx * sinOff + fixedDz * cosOff
                 v3Set(_tmpVec, px, 0, pz)
-                fireBulletInternal(
-                    entity, _tmpVec, w.projectileSpeed, w.damage,
-                    w.knockbackForce, w.projectileLifetime,
-                    w.homingStrength ?? 0, w.explosionRadius ?? 0,
-                    throwAngle,
-                )
+                fireBulletInternal(entity, _tmpVec, w, throwAngle)
             }
         } else {
             v3Set(_tmpVec, fixedDx, 0, fixedDz)
-            fireBulletInternal(
-                entity, _tmpVec, w.projectileSpeed, w.damage,
-                w.knockbackForce, w.projectileLifetime,
-                w.homingStrength ?? 0, w.explosionRadius ?? 0,
-                throwAngle,
-            )
+            fireBulletInternal(entity, _tmpVec, w, throwAngle)
         }
     }
 
@@ -186,6 +215,24 @@ export const createRangedExecutor = (
     const getOwnerEntity = (ownerId: number, allCharacters: readonly CharacterEntity[]): CharacterEntity | undefined =>
         allCharacters.find(c => c.id === ownerId)
 
+    /** 消失前结算范围伤害（爆炸半径 0 的子弹为空操作） */
+    const detonateAt = (
+        bullet: BulletInstance,
+        x: number,
+        y: number,
+        z: number,
+        allCharacters: readonly CharacterEntity[],
+    ): void => {
+        if (bullet.explosionRadius <= 0) return
+        const owner = getOwnerEntity(bullet.ownerId, allCharacters)
+        if (!owner) return
+        applyExplosionDamage(
+            x, y, z,
+            bullet.explosionRadius, bullet.damage, bullet.knockbackForce,
+            owner, allCharacters,
+        )
+    }
+
     const updateBullets = (dt: number, allCharacters: readonly CharacterEntity[]): void => {
         for (let i = bullets.length - 1; i >= 0; i--) {
             const bullet = bullets[i]
@@ -194,16 +241,7 @@ export const createRangedExecutor = (
             const bulletPos = bullet.body.translation()
 
             if (bullet.lifetime <= 0 || bulletPos.y < -10 || (bullet.explosionRadius > 0 && bulletPos.y < 0)) {
-                if (bullet.explosionRadius > 0) {
-                    const owner = getOwnerEntity(bullet.ownerId, allCharacters)
-                    if (owner) {
-                        applyExplosionDamage(
-                            bulletPos.x, bulletPos.y, bulletPos.z,
-                            bullet.explosionRadius, bullet.damage, bullet.knockbackForce,
-                            owner, allCharacters,
-                        )
-                    }
-                }
+                detonateAt(bullet, bulletPos.x, bulletPos.y, bulletPos.z, allCharacters)
                 removeBullet(i)
                 continue
             }
@@ -249,68 +287,101 @@ export const createRangedExecutor = (
 
             bullet.mesh.position.set(bulletPos.x, bulletPos.y, bulletPos.z)
 
+            /* 1) 角色命中 —— 沿用宽容半径判定（角色类别不参与形状扫描）。
+             * 命中角色即消失（角色不在可穿过类别内时）；仅敌对阵营结算伤害 / 击退 / 爆炸 */
             let hit = false
-            for (const target of allCharacters) {
-                if (target.id === bullet.ownerId || target.combat.isDead) continue
+            if (!maskIncludesCategory(bullet.passThroughMask, 'character')) {
+                for (const target of allCharacters) {
+                    if (target.id === bullet.ownerId || target.combat.isDead) continue
 
-                const tp = target.body.translation()
-                v3Set(_tmpVec,
-                    bulletPos.x - tp.x,
-                    bulletPos.y - tp.y,
-                    bulletPos.z - tp.z,
-                )
-                const dist = v3Length(_tmpVec)
-                if (dist > BULLET_HIT_RADIUS) continue
+                    const tp = target.body.translation()
+                    v3Set(_tmpVec,
+                        bulletPos.x - tp.x,
+                        bulletPos.y - tp.y,
+                        bulletPos.z - tp.z,
+                    )
+                    const dist = v3Length(_tmpVec)
+                    if (dist > BULLET_HIT_RADIUS) continue
 
-                if (!bullet.ownerAttackTendency(bullet.ownerFaction, target.combat.faction)) continue
+                    if (bullet.ownerAttackTendency(bullet.ownerFaction, target.combat.faction)) {
+                        if (bullet.explosionRadius > 0) {
+                            detonateAt(bullet, bulletPos.x, bulletPos.y, bulletPos.z, allCharacters)
+                        } else {
+                            applyDamage(target.combat, {
+                                sourceId: bullet.ownerId,
+                                targetId: target.id,
+                                baseAmount: bullet.damage,
+                                finalAmount: bullet.damage,
+                                skillId: 'ranged',
+                            })
 
-                if (bullet.explosionRadius > 0) {
-                    const owner = getOwnerEntity(bullet.ownerId, allCharacters)
-                    if (owner) {
-                        applyExplosionDamage(
-                            bulletPos.x, bulletPos.y, bulletPos.z,
-                            bullet.explosionRadius, bullet.damage, bullet.knockbackForce,
-                            owner, allCharacters,
-                        )
-                    }
-                } else {
-                    applyDamage(target.combat, {
-                        sourceId: bullet.ownerId,
-                        targetId: target.id,
-                        baseAmount: bullet.damage,
-                        finalAmount: bullet.damage,
-                        skillId: 'ranged',
-                    })
-
-                    if (bullet.knockbackForce > 0) {
-                        v3Set(_tmpVec,
-                            tp.x - bulletPos.x,
-                            0,
-                            tp.z - bulletPos.z,
-                        )
-                        const len = v3Length(_tmpVec)
-                        if (len > 0.0001) {
-                            _tmpVec.x /= len
-                            _tmpVec.z /= len
-                            target.body.applyImpulseAtPoint(
-                                {
-                                    x: _tmpVec.x * bullet.knockbackForce,
-                                    y: 1,
-                                    z: _tmpVec.z * bullet.knockbackForce,
-                                },
-                                target.body.translation(),
-                                true,
-                            )
+                            if (bullet.knockbackForce > 0) {
+                                v3Set(_tmpVec,
+                                    tp.x - bulletPos.x,
+                                    0,
+                                    tp.z - bulletPos.z,
+                                )
+                                const len = v3Length(_tmpVec)
+                                if (len > 0.0001) {
+                                    _tmpVec.x /= len
+                                    _tmpVec.z /= len
+                                    target.body.applyImpulseAtPoint(
+                                        {
+                                            x: _tmpVec.x * bullet.knockbackForce,
+                                            y: 1,
+                                            z: _tmpVec.z * bullet.knockbackForce,
+                                        },
+                                        target.body.translation(),
+                                        true,
+                                    )
+                                }
+                            }
                         }
                     }
-                }
 
-                removeBullet(i)
-                hit = true
-                break
+                    removeBullet(i)
+                    hit = true
+                    break
+                }
+            }
+
+            /* 2) 场景几何命中 —— 扫描「上一帧位置 → 当前位置」整段位移，
+             * 高速子弹因此不会穿过薄碰撞体；命中可穿过类别之外的场景几何即消失（爆炸子弹就地引爆） */
+            if (!hit) {
+                const dx = bulletPos.x - bullet.prevX
+                const dy = bulletPos.y - bullet.prevY
+                const dz = bulletPos.z - bullet.prevZ
+                if (dx !== 0 || dy !== 0 || dz !== 0) {
+                    v3Set(_sweepOrigin, bullet.prevX, bullet.prevY, bullet.prevZ)
+                    v3Set(_sweepVelocity, dx, dy, dz)
+                    const sweep = world.castShape(
+                        _sweepOrigin, IDENTITY_ROTATION, _sweepVelocity, bulletShape,
+                        /* targetDistance 0（接触即命中）、maxToi 1（正好覆盖本帧位移）、初始穿模即判定 */
+                        0, 1, true,
+                        undefined, undefined, bullet.collider, bullet.body,
+                        (collider) => blocksBullet(collider, bullet.passThroughMask),
+                    )
+                    if (sweep) {
+                        /* 爆炸落点取命中点（而非本帧终点），避免爆炸中心埋进碰撞体内部 */
+                        const toi = sweep.time_of_impact
+                        detonateAt(
+                            bullet,
+                            bullet.prevX + dx * toi,
+                            bullet.prevY + dy * toi,
+                            bullet.prevZ + dz * toi,
+                            allCharacters,
+                        )
+                        removeBullet(i)
+                        hit = true
+                    }
+                }
             }
 
             if (hit) continue
+
+            bullet.prevX = bulletPos.x
+            bullet.prevY = bulletPos.y
+            bullet.prevZ = bulletPos.z
 
             const lv = bullet.body.linvel()
             const speed = v3Length(lv)
@@ -328,5 +399,7 @@ export const createRangedExecutor = (
         bullets.length = 0
     }
 
-    return {type: 'ranged', start, update, end, updateBullets, clear}
+    const getBulletCount = (): number => bullets.length
+
+    return {type: 'ranged', start, update, end, updateBullets, getBulletCount, clear}
 }

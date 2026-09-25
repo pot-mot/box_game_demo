@@ -3,6 +3,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import {createColliderForBody, setBodyMass} from '../../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {FRAGMENT_COLLISION_GROUP, FRAGMENT_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {categoryCollisionGroups} from '../../../../physics/collision_category.ts'
 import type {FragmentConfig, Fragment, FragmentEntityContext} from '../types'
 import type {FragmentData} from '../../../destroyed/types'
 import type {XYZ} from '../../../box/base/types'
@@ -81,7 +82,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
             .setFriction(0.5)
             /* 密度 0：质量完全由附加质量决定 */
             .setDensity(0)
-            .setCollisionGroups((FRAGMENT_COLLISION_GROUP << 16) | (FRAGMENT_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(FRAGMENT_COLLISION_GROUP, FRAGMENT_COLLISION_MASK, 'fragment'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS), body)
         /* 碎片质量 = config.mass（对齐 cannon-es master） */
         setBodyMass(body, Math.max(cfg.mass, 0.01))

@@ -353,6 +353,20 @@ idle/walking ──→ attacking (meta-state)
 
 SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次）→ `applyDamage` + 击退冲量（方向 = 武器握把 → 目标的水平方向）+ `onHit` 回调（顿帧/相机震动等打击感）。击退方向以武器握把世界位置为起点（`weaponGroup.getWorldPosition`）。
 
+### 5.4 投掷物（子弹）碰撞与可穿过类别
+
+**文件**：`src/entity/character/combat/ranged_executor.ts`
+
+子弹自身是 `mask 0` 的 sensor（不与任何物体产生物理交互），命中判定完全由每帧的显式检测完成，因此「命中什么会消失」由数据驱动：
+
+- **配置字段**：`RangedWeaponConfig.passThroughCategories?: readonly CollisionCategory[]`。默认值 `DEFAULT_BULLET_PASS_THROUGH_CATEGORIES = ['area']`（`character/weapon/ranged_weapon.ts`），即**默认只穿过水域**；命中其它类别（`box` / `fragment` / `terrain` / `ground` / `character`）子弹立即消失。
+- **类别系统**：`src/physics/collision_category.ts`。类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）以 membership 位（第 5 位起，避开交互组 1/2/4/8/16）并入碰撞体的 `collisionGroups`，经 `categoryCollisionGroups(group, mask, category)` 打包；类别位不参与交互（其它碰撞体的 filter 均不含这些位），仅用于查询侧识别。
+- **数值编译**：命中判定用位掩码，`passThroughCategories` 在开火时编译为 `passThroughMask`（逐帧 O(1)）。
+- **场景几何（箱子 / 碎片 / 地形 / 世界地面）**：每帧用 `world.castShape` 扫描「上一帧位置 → 当前位置」整段位移（`maxToi = 1`、初始穿模即判定），因此高速子弹不会穿过薄碰撞体。扫描用 `filterPredicate` 放行可穿过类别，其余已标注类别的碰撞体一律阻挡；爆炸子弹（`explosionRadius > 0`）在**命中点**就地引爆后消失。
+- **角色**：沿用宽容半径判定（`BULLET_HIT_RADIUS`，覆盖受击箱 + 一帧位移），不参与形状扫描。命中角色即消失；仅 `attackTendency` 判定为敌对时结算伤害 / 击退 / 爆炸——**非敌对角色同样会挡下子弹（不结算伤害）**。把 `character` 加入 `passThroughCategories` 则该武器对所有角色完全透明（穿过且不结算伤害，即「幽灵弹」；带伤害的贯穿弹属未实现能力）。
+- **兜底路径**：生命期耗尽、坠出世界（`y < -10`）、爆炸子弹掉到地面以下（`y < 0`，正常已被地面扫描拦下）、命中后速度 < 1，均沿用原有消失逻辑。
+- **未标注类别的碰撞体**（武器、其它子弹）不阻挡子弹；未显式声明碰撞组者 membership 全 1，按声明顺序解析为 `ground` → 阻挡（fail-closed）。
+
 ---
 
 ## 六、动画系统（骨骼 clip 化，M4 迁移后）
@@ -506,6 +520,9 @@ export type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${Attack
 | 修改 | `src/entity/character/appearance/weapon_mesh.ts` | 武器本地命中箱 `WeaponLocalHitBox`（近战武器显式打击部位盒） |
 | 修改 | `src/entity/character/appearance/model.ts` | 暴露 `weaponGroup` / `weaponHitBox` |
 | 修改 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/受击箱（青）/检测箱（橙）/射程圆环（橙，远程）/视线扇形（蓝）五组件 debug 可视化 |
+| **NEW** | `src/physics/collision_category.ts` | 碰撞类别（`ground`/`box`/`fragment`/`area`/`terrain`/`character`）与 membership 位打包 / 解析 / 掩码工具，投掷物穿透判定与类别识别共用 |
+| 修改 | `src/character/weapon/ranged_weapon.ts` | `RangedWeaponConfig` 新增 `passThroughCategories`（子弹可穿过类别列表）；导出默认值 `DEFAULT_BULLET_PASS_THROUGH_CATEGORIES = ['area']` |
+| 修改 | `src/entity/character/combat/ranged_executor.ts` | 子弹新增可穿过类别判定：场景几何走 `castShape` 位移扫描（可穿过类别由 predicate 放行），角色走宽容半径判定；命中非列表类别即消失，爆炸子弹就地引爆 |
 
 ---
 
@@ -569,6 +586,10 @@ describe 区块：连段守卫（test_weapon 蓄力/方向组合键）、平地�
 ### 11.5 伤害判定几何 — `entity/character/combat/obb.test.ts` / `melee_executor.test.ts`
 
 OBB 构造与 15 轴 SAT 相交；攻击检测箱（`attackDetectOBB` / `testAttackDetect`）；武器命中箱判定（`testMeleeHit`）。
+
+### 11.5.1 投掷物穿透与碰撞类别 — `entity/character/combat/ranged_executor.test.ts` / `physics/collision_category.test.ts`
+
+真实 rapier 世界夹具（`harness.ts`）端到端覆盖：默认（仅 area）命中箱子即消失且箱后目标无伤害、可穿过列表加入 `box` 后穿过箱子命中目标、`area` 类别不阻挡、世界地面落地即消失、地形/碎片阻挡、非敌对角色挡下子弹不结算伤害、`character` 入列后角色完全透明、空列表命中场景几何即消失、爆炸子弹命中场景几何就地引爆。`collision_category` 覆盖类别位打包/解析往返、掩码匹配、`isBlockingGeometry` 判定与 fail-closed 行为。
 
 ### 11.6 地面检测 — `character/state_machine/ground.test.ts`
 

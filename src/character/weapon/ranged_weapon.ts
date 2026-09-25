@@ -1,4 +1,11 @@
 import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
+import type { CollisionCategory } from '../../physics/collision_category.ts'
+
+/**
+ * 投掷物默认可穿过的碰撞类别 —— 仅水域（area）：
+ * 其余类别（角色 / 箱子 / 碎片 / 地形 / 世界地面）命中即消失，见 `entity/character/combat/ranged_executor.ts`。
+ */
+export const DEFAULT_BULLET_PASS_THROUGH_CATEGORIES: readonly CollisionCategory[] = ['area']
 
 /** 远程武器配置 — 玩家装备该武器的全部固有属性 */
 export interface RangedWeaponConfig {
@@ -27,6 +34,11 @@ export interface RangedWeaponConfig {
     readonly explosionRadius?: number
     readonly homingStrength?: number
     readonly throwAngle?: number
+    /**
+     * 子弹可穿过的碰撞类别列表（默认 `DEFAULT_BULLET_PASS_THROUGH_CATEGORIES` = 仅 area）：
+     * 命中列表内类别的物体时子弹继续飞行，命中其它类别（角色 / 箱子 / 碎片 / 地形 / 世界地面）即消失。
+     */
+    readonly passThroughCategories?: readonly CollisionCategory[]
 }
 
 export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {

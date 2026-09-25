@@ -2,6 +2,7 @@ import {type Scene, ShaderMaterial} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, GROUND_Y} from '../../../../physics/constants.ts'
+import {categoryCollisionGroups} from '../../../../physics/collision_category.ts'
 import {createColliderForBody, setBodyMass} from '../../../../physics/rapier_utils.ts'
 import type {BurningBoxConfig, BurningBox, BurningBoxAddOptions, BurningEntityContext} from '../types'
 import type {EntityPanelInfo} from '../../base/types/entity_info'
@@ -79,7 +80,7 @@ export const setupBurningBoxes = (
             .setFriction(0.5)
             /* 密度 0：质量完全由附加质量决定 */
             .setDensity(0)
-            .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'box'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
         if (!isStatic) {
@@ -176,7 +177,7 @@ export const setupBurningBoxes = (
                 .setFriction(0.5)
                 /* 密度 0：重建碰撞体不改变刚体质量 */
                 .setDensity(0)
-                .setCollisionGroups((DEFAULT_COLLISION_GROUP << 16) | (DEFAULT_COLLISION_MASK & 0xFFFF))
+                .setCollisionGroups(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'box'))
                 .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             pb.mainCollider = createColliderForBody(world, colliderDesc, pb.body)
             const pos = pb.body.translation()

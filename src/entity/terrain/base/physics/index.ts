@@ -10,6 +10,7 @@ import {createTerrainMesh, rebuildTerrainMesh} from '../render'
 import {DEFAULT_TERRAIN_CONFIG} from '../validation.ts'
 import {BRUSH_RADIUS, BRUSH_STRENGTH} from '../../constants.ts'
 import {TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK} from '../../../../physics/constants.ts'
+import {categoryCollisionGroups} from '../../../../physics/collision_category.ts'
 
 import type {BaseTerrainConfig, BaseTerrainEntity, TerrainSetupOptions, TerrainContext} from '../types'
 
@@ -123,7 +124,7 @@ export const createTerrainContextImpl = (
 
         const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indices)
             .setFriction(0.5)
-            .setCollisionGroups((TERRAIN_COLLISION_GROUP << 16) | (TERRAIN_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK, 'terrain'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
 
@@ -284,7 +285,7 @@ export const createTerrainContextImpl = (
         const {vertices, indices} = buildTrimesh(t.heights, gs, cs)
         const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indices)
             .setFriction(0.5)
-            .setCollisionGroups((TERRAIN_COLLISION_GROUP << 16) | (TERRAIN_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK, 'terrain'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         t.mainCollider = createColliderForBody(world, colliderDesc, t.body)
 

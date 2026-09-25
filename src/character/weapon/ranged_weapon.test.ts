@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest'
-import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from './ranged_weapon.ts'
+import {DEFAULT_BULLET_PASS_THROUGH_CATEGORIES, RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from './ranged_weapon.ts'
 import {MELEE_WEAPON_PRESETS} from './melee_weapon.ts'
 
 const presets = Object.entries(RANGED_WEAPON_PRESETS) as [string, RangedWeaponConfig][]
@@ -86,5 +86,17 @@ describe('RANGED_WEAPON_PRESETS', () => {
     it('每个键名唯一', () => {
         const ids = presets.map(([, w]) => w.id)
         expect(new Set(ids).size).toBe(ids.length)
+    })
+})
+
+describe('子弹可穿过类别（DEFAULT_BULLET_PASS_THROUGH_CATEGORIES）', () => {
+    it('默认仅可穿过 area', () => {
+        expect(DEFAULT_BULLET_PASS_THROUGH_CATEGORIES).toEqual(['area'])
+    })
+
+    it.each(presetIds)('%s 未覆写该字段 → 沿用默认（仅 area）', (key) => {
+        const configured = RANGED_WEAPON_PRESETS[key].passThroughCategories
+            ?? DEFAULT_BULLET_PASS_THROUGH_CATEGORIES
+        expect(configured).toEqual(['area'])
     })
 })

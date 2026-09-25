@@ -37,6 +37,7 @@ import type {CharacterModel} from '../appearance/types.ts'
 import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG} from '../validation.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE} from '../constants.ts'
+import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import {resolveGroundState} from './ground_state.ts'
 import type {GroundContactLike} from './ground_state.ts'
@@ -341,7 +342,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             .setFriction(0)
             /* 密度 0：质量完全由附加质量决定，与碰撞体尺寸（scale）解耦 */
             .setDensity(0)
-            .setCollisionGroups((CHARACTER_COLLISION_GROUP << 16) | (CHARACTER_COLLISION_MASK & 0xFFFF))
+            .setCollisionGroups(categoryCollisionGroups(CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, 'character'))
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
         const mainCollider = createColliderForBody(world, colliderDesc, body)
         /* 质量恒为 1（对齐 cannon-es master）：击退/磁力/浮力均按 mass=1 计算。
@@ -1144,7 +1145,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 .setFriction(0)
                 /* 密度 0：重建碰撞体不改变刚体质量（恒为 1） */
                 .setDensity(0)
-                .setCollisionGroups((CHARACTER_COLLISION_GROUP << 16) | (CHARACTER_COLLISION_MASK & 0xFFFF))
+                .setCollisionGroups(categoryCollisionGroups(CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, 'character'))
                 .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
             entity.mainCollider = createColliderForBody(world, colliderDesc, entity.body)
             /* 重建后刷新总质量（碰撞体密度 0，质量仍为 1） */
