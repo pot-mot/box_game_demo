@@ -3,11 +3,13 @@ import type {SpawnMode} from '../../types/spawnMode.ts'
 import type {EntityInfoSource} from '../../entity/box/base/types/entity_info.ts'
 import type {TerrainContext} from '../../entity/terrain/base/types'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
+import {getInputRegistry} from '../../input/registry.ts'
 import {focusPanel} from '../../ui/entity_control_panel.ts'
 import type {TransformGizmo, DragState, GizmoPartType} from './transform_gizmo.ts'
 
 /**
- * 指针交互（左键选中 + 右键生成 + 滚轮雕刻）。
+ * 指针交互（左键选中 + 「生成物体」绑定生成 + 滚轮雕刻）。
+ * 生成键取自操作设置中的「生成物体」绑定（默认右键，可改为其它鼠标键或键盘键）。
  * 返回 setEnabled 控制开关，用于编辑/游玩模式切换。
  */
 export const setupPointerInteraction = (
@@ -25,6 +27,7 @@ export const setupPointerInteraction = (
     getActivePart: () => GizmoPartType | undefined
 } => {
     const sourcesByType = new Map(sources.map(s => [s.type, s]))
+    const input = getInputRegistry()
     const raycaster = new Raycaster()
     const pointer = new Vector2()
     let pointerDownPos = {x: 0, y: 0}
@@ -177,17 +180,14 @@ export const setupPointerInteraction = (
         }
     }
 
-    const handleContextMenu = (e: MouseEvent) => {
-        if (!enabled) return
-        /* gizmo 拖拽中屏蔽右键生成，避免拖拽过程意外创建实体 */
-        if (dragState) return
-        e.preventDefault()
+    /** 在给定屏幕坐标处生成一个当前类型的实体 */
+    const spawnAtScreen = (clientX: number, clientY: number): void => {
         const mode = getSpawnMode()
         const source = sourcesByType.get(mode)
         if (!source) return
 
-        pointer.x = (e.clientX / window.innerWidth) * 2 - 1
-        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
+        pointer.x = (clientX / window.innerWidth) * 2 - 1
+        pointer.y = -(clientY / window.innerHeight) * 2 + 1
         raycaster.setFromCamera(pointer, camera)
 
         const allMeshes = sources.flatMap(s => s.getMeshes())
@@ -202,6 +202,30 @@ export const setupPointerInteraction = (
         }
 
         source.spawnAt(spawnPos.x, spawnPos.y, spawnPos.z)
+    }
+
+    /** 「生成物体」绑定为鼠标键：在指针处生成（gizmo 拖拽中屏蔽，避免拖拽过程意外创建实体） */
+    const handleSpawnPointerDown = (e: PointerEvent) => {
+        if (!enabled || dragState) return
+        if (!input.matchesMouseButton('spawn_entity', e.button)) return
+        e.preventDefault()
+        spawnAtScreen(e.clientX, e.clientY)
+    }
+
+    /** 「生成物体」绑定为键盘键：在最后记录的指针位置生成（指针从未进入画布时取屏幕中心） */
+    const handleSpawnKey = () => {
+        if (!enabled || dragState) return
+        if (Number.isNaN(lastPointer.x)) {
+            spawnAtScreen(window.innerWidth / 2, window.innerHeight / 2)
+        } else {
+            spawnAtScreen(lastPointer.x, lastPointer.y)
+        }
+    }
+
+    /** 屏蔽画布右键菜单（生成改由「生成物体」绑定在 pointerdown 触发） */
+    const handleContextMenu = (e: MouseEvent) => {
+        if (!enabled) return
+        e.preventDefault()
     }
 
     const handlePointerMove = (e: PointerEvent) => {
@@ -233,6 +257,7 @@ export const setupPointerInteraction = (
     const getActivePart = (): GizmoPartType | undefined => dragState?.partType
 
     renderer.domElement.addEventListener('pointerdown', handlePointerDown)
+    renderer.domElement.addEventListener('pointerdown', handleSpawnPointerDown)
     /* move/up 注册到 window：拖拽拖出 canvas 后仍能跟踪与结束 */
     window.addEventListener('pointerup', handlePointerUp)
     window.addEventListener('pointermove', handlePointerMove)
@@ -241,6 +266,8 @@ export const setupPointerInteraction = (
     window.addEventListener('blur', cancelDrag)
     renderer.domElement.addEventListener('wheel', handleWheel)
     renderer.domElement.addEventListener('contextmenu', handleContextMenu)
+    /* 键盘绑定「生成物体」时按动作回调触发 */
+    input.onActionDown('spawn_entity', handleSpawnKey)
 
     return {
         setEnabled: (v: boolean) => { enabled = v },

@@ -26,7 +26,6 @@ import type {CharacterEntitySystem} from './entity/character/physics/world.ts'
 import type {CharacterEntity} from './character/types.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
 import {setupStartupScreen} from './modes/startup_screen.ts'
-import {setupInstructionsPanel} from './modes/instructions_panel.ts'
 import {setupSettingsPanel} from './ui/settings_panel.ts'
 import {setupEditMode} from './modes/edit'
 import type {EditModeController} from './modes/edit'
@@ -42,7 +41,7 @@ import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
 import {promptLoadFile} from './save_load/actions.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
 import {createInputRegistry} from './input/registry.ts'
-import {openBindingPanel} from './input/binding_panel.ts'
+import {openOperationsPanel} from './input/operations_panel.ts'
 
 type EntitySystem = EntityInfoSource & EntityTickHandler
 
@@ -272,7 +271,6 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
 
     // --- UI ---
     const cameraInfoUpdate = mode === 'showcase' ? () => {} : setupCameraInfo(camera)
-    const {updater: instructionsUpdate, toggle: toggleInstructions} = setupInstructionsPanel(() => mode)
 
     // --- 存档快捷键（展示模式无世界实体、骨骼动画模式走独立资产导入导出，均不注册） ---
     if (mode !== 'showcase' && mode !== 'bone_edit') input.onActionDown('save_world', () => {
@@ -310,8 +308,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
 
     // --- 设置面板（右上角齿轮） ---
     setupSettingsPanel(
-        toggleInstructions,
-        openBindingPanel,
+        () => openOperationsPanel(mode),
         mode === 'showcase' ? () => showcaseMode?.exit() : undefined,
     )
 
@@ -379,7 +376,6 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             }
 
             cameraInfoUpdate()
-            instructionsUpdate()
             input.getUpdater()()
         } catch (e) {
             console.warn('Frame update failed:', e)

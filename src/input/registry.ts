@@ -1,6 +1,6 @@
 import type {InputAction, InputRegistry, KeyCombo, BindingsMap} from './types.ts'
 import {INPUT_ACTIONS} from './types.ts'
-import {DEFAULT_BINDINGS, STORAGE_KEY} from './constants.ts'
+import {DEFAULT_BINDINGS, STORAGE_KEY, mouseCode} from './constants.ts'
 import type {DeepReadonly} from '../types/readonly.ts'
 
 /** 将 combo 规范化为排序后的不可变数组 */
@@ -23,13 +23,19 @@ class InputRegistryImpl implements InputRegistry {
     private lastWinningActions = new Set<InputAction>()
     private callbacks = new Map<InputAction, Set<() => void>>()
     private bindings: BindingsMap
-    private keyCapture: ((combo: KeyCombo) => void) | undefined
+    private inputCapture: ((combo: KeyCombo) => void) | undefined
     private captureMax: KeyCombo | undefined
+    /** 鼠标捕获刚结束：吞掉紧随其后的 click / contextmenu（下一次 mousedown 自动解除） */
+    private swallowNextClick = false
     private destroyed = false
 
     private onKeyDownBound: (e: KeyboardEvent) => void
     private onKeyUpBound: (e: KeyboardEvent) => void
     private onBlurBound: () => void
+    private onMouseDownBound: (e: MouseEvent) => void
+    private onMouseUpBound: (e: MouseEvent) => void
+    private onClickBound: (e: MouseEvent) => void
+    private onContextMenuBound: (e: MouseEvent) => void
 
     constructor() {
         this.bindings = this.loadFromStorageInternal() ?? this.cloneDefaults()
@@ -41,10 +47,19 @@ class InputRegistryImpl implements InputRegistry {
         this.onKeyDownBound = (e) => this.handleKeyDown(e)
         this.onKeyUpBound = (e) => this.handleKeyUp(e)
         this.onBlurBound = () => this.handleBlur()
+        this.onMouseDownBound = (e) => this.handleMouseDown(e)
+        this.onMouseUpBound = (e) => this.handleMouseUp(e)
+        this.onClickBound = (e) => this.handleSuppressedMouseEvent(e)
+        this.onContextMenuBound = (e) => this.handleSuppressedMouseEvent(e)
 
         window.addEventListener('keydown', this.onKeyDownBound)
         window.addEventListener('keyup', this.onKeyUpBound)
         window.addEventListener('blur', this.onBlurBound)
+        /* 鼠标捕获走捕获阶段：stopPropagation 可拦住画布/窗口上的相机、拾取等监听 */
+        window.addEventListener('mousedown', this.onMouseDownBound, {capture: true})
+        window.addEventListener('mouseup', this.onMouseUpBound, {capture: true})
+        window.addEventListener('click', this.onClickBound, {capture: true})
+        window.addEventListener('contextmenu', this.onContextMenuBound, {capture: true})
     }
 
     /* ── 公开 API ── */
@@ -71,13 +86,23 @@ class InputRegistryImpl implements InputRegistry {
         set?.add(callback)
     }
 
-    readonly setKeyCapture = (handler: ((combo: KeyCombo) => void) | undefined): void => {
-        this.keyCapture = handler
+    readonly setInputCapture = (handler: ((combo: KeyCombo) => void) | undefined): void => {
+        this.inputCapture = handler
         this.captureMax = undefined
         if (handler) {
             this.activeKeys.clear()
             this.lastWinningActions.clear()
         }
+    }
+
+    readonly matchesMouseButton = (action: InputAction, button: number): boolean => {
+        const code = mouseCode(button)
+        for (const combo of this.bindings[action]) {
+            if (!combo.includes(code)) continue
+            /* 组合中的其它键（修饰键等）必须处于按下状态 */
+            if (combo.every(c => c === code || this.activeKeys.has(c))) return true
+        }
+        return false
     }
 
     readonly getBindings = (): DeepReadonly<BindingsMap> => this.bindings
@@ -118,11 +143,16 @@ class InputRegistryImpl implements InputRegistry {
         window.removeEventListener('keydown', this.onKeyDownBound)
         window.removeEventListener('keyup', this.onKeyUpBound)
         window.removeEventListener('blur', this.onBlurBound)
+        window.removeEventListener('mousedown', this.onMouseDownBound, {capture: true})
+        window.removeEventListener('mouseup', this.onMouseUpBound, {capture: true})
+        window.removeEventListener('click', this.onClickBound, {capture: true})
+        window.removeEventListener('contextmenu', this.onContextMenuBound, {capture: true})
         this.activeKeys.clear()
         this.pressedThisFrame.clear()
         this.lastWinningActions.clear()
         this.callbacks.clear()
-        this.keyCapture = undefined
+        this.inputCapture = undefined
+        this.swallowNextClick = false
     }
 
     /* ── 内部方法 ── */
@@ -162,11 +192,11 @@ class InputRegistryImpl implements InputRegistry {
         if (this.destroyed) return
 
         /* 捕获模式 */
-        if (this.keyCapture) {
+        if (this.inputCapture) {
             e.preventDefault()
             /* Esc 取消捕获 */
             if (e.code === 'Escape') {
-                this.keyCapture = undefined
+                this.inputCapture = undefined
                 this.captureMax = undefined
                 this.activeKeys.clear()
                 return
@@ -215,21 +245,64 @@ class InputRegistryImpl implements InputRegistry {
     private handleKeyUp(e: KeyboardEvent): void {
         if (this.destroyed) return
 
-        if (this.keyCapture) {
+        if (this.inputCapture) {
             this.activeKeys.delete(e.code)
             /* 所有键释放且有有效最大组合 → 确认 */
             if (this.activeKeys.size === 0 && this.captureMax && this.captureMax.length > 0) {
-                const handler = this.keyCapture
-                this.keyCapture = undefined
-                const combo = this.captureMax
-                this.captureMax = undefined
-                handler(combo)
+                this.finishCapture()
             }
             return
         }
 
         this.activeKeys.delete(e.code)
         this.lastWinningActions = this.computeWinningActions()
+    }
+
+    /** 鼠标按下：捕获模式下记录按键码，并拦住画布上的相机/拾取监听 */
+    private handleMouseDown(e: MouseEvent): void {
+        if (this.destroyed) return
+        /* 新的按下意味着上一次交互已结束，解除一次性吞掉标记 */
+        this.swallowNextClick = false
+        if (!this.inputCapture) return
+        e.preventDefault()
+        e.stopPropagation()
+        this.activeKeys.add(mouseCode(e.button))
+        const combo = normalize(this.activeKeys)
+        if (!this.captureMax || combo.length >= this.captureMax.length) {
+            this.captureMax = combo
+        }
+    }
+
+    /** 鼠标抬起：全部按键释放后确认捕获结果 */
+    private handleMouseUp(e: MouseEvent): void {
+        if (this.destroyed) return
+        if (!this.inputCapture) return
+        e.preventDefault()
+        e.stopPropagation()
+        this.activeKeys.delete(mouseCode(e.button))
+        if (this.activeKeys.size > 0) return
+        if (!this.captureMax || this.captureMax.length === 0) return
+        this.swallowNextClick = true
+        this.finishCapture()
+    }
+
+    /** 捕获中或捕获刚结束：吞掉 click / contextmenu，避免误触关闭面板或弹出右键菜单 */
+    private handleSuppressedMouseEvent(e: MouseEvent): void {
+        if (this.destroyed) return
+        if (this.inputCapture || this.swallowNextClick) {
+            e.preventDefault()
+            e.stopPropagation()
+            this.swallowNextClick = false
+        }
+    }
+
+    /** 结束捕获并把最终组合交给面板 */
+    private finishCapture(): void {
+        const handler = this.inputCapture
+        const combo = this.captureMax
+        this.inputCapture = undefined
+        this.captureMax = undefined
+        if (handler && combo) handler(combo)
     }
 
     private handleBlur(): void {

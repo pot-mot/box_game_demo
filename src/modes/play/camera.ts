@@ -15,7 +15,8 @@ export interface MouseAttackCallbacks {
 
 /**
  * 游玩模式相机：有玩家 → 第三人称环绕（平滑跟随目标，抑制角色弹跳导致的抖动）；无玩家 → 自由飞行。
- * 左键拖拽旋转相机，左键短按松开触发轻击，右键松开触发重击；均携带按住时长供蓄力守卫区分点按/长按。
+ * 「旋转视角」绑定（默认左键）拖拽旋转相机，左键短按松开触发轻击，右键松开触发重击；
+ * 攻击均携带按住时长供蓄力守卫区分点按/长按，拖拽视角时该次攻击不触发。
  */
 export const setupPlayCamera = (
     camera: PerspectiveCamera,
@@ -27,8 +28,9 @@ export const setupPlayCamera = (
     let yaw = Math.PI
     let pitch = Math.PI / 6
     let distance = 6
-    let isDown = false
-    /** 左键按下后累计移动距离（像素），用于区分 click / drag */
+    /** 正在按住「旋转视角」绑定的鼠标按键（undefined = 未按下） */
+    let orbitButton: number | undefined
+    /** 旋转键按下后累计移动距离（像素），用于区分 click / drag */
     let dragDist = 0
     /** 攻击键按下时刻（performance.now()，undefined = 未按下），松开时算按住时长 */
     let leftDownAt: number | undefined
@@ -38,11 +40,13 @@ export const setupPlayCamera = (
     let hasSmoothedTarget = false
 
     element.addEventListener('mousedown', (e: MouseEvent) => {
-        if (e.button === 0) {
-            isDown = true
+        if (input.matchesMouseButton('mouse_orbit', e.button)) {
+            orbitButton = e.button
             dragDist = 0
-            leftDownAt = performance.now()
             element.focus()
+        }
+        if (e.button === 0) {
+            leftDownAt = performance.now()
         }
         if (e.button === 2) {
             e.preventDefault()
@@ -51,31 +55,33 @@ export const setupPlayCamera = (
     })
     element.addEventListener('contextmenu', (e: Event) => {
         e.preventDefault()
-        isDown = false
+        orbitButton = undefined
         leftDownAt = undefined
         rightDownAt = undefined
     })
     window.addEventListener('blur', () => {
-        isDown = false
+        orbitButton = undefined
         leftDownAt = undefined
         rightDownAt = undefined
     })
     window.addEventListener('mouseup', (e: MouseEvent) => {
+        /* 本次拖拽是否达到点击阈值之外的位移（拖拽视角不触攻击） */
+        const dragged = e.button === orbitButton && dragDist >= CLICK_DRAG_THRESHOLD
+        if (e.button === orbitButton) orbitButton = undefined
         if (e.button === 0) {
-            if (isDown && dragDist < CLICK_DRAG_THRESHOLD && leftDownAt !== undefined) {
+            if (!dragged && leftDownAt !== undefined) {
                 mouseAttack?.onLightAttack((performance.now() - leftDownAt) / 1000)
             }
-            isDown = false
             leftDownAt = undefined
         }
-        if (e.button === 2 && rightDownAt !== undefined) {
+        if (e.button === 2 && !dragged && rightDownAt !== undefined) {
             /* 重击改在松开时触发：携带按住时长，支持右键蓄力 */
             mouseAttack?.onHeavyAttack((performance.now() - rightDownAt) / 1000)
             rightDownAt = undefined
         }
     })
     window.addEventListener('mousemove', (e: MouseEvent) => {
-        if (!isDown) return
+        if (orbitButton === undefined) return
         const mx = e.movementX
         const my = e.movementY
         dragDist += Math.hypot(mx, my)

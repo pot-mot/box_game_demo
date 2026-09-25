@@ -5,12 +5,13 @@ import {applyFreeFlightMovement} from './free_flight.ts'
 
 /**
  * 鼠标拖拽旋转相机（偏航/俯仰）：edit 与 bone_edit 模式共用。
- * 监听 mousedown/mousemove/mouseup（仅左键拖拽旋转）。
+ * 监听 mousedown/mousemove/mouseup，按键取自操作设置中的「旋转视角」绑定。
  */
 export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement): {
     setOrientation: (yaw: number, pitch: number) => void
     setEnabled: (v: boolean) => void
 } => {
+    const input = getInputRegistry()
     let yaw = 0
     let pitch = 0
     let isDown = false
@@ -22,7 +23,10 @@ export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement)
     }
 
     element.addEventListener('mousedown', (e: MouseEvent) => {
-        if (e.button === 0 && enabled) { isDown = true; element.focus() }
+        if (enabled && input.matchesMouseButton('mouse_orbit', e.button)) {
+            isDown = true
+            element.focus()
+        }
     })
     window.addEventListener('mouseup', () => { isDown = false })
     window.addEventListener('mousemove', (e: MouseEvent) => {
@@ -48,7 +52,7 @@ export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement)
 }
 
 /**
- * WASD+EQ 第一人称相机移动（edit 与 bone_edit 模式共用）。
+ * WASD+ZX 第一人称相机移动（edit 与 bone_edit 模式共用）。
  * 支持启用/禁用（setEnabled）；返回 updater 函数，由主循环每帧调用。
  */
 export const setupKeyboardCamera = (camera: PerspectiveCamera): {

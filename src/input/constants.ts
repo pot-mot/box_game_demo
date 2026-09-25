@@ -7,18 +7,28 @@ export const DEFAULT_BINDINGS: BindingsMap = {
     move_backward: [['KeyS']],
     move_left: [['KeyA']],
     move_right: [['KeyD']],
-    move_up: [['KeyE']],
-    move_down: [['KeyQ']],
+    move_up: [['KeyZ']],
+    move_down: [['KeyX']],
     jump: [['Space']],
     sprint: [['ShiftLeft'], ['ShiftRight']],
     cycle_spawn_up: [['ArrowUp']],
     cycle_spawn_down: [['ArrowDown']],
     delete_entity: [['Delete']],
     close_panel: [['Escape']],
-    toggle_help: [['F1']],
     save_world: [['ControlLeft', 'KeyS'], ['MetaLeft', 'KeyS']],
     load_world: [['ControlLeft', 'KeyO'], ['MetaLeft', 'KeyO']],
+    /* 鼠标视角：左键拖拽旋转 / 右键拖拽平移（展示模式），均可在操作设置中修改 */
+    mouse_orbit: [['Mouse0']],
+    mouse_pan: [['Mouse2']],
+    /* 生成物体：默认右键（编辑模式），与展示模式的右键平移互不冲突，可在操作设置中修改 */
+    spawn_entity: [['Mouse2']],
 }
+
+/** 鼠标按键码前缀（Mouse0 = 左键 / Mouse1 = 中键 / Mouse2 = 右键，与 KeyboardEvent.code 共用同一绑定空间） */
+export const MOUSE_CODE_PREFIX = 'Mouse'
+
+/** MouseEvent.button → 统一绑定码 */
+export const mouseCode = (button: number): string => `${MOUSE_CODE_PREFIX}${button}`
 
 /** KeyboardEvent.code → 可读键名映射 */
 export const CODE_LABELS: Record<string, string> = {
@@ -58,6 +68,9 @@ export const CODE_LABELS: Record<string, string> = {
     Backslash: '\\', Semicolon: ';', Quote: '\'',
     Comma: ',', Period: '.', Slash: '/',
     Backquote: '`',
+    // 鼠标按键
+    Mouse0: '鼠标左键', Mouse1: '鼠标中键', Mouse2: '鼠标右键',
+    Mouse3: '鼠标侧键1', Mouse4: '鼠标侧键2',
 }
 
 /**
@@ -73,25 +86,27 @@ export const combosEqual = (a: KeyCombo, b: KeyCombo): boolean => {
 }
 
 /**
- * 在当前绑定中查找与给定 combo 冲突的条目。
- * 返回冲突动作名称，无冲突返回 undefined。
+ * 在当前绑定中查找与给定 combo 冲突的**全部**条目。
+ * 返回冲突动作列表（可能为空：不同模式下的鼠标动作默认共用同一按键，覆盖时需一并处理）。
  * excludeAction 用于排除正在编辑的动作本身。
  */
-export const findConflict = (
+export const findConflicts = (
     bindings: { readonly [K in InputAction]: readonly (readonly string[])[] },
     combo: KeyCombo,
     excludeAction?: InputAction,
-): InputAction | undefined => {
+): InputAction[] => {
+    const conflicts: InputAction[] = []
     for (const action of INPUT_ACTIONS) {
         if (action === excludeAction) continue
         const combos = bindings[action]
         for (const existing of combos) {
             if (combosEqual(existing, combo)) {
-                return action
+                conflicts.push(action)
+                break
             }
         }
     }
-    return undefined
+    return conflicts
 }
 
 /** localStorage 键名 */

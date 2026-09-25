@@ -1,7 +1,7 @@
 import {getInputRegistry} from './registry.ts'
-import type {InputAction, KeyCombo, BindingsMap} from './types.ts'
-import {INPUT_ACTIONS, ACTION_LABELS, ACTION_GROUPS} from './types.ts'
-import {findConflict} from './constants.ts'
+import type {InputAction, KeyCombo, BindingsMap, FixedMouseOperation, MouseOperationsMode} from './types.ts'
+import {INPUT_ACTIONS, ACTION_LABELS, ACTION_GROUPS, MOUSE_ACTIONS_BY_MODE, FIXED_MOUSE_OPERATIONS} from './types.ts'
+import {findConflicts} from './constants.ts'
 import {keyComboToDisplay} from './display.ts'
 import type {DeepReadonly} from '../types/readonly.ts'
 
@@ -23,6 +23,7 @@ const injectStyles = (): void => {
 .bp-row { display:flex; align-items:center; gap:6px; padding:6px 0; }
 .bp-row-label { flex:1; font:13px/1.5 system-ui,sans-serif; color:#ccc; }
 .bp-row-key { display:inline-block; font:12px/1.4 'Courier New',monospace; background:#2a2a2a; color:#ddd; padding:2px 8px; border-radius:3px; border:1px solid #444; min-width:60px; text-align:center; }
+.bp-row-key-fixed { background:#1f1f1f; color:#777; border-color:#383838; }
 .bp-row-key-capturing { background:#3a5a3a; border-color:#6a6; color:#9f9; animation:bp-pulse .8s ease-in-out infinite alternate; }
 @keyframes bp-pulse { from{opacity:.7} to{opacity:1} }
 .bp-row-btn { background:#333; border:1px solid #555; color:#aaa; font:11px/1 monospace; cursor:pointer; padding:2px 6px; border-radius:3px; min-width:22px; text-align:center; }
@@ -30,6 +31,7 @@ const injectStyles = (): void => {
 .bp-row-btn:disabled { cursor:default; }
 .bp-row-btn-del { color:#f66; border-color:#633; }
 .bp-row-btn-del:hover { background:#533; }
+.bp-row-hint { font:11px/1.5 system-ui,sans-serif; color:#666; }
 .bp-footer { display:flex; gap:8px; padding:12px 20px; border-top:1px solid #333; justify-content:flex-end; }
 .bp-btn { padding:8px 16px; font:13px/1.5 system-ui,sans-serif; border:1px solid #555; background:#2a2a2a; color:#ccc; cursor:pointer; }
 .bp-btn:hover { background:#3a3a3a; color:#fff; }
@@ -55,7 +57,7 @@ const cloneBindings = (src: DeepReadonly<BindingsMap>): BindingsMap => {
     return copy
 }
 
-const createConflictDialog = (conflictAction: InputAction): { el: HTMLElement; confirm: Promise<boolean> } => {
+const createConflictDialog = (message: string): { el: HTMLElement; confirm: Promise<boolean> } => {
     const overlay = document.createElement('div')
     overlay.className = 'bp-conflict-overlay'
 
@@ -66,12 +68,12 @@ const createConflictDialog = (conflictAction: InputAction): { el: HTMLElement; c
 
     const title = document.createElement('div')
     title.className = 'bp-conflict-title'
-    title.textContent = '按键冲突'
+    title.textContent = '输入冲突'
     box.appendChild(title)
 
     const msg = document.createElement('div')
     msg.className = 'bp-conflict-msg'
-    msg.textContent = `此按键已被「${ACTION_LABELS[conflictAction]}」占用，是否覆盖原有绑定？`
+    msg.textContent = message
     box.appendChild(msg)
 
     const actions = document.createElement('div')
@@ -110,8 +112,11 @@ const createConflictDialog = (conflictAction: InputAction): { el: HTMLElement; c
     return {el: overlay, confirm: promise}
 }
 
-/** 创建并打开按键配置面板 */
-export const openBindingPanel = (): void => {
+/**
+ * 创建并打开操作设置面板（键盘 + 鼠标）。
+ * @param mode 当前模式，决定“不可修改”的鼠标操作清单
+ */
+export const openOperationsPanel = (mode: MouseOperationsMode): void => {
     injectStyles()
     const input = getInputRegistry()
 
@@ -135,7 +140,7 @@ export const openBindingPanel = (): void => {
 
     const title = document.createElement('span')
     title.className = 'bp-title'
-    title.textContent = '按键配置'
+    title.textContent = '操作设置'
     header.appendChild(title)
 
     const closeBtn = document.createElement('button')
@@ -171,100 +176,139 @@ export const openBindingPanel = (): void => {
 
     /* ---- 构建行 ---- */
 
+    /** 可修改的动作行：每项绑定一个键位标签 + 替换/删除，行尾追加“添加替代绑定” */
+    const createActionRow = (action: InputAction, combos: DeepReadonly<KeyCombo[]>): HTMLElement => {
+        const row = document.createElement('div')
+        row.className = 'bp-row'
+
+        const label = document.createElement('span')
+        label.className = 'bp-row-label'
+        label.textContent = ACTION_LABELS[action]
+        row.appendChild(label)
+
+        for (let i = 0; i < combos.length; i++) {
+            const combo = combos[i]
+
+            const keyChip = document.createElement('span')
+            keyChip.className = 'bp-row-key'
+            keyChip.textContent = keyComboToDisplay(combo)
+            row.appendChild(keyChip)
+
+            /* 编辑按钮 */
+            const editBtn = document.createElement('button')
+            editBtn.className = 'bp-row-btn'
+            editBtn.textContent = '✎'
+            editBtn.title = '替换绑定'
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                startCapture(action, i, row)
+            })
+            row.appendChild(editBtn)
+
+            /* 删除按钮 */
+            const delBtn = document.createElement('button')
+            delBtn.className = 'bp-row-btn bp-row-btn-del'
+            delBtn.textContent = '×'
+            delBtn.title = '删除绑定'
+            if (combos.length <= 1) {
+                delBtn.disabled = true
+                delBtn.style.opacity = '0.3'
+            }
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                if (combos.length > 1) {
+                    const newBindings = cloneBindings(input.getBindings())
+                    newBindings[action] = newBindings[action].filter((_, j) => j !== i)
+                    input.setBindings(newBindings)
+                    input.saveToStorage()
+                    buildContent()
+                }
+            })
+            row.appendChild(delBtn)
+        }
+
+        /* 添加替代绑定按钮 */
+        if (combos.length === 0 || combos.length < 3) {
+            const addBtn = document.createElement('button')
+            addBtn.className = 'bp-row-btn'
+            addBtn.textContent = '+'
+            addBtn.title = '添加替代绑定'
+            addBtn.addEventListener('click', (e) => {
+                e.stopPropagation()
+                startCapture(action, undefined, row)
+            })
+            row.appendChild(addBtn)
+        }
+
+        return row
+    }
+
+    /** 不可修改的鼠标操作行：仅展示，无编辑入口 */
+    const createFixedRow = (op: FixedMouseOperation): HTMLElement => {
+        const row = document.createElement('div')
+        row.className = 'bp-row'
+
+        const label = document.createElement('span')
+        label.className = 'bp-row-label'
+        label.textContent = op.label
+        row.appendChild(label)
+
+        const keyChip = document.createElement('span')
+        keyChip.className = 'bp-row-key bp-row-key-fixed'
+        keyChip.textContent = op.keys
+        row.appendChild(keyChip)
+
+        const hint = document.createElement('span')
+        hint.className = 'bp-row-hint'
+        hint.textContent = '不可修改'
+        row.appendChild(hint)
+
+        return row
+    }
+
+    const appendGroupTitle = (name: string): void => {
+        const groupTitle = document.createElement('div')
+        groupTitle.className = 'bp-group-title'
+        groupTitle.textContent = name
+        content.appendChild(groupTitle)
+    }
+
     const buildContent = (): void => {
         content.innerHTML = ''
         const currentBindings = input.getBindings()
 
+        /* —— 鼠标：当前模式下可修改的指针动作 + 不可修改的鼠标操作 —— */
+        appendGroupTitle('鼠标')
+        for (const action of MOUSE_ACTIONS_BY_MODE[mode]) {
+            content.appendChild(createActionRow(action, currentBindings[action]))
+        }
+        for (const op of FIXED_MOUSE_OPERATIONS[mode]) {
+            content.appendChild(createFixedRow(op))
+        }
+
+        /* —— 键盘 —— */
         for (const group of ACTION_GROUPS) {
-            const groupTitle = document.createElement('div')
-            groupTitle.className = 'bp-group-title'
-            groupTitle.textContent = group.name
-            content.appendChild(groupTitle)
-
+            appendGroupTitle(group.name)
             for (const action of group.actions) {
-                const row = document.createElement('div')
-                row.className = 'bp-row'
-                content.appendChild(row)
-
-                const label = document.createElement('span')
-                label.className = 'bp-row-label'
-                label.textContent = ACTION_LABELS[action]
-                row.appendChild(label)
-
-                const combos = currentBindings[action]
-
-                /* 渲染每个绑定 */
-                for (let i = 0; i < combos.length; i++) {
-                    const combo = combos[i]
-
-                    const keyChip = document.createElement('span')
-                    keyChip.className = 'bp-row-key'
-                    keyChip.textContent = keyComboToDisplay(combo)
-                    row.appendChild(keyChip)
-
-                    /* 编辑按钮 */
-                    const editBtn = document.createElement('button')
-                    editBtn.className = 'bp-row-btn'
-                    editBtn.textContent = '✎'
-                    editBtn.title = '替换绑定'
-                    editBtn.addEventListener('click', (e) => {
-                        e.stopPropagation()
-                        startCapture(action, i, row)
-                    })
-                    row.appendChild(editBtn)
-
-                    /* 删除按钮 */
-                    const delBtn = document.createElement('button')
-                    delBtn.className = 'bp-row-btn bp-row-btn-del'
-                    delBtn.textContent = '×'
-                    delBtn.title = '删除绑定'
-                    if (combos.length <= 1) {
-                        delBtn.disabled = true
-                        delBtn.style.opacity = '0.3'
-                    }
-                    delBtn.addEventListener('click', (e) => {
-                        e.stopPropagation()
-                        if (combos.length > 1) {
-                            const newBindings = cloneBindings(input.getBindings())
-                            newBindings[action] = newBindings[action].filter((_, j) => j !== i)
-                            input.setBindings(newBindings)
-                            input.saveToStorage()
-                            buildContent()
-                        }
-                    })
-                    row.appendChild(delBtn)
-                }
-
-                /* 添加替代绑定按钮 */
-                if (combos.length === 0 || combos.length < 3) {
-                    const addBtn = document.createElement('button')
-                    addBtn.className = 'bp-row-btn'
-                    addBtn.textContent = '+'
-                    addBtn.title = '添加替代绑定'
-                    addBtn.addEventListener('click', (e) => {
-                        e.stopPropagation()
-                        startCapture(action, undefined, row)
-                    })
-                    row.appendChild(addBtn)
-                }
+                content.appendChild(createActionRow(action, currentBindings[action]))
             }
         }
     }
 
     buildContent()
 
-    /* ---- 按键捕获 ---- */
+    /* ---- 输入捕获（键盘按键或鼠标按键） ---- */
 
     const startCapture = (action: InputAction, index: number | undefined, row: HTMLElement): void => {
         isCapturing = true
         /* 标记捕获行 */
         const capturingChip = document.createElement('span')
         capturingChip.className = 'bp-row-key bp-row-key-capturing'
-        capturingChip.textContent = '请按键...'
+        capturingChip.textContent = '请按键 / 鼠标键...'
         row.appendChild(capturingChip)
         row.classList.add('bp-row-capturing')
 
-        input.setKeyCapture((combo: KeyCombo) => {
+        input.setInputCapture((combo: KeyCombo) => {
             /* 捕获完成 */
             isCapturing = false
             row.classList.remove('bp-row-capturing')
@@ -283,12 +327,12 @@ export const openBindingPanel = (): void => {
                 return
             }
 
-            /* 冲突检查 */
-            const conflictAction = findConflict(currentBindings, combo, action)
+            /* 冲突检查（可能同时与多个动作冲突：不同模式的鼠标动作默认共用同一按键） */
+            const conflictActions = findConflicts(currentBindings, combo, action)
 
             const applyBinding = (): void => {
-                if (conflictAction) {
-                    /* 从冲突动作中移除此绑定 */
+                /* 从所有冲突动作中移除此绑定 */
+                for (const conflictAction of conflictActions) {
                     currentBindings[conflictAction] = currentBindings[conflictAction].filter(
                         existing => !(existing.length === combo.length && existing.every((c, ci) => c === combo[ci]))
                     )
@@ -307,8 +351,9 @@ export const openBindingPanel = (): void => {
                 buildContent()
             }
 
-            if (conflictAction) {
-                createConflictDialog(conflictAction).confirm.then((confirmed: boolean) => {
+            if (conflictActions.length > 0) {
+                const names = conflictActions.map(a => `「${ACTION_LABELS[a]}」`).join('、')
+                createConflictDialog(`此输入已被 ${names} 占用，是否覆盖原有绑定？`).confirm.then((confirmed: boolean) => {
                     if (confirmed) applyBinding()
                     else buildContent()
                 })
@@ -374,7 +419,7 @@ export const openBindingPanel = (): void => {
                     input.setBindings(bindings)
                     input.saveToStorage()
                     buildContent()
-                    showToast('按键配置已导入')
+                    showToast('操作设置已导入')
                 } catch {
                     showToast('文件格式无效：无法解析 JSON')
                 }
@@ -396,7 +441,7 @@ export const openBindingPanel = (): void => {
         if (e.code === 'Escape') {
             if (isCapturing) {
                 isCapturing = false
-                input.setKeyCapture(undefined)
+                input.setInputCapture(undefined)
                 buildContent()
             } else {
                 overlay.remove()
@@ -409,7 +454,7 @@ export const openBindingPanel = (): void => {
     /* 面板关闭时确保停止捕获 */
     const observer = new MutationObserver(() => {
         if (!document.body.contains(overlay)) {
-            input.setKeyCapture(undefined)
+            input.setInputCapture(undefined)
             observer.disconnect()
             window.removeEventListener('keydown', escHandler)
         }

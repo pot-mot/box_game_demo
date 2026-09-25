@@ -1,6 +1,7 @@
 import {Scene, PerspectiveCamera, AmbientLight, DirectionalLight, Color, Vector3} from 'three'
 import type {WebGLRenderer} from 'three'
 import {setupInfiniteGrid} from '../../render/grid.ts'
+import {getInputRegistry} from '../../input/registry.ts'
 import {
     CAMERA_FAR,
     CAMERA_FOV,
@@ -146,18 +147,19 @@ const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLElement, s
         applyCamera()
     }
 
-    /* —— 指针事件：左键旋转 / 右键平移 / 滚轮缩放（全部由 AbortSignal 管理，随模式退出释放） —— */
-    let dragging: 0 | 2 | null = null
+    /* —— 指针事件：旋转 / 平移 / 滚轮缩放（前两者由操作设置绑定，全部随模式退出释放） —— */
+    const input = getInputRegistry()
+    let dragging: 'orbit' | 'pan' | null = null
     domElement.addEventListener('mousedown', (e: MouseEvent) => {
-        if (e.button === 0) dragging = 0
-        else if (e.button === 2) dragging = 2
+        if (input.matchesMouseButton('mouse_orbit', e.button)) dragging = 'orbit'
+        else if (input.matchesMouseButton('mouse_pan', e.button)) dragging = 'pan'
     }, {signal})
     window.addEventListener('mouseup', () => {
         dragging = null
     }, {signal})
     window.addEventListener('mousemove', (e: MouseEvent) => {
         if (dragging === null) return
-        if (dragging === 0) rotateBy(e.movementX, e.movementY)
+        if (dragging === 'orbit') rotateBy(e.movementX, e.movementY)
         else panBy(e.movementX, e.movementY)
     }, {signal})
     domElement.addEventListener('contextmenu', (e: MouseEvent) => {

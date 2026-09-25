@@ -3,7 +3,7 @@ import {getInputRegistry} from '../../input/registry.ts'
 import {MOVE_STEP} from '../constants.ts'
 
 /**
- * WASD+EQ 轨道相机自由飞行式平移。
+ * WASD+ZX 轨道相机自由飞行式平移。
  * 对标 edit/keyboard.ts 的 setupKeyboardCamera：基于相机朝向计算世界位移，
  * 再把同样的位移施加到轨道相机 target（相机随 applyCamera 同步跟随），
  * 视角方向保持不变，效果与 edit 模式的自由飞行一致（无固定焦点）。
