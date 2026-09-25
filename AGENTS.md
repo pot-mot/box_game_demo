@@ -1,6 +1,9 @@
 # box-demo
 
-Three.js + rapier3d-compat 物理箱子交互演示。
+> 项目定位：一个追求相对轻量设计的游戏项目。
+> 代码、文档、测试与验收一律按生产标准执行——禁止以「demo / 原型 / 先跑起来再说」为由降低质量要求。
+
+基于 Three.js + rapier3d-compat 的游戏项目：物理交互沙盒 + 角色动作战斗 + 编辑 / 游玩 / 展示 / 骨骼动画四套模式。
 
 ## 命令
 
@@ -8,8 +11,28 @@ Three.js + rapier3d-compat 物理箱子交互演示。
 - `pnpm build` — `tsc && vite build`（必须先检查类型再打包）
 - `pnpm preview` — 预览构建产物
 - `pnpm type-check` — `tsc --noEmit` 仅类型检查
-- `pnpm test` — `vitest run` 单元测试
-- `pnpm test:e2e` — `playwright test` 端到端测试
+- `pnpm test` — `vitest run` 全量单元测试
+- `pnpm test:e2e` — `playwright test` 全量端到端测试
+- `pnpm vitest run <测试文件>` — 只跑指定单元测试（开发期首选）
+- `pnpm test:e2e <spec 文件名>` — 只跑指定端到端用例（开发期首选，参数会透传给带 `--config` 的 playwright）
+
+## 测试与验证
+
+**非必要不重复运行全量测试。** 验证遵循「最小充分」原则：
+
+1. **开发迭代期** — 只跑 `pnpm type-check` 加与本次改动直接相关的用例（`pnpm vitest run src/xxx/yyy.test.ts`、`pnpm test:e2e <spec 文件名>`），不跑全量。
+2. **任务收尾时** — 再跑一次全量 `pnpm test`；改动涉及 UI / 交互 / 模式切换时追加 `pnpm test:e2e`；改动涉及构建配置、依赖或入口链路时追加 `pnpm build`。
+3. **禁止重复验证** — 同一份改动已经全量通过后，不得为「再确认一次」重跑同一套全量测试；后续改动只做受影响的增量验证。
+4. **必须全量的情形** — 改动落在共享底层（`physics/`、`render/`、`input/`、`save_load/`、`main.ts` 的单 RAF 链路）、跨分包重构、或删除/重命名被广泛引用的导出。
+5. **e2e 说明** — `e2e/playwright.config.ts` 会自动拉起 `pnpm dev`（端口 5173）并复用已有服务器，无需手工启动。
+
+## 工程标准
+
+1. **无占位实现** — 不提交 TODO、空实现或调试用 `console.log`；未完成的能力要么不合并，要么在 `docs/` 中记录设计方案。
+2. **改动完整** — 功能改动必须同时补齐类型、测试（按改动性质选单测或 e2e）、相关 `docs/` 文档，以及 AGENTS.md 中受影响的结构/约定描述。
+3. **兼容性** — 存档格式（`save_load/`）与本地存储（如键位绑定 `localStorage`）变更必须考虑旧数据：校验层需安全回退到默认值，不得抛错崩溃。
+4. **性能** — 帧内逻辑避免无谓分配（复用向量与临时对象），更新路径中禁止创建 DOM；纹理、材质、几何体按需单例复用。
+5. **玩家可读性** — 面向玩家的 UI 文案、代码注释与文档一律中文；标识符沿用既有英文命名习惯。
 
 ## 规范
 
@@ -85,7 +108,7 @@ src/
 ├── types/                       # 通用类型定义
 ├── physics/                     # 共享物理世界（rapier3d-compat）
 ├── render/                      # Three.js 渲染
-├── input/                       # 键盘输入注册表（动作抽象、键位绑定、绑定面板）
+├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
 │   └── state_machine/states/    # idle / walking / jumping / falling / attacking / dying / dashing / flinching
 ├── entity/
@@ -100,7 +123,6 @@ src/
 │   ├── play/                    # 游玩模式（第三人称、状态机驱动）
 │   ├── showcase/                # 展示模式（攻击动作展示台，复现生产动画时序）
 │   ├── startup_screen.ts
-│   ├── instructions_panel.ts
 │   └── free_flight.ts
 ├── ui/                          # 面板（相机HUD、属性面板、列表侧栏、设置）
 ├── save_load/                   # 存档序列化 / 反序列化
@@ -147,3 +169,5 @@ src/
 - rapier3d-compat 的休眠 body 无视 velocity 写入，操作 velocity 前必须 `body.wakeUp()`（`setLinvel(vel, true)` 第二参数同样会唤醒，本项目一律传 `true`）
 - 角色 collider 是**竖直胶囊**（半径 = `CHARACTER_BASE_SIZE.width/2`，总高 = `height`），不是 cuboid。平底 cuboid 在 trimesh 地形上坡时会跨网格顶点线被内部棱幽灵水平法线卡死（原地 walking 不动）；rapier3d-compat 0.19/0.20 的 `FIX_INTERNAL_EDGES` 已损坏（开启后 trimesh 完全无碰撞），禁止使用；heightfield 在该版本 wasm 直接崩溃，禁止使用（地形用 `RAPIER.ColliderDesc.trimesh` 生成）
 - 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击阶段子状态（`attacking_{skillId}_{phaseName}`）通过 `states/attacking.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为
+- 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；默认值只在 `localStorage` 无记录时生效，已存过旧绑定的浏览器需「重置默认」或导入配置
+- 鼠标动作按模式生效：`MOUSE_ACTIONS_BY_MODE` 决定操作设置面板中各模式可改的指针动作，"平移视角 / 生成物体" 默认同为右键但分属不同模式，改动其中一个需同步核对另一个的默认值
