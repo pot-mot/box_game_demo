@@ -6,7 +6,9 @@ import {createNavRunContext, processNav} from './machine.ts'
 import {STUCK_ESCAPE_DURATION, STUCK_ESCAPE_MAX_RETRIES} from './constants.ts'
 import type {NavSensor, NavRunContext, NavConfig} from './types.ts'
 import type {CharacterEntity} from '../../../../character/types.ts'
-import {createDashSkillSlot} from '../../../../character/combat/dash_skill.ts'
+import {createWeaponRuntime} from '../../../../character/weapon/weapon_runtime.ts'
+import {createDashSkillRuntime} from '../../../../character/combat/dash_skill.ts'
+import type {CombatComponent} from '../../../../character/combat/types.ts'
 import {CHARACTER_BASE_SIZE} from '../../constants.ts'
 
 const FIXED_DT = 1 / 60
@@ -22,6 +24,42 @@ interface MockBody {
 /** 测试专用窄化：实体 body 实际为 mock 对象（仅本测试文件内集中转换） */
 const mockBodyOf = (entity: CharacterEntity): MockBody =>
     entity.body as unknown as MockBody
+
+/**
+ * 构造最小战斗组件（nav 测试不涉及战斗行为，仅需满足 CombatComponent）：
+ * 武器运行时替代原技能槽夹具，连段状态由 activeSegment / bufferedSegment 表达。
+ */
+const createCombatStub = (): CombatComponent => {
+    const weaponRuntime = createWeaponRuntime('long_sword')
+    return {
+        weapon: weaponRuntime.weapon,
+        attacks: weaponRuntime.attacks,
+        segmentCooldowns: new Map(),
+        activeSegment: undefined,
+        bufferedSegment: undefined,
+        attackActive: false,
+        attackTimer: 0,
+        attackDirX: 0,
+        attackDirZ: 1,
+        attackedTargets: new Set(),
+        swingTilt: 0,
+        phaseIndex: 0,
+        phaseTimer: 0,
+        pendingFlinch: false,
+        flinchImmunityTimer: 0,
+        dashSkill: createDashSkillRuntime(),
+        faction: 0,
+        attackTendency: () => false,
+        tendencyConfig: {tendencyId: 'hostileExceptSelf'},
+        health: 15,
+        maxHealth: 15,
+        isDead: false,
+        damageModifiers: [],
+        onDamageTaken: null,
+        onDamageDealt: null,
+        onDeath: null,
+    }
+}
 
 const createBoxMesh = (x: number, y: number, z: number, w: number, h: number, d: number): Mesh => {
     const geo = new BoxGeometry(w, h, d)
@@ -81,21 +119,7 @@ const createCharEntity = (
         combatStrategy: 'tactical' as const,
         isDying: false,
         dyingTimer: 0,
-        combat: {
-            faction: 0,
-            isDead: false,
-            attackActive: false,
-            attackTendency: () => false,
-            tendencyConfig: {tendencyId: 'hostileExceptSelf' as const},
-            skills: [],
-            dashSkill: createDashSkillSlot(),
-            currentSkillIndex: 0,
-            attackedTargets: new Set(),
-            attackDirX: 0,
-            attackDirZ: 0,
-            swingTilt: 0,
-            phaseIndex: 0, phaseTimer: 0, chainEntryIndex: 0, bufferedSkillIndex: -1, pendingFlinch: false, flinchImmunityTimer: 0,
-        },
+        combat: createCombatStub(),
         stateMachine: {
             currentState: 'idle',
             previousState: null,
@@ -546,13 +570,7 @@ const createCharOnBox = (boxTopY: number): CharacterEntity => {
         isPlayer: false, navEnabled: true,
         peaceStrategy: 'patrol' as const, combatStrategy: 'tactical' as const,
         isDying: false, dyingTimer: 0,
-        combat: {
-            faction: 0, isDead: false, attackActive: false,
-            attackTendency: () => false,
-            tendencyConfig: {tendencyId: 'hostileExceptSelf' as const},
-            skills: [], dashSkill: createDashSkillSlot(), currentSkillIndex: 0,
-            attackedTargets: new Set(), attackDirX: 0, attackDirZ: 0, swingTilt: 0,
-        },
+        combat: createCombatStub(),
         stateMachine: {
             currentState: 'idle', previousState: null, stateTime: 0,
             onStateChange: null, setInput: () => {}, update: () => {}, reset: () => {},

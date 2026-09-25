@@ -1,6 +1,7 @@
 import type {CharacterEntity} from '../types.ts'
 import {resolvePhases} from '../combat/attack_phases.ts'
-import {resolveEntrySkillIndex} from '../combat/combo_guard.ts'
+import {resolveEntrySegment} from '../weapon/attack_chain.ts'
+import {attackContextOf} from '../combat/attack_runtime.ts'
 import type {
     CharacterState,
     CharacterInput,
@@ -12,7 +13,7 @@ import {idleHandler} from './states/idle.ts'
 import {walkingHandler} from './states/walking.ts'
 import {jumpingHandler} from './states/jumping.ts'
 import {fallingHandler} from './states/falling.ts'
-import {attackingHandler} from './states/attacking.ts'
+import {attackingHandler} from './states/attacking/index.ts'
 import {dyingHandler} from './states/dying.ts'
 import {dashingHandler} from './states/dashing.ts'
 import {flinchingHandler} from './states/flinching.ts'
@@ -34,14 +35,14 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     let previousState: CharacterState | null = null
     let stateTime = 0
     let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
-    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, skillIndex: 0, sprint: false, attackHoldDuration: 0}
+    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, sprint: false, attackHoldDuration: 0}
 
     const makeContext = (entity?: CharacterEntity): MachineContext => {
         let attackPhase: string | undefined
         if (entity !== undefined && currentState === 'attacking') {
-            const skill = entity.combat.skills[entity.combat.currentSkillIndex]
-            if (skill) {
-                const phases = resolvePhases(skill.config.phases)
+            const segment = entity.combat.activeSegment
+            if (segment !== undefined) {
+                const phases = resolvePhases(segment.phases)
                 if (entity.combat.phaseIndex < phases.length) {
                     attackPhase = phases[entity.combat.phaseIndex].name
                 }
@@ -54,13 +55,13 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         }
     }
 
-    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, sprint?: boolean, skillIndex?: number, attackHoldDuration?: number): void => {
+    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, sprint?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number): void => {
         input.dx = dx
         input.dz = dz
         input.jump = jump
         input.attack = attack
         input.sprint = sprint ?? false
-        input.skillIndex = skillIndex ?? 0
+        input.attackKey = attackKey
         input.attackHoldDuration = attackHoldDuration ?? 0
     }
 
@@ -76,11 +77,20 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
                 currentState = t.to
                 stateTime = 0
                 if (currentState === 'attacking') {
-                    /* 起手选择：键组内按守卫/冷却解析（转换 guard 已验证存在候选，这里必命中） */
-                    entity.combat.currentSkillIndex = resolveEntrySkillIndex(
-                        entity.combat, input.skillIndex,
-                        {dx: input.dx, dz: input.dz, holdDuration: input.attackHoldDuration},
-                    )
+                    /* 起手解析：攻击键的起手候选按守卫（蓄力/方向变体）+ 冷却解析（转换 guard 已验证存在候选） */
+                    const key = input.attackKey
+                    entity.combat.activeSegment = key !== undefined
+                        ? resolveEntrySegment(
+                            entity.combat.attacks,
+                            key,
+                            attackContextOf(entity.combat, {
+                                dx: input.dx,
+                                dz: input.dz,
+                                holdDuration: input.attackHoldDuration,
+                                attackKey: key,
+                            }),
+                        )
+                        : undefined
                 }
                 const newCtx = makeContext(entity)
                 STATE_HANDLERS[currentState].enter(entity, newCtx)
@@ -102,7 +112,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.jump = false
         input.attack = false
         input.sprint = false
-        input.skillIndex = 0
+        input.attackKey = undefined
         input.attackHoldDuration = 0
     }
 

@@ -213,14 +213,11 @@ describe('郊狼过程动画与摄像机平滑', () => {
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
                     swingTilt: 0,
+                    attackSegment: undefined,
                     attackPhase: undefined,
                     attackPhaseProgress: 0,
                     attackTotalProgress: 0,
-                    attackPhases: undefined,
                     attackPhaseIndex: 0,
-                    attackSkillId: undefined,
-                    attackDuration: 1,
-                    attackRecovery: 0,
                     weaponHeld: false,
                 })
                 if (state !== prevState) prevState = state

@@ -14,9 +14,8 @@ import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {computeSeparation, separationSlopeDy} from './separation.ts'
 import {CHARACTER_SEPARATION_SPEED, CHARACTER_LINEAR_DAMPING} from './constants.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
-import {createSkillSlot} from '../../../character/combat/skill_types.ts'
-import {createDashSkillSlot} from '../../../character/combat/dash_skill.ts'
-import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
+import {createDashSkillRuntime} from '../../../character/combat/dash_skill.ts'
+import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE} from '../constants.ts'
 
@@ -77,7 +76,8 @@ export const makeChar = (
     /* 质量恒为 1（与生产 spawnEntity 一致） */
     setBodyMass(body, 1)
 
-    const slot = createSkillSlot(MELEE_SKILL_PRESETS.long_sword_slash)
+    /* 测试武器：长剑（真实武器运行时，含攻击链） */
+    const runtime = createWeaponRuntime('long_sword')
     const entity: CharacterEntity = {
         id,
         config: {speed, jumpHeight: 2, scale: 1},
@@ -110,17 +110,20 @@ export const makeChar = (
             onDamageTaken: null,
             onDeath: null,
             onDamageDealt: null,
-            skills: [slot],
-            dashSkill: createDashSkillSlot(),
-            currentSkillIndex: 0,
+            weapon: runtime.weapon,
+            attacks: runtime.attacks,
+            segmentCooldowns: new Map(),
+            activeSegment: undefined,
+            bufferedSegment: undefined,
+            dashSkill: createDashSkillRuntime(),
             attackActive: false,
             attackTimer: 0,
             attackedTargets: new Set(),
             attackDirX: 0,
             attackDirZ: 0,
             swingTilt: 0,
-            phaseIndex: 0, phaseTimer: 0, chainEntryIndex: 0, bufferedSkillIndex: -1, pendingFlinch: false, flinchImmunityTimer: 0,
-        } as unknown as CharacterEntity['combat'],
+            phaseIndex: 0, phaseTimer: 0, pendingFlinch: false, flinchImmunityTimer: 0,
+        },
         stateMachine: createCharacterStateMachine(),
     }
     return entity

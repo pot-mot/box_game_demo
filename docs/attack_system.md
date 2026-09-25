@@ -1,32 +1,39 @@
-# 攻击系统文档（武器阶段 / 连招 / 动画 / 中断）
+# 攻击系统文档（武器攻击链 / 段子状态 / 动画 / 中断）
 
 ## 一、整体架构
 
 攻击系统由三层协作完成一次武器攻击的完整生命周期：
 
 ```
-武器配置层（character/weapon/ + character/combat/）
-  └─ MeleeSkillConfig / RangedSkillConfig
-       ├─ duration: 动作时间（不含恢复）
-       ├─ recovery: 恢复时间（后摇，0 = 无恢复段）
-       ├─ cooldown: 冷却时间（普通攻击 = 0；非 0 时从触发时刻计时，只挡起手）
-       ├─ phases: AttackPhase[]    ← 阶段序列
-       └─ comboChain?: string[]    ← 连招链
+武器模组层（character/weapon/）
+  └─ WeaponAttacks（武器固有数据，见 attack_chain.ts）
+       ├─ chains: {light, heavy}       ← 每个攻击键的起手候选 entries + 主干段顺序 steps
+       └─ segments: Record<string, AttackSegment>
+            ├─ duration: 动作时间（不含恢复）
+            ├─ recovery: 恢复时间（后摇，0 = 无恢复段）
+            ├─ cooldown: 冷却时间（普通攻击 = 0；非 0 时从段触发时刻计时，只挡起手）
+            ├─ phases: readonly AttackPhase[]   ← 阶段序列
+            ├─ swingTilt / damageMultiplier     ← 段固有倾斜角与伤害倍率
+            └─ next: readonly AttackTransition[] ← 本段播完后的下一状态候选（连段唯一来源）
 
 角色状态机层（character/state_machine/）
-  └─ attacking  meta-state（阶段调度器，states/attacking.ts）
-       └─ 按 key = "attacking_{skillId}_{phaseName}" 查 phaseHandlerRegistry
+  └─ attacking meta-state（段子状态调度器，states/attacking/index.ts）
+       ├─ 起手解析：machine.ts 在进入 attacking 时用 resolveEntrySegment 定下首个 activeSegment
+       ├─ 每帧推进段子状态：states/attacking/segment.ts 推进阶段时间线 + 求值段的下一状态切换函数
+       │    ├─ 同键 → 本段 next 转换（守卫变体优先）
+       │    └─ 异键 → 该键起手解析
+       └─ 按 key = "attacking_{segmentId}_{phaseName}" 查 phaseHandlerRegistry
             ├─ 找到 → 委托阶段专用 StateHandler 的 update
             └─ 未找到 → 默认阶段行为（按 moveSpeedMultiplier 缩放移动 + 斜坡投影/防滑）
 
 动画表现层（entity/character/appearance/）
-  └─ ANIMATION_HANDLERS（静态 Record<CharacterState, AnimationHandler>，每基础状态一个 animator）
-       └─ attackingAnim 按 AnimationContext 的阶段信息驱动：
-            ├─ 有 attackPhases → 相邻阶段末姿态链式插值（phaseEndPose 按阶段名解释 animConfig）
-            └─ 无阶段信息 → 回退虚拟三阶段（windup/strike/recovery，按 attackTotalProgress 映射）
+  └─ AppearanceSystem（clip 调度器，system.ts）
+       └─ attacking 状态用当前段生成攻击 clip：
+            ├─ getAttackClip({segmentId, duration, recovery, phases, tilt, gripTilt})
+            └─ 动画键 = `attacking:{segment.id}`，段切换即触发快照混合
 ```
 
-**关键**：阶段逻辑与阶段动画均已收敛为"通用调度 + 数据驱动"——阶段特定逻辑通过 `registerPhaseHandler`（attacking.ts）按 `attacking_{skillId}_{phaseName}` 命名约定运行时注入（当前生产武器全部走默认行为）；动画统一由 `attackingAnim` 按 `AttackPhase.animConfig` 的语义参数驱动，无 per-phase animator 文件。
+**关键**：攻击动作的唯一真源是**武器模组的攻击链**——段定义（时长 / 恢复 / 阶段 / 倾斜角 / 伤害倍率 / 冷却 / next 转换）全部由武器模组声明，角色实体只持有装备武器与数值覆写；连段不再是状态机持有的索引，而是**段自身声明的 `next` 转换**，`attacking` 因此成为一个段子状态机（调度 + 消费缓冲，不退出状态即可推进下一段）；起手统一由 `resolveEntrySegment` 解析（声明顺序 = 优先级：守卫变体在前、兜底在后）；阶段特定逻辑通过 `registerPhaseHandler` 按 `attacking_{segmentId}_{phaseName}` 命名约定运行时注入（当前生产武器全部走默认行为），动画统一由段 id 驱动的攻击 clip 生成器产出，无 per-phase animator 文件。
 
 ---
 
@@ -34,10 +41,10 @@
 
 ### 2.1 阶段类型定义
 
-**文件**：`src/character/combat/attack_phases.ts`（新增）
+**文件**：`src/character/combat/attack_phases.ts`
 
 ```ts
-/** 攻击阶段名（运行时通过武器预设组合确定实际状态名） */
+/** 攻击阶段名（具体段的阶段序列由武器模组声明，见 weapon/melee_attacks.ts / ranged_attacks.ts） */
 export const ATTACK_PHASES = ['windup', 'strike', 'recovery', 'spin', 'draw', 'aim', 'release'] as const
 export type AttackPhaseName = typeof ATTACK_PHASES[number]
 
@@ -51,10 +58,10 @@ export type AttackType = typeof ATTACK_TYPES[number]
 
 /** 攻击阶段配置 */
 export interface AttackPhase {
-    /** 阶段名，构成状态名 "attacking_{skillId}_{name}" */
+    /** 阶段名，构成阶段子状态 key "attacking_{segmentId}_{name}" */
     readonly name: AttackPhaseName
     /** 占动作时间的比例（0-1），动作阶段（非 recovery）比例之和应为 1；
-     *  recovery 阶段不参与分摊，时长直接取 config.recovery */
+     *  recovery 阶段不参与分摊，时长直接取所属段的 recovery */
     readonly durationRatio: number
     /** 移速倍率：0 = 完全定身，1 = 全速移动 */
     readonly moveSpeedMultiplier: number
@@ -92,7 +99,7 @@ export interface AttackAnimConfig {
 ### 2.2 阶段解析
 
 ```ts
-// character/state_machine/states/attacking.ts
+// character/state_machine/states/attacking/index.ts
 /** 阶段子状态 handler 注册表 — 外部通过 registerPhaseHandler 注入 */
 export const phaseHandlerRegistry = new Map<string, StateHandler>()
 
@@ -100,9 +107,10 @@ export const registerPhaseHandler = (key: string, handler: StateHandler): void =
     phaseHandlerRegistry.set(key, handler)
 }
 
-// attackingHandler.update 内：
+// attackingHandler.update 内（segment = c.activeSegment，武器模组持有的段定义）：
+const phases = resolvePhases(segment.phases)
 const phaseKey = c.phaseIndex < phases.length
-    ? `attacking_${skill.config.id}_${phases[c.phaseIndex].name}`
+    ? `attacking_${segment.id}_${phases[c.phaseIndex].name}`
     : undefined
 const phaseHandler = phaseKey ? phaseHandlerRegistry.get(phaseKey) : undefined
 // 找到 → 委托 update（stateTime = phaseTimer、attackPhase = 阶段名）；
@@ -111,20 +119,20 @@ const phaseHandler = phaseKey ? phaseHandlerRegistry.get(phaseKey) : undefined
 
 ### 2.3 时间模型（三计时属性）
 
-技能计时器由三个属性表达：**动作时间 `duration` + 恢复时间 `recovery` + 冷却时间 `cooldown`**。技能总时长 = `duration + recovery`；普通攻击（近战链段 / 远程预设）`cooldown = 0`，节奏完全由动作/恢复时间形成；冷却机制保留给特殊技能（如蓄力，见 test_weapon），非 0 时从**触发时刻**开始计时、只挡起手。
+段计时器由三个属性表达：**动作时间 `duration` + 恢复时间 `recovery` + 冷却时间 `cooldown`**，三者都是**段（`AttackSegment`）自身的属性**（不再挂在技能配置上）。段总时长 = `duration + recovery`；普通攻击（近战链段 / 远程预设）`cooldown = 0`，节奏完全由动作/恢复时间形成；冷却机制保留给特殊技能与数值覆写（如 test_weapon 的蓄力段），非 0 时从**段触发时刻**开始计时、只挡起手。
 
-单阶段时长由 `phaseDurationOf(phase, duration, recovery)` 计算：
+单阶段时长由 `phaseDurationOf(phase, segment.duration, segment.recovery)` 计算：
 
 ```ts
-/* recovery 阶段取 config.recovery；其余动作阶段按 durationRatio 从 config.duration 分摊 */
+/* recovery 阶段取段的 recovery；其余动作阶段按 durationRatio 从段的 duration 分摊 */
 export const phaseDurationOf = (phase: AttackPhase, duration: number, recovery: number): number =>
     phase.name === 'recovery' ? recovery : duration * phase.durationRatio
 ```
 
 ```
-近战轻段：duration = 0.2s，recovery = 0.2s，总时长 0.4s
+近战轻段：duration = 0.2s，recovery = 0.2s，段总时长 0.4s
 ├─ strike:   durationRatio = 1 → 实际时长 0.2s（= duration）
-└─ recovery: durationRatio = 0 → 实际时长 0.2s（= config.recovery，ratio 不参与）
+└─ recovery: durationRatio = 0 → 实际时长 0.2s（= 段的 recovery，ratio 不参与）
 
 每个阶段内的 phaseProgress = phaseTimer / phaseDurationOf(...)
 总进度 totalProgress = attackTimer / (duration + recovery)
@@ -134,129 +142,183 @@ export const phaseDurationOf = (phase: AttackPhase, duration: number, recovery: 
 
 ---
 
-## 三、连段系统（链段即技能 + 输入缓冲）
+## 三、武器攻击链与连段（段子状态 next 转换 + 输入缓冲）
 
-### 3.1 通用连段机制（近战 / 远程共用）
+### 3.1 攻击链数据模型
 
-连段不绑定特定武器结构：每个技能槽通过 `SkillSlot.comboChain` 声明"本段之后可接的技能"，attacking meta-state 的段末缓冲推进（见 3.4）按链消费。**武器的连段由该武器自己的技能槽集合与 `comboChain` 拓扑定义**——段数、段结构、是否循环完全由武器预设决定，不同武器可以不同（可以是 2 段、3 段，也可以不挂链 = 单次攻击）。近战与远程共用同一套机制，远程技能同样可以定义 `comboChain` 组连段（如多段射击 / 蓄力-释放序列）。
+**文件**：`src/character/weapon/attack_chain.ts`
+
+攻击动作由**武器模组拥有**：一把武器 = 一张攻击链（`WeaponAttacks`），内含段定义索引与轻/重两个攻击键的链。连段关系不用「槽位下标 / comboChain 字符串列表」表达，而是**写在段自己身上**——每段的 `next` 声明「本段播完后可进入哪些段」，按声明顺序求值，第一个守卫通过者胜出。
 
 ```ts
-export interface SkillSlot {
-    readonly config: SkillConfig
-    cooldownTimer: number
-    /** 连招链：本段后可接的技能 ID 列表（可循环） */
-    comboChain?: readonly string[]
-    /** 链起手槽标记：切链时更新 chainEntryIndex；冷却非 0 的技能触发时挂冷却（普通攻击冷却恒 0） */
-    isChainEntry?: boolean
-    /** 触发守卫（可选）：起手/链下一段的触发条件（蓄力、方向组合键等）；无守卫 = 无条件通过，作为兜底应放在同类候选末尾 */
-    readonly triggerGuard?: ComboGuard
-    /** 起手槽归属的攻击键组（0 = 轻击键 / 1 = 重击键）；默认 = 槽自身索引 */
-    readonly entryGroup?: number
+/** 攻击键组（输入侧语义，与槽位下标无关） */
+export const ATTACK_KEYS = ['light', 'heavy'] as const
+export type AttackKey = typeof ATTACK_KEYS[number]
+
+/** 攻击段：武器模组拥有的一次可播放动作（id 同时是动画键与展示/编辑器清单键） */
+export interface AttackSegment {
+    readonly id: string                 /* 段 id（武器内唯一，形如 `{weaponId}_{key}_{step}`） */
+    readonly key: AttackKey             /* 所属攻击键 */
+    readonly step: number               /* 链内序号（1-based） */
+    readonly duration: number           /* 动作时长（秒，不含恢复段） */
+    readonly recovery: number           /* 恢复时长（秒，0 = 无恢复段） */
+    readonly phases: readonly AttackPhase[]  /* 阶段序列；recovery 阶段时长取本段 recovery */
+    readonly swingTilt?: number         /* 段固有挥砍倾斜角（rad，确定性，非随机轮转） */
+    readonly damageMultiplier: number   /* 伤害倍率（相对武器基础伤害） */
+    readonly cooldown: number           /* 冷却（秒，0 = 无冷却；从段触发时刻计时，只挡起手） */
+    readonly next: readonly AttackTransition[]  /* 段播完（含恢复段）后的下一状态候选；空数组 = 链终止 */
+    readonly label?: string             /* 显示名覆写（条件变体段用，如「蓄力重劈」） */
+}
+
+/** 段转换：to = 目标段 id；按声明顺序求值，guard 缺省 = 无条件 */
+export interface AttackTransition {
+    readonly to: string
+    readonly guard?: AttackTransitionGuard
+}
+
+/** 起手候选（声明顺序 = 优先级：守卫变体在前、兜底在后） */
+export interface AttackEntry {
+    readonly segmentId: string
+    readonly guard?: AttackTransitionGuard
+}
+
+/** 单个攻击键的链 */
+export interface WeaponAttackChain {
+    readonly key: AttackKey
+    readonly entries: readonly AttackEntry[]  /* 起手候选 */
+    readonly steps: readonly string[]         /* 主干段顺序（HUD/清单/展示按此枚举；纯条件起手变体段不入列） */
+}
+
+/** 全套攻击链（武器模组固有数据） */
+export interface WeaponAttacks {
+    readonly chains: Readonly<Record<AttackKey, WeaponAttackChain>>
+    readonly segments: Readonly<Record<string, AttackSegment>>
 }
 ```
 
-通用约定（与段数无关）：
+**解析规则**：
 
-- 起手槽标 `isChainEntry`；`comboChain` 指向链中下一段，可构成循环链（持续输入无限循环）。
-- 普通攻击（近战链段 / 远程预设）`cooldown = 0`：节奏由动作时间 + 恢复时间自然形成，链推进无冷却阻塞。冷却机制保留给特殊技能（如蓄力攻击），非 0 时从该段**触发时刻**开始计时（起手 enter 与段末推进均立即挂自身冷却）、只挡起手。
-- 段配置（动作时间 / 恢复时间 / 阶段 / 动作 / 伤害）由武器预设自行定义。
+- **起手 `resolveEntrySegment(attacks, key, ctx, currentSegmentId?)`**：该攻击键的起手候选按**声明顺序**取第一个「守卫通过 + 冷却就绪」的段；`currentSegmentId` 用于排除自身（攻击中重复按同键不应重启本段）；无候选 → `undefined`。`idle` / `walking` 的攻击转换 guard 与 `world.ts setPlayerAttack` 都经 `canStartAttack(combat, input)` 复用它判定。
+- **段转换 `resolveNextSegment(attacks, segment, ctx)`**：本段 `next` 候选按声明顺序取第一个守卫通过者；无候选 → `undefined`（链终止，段播完后正常退出 attacking）。
+- **声明顺序 = 优先级**：带守卫的条件变体必须声明在同组兜底段之前；变体冷却中会自动回退到兜底候选（两者冷却相互独立）。
+- **冷却只挡起手**：段触发即挂自身冷却，链内推进不查冷却，因此普通攻击（冷却恒 0）不受任何阻塞。
 
-### 3.2 近战当前预设：短剑 4 槽双链（示例）
+**段清单顺序 `orderedSegments(attacks)`**：按攻击键分组枚举——每键先按 `steps` 主干顺序（同链 1、2… 段相邻），再补该键其余段（条件起手变体接在所属键末尾）；键序为轻 → 重。近战因此得到「轻1 → 轻2 → 重1 → 重2」。HUD 面板、展示模式脚本与骨骼动画编辑模式内置动作库共用这一枚举顺序。
 
-**近战模块**当前所有武器由 `buildMeleeSkillSlots(weaponId, overrides)` 装配，暂统一沿用短剑精调的 4 槽双链结构（`MELEE_CHAIN_SLOTS`），其余武器的段节奏/幅度后续逐一修正为各自的结构——**下表是短剑示例，不是对所有武器的要求**：
+### 3.2 近战段：每武器 4 个主干段（示例）
 
-| 槽 | 链段 id | 动作（短剑基准） | strike 时长 | recovery | swingTilt |
-|---|---|---|---|---|---|
-| 0 | `{weapon}_light_1` | 上至下竖劈 | 0.2s | 0.2s | 0（竖劈） |
-| 1 | `{weapon}_heavy_1` | 水平横向挥砍 | 0.3s | 0.2s | ≈π/2（左向横斩） |
-| 2 | `{weapon}_light_2` | 水平向前戳 | 0.2s | 0.2s | —（thrust 不受倾斜角影响） |
-| 3 | `{weapon}_heavy_2` | 斜向挥砍 | 0.3s | 0.2s | ≈-π/4（右向斜劈） |
+**文件**：`src/character/weapon/melee_attacks.ts`（模板） + `src/character/weapon/melee_weapon.ts`（预设装配）
 
-- 槽 0 = 轻击键起手、槽 1 = 重击键起手；轻1↔轻2、重1↔重2 各自成循环链。
-- 段时长（轻 = 动作 0.2s + 恢复 0.2s、重 = 动作 0.3s + 恢复 0.2s）、重段伤害倍率（×1.6）目前是短剑基准的全局常量；普通攻击冷却全为 0；武器独立连段化时应改为按武器配置。
-- `MeleeSkillConfig.swingTilt`：段固有挥砍倾斜角（确定性，非随机轮转），`attacking.enter` 与段末推进时写入 `c.swingTilt`。
-- 武器间差异目前体现在 `MELEE_CHAIN_STYLES`（幅度系数 / 双手持握），结构差异待后续展开。
+近战段模板由 `buildMeleeAttacks(weaponId, style)` 装配，段 id = `{weaponId}_{模板键}`，模板键为 `light_1` / `light_2` / `heavy_1` / `heavy_2`。**下表是短剑示例**（数值目前是近战全局常量：轻 = 动作 0.2s + 恢复 0.2s、重 = 动作 0.3s + 恢复 0.2s、重段伤害倍率 ×1.6）：
 
-### 3.3 远程模块
+| 段 id | 攻击键 | 动作 | strike 时长 | recovery | swingTilt | 伤害倍率 | next |
+|---|---|---|---|---|---|---|---|
+| `{weapon}_light_1` | light | 上至下竖劈 | 0.2s | 0.2s | 0（竖劈） | 1 | `{weapon}_light_2` |
+| `{weapon}_light_2` | light | 水平向前直刺（thrust） | 0.2s | 0.2s | 0 | 1 | `{weapon}_light_1` |
+| `{weapon}_heavy_1` | heavy | 水平横向挥砍 | 0.3s | 0.2s | ≈0.48π（左向横斩） | 1.6 | `{weapon}_heavy_2` |
+| `{weapon}_heavy_2` | heavy | 斜向挥砍 | 0.3s | 0.2s | ≈-0.22π（右向斜劈） | 1.6 | `{weapon}_heavy_1` |
 
-远程技能同样走 `SkillSlot` + `comboChain` 通用机制，`RangedSkillConfig` 支持 `phases`（draw / aim / release）与 `comboChain` 字段。当前远程预设均为单槽技能（未挂链），行为即普通单次攻击；如需为某远程武器组连段（如三连射、蓄力-释放两段），只需在其技能槽上声明 `comboChain`，段末缓冲推进逻辑无需任何改动。
+- **起手**：轻击键 → `light_1`、重击键 → `heavy_1`（均为无守卫的单一候选，普通攻击恒定可起手）。
+- **连段**：`light_1 ↔ light_2`、`heavy_1 ↔ heavy_2` 各自成循环链（持续输入无限循环），全部由段的 `next` 声明；`next` 无守卫，因此同键按住即循环。
+- **段冷却全为 0**：节奏由动作 + 恢复时间自然形成。
+- **确定性挥砍方向**：方向的唯一来源是段的 `swingTilt`（轻段 0，重 1 左向横斩，重 2 右向斜劈），进入段时写入 `combat.swingTilt`；同段每次播放方向一致。
+- **武器间差异**体现在 `MELEE_ATTACK_STYLES` 的幅度系数与双手持握（`amp` / `twoHanded`），段结构对全部近战武器一致。
 
-### 3.4 连段守卫（触发条件：蓄力 / 方向组合键）
+### 3.3 远程段：每武器单段
 
-**文件**：`src/character/combat/combo_guard.ts`
+**文件**：`src/character/weapon/ranged_attacks.ts`
 
-守卫决定"首段（起手）与链下一段何时可触发"，典型场景：同键点按 vs 长按（蓄力攻击）、攻击 + 方向组合键触发不同变体。
+远程武器各持 1 个主干段（`buildRangedAttacks(weaponId)`），段 id 沿用原远程技能 id（如 `longbow_shot`、`throwing_dart_fling`），`key = 'light'`、`recovery = 0`、`next = []`（单发，无连段）；重击链为空链（`entries` / `steps` 均为空数组，起手解析恒失败）。轻击键起手即开火，播完段即收招。
+
+阶段序列按武器语义声明：弓箭为 `draw / aim / release`，弩与枪械为 `aim / release`，投掷类（飞斧 / 手雷 / 燃烧瓶）为 `windup / release`，飞镖为单 `release`。多数阶段 `cancellable: true`（瞄准期可被 dash 打断），释放段不可打断。
+
+**若要为远程武器组连段**（如三连射、蓄力-释放两段）：在该武器的 `buildRangedAttacks` 里追加段定义并填写 `next`（可选守卫 `holdAtLeast` 等），段末推进逻辑无需任何改动。
+
+### 3.4 守卫与上下文（触发条件：蓄力 / 方向组合键 / 冷却）
+
+守卫决定「起手候选与段转换何时成立」，典型场景：同键点按 vs 长按（蓄力攻击）、攻击 + 方向组合键触发不同变体、跨链切段时目标段是否已就绪。守卫原语与上下文都在 `src/character/weapon/attack_chain.ts`（原 `combat/combo_guard.ts` 已删除）。
 
 ```ts
-/** 守卫上下文：触发瞬间的输入快照（纯数据，combat 层不依赖状态机） */
-export interface ComboGuardContext {
-    readonly dx: number          /* 移动方向输入 */
+/** 段转换求值上下文（状态机每帧构造）：输入侧信息 + 段冷却查询，守卫不直接触碰实体/物理 */
+export interface AttackTransitionContext {
+    readonly dx: number           /* 移动输入方向 */
     readonly dz: number
     readonly holdDuration: number /* 攻击键按住时长（秒），区分点按/长按 */
+    readonly attackKey: AttackKey | undefined /* 本帧按下的攻击键（undefined = 无攻击输入） */
+    readonly cooldownRemaining: (segmentId: string) => number /* 查询某段剩余冷却（秒，<= 0 = 就绪） */
 }
-export type ComboGuard = (ctx: ComboGuardContext) => boolean
+export type AttackTransitionGuard = (ctx: AttackTransitionContext) => boolean
 
-/* 常用守卫 */
-holdAtLeast(seconds)   /* 长按（蓄力） */
-holdLessThan(seconds)  /* 点按 */
-hasMoveInput           /* 有方向输入（攻击 + 方向组合键） */
-noMoveInput            /* 无方向输入 */
+/* 守卫原语 */
+always                        /* 无条件通过（兜底转换的显式写法） */
+pressedKey(key)               /* 按下指定攻击键 */
+pressedOtherKey(key)          /* 按下非指定攻击键（切链用） */
+holdAtLeast(seconds)          /* 长按（蓄力） */
+holdLessThan(seconds)         /* 点按 */
+hasMoveInput                  /* 有方向输入（攻击 + 方向组合键） */
+noMoveInput                   /* 无方向输入 */
+cooldownReady(segmentId)      /* 目标段冷却就绪（跨链切段 / 重新起链） */
+allOf(...guards)              /* 组合：全部通过 */
+anyOf(...guards)              /* 组合：任一通过 */
+not(guard)                    /* 取反 */
 ```
 
-**键组模型**：`input.skillIndex` 语义为攻击键组号（0 = 轻击键、1 = 重击键），起手槽通过 `entryGroup` 映射到键组（默认 = 槽自身索引，兼容既有武器槽 0/1 即键位）。解析规则：
+上下文由 `combat/attack_runtime.ts` 的 `attackContextOf(c, input)` 构造（`cooldownRemaining` 读 `combat.segmentCooldowns`）；该模块同时提供 `segmentCooldownRemaining` / `armSegmentCooldown` / `tickSegmentCooldowns` 与 `canStartAttack`。
 
-- **起手选择 `resolveEntrySkillIndex(c, reqKey, ctx)`**：键组 = reqKey 的 `isChainEntry` 槽按**声明顺序**取第一个冷却完毕且守卫通过的；兜底分支处理非起手槽（远程单槽技能按冷却 + 守卫直接释放）；无候选 → -1（idle/walking 的 attacking 转换 guard 与 `setPlayerAttack` 均用它判定）。
-- **链下一段 `resolveChainNextIndex(c, ctx)`**：当前段 `comboChain` 候选按声明顺序取第一个守卫通过的（不查冷却，链内推进免冷却）。
-- **声明顺序 = 优先级**：带守卫的条件变体必须声明在同组兜底槽（无守卫）之前；变体冷却中会自动回退到兜底槽（两者冷却相互独立）。
+**键组模型**：输入侧按下的攻击键是 `attackKey: 'light' | 'heavy'`（`CharacterInput.attackKey`，取代原 `skillIndex` 数字槽号）；段通过自身 `key` 字段归属键组，`chains` 按 `AttackKey` 索引。守卫里的键判定用 `pressedKey` / `pressedOtherKey`。
 
 **蓄力攻击（按住计时，松开判定）**：计时在输入侧完成，状态机无计时器——
 
 1. `modes/play/camera.ts`：攻击键 mousedown 记录 `performance.now()`，mouseup 时算出按住秒数随回调传出（右键重击同为松开触发；blur/contextmenu 取消）；
-2. `world.ts setPlayerAttack(idx, holdDuration)`：把按住时长存入脉冲，经 `setInput` 第 7 参喂入 `CharacterInput.attackHoldDuration`，帧末与脉冲一同归零；
-3. 守卫 `holdAtLeast(阈值)` 通过则起手蓄力段，否则落到同键组兜底槽（点按段）。
+2. `world.ts setPlayerAttack(attackKey, holdDuration)`：把按住时长存入脉冲，经 `setInput` 第 6/7 参喂入 `CharacterInput.attackKey` / `attackHoldDuration`，帧末与脉冲一同归零；
+3. 起手候选声明顺序 = 优先级：`holdAtLeast(阈值)` 的蓄力段在前、无守卫的兜底段在后；守卫不通过或蓄力段冷却中时自动落到兜底段。
 
-**测试武器 `test_weapon`**（`src/character/combat/test_weapon.ts`，仅供单元测试，不进 `MELEE_WEAPON_PRESETS`）：6 槽覆盖蓄力起手（charge，holdAtLeast 0.5s）、点按兜底（tap）、键组分离（heavy 链 entryGroup 1）、方向变体（thrust 守卫 hasMoveInput vs 兜底 light_2）、循环链（tap↔light_2、heavy_1↔heavy_2）与无链单发（charge）。**冷却保留非 0 值作为冷却机制验证夹具**（普通攻击预设冷却均为 0）。装配入口：`world.ts` `attackToSkillSlots` 对 `weaponId === TEST_WEAPON_ID` 特判 `buildTestWeaponSkillSlots()`。
+**测试武器 `test_weapon`**（`src/character/combat/test_weapon.ts`，仅供单元测试，不进 `MELEE_WEAPON_PRESETS`；经 `catalog.ts` 的 `registerWeaponPreset` 注册为额外预设）：6 段覆盖蓄力起手（`charge`，起手守卫 `holdAtLeast(TEST_WEAPON_CHARGE_HOLD = 0.5)`）、点按兜底（`tap`，同键无守卫候选）、键组分离（`heavy_1` / `heavy_2` 独立重击链）、方向变体（`tap` 的 `next` = [`thrust`（守卫 `hasMoveInput`）, `light_2`（兜底）]）、循环链（`tap ↔ light_2`、`heavy_1 ↔ heavy_2`）与无链单发（`charge.next = []`）。**冷却保留非 0 值作为冷却机制验证夹具**（charge 1.2s / tap 0.3s / heavy_1 0.6s；普通攻击预设冷却均为 0）。装配入口：`world.ts` `weaponRuntimeOf` 对 `weaponId === TEST_WEAPON_ID` 特判 `createTestWeaponRuntime()`。
 
 ### 3.5 输入缓冲连段（段末推进）
 
-`CombatComponent` 运行时状态：
+`CombatComponent` 运行时状态（段以定义对象表达，不再有槽位索引）：
 
 ```ts
-/** 本次起链的起手槽索引（决定当前链键组） */
-chainEntryIndex: number
-/** 缓冲的目标技能槽索引（-1 = 无缓冲） */
-bufferedSkillIndex: number
+/** 当前攻击段（attacking 期间有效；未攻击时 undefined） */
+activeSegment: AttackSegment | undefined
+/** 缓冲的下一段（段播完由段转换 / 异键起手解析消费） */
+bufferedSegment: AttackSegment | undefined
+/** 段冷却剩余（秒）：段 id → 剩余时间（仅非 0 冷却的段写入） */
+readonly segmentCooldowns: Map<string, number>
 ```
 
-推进流程（`attackingHandler.update`）：
+推进流程（`states/attacking/index.ts` + `states/attacking/segment.ts`）：
 
 ```
 attacking update(dt):
-  ├─ 阶段照常推进（strike → recovery）
-  ├─ input.attack 为真 → resolveBufferedSkillIndex(c, input.skillIndex, ctx) 写缓冲：
-  │    ├─ 请求键组 == 当前链键组（chainGroupOf）→ 续链：resolveChainNextIndex 按守卫取链下一段（免冷却）
-  │    ├─ 异键组 → 切链：resolveEntrySkillIndex 解析该键组起手槽（守卫 + 冷却），不切自身
-  │    └─ 其余 → 不缓冲（新输入逐帧覆写旧缓冲 = 中途改键/改方向切链换变体）
-  ├─ 最终阶段（recovery）完整播完 && 缓冲存在
-  │    → 切换到目标槽：重置 attackTimer/phaseIndex/phaseTimer/attackedTargets，
-  │      取新段 swingTilt，新段触发即挂自身冷却（普通攻击冷却 = 0 不挂；特殊技能循环链回到起手槽 = 刷新冷却），
-  │      **不出 attacking 状态**（链内推进不检查冷却）
-  └─ 无缓冲 → 播完后正常走 transition 退出（冷却已在各段触发时挂上，exit 不补挂）
+  ├─ advanceSegmentPhases(c, dt)：阶段照常推进（strike → recovery），累计 attackTimer / phaseTimer
+  ├─ input.attack 为真 → resolveSegmentNextState(c, activeSegment, input) 写缓冲：
+  │    ├─ 同键（input.attackKey === 当前段 key）→ resolveNextSegment：本段 next 候选按守卫取第一个通过者
+  │    ├─ 异键 → resolveEntrySegment(attacks, 异键, ctx, 当前段 id)：该键起手解析（守卫 + 冷却），不切到自身
+  │    └─ 未按攻击键 → 不缓冲（新输入逐帧覆写旧缓冲 = 中途改键/改方向换变体）
+  ├─ 阶段全部播完（含 recovery）&& 缓冲存在
+  │    → enterAttackSegment(c, bufferedSegment, entity)：重置 attackTimer/phaseIndex/phaseTimer/attackedTargets，
+  │      取新段 swingTilt，段触发即挂自身冷却（普通攻击冷却 = 0 不挂），唤醒刚体，
+  │      **不出 attacking 状态**（链内推进不查冷却）
+  └─ 无缓冲 → 段播完后正常走 transition 退出（冷却已在各段触发时挂上，exit 不补挂）
 ```
 
-**玩家侧**：`world.ts` `setPlayerAttack(idx, holdDuration)` 攻击中不再拒绝，写单帧脉冲（含按住时长）经 `input.attack + skillIndex + attackHoldDuration` 由上述解析消费；非攻击中改用 `resolveEntrySkillIndex` 判定（键组内守卫变体与兜底槽冷却独立，不能只查单槽冷却）。**HUD 展示**：`modes/play/player_hud.ts` 每技能槽一行，同行展示动作/恢复/冷却三个计时器（`SkillTimerRowData`，数据由 `modes/play/index.ts` 按 `attackTimer` 与 `cooldownTimer` 装配）。**AI 侧**：`attack` 状态持续 `setInput(..., attack=true, ..., 0)` → 缓冲恒有值，自动无限走轻链，无需感知链结构（AI 不蓄力，holdDuration 恒 0 → 命中兜底槽）。
+`enterAttackSegment` 是段切换的唯一入口（进入 attacking 时由 `machine.ts` 先完成起手解析写入 `activeSegment`，再由此初始化段子状态）。
+
+**玩家侧**：`world.ts` `setPlayerAttack(attackKey, holdDuration)` 攻击中不再拒绝，写单帧脉冲（含攻击键与按住时长）经 `input.attack + attackKey + attackHoldDuration` 由上述解析消费；未攻击时先用 `canStartAttack` 判定（键组内守卫变体与兜底段冷却独立，不能只查单个段冷却），无候选则返回 `'cooldown'`。**HUD 展示**：`modes/play/index.ts` 按 `orderedSegments(player.combat.attacks)` 每段一行，同行展示动作 / 恢复 / 冷却三个计时器（`skillTimers`，冷却读 `segmentCooldownRemaining`；SKILLS 区块首行是冲刺技能）。**AI 侧**：AI 各战斗状态守卫用 `canStartAttack(combat, {..., holdDuration: 0, attackKey: 'light'})` 判断能否出招，出招后持续 `setInput(..., attack=true)` → 缓冲恒有值，自动无限走轻链，无需感知链结构（AI 不蓄力，holdDuration 恒 0 → 命中兜底段）。
 
 ### 3.6 确定性挥砍方向
 
-旧版 `COMBO_TILT_TABLE` 按挥砍次数轮转倾斜角（起手方向取决于历史，表现为“随机挥出”）已删除；每段方向的唯一来源是预设的 `swingTilt`，同段每次播放方向一致。
+旧版「按挥砍次数轮转倾斜角」的查表机制（起手方向取决于历史，表现为“随机挥出”）已删除；每段方向的唯一来源是段的 `swingTilt`，`enterAttackSegment` 写入 `combat.swingTilt`，同段每次播放方向一致。
 
 ### 3.7 移动技能：冲刺（dash）
 
-冲刺已整合进技能系统的三计时模型（`src/character/combat/dash_skill.ts`）：`DashSkillConfig`（id `dash`，duration = 0.25s 动作时间 / recovery = 0 / cooldown = 1.0s）经 `createDashSkillSlot()` 挂在 `CombatComponent.dashSkill`（`SkillSlot<DashSkillConfig>`，独立于攻击技能列表 `skills`，不参与起手解析/连段链/执行器）。运行时语义与攻击技能一致：
+冲刺是**角色能力而非武器技能**（`src/character/combat/dash_skill.ts`）：`DashSkillRuntime` 持有 `DashSkillConfig`（id `dash`，`DASH_DURATION = 0.25s` 动作时间 / recovery = 0 / `DASH_COOLDOWN = 1.0s`）与 `cooldownTimer`，由 `createDashSkillRuntime()` 创建后挂在 `CombatComponent.dashSkill`。它**不参与起手解析、攻击链与执行器调度**（`WeaponAttacks` 里没有冲刺段）。运行时语义与攻击段一致：
 
-- **冷却挡起手**：idle/walking/jumping/falling/attacking 的 `→ dashing` 转换守卫读 `combat.dashSkill.cooldownTimer <= 0`；`dashing.enter` 触发即挂 `config.cooldown`，由 `world.ts` 与攻击技能同循环递减。
-- **类型形态**：`SkillSlot<C extends SkillTimingConfig = SkillConfig>` 泛型默认攻击技能联合（近战/远程），冲刺槽用窄化参数；`SkillConfig` 联合不含冲刺，故攻击链路的 `config.weapon` 访问无需窄化。
-- **HUD**：play 面板 SKILLS 区块首行展示 `dash`（动作格 = 冲刺期间状态机驻留时间，恢复格恒 `-`，冷却格同攻击技能规则）；原 DASH 单行计时器已移除。
+- **冷却挡起手**：idle/walking/jumping/falling/attacking 的 `→ dashing` 转换守卫读 `combat.dashSkill.cooldownTimer <= 0`；`dashing.enter` 触发即挂 `config.cooldown`，由 `world.ts` 与段冷却同循环递减（`tickSegmentCooldowns` 与冲刺冷却各自递减）。
+- **类型形态**：原通用的 `SkillSlot` / `SkillTimingConfig` 已随槽位模型移除，冲刺保留自身最小配置类型，攻击链路无需任何窄化。
+- **HUD**：play 面板 SKILLS 区块首行展示 `dash`（动作格 = 冲刺期间状态机驻留时间，恢复格恒 `-`，冷却格同攻击段规则）。
 
 ---
 
@@ -273,7 +335,7 @@ export const CHARACTER_STATES = [
 ] as const
 ```
 
-**触发条件**：`CombatComponent.onDamageTaken` 回调中，若 `attackActive === true`（攻击/技能释放中被击中）且 `flinchImmunityTimer <= 0`，设置 `combat.pendingFlinch = true`。
+**触发条件**：`CombatComponent.onDamageTaken` 回调中，若 `attackActive === true`（攻击中被击中）且 `flinchImmunityTimer <= 0`，设置 `combat.pendingFlinch = true`。
 
 **受击保护窗口（防 stagger-lock）**：无限连段每段都会清空 `attackedTargets` 反复命中同一目标，若每次命中都能触发硬直，被击方每次重新起攻都会被下一击打断，永久锁在受击状态。因此 `flinching.exit` 挂 `flinchImmunityTimer = FLINCH_IMMUNITY_DURATION`（0.5s，> 轻链段间隔 0.4s），窗口内伤害照常结算但不再触发新硬直，保证被击方至少一个完整的反击/脱身窗口；计时器由 `world.ts` 主循环逐帧递减。
 
@@ -281,7 +343,7 @@ export const CHARACTER_STATES = [
 
 | 方法 | 行为 |
 |------|------|
-| `enter` | `attackActive = false`，`pendingFlinch = false`，`bufferedSkillIndex = -1`，阶段计时归零，速度归零（打断时非 0 冷却已在触发时挂上并继续计时；普通攻击无冷却不受影响） |
+| `enter` | `attackActive = false`，`pendingFlinch = false`，`bufferedSegment = undefined`，阶段计时归零，速度归零（打断时非 0 冷却已在段触发时挂上并继续计时；普通攻击无冷却不受影响） |
 | `update` | 速度持续归零，不响应移动输入 |
 | `exit` | 挂受击保护窗口 `flinchImmunityTimer = FLINCH_IMMUNITY_DURATION` |
 
@@ -300,28 +362,28 @@ export const CHARACTER_STATES = [
 ### 4.2 输入缓冲连段（软中断）
 
 - 攻击中按攻击键只写缓冲，不打断当前段；当前段（含 recovery）完整播完后才消费缓冲推进
-- 链内推进免冷却；普通攻击（近战链段 / 远程预设）冷却恒 0，节奏由动作/恢复时间形成；特殊技能的非 0 冷却从触发时开始计时，只挡起手不惩罚链中段
-- 中途改按另一链的键 = 段末切链（需该起手槽冷却完毕，普通攻击恒满足）
+- 链内推进（本段 `next`）免冷却；普通攻击（近战段 / 远程预设）冷却恒 0，节奏由动作/恢复时间形成；特殊段（如 test_weapon 蓄力段）的非 0 冷却从段触发时开始计时，只挡起手不惩罚链中段
+- 中途改按另一攻击键 = 段末切链（需该键起手候选守卫通过且冷却完毕，普通攻击恒满足）
 
 ### 4.3 Dash / Jump 取消（自中断）
 
 - 仅在 `cancellable === true` 的阶段，dashing / jumping 的 transition guard 可以通过
-- attacking meta-state 在 exit 时正常清理（冷却已在段触发时挂上、`bufferedSkillIndex`/阶段计时重置）
+- attacking meta-state 在 exit 时清理（冷却已在段触发时挂上、`bufferedSegment`/阶段计时重置）
 
 ### 4.4 状态转移图
 
 ```
                      ┌─→ flinching (受击，所有状态) ─→ idle/walking/falling
                      │
-idle/walking ──→ attacking (meta-state)
+idle/walking ──→ attacking (段子状态机)
                      │
-                     │  阶段推进：phase0(cancellable) → phase1 → … → 最终阶段
+                     │  段推进：当前段阶段0(cancellable) → 阶段1 → … → recovery
                      │       │
-                     │   攻击输入?（任意时刻）→ 写缓冲，最终阶段播完后推进下一段
+                     │   攻击输入?（任意时刻）→ 写缓冲；段播完后按段的 next 转换推进下一段（不退出 attacking）
                      │   dash/jump?（仅 cancellable 阶段）
                      │   → dashing/jumping
                      │
-                     └─→ walking/idle/falling/jumping (攻击完成)
+                     └─→ walking/idle/falling/jumping (段播完且无缓冲 / 链终止)
 ```
 
 ---
@@ -342,7 +404,7 @@ idle/walking ──→ attacking (meta-state)
 
 - **来源**：武器构建时提供本地盒参数（`appearance/weapon_mesh.ts` 的 `WeaponLocalHitBox`，略包裹武器打击部位 + `WEAPON_HIT_BOX_PAD` 外扩），经 `CharacterModel.weaponGroup` / `weaponHitBox` 暴露；近战武器显式指定刃部/枪头/斧头/锤头区域，远程/投掷取默认盒。
 - **reach 字段**：命中箱沿武器本地 +Y 轴（自握把延伸方向）的最大前伸量（`center.y + half.y`，含外扩边距），即武器打击部位距握把的最远距离；仅作命中箱几何属性保留，攻击检测箱已改由武器 `detectBox` 配置显式驱动（见 `docs/ai_system.md` 2.5）。
-- **运行时**：`melee_executor` 命中窗口（`attackTimer / duration` 进度 0.1–0.85，跳过蓄力前段与恢复期）内强制 `weaponGroup.updateMatrixWorld()`，取 `matrixWorld.elements` 经 `obbFromTransform`（列主序，列向量含缩放）得世界 OBB。
+- **运行时**：命中窗口由攻击 clip 的事件轨驱动（`hitbox_on` @ 0.1×动作时间、`hitbox_off` @ 0.85×动作时间，见 6.3），窗口内每帧强制 `weaponGroup.updateMatrixWorld()`，取 `matrixWorld.elements` 经 `obbFromTransform`（列主序，列向量含缩放）得世界 OBB。伤害 = `weapon.damage × activeSegment.damageMultiplier`（重段 ×1.6）。
 - **判定**：与目标受击箱 OBB 做 15 轴 SAT 相交（`combat/obb.ts` `obbIntersect`）。判定与 debug 可视化（`combat_vfx/hitbox_debug.ts` `syncWeaponDebugBox`）同源。
 
 ### 5.2 受击箱
@@ -372,7 +434,7 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 
 ## 六、动画系统（骨骼 clip 化，M4 迁移后）
 
-> 攻击动画已迁移至骨骼动画系统（`docs/bone_animation_system.md`）：原 `animators/` 目录全部删除，程序化阶段公式烘焙为关键帧 clip，命中窗口由动画事件轨道驱动。
+> 攻击动画已迁移至骨骼动画系统（`docs/bone_animation_system.md`）：原 `animators/` 目录全部删除，姿态公式在生成器内烘焙为关键帧 clip，命中窗口由动画事件轨道驱动。
 
 ### 6.1 动画文件组织
 
@@ -380,10 +442,10 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 
 ```
 appearance/
-├── pose_fns.ts            ← 基础状态姿态纯函数（公式提取自旧 animator，固定频率）
+├── pose_fns.ts            ← 基础状态姿态纯函数（固定频率采样）
 ├── clips/
 │   ├── base_clips.ts      ← 基础状态 clip 生成器（60fps 烘焙，循环 wrap/非循环 clamp，weaponHeld 变体）
-│   ├── attack_clips.ts    ← 攻击 clip 生成器（阶段公式全量烘焙 + hitbox 事件轨）
+│   ├── attack_clips.ts    ← 攻击 clip 生成器（按武器模组段定义的阶段公式烘焙 + hitbox 事件轨）
 │   └── *.test.ts
 ├── skeleton_bridge.ts     ← 角色模型 Group ↔ 骨架桥接（以场景为真源）
 └── system.ts              ← clip 调度器（动画键 → 播放器 → 快照加权混合）
@@ -393,44 +455,79 @@ appearance/
 
 `AppearanceSystem`（`system.ts`）为 clip 调度器：
 
-- **动画键**：基础状态 `${state}:${weaponHeld?'w':'n'}`；attacking 附加技能 id（`attacking:${skillId}`），链段切换触发快照混合。
+- **动画键**：基础状态 `${state}:${weaponHeld?'w':'n'}`；attacking 用当前段 id（`attacking:${segment.id}`），链段切换即触发快照混合。
 - **快照加权混合**：状态/键切换瞬间抓取全部关节快照，新 clip 采样输出 × w + 快照 × (1−w)（w 三次 ease-out，`STATE_BLEND_DURATION`）。
 - **桥接**：模型关节经 `createCharacterSkeletonBridge`（Group 层级自动建连）绑定为骨架，播放器 `applyPose` 写骨架 → 桥接写回 Group（场景图级联）。
 - **双手武器 IK**：attacking 且 `twoHanded` 时左腕链（左肩 IK 根 → 左肘 → 左腕）每帧 `solveCcd` 追「右腕 + 武器轴 × 0.45m」握柄点（applyPose 先写、IK 后写）。
 
 ### 6.3 攻击 clip 生成（attack_clips.ts）
 
-`buildAttackClip({skillId, duration, recovery, phases, tilt, gripTilt})` 按 60fps 烘焙阶段公式：
+`AppearanceSystem` 在进入 attacking 与链段切换时用当前段请求 clip：
 
-- **阶段末姿态**：`phaseEndPose(phase, tilt)` 按阶段名语义解释 `animConfig`（windup/draw 蓄力、aim/spin 维持、strike/release 随动、recovery 归位）——公式与旧 attackingAnim 逐行一致；
+```ts
+const segment = ctx.attackSegment   /* 武器模组的段定义（AnimationContext） */
+const clip = getAttackClip({
+    segmentId: segment.id,          /* clip 名 = 段 id */
+    duration: segment.duration,
+    recovery: segment.recovery,
+    phases: segment.phases,         /* undefined = 无阶段信息回退 */
+    tilt: ctx.swingTilt,            /* 段固有倾斜角（进入段时写入 combat.swingTilt） */
+    gripTilt: model.weaponGripTilt, /* 武器静态握持前倾，腕部刃面偏转抵消 */
+})
+```
+
+`buildAttackClip(params)` 按 60fps 烘焙阶段公式：
+
+- **阶段末姿态**：`phaseEndPose(phase, tilt)` 按阶段名语义解释 `animConfig`（windup/draw 蓄力、aim/spin 维持、strike/release 随动、recovery 归位）；
 - **插值**：上一阶段末姿态 → 本阶段末姿态链式插值；`strike`/`release` 用 `strikeCurve`（末端加速峰值在 `strikePeakRatio`），其余按 `easing`；恢复起点叠加 `overshootRatio` 惯性过冲；aim/spin 叠加持械微颤；
 - **附加驱动**：弓步腿角 + 重心下沉、左臂（双手扶柄 / 单手平衡反摆）、腕部刃面偏转（`gripTilt` 抵消 + `swingTilt` 横斩偏转）、头部侧偏与摆动；
-- **时间映射**：`spanAt(t)` 按阶段时长（`phaseDurationOf`）累加定位阶段跨度，全部完成后维持末阶段 p=1（clamp）；
-- **事件轨**：近战命中窗口 `hitbox_on` @ 0.1×duration、`hitbox_off` @ 0.85×duration（与旧 executor 计时窗口一致，驱动 `melee_executor.setHitWindow`）；
-- **swingTilt** 为技能段固有配置（`MeleeSkillConfig.swingTilt`），每技能段单一 clip 内嵌对应 tilt；clip 缓存按 skillId + gripTilt + duration/recovery。
+- **时间映射**：`spanAt(t)` 按阶段时长（`phaseDurationOf(phase, segment.duration, segment.recovery)`）累加定位阶段跨度，全部完成后维持末阶段 p=1（clamp）；
+- **事件轨**：近战命中窗口 `hitbox_on` @ 0.1×动作时间、`hitbox_off` @ 0.85×动作时间（驱动 `melee_executor.setHitWindow`）；
+- **clip 时长**：有阶段 = `duration + recovery`；无阶段 = `FALLBACK_ATTACK_DURATION`；
+- **clip 缓存 key**：`${segmentId}:${gripTilt}:${duration}:${recovery}`（`tilt` 内置于段定义，同一段 id 不会有两种方向）。
 
 ### 6.4 无阶段信息回退
 
-`attackPhases` 缺失时生成器回退虚拟三阶段（`FALLBACK_PHASES`），clip 时长 = `FALLBACK_ATTACK_DURATION`（0.5），按总进度映射（同旧 6.4 语义）。
+`params.phases` 缺失或为空数组时，生成器回退虚拟三阶段（`FALLBACK_PHASES`：windup / strike / recovery），clip 时长 = `FALLBACK_ATTACK_DURATION`（0.5s），按总进度映射（`mapFallbackProgress`）。生产武器的段都定义了阶段，该回退仅作为容错路径。
 
-### 6.5 阶段动画参数示例
+### 6.5 AnimationContext 与段 id 动画键
 
-| 技能 | 阶段 | armSwingBack | armSwingForward | elbowBend | twoHanded | 描述 |
-|------|------|:---:|:---:|:---:|:---:|------|
-| heavy_sword_slam | windup | X:-2.0, Z:0 | — | 0.8 | 是 | 双手举过头顶 |
-| heavy_sword_slam | strike | — | X:2.5, Z:0 | -0.1 | 是 | 全力下砸 |
-| heavy_sword_slam | recovery | — | — | 0→0 | 是 | 缓慢收刀 |
-| short_sword_slash | strike | X:-0.6, Z:±tilt | X:1.0, Z:±tilt | 0.1 | 否 | 快速横斩 + tilt |
-| short_sword_slash | recovery | — | — | 0→0 | 否 | 单臂收回 |
-| spear_thrust | windup | X:-0.8, Z:0 | — | 0.3 | 是 | 双手后拉 |
-| spear_thrust | strike | — | X:1.8, Z:0 | 0 | 是 | 直线前刺 |
-| dual_axe_spin | spin | X:-0.5, Z:-3.0 | — | 0.2 | 否 | 水平旋转，双斧交替 |
-| longbow_shot | draw | X:-1.0, Z:0 | — | 0.6 | 是 | 左手推弓，右手拉弦 |
-| longbow_shot | release | — | X:1.2, Z:0 | 0 | 是 | 释放 + 弦回弹 |
-| staff_orb | aim | X:-0.5, Z:0 | — | 0.3 | 是 | 法杖前指 |
-| staff_orb | release | — | X:0.8, Z:0 | 0.1 | 是 | 能量释放 |
+`AnimationContext`（`entity/character/appearance/types.ts`）由 `world.ts` 每帧装配：
 
-参数改动后由 clip 生成器自动重新烘焙（缓存按参数 key 失效），无需改动画代码。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `stateTime` | `number` | 当前状态已用时间（秒） |
+| `horizontalSpeed` | `number` | 水平速度（m/s）：行走步频变速、falling 腿张档位 |
+| `swingTilt` | `number` | 近战挥砍倾斜角（rad，读 `combat.swingTilt`，进入段时写入） |
+| `attackSegment` | `AttackSegment \| undefined` | 当前攻击段（仅 attacking 有效）—— 攻击 clip 生成参数与动画键的来源 |
+| `attackPhase` | `AttackPhaseName \| undefined` | 当前攻击阶段名 |
+| `attackPhaseProgress` | `number` | 当前阶段进度 0-1（`phaseTimer / phaseDurationOf(...)`） |
+| `attackTotalProgress` | `number` | 段总进度 0-1（`attackTimer / (duration + recovery)`） |
+| `attackPhaseIndex` | `number` | 当前阶段索引（越界表示阶段已全部完成） |
+| `weaponHeld` | `boolean` | 是否持有武器（idle/walking 据此降低持械臂摆幅） |
+
+动画键（`system.ts` 的 `update`）：attacking 且 `attackSegment !== undefined` 时为 `attacking:{segment.id}`；基础状态为 `${state}:${weaponHeld?'w':'n'}`；falling 附加速度档 `falling:{tier}:{w|n}`。**键变化即触发一次 `onStateChange`**：抓取当前关节快照、用新段参数重建攻击 clip 并 seek(0)，随后快照加权混合收敛（`STATE_BLEND_DURATION`），因此链段切换在视觉上是连续过渡而非硬切。
+
+### 6.6 阶段动画参数示例
+
+以下为实际段定义提取的参数（`MeleeAttackStyle.amp` 已折算；短剑 amp = 1.0、单手）：
+
+| 段 | 阶段 | armSwingBack | armSwingForward | elbowBend | twoHanded | attackType | 描述 |
+|------|------|:---:|:---:|:---:|:---:|:---:|------|
+| `{weapon}_light_1` | strike | X:-1.5, Z:0 | X:2.0, Z:0 | 0.25 | 按武器风格 | slash | 上至下竖劈 |
+| `{weapon}_light_2` | strike | X:-1.5, Z:0 | X:1.6, Z:0 | 0.15 | 按武器风格 | thrust | 探身直刺 |
+| `{weapon}_heavy_1` | strike | X:-1.5, Z:0 | X:2.4, Z:0 | 0.3 | 按武器风格 | slash | 拧腰大幅横斩（tilt ≈0.48π） |
+| `{weapon}_heavy_2` | strike | X:-1.5, Z:0 | X:2.3, Z:0 | 0.3 | 按武器风格 | slash | 斜向挥砍（tilt ≈-0.22π） |
+| 任意近战段 | recovery | — | — | 0.2 | 按武器风格 | slash | 收刀归位 |
+| `longbow_shot` | draw | X:-1.5, Z:0 | — | 0.15 | 是 | slash | 左手推弓，右手拉弦 |
+| `longbow_shot` | aim | X:-1.5, Z:0 | — | 0.15 | 是 | slash | 瞄准维持（可打断） |
+| `longbow_shot` | release | X:-1.5, Z:0 | X:-1.35, Z:0 | 0.1 | 是 | slash | 释放 + 弦回弹 |
+| `staff_orb` | aim | X:-1.4, Z:0 | — | 0.1 | 是 | slash | 法杖前指（可打断） |
+| `staff_orb` | release | X:-1.4, Z:0 | X:-1.3, Z:0 | 0.08 | 是 | slash | 能量释放 |
+| `throwing_axe_hurl` | windup | X:-1.8, Z:-0.4 | — | 0.8 | 否 | slash | 后引蓄力 |
+| `throwing_axe_hurl` | release | X:-1.8, Z:-0.4 | X:1.6, Z:-0.4 | 0.1 | 否 | slash | 抛掷甩出 |
+
+`swingTilt` 由段提供（不写在 `animConfig` 里，经 `getAttackClip` 的 `tilt` 参数进入生成器）；参数改动后由 clip 生成器自动重新烘焙（缓存 key 含段 id / gripTilt / duration / recovery），无需改动画代码。
 
 ---
 
@@ -451,22 +548,25 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
 }
 
 // entity/character/appearance/system.ts —— M4 迁移后为 clip 调度器（CLIP_STATES 覆盖全部状态，
-// 姿态由 clips/base_clips + clips/attack_clips 生成器提供，不再有 AnimationHandler Record）
+// 攻击姿态由 clips/attack_clips 的段 id 生成器提供，不再有 AnimationHandler Record）
 ```
 
 ### 7.2 阶段子状态：运行时注册表
 
-阶段子状态 key 为运行时字符串拼接（`attacking_${skillId}_${phaseName}`），由 `attacking.ts` 的 `phaseHandlerRegistry: Map<string, StateHandler>` 存取，未命中即走默认阶段行为。
+阶段子状态 key 为运行时字符串拼接（`attacking_${segmentId}_${phaseName}`），由 `states/attacking/index.ts` 的 `phaseHandlerRegistry: Map<string, StateHandler>` 存取，未命中即走默认阶段行为。注册入口仍为 `registerPhaseHandler(key, handler)`；原 `attack_phases.ts` 中的模板字面量推导类型 `AttackSubState` 已随技能 id 联合类型删除（武器段 id 是运行时字符串，不再有编译期联合可供推导）。
 
 ```ts
-// character/combat/attack_phases.ts —— 预留的模板字面量推导类型（当前未被注册表消费）
-type MeleeSkillId = keyof typeof MELEE_SKILL_PRESETS
-type RangedSkillId = keyof typeof RANGED_SKILL_PRESETS
-export type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${AttackPhaseName}`
-// 结果: "attacking_short_sword_slash_strike" | "attacking_heavy_sword_slam_windup" | ...
+// character/state_machine/states/attacking/index.ts
+export const phaseHandlerRegistry = new Map<string, StateHandler>()
+export const registerPhaseHandler = (key: string, handler: StateHandler): void => { /* ... */ }
+
+// update 内拼接（segment.id = 武器模组段 id）
+const phaseKey = c.phaseIndex < phases.length
+    ? `attacking_${segment.id}_${phases[c.phaseIndex].name}`
+    : undefined
 ```
 
-当前生产武器均未注册阶段 handler，全部走默认行为（见 8.2）；`AttackSubState` 类型保留供将来把注册表升级为判别式访问。
+当前生产武器均未注册阶段 handler，全部走默认行为（见 8.2）。
 
 ### 7.3 判别式 Map 访问约定
 
@@ -474,74 +574,207 @@ export type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${Attack
 
 ---
 
-## 八、新增攻击状态 / 武器指南
+## 八、新增 / 调整攻击段与连段指南
 
-### 8.1 为新武器添加攻击技能
+> 一句话原则：**攻击动作是武器模组的数据，不是状态机的代码**。增删段、改链长、改循环、加条件变体，全部落在 `src/character/weapon/`；状态机、存档、AI、HUD、展示模式、骨骼动画内置库都会自动跟随。
 
-1. 在 `src/character/weapon/melee_weapon.ts`（或 `ranged_weapon.ts`）的 `PRESETS` 中添加武器预设，**必须填写 `name` 字段（武器中文名）**——它同时驱动角色属性面板的武器下拉与展示场景的头顶标签
-2. 在 `src/character/combat/melee_skill.ts`（或 `ranged_skill.ts`）的 `PRESETS` 中添加技能预设，**必须定义 phases 数组**（阶段名取自 `ATTACK_PHASES`；近战用 `windup`/`strike`/`recovery`/`spin`，远程用 `draw`/`aim`/`release`）
-3. （可选）需要阶段专用逻辑时：创建 `StateHandler` 并在装配处调用 `registerPhaseHandler('attacking_{skillId}_{phaseName}', handler)`（由 `states/attacking.ts` 导出；当前生产武器全部走默认行为，未注册任何阶段 handler）
-4. 动画无需专用文件：阶段姿态由 `phases[].animConfig` 驱动通用 `attackingAnim`（调整 `armSwingBack/Forward`、`elbowBend`、`bodyLean`、`twoHanded`、`easing`、`attackType`、`strikePeakRatio`、`overshootRatio` 即可）；挥砍类段固有倾斜角用 `MeleeSkillConfig.swingTilt`
-5. 更新 `SkillSlot.comboChain`（如果该技能应属于连招链）
+### 8.1 三个可改点（改哪里）
 
-### 8.2 仅使用默认行为（当前全部生产武器）
+| 想改什么 | 改哪里 |
+|---|---|
+| 某段动作时长/恢复/动画幅度/倾斜角/伤害倍率 | `melee_attacks.ts` 的 `MELEE_SEGMENT_TEMPLATES`（模板表：一行一个段，`anim.armSwingForwardX` 会自动乘武器风格 `amp`） |
+| 某段阶段序列（strike/recovery 之外的新阶段、`moveSpeedMultiplier`、`cancellable`） | `melee_attacks.ts` 的 `segmentPhases()`（影响所有近战模板段）；单独一个段用 `extraSegments` 自带 `phases` |
+| 链长度/顺序/是否循环 | `melee_weapon.ts` 里该武器 `meleePreset(base, attackOptions)` 的 `attackOptions.chains`（缺省 = `melee_attacks.ts` 的 `MELEE_CHAIN_SPECS`：轻/重各 2 段循环） |
+| 起手条件（长按/方向变体/特殊技） | `attackOptions.extraSegments` + `attackOptions.entries`（守卫变体在前、兜底在后） |
+| 段间条件续段 | 该段的 `next` 候选数组（守卫候选在前、兜底在后） |
 
-仅在技能预设中定义 `phases` 数组即可。attacking meta-state 在找不到阶段专用 handler 时使用默认行为：有移动输入时按 `moveSpeedMultiplier` 缩放 `config.speed` 驱动移动（攻击中推进/突进，同 walking 的斜坡投影/吸附逻辑）；无移动输入时衰减残留速度 + 斜坡防滑。注意不能只衰减存量速度：无限连段下 AI 长期驻留 attacking，速度会衰减到 0 且永不补充，导致攻击一段时间后站桩不动。动画由 `attackingAnim` 按 `attackPhases` 数据驱动（无阶段信息时回退 6.4 的虚拟三阶段）。
+武器间差异（幅度系数 `amp` / 双手持握 `twoHanded`）写在 `MELEE_ATTACK_STYLES`（`meleeAttackStyleOf` 查询，未登记武器回退 `DEFAULT_ATTACK_STYLE`）。
 
-### 8.3 新增 flinching 触发源
+### 8.2 完整流程 A：把巨剑轻链改成三段（轻 1 → 轻 2 → 轻 3）
 
-在伤害回调或环境效果中设置 `combat.pendingFlinch = true`，下一帧 attacking meta-state 会通过 transition guard 检测到并转入 flinching。
+**目标**：只有巨剑的轻击链变三段，其它武器保持两段；三段都参与循环、清单顺序为 轻 1 → 轻 2 → 轻 3 → 重 1 → 重 2。
+
+1. **加段模板**（`melee_attacks.ts`）
+   - `MELEE_SEGMENT_KEYS` 追加 `'light_3'`；
+   - `SEGMENT_META` 追加 `light_3: {key: 'light', step: 3, heavy: false}`；
+   - `MELEE_SEGMENT_TEMPLATES` 追加一行（本仓库实现：上挑斜斩，`attackType: 'slash'`、`swingTilt: -π*0.12`、幅度 2.1）；
+   - 该模板键对**所有**近战武器可用，但只有把它写进某武器链编排的武器才会生成对应段（`buildMeleeAttacks` 只创建编排里用到的模板段）。
+2. **改该武器的链编排**（`melee_weapon.ts`）
+   ```ts
+   heavy_sword: meleePreset({...预设字段...}, {
+       chains: {light: {steps: ['light_1', 'light_2', 'light_3'], loop: true}},
+   }),
+   ```
+   `next` 由编排自动生成（轻 1 → 轻 2 → 轻 3 → 轻 1），无需手写；`loop: false` 则末段 `next: []`（播完收招）。
+3. **验证**（本仓库已落地的断言）
+   - 单测 `weapon/attack_chain.test.ts`：巨剑 `chains.light.steps` 为 3 段、`orderedSegments` 顺序为 轻1/轻2/轻3/重1/重2、`segmentDisplayName` 为「轻击三段」、段转换依编排推进；
+   - 单测 `state_machine/machine.test.ts`：按住轻击键依次得到 `heavy_sword_light_1 → light_2 → light_3 → light_1`；
+   - 单测 `combat/attack_phases.test.ts`：新段的 `durationRatio` 之和为 1、阶段名与 `attackConfig` 合法（遍历各武器实际段，不依赖固定段数）；
+   - 单测 `modes/bone_edit/builtin_clips.test.ts` 与 e2e `bone_edit.spec.ts`：内置动作库每武器段数/标签顺序（巨剑 5 条、近战合计 26 条、总条目 44）与 `data-builtin-clip-count` 同步更新；
+   - 无需改动：状态机、存档、AI、HUD、展示模式脚本（`orderedSegments` 自动带上新段；链间停顿位置由「第一个重击段之前」派生）。
+
+### 8.3 完整流程 B：给长枪加蓄力突刺变体（长按轻击键触发）
+
+**目标**：轻击键长按 ≥ 0.5s 松开触发「蓄力突刺」（高伤害、带冷却、单发无连段），点按仍是轻 1 段，冷却期内长按回落轻 1 段；AI 不蓄力因此行为不变。
+
+1. **写变体段**（`weapon/melee_special_moves.ts`）
+   ```ts
+   export const SPEAR_CHARGE_HOLD = 0.5
+   export const SPEAR_CHARGE_THRUST: AttackSegment = {
+       id: 'spear_charge_thrust', key: 'light', step: 1, label: '蓄力突刺',
+       duration: 0.45, recovery: 0.3,
+       phases: [/* strike（thrust + 更大探身，moveSpeedMultiplier 0.2）+ recovery */],
+       swingTilt: 0, damageMultiplier: 1.8, cooldown: 0.8, next: [],
+   }
+   ```
+   要点：`label` 让清单/HUD/展示显示中文名而非「轻击一段」；`next: []` = 单发；`cooldown` 只挡起手、冷却中自动回退兜底候选。
+2. **接进该武器**（`melee_weapon.ts`）
+   ```ts
+   spear: meleePreset({...预设字段...}, {
+       extraSegments: [SPEAR_CHARGE_THRUST],
+       entries: {light: [
+           {segmentId: SPEAR_CHARGE_THRUST.id, guard: holdAtLeast(SPEAR_CHARGE_HOLD)},
+           {segmentId: 'spear_light_1'},   // 兜底：无守卫、放最后
+       ]},
+   }),
+   ```
+   **不要**把变体段写进 `chains.light.steps`——它不是主干段，不进「同链 1..n 顺序」；`orderedSegments` 会把它补在所属攻击键末尾（清单显示为 长枪 · 轻击一段 / 轻击二段 / 蓄力突刺 / 重击一段 / 重击二段）。
+3. **输入链路（已具备，无需改动）**：`modes/play/camera.ts` 在攻击键 mouseup 时算出按住时长 → `characterSystem.setPlayerAttack('light', held)` → `world.ts` 写入单帧脉冲 → `setInput(..., attackKey, attackHoldDuration)` → 起手守卫 `holdAtLeast` 求值。AI 侧固定 `holdDuration: 0`，因此永远命中兜底段。
+4. **验证**（本仓库已落地的断言）
+   - 单测 `weapon/attack_chain.test.ts`：长按命中变体、点按回落轻 1、冷却中回退轻 1、`orderedSegments` 顺序、变体段 `next` 为空且带冷却；
+   - 单测 `state_machine/machine.test.ts`：真实状态机长按 → `activeSegment === 'spear_charge_thrust'` 且挂上段冷却；段中途按住不推进；松手后收招回 idle；冷却期内长按回退 `spear_light_1`；
+   - e2e：骨骼动画内置动作库出现 `spear_charge_thrust` 条目与「长枪 · 蓄力突刺」标签（可用它直接可视化调动作）。
+
+### 8.4 新增近战武器
+
+1. 在 `src/character/weapon/melee_weapon.ts` 的 `MELEE_WEAPON_PRESETS` 中用 `meleePreset({...})` 添加预设，**必须填写 `name` 字段（武器中文名）**——它同时驱动角色属性面板的武器下拉、展示场景的头顶标签与骨骼动画内置动作库的分组名。
+2. 在 `melee_attacks.ts` 的 `MELEE_ATTACK_STYLES` 中登记该武器 id 的 `amp` / `twoHanded`（不登记则用默认风格）。
+3. 攻击链由 `meleePreset` 自动调用 `buildMeleeAttacks(base.id, meleeAttackStyleOf(base.id), attackOptions)` 注入；该武器若需要特殊链长/变体，把 `attackOptions` 作为第二个参数传入（见 8.2 / 8.3）。
+4. `detectBox`（AI 出招检测箱）与 `mesh`（程序化模型）必须填写，其余数值（`damage` / `knockbackForce` / `knockbackY` / `detectionRange`）按武器定位给定。
+
+### 8.5 新增远程武器
+
+1. 在 `src/character/weapon/ranged_attacks.ts` 的 `RANGED_ATTACK_SPECS` 中添加该武器的段规格（`segmentId` / `duration` / `cooldown` / `phases`）。**阶段必须有**（阶段名取自 `ATTACK_PHASES`，远程常用 `draw` / `aim` / `release` / `windup`），动作比例之和应为 1；`aim` 类阶段建议 `cancellable: true` 以便瞄准期被 dash 打断。
+2. 在 `src/character/weapon/ranged_weapon.ts` 的 `RANGED_WEAPON_PRESETS` 中用 `rangedPreset({...})` 添加预设（`name` 中文名必填，弹道数值、`detectionRange` / `idealRange` / `retreatRange` 按定位给定）；攻击链由 `buildRangedAttacks(base.id)` 自动注入。
+3. 远程目前是**单段**（`next: []`、`heavy` 空链）：需要多段（三连射、蓄力-释放）时在 `RANGED_ATTACK_SPECS` 里加段并在 `buildRangedAttacks` 中填写 `next`/`steps`（与近战同构：`entries` 决定起手、`steps` 决定清单与顺序、`next` 决定推进）。
+
+### 8.6 用 `next` 与起手守卫表达条件（速查）
+
+- **条件起手**：变体段放进该键 `entries` 靠前位置并挂守卫（如 `holdAtLeast(0.5)`），无守卫兜底段放其后；两者冷却独立，变体冷却中自动回退兜底。
+- **条件续段**：写进当前段 `next`，守卫候选在前、兜底候选在后（如 `[{to: 'x_thrust', guard: hasMoveInput}, {to: 'x_light_2'}]`）。
+- **链终止**：`next: []`；**跨链切换**由输入侧异键自动走起手解析，不需要写 `next`。
+- **守卫原语**：`always` / `pressedKey(key)` / `pressedOtherKey(key)` / `holdAtLeast(s)` / `holdLessThan(s)` / `hasMoveInput` / `noMoveInput` / `cooldownReady(id)` / `allOf` / `anyOf` / `not`。
+- 测试夹具可参考 `src/character/combat/test_weapon.ts`：6 段覆盖蓄力起手、点按兜底、键组分离、方向变体、循环链、无链单发与非 0 冷却；它通过 `registerWeaponPreset` 注册为额外预设（不进面板下拉），`world.ts` 对 `TEST_WEAPON_ID` 特判装配。
+
+### 8.7 阶段专用逻辑与默认行为
+
+（可选）需要阶段专用逻辑时：创建 `StateHandler` 并在装配处调用 `registerPhaseHandler('attacking_{segmentId}_{phaseName}', handler)`（由 `states/attacking/index.ts` 导出）。**当前生产武器未注册任何阶段 handler，全部走默认行为**：
+
+- 有移动输入时按阶段 `moveSpeedMultiplier` 缩放 `entity.config.speed` 驱动移动（攻击中推进/突进，同 walking 的斜坡投影/吸附逻辑）；
+- 无移动输入时衰减残留速度 + 斜坡防滑。注意不能只衰减存量速度：无限连段下 AI 长期驻留 attacking，速度会衰减到 0 且永不补充，导致攻击一段时间后站桩不动。
+- 动画无需专用文件：阶段姿态由 `phases[].animConfig` 驱动 clip 生成器（调整 `armSwingBack/Forward`、`elbowBend`、`bodyLean`、`twoHanded`、`easing`、`attackType`、`strikePeakRatio`、`overshootRatio` 即可）；挥砍类段的固有倾斜角用 `segment.swingTilt`（经 `getAttackClip` 的 `tilt` 参数进入生成器）。
+
+### 8.8 新增 flinching 触发源
+
+在伤害回调或环境效果中设置 `combat.pendingFlinch = true`，下一帧 attacking 的 transition guard 会检测到并转入 flinching。
+
+### 8.9 改动影响清单（增删段后需要同步的断言）
+
+| 位置 | 为什么 |
+|---|---|
+| `weapon/attack_chain.test.ts` | 每武器段数/链编排/顺序/时长倍率/倾斜角断言（表驱动，新增武器或改链长时同步 `MELEE_CHAIN_STEPS`） |
+| `weapon/melee_weapon.test.ts` | 武器预设数量（6 把近战）与字段完整性 |
+| `combat/attack_phases.test.ts` | 遍历各武器实际段检查阶段比例/类型合法性（不写死段数，一般无需改） |
+| `state_machine/machine.test.ts` | 连段推进与起手解析的端到端断言（改链长/加变体时补对应用例） |
+| `modes/bone_edit/builtin_clips.test.ts` + `e2e/bone_edit.spec.ts` | 内置动作库条目总数（当前 9 + 26 + 9 = 44）、每武器标签顺序、`data-builtin-clip-count` |
+| `entity/character/appearance/clips/attack_clips.test.ts` | 攻击 clip 生成参数（段 id 变更会改动画键与缓存 key） |
+| `docs/showcase.md` / `docs/bone_animation_system.md` | 展示清单与内置动作库的段数/顺序描述 |
 
 ---
 
 ## 九、核心文件索引
 
-| 层级 | 文件 | 内容 |
-|------|------|------|
-| **NEW** | `src/character/combat/attack_phases.ts` | `AttackPhase`、`AttackAnimConfig`、`EasingType` 类型；阶段解析工具；类型推导 |
-| 修改 | `src/character/combat/melee_skill.ts` | `MeleeSkillConfig` 新增 `phases`、`comboChain`、`swingTilt`；6 武器 × 4 链段（`MELEE_CHAIN_SLOTS`）预设补充阶段定义 |
-| 修改 | `src/character/combat/ranged_skill.ts` | `RangedSkillConfig` 新增 `phases`、`comboChain`；9 个预设补充阶段定义 |
-| 修改 | `src/character/combat/skill_types.ts` | `SkillSlot` 新增 `comboChain`；`ComboGuardContext`/`ComboGuard` 类型；`triggerGuard`/`entryGroup` 字段 |
-| **NEW** | `src/character/combat/combo_guard.ts` | 守卫求值与解析：`evalComboGuard`/`resolveEntrySkillIndex`/`resolveChainNextIndex`/`chainGroupOf` + 常用守卫（holdAtLeast/holdLessThan/hasMoveInput/noMoveInput） |
-| **NEW** | `src/character/combat/test_weapon.ts` | 测试武器：6 槽守卫链装配（蓄力/点按兜底/键组分离/方向变体/循环链/无链单发），仅供单元测试 |
-| 修改 | `src/character/combat/types.ts` | `CombatComponent` 新增 `phaseIndex`、`phaseTimer`、`chainEntryIndex`、`bufferedSkillIndex`、`pendingFlinch`、`flinchImmunityTimer` |
-| 修改 | `src/character/state_machine/types.ts` | `CHARACTER_STATES` 新增 `'flinching'`；`MachineContext` 新增 `attackPhase`；`CharacterInput` 新增 `attackHoldDuration`（蓄力按住时长），`setInput` 第 7 参 |
-| 修改 | `src/character/state_machine/machine.ts` | 静态 `Record<CharacterState, StateHandler>` 注册 8 状态；transition guard 检查 + `onStateChange` 派发 |
-| **重写** | `src/character/state_machine/states/attacking.ts` | 阶段调度 meta-state：enter 初始化阶段索引 → update 推进阶段 + 缓冲消费/委托 → exit 清理；导出 `phaseHandlerRegistry` / `registerPhaseHandler`（阶段子状态运行时注入，未注册走默认行为） |
-| — | `src/character/state_machine/states/attack/` | 不存在——阶段子状态通过 `registerPhaseHandler` 运行时注入，当前生产武器全部走默认行为 |
-| **NEW** | `src/character/state_machine/states/flinching.ts` | flinching 状态 handler |
-| 修改 | `src/entity/character/appearance/types.ts` | `AnimationContext` 新增 `attackSkillId`、`attackPhase`、`attackPhaseProgress`、`attackTotalProgress`、`attackPhases`、`attackPhaseIndex` |
-| 修改 | `src/entity/character/appearance/system.ts` | 静态 `Record<CharacterState, AnimationHandler>`；动画键 `state:skillId` 触发快照混合；传递阶段信息给 animator |
-| **重写** | `src/entity/character/appearance/animators/attacking.ts` | 阶段驱动通用动画器：`attackPhases` 相邻阶段末姿态链式插值（`phaseEndPose` 按阶段名解释 animConfig）；无阶段信息回退 `attackTotalProgress` 虚拟三阶段 |
-| — | `src/entity/character/appearance/animators/attack/` | 不存在——阶段动画由 `attackingAnim` 数据驱动（见 6.3） |
-| 修改 | `src/entity/character/physics/world.ts` | 传递 `phaseIndex`/`phaseTimer`/阶段序列给外观系统；更新 executor 调度；`setPlayerAttack(idx, holdDuration)` 蓄力脉冲与起手守卫解析；test_weapon 装配特判 |
-| 修改 | `src/modes/play/camera.ts` | 攻击键按住计时（mousedown 记录时刻，mouseup 携带按住秒数触发，右键重击同为松开触发） |
-| **NEW** | `src/entity/character/combat/obb.ts` | OBB 类型 + `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
-| 修改 | `src/entity/character/combat/melee_executor.ts` | 伤害判定改武器 OBB × 受击箱 OBB（`testMeleeHit`）；攻击检测箱 `attackDetectOBB` / `testAttackDetect` |
-| 修改 | `src/entity/character/appearance/weapon_mesh.ts` | 武器本地命中箱 `WeaponLocalHitBox`（近战武器显式打击部位盒） |
-| 修改 | `src/entity/character/appearance/model.ts` | 暴露 `weaponGroup` / `weaponHitBox` |
-| 修改 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/受击箱（青）/检测箱（橙）/射程圆环（橙，远程）/视线扇形（蓝）五组件 debug 可视化 |
-| **NEW** | `src/physics/collision_category.ts` | 碰撞类别（`ground`/`box`/`fragment`/`area`/`terrain`/`character`）与 membership 位打包 / 解析 / 掩码工具，投掷物穿透判定与类别识别共用 |
-| 修改 | `src/character/weapon/ranged_weapon.ts` | `RangedWeaponConfig` 新增 `passThroughCategories`（子弹可穿过类别列表）；导出默认值 `DEFAULT_BULLET_PASS_THROUGH_CATEGORIES = ['area']` |
-| 修改 | `src/entity/character/combat/ranged_executor.ts` | 子弹新增可穿过类别判定：场景几何走 `castShape` 位移扫描（可穿过类别由 predicate 放行），角色走宽容半径判定；命中非列表类别即消失，爆炸子弹就地引爆 |
+### 9.1 武器模组（`src/character/weapon/`）
+
+| 文件 | 内容 |
+|------|------|
+| `attack_chain.ts` | 攻击链领域模型：`ATTACK_KEYS` / `AttackKey`、`AttackSegment`、`AttackTransition`、`AttackEntry`、`WeaponAttackChain`、`WeaponAttacks`；守卫原语（`always`/`pressedKey`/`pressedOtherKey`/`holdAtLeast`/`holdLessThan`/`hasMoveInput`/`noMoveInput`/`cooldownReady`/`allOf`/`anyOf`/`not`）；解析与查询（`findSegment`/`chainOf`/`resolveEntrySegment`/`resolveNextSegment`/`orderedSegments`/`segmentDisplayName`/`segmentTotalDuration`） |
+| `melee_attacks.ts` | 近战段模板表与武器风格：`MELEE_SEGMENT_KEYS`（light_1/2/3、heavy_1/2）、`MELEE_SEGMENT_TEMPLATES`（一行一个段：动画幅度/tilt/是否重段）、段时长常量（轻 0.2+0.2 / 重 0.3+0.2）、重段倍率 1.6、`MELEE_CHAIN_SPECS`（缺省链编排）、`meleeAttackStyleOf`、`meleeSegmentId`、`buildMeleeAttacks(weaponId, style, options)` |
+| `melee_special_moves.ts` | 近战条件变体段（非模板主干段）：长枪「蓄力突刺」`SPEAR_CHARGE_HOLD` / `SPEAR_CHARGE_THRUST` |
+| `ranged_attacks.ts` | 远程段规格（9 把武器，单段）：`RANGED_ATTACK_SPECS`、`rangedSegmentIdOf`、`buildRangedAttacks` |
+| `catalog.ts` | 武器目录统一查询：`WeaponConfig` / `WeaponType`、`DEFAULT_WEAPON_ID`、`ALL_WEAPON_PRESETS`、`findWeaponPreset`、`weaponPresetOrDefault`、额外预设注册 `registerWeaponPreset`（测试武器） |
+| `weapon_runtime.ts` | `createWeaponRuntime(weaponId, overrides)` → `{weapon, attacks}`：伤害覆写、起手段冷却覆写（`isEntrySegment` 判定）、远程弹道覆写；动作/时长/阶段不可覆写；`isKnownWeaponId` |
+| `melee_weapon.ts` | `MeleeWeaponConfig`（含 `detectBox` 与 `attacks`）与 6 个近战预设（`meleePreset` 自动注入攻击链） |
+| `ranged_weapon.ts` | `RangedWeaponConfig`（含 `passThroughCategories` 与 `attacks`）与 9 个远程预设；`DEFAULT_BULLET_PASS_THROUGH_CATEGORIES = ['area']` |
+
+### 9.2 战斗运行时（`src/character/combat/`）
+
+| 文件 | 内容 |
+|------|------|
+| `types.ts` | `CombatComponent`（`weapon` / `attacks` / `segmentCooldowns` / `activeSegment` / `bufferedSegment` / `attackTimer` / `phaseIndex` / `phaseTimer` / `swingTilt` / `attackedTargets` / `dashSkill` …）；`createCombatComponent`、`setCombatWeapon`（换装整体替换武器运行时） |
+| `attack_runtime.ts` | 段冷却读写与上下文构造：`segmentCooldownRemaining` / `armSegmentCooldown` / `tickSegmentCooldowns` / `attackContextOf` / `canStartAttack` |
+| `attack_phases.ts` | `AttackPhase` / `AttackAnimConfig` / `ATTACK_PHASES` / `EASING_TYPES` / `ATTACK_TYPES`、`DEFAULT_ANIM`、`applyEasing` / `strikeCurve`、`resolvePhases`（未定义时回退单阶段）、`phaseDurationOf`、`FLINCH_DURATION` / `FLINCH_IMMUNITY_DURATION` |
+| `dash_skill.ts` | 冲刺（角色能力，非武器段）：`DashSkillConfig` / `DashSkillRuntime`、`createDashSkillRuntime` |
+| `test_weapon.ts` | 测试武器：6 段守卫链夹具（蓄力 / 点按兜底 / 键组分离 / 方向变体 / 循环链 / 无链单发 / 非 0 冷却），仅供单元测试 |
+| `executor.ts` / `damage.ts` / `explosion.ts` | 执行器接口与伤害结算（命中窗口由动画事件轨驱动） |
+
+### 9.3 状态机与角色侧
+
+| 文件 | 内容 |
+|------|------|
+| `src/character/state_machine/types.ts` | `CHARACTER_STATES`（含 `'flinching'`）；`CharacterInput.attackKey: AttackKey \| undefined`、`attackHoldDuration`（`setInput` 第 6/7 参）；`MachineContext.attackPhase` |
+| `src/character/state_machine/machine.ts` | 静态 `Record<CharacterState, StateHandler>` 注册 8 状态；transition guard 检查 + `onStateChange` 派发；**进入 attacking 时用 `resolveEntrySegment` 完成起手解析并写入 `combat.activeSegment`** |
+| `src/character/state_machine/states/attacking/index.ts` | attacking 段子状态调度器：推进阶段时间线 → 按输入求段转换写缓冲 → 段播完推进下一段（不退出状态）→ 委托阶段 handler 或走默认行为；导出 `phaseHandlerRegistry` / `registerPhaseHandler` |
+| `src/character/state_machine/states/attacking/segment.ts` | 段子状态单元：`enterAttackSegment`（重置计时/挂段冷却/取 `swingTilt`/清命中记录/唤醒刚体）、`advanceSegmentPhases`、`isSegmentPhasesDone`、`resolveSegmentNextState`（同键 → 本段 `next`；异键 → 该键起手解析） |
+| `src/character/state_machine/states/{idle,walking}.ts` | 攻击转换 guard 复用 `canStartAttack`（无起手候选则不进入 attacking） |
+| `src/character/state_machine/states/flinching.ts` | 受击硬直状态 handler（enter 清 `bufferedSegment` 与阶段计时，exit 挂免疫窗口） |
+| `src/character/archetypes.ts` | 存档 / 面板的攻击配置：`AttackConfig = {weaponId, damage?, cooldown?, ranged?}`（只有武器与数值覆写）、`ATTACK_PRESETS` |
+| `src/save_load/types.ts` | `SAVE_FORMAT_VERSION = 3`；`CharacterSaveConfig.attack: AttackConfig`（原 `attackSlot` 已删除） |
+
+### 9.4 实体表现与调试
+
+| 文件 | 内容 |
+|------|------|
+| `src/entity/character/appearance/types.ts` | `CharacterModel`（`weaponGroup` / `weaponHitBox` / `weaponGripTilt`）；`AnimationContext`（`stateTime` / `horizontalSpeed` / `swingTilt` / `attackSegment` / `attackPhase` / `attackPhaseProgress` / `attackTotalProgress` / `attackPhaseIndex` / `weaponHeld`） |
+| `src/entity/character/appearance/system.ts` | clip 调度器：动画键（attacking 用 `attacking:{segment.id}`）→ 重建 clip + 快照加权混合；双手武器左腕 IK |
+| `src/entity/character/appearance/clips/attack_clips.ts` | 攻击 clip 生成器：`AttackClipParams`、`buildAttackClip`、`attackClipDurationOf`、`getAttackClip`（缓存 key = 段 id + gripTilt + duration + recovery）、60fps 烘焙与 hitbox 事件轨 |
+| `src/entity/character/appearance/clips/base_clips.ts` | 基础状态 clip 生成器（`getBaseClip` / `fallingSpeedTier` / `CHARACTER_JOINT_IDS`） |
+| `src/entity/character/appearance/weapon_mesh.ts` | 武器本地命中箱 `WeaponLocalHitBox`（近战武器显式打击部位盒） |
+| `src/entity/character/combat/melee_executor.ts` | 伤害判定：武器命中箱 OBB × 受击箱 OBB（`testMeleeHit`）；伤害 = `weapon.damage × activeSegment.damageMultiplier`；攻击检测箱 `attackDetectOBB` / `testAttackDetect` |
+| `src/entity/character/combat/obb.ts` | OBB 类型 + `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
+| `src/entity/character/combat/ranged_executor.ts` | 子弹生命周期与可穿过类别判定（`castShape` 位移扫描 + 角色宽容半径判定） |
+| `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/ 受击箱（青）/ 检测箱（橙）/ 射程圆环（橙，远程）/ 视线扇形（蓝）debug 可视化 |
+| `src/entity/character/physics/world.ts` | `weaponRuntimeOf(attack)`（test_weapon 特判）；`setPlayerAttack(attackKey, holdDuration)` 起手解析与攻击中写脉冲；每帧段冷却递减（`tickSegmentCooldowns`）与 `AnimationContext` 装配；换装 `setCombatWeapon` + 清空段冷却/当前段 |
+| `src/modes/play/camera.ts` | 攻击键按住计时（mousedown 记录时刻，mouseup 携带按住秒数触发，右键重击同为松开触发） |
+| `src/modes/play/index.ts` | HUD 技能计时：SKILLS 首行冲刺 + 按 `orderedSegments` 每段一行（动作 / 恢复 / 冷却） |
+| `src/modes/bone_edit/builtin_clips.ts` | 骨骼动画内置动作库：按 `orderedSegments` 枚举全部武器段（`segmentDisplayName` 作显示名） |
+| `src/entity/character/ui/panel.ts` | 属性面板攻击区：武器下拉（`ALL_WEAPON_PRESETS`）+ 伤害 / 起手段冷却 / 远程弹道覆写 |
+| `src/physics/collision_category.ts` | 碰撞类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）与 membership 位打包 / 解析 / 掩码工具 |
+
+**已随本次重构删除**：`combat/skill_types.ts`、`combat/melee_skill.ts`、`combat/ranged_skill.ts`、`combat/combo_guard.ts`、`state_machine/states/attacking.ts`（旧单文件 meta-state）、`appearance/animators/`（旧动画器目录）、`attack_phases.ts` 的 `RANGED_PHASE_PRESETS` 与 `AttackSubState`。
 
 ---
 
-## 十、CombatComponent 字段变更清单
+## 十、CombatComponent 字段清单
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `currentSkillIndex` | `number` | 保留，当前技能槽索引 |
-| `attackActive` | `boolean` | 保留 |
-| `attackTimer` | `number` | 保留，攻击总计时 |
-| `attackedTargets` | `Set<number>` | 保留 |
-| `swingTilt` | `number` | 保留（段固有倾斜角，enter/段末推进时从预设写入，非随机） |
-| **NEW** `phaseIndex` | `number` | 当前所在阶段索引（0-based） |
-| **NEW** `phaseTimer` | `number` | 当前阶段已用时间（秒） |
-| **NEW** `chainEntryIndex` | `number` | 本次起链的起手槽索引（决定当前链键组） |
-| **NEW** `bufferedSkillIndex` | `number` | 缓冲的目标技能槽索引（-1 = 无缓冲，段末消费） |
-| **NEW** `pendingFlinch` | `boolean` | 是否被标记为需要受击硬直 |
-| **NEW** `flinchImmunityTimer` | `number` | 受击保护剩余时间（秒）：flinching 退出后免再触发硬直，防无限连段锁死；伤害不受影响 |
+| `weapon` | `WeaponConfig` | 装备武器（含伤害 / 起手段冷却 / 远程弹道数值覆写） |
+| `attacks` | `WeaponAttacks` | 当前武器攻击链（换武器时由 `setCombatWeapon` 整体替换） |
+| `segmentCooldowns` | `Map<string, number>`（readonly） | 段冷却剩余（秒），段 id → 剩余时间；仅非 0 冷却的段写入；`tickSegmentCooldowns` 逐帧递减（≤ 0 时删除条目） |
+| `activeSegment` | `AttackSegment \| undefined` | 当前攻击段（attacking 期间有效，进入状态时由起手解析写入） |
+| `bufferedSegment` | `AttackSegment \| undefined` | 缓冲的下一段（段播完由段转换 / 异键起手解析消费） |
+| `attackActive` | `boolean` | 是否处于攻击中（受击硬直回调据此判定） |
+| `attackTimer` | `number` | 当前段累计时间（动作 + 恢复全程，秒） |
+| `swingTilt` | `number` | 当前段固有挥砍倾斜角（rad，`enterAttackSegment` 写入，非随机） |
+| `phaseIndex` | `number` | 当前阶段索引（0-based，越界表示阶段已完成） |
+| `phaseTimer` | `number` | 当前阶段已用时间（秒） |
+| `attackedTargets` | `Set<number>` | 本次段已命中的目标（每段切换时清空，同一段内只结算一次） |
+| `dashSkill` | `DashSkillRuntime` | 冲刺技能运行时（角色能力，独立于攻击段） |
+| `pendingFlinch` | `boolean` | 是否被标记为需要受击硬直 |
+| `flinchImmunityTimer` | `number` | 受击保护剩余时间（秒）：flinching 退出后免再触发硬直，防无限连段锁死；伤害不受影响 |
+
+**已删除字段**：`currentSkillIndex`、`chainEntryIndex`、`bufferedSkillIndex`、`skills`（技能槽列表）、`SkillSlot` / `SkillTimingConfig` 相关类型。
 
 ---
 
@@ -549,58 +782,78 @@ export type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${Attack
 
 > 测试框架：Vitest。测试文件命名为 `<被测模块>.test.ts`，与被测源文件同目录。测试使用 `DT = 1/60` 固定帧步长、内联 mock 工厂函数、帧进辅助函数和 `it.each()` 参数化测试。物理行为测试由 `entity/character/physics/harness.ts` 提供真实 rapier 世界的逐帧推进夹具。
 
-### 11.1 阶段配置与曲线 — `character/combat/attack_phases.test.ts`
+### 11.1 攻击链与武器运行时 — `character/weapon/attack_chain.test.ts`
+
+| 覆盖点 | 验证方式 |
+|--------|----------|
+| 近战链结构 | 每把近战武器 4 个主干段；`chains.light.steps` = [轻1, 轻2]、`chains.heavy.steps` = [重1, 重2]；轻/重起手候选分别为轻1 / 重1 且无守卫 |
+| 段转换 | `resolveNextSegment` 轻1↔轻2、重1↔重2 循环；链终止段（蓄力段、远程单段）返回 `undefined` |
+| 段数值 | 轻段总时长 0.4s（0.2+0.2）、重段 0.5s（0.3+0.2）；重段 `damageMultiplier` = 1.6；普通攻击段冷却全为 0 |
+| 段倾斜角确定性 | 轻1 / 轻2 = 0、重1 > 0.4π、重2 < 0 |
+| 远程链 | 每把远程武器单段、`key = 'light'`、`next = []`、无重击链（`entries` / `steps` 为空）；段 id 沿用原远程技能 id |
+| 段清单顺序 | `orderedSegments` 近战为 轻1 → 轻2 → 重1 → 重2；条件变体段接在所属键末尾（test_weapon 全序断言）；全部生产武器轻链位于重链之前 |
+| 起手解析 | 无条件候选直取；冷却未就绪 → `undefined`；`currentSegmentId` 排除自身；守卫变体优先于兜底；变体冷却中回退兜底 |
+| 段转换守卫 | 方向组合键变体优先于兜底（`hasMoveInput`）；链终止段无下一状态 |
+| 展示名 | 缺省「轻击一段 / 重击二段…」；条件变体段用 `label` |
+| 武器运行时 | 伤害覆写生效且不污染预设；起手段冷却覆写只作用于起手段（链中段保持预设）；远程弹道覆写生效；未知武器 id 回退默认武器；测试武器经额外注册表可解析出 6 段 |
+
+### 11.2 武器预设 — `character/weapon/melee_weapon.test.ts` / `ranged_weapon.test.ts`
+
+| 覆盖点 | 验证方式 |
+|--------|----------|
+| 预设完整性 | 近战 6 种 / 远程 9 种；id 与 key 匹配；`type` 正确；每个键名唯一 |
+| 武器中文名 | `name` 非空、纯中文、与 `id` 不同、同类内互不重复 |
+| 近战数值约束 | 伤害 / 击退 / `knockbackY` 为正；`war_hammer` 伤害最高；`detectBox` 尺寸分量为正且前缘在身体前方；`spear` 检测箱前缘最远 |
+| 远程数值约束 | 弹道参数为正；`crossbow` 弹速最快；`shotgun` 有 `spreadCount` / `spreadAngle`；`staff` 有 `explosionRadius`；`magic_wand` 有 `homingStrength`；`grenade` 有 `throwAngle` 与 `explosionRadius`；远程侦测范围大于近战 |
+| 子弹可穿过类别 | `DEFAULT_BULLET_PASS_THROUGH_CATEGORIES` 默认为 `['area']` |
+
+### 11.3 段阶段配置与曲线 — `character/combat/attack_phases.test.ts`
 
 | 覆盖点 | 验证方式 |
 |--------|----------|
 | `applyEasing` 曲线性质 | 端点恒等、单调不减、ease_out 前快后慢 |
 | `strikeCurve` 打击曲线 | 端点恒等、单调不减、峰值处曲线与速度连续、速度峰值位于 `strikePeakRatio`（峰值前加速、峰值后减速） |
-| 阶段预设完整性 | 全部预设（近战链段 + `RANGED_PHASE_PRESETS`）的 `durationRatio` 之和为 1；阶段名 / `attackType` / `easing` 是合法枚举成员；`strikePeakRatio` ∈ (0,1]、`overshootRatio` ∈ [0,1) |
-| 回退兼容 | `resolvePhases(undefined)` 返回单阶段回退（strike、ratio 1、移速 0.3） |
-| 近战链段约束 | 每武器 4 段齐全（strike + recovery 两段式）；recovery 时长取 `config.recovery` 不参与分摊；段动作类型（轻1 竖斩 / 轻2 直刺 / 重1 横斩 / 重2 斜劈）；`swingTilt` 段固有确定性；动作阶段按 `durationRatio` 从动作时间分摊；段总时长 = 动作 + 恢复 |
+| 段阶段完整性 | 段清单非空（近战 4 段/武器 + 远程单段）；所有段 `durationRatio` 之和为 1；阶段名 / `attackType` / `easing` 是合法枚举成员；`strikePeakRatio` ∈ (0,1]、`overshootRatio` ∈ [0,1) |
+| 回退兼容 | `resolvePhases(undefined)` / 空数组返回单阶段回退（strike、ratio 1、移速 0.3） |
+| 近战段约束 | 每武器 4 段齐全（strike + recovery 两段式）；strike ratio = 1、recovery ratio = 0；段动作类型（轻1 竖斩 / 轻2 直刺 / 重1 横斩 / 重2 斜劈）；`swingTilt` 段固有确定性；动作阶段按 `durationRatio` 从动作时间分摊；段总时长 = 动作 + 恢复 |
 
-### 11.2 技能/武器配置 — `melee_skill.test.ts` / `ranged_skill.test.ts` / `melee_weapon.test.ts` / `ranged_weapon.test.ts`
-
-| 覆盖点 | 验证方式 |
-|--------|----------|
-| 预设完整性 | 每武器 4 段共 24 个近战预设；远程 9 技能；id 与 key 匹配；type 正确 |
-| 武器中文名 | `name` 非空、纯中文、与 `id` 不同、同类内互不重复（`melee_weapon.test.ts` / `ranged_weapon.test.ts`） |
-| 三计时属性 | 轻段动作 0.2s + 恢复 0.2s、重段 0.3s + 0.2s；普通攻击冷却全为 0；远程 duration 排序约束（如 dart 最短、grenade 最长） |
-| 连段装配 | `buildMeleeSkillSlots` 产出 4 槽 [轻1, 重1, 轻2, 重2]；槽 0/1 为起手槽；循环链闭合（轻1↔轻2、重1↔重2）；链指向的 skillId 均存在于本武器槽内；重段伤害 = 轻段 × 1.6；全部近战武器可装配出闭合双链 |
-
----
-
-### 11.3 状态机 — `character/state_machine/machine.test.ts`
+### 11.4 状态机与连段 — `character/state_machine/machine.test.ts`
 
 describe 区块：连段守卫（test_weapon 蓄力/方向组合键）、平地移动、斜坡 falling 判定、falling 行为、攻击/冲刺在陡坡结束、斜坡防滑、跳跃、输入缓冲连段（轻/重双链）、受击硬直与保护窗口。
 
 | 覆盖点 | 验证方式 |
 |--------|----------|
-| 阶段推进 | 进入 attacking 时 `phaseIndex`/`phaseTimer` 归零；`phaseTimer >= phaseDuration` 推进阶段；全部阶段完成且总时长满足后 transition 退出 |
-| 输入缓冲连段 | 最终阶段完整播完才消费缓冲；同键组续链免冷却、异键组切链需起手槽冷却；攻击中按输入逐帧重求守卫（中途改键/改方向 = 切链/换变体） |
+| 起手解析 | 点按（hold = 0）→ 兜底段、长按 ≥ 阈值 → 蓄力段、重击键 → 重链起手段；起手段全冷却时不进入 attacking（保持 idle） |
+| 段推进 | 进入 attacking 时 `activeSegment` 已由起手解析写入、`phaseIndex` / `phaseTimer` 归零；`phaseTimer >= phaseDuration` 推进阶段；段总时长满足后 transition 退出 |
+| 输入缓冲连段 | 段中不推进（即使缓冲存在，`phaseIndex` 已进 recovery 仍停留本段）；段末才消费缓冲；轻链无限循环 轻1→轻2→轻1；缓冲缺失则本段播完收招；普通攻击全程 `segmentCooldowns` 为空 |
+| 冷却夹具 | 蓄力段触发即挂冷却（`segmentCooldowns.get('test_weapon_charge') === charge.cooldown`），点按兜底段冷却独立仍可起手 |
+| 跨键切链 | 段中改按重击键 → 段末切到重链起手段且不退出 attacking |
 | flinching | 攻击中被击中（`pendingFlinch`）立即中断攻击进入 flinching；硬直播完按支撑/输入转换；退出挂 `FLINCH_IMMUNITY_DURATION` 保护窗口；dying 优先级高于 flinching |
-| 守卫集成 | `holdAtLeast`/`holdLessThan` 点按长按分流、方向组合键变体、键组分离（entryGroup） |
-
-### 11.4 守卫解析 — `character/combat/combo_guard.test.ts`（19 用例）
-
-守卫边界（holdAtLeast/holdLessThan 阈值、hasMoveInput/noMoveInput）、`evalComboGuard` 无守卫兜底、起手解析（`resolveEntrySkillIndex`：变体优先于兜底、冷却回退、键组内全冷却 → -1）、链下一段（`resolveChainNextIndex`：方向变体/兜底/无链 → -1）、键组映射（`chainGroupOf`）；夹具为 `test_weapon` 6 槽守卫链（蓄力/点按/重键组/方向变体/循环链/无链单发）。
 
 ### 11.5 伤害判定几何 — `entity/character/combat/obb.test.ts` / `melee_executor.test.ts`
 
-OBB 构造与 15 轴 SAT 相交；攻击检测箱（`attackDetectOBB` / `testAttackDetect`）；武器命中箱判定（`testMeleeHit`）。
+OBB 构造与 15 轴 SAT 相交；`targetHitBoxHalves` 随 scale 缩放；武器命中箱判定（`testMeleeHit`：重叠命中 / 远离不命中 / 高度分离不命中 / 武器姿态旋转与目标朝向旋转）；命中箱 `reach` 几何属性（长杆 > 短刃）；攻击检测箱（`attackDetectOBB` / `testAttackDetect`：几何参数、scale 缩放、身前命中、身后余量、侧面覆盖、武器差异、朝向旋转）；命中窗口（`setHitWindow` 事件轨驱动：窗口关闭时 update 早退、非近战武器早退）。
 
-### 11.5.1 投掷物穿透与碰撞类别 — `entity/character/combat/ranged_executor.test.ts` / `physics/collision_category.test.ts`
+### 11.6 攻击 clip 生成器 — `entity/character/appearance/clips/attack_clips.test.ts`
+
+clip 时长 = 动作 + 恢复；事件轨 = 0.1 / 0.85 动作进度（`hitbox_on` / `hitbox_off`）；打击段中部肩摆 = `-armSwingForwardX × strikeCurve(进度)`；恢复段起点叠加 `overshootRatio` 惯性过冲；恢复末归零（clamp 末姿态）；无阶段信息回退 `FALLBACK_ATTACK_DURATION` 且不抛错；同参数缓存复用同一实例；不同 `tilt` 生成不同腕部刃面偏转。
+
+### 11.7 投掷物穿透与碰撞类别 — `entity/character/combat/ranged_executor.test.ts` / `physics/collision_category.test.ts`
 
 真实 rapier 世界夹具（`harness.ts`）端到端覆盖：默认（仅 area）命中箱子即消失且箱后目标无伤害、可穿过列表加入 `box` 后穿过箱子命中目标、`area` 类别不阻挡、世界地面落地即消失、地形/碎片阻挡、非敌对角色挡下子弹不结算伤害、`character` 入列后角色完全透明、空列表命中场景几何即消失、爆炸子弹命中场景几何就地引爆。`collision_category` 覆盖类别位打包/解析往返、掩码匹配、`isBlockingGeometry` 判定与 fail-closed 行为。
 
-### 11.6 地面检测 — `character/state_machine/ground.test.ts`
+### 11.8 内置动作库 — `modes/bone_edit/builtin_clips.test.ts`
+
+覆盖全部基础状态与全部武器攻击段（9 + 24 + 9 条）；分组按展示顺序；近战按武器分组、每武器内 轻1 → 轻2 → 重1 → 重2 连续排列；id / 显示名 / clip 名全库唯一；轨迹时间升序且末帧落在时长处；攻击条目带 `hitbox_on` / `hitbox_off` 事件轨（`long_sword_light_1` 时间点 = 0.02 / 0.17）；首帧静止位置与预设骨架一致；惰性构建并缓存。
+
+### 11.9 地面检测 — `character/state_machine/ground.test.ts`
 
 `isSupportedOn` / `shouldFall` / `projectToSlope` / `applySlopeAntiGravity`。
 
-### 11.7 物理行为 — `entity/character/physics/*.test.ts`
+### 11.10 物理行为 — `entity/character/physics/*.test.ts`
 
 `harness.ts` 提供真实 rapier 世界夹具（`createHarnessWorld` / `tick` / `tickMulti`）：斜坡行走（`slope.test.ts`）、挤压弹出与推挤阻断（`squeeze_eject.test.ts`）、角色分离与斜坡补偿（`separation.test.ts`）、地面状态机（`ground_state.test.ts`）、质量配置（`mass.test.ts`）、面板信息（`panel_info.test.ts`）。
 
-### 11.8 AI — `entity/character/ai/ai.test.ts` / `ai/nav/nav.test.ts`
+### 11.11 AI — `entity/character/ai/ai.test.ts` / `ai/nav/nav.test.ts`
 
-双层 FSM 转移、静止检测（stall 恢复/交火豁免）、接敌冷却、追击活动半径、导航 stuck 倒退逃逸等。
+双层 FSM 转移、静止检测（stall 恢复/交火豁免）、接敌冷却、追击活动半径、导航 stuck 倒退逃逸等；AI 出招门控统一用 `canStartAttack(combat, {..., holdDuration: 0, attackKey: 'light'})`。

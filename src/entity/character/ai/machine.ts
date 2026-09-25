@@ -25,8 +25,8 @@ const findNearestEnemy = (
     allCharacters: readonly CharacterEntity[],
 ): {id: number; dist: number} | undefined => {
     const pos = character.body.translation()
-    const skill = character.combat.skills[character.combat.currentSkillIndex]
-    const detRange = skill?.config.weapon.detectionRange ?? 8
+    /* 侦测半径取自装备武器（武器恒存在，无槽位概念） */
+    const detRange = character.combat.weapon.detectionRange
     const los = ctx.losChecker
     const facing = ctx.getFacingAngle?.() ?? 0
     /* 扫描射线起点取眼部高度（与 debug 可视化同源） */

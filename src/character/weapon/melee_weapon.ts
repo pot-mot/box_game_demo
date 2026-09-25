@@ -1,4 +1,8 @@
 import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
+import type { WeaponAttacks } from './attack_chain.ts'
+import { holdAtLeast } from './attack_chain.ts'
+import { buildMeleeAttacks, meleeAttackStyleOf, type BuildMeleeAttacksOptions } from './melee_attacks.ts'
+import { SPEAR_CHARGE_HOLD, SPEAR_CHARGE_THRUST } from './melee_special_moves.ts'
 
 /**
  * 攻击检测箱（AI 出招触发判定专用，与红色伤害判定箱解耦）：
@@ -12,7 +16,11 @@ export interface MeleeDetectBox {
     readonly offset: { readonly x: number; readonly y: number; readonly z: number }
 }
 
-/** 近战武器配置 — 玩家装备该武器的全部固有属性 */
+/**
+ * 近战武器配置 — 玩家装备该武器的全部固有属性。
+ * **攻击动作（轻重链/段/动画/时长/倾斜角/伤害倍率）由武器模组拥有**（`attacks`），
+ * 角色实体只持有武器与数值覆写，不再维护技能槽位与连段索引。
+ */
 export interface MeleeWeaponConfig {
     readonly id: string
     /** 武器中文名（面向玩家显示，如面板武器下拉、展示场景标签） */
@@ -27,55 +35,79 @@ export interface MeleeWeaponConfig {
     readonly detectBox: MeleeDetectBox
     /** 程序化武器模型 */
     readonly mesh: WeaponMeshConfig
+    /** 攻击链（轻/重键起手候选 + 主干段顺序 + 段定义与段间转换） */
+    readonly attacks: WeaponAttacks
 }
 
+/** 近战预设装配：按武器 id 注入固有攻击链（风格系数取自 melee_attacks 的武器风格表） */
+const meleePreset = (
+    base: Omit<MeleeWeaponConfig, 'attacks'>,
+    attackOptions: BuildMeleeAttacksOptions = {},
+): MeleeWeaponConfig => ({
+    ...base,
+    attacks: buildMeleeAttacks(base.id, meleeAttackStyleOf(base.id), attackOptions),
+})
+
 export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
-    short_sword: {
+    short_sword: meleePreset({
         id: 'short_sword', name: '短剑', type: 'melee',
         damage: 2,
         knockbackForce: 2, knockbackY: 1,
         detectionRange: 6,
         detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
         mesh: { id: 'sword', bladeLen: 0.3, color: 0xcc5555, gripColor: 0x664422 },
-    },
-    long_sword: {
+    }),
+    long_sword: meleePreset({
         id: 'long_sword', name: '长剑', type: 'melee',
         damage: 3,
         knockbackForce: 5, knockbackY: 2,
         detectionRange: 8,
         detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
         mesh: { id: 'sword', bladeLen: 0.5, color: 0xcc6666, gripColor: 0x553322 },
-    },
-    heavy_sword: {
+    }),
+    /* 巨剑：轻型链加长为三段（轻 1 → 轻 2 → 轻 3 循环），重链保持两段 */
+    heavy_sword: meleePreset({
         id: 'heavy_sword', name: '巨剑', type: 'melee',
         damage: 8,
         knockbackForce: 8, knockbackY: 3,
         detectionRange: 10,
         detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
         mesh: { id: 'heavy_sword', bladeLen: 0.65, color: 0x555566, gripColor: 0x332211 },
-    },
-    spear: {
+    }, {
+        chains: {light: {steps: ['light_1', 'light_2', 'light_3'], loop: true}},
+    }),
+    /* 长枪：轻击键增加蓄力突刺变体（长按 >= SPEAR_CHARGE_HOLD 松开触发；冷却中自动回退到轻 1 段） */
+    spear: meleePreset({
         id: 'spear', name: '长枪', type: 'melee',
         damage: 5,
         knockbackForce: 4, knockbackY: 1,
         detectionRange: 10,
         detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
         mesh: { id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa },
-    },
-    dual_axe: {
+    }, {
+        /* 起手候选顺序 = 优先级：守卫变体（蓄力）在前、无守卫兜底（轻 1）在后 */
+        extraSegments: [SPEAR_CHARGE_THRUST],
+        entries: {
+            light: [
+                {segmentId: SPEAR_CHARGE_THRUST.id, guard: holdAtLeast(SPEAR_CHARGE_HOLD)},
+                {segmentId: 'spear_light_1'},
+            ],
+        },
+    }),
+    dual_axe: meleePreset({
         id: 'dual_axe', name: '双斧', type: 'melee',
         damage: 6,
         knockbackForce: 7, knockbackY: 2,
         detectionRange: 7,
         detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
         mesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322 },
-    },
-    war_hammer: {
+    }),
+    war_hammer: meleePreset({
         id: 'war_hammer', name: '战锤', type: 'melee',
         damage: 10,
         knockbackForce: 10, knockbackY: 4,
         detectionRange: 8,
         detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
         mesh: { id: 'war_hammer', headSize: 0.35, color: 0x777777, gripColor: 0x443311 },
-    },
+    }),
 }

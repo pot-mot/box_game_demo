@@ -2,7 +2,6 @@ import {v3Set, type RapVector3} from '../../../physics/rapier_utils.ts'
 import {Vector3} from 'three'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
-import type {SkillConfig} from '../../../character/combat/skill_types.ts'
 import {applyDamage} from '../../../character/combat/damage.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
@@ -121,7 +120,6 @@ export const createMeleeExecutor = (
     }
 
     const start = (
-        _skill: SkillConfig,
         _combat: CombatComponent,
         _entity: CharacterEntity,
         _direction: RapVector3,
@@ -132,16 +130,20 @@ export const createMeleeExecutor = (
 
     const update = (
         _dt: number,
-        skill: SkillConfig,
         combat: CombatComponent,
         entity: CharacterEntity,
         _ctx: ExecutorContext,
     ): void => {
-        if (skill.type !== 'melee') return
+        const weapon = combat.weapon
+        if (weapon.type !== 'melee') return
         /* 命中窗口关闭（动画事件轨 hitbox_off 或攻击尚未进入打击阶段）时不检测 */
         if (!hitWindowActive) return
         const model = getModel(entity.id)
         if (!model || !model.weaponGroup || !model.weaponHitBox) return
+
+        /* 伤害 = 武器基础伤害 × 当前段伤害倍率（重段 ×1.6） */
+        const damage = weapon.damage * (combat.activeSegment?.damageMultiplier ?? 1)
+        const attackId = combat.activeSegment?.id ?? weapon.id
 
         /* matrixWorld 在渲染器绘制前可能滞后，先强制刷新武器子树变换 */
         model.weaponGroup.updateMatrixWorld()
@@ -167,9 +169,9 @@ export const createMeleeExecutor = (
             applyDamage(target.combat, {
                 sourceId: entity.id,
                 targetId: target.id,
-                baseAmount: skill.weapon.damage,
-                finalAmount: skill.weapon.damage,
-                skillId: skill.id,
+                baseAmount: damage,
+                finalAmount: damage,
+                skillId: attackId,
             })
             combat.attackedTargets.add(target.id)
             onHit?.(wx, wy, wz)
@@ -181,9 +183,9 @@ export const createMeleeExecutor = (
                 _tmpVec.z /= len
                 target.body.applyImpulseAtPoint(
                     {
-                        x: _tmpVec.x * skill.weapon.knockbackForce,
-                        y: skill.weapon.knockbackY,
-                        z: _tmpVec.z * skill.weapon.knockbackForce,
+                        x: _tmpVec.x * weapon.knockbackForce,
+                        y: weapon.knockbackY,
+                        z: _tmpVec.z * weapon.knockbackForce,
                     },
                     target.body.translation(),
                     true,
@@ -193,7 +195,6 @@ export const createMeleeExecutor = (
     }
 
     const end = (
-        _skill: SkillConfig,
         _combat: CombatComponent,
         _entity: CharacterEntity,
         _ctx: ExecutorContext,

@@ -1,6 +1,6 @@
 import {describe, it, expect} from 'vitest'
 import {Quaternion, Vector3} from 'three'
-import {keyframesToTracks, tracksToKeyframes} from './types.ts'
+import {cloneClip, keyframesToTracks, tracksToKeyframes} from './types.ts'
 import type {BoneAnimationClip, BoneAnimationKeyframe} from './types.ts'
 
 const pos = (x: number, y = 0, z = 0): Vector3 => new Vector3(x, y, z)
@@ -62,6 +62,52 @@ describe('关键帧聚合 → 轨道（keyframesToTracks）', () => {
         const {eventTracks} = keyframesToTracks(makeKeyframes())
         expect(eventTracks).toHaveLength(1)
         expect(eventTracks[0].records.map(r => r.time)).toEqual([0.2, 0.5])
+    })
+})
+
+describe('clip 深拷贝（cloneClip）', () => {
+    const makeClip = (): BoneAnimationClip => ({
+        name: 'src',
+        duration: 1,
+        loop: true,
+        jointTracks: [
+            {targetId: 'spine', interpolation: {type: 'bezier_quad', strategy: 'none'}, records: [
+                {time: 0, position: new Vector3(0, 0.5, 0), rotation: new Quaternion()},
+                {time: 1, position: new Vector3(0, 0.5, 0.1), rotation: new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.5)},
+            ]},
+        ],
+        boneTracks: [
+            {targetId: 'torso', interpolation: {type: 'linear', strategy: 'none'}, records: [{time: 0, roll: 0.3}]},
+        ],
+        eventTracks: [{records: [{time: 0.2, eventName: 'hitbox_on'}]}],
+    })
+
+    it('记录的位置/旋转与原 clip 数值一致但对象独立', () => {
+        const clip = makeClip()
+        const copy = cloneClip(clip)
+        expect(copy.jointTracks[0].records).toHaveLength(2)
+        expect(copy.jointTracks[0].records[1].rotation.angleTo(clip.jointTracks[0].records[1].rotation)).toBeLessThan(1e-6)
+        expect(copy.jointTracks[0].records[0].position).not.toBe(clip.jointTracks[0].records[0].position)
+        expect(copy.jointTracks[0].records[0].rotation).not.toBe(clip.jointTracks[0].records[0].rotation)
+    })
+
+    it('数组独立：修改副本记录不影响源 clip', () => {
+        const clip = makeClip()
+        const copy = cloneClip(clip)
+        copy.jointTracks[0].records[0].position.x = 99
+        expect(clip.jointTracks[0].records[0].position.x).toBe(0)
+        expect(copy.jointTracks).not.toBe(clip.jointTracks)
+        expect(copy.jointTracks[0].records).not.toBe(clip.jointTracks[0].records)
+        expect(copy.boneTracks[0].records).not.toBe(clip.boneTracks[0].records)
+        expect(copy.eventTracks[0].records).not.toBe(clip.eventTracks[0].records)
+    })
+
+    it('时长/循环/插值规格保留', () => {
+        const clip = makeClip()
+        const copy = cloneClip(clip)
+        expect(copy.duration).toBe(clip.duration)
+        expect(copy.loop).toBe(clip.loop)
+        expect(copy.jointTracks[0].interpolation).toEqual(clip.jointTracks[0].interpolation)
     })
 })
 

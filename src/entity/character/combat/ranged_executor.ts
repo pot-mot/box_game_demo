@@ -5,7 +5,6 @@ import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.
 import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
-import type {SkillConfig} from '../../../character/combat/skill_types.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import {applyDamage} from '../../../character/combat/damage.ts'
 import {applyExplosionDamage} from '../../../character/combat/explosion.ts'
@@ -145,7 +144,6 @@ export const createRangedExecutor = (
     const attackDirections = new Map<number, {dx: number; dz: number}>()
 
     const start = (
-        _skill: SkillConfig,
         _combat: CombatComponent,
         entity: CharacterEntity,
         direction: RapVector3,
@@ -157,12 +155,12 @@ export const createRangedExecutor = (
 
     const update = (
         _dt: number,
-        skill: SkillConfig,
         combat: CombatComponent,
         entity: CharacterEntity,
         _ctx: ExecutorContext,
     ): void => {
-        if (skill.type !== 'ranged') return
+        const weapon = combat.weapon
+        if (weapon.type !== 'ranged') return
 
         if (combat.attackTimer > 0.016 || firedThisAttack.has(entity.id)) return
         firedThisAttack.add(entity.id)
@@ -174,7 +172,7 @@ export const createRangedExecutor = (
         const fixedDx = dirLen < 0.001 ? 0 : ndx / dirLen
         const fixedDz = dirLen < 0.001 ? 1 : ndz / dirLen
 
-        const w = skill.weapon
+        const w = weapon
         const throwAngle = w.throwAngle ?? 0
         const spreadCount = w.spreadCount ?? 1
 
@@ -197,7 +195,6 @@ export const createRangedExecutor = (
     }
 
     const end = (
-        _skill: SkillConfig,
         _combat: CombatComponent,
         entity: CharacterEntity,
         _ctx: ExecutorContext,

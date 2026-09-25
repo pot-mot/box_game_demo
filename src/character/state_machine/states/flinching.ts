@@ -8,7 +8,7 @@ export const flinchingHandler: StateHandler = {
         const c = entity.combat
         c.attackActive = false
         c.pendingFlinch = false
-        c.bufferedSkillIndex = -1
+        c.bufferedSegment = undefined
         c.phaseIndex = 0
         c.phaseTimer = 0
         entity.body.setLinvel({x: 0, y: 0, z: 0}, true)

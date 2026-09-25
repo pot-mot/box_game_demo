@@ -1,7 +1,7 @@
 import type {StateHandler} from '../types.ts'
 import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY, STATE_FLIP_MIN_TIME} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlopeAtSpeed, applySlopeSink} from '../ground.ts'
-import {resolveEntrySkillIndex} from '../../combat/combo_guard.ts'
+import {canStartAttack} from '../../combat/attack_runtime.ts'
 
 export const walkingHandler: StateHandler = {
     enter: (entity) => {
@@ -30,9 +30,14 @@ export const walkingHandler: StateHandler = {
         { to: 'idle', guard: (input) => Math.hypot(input.dx, input.dz) < 0.001 },
         {
             to: 'attacking',
-            /* 起手选择：键组内按守卫（蓄力/方向组合键）与冷却解析，存在候选才进入 */
+            /* 起手解析：攻击键的起手候选按守卫（蓄力/方向组合键）与冷却求值，存在候选才进入 */
             guard: (input, entity) => input.attack
-                && resolveEntrySkillIndex(entity.combat, input.skillIndex, {dx: input.dx, dz: input.dz, holdDuration: input.attackHoldDuration}) >= 0,
+                && canStartAttack(entity.combat, {
+                    dx: input.dx,
+                    dz: input.dz,
+                    holdDuration: input.attackHoldDuration,
+                    attackKey: input.attackKey,
+                }),
         },
         {
             to: 'jumping',

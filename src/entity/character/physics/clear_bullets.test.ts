@@ -58,16 +58,15 @@ const rangedSaveConfig = (): CharacterSaveConfig => ({
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attackSlot: {
-        type: 'ranged',
+    attack: {
         weaponId: 'longbow',
-        range: 10,
         damage: 2,
-        cooldown: 0,
-        duration: 0.4,
-        bulletSpeed: 20,
-        bulletKnockback: 3,
-        bulletLifetime: 3,
+        ranged: {
+            range: 10,
+            bulletSpeed: 20,
+            bulletKnockback: 3,
+            bulletLifetime: 3,
+        },
     },
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
@@ -105,7 +104,7 @@ describe('角色系统的子弹清理', () => {
         /* 角色 mesh / 外观组 / 刀光 / 调试线框在 add 时已入场景，基线须在其后采样 */
         const childrenBeforeFire = scene.children.length
         system.setPlayerMove(0, 0, false, 0, 1)
-        system.setPlayerAttack(0)
+        system.setPlayerAttack('light')
         for (let i = 0; i < 180; i++) {
             system.update(FIXED_TIME_STEP)
             if (countSensorColliders(shared) > 0) return childrenBeforeFire

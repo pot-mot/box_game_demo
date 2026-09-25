@@ -7,14 +7,12 @@ import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
-import {createCombatComponent} from '../../../character/combat/types.ts'
+import {createCombatComponent, setCombatWeapon} from '../../../character/combat/types.ts'
 import type { AttackResult } from '../../../character/combat/types.ts'
-import {createSkillSlot, type SkillConfig, type SkillSlot} from '../../../character/combat/skill_types.ts'
-import {buildMeleeSkillSlots, MELEE_LIGHT_DURATION} from '../../../character/combat/melee_skill.ts'
-import {resolveEntrySkillIndex} from '../../../character/combat/combo_guard.ts'
-import {TEST_WEAPON_ID, TEST_WEAPON, buildTestWeaponSkillSlots} from '../../../character/combat/test_weapon.ts'
-import {MELEE_WEAPON_PRESETS} from '../../../character/weapon/melee_weapon.ts'
-import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
+import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/attack_runtime.ts'
+import {TEST_WEAPON_ID, createTestWeaponRuntime} from '../../../character/combat/test_weapon.ts'
+import {createWeaponRuntime, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
+import type {AttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext} from '../ai/types.ts'
@@ -51,7 +49,6 @@ import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
 import {createAttackHitBoxes, syncWeaponDebugBox, type AttackHitBoxes} from '../combat_vfx/hitbox_debug.ts'
 import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP} from '../ai/constants.ts'
-import type {WeaponMeshConfig} from '../appearance/weapon_mesh.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {createWireframe, cleanupWireframe} from '../../box/base/render'
@@ -64,13 +61,14 @@ type CharacterRigidBody = RAPIER.RigidBody
 /** 刀光轨迹刀尖采样复用向量（避免每帧分配） */
 const _trailTipVec = new Vector3()
 
-/** 根据 AttackConfig 解析武器模型配置 */
-const resolveWeaponMeshConfig = (attack: AttackConfig): WeaponMeshConfig => {
-    if (attack.type === 'melee') {
-        if (attack.weaponId === TEST_WEAPON_ID) return TEST_WEAPON.mesh
-        return (MELEE_WEAPON_PRESETS[attack.weaponId ?? ''] ?? MELEE_WEAPON_PRESETS.long_sword).mesh
-    }
-    return (RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow).mesh
+/** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写；test_weapon 走测试专用链） */
+const weaponRuntimeOf = (attack: AttackConfig): WeaponRuntime => {
+    if (attack.weaponId === TEST_WEAPON_ID) return createTestWeaponRuntime()
+    return createWeaponRuntime(attack.weaponId, {
+        damage: attack.damage,
+        cooldown: attack.cooldown,
+        ranged: attack.ranged,
+    })
 }
 
 /* 视线扇形可视化 castFan 命中距离复用缓冲 */
@@ -122,7 +120,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     markPlayer: (id: number) => void
     unmarkPlayer: () => void
     setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, sprint?: boolean) => void
-    setPlayerAttack: (skillIndex?: number, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
+    setPlayerAttack: (attackKey?: AttackKey, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
     getPlayerCharacter: () => CharacterEntity | undefined
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
@@ -155,46 +153,6 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setOnMeleeImpact: (listener: ((x: number, y: number, z: number) => void) | null) => void
     /** 清除执行期产生的全部子弹（子弹是战斗期临时对象、不进存档，世界还原/载入时必须显式清理） */
     clearBullets: () => void
-}
-
-/** 将旧 AttackConfig 转换为 SkillSlot 数组 */
-const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
-    if (attack.type === 'melee') {
-        /* test_weapon：测试专用武器，走自定义 6 槽守卫链装配（不进生产预设表） */
-        if ((attack.weaponId ?? '') === TEST_WEAPON_ID) return buildTestWeaponSkillSlots()
-        /* 近战 = 4 技能槽双链（轻1/重1/轻2/重2）；伤害沿用存档覆写，
-         * 段时长/阶段/链结构/起手冷却取预设（存档 duration 不再决定攻击时长） */
-        return buildMeleeSkillSlots(attack.weaponId ?? '', {damage: attack.damage})
-    }
-    const weaponPreset = RANGED_WEAPON_PRESETS[attack.weaponId ?? ''] ?? RANGED_WEAPON_PRESETS.longbow
-    const skill: SkillConfig = {
-        id: attack.weaponId ?? 'custom_ranged',
-        type: 'ranged',
-        /* 远程普通攻击默认无冷却；存档/面板仍可配置非 0 值（触发时开始计时，只挡起手） */
-        cooldown: attack.cooldown,
-        duration: attack.duration,
-        recovery: 0,
-        weapon: {
-            id: weaponPreset.id,
-            name: weaponPreset.name,
-            type: 'ranged',
-            damage: attack.damage,
-            range: attack.range,
-            knockbackForce: attack.bulletKnockback,
-            projectileSpeed: attack.bulletSpeed,
-            projectileLifetime: attack.bulletLifetime,
-            detectionRange: weaponPreset.detectionRange,
-            idealRange: weaponPreset.idealRange,
-            retreatRange: weaponPreset.retreatRange,
-            spreadCount: weaponPreset.spreadCount,
-            spreadAngle: weaponPreset.spreadAngle,
-            explosionRadius: weaponPreset.explosionRadius,
-            homingStrength: weaponPreset.homingStrength,
-            throwAngle: weaponPreset.throwAngle,
-            mesh: weaponPreset.mesh,
-        },
-    }
-    return [createSkillSlot(skill)]
 }
 
 export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): CharacterEntitySystem => {
@@ -264,7 +222,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         fireProjectile: () => {},
     }
 
-    let playerAttackSkillIndex = 0
+    /** 玩家攻击脉冲携带的攻击键组（帧末与脉冲一同归零） */
+    let playerAttackKey: AttackKey | undefined = undefined
     /** 玩家攻击脉冲携带的按键按住时长（秒），帧末与脉冲一同归零 */
     let playerAttackHoldDuration = 0
 
@@ -284,10 +243,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const pi = infoById.get(ch.id)
             if (!pi) continue
             const playerPrefix = ch.isPlayer ? '▶ Player: ' : ''
-            const skill = ch.combat.skills[ch.combat.currentSkillIndex]
+            const weapon = ch.combat.weapon
             /* 列表侧栏（`ui/element_list_panel.ts`）展示武器中文名，与角色面板武器下拉同源（武器预设 `name` 字段） */
-            const weaponName = skill?.config.weapon.name ?? '?'
-            const weaponDmg = skill?.config.weapon.damage ?? 0
+            const weaponName = weapon.name
+            const weaponDmg = weapon.damage
             pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weaponDmg})  spd:${ch.config.speed}  [${stateLabelOf(ch)}]`
             pi.badgeLabel = ch.isPlayer ? 'P' : `F${ch.combat.faction}`
             pi.badgeColor = factionBadgeColor(ch.combat.faction, ch.isPlayer)
@@ -306,7 +265,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const spawnEntity = (
         config: CharacterConfig,
-        attackSlot: AttackConfig,
+        attack: AttackConfig,
         tendencyConfig: TendencyConfig,
         faction: number,
         x: number, y: number, z: number,
@@ -315,6 +274,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         combatStrategy: CombatSubStrategy = 'tactical',
         navEnabled: boolean = true,
     ): CharacterEntity => {
+        /* 武器运行时（武器预设 + 存档数值覆写）：外观武器模型、攻击链、血量档位都由它决定 */
+        const runtime = weaponRuntimeOf(attack)
         const mesh = createCharacterMesh(config)
         /* 实体原点在脚底：mesh/外观模型定位到原点，物理刚体（胶囊）中心上移半高 */
         const halfH = originToCenterY(config)
@@ -330,7 +291,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         scene.add(mesh)
 
         const model = createCharacterModel(config, faction)
-        model.equipWeapon(resolveWeaponMeshConfig(attackSlot))
+        model.equipWeapon(runtime.weapon.mesh)
         model.group.position.set(x, y, z)
         scene.add(model.group)
 
@@ -358,11 +319,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
         const id = nextId++
         const stateMachine = createCharacterStateMachine()
-        const skills = attackToSkillSlots(attackSlot)
-        const maxHP = attackSlot.type === 'melee' ? 15 : 8
+        const maxHP = runtime.weapon.type === 'melee' ? 15 : 8
 
         const combat = createCombatComponent(
-            skills, faction,
+            runtime, faction,
             resolveTendency(tendencyConfig), tendencyConfig, maxHP,
         )
 
@@ -427,8 +387,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const spawnAt = (x: number, y: number, z: number): void => {
-        const wp = MELEE_WEAPON_PRESETS.long_sword
-        const meleePreset: AttackConfig = {type: 'melee', damage: wp.damage, cooldown: 0, duration: MELEE_LIGHT_DURATION}
+        const meleePreset: AttackConfig = {weaponId: 'long_sword'}
         const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
         select(entity.id)
     }
@@ -491,9 +450,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
         hitBoxes.targetBox.rotation.y = yaw
         hitBoxes.targetBox.visible = show
-        const skill = entity.combat.skills[entity.combat.currentSkillIndex]?.config
-        if (skill !== undefined && skill.type === 'melee') {
-            const db = attackDetectOBB({x, y, z}, skill.weapon.detectBox, entity.config.scale, yaw)
+        const weapon = entity.combat.weapon
+        if (weapon.type === 'melee') {
+            const db = attackDetectOBB({x, y, z}, weapon.detectBox, entity.config.scale, yaw)
             hitBoxes.detectBox.position.set(db.center.x, db.center.y, db.center.z)
             hitBoxes.detectBox.scale.set(db.half.x * 2, db.half.y * 2, db.half.z * 2)
             hitBoxes.detectBox.rotation.y = yaw
@@ -501,16 +460,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         } else {
             hitBoxes.detectBox.visible = false
         }
-        if (skill !== undefined && skill.type === 'ranged') {
+        if (weapon.type === 'ranged') {
             /* 射程圆环：半径 = weapon.range，贴足部高度平铺 */
             hitBoxes.rangeRing.position.set(x, y - CHARACTER_BASE_SIZE.height * entity.config.scale / 2, z)
-            hitBoxes.rangeRing.scale.set(skill.weapon.range, 1, skill.weapon.range)
+            hitBoxes.rangeRing.scale.set(weapon.range, 1, weapon.range)
             hitBoxes.rangeRing.visible = show
         } else {
             hitBoxes.rangeRing.visible = false
         }
         placeVisionFan(hitBoxes, losChecker, x, y + CHARACTER_BASE_SIZE.height * entity.config.scale * 0.4, z, yaw,
-            skill?.weapon.detectionRange ?? 8)
+            weapon.detectionRange)
         hitBoxes.visionFan.visible = show
         /* 攻击判定箱（红）需逐帧跟随武器 matrixWorld，暂停态不强行显示，由 update() 维护 */
         if (!show) hitBoxes.weaponBox.visible = false
@@ -553,11 +512,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         cleanupWireframe(entity)
 
         if (entity.combat.attackActive) {
-            const skill = entity.combat.skills[entity.combat.currentSkillIndex]
-            if (skill) {
-                const executor = getSkillExecutor(skill.config.type)
-                executor?.end(skill.config, entity.combat, entity, noopExecCtx)
-            }
+            const executor = getSkillExecutor(entity.combat.weapon.type)
+            executor?.end(entity.combat, entity, noopExecCtx)
             activatedAttacks.delete(entity.id)
         }
 
@@ -606,25 +562,23 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         playerForwardZ = forwardZ
     }
 
-    const setPlayerAttack = (skillIndex?: number, holdDuration?: number): AttackResult => {
+    const setPlayerAttack = (attackKey?: AttackKey, holdDuration?: number): AttackResult => {
         const player = getPlayerCharacter()
         if (!player || player.combat.isDead) return 'dead'
-        const idx = skillIndex ?? 0
-        if (idx < 0 || idx >= player.combat.skills.length) return 'no_valid_skill'
+        const key: AttackKey = attackKey ?? 'light'
         const hold = holdDuration ?? 0
         if (player.combat.attackActive) {
-            /* 攻击中不再拒绝：写入单帧脉冲，由 attacking 缓冲逻辑在段末推进（续链/切链） */
+            /* 攻击中不再拒绝：写入单帧脉冲，由 attacking 段转换在段末推进（同键续链/异键切链） */
             playerAttackPending = true
-            playerAttackSkillIndex = idx
+            playerAttackKey = key
             playerAttackHoldDuration = hold
             return 'ok'
         }
-        /* 非攻击中：按键组 + 守卫（蓄力/方向）+ 冷却解析起手，无候选才拒绝
-         * （不能只查 skills[idx] 冷却：同键组守卫变体与兜底槽冷却相互独立） */
-        const entry = resolveEntrySkillIndex(player.combat, idx, {dx: playerDx, dz: playerDz, holdDuration: hold})
-        if (entry === -1) return 'cooldown'
+        /* 非攻击中：按键起手解析（起手候选守卫 + 冷却），无候选才拒绝 */
+        const canStart = canStartAttack(player.combat, {dx: playerDx, dz: playerDz, holdDuration: hold, attackKey: key})
+        if (!canStart) return 'cooldown'
         playerAttackPending = true
-        playerAttackSkillIndex = idx
+        playerAttackKey = key
         playerAttackHoldDuration = hold
         return 'ok'
     }
@@ -663,10 +617,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         for (const entity of characters) {
             if (entity.combat.isDead) continue
 
-            const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
-            for (const sk of entity.combat.skills) {
-                sk.cooldownTimer = Math.max(0, sk.cooldownTimer - dt)
-            }
+            /* 段冷却逐帧递减（只挡起手，链推进不查冷却） */
+            tickSegmentCooldowns(entity.combat, dt)
             entity.combat.dashSkill.cooldownTimer = Math.max(0, entity.combat.dashSkill.cooldownTimer - dt)
             entity.combat.flinchImmunityTimer = Math.max(0, entity.combat.flinchImmunityTimer - dt)
             flashStates.get(entity.id)?.tick(dt)
@@ -708,7 +660,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         jump = navResult.jump
                     }
 
-                    entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 0)
+                    entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 'light')
                     /* 记录意图方向（过滤前）：驱动朝向持续对准目标/路点，被接触阻断/nav 卡住时
                      * 仍能转正朝向，保证攻击检测箱门控与发射方向可用（过滤后方向会清零导致朝向自锁） */
                     aiTargetDirs.set(entity.id, {dx, dz})
@@ -723,7 +675,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 })
             } else if (entity.isPlayer) {
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerSprint, playerAttackSkillIndex, playerAttackHoldDuration)
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerSprint, playerAttackKey, playerAttackHoldDuration)
                 if (playerAttackPending) {
                     entity.combat.attackDirX = playerForwardX
                     entity.combat.attackDirZ = playerForwardZ
@@ -737,14 +689,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (model && sys) {
                 const linvel = entity.body.linvel()
                 const hSpeed = Math.hypot(linvel.x, linvel.z)
-                /* 计算阶段动画上下文（仅 attacking 状态注入阶段信息） */
-                const activeSkill = entity.combat.skills[entity.combat.currentSkillIndex]
-                const inAttacking = entity.stateMachine.currentState === 'attacking' && activeSkill !== undefined
-                const phases = inAttacking ? resolvePhases(activeSkill.config.phases) : []
-                const phaseDuration = entity.combat.phaseIndex < phases.length
-                    ? phaseDurationOf(phases[entity.combat.phaseIndex], activeSkill!.config.duration, activeSkill!.config.recovery)
+                /* 计算阶段动画上下文（仅 attacking 状态注入当前段信息） */
+                const activeSegment = entity.combat.activeSegment
+                const inAttacking = entity.stateMachine.currentState === 'attacking' && activeSegment !== undefined
+                const phases = inAttacking ? resolvePhases(activeSegment.phases) : []
+                const phaseDuration = inAttacking && entity.combat.phaseIndex < phases.length
+                    ? phaseDurationOf(phases[entity.combat.phaseIndex], activeSegment.duration, activeSegment.recovery)
                     : 1
-                const totalDuration = activeSkill !== undefined ? activeSkill.config.duration + activeSkill.config.recovery : 1
+                const totalDuration = activeSegment !== undefined ? activeSegment.duration + activeSegment.recovery : 1
                 const ctxPhaseName = inAttacking && entity.combat.phaseIndex < phases.length
                     ? phases[entity.combat.phaseIndex].name
                     : undefined
@@ -753,14 +705,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
                     swingTilt: entity.combat.swingTilt,
-                    attackSkillId: inAttacking ? activeSkill!.config.id : undefined,
+                    attackSegment: inAttacking ? activeSegment : undefined,
                     attackPhase: ctxPhaseName,
                     attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
                     attackTotalProgress: inAttacking && totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
-                    attackPhases: inAttacking ? phases : undefined,
                     attackPhaseIndex: entity.combat.phaseIndex,
-                    attackDuration: activeSkill?.config.duration ?? 1,
-                    attackRecovery: activeSkill?.config.recovery ?? 0,
                     weaponHeld: model.weaponMesh !== null,
                 })
 
@@ -834,12 +783,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     hitBoxes.targetBox.rotation.y = yaw
                     hitBoxes.targetBox.visible = showDebug
 
-                    const meleeSkill = activeSkill !== undefined && activeSkill.config.type === 'melee'
-                        ? activeSkill.config
-                        : undefined
+                    const debugWeapon = entity.combat.weapon
+                    const meleeWeapon = debugWeapon.type === 'melee' ? debugWeapon : undefined
 
                     /* 攻击判定箱（红）：跟随武器模型位姿，尺寸 = 武器本地命中箱 */
-                    if (showDebug && meleeSkill !== undefined && model.weaponGroup !== null && model.weaponHitBox !== null) {
+                    if (showDebug && meleeWeapon !== undefined && model.weaponGroup !== null && model.weaponHitBox !== null) {
                         model.weaponGroup.updateMatrixWorld()
                         syncWeaponDebugBox(hitBoxes.weaponBox, model.weaponGroup.matrixWorld,
                             model.weaponHitBox.center, model.weaponHitBox.half)
@@ -849,8 +797,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
 
                     /* 攻击检测箱（橙）：与角色位置/朝向绑定，尺寸与偏移由武器 detectBox 配置驱动 */
-                    if (showDebug && meleeSkill !== undefined) {
-                        const db = attackDetectOBB(bPos, meleeSkill.weapon.detectBox, entity.config.scale, yaw)
+                    if (showDebug && meleeWeapon !== undefined) {
+                        const db = attackDetectOBB(bPos, meleeWeapon.detectBox, entity.config.scale, yaw)
                         hitBoxes.detectBox.position.set(db.center.x, db.center.y, db.center.z)
                         hitBoxes.detectBox.scale.set(db.half.x * 2, db.half.y * 2, db.half.z * 2)
                         hitBoxes.detectBox.rotation.y = yaw
@@ -860,12 +808,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
 
                     /* 射程圆环（橙）：远程出招门控为圆形距离判定 dist <= weapon.range，贴足部高度平铺 */
-                    const rangedSkill = activeSkill !== undefined && activeSkill.config.type === 'ranged'
-                        ? activeSkill.config
-                        : undefined
-                    if (showDebug && rangedSkill !== undefined) {
+                    if (showDebug && debugWeapon.type === 'ranged') {
                         hitBoxes.rangeRing.position.set(bPos.x, bPos.y - CHARACTER_BASE_SIZE.height * entity.config.scale / 2, bPos.z)
-                        hitBoxes.rangeRing.scale.set(rangedSkill.weapon.range, 1, rangedSkill.weapon.range)
+                        hitBoxes.rangeRing.scale.set(debugWeapon.range, 1, debugWeapon.range)
                         hitBoxes.rangeRing.visible = true
                     } else {
                         hitBoxes.rangeRing.visible = false
@@ -874,7 +819,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     /* 视线扇形（蓝）：每 10° 一条扫描射线（截断到遮挡点），战斗目标存在时画连线 */
                     if (showDebug) {
                         const eyeY = bPos.y + CHARACTER_BASE_SIZE.height * entity.config.scale * 0.4
-                        const fanLen = activeSkill?.config.weapon.detectionRange ?? 8
+                        const fanLen = debugWeapon.detectionRange
                         let tx: number | undefined
                         let ty: number | undefined
                         let tz: number | undefined
@@ -896,29 +841,25 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
 
             if (entity.combat.attackActive && !entity.combat.isDead) {
-                if (activeSkill) {
-                    const executor = getSkillExecutor(activeSkill.config.type)
-                    if (executor) {
-                        if (!activatedAttacks.has(entity.id)) {
-                            activatedAttacks.add(entity.id)
-                            const dirInfo = aiTargetDirs.get(entity.id)
-                            let dirX = dirInfo ? dirInfo.dx : entity.combat.attackDirX
-                            let dirZ = dirInfo ? dirInfo.dz : entity.combat.attackDirZ
-                            const len = Math.hypot(dirX, dirZ)
-                            if (len < 0.001) { dirX = 0; dirZ = 1 }
-                            else { dirX /= len; dirZ /= len }
-                            const dirVec = { x: dirX, y: 0, z: dirZ }
-                            executor.start(activeSkill.config, entity.combat, entity, dirVec, noopExecCtx)
-                        }
-                        executor.update(dt, activeSkill.config, entity.combat, entity, noopExecCtx)
+                const executor = getSkillExecutor(entity.combat.weapon.type)
+                if (executor) {
+                    if (!activatedAttacks.has(entity.id)) {
+                        activatedAttacks.add(entity.id)
+                        const dirInfo = aiTargetDirs.get(entity.id)
+                        let dirX = dirInfo ? dirInfo.dx : entity.combat.attackDirX
+                        let dirZ = dirInfo ? dirInfo.dz : entity.combat.attackDirZ
+                        const len = Math.hypot(dirX, dirZ)
+                        if (len < 0.001) { dirX = 0; dirZ = 1 }
+                        else { dirX /= len; dirZ /= len }
+                        const dirVec = { x: dirX, y: 0, z: dirZ }
+                        executor.start(entity.combat, entity, dirVec, noopExecCtx)
                     }
+                    executor.update(dt, entity.combat, entity, noopExecCtx)
                 }
             } else if (activatedAttacks.has(entity.id)) {
                 activatedAttacks.delete(entity.id)
-                if (activeSkill) {
-                    const executor = getSkillExecutor(activeSkill.config.type)
-                    executor?.end(activeSkill.config, entity.combat, entity, noopExecCtx)
-                }
+                const executor = getSkillExecutor(entity.combat.weapon.type)
+                executor?.end(entity.combat, entity, noopExecCtx)
             }
         }
 
@@ -1014,15 +955,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     /* 攻击检测箱：与角色位置/朝向绑定、尺寸与偏移由武器 detectBox 配置驱动的前侧方立方体；
                      * 远程不适用检测箱，回退圆形距离判定 */
                     (character, target) => {
-                        const skill = character.combat.skills[character.combat.currentSkillIndex]
-                        if (!skill) return false
+                        const weapon = character.combat.weapon
                         const cPos = character.body.translation()
                         const tPos = target.body.translation()
-                        if (skill.config.type !== 'melee') {
-                            return Math.hypot(tPos.x - cPos.x, tPos.z - cPos.z) <= skill.config.weapon.range
+                        if (weapon.type !== 'melee') {
+                            return Math.hypot(tPos.x - cPos.x, tPos.z - cPos.z) <= weapon.range
                         }
                         return testAttackDetect(
-                            cPos, skill.config.weapon.detectBox, character.config.scale, facingAngles.get(character.id) ?? 0,
+                            cPos, weapon.detectBox, character.config.scale, facingAngles.get(character.id) ?? 0,
                             tPos, target.config.scale, facingAngles.get(target.id) ?? 0,
                         )
                     },
@@ -1075,7 +1015,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
         const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, scale: saveConfig.scale}
-        const entity = spawnEntity(cfg, saveConfig.attackSlot, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
+        const entity = spawnEntity(cfg, saveConfig.attack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
@@ -1172,13 +1112,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
         }
         if (newAttackSlot) {
-            entity.combat.skills = attackToSkillSlots(newAttackSlot)
-            entity.combat.currentSkillIndex = 0
-            entity.combat.chainEntryIndex = 0
-            entity.combat.bufferedSkillIndex = -1
+            /* 换装：整体替换武器运行时（武器 + 攻击链 + 数值覆写），清空段冷却与当前段 */
+            setCombatWeapon(entity.combat, weaponRuntimeOf(newAttackSlot))
+            entity.combat.activeSegment = undefined
+            entity.combat.bufferedSegment = undefined
+            entity.combat.segmentCooldowns.clear()
             const model = appearanceModels.get(entity.id)
             if (model) {
-                model.equipWeapon(resolveWeaponMeshConfig(newAttackSlot))
+                model.equipWeapon(entity.combat.weapon.mesh)
             }
         }
         if (newFaction !== undefined) {

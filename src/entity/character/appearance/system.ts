@@ -80,13 +80,14 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         const leftShoulder = bridge.findJoint('leftArmShoulder')
         if (leftShoulder !== undefined) leftShoulder.ikRootLevel = 0
         if (state === 'attacking') {
-            /* 攻击 clip：技能配置静态时长 + 段固有 tilt + 武器握持前倾；事件轨驱动命中窗口 */
-            const phases = ctx.attackPhases
+            /* 攻击 clip：当前段的武器固有参数（时长/阶段/倾斜角）+ 武器握持前倾；事件轨驱动命中窗口 */
+            const segment = ctx.attackSegment
+            if (segment === undefined) return
             const clip = getAttackClip({
-                skillId: ctx.attackSkillId ?? 'attack',
-                duration: ctx.attackDuration,
-                recovery: ctx.attackRecovery,
-                phases,
+                segmentId: segment.id,
+                duration: segment.duration,
+                recovery: segment.recovery,
+                phases: segment.phases,
                 tilt: ctx.swingTilt,
                 gripTilt: model.weaponGripTilt,
             })
@@ -106,7 +107,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     /** 双手武器 IK（评审决议：applyPose 先写、IK 后写覆盖左臂链）：左手腕追右腕武器轴握柄点 */
     const applyTwoHandedIk = (ctx: AnimationContext): void => {
         if (bridge === undefined || player === undefined) return
-        const twoHanded = ctx.attackPhases?.[0]?.animConfig.twoHanded ?? false
+        const twoHanded = ctx.attackSegment?.phases[0]?.animConfig.twoHanded ?? false
         if (!twoHanded) return
         const wristWorld = bridge.getWorldPosition('rightWristPivot')
         const elbowWorld = bridge.getWorldPosition('rightArmElbow')
@@ -148,9 +149,9 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     }
 
     const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {
-        /* 动画键：attacking 附加技能 id；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
-        const animKey = state === 'attacking' && ctx.attackSkillId !== undefined
-            ? `attacking:${ctx.attackSkillId}`
+        /* 动画键：attacking 用当前段 id（段切换触发混合）；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
+        const animKey = state === 'attacking' && ctx.attackSegment !== undefined
+            ? `attacking:${ctx.attackSegment.id}`
             : state === 'falling'
                 ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${ctx.weaponHeld ? ':w' : ':n'}`
                 : `${state}${ctx.weaponHeld ? ':w' : ':n'}`

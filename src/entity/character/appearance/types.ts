@@ -1,6 +1,7 @@
 import type {Group, Mesh} from 'three'
 import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
-import type {AttackPhase, AttackPhaseName} from '../../../character/combat/attack_phases.ts'
+import type {AttackPhaseName} from '../../../character/combat/attack_phases.ts'
+import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import type {BoxPartPalette} from '../../../render/box_parts.ts'
 
 /** 角色配色 palette（方块人部件共享，见 render/box_parts） */
@@ -77,22 +78,19 @@ export interface AnimationContext {
     readonly horizontalSpeed: number
     /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍 */
     readonly swingTilt: number
-    /** 当前攻击技能 id（仅 attacking 状态有效）— 链段切换时作为动画键触发姿态混合 */
-    readonly attackSkillId: string | undefined
+    /**
+     * 当前攻击段（仅 attacking 状态有效）—— 武器模组拥有的段定义：
+     * id 作为动画键（段切换触发姿态混合）、时长/恢复/阶段/tilt 供攻击 clip 生成器使用。
+     */
+    readonly attackSegment: AttackSegment | undefined
     /** 当前攻击阶段名（仅在 attacking 状态有效，其他状态为 undefined） */
     readonly attackPhase: AttackPhaseName | undefined
     /** 当前阶段进度 0-1（phaseTimer / phaseDuration） */
     readonly attackPhaseProgress: number
     /** 攻击总进度 0-1（attackTimer / totalDuration） */
     readonly attackTotalProgress: number
-    /** 当前技能完整阶段序列（仅 attacking 状态有效，其他状态为 undefined）— 供攻击 clip 生成器使用 */
-    readonly attackPhases: readonly AttackPhase[] | undefined
-    /** 当前阶段索引（与 attackPhases 配套，越界表示全部阶段已完成） */
+    /** 当前阶段索引（与 attackSegment.phases 配套，越界表示全部阶段已完成） */
     readonly attackPhaseIndex: number
-    /** 当前攻击动作时长 duration（秒，技能配置，攻击 clip 时间轴映射用） */
-    readonly attackDuration: number
-    /** 当前攻击恢复时长 recovery（秒，技能配置） */
-    readonly attackRecovery: number
     /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
     readonly weaponHeld: boolean
 }

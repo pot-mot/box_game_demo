@@ -9,17 +9,9 @@ import {setupHealthBars} from './health_bar.ts'
 import type {SkillTimerRowData, TimerCellData, TimerRowData} from './player_hud.ts'
 import {createPlayerHUD} from './player_hud.ts'
 import {createDeathScreen} from './death_screen.ts'
-import {MELEE_CHAIN_SLOTS} from '../../character/combat/melee_skill.ts'
+import {orderedSegments, segmentDisplayName} from '../../character/weapon/attack_chain.ts'
+import {segmentCooldownRemaining} from '../../character/combat/attack_runtime.ts'
 import {HIT_SHAKE_DURATION, HIT_SHAKE_AMPLITUDE} from './constants.ts'
-
-/** 技能显示名：近战链段取段后缀（light_1 / heavy_2 等），其余技能取 id 尾段（shot / charge 等） */
-const skillLabel = (id: string): string => {
-    for (const slot of MELEE_CHAIN_SLOTS) {
-        if (id.endsWith(`_${slot}`)) return slot
-    }
-    const idx = id.lastIndexOf('_')
-    return idx >= 0 ? id.slice(idx + 1) : id
-}
 
 export interface PlayModeController {
     updater: (dt: number) => void
@@ -49,8 +41,8 @@ export const setupPlayMode = (
         return cameraTarget
     },
     {
-        onLightAttack: (held) => characterSystem.setPlayerAttack(0, held),
-        onHeavyAttack: (held) => characterSystem.setPlayerAttack(1, held),
+        onLightAttack: (held) => characterSystem.setPlayerAttack('light', held),
+        onHeavyAttack: (held) => characterSystem.setPlayerAttack('heavy', held),
     },
     )
     const healthBarUpdate = setupHealthBars(
@@ -95,7 +87,8 @@ export const setupPlayMode = (
 
             const timers: TimerRowData[] = []
 
-            /* 每技能一行：动作时间 + 恢复时间 + 冷却时间 三个计时器 */
+            /* 每攻击段一行：动作时间 + 恢复时间 + 冷却时间 三个计时器
+             * 行顺序 = 武器攻击链展示顺序（轻1 → 轻2 → 重1 → 重2），段由武器模组声明 */
             const skillTimers: SkillTimerRowData[] = []
             const emptyCell = (text: string): TimerCellData => ({fillRatio: 0, fillColor: 'transparent', text})
 
@@ -121,24 +114,27 @@ export const setupPlayMode = (
                 cooldown: cooldownCell(dash.cooldownTimer, dashCfg.cooldown),
             })
 
-            for (let i = 0; i < player.combat.skills.length; i++) {
-                const s = player.combat.skills[i]
-                const cfg = s.config
-                const isActive = player.combat.attackActive && player.combat.currentSkillIndex === i
+            for (const segment of orderedSegments(player.combat.attacks)) {
+                const isActive = player.combat.attackActive && player.combat.activeSegment?.id === segment.id
                 const t = player.combat.attackTimer
 
                 /* 动作计时：attackTimer 处于 [0, duration] 区间时填充 */
-                const action: TimerCellData = isActive && cfg.duration > 0 && t <= cfg.duration
-                    ? {fillRatio: Math.min(1, t / cfg.duration), fillColor: '#ffaa00', text: `${t.toFixed(2)}s`}
-                    : emptyCell(cfg.duration > 0 ? `${cfg.duration.toFixed(2)}s` : '-')
+                const action: TimerCellData = isActive && segment.duration > 0 && t <= segment.duration
+                    ? {fillRatio: Math.min(1, t / segment.duration), fillColor: '#ffaa00', text: `${t.toFixed(2)}s`}
+                    : emptyCell(segment.duration > 0 ? `${segment.duration.toFixed(2)}s` : '-')
 
-                /* 恢复计时：attackTimer 越过 duration 后填充（recovery = 0 的技能无恢复段） */
-                const recovery: TimerCellData = isActive && cfg.recovery > 0 && t > cfg.duration
-                    ? {fillRatio: Math.min(1, (t - cfg.duration) / cfg.recovery), fillColor: '#44ccff', text: `${(t - cfg.duration).toFixed(2)}s`}
-                    : emptyCell(cfg.recovery > 0 ? `${cfg.recovery.toFixed(2)}s` : '-')
+                /* 恢复计时：attackTimer 越过 duration 后填充（recovery = 0 的段无恢复段） */
+                const recovery: TimerCellData = isActive && segment.recovery > 0 && t > segment.duration
+                    ? {fillRatio: Math.min(1, (t - segment.duration) / segment.recovery), fillColor: '#44ccff', text: `${(t - segment.duration).toFixed(2)}s`}
+                    : emptyCell(segment.recovery > 0 ? `${segment.recovery.toFixed(2)}s` : '-')
 
-                /* 冷却计时：从触发时刻开始（cooldownTimer 递减），就绪/无冷却时显示 0.0 */
-                skillTimers.push({label: skillLabel(cfg.id), action, recovery, cooldown: cooldownCell(s.cooldownTimer, cfg.cooldown)})
+                /* 冷却计时：从段触发时刻开始（段冷却递减），就绪/无冷却时显示 0.0 */
+                skillTimers.push({
+                    label: segmentDisplayName(segment),
+                    action,
+                    recovery,
+                    cooldown: cooldownCell(segmentCooldownRemaining(player.combat, segment.id), segment.cooldown),
+                })
             }
 
             hud.update({

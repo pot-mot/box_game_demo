@@ -1,7 +1,7 @@
 import type {RapVector3} from '../../physics/rapier_utils.ts'
 import type {CharacterEntity} from '../types.ts'
+import type {WeaponType} from '../weapon/catalog.ts'
 import type {CombatComponent} from './types.ts'
-import type {SkillConfig, SkillType} from './skill_types.ts'
 
 /** 执行器运行时上下文 —— 暴露必要能力，不依赖具体物理实现 */
 export interface ExecutorContext {
@@ -15,13 +15,16 @@ export interface ExecutorContext {
     ) => void
 }
 
-/** 技能执行器接口 —— 近战/远程各自实现 */
+/**
+ * 技能执行器接口 —— 按**武器类型**（近战 / 远程）实现。
+ * 执行器不接收「技能配置」：武器固有参数读 `combat.weapon`，当前动作段读 `combat.activeSegment`
+ * （命中伤害 = weapon.damage × segment.damageMultiplier）。
+ */
 export interface SkillExecutor {
-    readonly type: SkillType
+    readonly type: WeaponType
 
-    /** 技能开始执行（进入 attacking 状态时调用一次） */
+    /** 段开始执行（进入段时调用一次） */
     start(
-        skill: SkillConfig,
         combat: CombatComponent,
         entity: CharacterEntity,
         direction: RapVector3,
@@ -31,27 +34,25 @@ export interface SkillExecutor {
     /** 每帧更新（attacking 状态期间持续调用） */
     update(
         dt: number,
-        skill: SkillConfig,
         combat: CombatComponent,
         entity: CharacterEntity,
         ctx: ExecutorContext,
     ): void
 
-    /** 技能结束（退出 attacking 状态时调用一次） */
+    /** 段结束（退出 attacking 状态时调用一次） */
     end(
-        skill: SkillConfig,
         combat: CombatComponent,
         entity: CharacterEntity,
         ctx: ExecutorContext,
     ): void
 }
 
-/** 全局技能执行器注册表 */
-export const SKILL_EXECUTOR_REGISTRY = new Map<SkillType, SkillExecutor>()
+/** 全局技能执行器注册表（键 = 武器类型） */
+export const SKILL_EXECUTOR_REGISTRY = new Map<WeaponType, SkillExecutor>()
 
-export const registerSkillExecutor = (type: SkillType, executor: SkillExecutor): void => {
+export const registerSkillExecutor = (type: WeaponType, executor: SkillExecutor): void => {
     SKILL_EXECUTOR_REGISTRY.set(type, executor)
 }
 
-export const getSkillExecutor = (type: SkillType): SkillExecutor | undefined =>
+export const getSkillExecutor = (type: WeaponType): SkillExecutor | undefined =>
     SKILL_EXECUTOR_REGISTRY.get(type)

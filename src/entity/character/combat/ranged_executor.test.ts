@@ -6,8 +6,8 @@ import {createColliderForBody} from '../../../physics/rapier_utils.ts'
 import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../physics/constants.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {createRangedExecutor} from './ranged_executor.ts'
-import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
-import type {RangedSkillConfig} from '../../../character/combat/ranged_skill.ts'
+import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import type {WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import type {ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {CollisionCategory} from '../../../physics/collision_category.ts'
@@ -22,25 +22,24 @@ type RangedExecutor = ReturnType<typeof createRangedExecutor>
 
 const noopCtx: ExecutorContext = {fireProjectile: () => {}}
 
-/** 测试技能：固定伤害 / 无击退 / 无爆炸 / 平射，便于断言 */
-const makeSkill = (overrides: Partial<RangedSkillConfig['weapon']> = {}): RangedSkillConfig => ({
-    id: 'test_ranged',
-    type: 'ranged',
-    cooldown: 0,
-    duration: 0.2,
-    recovery: 0,
-    weapon: {
+/** 测试武器：长弓 + 数值覆写（固定伤害 5 / 无击退 / 平射），便于断言 */
+const makeWeaponRuntime = (weaponOverrides: Partial<RangedWeaponConfig> = {}, damage = 5): WeaponRuntime => {
+    const weapon: RangedWeaponConfig = {
         ...RANGED_WEAPON_PRESETS.longbow,
-        damage: 5,
+        damage,
         knockbackForce: 0,
-        ...overrides,
-    },
-})
+        ...weaponOverrides,
+    }
+    return {weapon, attacks: weapon.attacks}
+}
 
-/** 在 +Z 方向开火（执行器只在首次 update 时生成子弹） */
-const fireForward = (executor: RangedExecutor, shooter: CharacterEntity, skill: RangedSkillConfig): void => {
-    executor.start(skill, shooter.combat, shooter, {x: 0, y: 0, z: 1}, noopCtx)
-    executor.update(DT, skill, shooter.combat, shooter, noopCtx)
+/** 在 +Z 方向开火（执行器只在首次 update 时生成子弹；武器参数取自 combat.weapon） */
+const fireForward = (executor: RangedExecutor, shooter: CharacterEntity, runtime: WeaponRuntime): void => {
+    shooter.combat.weapon = runtime.weapon
+    shooter.combat.attacks = runtime.attacks
+    shooter.combat.attackTimer = 0
+    executor.start(shooter.combat, shooter, {x: 0, y: 0, z: 1}, noopCtx)
+    executor.update(DT, shooter.combat, shooter, noopCtx)
 }
 
 /** 推进若干帧：物理步进 + 子弹结算（与 main.ts 的帧序一致） */
@@ -89,7 +88,7 @@ describe('投掷物可穿过类别', () => {
         const target = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
         makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
 
-        fireForward(executor, shooter, makeSkill())
+        fireForward(executor, shooter, makeWeaponRuntime())
         expect(executor.getBulletCount()).toBe(1)
 
         runFrames(hw, executor, [shooter, target], 30)
@@ -105,7 +104,7 @@ describe('投掷物可穿过类别', () => {
         const target = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
         makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
 
-        fireForward(executor, shooter, makeSkill({passThroughCategories: ['area', 'box']}))
+        fireForward(executor, shooter, makeWeaponRuntime({passThroughCategories: ['area', 'box']}))
         runFrames(hw, executor, [shooter, target], 30)
 
         expect(executor.getBulletCount()).toBe(0)
@@ -120,7 +119,7 @@ describe('投掷物可穿过类别', () => {
         /* 水域当前无物理体，用同类别标注的静态块验证默认列表确实放行 area */
         makeCategorizedBlock(hw, 'area', 0, 0.5, 2, 0.5, 0.5, 0.25)
 
-        fireForward(executor, shooter, makeSkill())
+        fireForward(executor, shooter, makeWeaponRuntime())
         runFrames(hw, executor, [shooter, target], 30)
 
         expect(target.combat.health).toBe(target.combat.maxHealth - 5)
@@ -131,7 +130,7 @@ describe('投掷物可穿过类别', () => {
         const executor = createRangedExecutor(hw.shared, new Scene())
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
 
-        fireForward(executor, shooter, makeSkill())
+        fireForward(executor, shooter, makeWeaponRuntime())
         /* 初速 y=0，仅受重力：约 0.4s 落地；未修复时子弹会穿过地面直到 y<-10（约 1.5s） */
         runFrames(hw, executor, [shooter], 40)
 
@@ -144,7 +143,7 @@ describe('投掷物可穿过类别', () => {
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
         makeCategorizedBlock(hw, 'terrain', 0, 0.5, 2, 0.5, 0.5, 0.25)
 
-        fireForward(executor, shooter, makeSkill({passThroughCategories: ['area', 'fragment']}))
+        fireForward(executor, shooter, makeWeaponRuntime({passThroughCategories: ['area', 'fragment']}))
         runFrames(hw, executor, [shooter], 10)
 
         expect(executor.getBulletCount()).toBe(0)
@@ -160,7 +159,7 @@ describe('投掷物可穿过类别', () => {
         shooter.combat.attackTendency = (ownerFaction, targetFaction) => ownerFaction !== targetFaction
         enemy.combat.faction = 1
 
-        fireForward(executor, shooter, makeSkill())
+        fireForward(executor, shooter, makeWeaponRuntime())
         runFrames(hw, executor, [shooter, ally, enemy], 30)
 
         expect(executor.getBulletCount()).toBe(0)
@@ -178,7 +177,7 @@ describe('投掷物可穿过类别', () => {
         enemy.combat.faction = 1
         enemy2.combat.faction = 1
 
-        fireForward(executor, shooter, makeSkill({passThroughCategories: ['area', 'character']}))
+        fireForward(executor, shooter, makeWeaponRuntime({passThroughCategories: ['area', 'character']}))
         /* 默认配置下子弹会在 z=2 处被挡下；此处穿过两名敌人并继续飞行 */
         runFrames(hw, executor, [shooter, enemy, enemy2], 6)
 
@@ -193,7 +192,7 @@ describe('投掷物可穿过类别', () => {
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
         makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
 
-        fireForward(executor, shooter, makeSkill({passThroughCategories: []}))
+        fireForward(executor, shooter, makeWeaponRuntime({passThroughCategories: []}))
         runFrames(hw, executor, [shooter], 10)
 
         expect(executor.getBulletCount()).toBe(0)
@@ -207,7 +206,7 @@ describe('投掷物可穿过类别', () => {
         /* 箱面 z=1.75，爆炸半径 2 覆盖 z=3 的旁观者 */
         makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
 
-        fireForward(executor, shooter, makeSkill({explosionRadius: 2}))
+        fireForward(executor, shooter, makeWeaponRuntime({explosionRadius: 2}))
         runFrames(hw, executor, [shooter, bystander], 10)
 
         expect(executor.getBulletCount()).toBe(0)

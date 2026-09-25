@@ -3,11 +3,13 @@ import {targetHitBoxHalves, testMeleeHit, testAttackDetect, attackDetectOBB, cre
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
-import type {SkillConfig} from '../../../character/combat/skill_types.ts'
+import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
+import {weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
+import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
+import {createCombatComponent} from '../../../character/combat/types.ts'
 import type {ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
-import {buildMeleeSkillSlots} from '../../../character/combat/melee_skill.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 
 /* 攻击检测箱夹具（与 long_sword / spear 预设一致）：前缘 = offset.z + size.z/2 */
@@ -139,50 +141,69 @@ describe('attackDetectOBB / testAttackDetect（攻击检测箱由武器 detectBo
 })
 
 describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
-    const makeSkill = (): SkillConfig => {
-        const slot = buildMeleeSkillSlots('short_sword')[0]
-        if (slot.config.type !== 'melee') throw new Error('测试需要近战技能配置')
-        return slot.config
+    /** 当前段：短剑轻 1 攻击段（原「技能配置」由武器模组的段定义替代） */
+    const makeSegment = (): AttackSegment => weaponPresetOrDefault('short_sword').attacks.segments['short_sword_light_1']
+
+    /** 构造执行器用例所需的最小实体（body 只保留执行器读取的 translation） */
+    const makeEntity = (): CharacterEntity => {
+        const combat = createCombatComponent(
+            createWeaponRuntime('short_sword'),
+            0,
+            () => true,
+            {tendencyId: 'hostileExceptSelf'},
+            15,
+        )
+        combat.activeSegment = makeSegment()
+        const entity = {
+            id: 1,
+            config: {speed: 6, jumpHeight: 2, scale: 1},
+            mesh: null!,
+            wireframe: undefined,
+            appearanceGroup: null!,
+            body: {translation: () => ({x: 0, y: 0, z: 0})},
+            mainCollider: undefined as unknown as RAPIER.Collider,
+            isOnGround: true,
+            groundNormal: {x: 0, y: 1, z: 0},
+            groundKeepTimer: 0,
+            airborneTime: 0, groundedTime: 0,
+            rowText: '',
+            navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
+            isDying: false, dyingTimer: 0,
+            combat,
+            stateMachine: createCharacterStateMachine(),
+        }
+        /* body 是执行器读取的最小替身：集中窄化一次，避免测试体散落类型转换 */
+        return entity as unknown as CharacterEntity
     }
-    const makeEntity = (): CharacterEntity => ({
-        id: 1,
-        config: {speed: 6, jumpHeight: 2, scale: 1},
-        mesh: null!,
-        wireframe: undefined,
-        appearanceGroup: {rotation: {y: 0}} as unknown as CharacterEntity['appearanceGroup'],
-        body: {translation: () => ({x: 0, y: 0, z: 0})} as unknown as CharacterEntity['body'],
-        mainCollider: undefined as unknown as RAPIER.Collider,
-        isOnGround: true,
-        groundNormal: {x: 0, y: 1, z: 0},
-        groundKeepTimer: 0,
-        airborneTime: 0, groundedTime: 0,
-        rowText: '',
-        navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
-        isDying: false, dyingTimer: 0,
-        combat: {skills: [makeSkill()], currentSkillIndex: 0} as unknown as CharacterEntity['combat'],
-        stateMachine: createCharacterStateMachine(),
-    })
 
     it('窗口关闭时 update 早退（getModel 不被调用）', () => {
         const getModel = vi.fn()
         const executor = createMeleeExecutor(() => [], getModel, () => 0)
-        const skill = makeSkill()
-        executor.update(0.016, skill, makeEntity().combat, makeEntity(), {} as ExecutorContext)
+        const entity = makeEntity()
+        executor.update(0.016, entity.combat, entity, {} as ExecutorContext)
         expect(getModel).not.toHaveBeenCalled()
         executor.setHitWindow(true)
-        executor.update(0.016, skill, makeEntity().combat, makeEntity(), {} as ExecutorContext)
+        executor.update(0.016, entity.combat, entity, {} as ExecutorContext)
         expect(getModel).toHaveBeenCalled()
         executor.setHitWindow(false)
         getModel.mockClear()
-        executor.update(0.016, skill, makeEntity().combat, makeEntity(), {} as ExecutorContext)
+        executor.update(0.016, entity.combat, entity, {} as ExecutorContext)
         expect(getModel).not.toHaveBeenCalled()
     })
 
-    it('非近战技能早退（ranged 不受窗口影响）', () => {
+    it('非近战武器早退（ranged 武器不受命中窗口影响）', () => {
         const getModel = vi.fn()
         const executor = createMeleeExecutor(() => [], getModel, () => 0)
+        const combat = createCombatComponent(
+            createWeaponRuntime('longbow'),
+            0,
+            () => true,
+            {tendencyId: 'hostileExceptSelf'},
+            15,
+        )
+        const entity = makeEntity()
         executor.setHitWindow(true)
-        executor.update(0.016, {type: 'ranged'} as SkillConfig, makeEntity().combat, makeEntity(), {} as ExecutorContext)
+        executor.update(0.016, combat, entity, {} as ExecutorContext)
         expect(getModel).not.toHaveBeenCalled()
     })
 })

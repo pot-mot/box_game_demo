@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld} from '../../../physics/world.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
-import type {CharacterSaveConfig, SaveData, SavableCharacter} from '../../../save_load/types.ts'
+import {SAVE_FORMAT_VERSION, type CharacterSaveConfig, type SaveData, type SavableCharacter} from '../../../save_load/types.ts'
 import {loadWorldFromData} from '../../../save_load/deserialize.ts'
 import type {EntityInfoSource} from '../../box/base/types/entity_info.ts'
 
@@ -44,12 +44,9 @@ const meleeSaveConfig = (overrides?: Partial<CharacterSaveConfig>): CharacterSav
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attackSlot: {
-        type: 'melee',
+    attack: {
         weaponId: 'long_sword',
         damage: 3,
-        cooldown: 0.5,
-        duration: 0.3,
     },
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
@@ -138,7 +135,7 @@ describe('角色原点在脚底（非身体中心）', () => {
         expect(entity.body.translation().y).toBeCloseTo(2, 6)
     })
 
-    it('v2 新档（position = 脚底）加载不再迁移', () => {
+    it('当前版本新档（position = 脚底）加载不再迁移', () => {
         const systems = new Map<string, EntityInfoSource>([['character', system]])
         const currentEntity: SavableCharacter = {
             type: 'character',
@@ -147,7 +144,7 @@ describe('角色原点在脚底（非身体中心）', () => {
             position: [1, 2, 3],
             quaternion: [0, 0, 0, 1],
         }
-        const current: SaveData = {version: 2, entities: [currentEntity]}
+        const current: SaveData = {version: SAVE_FORMAT_VERSION, entities: [currentEntity]}
         loadWorldFromData(current, systems, [])
         const entity = system.getAll()[0]
         expect(entity.mesh.position.y).toBeCloseTo(2, 6)

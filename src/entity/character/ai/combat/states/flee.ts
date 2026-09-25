@@ -1,6 +1,6 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
-import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
+import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
 
 const _fleeDir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -31,8 +31,8 @@ export const fleeHandler: CombatStateHandler = {
         ctx.combatFleeDir.z = fl > 0.001 ? fz / fl : 0
     },
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const skill = character.combat.skills[character.combat.currentSkillIndex]
-        const detRange = skill?.config.weapon.detectionRange ?? 8
+        const weapon = character.combat.weapon
+        const detRange = weapon.detectionRange
         const pos = character.body.translation()
 
         /* 检查是否有附近敌人：从敌人方向逃离 */
@@ -72,9 +72,13 @@ export const fleeHandler: CombatStateHandler = {
             ctx.combatFleeDir.z = fz
         }
 
-        const isRanged = skill?.config.type === 'ranged'
+        /* 远程武器：射程内且起手就绪才边逃边射（近战武器恒 false） */
+        const rangedWeapon = weapon.type === 'ranged' ? weapon : undefined
 
-        if (isRanged && !character.combat.attackActive && skill.cooldownTimer <= 0 && nearestDist < (skill.config as RangedSkillConfig).weapon.range) {
+        if (rangedWeapon !== undefined
+            && !character.combat.attackActive
+            && canStartAttack(character.combat, {dx: ctx.combatFleeDir.x, dz: ctx.combatFleeDir.z, holdDuration: 0, attackKey: 'light'})
+            && nearestDist < rangedWeapon.range) {
             /* 边逃边射：移动保持逃跑方向，攻击方向显式指向最近敌人（否则子弹朝逃跑方向飞） */
             if (nearestDist < Infinity) {
                 setInput(ctx.combatFleeDir.x, ctx.combatFleeDir.z, true, nearestDx / nearestDist, nearestDz / nearestDist)
@@ -94,8 +98,7 @@ export const fleeHandler: CombatStateHandler = {
                 if (ctx.combatStateTime < ctx.combatConfig.fleeDuration) return false
                 if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
                 /* 需要有有效目标 */
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.weapon.detectionRange ?? 8
+                const detRange = character.combat.weapon.detectionRange
                 const pos = character.body.translation()
                 for (const other of allCharacters) {
                     if (other.id === character.id || other.combat.isDead) continue
@@ -118,8 +121,7 @@ export const fleeHandler: CombatStateHandler = {
                 if (ctx.combatStateTime < ctx.combatConfig.fleeDuration) return false
                 if (ctx.combatBurstAttackCount < ctx.combatConfig.attackBurstCount) {
                     /* 若无可达目标，放弃 */
-                    const skill = character.combat.skills[character.combat.currentSkillIndex]
-                    const detRange = skill?.config.weapon.detectionRange ?? 8
+                    const detRange = character.combat.weapon.detectionRange
                     const pos = character.body.translation()
                     let hasTarget = false
                     for (const other of allCharacters) {
@@ -139,8 +141,7 @@ export const fleeHandler: CombatStateHandler = {
             /* 没有敌人在侦测范围内 → inactive */
             to: 'inactive',
             guard: (_ctx, character, allCharacters) => {
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.weapon.detectionRange ?? 8
+                const detRange = character.combat.weapon.detectionRange
                 const pos = character.body.translation()
                 for (const other of allCharacters) {
                     if (other.id === character.id || other.combat.isDead) continue

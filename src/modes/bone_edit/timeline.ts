@@ -1,4 +1,4 @@
-﻿import {BoxGeometry, Group, Mesh, MeshBasicMaterial, Quaternion, Vector3} from 'three'
+import {BoxGeometry, Group, Mesh, MeshBasicMaterial, Quaternion, Vector3} from 'three'
 import type {BoneAnimationClip, BoneJointTrack, BoneSegmentTrack} from '../../skeleton/anim/types.ts'
 import type {ClipJSON} from '../../skeleton/anim/serialization.ts'
 import {clipToJSON, clipFromJSON, skeletonToDefinition, parseAsset} from '../../skeleton/anim/serialization.ts'
@@ -8,7 +8,14 @@ import type {SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
 import type {AnimationStore} from './animation_store.ts'
 import type {BoneEditHistory} from './history.ts'
 import {setupTimelineCanvas, type TimelineCanvasTrack} from './timeline_canvas.ts'
+import {BUILTIN_CLIP_GROUP_ORDER, findBuiltinClip, getBuiltinClips} from './builtin_clips.ts'
+import {createBoneEditWeaponControl, type ClipWeaponSource} from './weapon_control.ts'
 import {
+    ANIM_OPTION_BUILTIN_PREFIX,
+    ANIM_OPTION_EDITED_PREFIX,
+    ANIM_SELECT_BUILTIN_GROUP_SUFFIX,
+    ANIM_SELECT_EDITED_GROUP,
+    ANIM_SELECT_ID,
     ONION_SKIN_JOINT_SIZE,
     ONION_SKIN_STEP,
     TIMELINE_BG,
@@ -134,7 +141,9 @@ export const setupTimelinePanel = (
     loopCheck.appendChild(loopInput)
 
     const animSelect = document.createElement('select')
-    animSelect.style.cssText = 'max-width:160px'
+    animSelect.id = ANIM_SELECT_ID
+    animSelect.title = '动画列表：编辑动画 + 内置动作（攻击/行走/跳跃等，选中载入可编辑副本）'
+    animSelect.style.cssText = 'max-width:200px'
     const newAnimBtn = makeButton('+动画')
     const delAnimBtn = makeButton('−动画')
     const renameAnimBtn = makeButton('改名')
@@ -191,6 +200,34 @@ export const setupTimelinePanel = (
     controls.appendChild(document.createTextNode('骨架'))
     controls.appendChild(skeletonSelect)
 
+    /* ── 武器控制（自动跟随动画来源 / 手动覆盖；双手贴合开关，默认关）── */
+    const weaponControl = createBoneEditWeaponControl(world)
+    controls.appendChild(weaponControl.select)
+    controls.appendChild(weaponControl.gripToggle)
+    /** 贴合开关切换：先重新应用当前 clip 姿态（关闭时左臂回到动画姿态），再按新开关状态求解 */
+    weaponControl.gripToggle.addEventListener('click', () => {
+        rebuildPlayer()
+        weaponControl.solveGrip()
+        refreshControls()
+    })
+    /** 动画库中每个 clip 的来源（内置动作载入副本时记录，供「自动」模式选武器） */
+    const clipWeaponSource = new Map<string, ClipWeaponSource>()
+    /** 当前动画来源（「自动」模式据此装备武器） */
+    const currentWeaponSource = (): ClipWeaponSource =>
+        store.currentName !== undefined ? (clipWeaponSource.get(store.currentName) ?? {}) : {}
+
+    /** 上次武器同步键：动画名 + 来源武器/段，避免同一动画重复重装武器 */
+    let lastWeaponSyncKey: string | undefined
+
+    /** 按当前动画来源同步武器（force = 强制重装，如切换聚焦骨架后） */
+    const syncWeaponForCurrentClip = (force = false): void => {
+        const source = currentWeaponSource()
+        const key = `${store.currentName ?? ''}|${source.weaponId ?? ''}|${source.segmentId ?? ''}`
+        if (!force && key === lastWeaponSyncKey) return
+        lastWeaponSyncKey = key
+        weaponControl.syncForClip(source)
+    }
+
     /* ── 轨道区（左侧列表 + canvas） ── */
     const trackArea = document.createElement('div')
     trackArea.style.cssText = 'display:flex;flex:1;min-height:0'
@@ -242,6 +279,48 @@ export const setupTimelinePanel = (
         player.setSpeed(playerSpeedRef.current)
         player.seek(Math.min(playhead, clip.duration))
         if (playing) player.play()
+        /* 注意：此处不求解左手贴合 —— 暂停/拖动播放头属于编辑状态，两只手必须互不牵扯；
+         * 贴合只在播放预览的每帧（updater）且开关打开时进行 */
+    }
+
+    /** 重建动画下拉：编辑动画（动画库）+ 内置动作（生产已有动作，选中载入副本） */
+    const rebuildAnimOptions = (): void => {
+        animSelect.innerHTML = ''
+
+        const editedGroup = document.createElement('optgroup')
+        editedGroup.label = ANIM_SELECT_EDITED_GROUP
+        for (const name of store.clips.keys()) {
+            const opt = document.createElement('option')
+            opt.value = `${ANIM_OPTION_EDITED_PREFIX}${name}`
+            opt.textContent = name
+            editedGroup.appendChild(opt)
+        }
+        animSelect.appendChild(editedGroup)
+
+        for (const group of BUILTIN_CLIP_GROUP_ORDER) {
+            const entries = getBuiltinClips().filter(entry => entry.group === group)
+            if (entries.length === 0) continue
+            const optgroup = document.createElement('optgroup')
+            optgroup.label = `${group}${ANIM_SELECT_BUILTIN_GROUP_SUFFIX}`
+            for (const entry of entries) {
+                const opt = document.createElement('option')
+                opt.value = `${ANIM_OPTION_BUILTIN_PREFIX}${entry.id}`
+                opt.textContent = entry.label
+                opt.dataset.builtinId = entry.id
+                optgroup.appendChild(opt)
+            }
+            animSelect.appendChild(optgroup)
+        }
+
+        animSelect.value = store.currentName !== undefined ? `${ANIM_OPTION_EDITED_PREFIX}${store.currentName}` : ''
+        /* DOM 可测试面：当前动画名与内置动作条目总数 */
+        container.dataset.currentClip = store.currentName ?? ''
+        container.dataset.builtinClipCount = String(getBuiltinClips().length)
+        /* DOM 可测试面：当前编辑器武器（id / 是否双手 / 贴合开关 / 左手是否已贴合） */
+        container.dataset.weapon = weaponControl.currentWeaponId() ?? ''
+        container.dataset.twoHanded = String(weaponControl.isTwoHanded())
+        container.dataset.gripAssist = weaponControl.isGripAssist() ? 'on' : 'off'
+        container.dataset.gripSolved = String(weaponControl.isGripSolved())
     }
 
     const refreshControls = (): void => {
@@ -249,15 +328,10 @@ export const setupTimelinePanel = (
         loopInput.checked = clip?.loop ?? false
         durationInput.value = String(round(clip?.duration ?? 0))
         speedInput.value = String(playerSpeedRef.current)
+        /* 武器：「自动」模式跟随当前动画来源（仅在来源变化时重装，避免每帧重建武器网格） */
+        syncWeaponForCurrentClip()
         /* 动画下拉 */
-        animSelect.innerHTML = ''
-        for (const name of store.clips.keys()) {
-            const opt = document.createElement('option')
-            opt.value = name
-            opt.textContent = name
-            animSelect.appendChild(opt)
-        }
-        animSelect.value = store.currentName ?? ''
+        rebuildAnimOptions()
         /* 骨架下拉 */
         skeletonSelect.innerHTML = ''
         for (const entity of world.getEntityList()) {
@@ -809,11 +883,41 @@ export const setupTimelinePanel = (
             playerSpeedRef.current = v
         }
     })
+    /**
+     * 选中内置动作：动画库中已有同名副本则直接选中，否则深拷贝载入一份可编辑副本。
+     * 副本名为内置显示名（如「行走（空手）」），可直接编辑/导出，不影响生产动作。
+     */
+    const selectBuiltinClip = (builtinId: string): void => {
+        const entry = findBuiltinClip(builtinId)
+        if (entry === undefined) return
+        if (store.clips.has(entry.label)) {
+            store.select(entry.label)
+            return
+        }
+        const imported = store.importClip(entry.clip)
+        /* 记录来源：编辑器「武器：自动」模式据此装备该动作所属武器 / 按持械变体保留或卸下武器 */
+        if (entry.weaponId !== undefined || entry.weaponHeld !== undefined) {
+            clipWeaponSource.set(imported.name, {
+                weaponId: entry.weaponId,
+                segmentId: entry.segmentId,
+                weaponHeld: entry.weaponHeld,
+            })
+        }
+    }
+
     animSelect.addEventListener('change', () => {
+        const value = animSelect.value
         history.startEdit()
-        store.select(animSelect.value)
+        if (value.startsWith(ANIM_OPTION_BUILTIN_PREFIX)) {
+            selectBuiltinClip(value.slice(ANIM_OPTION_BUILTIN_PREFIX.length))
+        } else {
+            store.select(value.slice(ANIM_OPTION_EDITED_PREFIX.length))
+        }
+        /* 切换动画后播放头归零，避免沿用上一条动画的时间点 */
+        playhead = 0
         rebuildPlayer()
         history.endEdit()
+        refreshControls()
         renderTrackList()
         canvasModel.render()
     })
@@ -832,9 +936,18 @@ export const setupTimelinePanel = (
         const next = window.prompt('新动画名：', name)
         if (next === null || next.trim() === '' || next === name) return
         history.startEdit()
-        store.rename(name, next.trim())
+        const renameTo = next.trim()
+        store.rename(name, renameTo)
+        /* 动画改名时同步搬运内置来源记录（供「武器：自动」继续跟随） */
+        const source = clipWeaponSource.get(name)
+        if (source !== undefined) {
+            clipWeaponSource.delete(name)
+            clipWeaponSource.set(store.currentName ?? renameTo, source)
+        }
         history.endEdit()
         refreshControls()
+        renderTrackList()
+        canvasModel.render()
     })
     delAnimBtn.addEventListener('click', () => {
         const name = store.currentName
@@ -874,6 +987,8 @@ export const setupTimelinePanel = (
         world.focus(id)
         selection = new Map()
         updateCurveEditor()
+        /* 聚焦骨架更换：武器需重新挂到新骨架的右手挂点上 */
+        syncWeaponForCurrentClip(true)
         rebuildPlayer()
         refreshControls()
         renderTrackList()
@@ -942,6 +1057,9 @@ export const setupTimelinePanel = (
                     world.focus(entity.id)
                     history.startEdit()
                     store.replaceAll(asset.animations, asset.animations[0]?.name)
+                    clipWeaponSource.clear()
+                    /* 骨架被重建：武器必须重新挂到新骨架的右手挂点上 */
+                    syncWeaponForCurrentClip(true)
                     rebuildPlayer()
                     history.endEdit()
                     refreshControls()
@@ -958,6 +1076,8 @@ export const setupTimelinePanel = (
 
     const applyLibrary = (clips: readonly ClipJSON[], currentName?: string): void => {
         store.replaceAll(clips.map(clipFromJSON), currentName)
+        /* undo/redo 会整体重建骨架实体：武器重新挂到新骨架的挂点上 */
+        syncWeaponForCurrentClip(true)
         rebuildPlayer()
         refreshControls()
         renderTrackList()
@@ -988,8 +1108,16 @@ export const setupTimelinePanel = (
             updateOnion()
             canvasModel.render()
         }
+        /* 左手贴合：仅在开关打开且双手武器时生效（关闭时为零耦合的空操作）；
+         * 放在播放分支之外，保证暂停状态下开启贴合也能立即跟随武器 */
+        weaponControl.solveGrip()
         /* DOM 可测试面：播放头时间 */
         container.dataset.playheadTime = playhead.toFixed(3)
+        /* DOM 可测试面：武器状态（装载/是否双手/贴合开关与是否已求解） */
+        container.dataset.weapon = weaponControl.currentWeaponId() ?? ''
+        container.dataset.twoHanded = String(weaponControl.isTwoHanded())
+        container.dataset.gripAssist = weaponControl.isGripAssist() ? 'on' : 'off'
+        container.dataset.gripSolved = String(weaponControl.isGripSolved())
     }
 
     const edit = (fn: () => void): void => {
@@ -1019,6 +1147,7 @@ export const setupTimelinePanel = (
         edit,
         destroy: () => {
             player?.pause()
+            weaponControl.dispose()
             window.removeEventListener('resize', onResize)
             window.removeEventListener('keydown', onKeyDown)
             onionGroup?.root.removeFromParent()

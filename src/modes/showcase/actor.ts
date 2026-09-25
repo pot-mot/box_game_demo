@@ -9,13 +9,17 @@ import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.
 import type {NameLabel} from './label.ts'
 import {resolvePhases, phaseDurationOf} from '../../character/combat/attack_phases.ts'
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
-import type {SkillSlot} from '../../character/combat/skill_types.ts'
-import {MELEE_CHAIN_SLOTS} from '../../character/combat/melee_skill.ts'
+import type {WeaponConfig} from '../../character/weapon/catalog.ts'
+import {
+    orderedSegments,
+    segmentDisplayName,
+    segmentTotalDuration,
+    type AttackSegment,
+} from '../../character/weapon/attack_chain.ts'
 import {
     ACTOR_JUMP_HEIGHT,
     ACTOR_SCALE,
     ACTOR_SPEED,
-    CHAIN_PAUSE_AFTER_POS,
     CHAIN_PAUSE_IDLE,
     DIMMED_OPACITY,
     IDLE_LEAD,
@@ -26,8 +30,9 @@ import {
 export const LINK_LABELS = ['首次起手', '段内推进', '重新起手', '—'] as const
 export type LinkLabel = typeof LINK_LABELS[number]
 
-/** 面板展示用的单个技能槽计时快照（与 play HUD 三计时器同语义） */
+/** 面板展示用的单个攻击段计时快照（与 play HUD 三计时器同语义） */
 export interface SkillTimerStatus {
+    /** 段显示名（`segmentDisplayName`：轻击一段 / 重击二段 / 变体段 label） */
     readonly label: string
     readonly duration: number
     readonly recovery: number
@@ -40,19 +45,15 @@ export interface SkillTimerStatus {
     readonly cooldownRemaining: number
 }
 
-/** 段显示名：近战链段取段后缀（light_1 等），其余技能取 id 尾段（shot 等） */
-const slotLabel = (id: string): string => {
-    for (const slot of MELEE_CHAIN_SLOTS) {
-        if (id.endsWith(`_${slot}`)) return slot
-    }
-    const idx = id.lastIndexOf('_')
-    return idx >= 0 ? id.slice(idx + 1) : id
-}
-
 /** 面板展示用的角色运行状态快照 */
 export interface ActorStatus {
     readonly id: number
+    /** 当前段 id（= 动画键，武器内唯一；idle 时为下一段） */
     readonly skillId: string
+    /**
+     * 展示名（重构后无技能概念：与 weaponName 同为武器中文名，
+     * 保留字段以兼容面板「名称 + 副名」两段式渲染）
+     */
     readonly skillName: string
     readonly weaponName: string
     readonly isMelee: boolean
@@ -70,14 +71,13 @@ export interface ActorStatus {
     readonly attackProgress: number
     /** 本段的衔接方式 */
     readonly link: LinkLabel
-    /** 每技能槽一行的三计时器快照（动作/恢复/冷却，与 play HUD 一致） */
+    /** 每段一行的三计时器快照（顺序 = 段展示顺序，与清单/播放顺序同源） */
     readonly slotTimers: readonly SkillTimerStatus[]
 }
 
 export interface ShowcaseActor {
     readonly id: number
     readonly anchor: Group
-    readonly skillName: string
     readonly weaponName: string
     /** 推进一帧：调度时间线 + 注入动画上下文 + 更新刀光 */
     update: (dt: number) => void
@@ -92,12 +92,11 @@ export interface ShowcaseActor {
 export interface ShowcaseActorInit {
     readonly id: number
     readonly scene: Scene
-    /** 技能槽：近战 = buildMeleeSkillSlots 的 4 槽，远程 = 单槽 */
-    readonly slots: readonly SkillSlot[]
+    /** 展示武器模组：攻击链（段/时长/阶段/冷却/倾斜角）+ 模型一并取自它 */
+    readonly weapon: WeaponConfig
     readonly faction: number
     readonly x: number
     readonly z: number
-    readonly skillName: string
     readonly weaponName: string
 }
 
@@ -113,36 +112,44 @@ interface MaterialSnapshot {
 /**
  * 展示角色驱动器。
  *
- * 数据流（与生产 physics/world.ts + character/state_machine/states/attacking.ts 逐段对应）：
+ * 数据流（与生产 physics/world.ts + state_machine/states/attacking/ 逐段对应）：
  * 1. 时间线调度镜像 attackingHandler.update：attackTimer/phaseTimer 递增 →
- *    阶段推进（phaseDurationOf：动作阶段按 ratio 分摊 duration，recovery 取 config.recovery）→ 最终阶段完整播完时的段末推进
- *    （缓冲恒有值 → 重置计时切换下一段，不出 attacking 状态）→
+ *    阶段推进（phaseDurationOf：动作阶段按 ratio 分摊 duration，recovery 取段 recovery）→
+ *    最终阶段完整播完时的段末推进（缓冲恒有值 → 重置计时切换下一段，不出 attacking 状态）→
  *    脚本播完或链间停顿 → idle。
- * 2. 近战演示脚本 [轻1, 轻2, 重1, 重2]：轻链两段连续推进 → 停顿（模拟松开攻击键）→
- *    重链两段连续推进 → 收尾待机 → 循环。段间衔接为"段末推进"（不再有 cancellable 中途取消）。
- * 3. 动画注入镜像 world.ts：AnimationContext 携带 attackSkillId，段切换触发动画键变化
- *    走快照混合（修复旧版段切换单帧姿态跳变）。
+ * 2. 数据源 = 武器模组拥有的攻击链（`WeaponAttacks`）：演示脚本即 `orderedSegments(weapon.attacks)`
+ *    的段展示顺序（轻 1 → 轻 2 → 重 1 → 重 2，条件起手变体段接在所属键末尾），
+ *    故播放顺序、面板计时行顺序与清单枚举顺序三者同源一致（不再需要槽位重排）。
+ *    链间停顿位置由脚本内首个重段派生：停顿插在它之前（模拟松开攻击键），
+ *    无重段（远程单段 / 单键武器）自然不停顿。
+ * 3. 动画注入镜像 world.ts：AnimationContext 携带 attackSegment（段即动画键），
+ *    段切换触发动画键变化走快照混合（修复旧版段切换单帧姿态跳变）。
  * 4. 刀光镜像 world.ts：strike/release/spin 阶段激活，采样 weaponTip。
  *
  * 展示场景省略的部分（与生产差异）：物理速度缩放（moveSpeedMultiplier）、
- * 命中执行器、hitstop、hitbox——攻击中角色静止站立。冷却计时仅镜像展示（触发即挂、逐帧递减），
+ * 命中执行器、hitstop、hitbox——攻击中角色静止站立。段冷却计时仅镜像展示（进入段即挂、逐帧递减），
  * 不阻断脚本推进。
  */
 export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
-    const {id, scene, slots, faction, x, z, skillName, weaponName} = init
-    if (slots.length === 0) {
-        throw new Error(`[showcase] actor ${id} 技能槽为空`)
+    const {id, scene, faction, x, z, weaponName} = init
+    const isMelee = init.weapon.type === 'melee'
+    /*
+     * 演示脚本 = 段展示顺序本身（下标 0..n-1 即播放顺序）：
+     * 播放顺序、面板计时行顺序与清单顺序三者一致（统一枚举源，无需重排映射）。
+     */
+    const segments: readonly AttackSegment[] = orderedSegments(init.weapon.attacks)
+    if (segments.length === 0) {
+        throw new Error(`[showcase] actor ${id} 武器 ${init.weapon.id} 没有可展示的攻击段`)
     }
-    const isMelee = slots[0].config.type === 'melee'
-    /* 演示脚本：近战按 轻1→轻2→重1→重2 播完整双链，远程单槽单段 */
-    const script: readonly number[] = isMelee ? [0, 2, 1, 3] : [0]
-    const totalHits = script.length
+    const totalHits = segments.length
+    /** 链间停顿位置：脚本内首个重段之前（-1/-2 等负值 = 无重段，恒不停顿） */
+    const pauseAfterPos = segments.findIndex(segment => segment.key === 'heavy') - 1
 
     const model: CharacterModel = createCharacterModel(
         {speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: ACTOR_SCALE},
         faction,
     )
-    model.equipWeapon(slots[0].config.weapon.mesh)
+    model.equipWeapon(init.weapon.mesh)
 
     const anchor = new Group()
     anchor.position.set(x, 0, z)
@@ -167,13 +174,13 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     /** 本段衔接方式（进入攻击时取 pendingLink，段末推进直接覆盖） */
     let link: LinkLabel = '—'
     let pendingLink: LinkLabel = isMelee ? '首次起手' : '—'
-    /** 双链播完，收尾待机结束后重置循环（scriptPos 归零重新起手） */
+    /** 全链播完，收尾待机结束后重置循环（scriptPos 归零重新起手） */
     let resetPending = false
-    /** 每槽冷却剩余时间（镜像生产：段触发即挂自身冷却，逐帧递减；仅展示不挡推进） */
-    const cooldownTimers: number[] = slots.map(() => 0)
+    /** 每段冷却剩余时间（镜像生产：段触发即挂自身冷却，逐帧递减；仅展示不挡推进） */
+    const cooldownTimers = new Map<string, number>()
 
-    /** 当前段技能槽（script 位置 → 槽下标） */
-    const currentSlot = (): SkillSlot => slots[script[scriptPos] ?? 0]
+    /** 当前脚本站位的段（scriptPos 恒在脚本范围内；越界回退首段防御） */
+    const currentSegment = (): AttackSegment => segments[scriptPos] ?? segments[0]
 
     /** 进入指定脚本位置的段 —— 镜像 attackingHandler.enter（省略物理 wakeUp/attackedTargets） */
     const enterSegment = (pos: number, nextLink: LinkLabel): void => {
@@ -183,12 +190,12 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         attackTimer = 0
         phaseIndex = 0
         phaseTimer = 0
-        /* 段固有倾斜角 —— 与 attacking.enter 的 c.swingTilt = skill.swingTilt ?? 0 一致 */
-        const config = currentSlot().config
-        swingTilt = config.type === 'melee' ? (config.swingTilt ?? 0) : 0
+        const segment = currentSegment()
+        /* 段固有倾斜角 —— 与 attacking.enter 的 c.swingTilt = segment.swingTilt ?? 0 一致 */
+        swingTilt = segment.swingTilt ?? 0
         link = nextLink
         /* 触发即挂自身冷却（镜像生产起手 enter） */
-        cooldownTimers[scriptPos] = config.cooldown
+        cooldownTimers.set(segment.id, segment.cooldown)
     }
 
     /** 攻击时间线 —— 镜像 attackingHandler.update 的调度部分（省略物理/位移缩放） */
@@ -199,12 +206,12 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         attackTimer += dt
         phaseTimer += dt
 
-        const config = currentSlot().config
-        const phases = resolvePhases(config.phases)
+        const segment = currentSegment()
+        const phases = resolvePhases(segment.phases)
 
         /* 阶段推进（镜像 attacking.update 阶段调度） */
         if (phaseIndex < phases.length) {
-            const phaseDuration = phaseDurationOf(phases[phaseIndex], config.duration, config.recovery)
+            const phaseDuration = phaseDurationOf(phases[phaseIndex], segment.duration, segment.recovery)
             if (phaseTimer >= phaseDuration) {
                 if (phaseIndex < phases.length - 1) {
                     phaseIndex++
@@ -219,7 +226,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         /* 段末推进（镜像 attacking.update 的缓冲消费分支）：
          * 演示中缓冲恒有值（模拟玩家持续按键）→ 切换下一段、重置计时、取新段 tilt，不出 attacking 状态 */
         if (phaseIndex >= phases.length && scriptPos < totalHits - 1) {
-            if (scriptPos === CHAIN_PAUSE_AFTER_POS && isMelee) {
+            if (scriptPos === pauseAfterPos) {
                 /* 轻链播完 → 停顿（模拟玩家松开攻击键）→ 重新起手段进重链 */
                 mode = 'idle'
                 stateTime = 0
@@ -233,11 +240,11 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             phaseTimer = 0
             phaseIndex = 0
             scriptPos++
-            const nextConfig = currentSlot().config
-            swingTilt = nextConfig.type === 'melee' ? (nextConfig.swingTilt ?? 0) : 0
+            const nextSegment = currentSegment()
+            swingTilt = nextSegment.swingTilt ?? 0
             link = '段内推进'
             /* 链中段触发同样挂自身冷却（镜像生产段末推进） */
-            cooldownTimers[scriptPos] = nextConfig.cooldown
+            cooldownTimers.set(nextSegment.id, nextSegment.cooldown)
             return
         }
 
@@ -265,15 +272,15 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
 
     /**
      * 动画注入 —— 镜像 world.ts 动画上下文装配：
-     * 构造 AnimationContext（同名同语义，含 attackSkillId）→ system.update（动画键 = state:skillId，
+     * 构造 AnimationContext（同名同语义，含 attackSegment）→ system.update（动画键 = state:segmentId，
      * 段切换触发快照混合）→ 刀光采样。
      */
     const applyAnimation = (dt: number): void => {
         const inAttacking = mode === 'attacking'
-        const config = currentSlot().config
-        const phases = resolvePhases(config.phases)
+        const segment = currentSegment()
+        const phases = resolvePhases(segment.phases)
         const phaseDuration = phaseIndex < phases.length
-            ? phaseDurationOf(phases[phaseIndex], config.duration, config.recovery)
+            ? phaseDurationOf(phases[phaseIndex], segment.duration, segment.recovery)
             : 1
         const ctxPhaseName: AttackPhaseName | undefined = inAttacking && phaseIndex < phases.length
             ? phases[phaseIndex].name
@@ -284,15 +291,14 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             /* 展示场景站立攻击：速度恒 0（生产为物理体实时速度） */
             horizontalSpeed: 0,
             swingTilt,
+            attackSegment: inAttacking ? segment : undefined,
             attackPhase: ctxPhaseName,
             attackPhaseProgress: phaseDuration > 0 ? phaseTimer / phaseDuration : 0,
             /* 总进度分母 = 动作时间 + 恢复时间（镜像 world.ts totalDuration） */
-            attackTotalProgress: inAttacking && config.duration + config.recovery > 0 ? attackTimer / (config.duration + config.recovery) : 0,
-            attackPhases: inAttacking ? phases : undefined,
+            attackTotalProgress: inAttacking && segmentTotalDuration(segment) > 0
+                ? attackTimer / segmentTotalDuration(segment)
+                : 0,
             attackPhaseIndex: phaseIndex,
-            attackSkillId: inAttacking ? config.id : undefined,
-            attackDuration: config.duration,
-            attackRecovery: config.recovery,
             weaponHeld: model.weaponMesh !== null,
         }
         system.update(dt, model, inAttacking ? 'attacking' : 'idle', ctx)
@@ -309,9 +315,9 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     }
 
     const update = (dt: number): void => {
-        /* 冷却递减（镜像 world.ts 技能冷却循环） */
-        for (let i = 0; i < cooldownTimers.length; i++) {
-            cooldownTimers[i] = Math.max(0, cooldownTimers[i] - dt)
+        /* 冷却递减（镜像 world.ts 段冷却循环） */
+        for (const [segmentId, remaining] of cooldownTimers) {
+            cooldownTimers.set(segmentId, Math.max(0, remaining - dt))
         }
         if (mode === 'attacking') {
             advanceAttack(dt)
@@ -322,12 +328,12 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     }
 
     const status = (): ActorStatus => {
-        const config = currentSlot().config
-        const phases = resolvePhases(config.phases)
+        const segment = currentSegment()
+        const phases = resolvePhases(segment.phases)
         return {
             id,
-            skillId: config.id,
-            skillName,
+            skillId: segment.id,
+            skillName: weaponName,
             weaponName,
             isMelee,
             mode,
@@ -337,22 +343,21 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             phaseName: mode === 'idle' ? 'idle' : phaseIndex < phases.length ? phases[phaseIndex].name : 'done',
             phaseProgress: mode === 'idle'
                 ? 0
-                : Math.min(Math.max(phaseIndex < phases.length ? phaseTimer / phaseDurationOf(phases[phaseIndex], config.duration, config.recovery) : 1, 0), 1),
-            attackProgress: mode === 'idle' ? 0 : Math.min(Math.max(attackTimer / (config.duration + config.recovery), 0), 1),
+                : Math.min(Math.max(phaseIndex < phases.length ? phaseTimer / phaseDurationOf(phases[phaseIndex], segment.duration, segment.recovery) : 1, 0), 1),
+            attackProgress: mode === 'idle' ? 0 : Math.min(Math.max(attackTimer / segmentTotalDuration(segment), 0), 1),
             link: mode === 'attacking' ? link : '—',
-            /* 每槽三计时器快照：当前段按 attackTimer 切分动作/恢复两格，冷却取递减值 */
-            slotTimers: slots.map((slot, i) => {
-                const cfg = slot.config
-                const active = mode === 'attacking' && script[scriptPos] === i
+            /* 每段三计时器快照：当前段按 attackTimer 切分动作/恢复两格，冷却取递减值 */
+            slotTimers: segments.map(seg => {
+                const active = mode === 'attacking' && seg.id === segment.id
                 const t = attackTimer
                 return {
-                    label: slotLabel(cfg.id),
-                    duration: cfg.duration,
-                    recovery: cfg.recovery,
-                    cooldown: cfg.cooldown,
-                    actionElapsed: active && t <= cfg.duration ? t : -1,
-                    recoveryElapsed: active && cfg.recovery > 0 && t > cfg.duration ? t - cfg.duration : -1,
-                    cooldownRemaining: cooldownTimers[i] ?? 0,
+                    label: segmentDisplayName(seg),
+                    duration: seg.duration,
+                    recovery: seg.recovery,
+                    cooldown: seg.cooldown,
+                    actionElapsed: active && t <= seg.duration ? t : -1,
+                    recoveryElapsed: active && seg.recovery > 0 && t > seg.duration ? t - seg.duration : -1,
+                    cooldownRemaining: cooldownTimers.get(seg.id) ?? 0,
                 }
             }),
         }
@@ -401,5 +406,5 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         scene.remove(anchor)
     }
 
-    return {id, anchor, skillName, weaponName, update, status, attachLabel, setDimmed, dispose}
+    return {id, anchor, weaponName, update, status, attachLabel, setDimmed, dispose}
 }

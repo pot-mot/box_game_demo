@@ -1,5 +1,6 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
+import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
 import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
 
@@ -16,11 +17,11 @@ export const attackHandler: CombatStateHandler = {
         v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
         const dist = v3Length(_dir)
 
-        const skill = character.combat.skills[character.combat.currentSkillIndex]
-        if (!skill) { setInput(0, 0, false); return }
+        /* 武器恒存在（无技能槽模型），攻击动作参数与射程直接从装备武器读取 */
+        const weapon = character.combat.weapon
 
         /* 出招门控：目标在攻击检测箱内才出招（checker 缺失时回退圆形距离判定；近战无射程概念用常量默认值） */
-        const fallbackRange = skill.config.type === 'ranged' ? skill.config.weapon.range : MELEE_FALLBACK_DETECT_RANGE
+        const fallbackRange = weapon.type === 'ranged' ? weapon.range : MELEE_FALLBACK_DETECT_RANGE
         const inHitRegion = ctx.attackDetectChecker
             ? ctx.attackDetectChecker(character, target)
             : dist <= fallbackRange
@@ -30,8 +31,9 @@ export const attackHandler: CombatStateHandler = {
         const adx = _dir.x / len
         const adz = _dir.z / len
 
-        /* 攻击中持续按住 attack → 缓冲自动续链；未攻击时冷却完毕才起链 */
-        if (character.combat.attackActive || skill.cooldownTimer <= 0) {
+        /* 攻击中持续按住 attack → 缓冲自动续链；未攻击时起手段就绪才起链 */
+        if (character.combat.attackActive
+            || canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})) {
             setInput(adx, adz, true)
         } else {
             setInput(0, 0, false)
@@ -64,10 +66,10 @@ export const attackHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.weapon.detectionRange ?? 8
+                const weapon = character.combat.weapon
+                const detRange = weapon.detectionRange
                 /* 出攻击检测箱 → 追击（checker 缺失时回退距离判定；近战用常量默认值） */
-                const fallbackRange = skill?.config.type === 'ranged' ? skill.config.weapon.range : MELEE_FALLBACK_DETECT_RANGE
+                const fallbackRange = weapon.type === 'ranged' ? weapon.range : MELEE_FALLBACK_DETECT_RANGE
                 const outOfRegion = ctx.attackDetectChecker
                     ? !ctx.attackDetectChecker(character, target)
                     : v3Length(_dir) > fallbackRange
@@ -82,8 +84,7 @@ export const attackHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.weapon.detectionRange ?? 8
+                const detRange = character.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

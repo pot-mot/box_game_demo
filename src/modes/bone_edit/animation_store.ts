@@ -1,4 +1,5 @@
 ﻿import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
+import {cloneClip} from '../../skeleton/anim/types.ts'
 
 /** 动画库存储：多动画管理 + 当前选中（由 index 装配，timeline/history 共享） */
 export interface AnimationStore {
@@ -9,6 +10,12 @@ export interface AnimationStore {
     createEmpty: (name: string) => BoneAnimationClip
     /** 添加/覆盖动画（不切换选中） */
     add: (clip: BoneAnimationClip) => void
+    /**
+     * 导入外部动画（内置动作库等）：深拷贝后入库并选中。
+     * 深拷贝保证编辑副本不会影响源 clip（内置动作与生产共用生成器缓存）；
+     * 重名时自动加后缀，返回实际入库的 clip。
+     */
+    importClip: (clip: BoneAnimationClip) => BoneAnimationClip
     remove: (name: string) => void
     rename: (from: string, to: string) => void
     select: (name: string | undefined) => void
@@ -66,6 +73,13 @@ export const createAnimationStore = (): AnimationStore => {
         get currentName() { return currentName },
         createEmpty,
         add: (clip) => { clips.set(clip.name, clip) },
+        importClip: (clip) => {
+            const finalName = uniqueName(clips, clip.name)
+            const imported: BoneAnimationClip = {...cloneClip(clip), name: finalName}
+            clips.set(finalName, imported)
+            currentName = finalName
+            return imported
+        },
         remove: (name) => {
             if (clips.delete(name) && currentName === name) {
                 currentName = clips.keys().next().value as string | undefined

@@ -1,15 +1,15 @@
 // ── 展示清单 ──
 
-/** 展示角色清单条目：近战按武器（每武器一个角色播完整双链）、远程按技能 */
+/** 展示角色清单条目：一律按武器 id 指定（近战/远程只决定摆放行与链形态） */
 export interface ShowcaseRosterEntry {
-    /** 近战 = 武器 id（MELEE_WEAPON_PRESETS 键），远程 = 技能 id（RANGED_SKILL_PRESETS 键） */
+    /** 武器 id（`WeaponConfig.id`，近战与远程统一；经 `weaponPresetOrDefault` 取模组） */
     readonly skillId: string
     readonly kind: 'melee' | 'ranged'
 }
 
 /**
- * 全部攻击技能的展示清单（6 近战武器 + 9 远程技能）。
- * 近战每武器一个角色播完整双链（轻1→轻2 → 停顿 → 重1→重2）。
+ * 全部展示武器的清单（6 近战 + 9 远程，条目 skillId 为武器 id）。
+ * 近战每武器一个角色播完整双链（轻1 → 轻2 → 停顿 → 重1→重2），远程播单段开火。
  */
 export const SHOWCASE_ROSTER: readonly ShowcaseRosterEntry[] = [
     {skillId: 'short_sword', kind: 'melee'},
@@ -18,63 +18,16 @@ export const SHOWCASE_ROSTER: readonly ShowcaseRosterEntry[] = [
     {skillId: 'spear', kind: 'melee'},
     {skillId: 'dual_axe', kind: 'melee'},
     {skillId: 'war_hammer', kind: 'melee'},
-    {skillId: 'longbow_shot', kind: 'ranged'},
-    {skillId: 'crossbow_bolt', kind: 'ranged'},
-    {skillId: 'shotgun_blast', kind: 'ranged'},
-    {skillId: 'staff_orb', kind: 'ranged'},
-    {skillId: 'magic_wand_homing', kind: 'ranged'},
-    {skillId: 'throwing_axe_hurl', kind: 'ranged'},
-    {skillId: 'grenade_throw', kind: 'ranged'},
-    {skillId: 'molotov_throw', kind: 'ranged'},
-    {skillId: 'throwing_dart_fling', kind: 'ranged'},
+    {skillId: 'longbow', kind: 'ranged'},
+    {skillId: 'crossbow', kind: 'ranged'},
+    {skillId: 'shotgun', kind: 'ranged'},
+    {skillId: 'staff', kind: 'ranged'},
+    {skillId: 'magic_wand', kind: 'ranged'},
+    {skillId: 'throwing_axe', kind: 'ranged'},
+    {skillId: 'grenade', kind: 'ranged'},
+    {skillId: 'molotov', kind: 'ranged'},
+    {skillId: 'throwing_dart', kind: 'ranged'},
 ]
-
-/** 技能中文名（近战键 = 武器 id，远程键 = 技能 id）；武器中文名取自武器预设的 `name` 字段 */
-export const SKILL_DISPLAY_NAMES: Record<string, string> = {
-    short_sword: '短剑轻/重双链',
-    long_sword: '长剑轻/重双链',
-    heavy_sword: '巨剑轻/重双链',
-    spear: '长枪轻/重双链',
-    dual_axe: '双斧轻/重双链',
-    war_hammer: '战锤轻/重双链',
-    longbow_shot: '长弓射击',
-    crossbow_bolt: '弩箭速射',
-    shotgun_blast: '霰弹轰击',
-    staff_orb: '法杖能量球',
-    magic_wand_homing: '魔杖追踪弹',
-    throwing_axe_hurl: '飞斧投掷',
-    grenade_throw: '手雷投掷',
-    molotov_throw: '燃烧瓶投掷',
-    throwing_dart_fling: '飞镖疾掷',
-}
-
-/** 武器中文名（键 = 武器 id） */
-export const WEAPON_DISPLAY_NAMES: Record<string, string> = {
-    short_sword: '短剑',
-    long_sword: '长剑',
-    heavy_sword: '巨剑',
-    spear: '长枪',
-    dual_axe: '双斧',
-    war_hammer: '战锤',
-    longbow: '长弓',
-    crossbow: '弩',
-    shotgun: '霰弹枪',
-    staff: '法杖',
-    magic_wand: '魔杖',
-    throwing_axe: '飞斧',
-    grenade: '手雷',
-    molotov: '燃烧瓶',
-    throwing_dart: '飞镖',
-}
-
-/** 中文名查询：键缺失时回退原始 id（防御清单打错字） */
-export const displayNameOf = (map: Record<string, string>, key: string): string =>
-    key in map ? map[key] : key
-
-// ── 连段时序 ──
-
-/** 链内段停顿序号：轻链播完后插入停顿再接重链（script 下标，仅近战生效） */
-export const CHAIN_PAUSE_AFTER_POS = 1
 
 // ── 循环时间线（秒） ──
 

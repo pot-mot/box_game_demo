@@ -1,6 +1,6 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
-import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
+import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
 import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
 
@@ -26,18 +26,16 @@ export const chaseHandler: CombatStateHandler = {
 
         if (dist < 0.01) { setInput(0, 0, false); return }
 
-        const skill = character.combat.skills[character.combat.currentSkillIndex]
+        const weapon = character.combat.weapon
 
         /* aggressive 策略：远程也追到近战距离 */
         if (ctx.combatStrategy === 'aggressive') {
-            if (skill?.config.type === 'ranged') {
-                const skillRange = skill.config.weapon.range
-                if (dist < skillRange) { setInput(0, 0, false); return }
+            if (weapon.type === 'ranged') {
+                if (dist < weapon.range) { setInput(0, 0, false); return }
             }
-        } else if (skill?.config.type === 'ranged') {
+        } else if (weapon.type === 'ranged') {
             /* tactical / cowardly：远程在理想距离停下 */
-            const ideal = (skill.config as RangedSkillConfig).weapon.idealRange
-            if (dist < ideal * 1.3) { setInput(0, 0, false); return }
+            if (dist < weapon.idealRange * 1.3) { setInput(0, 0, false); return }
         }
 
         _dir.x /= dist
@@ -66,8 +64,7 @@ export const chaseHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 const dist = Math.hypot(tp.x - pos.x, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.weapon.detectionRange ?? 8
+                const detRange = character.combat.weapon.detectionRange
                 return dist < detRange * 0.5
             },
         },
@@ -79,16 +76,15 @@ export const chaseHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill || skill.config.type !== 'ranged') return false
+                const weapon = character.combat.weapon
+                if (weapon.type !== 'ranged') return false
 
                 /* aggressive 策略：更短的理想距离 */
-                const cfg = skill.config as RangedSkillConfig
                 const threshold = ctx.combatStrategy === 'aggressive'
-                    ? cfg.weapon.range * 1.5
-                    : cfg.weapon.idealRange * 1.3
+                    ? weapon.range * 1.5
+                    : weapon.idealRange * 1.3
                 return v3Length(_dir) < threshold
-                    && (skill.cooldownTimer ?? Infinity) <= 0
+                    && canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
             },
         },
         {
@@ -99,21 +95,20 @@ export const chaseHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill) return false
+                const weapon = character.combat.weapon
 
                 /* aggressive 策略：远程也可进入攻击（远程保持距离判定） */
-                if (ctx.combatStrategy === 'aggressive' && skill.config.type === 'ranged') {
-                    return v3Length(_dir) < skill.config.weapon.range
-                        && (skill.cooldownTimer ?? Infinity) <= 0
+                if (ctx.combatStrategy === 'aggressive' && weapon.type === 'ranged') {
+                    return v3Length(_dir) < weapon.range
+                        && canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
                 }
 
                 /* 默认：仅近战可进入攻击（攻击检测箱检查，checker 缺失时回退常量距离判定） */
-                if (skill.config.type === 'ranged') return false
+                if (weapon.type === 'ranged') return false
                 const inRegion = ctx.attackDetectChecker
                     ? ctx.attackDetectChecker(character, target)
                     : v3Length(_dir) < MELEE_FALLBACK_DETECT_RANGE
-                return inRegion && (skill.cooldownTimer ?? Infinity) <= 0
+                return inRegion && canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
             },
         },
         {
@@ -125,8 +120,7 @@ export const chaseHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.weapon.detectionRange ?? 8
+                const detRange = character.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

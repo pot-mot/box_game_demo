@@ -2,8 +2,8 @@ import {Group, Mesh} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import type {CharacterModel, CharacterColorPalette} from './types.ts'
 import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
-import {createWeaponMesh} from './weapon_mesh.ts'
-import {WEAPON_GRIP_POSES, SELECT_PALETTE} from './constants.ts'
+import {createWeaponMount} from './weapon_mount.ts'
+import {SELECT_PALETTE} from './constants.ts'
 import {
     HEAD_RATIO,
     BODY_RATIO,
@@ -193,24 +193,15 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     const equipWeapon = (meshConfig: WeaponMeshConfig): void => {
         removeWeapon()
-        const result = createWeaponMesh(meshConfig)
-        const grip = WEAPON_GRIP_POSES[meshConfig.id]
-        /* 静态握持 mount：按武器类型施加携带姿态（位置偏移 + 欧拉角），不受动画器影响；
-         * 握把中心在武器本地 Y 轴上，先旋转后平移，故按 rx 分解偏移（m.y = -gripY·cos(rx)、m.z = -gripY·sin(rx)）
-         * 使握把中心精确落于手腕节点 */
-        const mount = new Group()
-        const cosR = Math.cos(grip.rx)
-        const sinR = Math.sin(grip.rx)
-        mount.position.set(grip.x, grip.y - result.gripY * cosR, grip.z - result.gripY * sinR)
-        mount.rotation.set(grip.rx, grip.ry, grip.rz)
-        mount.add(result.group)
+        /* 静态握持 mount 由共享装配函数创建（位置偏移 + 欧拉角，握把中心精确落于手腕节点） */
+        const {mount, result, gripTilt} = createWeaponMount(meshConfig)
         weaponGroup = result.group
         weaponHitCenter = result.hitCenter
         weaponTipMesh = result.tip
         weaponHitBoxData = result.hitBox
         weaponCleanup = result.cleanup
         weaponMount = mount
-        weaponGripTilt = grip.rx
+        weaponGripTilt = gripTilt
         rightWristPivot.add(mount)
     }
 

@@ -4,7 +4,6 @@ import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {EntityType} from '../entity/constants.ts'
 import type {SaveData, FragmentDataJSON, EntitySourceMap} from './types.ts'
-import {SAVE_FORMAT_VERSION} from './types.ts'
 import {CHARACTER_BASE_SIZE} from '../entity/character/constants.ts'
 
 /** JSON-safe 格式 → FragmentData */
@@ -60,8 +59,8 @@ export const loadWorldFromData = (
     const frag = getSource('fragment/common')
     const character = getSource('character')
     const terrain = terrainSources[0]
-    /* v1 旧档：character 位置为身体中心，需下移半高迁移到脚底原点语义 */
-    const legacyCharacterPos = (data.version ?? 1) < SAVE_FORMAT_VERSION
+    /* v1 旧档：character 位置为身体中心，需下移半高迁移到脚底原点语义（v2 起即为脚底原点，不再迁移） */
+    const legacyCharacterPos = (data.version ?? 1) < 2
 
     for (const entity of data.entities) {
         const [x, y, z] = entity.position

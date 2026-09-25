@@ -1,6 +1,6 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
-import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
+import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
 import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
 
@@ -19,9 +19,8 @@ export const approachHandler: CombatStateHandler = {
         v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
         const dist = v3Length(_dir)
 
-        const skill = character.combat.skills[character.combat.currentSkillIndex]
-        if (!skill || skill.config.type !== 'ranged') { setInput(0, 0, false); return }
-        const cfg = skill.config as RangedSkillConfig
+        const weapon = character.combat.weapon
+        if (weapon.type !== 'ranged') { setInput(0, 0, false); return }
 
         if (dist < 0.01) { setInput(0, 0, false); return }
         const len = dist
@@ -29,16 +28,19 @@ export const approachHandler: CombatStateHandler = {
         const adz = _dir.z / len
 
         /* aggressive 策略：使用攻击距离而非理想距离 */
-        const effectiveRange = ctx.combatStrategy === 'aggressive' ? cfg.weapon.range : cfg.weapon.idealRange
+        const effectiveRange = ctx.combatStrategy === 'aggressive' ? weapon.range : weapon.idealRange
 
         if (dist < effectiveRange) {
-            if (!character.combat.attackActive && skill.cooldownTimer <= 0) {
+            if (!character.combat.attackActive
+                && canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})) {
                 setInput(adx, adz, true)
             } else {
                 setInput(0, 0, false)
             }
         } else {
-            if (!character.combat.attackActive && skill.cooldownTimer <= 0 && dist < effectiveRange * 1.1) {
+            if (!character.combat.attackActive
+                && canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
+                && dist < effectiveRange * 1.1) {
                 setInput(adx, adz, true)
             } else {
                 setInput(adx, adz, false)
@@ -66,10 +68,9 @@ export const approachHandler: CombatStateHandler = {
                 if (!target || target.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill || skill.config.type !== 'ranged') return false
-                const cfg = skill.config as RangedSkillConfig
-                return Math.hypot(tp.x - pos.x, tp.z - pos.z) < cfg.weapon.retreatRange
+                const weapon = character.combat.weapon
+                if (weapon.type !== 'ranged') return false
+                return Math.hypot(tp.x - pos.x, tp.z - pos.z) < weapon.retreatRange
             },
         },
         {
@@ -82,11 +83,10 @@ export const approachHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill) return false
-                const cooldownOk = (skill.cooldownTimer ?? Infinity) <= 0
+                const weapon = character.combat.weapon
+                const cooldownOk = canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
                 /* 近战无射程概念，用检测回退常量默认值 */
-                const skillRange = skill.config.type === 'melee' ? MELEE_FALLBACK_DETECT_RANGE : skill.config.weapon.range
+                const skillRange = weapon.type === 'melee' ? MELEE_FALLBACK_DETECT_RANGE : weapon.range
                 return v3Length(_dir) < skillRange && cooldownOk
             },
         },
@@ -100,11 +100,10 @@ export const approachHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill || skill.config.type !== 'ranged') return false
-                const cfg = skill.config as RangedSkillConfig
-                const cooldownOk = (skill.cooldownTimer ?? Infinity) <= 0
-                return v3Length(_dir) < cfg.weapon.idealRange + 0.5 && cooldownOk
+                const weapon = character.combat.weapon
+                if (weapon.type !== 'ranged') return false
+                const cooldownOk = canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
+                return v3Length(_dir) < weapon.idealRange + 0.5 && cooldownOk
             },
         },
         {
@@ -115,12 +114,11 @@ export const approachHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill || skill.config.type !== 'ranged') return false
-                const cfg = skill.config as RangedSkillConfig
+                const weapon = character.combat.weapon
+                if (weapon.type !== 'ranged') return false
                 const threshold = ctx.combatStrategy === 'aggressive'
-                    ? cfg.weapon.range * 2
-                    : cfg.weapon.idealRange * 1.5
+                    ? weapon.range * 2
+                    : weapon.idealRange * 1.5
                 return v3Length(_dir) > threshold
             },
         },
@@ -132,8 +130,7 @@ export const approachHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.weapon.detectionRange ?? 8
+                const detRange = character.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

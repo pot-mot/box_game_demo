@@ -1,65 +1,134 @@
 import type {PanelContext} from '../../box/base/ui'
 import type {CharacterEntitySystem} from '../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
+import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig, TendencyId} from '../../../character/faction.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
-import {MELEE_WEAPON_PRESETS} from '../../../character/weapon/melee_weapon.ts'
-import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
-import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
-import {RANGED_SKILL_PRESETS} from '../../../character/combat/ranged_skill.ts'
+import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.ts'
+import {ALL_WEAPON_PRESETS, findWeaponPreset} from '../../../character/weapon/catalog.ts'
+import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
 
-const MELEE_WEAPON_OPTIONS = Object.entries(MELEE_WEAPON_PRESETS).map(([key, w]) => ({value: key, label: `${w.name} (dmg:${w.damage})`}))
-const RANGED_WEAPON_OPTIONS = Object.entries(RANGED_WEAPON_PRESETS).map(([key, w]) => ({
-    value: key, label: `${w.name} (dmg:${w.damage} rng:${w.range})${
-        w.spreadCount ? ' [Shotgun]' : w.explosionRadius ? ' [Explosion]' : w.homingStrength ? ' [Homing]' : w.throwAngle ? ' [Throw]' : ''
-    }`,
-}))
+/** 下拉项：武器 id（option.value）+ 所属类型（option.dataset.weaponType，用于收窄类型） */
+interface WeaponOption {
+    readonly id: string
+    readonly type: WeaponType
+    readonly label: string
+}
 
-const SKILL_MAP: Record<string, {cooldown: number; duration: number} | undefined> = {}
-for (const [, s] of Object.entries(MELEE_SKILL_PRESETS)) SKILL_MAP[s.weapon.id] = {cooldown: s.cooldown, duration: s.duration}
-for (const [, s] of Object.entries(RANGED_SKILL_PRESETS)) SKILL_MAP[s.weapon.id] = {cooldown: s.cooldown, duration: s.duration}
+/** 近战武器中文名（optgroup 标签） */
+const WEAPON_GROUP_LABEL_MELEE = '近战武器'
+/** 远程武器中文名（optgroup 标签） */
+const WEAPON_GROUP_LABEL_RANGED = '远程武器'
 
-const autoFillFromWeapon = (weaponId: string, type: 'melee' | 'ranged', fields: {
-    atkRange: HTMLInputElement; atkDmg: HTMLInputElement; atkCD: HTMLInputElement; atkDuration: HTMLInputElement
-    bulletSpeed: HTMLInputElement; bulletKB: HTMLInputElement; bulletLife: HTMLInputElement
-    weaponTag: HTMLElement
-}): void => {
-    const w = type === 'melee' ? MELEE_WEAPON_PRESETS[weaponId] : RANGED_WEAPON_PRESETS[weaponId]
-    if (!w) return
-    fields.atkDmg.value = String(w.damage)
-    const sk = SKILL_MAP[w.id]
-    if (sk) {
-        fields.atkCD.value = String(sk.cooldown)
-        fields.atkDuration.value = String(sk.duration)
+/** 武器预设 → 下拉项文案（远程附带模式标记，便于区分特殊弹道） */
+const describeWeapon = (w: WeaponConfig): string => {
+    if (w.type === 'melee') return `${w.name} (dmg:${w.damage})`
+    const tags: string[] = []
+    if (w.spreadCount !== undefined) tags.push(`散射×${w.spreadCount}`)
+    if (w.explosionRadius !== undefined) tags.push(`爆炸 R:${w.explosionRadius}`)
+    if (w.homingStrength !== undefined) tags.push(`追踪 S:${w.homingStrength}`)
+    if (w.throwAngle !== undefined) tags.push(`抛物线:${(w.throwAngle * 180 / Math.PI).toFixed(0)}°`)
+    return `${w.name} (dmg:${w.damage} rng:${w.range})${tags.length > 0 ? ` [${tags.join(' ')}]` : ''}`
+}
+
+/** 武器下拉按近战/远程分组（类型由所选武器决定，因此不再有独立「攻击类型」选择器） */
+const buildWeaponOptions = (): {melee: readonly WeaponOption[]; ranged: readonly WeaponOption[]} => {
+    const melee: WeaponOption[] = []
+    const ranged: WeaponOption[] = []
+    for (const preset of ALL_WEAPON_PRESETS) {
+        const option: WeaponOption = {id: preset.id, type: preset.type, label: describeWeapon(preset)}
+        if (preset.type === 'melee') melee.push(option)
+        else ranged.push(option)
     }
-    if (type === 'ranged') {
-        const rw = w as RangedWeaponConfig
-        fields.atkRange.value = String(rw.range)
-        fields.bulletSpeed.value = String(rw.projectileSpeed)
-        fields.bulletKB.value = String(rw.knockbackForce)
-        fields.bulletLife.value = String(rw.projectileLifetime)
-        const tags: string[] = []
-        if (rw.spreadCount) tags.push(`Spread ×${rw.spreadCount}`)
-        if (rw.explosionRadius) tags.push(`Explosion R:${rw.explosionRadius}`)
-        if (rw.homingStrength) tags.push(`Homing S:${rw.homingStrength}`)
-        if (rw.throwAngle) tags.push(`Arc:${(rw.throwAngle * 180 / Math.PI).toFixed(0)}°`)
-        fields.weaponTag.textContent = [w.name, ...tags].join('  ')
+    return {melee, ranged}
+}
+
+/** 武器下拉数据（模块级构建一次：预设为静态数据） */
+const WEAPON_OPTIONS = buildWeaponOptions()
+
+/** 面板攻击区可见字段 */
+interface AttackFields {
+    readonly atkRange: HTMLInputElement
+    readonly atkDmg: HTMLInputElement
+    readonly atkCD: HTMLInputElement
+    readonly bulletSpeed: HTMLInputElement
+    readonly bulletKB: HTMLInputElement
+    readonly bulletLife: HTMLInputElement
+    readonly weaponTag: HTMLElement
+}
+
+/** 数字转输入框文本（避免 3.0000000000000004 之类的浮点尾巴） */
+const formatNumber = (value: number): string => String(Number(value.toFixed(4)))
+
+/** 起手段冷却：取轻击链首段（角色的冷却覆写落在段定义上） */
+const entryCooldownOfAttacks = (attacks: WeaponAttacks): number => {
+    const entryId = chainOf(attacks, 'light').entries[0]?.segmentId
+    return entryId === undefined ? 0 : (attacks.segments[entryId]?.cooldown ?? 0)
+}
+
+/** 武器预设的起手段冷却（换武器预填用） */
+const entryCooldownOf = (weapon: WeaponConfig): number => entryCooldownOfAttacks(weapon.attacks)
+
+/** 远程武器特殊模式文案（散射 / 爆炸 / 追踪 / 抛物线） */
+const rangedModeTags = (weapon: RangedWeaponConfig): readonly string[] => {
+    const tags: string[] = []
+    if (weapon.spreadCount !== undefined) tags.push(`散射 ×${weapon.spreadCount}`)
+    if (weapon.explosionRadius !== undefined) tags.push(`爆炸 R:${weapon.explosionRadius}`)
+    if (weapon.homingStrength !== undefined) tags.push(`追踪 S:${weapon.homingStrength}`)
+    if (weapon.throwAngle !== undefined) tags.push(`抛物线:${(weapon.throwAngle * 180 / Math.PI).toFixed(0)}°`)
+    return tags
+}
+
+/** 换武器时按武器预设预填数值覆写字段（冷却取起手段预设冷却；远程弹道仅在远程武器时展示） */
+const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
+    const weapon = findWeaponPreset(weaponId)
+    if (weapon === undefined) return
+    fields.atkDmg.value = formatNumber(weapon.damage)
+    fields.atkCD.value = formatNumber(entryCooldownOf(weapon))
+    if (weapon.type === 'ranged') {
+        fields.weaponTag.textContent = [weapon.name, ...rangedModeTags(weapon)].join('  ')
+        fields.atkRange.value = formatNumber(weapon.range)
+        fields.bulletSpeed.value = formatNumber(weapon.projectileSpeed)
+        fields.bulletKB.value = formatNumber(weapon.knockbackForce)
+        fields.bulletLife.value = formatNumber(weapon.projectileLifetime)
     } else {
-        fields.weaponTag.textContent = w.name
+        fields.weaponTag.textContent = weapon.name
     }
 }
 
-const populateWeaponOptions = (select: HTMLSelectElement, type: 'melee' | 'ranged'): void => {
-    select.innerHTML = ''
-    const options = type === 'melee' ? MELEE_WEAPON_OPTIONS : RANGED_WEAPON_OPTIONS
-    for (const opt of options) {
-        const o = document.createElement('option')
-        o.value = opt.value; o.textContent = opt.label
-        select.appendChild(o)
+/** 当前选中武器（未选中返回 undefined）；类型由所选武器本身决定 */
+const selectedWeaponOf = (select: HTMLSelectElement): WeaponConfig | undefined => {
+    const weaponId = select.value
+    return weaponId.length > 0 ? findWeaponPreset(weaponId) : undefined
+}
+
+/** 读取角色当前攻击配置：武器 + 数值覆写 + 起手段当前冷却（用于面板回显） */
+const readSelectedAttack = (sel: CharacterEntity): {
+    readonly weaponId: string
+    readonly damage: number
+    readonly cooldown: number
+    readonly ranged?: {readonly range: number; readonly bulletSpeed: number; readonly bulletKnockback: number; readonly bulletLifetime: number}
+} => {
+    const weapon = sel.combat.weapon
+    const cooldown = entryCooldownOfAttacks(sel.combat.attacks)
+    if (weapon.type === 'ranged') {
+        return {
+            weaponId: weapon.id,
+            damage: weapon.damage,
+            cooldown,
+            ranged: {
+                range: weapon.range,
+                bulletSpeed: weapon.projectileSpeed,
+                bulletKnockback: weapon.knockbackForce,
+                bulletLifetime: weapon.projectileLifetime,
+            },
+        }
     }
+    return {weaponId: weapon.id, damage: weapon.damage, cooldown}
 }
 
 export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>): PanelContext => {
@@ -138,41 +207,47 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         return {tendencyId}
     }
 
+    /* 武器下拉：近战/远程同列并按 optgroup 分组；攻击类型由所选武器决定，故不再有类型选择器 */
     el.appendChild(createSection('Attack'))
-    const atkTypeRow = document.createElement('div')
-    atkTypeRow.style.cssText = 'display:flex;gap:8px;align-items:center'
-    const atkSelectLabel = document.createElement('label')
-    atkSelectLabel.textContent = 'Type '
-    const atkSelect = document.createElement('select')
-    const meleeOpt = document.createElement('option')
-    meleeOpt.value = 'melee'; meleeOpt.textContent = 'Melee'
-    const rangedOpt = document.createElement('option')
-    rangedOpt.value = 'ranged'; rangedOpt.textContent = 'Ranged'
-    atkSelect.appendChild(meleeOpt)
-    atkSelect.appendChild(rangedOpt)
-    atkSelectLabel.appendChild(atkSelect)
-    atkTypeRow.appendChild(atkSelectLabel)
-
+    const atkRow = document.createElement('div')
+    atkRow.style.cssText = 'display:flex;gap:8px;align-items:center'
     const weaponSelectLabel = document.createElement('label')
     weaponSelectLabel.textContent = 'Wpn '
     const weaponSelect = document.createElement('select')
     weaponSelect.style.cssText = 'max-width:180px'
     weaponSelectLabel.appendChild(weaponSelect)
-    atkTypeRow.appendChild(weaponSelectLabel)
-    el.appendChild(atkTypeRow)
+    atkRow.appendChild(weaponSelectLabel)
+    el.appendChild(atkRow)
+    const attackSegmentTag = document.createElement('div')
+    attackSegmentTag.style.cssText = 'font-size:11px;color:#aaa;margin-top:2px'
+    el.appendChild(attackSegmentTag)
+    for (const group of [{label: WEAPON_GROUP_LABEL_MELEE, options: WEAPON_OPTIONS.melee}, {label: WEAPON_GROUP_LABEL_RANGED, options: WEAPON_OPTIONS.ranged}]) {
+        const optGroup = document.createElement('optgroup')
+        optGroup.label = group.label
+        for (const opt of group.options) {
+            const o = document.createElement('option')
+            o.value = opt.id
+            o.dataset.weaponType = opt.type
+            o.textContent = opt.label
+            optGroup.appendChild(o)
+        }
+        weaponSelect.appendChild(optGroup)
+    }
 
     const weaponTag = document.createElement('div')
     weaponTag.style.cssText = 'font-size:11px;color:#aaa;margin-top:2px;margin-bottom:4px'
     el.appendChild(weaponTag)
 
-    const atkRange = createLabeledNumberInput(el, 'Range', {min: '0.1', step: '0.1', value: '1.5'})
+    const atkRange = createLabeledNumberInput(el, 'Range', {min: '0.1', step: '0.1', value: '10'})
     const atkDmg = createLabeledNumberInput(el, 'Damage', {min: '0.1', step: '0.1', value: '3'})
     const atkCD = createLabeledNumberInput(el, 'Cooldown', {min: '0.1', step: '0.1', value: '0.5'})
-    const atkDuration = createLabeledNumberInput(el, 'Duration', {min: '0.05', step: '0.05', value: '0.3'})
     el.appendChild(document.createElement('br'))
     const bulletSpeed = createLabeledNumberInput(el, 'BulSpd', {min: '1', step: '1', value: '20'})
     const bulletKB = createLabeledNumberInput(el, 'BulKnock', {min: '0', step: '0.5', value: '3'})
     const bulletLife = createLabeledNumberInput(el, 'BulLife', {min: '0.5', step: '0.5', value: '3'})
+
+    /** 攻击区字段集合（预填与回显共用） */
+    const attackFields: AttackFields = {atkRange, atkDmg, atkCD, bulletSpeed, bulletKB, bulletLife, weaponTag}
 
     el.appendChild(createSection('Health'))
     const maxHP = createLabeledNumberInput(el, 'MaxHP', {min: '1', step: '1', value: '15'})
@@ -280,8 +355,6 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
-    let currentType: 'melee' | 'ranged' = 'melee'
-
     peaceSelect.onchange = () => {
         const show = peaceSelect.value === 'build'
         buildSection.style.display = show ? '' : 'none'
@@ -290,30 +363,19 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         addBoxTypeBtn.style.display = show ? '' : 'none'
     }
 
-    const showRanged = () => {
-        const isRanged = atkSelect.value === 'ranged'
-        /* 近战实际打击距离由武器几何驱动，Range 输入框仅对远程生效 */
+    /** 远程弹道数值仅在所选武器为远程时显示（近战打击距离由武器几何驱动） */
+    const showRanged = (): void => {
+        const weapon = selectedWeaponOf(weaponSelect)
+        const isRanged = weapon !== undefined && weapon.type === 'ranged'
         atkRange.parentElement!.style.display = isRanged ? '' : 'none';
         [bulletSpeed, bulletKB, bulletLife].forEach(input => {
             input.parentElement!.style.display = isRanged ? '' : 'none'
         })
     }
 
-    atkSelect.onchange = (): void => {
-        currentType = atkSelect.value as 'melee' | 'ranged'
-        populateWeaponOptions(weaponSelect, currentType)
-        showRanged()
-        weaponTag.textContent = ''
-    }
-
     weaponSelect.onchange = () => {
-        if (weaponSelect.value) {
-            autoFillFromWeapon(weaponSelect.value, currentType, {
-                atkRange, atkDmg, atkCD, atkDuration,
-                bulletSpeed, bulletKB, bulletLife,
-                weaponTag,
-            })
-        }
+        if (weaponSelect.value.length > 0) autoFillFromWeapon(weaponSelect.value, attackFields)
+        showRanged()
     }
 
     const getSelected = (): CharacterEntity | undefined => {
@@ -429,7 +491,6 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         jumpH.value = String(sel.config.jumpHeight)
         scale.value = String(sel.config.scale)
 
-        const skill = sel.combat.skills[sel.combat.currentSkillIndex]
         maxHP.value = String(sel.combat.maxHealth)
         curHP.value = String(sel.combat.health)
         faction.value = String(sel.combat.faction)
@@ -437,32 +498,28 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         targetFactionsInput.value = sel.combat.tendencyConfig.targetFactions?.join(',') ?? ''
         showTargetFactions()
 
-        const skillType = skill?.config.type ?? 'melee'
-        atkSelect.value = skillType
-        currentType = skillType as 'melee' | 'ranged'
-        populateWeaponOptions(weaponSelect, currentType)
-
-        const weaponId = skill?.config.weapon.id ?? ''
-        if (MELEE_WEAPON_PRESETS[weaponId] || RANGED_WEAPON_PRESETS[weaponId]) {
-            weaponSelect.value = weaponId
-            autoFillFromWeapon(weaponId, currentType, {
-                atkRange, atkDmg, atkCD, atkDuration,
-                bulletSpeed, bulletKB, bulletLife,
-                weaponTag,
-            })
-        } else {
-            weaponSelect.value = ''
-            if (skill?.config.type === 'ranged') atkRange.value = String(skill.config.weapon.range)
-            atkDmg.value = String(skill?.config.weapon.damage ?? 3)
-            atkCD.value = String(skill?.config.cooldown ?? 0)
-            atkDuration.value = String(skill?.config.duration ?? 0.3)
-            if (skill?.config.type === 'ranged') {
-                bulletSpeed.value = String(skill.config.weapon.projectileSpeed)
-                bulletKB.value = String(skill.config.weapon.knockbackForce)
-                bulletLife.value = String(skill.config.weapon.projectileLifetime)
-            }
-            weaponTag.textContent = ''
+        /* 攻击区：装备武器 + 数值覆写（类型由武器决定，动作时长由武器模组决定，均不在面板暴露） */
+        const attack = readSelectedAttack(sel)
+        weaponSelect.value = attack.weaponId
+        atkDmg.value = formatNumber(attack.damage)
+        atkCD.value = formatNumber(attack.cooldown)
+        if (attack.ranged !== undefined) {
+            atkRange.value = formatNumber(attack.ranged.range)
+            bulletSpeed.value = formatNumber(attack.ranged.bulletSpeed)
+            bulletKB.value = formatNumber(attack.ranged.bulletKnockback)
+            bulletLife.value = formatNumber(attack.ranged.bulletLifetime)
         }
+        const weaponPreset = findWeaponPreset(attack.weaponId)
+        weaponTag.textContent = weaponPreset === undefined
+            ? ''
+            : weaponPreset.type === 'ranged'
+                ? [weaponPreset.name, ...rangedModeTags(weaponPreset)].join('  ')
+                : weaponPreset.name
+        /* 当前攻击段 / 连段信息（不再有槽位与连段索引） */
+        const activeSegment = sel.combat.activeSegment
+        attackSegmentTag.textContent = activeSegment === undefined
+            ? `${sel.combat.weapon.name} · 待机`
+            : `${sel.combat.weapon.name} · ${segmentDisplayName(activeSegment)}`
 
         playerCheck.checked = sel.isPlayer
         peaceSelect.value = sel.peaceStrategy
@@ -544,29 +601,29 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                         boxTypes,
                     })
                 }
-                const isRanged = atkSelect.value === 'ranged'
-                const selectedWeaponId = weaponSelect.value || undefined
+                /* 攻击配置：装备武器 + 数值覆写（动作时长/动画由武器模组的攻击链决定，不在此提交） */
+                const selectedWeapon = selectedWeaponOf(weaponSelect)
+                const attackDamage = parseFloat(atkDmg.value)
+                const attackCooldown = parseFloat(atkCD.value)
+                const newAttack: AttackConfig = {
+                    weaponId: selectedWeapon?.id ?? weaponSelect.value,
+                    ...(isNaN(attackDamage) ? {} : {damage: attackDamage}),
+                    ...(isNaN(attackCooldown) ? {} : {cooldown: attackCooldown}),
+                    /* 远程弹道数值仅远程武器写入 */
+                    ...(selectedWeapon !== undefined && selectedWeapon.type === 'ranged'
+                        ? {ranged: {
+                            range: parseFloat(atkRange.value),
+                            bulletSpeed: parseFloat(bulletSpeed.value),
+                            bulletKnockback: parseFloat(bulletKB.value),
+                            bulletLifetime: parseFloat(bulletLife.value),
+                        }}
+                        : {}),
+                }
                 ctx.updateCharacterConfig?.(cur.id, {
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
                     scale: parseFloat(scale.value),
-                }, isRanged ? {
-                    type: 'ranged',
-                    weaponId: selectedWeaponId,
-                    range: parseFloat(atkRange.value),
-                    damage: parseFloat(atkDmg.value),
-                    cooldown: parseFloat(atkCD.value),
-                    duration: parseFloat(atkDuration.value),
-                    bulletSpeed: parseFloat(bulletSpeed.value),
-                    bulletKnockback: parseFloat(bulletKB.value),
-                    bulletLifetime: parseFloat(bulletLife.value),
-                } : {
-                    type: 'melee',
-                    weaponId: selectedWeaponId,
-                    damage: parseFloat(atkDmg.value),
-                    cooldown: parseFloat(atkCD.value),
-                    duration: parseFloat(atkDuration.value),
-                }, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value))
+                }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value))
                 const updated = getSelected()
                 if (updated) {
                     maxHP.value = String(updated.combat.maxHealth)

@@ -3,6 +3,10 @@ import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {GameMode} from '../modes/constants'
 import type {EntityType} from '../entity/constants.ts'
+import type {AttackConfig} from '../character/archetypes.ts'
+import type {WeaponAttacks} from '../character/weapon/attack_chain.ts'
+import {chainOf} from '../character/weapon/attack_chain.ts'
+import type {WeaponConfig} from '../character/weapon/catalog.ts'
 import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON, ModeInfoJSON, CameraInfoJSON, EntitySourceMap} from './types.ts'
 import {SAVE_FORMAT_VERSION} from './types.ts'
 import {CHARACTER_BASE_SIZE} from '../entity/character/constants.ts'
@@ -25,6 +29,31 @@ const fragmentDataToJSON = (fd: FragmentData): FragmentDataJSON => ({
     massRatio: fd.massRatio,
     boxSize: fd.boxSize,
 })
+
+/* 起手（轻击链首段）冷却：角色的数值覆写落在段定义上，取链上第一段的冷却作为「起手段冷却」 */
+const entryCooldownOf = (attacks: WeaponAttacks): number => {
+    const entryId = chainOf(attacks, 'light').entries[0]?.segmentId
+    return entryId === undefined ? 0 : (attacks.segments[entryId]?.cooldown ?? 0)
+}
+
+/** 由战斗组件的武器 + 攻击链导出攻击配置（动作/时长由武器模组决定，不落存档） */
+const attackConfigOf = (weapon: WeaponConfig, attacks: WeaponAttacks): AttackConfig => {
+    /* 起手段冷却为 0（普通攻击默认无冷却）时省略字段 */
+    const cooldown = entryCooldownOf(attacks)
+    return {
+        weaponId: weapon.id,
+        damage: weapon.damage,
+        ...(cooldown !== 0 ? {cooldown} : {}),
+        ...(weapon.type === 'ranged'
+            ? {ranged: {
+                range: weapon.range,
+                bulletSpeed: weapon.projectileSpeed,
+                bulletKnockback: weapon.knockbackForce,
+                bulletLifetime: weapon.projectileLifetime,
+            }}
+            : {}),
+    }
+}
 
 /** 收集当前世界所有可序列化实体的状态 */
 export const collectWorldState = (
@@ -148,31 +177,14 @@ export const collectWorldState = (
             const halfH = (CHARACTER_BASE_SIZE.height * e.config.scale) / 2
             entities.push({
                 type: 'character',
-                    config: {
-                        speed: e.config.speed,
-                        jumpHeight: e.config.jumpHeight,
-                        scale: e.config.scale,
-                        peaceStrategy: e.peaceStrategy,
-                        combatStrategy: e.combatStrategy,
-                    attackSlot: e.combat.skills[0]?.config.type === 'melee'
-                        ? {
-                            type: 'melee' as const,
-                            weaponId: e.combat.skills[0].config.weapon.id,
-                            damage: e.combat.skills[0].config.weapon.damage,
-                            cooldown: e.combat.skills[0].config.cooldown,
-                            duration: e.combat.skills[0].config.duration,
-                        }
-                        : {
-                            type: 'ranged' as const,
-                            weaponId: e.combat.skills[0].config.weapon.id,
-                            range: e.combat.skills[0]?.config.weapon.range ?? 10,
-                            damage: e.combat.skills[0]?.config.weapon.damage ?? 2,
-                            cooldown: e.combat.skills[0]?.config.cooldown ?? 0.8,
-                            duration: e.combat.skills[0]?.config.duration ?? 0.2,
-                            bulletSpeed: e.combat.skills[0]?.config.weapon.projectileSpeed ?? 20,
-                            bulletKnockback: e.combat.skills[0]?.config.weapon.knockbackForce ?? 3,
-                            bulletLifetime: e.combat.skills[0]?.config.weapon.projectileLifetime ?? 3,
-                        },
+                config: {
+                    speed: e.config.speed,
+                    jumpHeight: e.config.jumpHeight,
+                    scale: e.config.scale,
+                    peaceStrategy: e.peaceStrategy,
+                    combatStrategy: e.combatStrategy,
+                    /* 攻击配置：装备武器 + 数值覆写（攻击动作由武器模组的攻击链决定） */
+                    attack: attackConfigOf(e.combat.weapon, e.combat.attacks),
                     tendency: e.combat.tendencyConfig,
                     faction: e.combat.faction,
                     maxHealth: e.combat.maxHealth,

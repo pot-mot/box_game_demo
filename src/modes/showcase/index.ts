@@ -8,14 +8,10 @@ import type {ShowcaseActor} from './actor.ts'
 import {createNameLabel} from './label.ts'
 import {createPanel} from './panel.ts'
 import type {PanelRowInfo} from './panel.ts'
-import {buildMeleeSkillSlots} from '../../character/combat/melee_skill.ts'
-import {RANGED_SKILL_PRESETS} from '../../character/combat/ranged_skill.ts'
-import type {SkillSlot} from '../../character/combat/skill_types.ts'
-import {createSkillSlot} from '../../character/combat/skill_types.ts'
+import {weaponPresetOrDefault} from '../../character/weapon/catalog.ts'
 import {SELECT_PALETTE} from '../../entity/character/appearance/constants.ts'
 import {
     CLICK_SLOP_PX,
-    displayNameOf,
     FOCUS_RING_COLOR,
     FOCUS_RING_INNER,
     FOCUS_RING_OUTER,
@@ -25,7 +21,6 @@ import {
     RANGED_ROW_Z,
     RANGED_SPACING,
     SHOWCASE_ROSTER,
-    SKILL_DISPLAY_NAMES,
     SPEED_OPTIONS,
     STEP_DT,
 } from './constants.ts'
@@ -44,18 +39,6 @@ export interface ShowcaseModeHost {
     readonly renderer: WebGLRenderer
     /** 资源释放完成后由 exit 调用（宿主负责停循环、销毁渲染器、重现启动屏） */
     readonly onExit: () => void
-}
-
-/** 按清单解析技能槽（近战 = 武器 4 槽双链，远程 = 单槽；phases 完整来自预设） */
-const resolveSkillSlots = (skillId: string, kind: 'melee' | 'ranged'): SkillSlot[] => {
-    if (kind === 'melee') {
-        /* skillId 为武器 id：装配 [轻1, 重1, 轻2, 重2] 循环链 */
-        return buildMeleeSkillSlots(skillId)
-    }
-    if (!(skillId in RANGED_SKILL_PRESETS)) {
-        throw new Error(`[showcase] 未知的远程技能 id: ${skillId}`)
-    }
-    return [createSkillSlot(RANGED_SKILL_PRESETS[skillId])]
 }
 
 /**
@@ -82,21 +65,21 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i]
             if (entry === undefined) continue
-            const slots = resolveSkillSlots(entry.skillId, kind)
-            const skillName = displayNameOf(SKILL_DISPLAY_NAMES, entry.skillId)
-            const weaponName = slots[0].config.weapon.name
+            /* 清单条目 skillId 即武器 id：攻击链（段/时长/阶段/冷却/倾斜角）与模型全部取自武器模组 */
+            const weapon = weaponPresetOrDefault(entry.skillId)
+            /* 重构后无独立技能概念：名称行与副名同为武器中文名（面板/标签按相同值去重显示） */
+            const weaponName = weapon.name
             const actor = createShowcaseActor({
                 id: actors.length,
                 scene: sceneCtx.scene,
-                slots,
+                weapon,
                 faction: nextFaction++,
                 x: (i - (entries.length - 1) / 2) * spacing,
                 z: rowZ,
-                skillName,
                 weaponName,
             })
-            /* 头顶名称标签（技能名 + 武器名）—— 句柄交给 actor，随其 dispose 统一回收 */
-            actor.attachLabel(createNameLabel(skillName, weaponName))
+            /* 头顶名称标签（武器名 + 武器类型）—— 句柄交给 actor，随其 dispose 统一回收 */
+            actor.attachLabel(createNameLabel(weaponName, weapon.type === 'melee' ? '近战武器' : '远程武器'))
             actors.push(actor)
             anchorToActor.set(actor.anchor, actor)
         }
@@ -145,7 +128,8 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
     /* —— 信息面板 —— */
     const panelInfos: PanelRowInfo[] = actors.map(actor => ({
         id: actor.id,
-        skillName: actor.skillName,
+        /* 技能名与武器名同为武器中文名（面板内部对相同值去重显示） */
+        skillName: actor.weaponName,
         weaponName: actor.weaponName,
         colorHex: `#${SELECT_PALETTE(actors.indexOf(actor)).bodyColor.toString(16).padStart(6, '0')}`,
     }))

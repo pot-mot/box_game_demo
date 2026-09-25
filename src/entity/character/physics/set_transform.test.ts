@@ -41,12 +41,9 @@ const meleeSaveConfig = (overrides?: Partial<CharacterSaveConfig>): CharacterSav
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attackSlot: {
-        type: 'melee',
+    attack: {
         weaponId: 'long_sword',
         damage: 3,
-        cooldown: 0.5,
-        duration: 0.3,
     },
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,

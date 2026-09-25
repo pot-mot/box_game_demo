@@ -59,3 +59,42 @@ export const VIEW_MIN_DISTANCE = 1.5
 
 /** 初始取景可见区域高度比例下限（时间轴面板拉到最高时仍可用的取景高度） */
 export const VIEW_MIN_VISIBLE_RATIO = 0.2
+
+// ── 动画列表（下拉：编辑动画 + 内置动作）──
+
+/** 动画下拉 DOM id（e2e 断言面） */
+export const ANIM_SELECT_ID = 'bone-anim-select'
+
+/** 动画下拉分组名：动画库中可编辑的动画 */
+export const ANIM_SELECT_EDITED_GROUP = '编辑动画'
+
+/** 内置动作分组名后缀（提示：选中即载入一份可编辑副本） */
+export const ANIM_SELECT_BUILTIN_GROUP_SUFFIX = '（选中载入副本）'
+
+/** 动画下拉 option 值前缀：编辑动画（后接 clip 名） */
+export const ANIM_OPTION_EDITED_PREFIX = 'edited:'
+
+/** 动画下拉 option 值前缀：内置动作（后接内置条目 id） */
+export const ANIM_OPTION_BUILTIN_PREFIX = 'builtin:'
+
+// ── 武器控制（编辑器武器装载与双手贴合）──
+
+/** 武器下拉 DOM id（e2e 断言面） */
+export const WEAPON_SELECT_ID = 'bone-weapon-select'
+
+/** 左手贴合开关按钮 DOM id（默认关；开启后仅在播放预览时求解） */
+export const GRIP_TOGGLE_ID = 'bone-grip-toggle'
+
+/** 武器下拉：自动（跟随当前动画所属武器） */
+export const ANIM_OPTION_WEAPON_AUTO = 'auto'
+
+/** 武器下拉：无武器 */
+export const ANIM_OPTION_WEAPON_NONE = 'none'
+
+export const WEAPON_AUTO_LABEL = '武器：自动'
+export const WEAPON_NONE_LABEL = '武器：无'
+export const WEAPON_GROUP_LABEL_MELEE = '近战武器'
+export const WEAPON_GROUP_LABEL_RANGED = '远程武器'
+
+/** 双手武器副握点沿武器轴（本地 +Y，握把→刃尖）的距离（米），与生产双手 IK 同量级 */
+export const LEFT_GRIP_OFFSET = 0.45

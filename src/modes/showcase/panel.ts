@@ -12,6 +12,7 @@ export interface PanelCallbacks {
 /** 建行所需的静态信息 */
 export interface PanelRowInfo {
     readonly id: number
+    /** 名称行（重构后为武器中文名，与 weaponName 同值） */
     readonly skillName: string
     readonly weaponName: string
     /** 阵营主色（css 颜色字符串） */
@@ -109,6 +110,10 @@ const setFill = (el: HTMLElement, ratio: number, color: string): void => {
 }
 
 const toDeg = (rad: number): string => `${(rad * 180 / Math.PI).toFixed(0)}°`
+
+/** 名称拼接：名称行与副名相同（重构后同为武器中文名）时只显示一次，避免重复文案 */
+const joinNames = (primary: string, secondary: string): string =>
+    primary === secondary || secondary === '' ? primary : `${primary} · ${secondary}`
 
 /** 行级 DOM 引用（refresh 时只改内容不重建） */
 interface RowRefs {
@@ -209,7 +214,8 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         skillSpan.textContent = info.skillName
         const weaponSpan = document.createElement('span')
         weaponSpan.className = 'sch-weapon'
-        weaponSpan.textContent = info.weaponName
+        /* 副名与名称行同值时留空（重构后二者同为武器中文名） */
+        weaponSpan.textContent = info.weaponName === info.skillName ? '' : info.weaponName
         names.appendChild(skillSpan)
         names.appendChild(weaponSpan)
         root.appendChild(names)
@@ -388,7 +394,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         }
         if (focusedStatus !== undefined) {
             const st = focusedStatus
-            setText(detailTitle, `${st.skillName} · ${st.weaponName}`)
+            setText(detailTitle, joinNames(st.skillName, st.weaponName))
             setText(detailHit, st.mode === 'idle'
                 ? '状态：待机'
                 : `${st.isMelee ? `连段第 ${st.hitNumber}/${st.totalHits} 击 · tilt ${toDeg(st.swingTilt)} (${st.swingTilt.toFixed(2)} rad)` : '远程射击序列'}`)

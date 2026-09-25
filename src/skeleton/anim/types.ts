@@ -50,6 +50,24 @@ export interface BoneAnimationClip {
     readonly eventTracks: readonly BoneEventTrack[]
 }
 
+/**
+ * clip 深拷贝：记录的位置/旋转向量与全部数组独立（编辑副本不影响源 clip）。
+ * 插值规格与事件记录参数按不可变数据复用（项目内一律以替换而非就地修改的方式更新）。
+ */
+export const cloneClip = (clip: BoneAnimationClip): BoneAnimationClip => ({
+    ...clip,
+    jointTracks: clip.jointTracks.map(track => ({
+        ...track,
+        records: track.records.map(record => ({
+            time: record.time,
+            position: record.position.clone(),
+            rotation: record.rotation.clone(),
+        })),
+    })),
+    boneTracks: clip.boneTracks.map(track => ({...track, records: [...track.records]})),
+    eventTracks: clip.eventTracks.map(track => ({...track, records: [...track.records]})),
+})
+
 /** 编辑器视图：关键帧聚合（时间点 → 全部目标记录 + 事件），与轨道互转 */
 export interface BoneAnimationKeyframe {
     readonly time: number

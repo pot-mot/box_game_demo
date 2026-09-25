@@ -1,6 +1,6 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
-import type {RangedSkillConfig} from '../../../../../character/combat/ranged_skill.ts'
+import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
 import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
 
@@ -17,16 +17,17 @@ export const kiteHandler: CombatStateHandler = {
         v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
         const dist = v3Length(_dir)
 
-        const skill = character.combat.skills[character.combat.currentSkillIndex]
-        if (!skill || skill.config.type !== 'ranged') { setInput(0, 0, false); return }
-        const cfg = skill.config as RangedSkillConfig
+        const weapon = character.combat.weapon
+        if (weapon.type !== 'ranged') { setInput(0, 0, false); return }
 
         if (dist < 0.01) { setInput(0, 0, false); return }
         const len = dist
         const adx = _dir.x / len
         const adz = _dir.z / len
 
-        if (!character.combat.attackActive && skill.cooldownTimer <= 0 && dist <= cfg.weapon.range) {
+        if (!character.combat.attackActive
+            && canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
+            && dist <= weapon.range) {
             setInput(adx, adz, true)
         } else {
             setInput(-adx, -adz, false)
@@ -44,15 +45,14 @@ export const kiteHandler: CombatStateHandler = {
                 /* 需要目标在攻击距离内（近战用攻击检测箱，checker 缺失时回退距离判定） */
                 const target = allCharacters.find(c => c.id === ctx.combatTargetId)
                 if (!target || target.combat.isDead) return false
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill) return false
-                if (skill.config.type === 'melee' && ctx.attackDetectChecker) {
+                const weapon = character.combat.weapon
+                if (weapon.type === 'melee' && ctx.attackDetectChecker) {
                     return ctx.attackDetectChecker(character, target)
                 }
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 /* 近战无射程概念，用检测回退常量默认值 */
-                const fallbackRange = skill.config.type === 'melee' ? MELEE_FALLBACK_DETECT_RANGE : skill.config.weapon.range
+                const fallbackRange = weapon.type === 'melee' ? MELEE_FALLBACK_DETECT_RANGE : weapon.range
                 return Math.hypot(tp.x - pos.x, tp.z - pos.z) < fallbackRange
             },
         },
@@ -81,10 +81,9 @@ export const kiteHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                if (!skill || skill.config.type !== 'ranged') return false
-                const cfg = skill.config as RangedSkillConfig
-                return v3Length(_dir) > cfg.weapon.retreatRange * 1.5
+                const weapon = character.combat.weapon
+                if (weapon.type !== 'ranged') return false
+                return v3Length(_dir) > weapon.retreatRange * 1.5
             },
         },
         {
@@ -95,8 +94,7 @@ export const kiteHandler: CombatStateHandler = {
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const skill = character.combat.skills[character.combat.currentSkillIndex]
-                const detRange = skill?.config.weapon.detectionRange ?? 8
+                const detRange = character.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

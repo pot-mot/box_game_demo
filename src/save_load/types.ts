@@ -7,9 +7,10 @@ import type {WaterBlockConfig, WaterEntityContext} from '../entity/area/water/ty
 import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/types'
 import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/common/types'
 import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
+import type {AttackConfig} from '../character/archetypes.ts'
 
-/** 当前存档格式版本：v2 起 character 的 position 语义改为脚底原点（旧档为身体中心） */
-export const SAVE_FORMAT_VERSION = 2
+/** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」 */
+export const SAVE_FORMAT_VERSION = 3
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -106,16 +107,8 @@ export interface CharacterSaveConfig {
     scale: number
     peaceStrategy?: 'patrol' | 'build'
     combatStrategy?: 'tactical' | 'aggressive' | 'cowardly'
-    attackSlot: {
-        type: 'melee'
-        weaponId?: string
-        damage: number; cooldown: number; duration: number
-    } | {
-        type: 'ranged'
-        weaponId?: string
-        range: number; damage: number; cooldown: number; duration: number
-        bulletSpeed: number; bulletKnockback: number; bulletLifetime: number
-    }
+    /** 攻击配置：装备武器 + 数值覆写（动作/时长/动画由武器模组的攻击链决定） */
+    attack: AttackConfig
     tendency: {
         tendencyId: 'hostileAll' | 'hostileExceptSelf' | 'hostileTo' | 'hostileExcept' | 'pacifist'
         targetFactions?: number[]

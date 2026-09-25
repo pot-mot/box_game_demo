@@ -33,4 +33,22 @@ describe('人形预设骨架定义', () => {
         expect(head?.tail.id).toBe('headTop')
         expect(head?.length).toBeCloseTo(PRESET_PART_SIZES.headH)
     })
+
+    it('武器挂点：右/左手武器挂点为腕下零偏移关节（武器占用的两个骨骼位）', () => {
+        const skeleton = skeletonFromDefinition(buildCharacterSkeletonDefinition())
+        const rightMount = skeleton.findJoint('rightWeaponMount')
+        const leftMount = skeleton.findJoint('leftWeaponMount')
+        expect(rightMount?.parent?.id).toBe('rightWristPivot')
+        expect(leftMount?.parent?.id).toBe('leftWristPivot')
+        /* 零偏移：挂点世界位置与对应手腕重合（武器握把中心落在腕节点上） */
+        for (const [mountId, wristId] of [['rightWeaponMount', 'rightWristPivot'], ['leftWeaponMount', 'leftWristPivot']] as const) {
+            const mountPos = skeleton.getWorldPosition(mountId)!
+            const wristPos = skeleton.getWorldPosition(wristId)!
+            expect(mountPos.distanceTo(wristPos)).toBeCloseTo(0, 6)
+        }
+        /* 挂点仅作挂载/IK 目标：不参与骨骼段（避免退化零长段） */
+        const boneJointIds = [...skeleton.bones.values()].flatMap(bone => [bone.head.id, bone.tail.id])
+        expect(boneJointIds).not.toContain('rightWeaponMount')
+        expect(boneJointIds).not.toContain('leftWeaponMount')
+    })
 })

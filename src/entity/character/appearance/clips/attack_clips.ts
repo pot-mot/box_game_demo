@@ -279,9 +279,10 @@ const attackPoseAt = (
     }
 }
 
-/** 攻击 clip 生成参数（技能配置静态值 + 段固有 tilt + 武器握持前倾） */
+/** 攻击 clip 生成参数（武器模组段定义 + 武器握持前倾） */
 export interface AttackClipParams {
-    readonly skillId: string
+    /** 段 id（武器模组固有，动画键与清单键） */
+    readonly segmentId: string
     readonly duration: number
     readonly recovery: number
     /** undefined = 无阶段信息回退（虚拟三阶段） */
@@ -326,7 +327,7 @@ export const buildAttackClip = (params: AttackClipParams): BoneAnimationClip => 
     ]
 
     return {
-        name: params.skillId,
+        name: params.segmentId,
         duration: total,
         loop: false,
         jointTracks: tracks,
@@ -364,11 +365,11 @@ const attackPoseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, {pos
     return map
 }
 
-/** 攻击 clip 缓存（key = skillId + gripTilt + duration/recovery；tilt 内置于技能配置） */
+/** 攻击 clip 缓存（key = 段 id + gripTilt + duration/recovery；tilt 内置于段定义） */
 const attackClipCache = new Map<string, BoneAnimationClip>()
 
 export const getAttackClip = (params: AttackClipParams): BoneAnimationClip => {
-    const key = `${params.skillId}:${params.gripTilt}:${params.duration}:${params.recovery}`
+    const key = `${params.segmentId}:${params.gripTilt}:${params.duration}:${params.recovery}`
     const cached = attackClipCache.get(key)
     if (cached !== undefined) return cached
     const clip = buildAttackClip(params)

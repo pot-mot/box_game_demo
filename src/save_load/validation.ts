@@ -109,29 +109,21 @@ const SavableFragment = z.object({
     }),
 })
 
-const MeleeAttackSchema = z.object({
-    type: z.literal('melee'),
-    weaponId: z.string().optional(),
-    damage: z.number().positive(),
-    /* 冷却允许 0：普通攻击无冷却，节奏由动作/恢复时间形成 */
-    cooldown: z.number().min(0),
-    duration: z.number().positive(),
-})
-
-const RangedAttackSchema = z.object({
-    type: z.literal('ranged'),
-    weaponId: z.string().optional(),
-    range: z.number().positive(),
-    damage: z.number().positive(),
-    /* 冷却允许 0：普通攻击默认无冷却（存档/面板仍可配置非 0 值） */
-    cooldown: z.number().min(0),
-    duration: z.number().positive(),
-    bulletSpeed: z.number().positive(),
+/* 攻击配置：装备武器 id + 数值覆写；动作/时长/动画由武器模组的攻击链决定，不在此描述。
+   宽松校验（武器 id 不做白名单硬校验）：未知武器 id 由运行时回退默认武器，旧档缺字段则安全回退默认配置 */
+const RangedOverrideSchema = z.object({
+    range: z.number(),
+    bulletSpeed: z.number(),
     bulletKnockback: z.number(),
-    bulletLifetime: z.number().positive(),
+    bulletLifetime: z.number(),
 })
 
-const AttackSlotSchema = z.discriminatedUnion('type', [MeleeAttackSchema, RangedAttackSchema])
+const AttackConfigSchema = z.object({
+    weaponId: z.string(),
+    damage: z.number().optional(),
+    cooldown: z.number().optional(),
+    ranged: RangedOverrideSchema.optional(),
+})
 
 const TendencyConfigSchema = z.object({
     tendencyId: z.enum(['hostileAll', 'hostileExceptSelf', 'hostileTo', 'hostileExcept', 'pacifist']),
@@ -139,7 +131,7 @@ const TendencyConfigSchema = z.object({
 })
 
 /** character 存档共享默认值（供内联 schema .default() 和外层 CHARACTER_SAVE_CONFIG_DEFAULTS 共用） */
-const CHARACTER_SAVE_ATTACK_DEFAULT = {type: 'melee' as const, weaponId: 'short_sword' as const, damage: 3, cooldown: 0, duration: 0.3}
+const CHARACTER_SAVE_ATTACK_DEFAULT = {weaponId: 'long_sword', damage: 3}
 const CHARACTER_SAVE_TENDENCY_DEFAULT = {tendencyId: 'hostileExceptSelf' as const}
 
 const CharacterConfigInner = z.object({
@@ -148,7 +140,7 @@ const CharacterConfigInner = z.object({
     scale: z.number().positive().default(CHARACTER_CONFIG_DEFAULTS.scale),
     peaceStrategy: z.enum(['patrol', 'build']).optional(),
     combatStrategy: z.enum(['tactical', 'aggressive', 'cowardly']).optional(),
-    attackSlot: AttackSlotSchema.default(CHARACTER_SAVE_ATTACK_DEFAULT),
+    attack: AttackConfigSchema.default(CHARACTER_SAVE_ATTACK_DEFAULT),
     tendency: TendencyConfigSchema.default(CHARACTER_SAVE_TENDENCY_DEFAULT),
     faction: z.number().default(0),
     maxHealth: z.number().positive().default(100),
@@ -161,7 +153,7 @@ const CHARACTER_SAVE_CONFIG_DEFAULTS = {
     speed: CHARACTER_CONFIG_DEFAULTS.speed,
     jumpHeight: CHARACTER_CONFIG_DEFAULTS.jumpHeight,
     scale: CHARACTER_CONFIG_DEFAULTS.scale,
-    attackSlot: CHARACTER_SAVE_ATTACK_DEFAULT,
+    attack: CHARACTER_SAVE_ATTACK_DEFAULT,
     tendency: CHARACTER_SAVE_TENDENCY_DEFAULT,
     faction: 0,
     maxHealth: 100,

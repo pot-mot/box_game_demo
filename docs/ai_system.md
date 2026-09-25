@@ -373,11 +373,12 @@ stateMachine: CharacterStateMachine // 角色动作 FSM
 
 **文件**：`src/character/combat/types.ts`
 
-- `skills: SkillSlot[]` — 武器技能槽位
+- `weapon: WeaponConfig` / `attacks: WeaponAttacks` — 当前武器（含数值覆写）与其攻击链（段定义由武器模组拥有；AI 侦测范围/射程等一律读 `weapon.*`）
+- `segmentCooldowns / activeSegment / bufferedSegment / attackTimer / phaseIndex / phaseTimer` — 攻击段运行时（起手可用性判定用 `canStartAttack(combat, {dx, dz, holdDuration, attackKey})`）
 - `attackTendency: AttackTendency` — `(selfFaction, targetFaction) => boolean`
 - `faction: Faction` — 数值型阵营
 - `health / maxHealth / isDead`
-- `attackActive / attackTimer / attackedTargets`
+- `attackActive / attackedTargets`
 
 ### 5.3 `CombatConfig`
 

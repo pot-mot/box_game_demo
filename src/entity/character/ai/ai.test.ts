@@ -1,8 +1,8 @@
 import {describe, it, expect, vi, afterEach} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
-import {createSkillSlot} from '../../../character/combat/skill_types.ts'
-import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
-import {RANGED_SKILL_PRESETS} from '../../../character/combat/ranged_skill.ts'
+import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
+import {createDashSkillRuntime} from '../../../character/combat/dash_skill.ts'
+import type {CombatComponent} from '../../../character/combat/types.ts'
 import {DEFAULT_COMBAT_CONFIGS, type CombatConfig} from '../../../character/ai_strategy/combat.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
@@ -33,28 +33,49 @@ const makeChar = (
     },
     combatStrategy: CombatSubStrategy = 'tactical',
 ): CharacterEntity => {
-    const skillPreset = skillType === 'melee'
-        ? MELEE_SKILL_PRESETS.long_sword_light_1
-        : RANGED_SKILL_PRESETS.longbow_shot
-    const slot = createSkillSlot(skillPreset)
-    slot.cooldownTimer = overrides?.cooldownTimer ?? 0
+    /* 武器运行时替代原技能槽夹具：近战取长剑、远程取长弓（与旧预设数值一致） */
+    const weaponRuntime = createWeaponRuntime(skillType === 'melee' ? 'long_sword' : 'longbow')
+    /* 旧 cooldownTimer 覆写语义 = 轻击起手段冷却剩余（0 = 就绪） */
+    const segmentCooldowns = new Map<string, number>()
+    const entryCooldown = overrides?.cooldownTimer ?? 0
+    if (entryCooldown > 0) {
+        segmentCooldowns.set(weaponRuntime.attacks.chains.light.entries[0].segmentId, entryCooldown)
+    }
+
+    const combat: CombatComponent = {
+        weapon: weaponRuntime.weapon,
+        attacks: weaponRuntime.attacks,
+        segmentCooldowns,
+        activeSegment: undefined,
+        bufferedSegment: undefined,
+        attackActive: overrides?.attackActive ?? false,
+        attackTimer: 0,
+        attackDirX: 0,
+        attackDirZ: 1,
+        attackedTargets: new Set(),
+        swingTilt: 0,
+        phaseIndex: 0,
+        phaseTimer: 0,
+        pendingFlinch: false,
+        flinchImmunityTimer: 0,
+        dashSkill: createDashSkillRuntime(),
+        faction,
+        attackTendency: (a: number, b: number) => a !== b,
+        tendencyConfig: {tendencyId: 'hostileExceptSelf'},
+        health: 15,
+        maxHealth: 15,
+        isDead: overrides?.isDead ?? false,
+        damageModifiers: [],
+        onDamageTaken: null,
+        onDamageDealt: null,
+        onDeath: null,
+    }
 
     return {
         id,
         body: {translation: () => ({x, y: 0, z})} as unknown as CharacterEntity['body'],
         mainCollider: undefined as unknown as RAPIER.Collider,
-        combat: {
-            faction,
-            isDead: overrides?.isDead ?? false,
-            attackActive: overrides?.attackActive ?? false,
-            attackTendency: (a: number, b: number) => a !== b,
-            tendencyConfig: {tendencyId: 'hostileExceptSelf' as const},
-            skills: [slot],
-            currentSkillIndex: 0,
-            attackedTargets: new Set(),
-            attackDirX: 0, attackDirZ: 0, swingTilt: 0,
-            phaseIndex: 0, phaseTimer: 0, chainEntryIndex: 0, bufferedSkillIndex: -1, pendingFlinch: false, flinchImmunityTimer: 0,
-        },
+        combat,
         config: {speed: 0, jumpHeight: 0, scale: 1},
         mesh: null!, appearanceGroup: null!,
         isOnGround: true, rowText: '',

@@ -1,5 +1,8 @@
-import type { MELEE_SKILL_PRESETS } from './melee_skill.ts'
-import type { RANGED_SKILL_PRESETS } from './ranged_skill.ts'
+/**
+ * 攻击阶段模型与缓动函数（近战 / 远程通用）。
+ * 具体武器的阶段序列与动画参数由武器模组声明（`character/weapon/melee_attacks.ts`、`ranged_attacks.ts`），
+ * 本模块只提供阶段语义、缓动曲线与时长分摊规则。
+ */
 
 /** 攻击阶段名常量集 */
 export const ATTACK_PHASES = ['windup', 'strike', 'recovery', 'spin', 'draw', 'aim', 'release'] as const
@@ -87,46 +90,6 @@ const FALLBACK_PHASE: AttackPhase = {
     animConfig: DEFAULT_ANIM,
 }
 
-/** 远程阶段预设 — 按武器分类（swingTilt=0，X 幅值直接生效） */
-export const RANGED_PHASE_PRESETS: Record<string, readonly AttackPhase[]> = {
-    longbow_shot: [
-        {name: 'draw', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, elbowBend: 0.15, twoHanded: true}},
-        {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, elbowBend: 0.15, twoHanded: true}},
-        {name: 'release', durationRatio: 0.4, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, armSwingForwardX: -1.35, elbowBend: 0.1, twoHanded: true}},
-    ],
-    crossbow_bolt: [
-        {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, elbowBend: 0.1, twoHanded: true}},
-        {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, armSwingForwardX: -1.4, elbowBend: 0.08, twoHanded: true}},
-    ],
-    shotgun_blast: [
-        {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, elbowBend: 0.5, twoHanded: true}},
-        {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.2, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, armSwingForwardX: -1.3, elbowBend: 0.45, bodyLean: -0.1, twoHanded: true}},
-    ],
-    staff_orb: [
-        {name: 'aim', durationRatio: 0.4, moveSpeedMultiplier: 0.3, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, armSwingBackZ: 0, elbowBend: 0.1, twoHanded: true}},
-        {name: 'release', durationRatio: 0.6, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, armSwingForwardX: -1.3, elbowBend: 0.08, twoHanded: true}},
-    ],
-    magic_wand_homing: [
-        {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.2, elbowBend: 0.1}},
-        {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.4, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.2, armSwingForwardX: -1.1, elbowBend: 0.08}},
-    ],
-    throwing_axe_hurl: [
-        {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingBackZ: -0.4, elbowBend: 0.8, bodyLean: -0.1}},
-        {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingForwardX: 1.6, armSwingBackZ: -0.4, elbowBend: 0.1, bodyLean: 0.15}},
-    ],
-    grenade_throw: [
-        {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingBackZ: -0.4, elbowBend: 0.8, bodyLean: -0.1}},
-        {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingForwardX: 1.6, armSwingBackZ: -0.4, elbowBend: 0.1, bodyLean: 0.15}},
-    ],
-    molotov_throw: [
-        {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingBackZ: -0.4, elbowBend: 0.8, bodyLean: -0.1}},
-        {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingForwardX: 1.6, armSwingBackZ: -0.4, elbowBend: 0.1, bodyLean: 0.15}},
-    ],
-    throwing_dart_fling: [
-        {name: 'release', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -0.9, armSwingForwardX: 0.6, elbowBend: 0.1}},
-    ],
-}
-
 /** 受击硬直持续时间（秒） */
 export const FLINCH_DURATION = 0.1
 
@@ -141,17 +104,9 @@ export const resolvePhases = (phases: readonly AttackPhase[] | undefined): reado
     phases !== undefined && phases.length > 0 ? phases : [FALLBACK_PHASE]
 
 /**
- * 单阶段时长：recovery 阶段取技能配置的恢复时间（config.recovery），
- * 其余动作阶段按 durationRatio 从动作时间（config.duration）中分摊（动作阶段比例和应为 1）。
- * 技能总时长 = duration + recovery。
+ * 单阶段时长：recovery 阶段取段配置的恢复时间（segment.recovery），
+ * 其余动作阶段按 durationRatio 从动作时间（segment.duration）中分摊（动作阶段比例和应为 1）。
+ * 段总时长 = duration + recovery。
  */
 export const phaseDurationOf = (phase: AttackPhase, duration: number, recovery: number): number =>
     phase.name === 'recovery' ? recovery : duration * phase.durationRatio
-
-// ── 强类型推导 ──
-
-type MeleeSkillId = keyof typeof MELEE_SKILL_PRESETS
-type RangedSkillId = keyof typeof RANGED_SKILL_PRESETS
-
-/** 编译期计算所有可能的攻击子状态名 */
-export type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${AttackPhaseName}`

@@ -100,6 +100,9 @@
    - 转换规则由各状态通过 `transitions[]` 声明，状态机核心 `machine.ts` 统一检查 guard 并派发 `onStateChange`
    - 状态持有 `CharacterEntity` 引用，可直接操作 `body` / `mesh`
    - 依赖方向：`entity/character/` → `character/state_machine/` → `character/types.ts`
+   - **攻击连段**由 `states/attacking/` 的段子状态机表达：`attacking` meta-state 负责调度，段定义（含自身声明的 `next` 转换）由武器模组拥有（`character/weapon/`），禁止在角色侧重建槽位/连段索引
+
+4. **攻击动作归属** — 武器的段（时长 / 恢复 / 阶段 / 动画 / 倾斜角 / 伤害倍率 / 冷却 / 连段拓扑）一律写在武器模组（`character/weapon/melee_attacks.ts`、`ranged_attacks.ts`）；角色与存档只持有「武器 + 数值覆写」（伤害 / 起手段冷却 / 远程弹道）。新增或调整攻击动作时改武器模组，不要在角色或状态机里加分支。
 
 ## 项目结构
 
@@ -110,7 +113,9 @@ src/
 ├── render/                      # Three.js 渲染
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
-│   └── state_machine/states/    # idle / walking / jumping / falling / attacking / dying / dashing / flinching
+│   ├── weapon/                  # 武器模组（固有属性 + 攻击链：attack_chain / melee_attacks / ranged_attacks / catalog / weapon_runtime）
+│   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害、冲刺）
+│   └── state_machine/states/    # idle / walking / jumping / falling / attacking（段子状态机）/ dying / dashing / flinching
 ├── entity/
 │   ├── character/               # 角色实体
 │   ├── box/                     # common / destructed / burning / magnet / elasticity
@@ -152,7 +157,7 @@ src/
 | 文档 | 内容 |
 |------|------|
 | [`docs/ai_system.md`](docs/ai_system.md) | 角色 AI 寻路索敌系统：双层 FSM 架构、状态转移图、全量配置项、类型定义、扩展指南、核心文件索引 |
-| [`docs/attack_system.md`](docs/attack_system.md) | 攻击系统：技能三计时模型、阶段调度 meta-state、连段守卫与输入缓冲、受击硬直、伤害判定几何、动画系统 |
+| [`docs/attack_system.md`](docs/attack_system.md) | 攻击系统：武器模组攻击链（段模型）与段子状态连段、起手解析与输入缓冲、受击硬直、伤害判定几何、动画系统 |
 | [`docs/edit_mode.md`](docs/edit_mode.md) | 编辑模式：与主循环的关系、执行面板（Execute / Stop / Step / Run / Reset）语义与快照基线生命周期、其余控制与文件索引 |
 | [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
@@ -169,7 +174,9 @@ src/
 - `Mesh` 是运行时值（`new Mesh(...)`，如 `entity/box/*/render/index.ts`），必须用 `import {Mesh}` 而非 `import type {Mesh}`
 - rapier3d-compat 的休眠 body 无视 velocity 写入，操作 velocity 前必须 `body.wakeUp()`（`setLinvel(vel, true)` 第二参数同样会唤醒，本项目一律传 `true`）
 - 角色 collider 是**竖直胶囊**（半径 = `CHARACTER_BASE_SIZE.width/2`，总高 = `height`），不是 cuboid。平底 cuboid 在 trimesh 地形上坡时会跨网格顶点线被内部棱幽灵水平法线卡死（原地 walking 不动）；rapier3d-compat 0.19/0.20 的 `FIX_INTERNAL_EDGES` 已损坏（开启后 trimesh 完全无碰撞），禁止使用；heightfield 在该版本 wasm 直接崩溃，禁止使用（地形用 `RAPIER.ColliderDesc.trimesh` 生成）
-- 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击阶段子状态（`attacking_{skillId}_{phaseName}`）通过 `states/attacking.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为
+- 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击**阶段**子状态（`attacking_{segmentId}_{phaseName}`）通过 `states/attacking/index.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为；攻击**段**子状态不在此列——它由武器模组的段定义（含 `next` 转换）驱动，新增/调整段只改 `character/weapon/*_attacks.ts`
+- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 3`）
 - 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；默认值只在 `localStorage` 无记录时生效，已存过旧绑定的浏览器需「重置默认」或导入配置
 - 鼠标动作按模式生效：`MOUSE_ACTIONS_BY_MODE` 决定操作设置面板中各模式可改的指针动作，"平移视角 / 生成物体" 默认同为右键但分属不同模式，改动其中一个需同步核对另一个的默认值
+- 预设骨架为武器预留两个零偏移关节 `rightWeaponMount`（`rightWristPivot` 下，武器主体挂点）与 `leftWeaponMount`（`leftWristPivot` 下，双手武器副握点/左手 IK 末端）：它们不参与骨骼段与关键帧，仅作挂载与求解目标；自定义骨架缺这两个关节时自动回退同名手腕关节（编辑器装载在 `modes/bone_edit/weapon_equip.ts` + 控制逻辑 `weapon_control.ts`；生产挂载在 `entity/character/appearance/weapon_mount.ts`）
 - 新增碰撞体必须显式 `setCollisionGroups`，并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注碰撞类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）——投掷物的「可穿过类别」判定依赖类别位；类别位从 membership 第 5 位起，不参与交互，但未声明碰撞组的碰撞体 membership 全 1，会被解析为 `ground` 并挡下子弹（fail-closed）

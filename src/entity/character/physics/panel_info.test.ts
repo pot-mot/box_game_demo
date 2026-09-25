@@ -4,6 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld} from '../../../physics/world.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
+import type {AttackConfig} from '../../../character/archetypes.ts'
 
 /** happy-dom 不支持 canvas 2d，这里注入一个最小 2d 上下文桩（仅覆盖 model.ts 用到的方法） */
 const canvasCtxStub = (): Record<string, unknown> => {
@@ -45,12 +46,9 @@ const meleeSaveConfig = (overrides?: Partial<CharacterSaveConfig>): CharacterSav
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attackSlot: {
-        type: 'melee',
+    attack: {
         weaponId: 'long_sword',
         damage: 3,
-        cooldown: 0.5,
-        duration: 0.3,
     },
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
@@ -59,12 +57,10 @@ const meleeSaveConfig = (overrides?: Partial<CharacterSaveConfig>): CharacterSav
     ...overrides,
 })
 
-const meleeAttackSlot = (damage: number): CharacterSaveConfig['attackSlot'] => ({
-    type: 'melee',
+/** 面板改装用的攻击配置（武器沿用长剑，只改伤害覆写） */
+const meleeAttack = (damage: number): AttackConfig => ({
     weaponId: 'long_sword',
     damage,
-    cooldown: 0.5,
-    duration: 0.3,
 })
 
 describe('角色 panelInfo 同步', () => {
@@ -115,7 +111,7 @@ describe('角色 panelInfo 同步', () => {
         system.updateCharacterConfig(
             id,
             {speed: 9},
-            meleeAttackSlot(5),
+            meleeAttack(5),
             2,
             20,
             {tendencyId: 'pacifist'},

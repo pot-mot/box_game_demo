@@ -1,18 +1,17 @@
 import {describe, it, expect} from 'vitest'
 import {Euler} from 'three'
-import {buildAttackClip, attackClipDurationOf, getAttackClip} from './attack_clips.ts'
+import {buildAttackClip, attackClipDurationOf, getAttackClip, type AttackClipParams} from './attack_clips.ts'
 import {sampleClip} from '../../../../skeleton/anim/sampling.ts'
-import {buildMeleeSkillSlots} from '../../../../character/combat/melee_skill.ts'
+import {createWeaponRuntime} from '../../../../character/weapon/weapon_runtime.ts'
+import {orderedSegments} from '../../../../character/weapon/attack_chain.ts'
 import {FALLBACK_ATTACK_DURATION} from '../constants.ts'
 import {strikeCurve} from '../../../../character/combat/attack_phases.ts'
 
-/** short_sword 轻 1 段（tilt=0） */
-const light1Slot = buildMeleeSkillSlots('short_sword')[0]
-if (light1Slot.config.type !== 'melee') throw new Error('测试需要近战技能配置')
-const light1 = light1Slot.config
+/** 短剑链主干首段 = 轻击一段（tilt=0）：武器模组的段定义即生产攻击 clip 的生成参数来源 */
+const light1 = orderedSegments(createWeaponRuntime('short_sword').attacks)[0]
 
-const params = {
-    skillId: light1.id,
+const params: AttackClipParams = {
+    segmentId: light1.id,
     duration: light1.duration,
     recovery: light1.recovery,
     phases: light1.phases,

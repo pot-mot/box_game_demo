@@ -19,6 +19,11 @@ import {
  * 比例常量来自 render 层共享定义，与生产模型一致。
  * 锚点约定：root = 脚底（落在地面 y=0，与生产模型 group 原点一致），
  * 髋部（spine 关节）与双腿髋关节均抬升到腿高 HIP_Y，骨骼段不再出现退化零长段。
+ *
+ * **武器挂点**：右腕/左腕下各挂一个零偏移关节 `rightWeaponMount` / `leftWeaponMount`——
+ * 它们是「武器占用的两个骨骼位」：武器主体挂在右手挂点（跟随右手动画），
+ * 左手挂点是双手武器的副握点（由左手链 IK 贴合武器，见 modes/bone_edit 与生产双手 IK）。
+ * 两者不参与动画关键帧记录（无 clip 轨道），仅作为挂载/求解目标。
  */
 export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
     const bodyW = MODEL_BASE_WIDTH
@@ -42,10 +47,12 @@ export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
             {id: 'rightArmElbow', name: '右肘', parentId: 'rightArmShoulder', position: [0, -upperArmH, 0], rotation: identity},
             {id: 'rightHandPivot', name: '右手', parentId: 'rightArmElbow', position: [0, -forearmH, 0], rotation: identity},
             {id: 'rightWristPivot', name: '右腕', parentId: 'rightHandPivot', position: [0, 0, 0], rotation: identity},
+            {id: 'rightWeaponMount', name: '右手武器挂点', parentId: 'rightWristPivot', position: [0, 0, 0], rotation: identity},
             {id: 'leftArmShoulder', name: '左肩', parentId: 'spine', position: [-shoulderX, bodyH, 0], rotation: identity},
             {id: 'leftArmElbow', name: '左肘', parentId: 'leftArmShoulder', position: [0, -upperArmH, 0], rotation: identity},
             {id: 'leftHandPivot', name: '左手', parentId: 'leftArmElbow', position: [0, -forearmH, 0], rotation: identity},
             {id: 'leftWristPivot', name: '左腕', parentId: 'leftHandPivot', position: [0, 0, 0], rotation: identity},
+            {id: 'leftWeaponMount', name: '左手武器挂点', parentId: 'leftWristPivot', position: [0, 0, 0], rotation: identity},
             {id: 'rightLegHip', name: '右髋', parentId: 'root', position: [hipX, HIP_Y, 0], rotation: identity},
             {id: 'rightLegKnee', name: '右膝', parentId: 'rightLegHip', position: [0, -hipH, 0], rotation: identity},
             {id: 'rightFoot', name: '右脚', parentId: 'rightLegKnee', position: [0, -shinH, 0], rotation: identity},
