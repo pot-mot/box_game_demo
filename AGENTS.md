@@ -153,6 +153,7 @@ src/
 |------|------|
 | [`docs/ai_system.md`](docs/ai_system.md) | 角色 AI 寻路索敌系统：双层 FSM 架构、状态转移图、全量配置项、类型定义、扩展指南、核心文件索引 |
 | [`docs/attack_system.md`](docs/attack_system.md) | 攻击系统：技能三计时模型、阶段调度 meta-state、连段守卫与输入缓冲、受击硬直、伤害判定几何、动画系统 |
+| [`docs/edit_mode.md`](docs/edit_mode.md) | 编辑模式：与主循环的关系、执行面板（Execute / Stop / Step / Run / Reset）语义与快照基线生命周期、其余控制与文件索引 |
 | [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
 

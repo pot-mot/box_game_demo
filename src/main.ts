@@ -117,6 +117,16 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
 
     characterSystem.setupAI(systems)
 
+    /**
+     * 清空世界：所有存档实体 + 执行期产生的临时对象。
+     * 子弹不属于存档实体（由角色战斗系统内部持有），必须显式清理，
+     * 否则 Reset / 载入存档后会残留在还原后的世界里继续飞行。
+     */
+    const clearWorld = (): void => {
+        characterSystem.clearBullets()
+        clearAllEntities(systemsByType, allTerrainSources)
+    }
+
     /* 箱子生成回调（供 builder AI 使用） */
     const boxSpawner = (entry: {entityType: string; mass: number; friction: number; maxHealth?: number; attractionRadius?: number; attractionStrength?: number; stiffness?: number; dampingRatio?: number; maxDeformFraction?: number}, x: number, y: number, z: number, size: {width: number; height: number; depth: number}): void => {
         const mass = entry.mass * size.width * size.height * size.depth
@@ -162,7 +172,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     if (mode === 'edit' || mode === 'play') {
         const dataToLoad = saveData ?? loadCachedSaveData()
         if (dataToLoad) {
-            clearAllEntities(systemsByType, allTerrainSources)
+            clearWorld()
             loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources)
         }
     }
@@ -200,6 +210,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     let executing = false
     let snapshot: SaveData | undefined
     let aiActive = false
+    /** 自最近一次基线记录以来世界是否已被步进：步进后当前状态就不再是「编辑基线」 */
+    let steppedSinceBaseline = false
 
     const saveSnapshot = (): void => {
         snapshot = collectWorldState(
@@ -209,11 +221,13 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             camera.position,
             camera.rotation,
         )
+        steppedSinceBaseline = false
     }
 
     const restoreSnapshot = (): void => {
         if (!snapshot) return
-        clearAllEntities(systemsByType, allTerrainSources)
+        /* Reset 还原整个世界：实体由快照重建，执行期子弹一并清除 */
+        clearWorld()
         loadWorldFromData(snapshot, systemsByType, allTerrainSources)
         saveSnapshot()
     }
@@ -233,11 +247,13 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     if (editMode) {
         editMode.execute.onToggle((entering: boolean) => {
             if (entering) {
-                saveSnapshot()
+                /* 世界尚未步进过（仍是编辑态）时重记基线，保证编辑内容不被 Reset 丢弃；
+                 * 世界已步进过则保留原基线，使「Execute → Stop → 再次 Execute」不会改变 Reset 的还原点 */
+                if (!steppedSinceBaseline) saveSnapshot()
                 executing = true
             } else {
+                /* Stop 只停止世界步进，保留当前世界状态；还原唯一入口是 Reset */
                 executing = false
-                restoreSnapshot()
             }
         })
 
@@ -245,6 +261,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             executing = false
             characterSystem.setAIEnabled(false)
             aiActive = false
+            /* Reset 是唯一的世界还原入口：回到最近一次「步进之前」的状态 */
             restoreSnapshot()
         })
     }
@@ -290,7 +307,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     if (mode !== 'showcase' && mode !== 'bone_edit') input.onActionDown('load_world', () => {
         promptLoadFile((data) => {
             cacheSaveData(data)
-            clearAllEntities(systemsByType, allTerrainSources)
+            /* 载入新世界：连同执行期子弹一起清空，避免旧子弹飞入新世界 */
+            clearWorld()
             const result = loadWorldFromData(data, systemsByType, allTerrainSources)
             if (mode === 'edit') {
                 if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
@@ -298,6 +316,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                     camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
                     editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
                 }
+                /* 载入的世界取代原有编辑内容：刷新还原基线，使 Reset 回到载入后的世界 */
+                saveSnapshot()
             }
             if (mode === 'play') {
                 if (result.playCameraPos) camera.position.set(result.playCameraPos.x, result.playCameraPos.y, result.playCameraPos.z)
@@ -327,6 +347,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             const stepActive = pendingSteps > 0 && !executing
 
             if (simActive) {
+                /* 世界一旦步进就不再是编辑基线（编辑模式的 Reset 需回到步进前的状态） */
+                if (mode === 'edit') steppedSinceBaseline = true
                 /* play 模式或持续执行：正常变速步进 */
                 const totalSteps = Math.min(Math.max(1, Math.ceil(delta / FIXED_TIME_STEP)), MAX_SUB_STEPS)
                 for (let s = 0; s < totalSteps; s++) {
@@ -338,6 +360,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 for (const s of systems) s.preSync?.(delta, time)
                 for (const s of systems) s.syncPositions()
             } else if (stepActive) {
+                /* 单步 / 排队步进同样会推进世界：基线随之固定 */
+                steppedSinceBaseline = true
                 /* 逐帧步进：每帧精确推进 1 物理步 */
                 shared.world.step(shared.eventQueue)
                 shared.eventBus.drain()

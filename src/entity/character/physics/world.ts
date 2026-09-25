@@ -153,6 +153,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setNavEnabled: (id: number, enabled: boolean) => void
     /** 设置近战命中冲击监听器（参数为命中点世界坐标，null 清除） */
     setOnMeleeImpact: (listener: ((x: number, y: number, z: number) => void) | null) => void
+    /** 清除执行期产生的全部子弹（子弹是战斗期临时对象、不进存档，世界还原/载入时必须显式清理） */
+    clearBullets: () => void
 }
 
 /** 将旧 AttackConfig 转换为 SkillSlot 数组 */
@@ -246,6 +248,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const rangedExecutor = createRangedExecutor(shared, scene)
     registerSkillExecutor('melee', meleeExecutor)
     registerSkillExecutor('ranged', rangedExecutor)
+
+    /** 清除全部在飞子弹（同时移除物理刚体与场景 mesh），供世界还原 / 载入存档时调用 */
+    const clearBullets = (): void => { rangedExecutor.clear() }
     /* 攻击动画事件轨道 → 近战命中窗口（hitbox_on/off，与视觉动画同步） */
     const onAttackEvent = (record: {eventName: string}): void => {
         if (record.eventName === 'hitbox_on') meleeExecutor.setHitWindow(true)
@@ -1283,6 +1288,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setupAI,
         setNavEnabled,
         setOnMeleeImpact,
+        clearBullets,
     }
 
     return {

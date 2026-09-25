@@ -1,6 +1,12 @@
 /**
  * 编辑模式——执行面板 UI
- * 提供：持续执行（快照/还原）、单步步进、N 步排队执行、重置
+ * 提供：持续执行（Execute / Stop）、单步步进（Step）、N 步排队执行（Run）、重置（Reset）
+ *
+ * 语义约定（面板只负责交互状态，世界快照由 main.ts 持有）：
+ * - Execute：开始步进；世界尚未步进过时把当前编辑状态记为还原基线（onToggle(true)）；
+ * - Stop：仅停止世界步进，世界保持当前状态，**不触发还原**（onToggle(false)）；
+ * - Reset：唯一的世界还原入口（onReset），停止步进并回到最近一次基线。
+ * 面板自身置停时不再派发 onToggle(false)，由 onReset 订阅者统一处理执行态复位。
  */
 
 type ToggleCallback = (entering: boolean) => void
@@ -57,7 +63,7 @@ export const setupExecutePanel = (): ExecutePanel => {
     /* ── 执行 / 停止按钮 ── */
     const executeBtn = document.createElement('button')
     executeBtn.textContent = 'Execute'
-    executeBtn.title = '持续执行（带快照/还原）'
+    executeBtn.title = '开始步进世界（世界未步进时以当前编辑内容为还原点）'
     executeBtn.style.cssText = STYLES.btn(false)
     executeBtn.addEventListener('mouseenter', () => {
         executeBtn.style.background = STYLES.btnHover(isExecuting)
@@ -128,7 +134,7 @@ export const setupExecutePanel = (): ExecutePanel => {
     /* ── 重置按钮 ── */
     const resetBtn = document.createElement('button')
     resetBtn.textContent = 'Reset'
-    resetBtn.title = '停止执行并清空所有实体'
+    resetBtn.title = '停止步进并还原到初始状态（最近一次 Execute 开始前）'
     resetBtn.style.cssText = STYLES.btn(false)
     const triggerReset = (): void => {
         if (isExecuting) {
@@ -160,16 +166,19 @@ export const setupExecutePanel = (): ExecutePanel => {
             runStepsBtn.style.background = ''
             executeBtn.style.cssText = STYLES.btn(true)
             executeBtn.textContent = 'Stop'
+            executeBtn.title = '停止世界步进（保留当前状态，再次 Execute 从当前状态继续）'
         } else if (pendingSteps > 0) {
             executeBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
             executeBtn.style.background = ''
             executeBtn.textContent = 'Execute'
+            executeBtn.title = '步进排队中，暂不可切换执行'
             stepBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
             stepBtn.style.background = ''
             runStepsBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
             runStepsBtn.style.background = ''
         } else {
             executeBtn.textContent = 'Execute'
+            executeBtn.title = '开始步进世界（世界未步进时以当前编辑内容为还原点）'
             executeBtn.style.cssText = STYLES.btn(false)
             stepBtn.style.cssText = STYLES.btn(false)
             runStepsBtn.style.cssText = STYLES.btn(false)
