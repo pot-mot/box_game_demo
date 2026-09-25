@@ -10,6 +10,8 @@ export const DEFAULT_BULLET_PASS_THROUGH_CATEGORIES: readonly CollisionCategory[
 /** 远程武器配置 — 玩家装备该武器的全部固有属性 */
 export interface RangedWeaponConfig {
     readonly id: string
+    /** 武器中文名（面向玩家显示，如面板武器下拉、展示场景标签） */
+    readonly name: string
     readonly type: 'ranged'
     readonly damage: number
     /** 最大开火距离 */
@@ -43,21 +45,21 @@ export interface RangedWeaponConfig {
 
 export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     longbow: {
-        id: 'longbow', type: 'ranged',
+        id: 'longbow', name: '长弓', type: 'ranged',
         damage: 2, range: 10,
         knockbackForce: 3, projectileSpeed: 20, projectileLifetime: 3,
         detectionRange: 20, idealRange: 7, retreatRange: 4,
         mesh: { id: 'bow', size: 0.7, color: 0x886633, stringColor: 0xddddcc },
     },
     crossbow: {
-        id: 'crossbow', type: 'ranged',
+        id: 'crossbow', name: '弩', type: 'ranged',
         damage: 5, range: 8,
         knockbackForce: 4, projectileSpeed: 45, projectileLifetime: 1.5,
         detectionRange: 15, idealRange: 5, retreatRange: 3,
         mesh: { id: 'crossbow', size: 0.5, color: 0x553322, metalColor: 0x888888 },
     },
     shotgun: {
-        id: 'shotgun', type: 'ranged',
+        id: 'shotgun', name: '霰弹枪', type: 'ranged',
         damage: 1, range: 6,
         knockbackForce: 6, projectileSpeed: 15, projectileLifetime: 1.5,
         detectionRange: 10, idealRange: 3, retreatRange: 2,
@@ -65,7 +67,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
         mesh: { id: 'shotgun', size: 0.6, color: 0x443322, metalColor: 0x666666 },
     },
     staff: {
-        id: 'staff', type: 'ranged',
+        id: 'staff', name: '法杖', type: 'ranged',
         damage: 3, range: 8,
         knockbackForce: 4, projectileSpeed: 10, projectileLifetime: 5,
         detectionRange: 18, idealRange: 5, retreatRange: 3,
@@ -73,7 +75,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
         mesh: { id: 'staff', poleLen: 0.8, orbRadius: 0.12, color: 0x664422, orbColor: 0x44aaff },
     },
     magic_wand: {
-        id: 'magic_wand', type: 'ranged',
+        id: 'magic_wand', name: '魔杖', type: 'ranged',
         damage: 1.5, range: 10,
         knockbackForce: 2, projectileSpeed: 8, projectileLifetime: 4,
         detectionRange: 16, idealRange: 6, retreatRange: 4,
@@ -81,7 +83,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
         mesh: { id: 'magic_wand', len: 0.5, color: 0x886633, gemColor: 0xff44ff },
     },
     throwing_axe: {
-        id: 'throwing_axe', type: 'ranged',
+        id: 'throwing_axe', name: '飞斧', type: 'ranged',
         damage: 6, range: 10,
         knockbackForce: 5, projectileSpeed: 15, projectileLifetime: 3,
         detectionRange: 12, idealRange: 6, retreatRange: 3,
@@ -89,7 +91,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
         mesh: { id: 'throwing_axe', bladeSize: 0.25, color: 0x888888, gripColor: 0x553322 },
     },
     grenade: {
-        id: 'grenade', type: 'ranged',
+        id: 'grenade', name: '手雷', type: 'ranged',
         damage: 4, range: 10,
         knockbackForce: 8, projectileSpeed: 10, projectileLifetime: 4,
         detectionRange: 14, idealRange: 6, retreatRange: 3,
@@ -97,7 +99,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
         mesh: { id: 'grenade', radius: 0.1, color: 0x445522, bandColor: 0x333311 },
     },
     molotov: {
-        id: 'molotov', type: 'ranged',
+        id: 'molotov', name: '燃烧瓶', type: 'ranged',
         damage: 2, range: 10,
         knockbackForce: 5, projectileSpeed: 10, projectileLifetime: 4,
         detectionRange: 12, idealRange: 6, retreatRange: 3,
@@ -105,7 +107,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
         mesh: { id: 'molotov', size: 0.25, color: 0x446622, fireColor: 0xff8800 },
     },
     throwing_dart: {
-        id: 'throwing_dart', type: 'ranged',
+        id: 'throwing_dart', name: '飞镖', type: 'ranged',
         damage: 1.5, range: 12,
         knockbackForce: 1, projectileSpeed: 30, projectileLifetime: 2,
         detectionRange: 16, idealRange: 8, retreatRange: 4,

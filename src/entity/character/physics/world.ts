@@ -174,6 +174,7 @@ const attackToSkillSlots = (attack: AttackConfig): SkillSlot[] => {
         recovery: 0,
         weapon: {
             id: weaponPreset.id,
+            name: weaponPreset.name,
             type: 'ranged',
             damage: attack.damage,
             range: attack.range,
@@ -279,7 +280,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (!pi) continue
             const playerPrefix = ch.isPlayer ? '▶ Player: ' : ''
             const skill = ch.combat.skills[ch.combat.currentSkillIndex]
-            const weaponName = skill?.config.weapon.id ?? '?'
+            /* 列表侧栏（`ui/element_list_panel.ts`）展示武器中文名，与角色面板武器下拉同源（武器预设 `name` 字段） */
+            const weaponName = skill?.config.weapon.name ?? '?'
             const weaponDmg = skill?.config.weapon.damage ?? 0
             pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weaponDmg})  spd:${ch.config.speed}  [${stateLabelOf(ch)}]`
             pi.badgeLabel = ch.isPlayer ? 'P' : `F${ch.combat.faction}`

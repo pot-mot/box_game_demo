@@ -21,7 +21,7 @@ export const TEST_WEAPON_ID = 'test_weapon'
 export const TEST_WEAPON_CHARGE_HOLD = 0.5
 
 export const TEST_WEAPON: MeleeWeaponConfig = {
-    id: TEST_WEAPON_ID, type: 'melee',
+    id: TEST_WEAPON_ID, name: '测试武器', type: 'melee',
     damage: 3,
     knockbackForce: 4, knockbackY: 2,
     detectionRange: 8,

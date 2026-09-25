@@ -11,9 +11,9 @@ import {MELEE_SKILL_PRESETS} from '../../../character/combat/melee_skill.ts'
 import {RANGED_SKILL_PRESETS} from '../../../character/combat/ranged_skill.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
 
-const MELEE_WEAPON_OPTIONS = Object.entries(MELEE_WEAPON_PRESETS).map(([key, w]) => ({value: key, label: `${w.id} (dmg:${w.damage})`}))
+const MELEE_WEAPON_OPTIONS = Object.entries(MELEE_WEAPON_PRESETS).map(([key, w]) => ({value: key, label: `${w.name} (dmg:${w.damage})`}))
 const RANGED_WEAPON_OPTIONS = Object.entries(RANGED_WEAPON_PRESETS).map(([key, w]) => ({
-    value: key, label: `${w.id} (dmg:${w.damage} rng:${w.range})${
+    value: key, label: `${w.name} (dmg:${w.damage} rng:${w.range})${
         w.spreadCount ? ' [Shotgun]' : w.explosionRadius ? ' [Explosion]' : w.homingStrength ? ' [Homing]' : w.throwAngle ? ' [Throw]' : ''
     }`,
 }))
@@ -46,9 +46,9 @@ const autoFillFromWeapon = (weaponId: string, type: 'melee' | 'ranged', fields: 
         if (rw.explosionRadius) tags.push(`Explosion R:${rw.explosionRadius}`)
         if (rw.homingStrength) tags.push(`Homing S:${rw.homingStrength}`)
         if (rw.throwAngle) tags.push(`Arc:${(rw.throwAngle * 180 / Math.PI).toFixed(0)}°`)
-        fields.weaponTag.textContent = tags.join('  ')
+        fields.weaponTag.textContent = [w.name, ...tags].join('  ')
     } else {
-        fields.weaponTag.textContent = ''
+        fields.weaponTag.textContent = w.name
     }
 }
 

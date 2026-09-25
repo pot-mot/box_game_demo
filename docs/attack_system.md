@@ -477,7 +477,7 @@ export type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${Attack
 
 ### 8.1 为新武器添加攻击技能
 
-1. 在 `src/character/weapon/melee_weapon.ts`（或 `ranged_weapon.ts`）的 `PRESETS` 中添加武器预设
+1. 在 `src/character/weapon/melee_weapon.ts`（或 `ranged_weapon.ts`）的 `PRESETS` 中添加武器预设，**必须填写 `name` 字段（武器中文名）**——它同时驱动角色属性面板的武器下拉与展示场景的头顶标签
 2. 在 `src/character/combat/melee_skill.ts`（或 `ranged_skill.ts`）的 `PRESETS` 中添加技能预设，**必须定义 phases 数组**（阶段名取自 `ATTACK_PHASES`；近战用 `windup`/`strike`/`recovery`/`spin`，远程用 `draw`/`aim`/`release`）
 3. （可选）需要阶段专用逻辑时：创建 `StateHandler` 并在装配处调用 `registerPhaseHandler('attacking_{skillId}_{phaseName}', handler)`（由 `states/attacking.ts` 导出；当前生产武器全部走默认行为，未注册任何阶段 handler）
 4. 动画无需专用文件：阶段姿态由 `phases[].animConfig` 驱动通用 `attackingAnim`（调整 `armSwingBack/Forward`、`elbowBend`、`bodyLean`、`twoHanded`、`easing`、`attackType`、`strikePeakRatio`、`overshootRatio` 即可）；挥砍类段固有倾斜角用 `MeleeSkillConfig.swingTilt`
@@ -563,6 +563,7 @@ export type AttackSubState = `attacking_${MeleeSkillId | RangedSkillId}_${Attack
 | 覆盖点 | 验证方式 |
 |--------|----------|
 | 预设完整性 | 每武器 4 段共 24 个近战预设；远程 9 技能；id 与 key 匹配；type 正确 |
+| 武器中文名 | `name` 非空、纯中文、与 `id` 不同、同类内互不重复（`melee_weapon.test.ts` / `ranged_weapon.test.ts`） |
 | 三计时属性 | 轻段动作 0.2s + 恢复 0.2s、重段 0.3s + 0.2s；普通攻击冷却全为 0；远程 duration 排序约束（如 dart 最短、grenade 最长） |
 | 连段装配 | `buildMeleeSkillSlots` 产出 4 槽 [轻1, 重1, 轻2, 重2]；槽 0/1 为起手槽；循环链闭合（轻1↔轻2、重1↔重2）；链指向的 skillId 均存在于本武器槽内；重段伤害 = 轻段 × 1.6；全部近战武器可装配出闭合双链 |
 

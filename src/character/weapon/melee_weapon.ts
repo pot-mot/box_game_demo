@@ -15,6 +15,8 @@ export interface MeleeDetectBox {
 /** 近战武器配置 — 玩家装备该武器的全部固有属性 */
 export interface MeleeWeaponConfig {
     readonly id: string
+    /** 武器中文名（面向玩家显示，如面板武器下拉、展示场景标签） */
+    readonly name: string
     readonly type: 'melee'
     readonly damage: number
     readonly knockbackForce: number
@@ -29,7 +31,7 @@ export interface MeleeWeaponConfig {
 
 export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     short_sword: {
-        id: 'short_sword', type: 'melee',
+        id: 'short_sword', name: '短剑', type: 'melee',
         damage: 2,
         knockbackForce: 2, knockbackY: 1,
         detectionRange: 6,
@@ -37,7 +39,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
         mesh: { id: 'sword', bladeLen: 0.3, color: 0xcc5555, gripColor: 0x664422 },
     },
     long_sword: {
-        id: 'long_sword', type: 'melee',
+        id: 'long_sword', name: '长剑', type: 'melee',
         damage: 3,
         knockbackForce: 5, knockbackY: 2,
         detectionRange: 8,
@@ -45,7 +47,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
         mesh: { id: 'sword', bladeLen: 0.5, color: 0xcc6666, gripColor: 0x553322 },
     },
     heavy_sword: {
-        id: 'heavy_sword', type: 'melee',
+        id: 'heavy_sword', name: '巨剑', type: 'melee',
         damage: 8,
         knockbackForce: 8, knockbackY: 3,
         detectionRange: 10,
@@ -53,7 +55,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
         mesh: { id: 'heavy_sword', bladeLen: 0.65, color: 0x555566, gripColor: 0x332211 },
     },
     spear: {
-        id: 'spear', type: 'melee',
+        id: 'spear', name: '长枪', type: 'melee',
         damage: 5,
         knockbackForce: 4, knockbackY: 1,
         detectionRange: 10,
@@ -61,7 +63,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
         mesh: { id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa },
     },
     dual_axe: {
-        id: 'dual_axe', type: 'melee',
+        id: 'dual_axe', name: '双斧', type: 'melee',
         damage: 6,
         knockbackForce: 7, knockbackY: 2,
         detectionRange: 7,
@@ -69,7 +71,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
         mesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322 },
     },
     war_hammer: {
-        id: 'war_hammer', type: 'melee',
+        id: 'war_hammer', name: '战锤', type: 'melee',
         damage: 10,
         knockbackForce: 10, knockbackY: 4,
         detectionRange: 8,

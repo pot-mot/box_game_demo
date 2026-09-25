@@ -28,7 +28,6 @@ import {
     SKILL_DISPLAY_NAMES,
     SPEED_OPTIONS,
     STEP_DT,
-    WEAPON_DISPLAY_NAMES,
 } from './constants.ts'
 
 /** 展示模式控制器：遵循 modes 分包约定，updater 由主页单 RAF 循环统一调度 */
@@ -85,7 +84,7 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
             if (entry === undefined) continue
             const slots = resolveSkillSlots(entry.skillId, kind)
             const skillName = displayNameOf(SKILL_DISPLAY_NAMES, entry.skillId)
-            const weaponName = displayNameOf(WEAPON_DISPLAY_NAMES, slots[0].config.weapon.id)
+            const weaponName = slots[0].config.weapon.name
             const actor = createShowcaseActor({
                 id: actors.length,
                 scene: sceneCtx.scene,

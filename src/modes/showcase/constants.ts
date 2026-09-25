@@ -29,7 +29,7 @@ export const SHOWCASE_ROSTER: readonly ShowcaseRosterEntry[] = [
     {skillId: 'throwing_dart_fling', kind: 'ranged'},
 ]
 
-/** 技能中文名（近战键 = 武器 id，远程键 = 技能 id） */
+/** 技能中文名（近战键 = 武器 id，远程键 = 技能 id）；武器中文名取自武器预设的 `name` 字段 */
 export const SKILL_DISPLAY_NAMES: Record<string, string> = {
     short_sword: '短剑轻/重双链',
     long_sword: '长剑轻/重双链',

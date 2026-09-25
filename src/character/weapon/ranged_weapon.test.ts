@@ -83,6 +83,21 @@ describe('RANGED_WEAPON_PRESETS', () => {
         }
     })
 
+    it.each(presetIds)('%s 的中文名非空且为中文', (key) => {
+        const name = RANGED_WEAPON_PRESETS[key].name
+        expect(name.length).toBeGreaterThan(0)
+        expect(name).toMatch(/^[\u4e00-\u9fa5]+$/)
+    })
+
+    it.each(presetIds)('%s 的中文名与 id 不同（面向玩家可读）', (key) => {
+        expect(RANGED_WEAPON_PRESETS[key].name).not.toBe(key)
+    })
+
+    it('中文名互不重复', () => {
+        const names = presets.map(([, w]) => w.name)
+        expect(new Set(names).size).toBe(names.length)
+    })
+
     it('每个键名唯一', () => {
         const ids = presets.map(([, w]) => w.id)
         expect(new Set(ids).size).toBe(ids.length)

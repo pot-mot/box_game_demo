@@ -164,7 +164,7 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 ```
 
 - **几何**：`entity/character/combat/melee_executor.ts` 导出 `attackDetectOBB(pos, detectBox, scale, yaw)`：
-    - `detectBox` 为 `MeleeWeaponConfig.detectBox`（`character/weapon/melee_weapon.ts` `MeleeDetectBox`）：`size{x,y,z}` 盒尺寸 + `offset{x,y,z}` 相对身体中心偏移（身体局部坐标，+Z = 朝向）
+    - `detectBox` 为 `MeleeWeaponConfig.detectBox`（`character/weapon/melee_weapon.ts` `MeleeDetectBox`）：`size{x,y,z}` 盒尺寸 + `offset{x,y,z}` 相对身体中心偏移（身体局部坐标，+Z = 朝向）；同模块的 `name` 为武器中文名（面板 / 展示标签展示用，不参与任何判定）
     - 半长 = `size / 2 × scale`；盒中心 = 身体位置 + `offset × scale` 绕 yaw 旋转（局部 +Z → (sin, 0, cos)），主体覆盖角色前方与两侧，身后覆盖由 `offset.z - size.z / 2` 决定（预设保留少量贴背余量）
     - 预设值按武器攻击距离区分（如短剑前缘 ≈ 0.95、长枪前缘 ≈ 1.9，单位 m，scale=1）
 - **判定**：`testAttackDetect()` 用检测箱 OBB 与目标受击箱 OBB（与碰撞箱同尺寸的竖直胶囊包围盒，随目标朝向旋转）做 15 轴 SAT 相交（`combat/obb.ts`）。
