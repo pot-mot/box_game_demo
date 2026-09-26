@@ -4,7 +4,7 @@ import {equipSkeletonWeapon} from './weapon_equip.ts'
 import {weaponSpecOf} from './weapon_control.ts'
 import {createJointVisuals} from '../../entity/skeleton/render/joint_groups.ts'
 import {skeletonFromDefinition} from '../../skeleton/anim/serialization.ts'
-import {buildCharacterSkeletonDefinition} from '../../entity/skeleton/preset.ts'
+import {buildCharacterSkeletonDefinition} from '../../entity/character/skeleton/preset.ts'
 
 /** 编辑器武器装载（真实场景图 + 预设骨架）：保证武器「挂得上、看得见、跟得动」 */
 describe('编辑器武器装载（equipSkeletonWeapon）', () => {

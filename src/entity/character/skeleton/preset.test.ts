@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {buildCharacterSkeletonDefinition, PRESET_PART_SIZES} from './preset.ts'
-import {skeletonFromDefinition} from '../../skeleton/anim/serialization.ts'
-import {MODEL_BASE_HEIGHT, HIP_Y} from '../../render/constants.ts'
+import {skeletonFromDefinition} from '../../../skeleton/anim/serialization.ts'
+import {MODEL_BASE_HEIGHT, HIP_Y} from '../../../render/constants.ts'
 
 /** 人形预设骨架：锚点位置与头部骨骼段约定 */
 describe('人形预设骨架定义', () => {
@@ -50,5 +50,18 @@ describe('人形预设骨架定义', () => {
         const boneJointIds = [...skeleton.bones.values()].flatMap(bone => [bone.head.id, bone.tail.id])
         expect(boneJointIds).not.toContain('rightWeaponMount')
         expect(boneJointIds).not.toContain('leftWeaponMount')
+    })
+
+    it('手部骨骼段：右手/左手段连接 HandPivot→WristPivot，与武器挂点分属不同关节', () => {
+        const skeleton = skeletonFromDefinition(buildCharacterSkeletonDefinition())
+        for (const [boneId, handId, wristId, mountId] of [
+            ['rightHand', 'rightHandPivot', 'rightWristPivot', 'rightWeaponMount'],
+            ['leftHand', 'leftHandPivot', 'leftWristPivot', 'leftWeaponMount'],
+        ] as const) {
+            const bone = skeleton.findBone(boneId)
+            expect(bone?.head.id).toBe(handId)
+            expect(bone?.tail.id).toBe(wristId)
+            expect(skeleton.findJoint(mountId)?.parent?.id).toBe(wristId)
+        }
     })
 })

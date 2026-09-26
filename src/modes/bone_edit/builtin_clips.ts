@@ -50,7 +50,7 @@ export const BUILTIN_CLIP_GROUP_ORDER: readonly string[] = [GROUP_BASE, GROUP_ME
 
 /**
  * 生产角色 clip 与编辑器预设骨架使用**同一套关节 id**（根关节统一为 `root`，
- * 静止局部位置由同一套 render 比例常量推导，见 base_clips.ts 与 entity/skeleton/preset.ts），
+ * 静止局部位置由同一套 render 比例常量推导，见 base_clips.ts 与 entity/character/skeleton/preset.ts），
  * 因此无需任何目标 id 重定向。
  */
 

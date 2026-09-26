@@ -31,10 +31,12 @@ const quatOf = (state: PoseState, jointId: (typeof CHARACTER_JOINT_IDS)[number])
     const map: Record<(typeof CHARACTER_JOINT_IDS)[number], {rx: number; ry: number; rz: number}> = {
         rightArmShoulder: state.rightArmShoulder,
         rightArmElbow: state.rightArmElbow,
+        rightHandPivot: state.rightHandPivot,
         rightWristPivot: state.rightWristPivot,
         rightWeaponMount: state.rightWeaponMount,
         leftArmShoulder: state.leftArmShoulder,
         leftArmElbow: state.leftArmElbow,
+        leftHandPivot: state.leftHandPivot,
         leftWristPivot: state.leftWristPivot,
         leftWeaponMount: state.leftWeaponMount,
         rightLegHip: state.rightLegHip,
@@ -128,11 +130,11 @@ describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
         stubCanvas2d()
     })
 
-    it('绑定全部可动画关节 + rightHandPivot + leftHandPivot（Group 层级自动建连）', () => {
+    it('绑定全部可动画关节（含 rightHandPivot + leftHandPivot 手部骨骼，Group 层级自动建连）', () => {
         const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const bridge = createCharacterSkeletonBridge(model)
-        /* CHARACTER_JOINT_IDS + rightHandPivot（武器挂点）+ leftHandPivot（双手 IK 链末端） */
-        expect(bridge.joints.size).toBe(CHARACTER_JOINT_IDS.length + 2)
+        /* CHARACTER_JOINT_IDS 已含手部关节（rightHandPivot / leftHandPivot） */
+        expect(bridge.joints.size).toBe(CHARACTER_JOINT_IDS.length)
         expect(bridge.findJoint('rightHandPivot')).toBeDefined()
         expect(bridge.findJoint('leftHandPivot')).toBeDefined()
         /* Group 层级 → 骨架树一致：spine 的父是 root */

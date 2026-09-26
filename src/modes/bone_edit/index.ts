@@ -1,5 +1,6 @@
 import {Box3, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer, type Object3D} from 'three'
 import {setupSkeletonEntities, type SkeletonEntitiesContext, type SkeletonEntity} from '../../entity/skeleton/world.ts'
+import {createCharacterSkeletonPreset} from '../../entity/character/skeleton/preset_appearance.ts'
 import {setupMouseOrbit, setupKeyboardCamera} from '../camera_common.ts'
 import {createAnimationStore, type AnimationStore} from './animation_store.ts'
 import {setupBoneEditHistory, type BoneEditHistory} from './history.ts'
@@ -37,8 +38,8 @@ export const setupBoneEditMode = (
     scene: Scene,
     excludeFromBackground: (obj: Object3D) => void,
 ): BoneEditModeController => {
-    /* 骨架实体（多骨架 + 聚焦） */
-    const world: SkeletonEntitiesContext = setupSkeletonEntities(scene)
+    /* 骨架实体（多骨架 + 聚焦）：注入角色预设（人形定义 + 方块人外观构建器，与游玩共用） */
+    const world: SkeletonEntitiesContext = setupSkeletonEntities(scene, createCharacterSkeletonPreset())
     world.addPreset()
 
     /* 动画库 */

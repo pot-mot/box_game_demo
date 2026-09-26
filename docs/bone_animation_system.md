@@ -54,13 +54,15 @@ src/
 │       ├── retarget.ts              # 轨道目标 id 重定向（生产 clip 复用到编辑器骨架）
 │       └── serialization.ts         # 骨架定义 + 动画库 JSON 序列化/zod 校验
 ├── entity/
-│   ├── skeleton/                    # 骨骼实体（Three 渲染映射 + 外观装载 + 面板）
+│   ├── skeleton/                    # 通用骨架实体（与人形无关；预设由外部注入）
 │   │   ├── constants.ts
-│   │   ├── world.ts                 # setupSkeletonEntities：多骨架 CRUD + 聚焦 + 面板装配
-│   │   ├── render/                  # 关节 gizmo / 外观部件装载 / 同步（领域 FK 缓存为唯一世界变换源）
-│   │   ├── appearance/              # 方块人外观部件装载（部件 ↔ 骨骼段装配）
+│   │   ├── appearance.ts            # SkeletonAppearance / SkeletonPreset 通用类型
+│   │   ├── world.ts                 # setupSkeletonEntities(scene, preset)：多骨架 CRUD + 聚焦 + 面板装配
+│   │   ├── render/                  # 关节 gizmo / 同步（领域 FK 缓存为唯一世界变换源）
 │   │   └── ui/panel.ts              # 属性面板（PanelContext）
-│   └── character/                   # 迁移：外观系统改骨架驱动（见 §8）
+│   └── character/                   # 角色实体
+│       ├── skeleton/                # 人形预设骨架定义（preset.ts）+ 预设外观装配（preset_appearance.ts）
+│       └── appearance/              # 统一模型构建器（createCharacterModel）+ 外观装配（assemble.ts，含手部）
 └── modes/
     └── bone_edit/                   # 骨骼动画编辑模式（启动屏第 4 按钮）
         ├── index.ts                 # setupBoneEditMode
@@ -357,7 +359,9 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 - zod 校验（项目既有依赖；`skeleton/` 与 `character/` 领域层均允许使用，与 `save_load/validation.ts` 约定一致）；
 - 骨架定义（含 ikRootLevel）+ 动画库打包为单一资产文件，编辑器内导入/导出（Blob 下载 + 文件选择，复用 `save_load/actions.ts` 的 `promptLoadFile` 交互模式）。
-## 6. 骨骼实体与外观装载（`entity/skeleton/`）
+## 6. 骨骼实体与外观装载（`entity/skeleton/` 通用层 + `entity/character/` 人形注入）
+
+`entity/skeleton/` 是**与人形无关的通用骨架实体**（Group 层级、gizmo、面板、桥接），人形预设与方块人外观由 `entity/character/` 提供并经 `SkeletonPreset` 注入（`modes/bone_edit` 调 `setupSkeletonEntities(scene, createCharacterSkeletonPreset())`）。
 
 ### 6.1 渲染映射（`entity/skeleton/render/`，领域 FK 缓存为唯一世界变换源）
 
@@ -367,8 +371,9 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - **骨骼可视化（编辑模式）**：关节 = **小球**（`SphereGeometry`，`JOINT_GIZMO_RADIUS`），骨骼段 = **菱形连接段**（`OctahedronGeometry` 挂 head 关节 Group 下，位置 = 段局部中点、方向对准 head→tail、沿段方向拉伸 `scale.y = length`；段长过小隐藏）；
   **细线化约定**：`BONE_DIAMOND_THICKNESS` 与小球直径同量级（0.05，约 1/5 身宽），旋转指针半径/高度/偏移随小球半径同步缩放（保持“锥半径 < 小球半径”避免遮挡拾取），否则 x-ray 覆盖的骨骼层会把模型糊住；
   关节小球带 `userData.jointId`、菱形带 `userData.boneId + jointId`（拾取）；选中高亮 `setSelectedVisual`（joint 高亮小球 / bone 高亮菱形为高亮色），`clearSelectedVisuals` 还原；
+- Group 层级由 `skeleton/render/joint_hierarchy.ts` 的 `createJointHierarchy(skeleton)` 生成（角色模型与编辑器共用同一实现），编辑器在其上追加关节小球/骨骼菱形并建立桥接骨架；
 - `resizeBoneVisuals`：段长变化（面板/IK 调整）后更新菱形；
-- 预设：`buildCharacterSkeletonDefinition()` 输出与方块人同构的骨架定义（joint = 髋部/颈根/头顶/双臂肩肘腕/双腿髋膝 + ikRootLevel 标注）。
+- 预设：`buildCharacterSkeletonDefinition()`（`entity/character/skeleton/preset.ts`）输出与方块人同构的骨架定义（joint = 髋部/颈根/头顶/双臂肩肘**手**腕/双腿髋膝 + ikRootLevel 标注；骨骼段含手部段 `rightHand` / `leftHand` = `HandPivot → WristPivot`）。
   **锚点约定：`root` = 脚底（世界 y=0，与生产模型 `group` 原点一致）**，`spine`（髋部）与双腿髋关节抬升到腿高 `HIP_Y`，因此角色站在网格地面上而不是半身陷入地面；
   骨骼段均为沿脊柱/肢体方向的有效正长段（`torso` = 髋部→肩部、`head` = 颈根→头顶），不再保留 root→髋部的退化零长段；
   外观部件挂载方向与生产模型一致：躯干自髋部**向上**延伸至肩部、头自颈根**向上**延伸（`headNeck` 关节即肩线，头块不会倒挂进躯干），肢体默认自挂载关节向下延伸。
@@ -402,11 +407,12 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
   - 关闭开关或卸下武器时立即清除左肩 `ikRootLevel` 并重新应用当前 clip 姿态，左臂回到动画姿态（不留约束残留）；
   - 求解链只到 `leftArmShoulder` 为止，**不会旋转躯干或右臂**；与生产共用同一求解器，仅在目标点来源上一致（武器 Group 存在时取武器轴）。
 
-### 6.3 外观部件装载（`entity/skeleton/appearance/`，备用）
+### 6.3 外观部件装载（`entity/character/appearance/assemble.ts`，生产与编辑器共用）
 
-**编辑模式默认使用骨骼可视化（小球 + 菱形，见 6.1）；外观部件装载保留为可插拔的备用 visual 装载器**：
+**唯一的方块人外观构建器**：游玩/展示（`createCharacterModel`）与骨骼编辑器（`SkeletonPreset.mountAppearance`）都调用 `assembleCharacterAppearance(groups, palette)`，保证三处外观（含手部）完全一致：
 
-- 复用 `render/box_parts.ts` 的部件工厂（四肢/躯干/头部件 = BoxGeometry + 六面材质），按骨骼段装配到关节上（部件随 head 关节变换、长度随 `bone.length` 缩放）；
+- 复用 `render/box_parts.ts` 的部件工厂（四肢/躯干/头/手部件 = BoxGeometry + 六面材质），装配到关节 Group 上（部件随挂载关节变换、长度随对应骨骼段实际距离缩放 `resizeBoneParts`）；
+- **手部模型**挂在手部关节 `rightHandPivot` / `leftHandPivot`（与骨骼段 `rightHand` / `leftHand` 对应，**肤色**，高度为前臂的 0.7 倍再缩短为 1/4）；武器挂点仍是腕下独立关节，武器模型直接挂 `*WeaponMount`，不并入手部；
 - 渲染层与骨架解耦（visual 装载器可插拔），为未来外部 obj/blender 模型导入预留设计空间（本期不实现）。
 
 ### 6.4 属性面板（`entity/skeleton/ui/panel.ts`）
@@ -458,7 +464,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 - **来源与生产同源**（`modes/bone_edit/builtin_clips.ts`，惰性构建并缓存）：基础状态走 `getBaseClip`（待机/行走 各含空手与持械变体；跳跃/下落/死亡/冲刺/受击硬直 各一份，下落取水平速度 0 档），攻击动作走 `getAttackClipById`（段 id → `attack_clip_data.ts` 的显式骨骼关键帧）。条目共 44 项：基础状态 9 + 近战 26（4 段 × 4 武器 + 巨剑 5 段 + 长枪 5 段〈含蓄力突刺变体〉）+ 远程 9 武器 × 1 段 = 9；
 - **攻击段顺序由武器链数据决定**（`orderedSegments(weapon.attacks)`）：每把武器按 轻击一段 → 轻击二段 → 重击一段 → 重击二段 连续排列（同一链的 1、2 段相邻、轻链在重链之前），条件起手变体段（如蓄力段）接在所属攻击键末尾；不再需要任何展示顺序常量或槽位重排，展示模式/HUD/编辑器三者同源同序；
-- **关节 id 统一**：生产角色 clip 与编辑器预设骨架使用同一套关节 id（根关节统一为 `root`，静止局部位置由同一套 render 比例常量推导：`base_clips.ts` ↔ `entity/skeleton/preset.ts`），因此无需任何目标 id 重定向（`remapClipTargets` 保留为通用工具，内置动作库不再使用）；
+- **关节 id 统一**：生产角色 clip 与编辑器预设骨架使用同一套关节 id（根关节统一为 `root`，静止局部位置由同一套 render 比例常量推导：`base_clips.ts` ↔ `entity/character/skeleton/preset.ts`），因此无需任何目标 id 重定向（`remapClipTargets` 保留为通用工具，内置动作库不再使用）；
 - **选中即载入副本**：`AnimationStore.importClip` 深拷贝（`cloneClip`）+ 重名自动加后缀 + 选中，副本名 = 内置显示名（如「行走（空手）」「长剑 · 轻击一段」）。内置 clip 与生产共用生成器缓存对象，深拷贝保证编辑器内的编辑不会污染生产动作；同名副本已存在时直接选中，不重复载入。载入动作入库后即可播放/拖移关键帧/改插值/导出，导入的 `hitbox_on/off` 事件轨在事件轨行可见；
 - **切换动画时播放头归零**，并同步刷新时长/循环输入框与轨道列表；
 - **作用范围**：内置清单只读自武器模组与基础状态表（`ALL_WEAPON_PRESETS` × `orderedSegments`），新增武器/攻击段后自动出现在列表中，无手工清单；
@@ -536,7 +542,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `skeleton/anim/serialization.test.ts` | 资产 JSON 往返、非法数据拒绝、缺省字段兜底（zod default）、formatVersion、ikRootLevel 持久化 |
 | `entity/skeleton/render/bridge.test.ts` | 桥接（领域 FK 缓存为唯一世界变换源）：Group 局部读入骨架、领域修改写回 Group（场景图级联）、applyPose/rotateBone 经桥接生效、roll 写回场景图且 syncFromScene 往返幂等、`rootTranslationExternallyManaged` 控制根位移真源 |
 | `entity/skeleton/render/joint_groups.test.ts` | 骨骼可视化：关节小球（SphereGeometry）/骨骼段菱形（OctahedronGeometry 对准 head→tail）、拾取标记、选中高亮与还原、resizeBoneVisuals 随段长更新 |
-| `entity/skeleton/preset.test.ts` | 预设骨架锚点与段：root 为脚底锚点（关节最低点 y=0、最高点头顶 y=基准高）、髋部抬至 `HIP_Y`、颈根与肩同高、`torso`/`head` 段端点与正长度；**武器挂点**（`rightWeaponMount`/`leftWeaponMount` 为零偏移腕下关节、不参与骨骼段） |
+| `entity/character/skeleton/preset.test.ts` | 预设骨架锚点与段：root 为脚底锚点（关节最低点 y=0、最高点头顶 y=基准高）、髋部抬至 `HIP_Y`、颈根与肩同高、`torso`/`head` 段端点与正长度；**手部骨骼段**（`rightHand`/`leftHand` = HandPivot→WristPivot）；**武器挂点**（`rightWeaponMount`/`leftWeaponMount` 为零偏移腕下关节、不参与骨骼段、与手部分属不同关节） |
 | `entity/character/appearance/clips/base_clips.test.ts` | 基础状态 clip 烘焙回归：采样姿态与公式一致（容差 1.7°）、循环 wrap 无缝、持械变体差异、非循环 clamp 末帧；角色模型桥接（自动建连/applyPose 写回 Group/syncFromScene） |
 | `entity/character/appearance/clips/attack_clips.test.ts` | 攻击 clip 烘焙回归：时长 = 动作+恢复、事件轨时间（0.1/0.85 动作进度）、strike_peak 曲线生效、overshoot 起始姿态、恢复归零、无阶段回退、tilt 腕部偏转、缓存复用 |
 | `entity/character/combat/melee_executor.test.ts` | 命中窗口由 setHitWindow 开关（关闭时早退、非近战不受影响） |

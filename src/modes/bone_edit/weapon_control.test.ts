@@ -5,7 +5,7 @@ import {computeTwoHandGripTarget, leftGripJointId} from '../../entity/character/
 import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
 import {DEFAULT_WEAPON_ID, findWeaponPreset} from '../../character/weapon/catalog.ts'
 import {skeletonFromDefinition} from '../../skeleton/anim/serialization.ts'
-import {buildCharacterSkeletonDefinition} from '../../entity/skeleton/preset.ts'
+import {buildCharacterSkeletonDefinition} from '../../entity/character/skeleton/preset.ts'
 import {LEFT_WEAPON_MOUNT_JOINT, RIGHT_WEAPON_MOUNT_JOINT} from './weapon_equip.ts'
 
 describe('编辑器武器规格（weaponSpecOf / isTwoHandedWeapon）', () => {

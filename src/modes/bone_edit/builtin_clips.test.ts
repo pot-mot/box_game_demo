@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {Vector3} from 'three'
 import {BUILTIN_CLIP_GROUP_ORDER, findBuiltinClip, getBuiltinClips} from './builtin_clips.ts'
-import {buildCharacterSkeletonDefinition} from '../../entity/skeleton/preset.ts'
+import {buildCharacterSkeletonDefinition} from '../../entity/character/skeleton/preset.ts'
 import {sampleClip} from '../../skeleton/anim/sampling.ts'
 import {MELEE_WEAPON_PRESETS} from '../../character/weapon/melee_weapon.ts'
 import {RANGED_WEAPON_PRESETS} from '../../character/weapon/ranged_weapon.ts'

@@ -4,11 +4,10 @@ import type {Skeleton, JointCascadeSettings} from '../../skeleton/skeleton.ts'
 import {syncBoneLengths} from '../../skeleton/bone.ts'
 import {skeletonFromDefinition, type SkeletonDefinition} from '../../skeleton/anim/serialization.ts'
 import {createJointVisuals, createRotationGizmo, disposeRotationGizmo, type JointVisuals} from './render/joint_groups.ts'
-import {assembleCharacterAppearance, resizeBoneParts, type CharacterAppearance} from './appearance/assemble.ts'
-import {buildCharacterSkeletonDefinition} from './preset.ts'
+import type {SkeletonAppearance, SkeletonPreset} from './appearance.ts'
 import {createSkeletonPanel} from './ui/panel.ts'
 import {focusPanel} from '../../ui/entity_control_panel.ts'
-import {DEFAULT_CASCADE_DEPTH, DEFAULT_CASCADE_ENABLED, PRESET_PALETTE} from './constants.ts'
+import {DEFAULT_CASCADE_DEPTH, DEFAULT_CASCADE_ENABLED} from './constants.ts'
 
 /** 骨架实体选中项 */
 export interface SkeletonSelection {
@@ -17,15 +16,15 @@ export interface SkeletonSelection {
 }
 
 /** 骨架实体（纯视觉，不创建物理 body；编辑模式物理冻结）。
- *  骨骼可视化：关节 = 小球，骨骼段 = 细长菱形连接段；外观部件 = 方块人模型层（随关节 Group 变换）。 */
+ *  骨骼可视化：关节 = 小球，骨骼段 = 细长菱形连接段；外观部件（可选，由注入预设装配）随关节 Group 变换。 */
 export interface SkeletonEntity {
     readonly id: number
     readonly name: string
     /** 桥接骨架（写局部 pose 时同步 Group，场景图级联；实体编辑以它为真源） */
     readonly skeleton: Skeleton
     readonly visuals: JointVisuals
-    /** 方块人外观部件（模型层，骨骼层覆盖其上） */
-    readonly appearance: CharacterAppearance
+    /** 外观部件（模型层，骨骼层覆盖其上；由注入的预设装配） */
+    readonly appearance: SkeletonAppearance
     /** 可拾取网格（关节小球 + 骨骼段菱形 + 外观部件） */
     readonly meshes: readonly Mesh[]
 }
@@ -55,7 +54,7 @@ export interface SkeletonEntitiesContext {
     updater: (dt: number) => void
 }
 
-export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => {
+export const setupSkeletonEntities = (scene: Scene, preset: SkeletonPreset): SkeletonEntitiesContext => {
     const entities = new Map<number, SkeletonEntity>()
     let nextId = 1
     let focusId: number | undefined
@@ -76,15 +75,15 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
     }
 
     const addPreset = (name?: string): SkeletonEntity =>
-        addFromDefinition(buildCharacterSkeletonDefinition(), name)
+        addFromDefinition(preset.createDefinition(), name)
 
     const addFromDefinition = (definition: SkeletonDefinition, name?: string): SkeletonEntity => {
         /* scaffold 是「定义 → 关节树/骨骼」的一次性构建输入：createJointVisuals 据其建 Group 层级，
          * 再把局部 pose/骨骼段复制进以场景 Group 为绑定的 bridge；实体骨架以 bridge 为准，scaffold 随后弃用 */
         const scaffold = skeletonFromDefinition(definition)
         const visuals = createJointVisuals(scaffold, scene)
-        /* 模型层：方块人外观部件装配到关节 Group 上（随骨架变换） */
-        const appearance = assembleCharacterAppearance(visuals.groups, PRESET_PALETTE)
+        /* 模型层：方块人外观部件装配到关节 Group 上（随骨架变换；由预设注入） */
+        const appearance = preset.mountAppearance(visuals.groups)
         const entity: SkeletonEntity = {
             id: nextId,
             name: name ?? `骨架${nextId}`,
@@ -149,7 +148,7 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
             /* 段长 = 派生缓存（真源为关节位置）：刷新时从实际距离回写，保证面板/部件与骨架一致 */
             syncBoneLengths(entity.skeleton)
             entity.visuals.resizeBoneVisuals()
-            resizeBoneParts(entity.skeleton, entity.appearance)
+            entity.appearance.resize?.(entity.skeleton)
         }
     }
 

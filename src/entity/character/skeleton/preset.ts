@@ -1,4 +1,4 @@
-import type {SkeletonDefinition} from '../../skeleton/anim/serialization.ts'
+import type {SkeletonDefinition} from '../../../skeleton/anim/serialization.ts'
 import {
     MODEL_BASE_HEIGHT,
     MODEL_BASE_WIDTH,
@@ -11,10 +11,10 @@ import {
     LEG_WIDTH_RATIO,
     ARM_X_GAP,
     LEG_X_GAP,
-} from '../../render/constants.ts'
+} from '../../../render/constants.ts'
 
 /**
- * 人形预设骨架定义：与方块人模型（entity/character/appearance/model.ts）层级同构，
+ * 人形预设骨架定义：与方块人模型（entity/character/appearance）层级同构，
  * 另补 foot 末端关节使小腿骨骼段完整；rightHandPivot → rightWristPivot 作为手部段。
  * 比例常量来自 render 层共享定义，与生产模型一致。
  * 锚点约定：root = 脚底（落在地面 y=0，与生产模型 group 原点一致），

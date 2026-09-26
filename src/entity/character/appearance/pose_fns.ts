@@ -25,10 +25,12 @@ export interface JointEulerState {
 export interface PoseState {
     readonly rightArmShoulder: JointEulerState
     readonly rightArmElbow: JointEulerState
+    readonly rightHandPivot: JointEulerState
     readonly rightWristPivot: JointEulerState
     readonly rightWeaponMount: JointEulerState
     readonly leftArmShoulder: JointEulerState
     readonly leftArmElbow: JointEulerState
+    readonly leftHandPivot: JointEulerState
     readonly leftWristPivot: JointEulerState
     readonly leftWeaponMount: JointEulerState
     readonly rightLegHip: JointEulerState
@@ -63,10 +65,12 @@ const idlePose = (t: number, ctx: PoseContext): PoseState => ({
         rz: 0,
     },
     rightArmElbow: {rx: ctx.weaponHeld ? WEAPON_READY_ELBOW : -0.08, ry: 0, rz: 0},
+    rightHandPivot: ZERO,
     rightWristPivot: ZERO,
     rightWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
     leftArmShoulder: {rx: -Math.sin(t * 1.8) * 0.06, ry: 0, rz: 0},
     leftArmElbow: {rx: -0.08, ry: 0, rz: 0},
+    leftHandPivot: ZERO,
     leftWristPivot: ZERO,
     leftWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
     rightLegHip: ZERO,
@@ -91,10 +95,12 @@ const walkingPose = (t: number, ctx: PoseContext): PoseState => {
             rz: 0,
         },
         rightArmElbow: {rx: ctx.weaponHeld ? WEAPON_READY_ELBOW : -(armBend + 0.05), ry: 0, rz: 0},
+        rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
         leftArmShoulder: {rx: -armSwing, ry: 0, rz: 0},
         leftArmElbow: {rx: -(armBend + 0.05), ry: 0, rz: 0},
+        leftHandPivot: ZERO,
         leftWristPivot: ZERO,
         leftWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
         rightLegHip: {rx: legSwing, ry: 0, rz: 0},
@@ -134,10 +140,12 @@ const jumpingPose = (t: number): PoseState => {
     return {
         rightArmShoulder: {rx: armUp, ry: 0, rz: 0},
         rightArmElbow: {rx: -elbow, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
         leftArmShoulder: {rx: armUp, ry: 0, rz: 0},
         leftArmElbow: {rx: -elbow, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
         leftWristPivot: ZERO,
         leftWeaponMount: ZERO,
         rightLegHip: {rx: hip, ry: 0, rz: 0},
@@ -157,10 +165,12 @@ const fallingPose = (t: number, speed: number): PoseState => {
     return {
         rightArmShoulder: {rx: -1.2, ry: 0, rz: armZ},
         rightArmElbow: {rx: -0.3, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
         leftArmShoulder: {rx: -1.2, ry: 0, rz: -armZ},
         leftArmElbow: {rx: -0.3, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
         leftWristPivot: ZERO,
         leftWeaponMount: ZERO,
         rightLegHip: {rx: -0.15 - legSpread, ry: 0, rz: 0},
@@ -181,10 +191,12 @@ const dyingPose = (t: number): PoseState => {
     return {
         rightArmShoulder: {rx: eased * 0.4, ry: 0, rz: eased * 0.6},
         rightArmElbow: {rx: -eased * 0.5, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
         leftArmShoulder: {rx: eased * 0.4, ry: 0, rz: -eased * 0.6},
         leftArmElbow: {rx: -eased * 0.5, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
         leftWristPivot: ZERO,
         leftWeaponMount: ZERO,
         rightLegHip: {rx: eased * 0.2, ry: 0, rz: 0},
@@ -202,10 +214,12 @@ const dashingPose = (t: number): PoseState => {
     return {
         rightArmShoulder: {rx: -0.5, ry: 0, rz: 0},
         rightArmElbow: {rx: -0.3, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
         leftArmShoulder: {rx: -0.5, ry: 0, rz: 0},
         leftArmElbow: {rx: -0.3, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
         leftWristPivot: ZERO,
         leftWeaponMount: ZERO,
         rightLegHip: {rx: legSwing, ry: 0, rz: 0},
@@ -224,10 +238,12 @@ const flinchingPose = (t: number): PoseState => {
     return {
         rightArmShoulder: {rx: -FLINCH_ARM_RAISE * e, ry: 0, rz: FLINCH_ARM_SPREAD * e},
         rightArmElbow: {rx: FLINCH_ELBOW * e, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
         leftArmShoulder: {rx: -FLINCH_ARM_RAISE * e, ry: 0, rz: -FLINCH_ARM_SPREAD * e},
         leftArmElbow: {rx: FLINCH_ELBOW * e, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
         leftWristPivot: ZERO,
         leftWeaponMount: ZERO,
         rightLegHip: ZERO,
@@ -271,6 +287,7 @@ export const adjustArmsForHoldMode = (
         ...pose,
         leftArmShoulder: pose.rightArmShoulder,
         leftArmElbow: pose.rightArmElbow,
+        leftHandPivot: pose.rightHandPivot,
         leftWristPivot: pose.rightWristPivot,
         leftWeaponMount: pose.rightWeaponMount,
     }

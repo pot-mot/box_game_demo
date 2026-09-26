@@ -30,8 +30,8 @@ interface JointSnapshot {
 
 /** 收集模型全部可动画关节（顺序固定，与 CHARACTER_JOINT_IDS 一致） */
 const snapshotJoints = (model: CharacterModel): JointSnapshot[] => [
-    model.rightArmShoulder, model.rightArmElbow, model.rightWristPivot, model.rightWeaponMount,
-    model.leftArmShoulder, model.leftArmElbow, model.leftWristPivot, model.leftWeaponMount,
+    model.rightArmShoulder, model.rightArmElbow, model.rightHandPivot, model.rightWristPivot, model.rightWeaponMount,
+    model.leftArmShoulder, model.leftArmElbow, model.leftHandPivot, model.leftWristPivot, model.leftWeaponMount,
     model.rightLegHip, model.rightLegKnee, model.leftLegHip, model.leftLegKnee,
     model.headNeck, model.spine, model.group,
 ].map(joint => ({

@@ -4,9 +4,8 @@ import type {CharacterModel} from './types.ts'
 /**
  * 角色模型桥接：把方块人模型的 Group 关节层级绑定为领域骨架
  * （领域 FK 缓存为唯一世界变换源，动画播放器 applyPose 自动写回 Group）。
- * 关节 id 与 base_clips 的 CHARACTER_JOINT_IDS 一一对应（含可动画武器挂点）；
- * 额外包含 rightHandPivot / leftHandPivot（保持完整层级 so 腕部 IK 目标世界位置正确），
- * 两者不被 clip 驱动，applyPose 不会改写其静止位置。
+ * 关节 id 与 base_clips 的 CHARACTER_JOINT_IDS 一一对应（含手部关节与可动画武器挂点）；
+ * 额外保持 root 与完整手臂层级（手部关节纳入可动画集后由 clip 驱动，武器挂点由动画/挂载使用）。
  * 根位移由物理 body（syncPositions）管理，故 rootTranslationExternallyManaged = true。
  */
 export const createCharacterSkeletonBridge = (model: CharacterModel): SkeletonSceneBridge => createSkeletonFromGroups([

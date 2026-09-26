@@ -3,7 +3,7 @@ import {Scene, Vector3} from 'three'
 import {createBoneEditWeaponControl} from './weapon_control.ts'
 import {createJointVisuals} from '../../entity/skeleton/render/joint_groups.ts'
 import {skeletonFromDefinition} from '../../skeleton/anim/serialization.ts'
-import {buildCharacterSkeletonDefinition} from '../../entity/skeleton/preset.ts'
+import {buildCharacterSkeletonDefinition} from '../../entity/character/skeleton/preset.ts'
 import type {SkeletonEntitiesContext, SkeletonEntity} from '../../entity/skeleton/world.ts'
 import type {Mesh} from 'three'
 

@@ -18,10 +18,12 @@ import {
 export const CHARACTER_JOINT_IDS = [
     'rightArmShoulder',
     'rightArmElbow',
+    'rightHandPivot',
     'rightWristPivot',
     'rightWeaponMount',
     'leftArmShoulder',
     'leftArmElbow',
+    'leftHandPivot',
     'leftWristPivot',
     'leftWeaponMount',
     'rightLegHip',
@@ -48,8 +50,8 @@ export const BASE_LOCOMOTION_JOINTS: readonly CharacterJointId[] = [
 ]
 
 export const BASE_UPPER_JOINTS: readonly CharacterJointId[] = [
-    'rightArmShoulder', 'rightArmElbow', 'rightWristPivot', 'rightWeaponMount',
-    'leftArmShoulder', 'leftArmElbow', 'leftWristPivot', 'leftWeaponMount',
+    'rightArmShoulder', 'rightArmElbow', 'rightHandPivot', 'rightWristPivot', 'rightWeaponMount',
+    'leftArmShoulder', 'leftArmElbow', 'leftHandPivot', 'leftWristPivot', 'leftWeaponMount',
 ]
 
 /* ── 关节静止局部位置（模型 Group 层级，相对父关节；由 render 比例常量推导）。
@@ -64,10 +66,12 @@ const REST_HIP_X = LEG_X_GAP
 export const CHARACTER_JOINT_REST_POSITIONS: Readonly<Record<CharacterJointId, readonly [number, number, number]>> = {
     rightArmShoulder: [REST_SHOULDER_X, REST_BODY_H, 0],
     rightArmElbow: [0, -REST_UPPER_ARM_H, 0],
+    rightHandPivot: [0, -REST_UPPER_ARM_H, 0],
     rightWristPivot: [0, 0, 0],
     rightWeaponMount: [0, 0, 0],
     leftArmShoulder: [-REST_SHOULDER_X, REST_BODY_H, 0],
     leftArmElbow: [0, -REST_UPPER_ARM_H, 0],
+    leftHandPivot: [0, -REST_UPPER_ARM_H, 0],
     leftWristPivot: [0, 0, 0],
     leftWeaponMount: [0, 0, 0],
     /* 模型原点在脚底：root 直接子关节（双腿髋/spine）位于腿长高度 */
@@ -93,10 +97,12 @@ const poseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, JointPose>
     }
     set('rightArmShoulder', pose.rightArmShoulder)
     set('rightArmElbow', pose.rightArmElbow)
+    set('rightHandPivot', pose.rightHandPivot)
     set('rightWristPivot', pose.rightWristPivot)
     set('rightWeaponMount', pose.rightWeaponMount)
     set('leftArmShoulder', pose.leftArmShoulder)
     set('leftArmElbow', pose.leftArmElbow)
+    set('leftHandPivot', pose.leftHandPivot)
     set('leftWristPivot', pose.leftWristPivot)
     set('leftWeaponMount', pose.leftWeaponMount)
     set('rightLegHip', pose.rightLegHip)

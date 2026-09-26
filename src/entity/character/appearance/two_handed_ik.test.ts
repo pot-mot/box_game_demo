@@ -2,7 +2,7 @@ import {describe, it, expect} from 'vitest'
 import {Group, Vector3} from 'three'
 import {clearTwoHandGripRoot, computeTwoHandGripTarget, leftGripJointId, solveTwoHandedGrip} from './two_handed_ik.ts'
 import {skeletonFromDefinition} from '../../../skeleton/anim/serialization.ts'
-import {buildCharacterSkeletonDefinition} from '../../skeleton/preset.ts'
+import {buildCharacterSkeletonDefinition} from '../skeleton/preset.ts'
 
 /** 共享双手共持 IK：末端解析、副握点计算、CCD 求解与 IK 根清理 */
 describe('双手共持 IK（two_handed_ik）', () => {

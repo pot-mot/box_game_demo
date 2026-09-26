@@ -11,6 +11,7 @@ import {
 import type {Skeleton} from '../../../skeleton/skeleton.ts'
 import {createSkeletonFromGroups, type SkeletonSceneBridge} from './bridge.ts'
 import {createSkeletonBone} from '../../../skeleton/bone.ts'
+import {createJointHierarchy} from '../../../skeleton/render/joint_hierarchy.ts'
 import {
     BONE_DIAMOND_COLOR,
     BONE_DIAMOND_MIN_LENGTH,
@@ -56,7 +57,11 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
     const rootGroup = new Group()
     scene.add(rootGroup)
 
-    const groups = new Map<string, Group>()
+    /* Group 层级由通用构建器生成（与角色模型共用同一实现），编辑器仅追加骨架可视化 */
+    const hierarchy = createJointHierarchy(skeleton)
+    const groups = hierarchy.groups
+    for (const root of hierarchy.roots) rootGroup.add(root)
+
     const gizmos = new Map<string, Mesh>()
     const boneVisuals = new Map<string, Mesh>()
     const materials: MeshBasicMaterial[] = []
@@ -64,8 +69,8 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
 
     /* 关节小球（骨骼层覆盖渲染：忽略深度、后绘制） */
     for (const joint of skeleton.joints.values()) {
-        const group = new Group()
-        groups.set(joint.id, group)
+        const group = groups.get(joint.id)
+        if (group === undefined) continue
         const geometry = new SphereGeometry(JOINT_GIZMO_RADIUS, 16, 12)
         const material = new MeshBasicMaterial({color: JOINT_GIZMO_COLOR, depthTest: false, depthWrite: false})
         materials.push(material)
@@ -77,29 +82,15 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
         group.add(gizmo)
     }
 
-    for (const joint of skeleton.joints.values()) {
-        const group = groups.get(joint.id)!
-        if (joint.parent !== undefined) {
-            const parentGroup = groups.get(joint.parent.id)
-            if (parentGroup !== undefined) {
-                parentGroup.add(group)
-                continue
-            }
-        }
-        rootGroup.add(group)
-    }
-
-    /* 桥接骨架：按 Group 层级自动建连（与关节树一致） */
+    /* 桥接骨架：按 Group 层级自动建连（与关节树一致）；局部 pose 由 bridge 从 Group 读回 */
     const bridge = createSkeletonFromGroups(
         [...groups.entries()].map(([jointId, group]) => ({jointId, group})),
         true,
     )
-    /* 复制关节局部 pose 与 ikRootLevel 到桥接骨架（初始化 Group 定位数据） */
+    /* 复制 IK 根级别到桥接骨架 */
     for (const joint of skeleton.joints.values()) {
         const target = bridge.findJoint(joint.id)
         if (target === undefined) continue
-        target.position.copy(joint.position)
-        target.rotation.copy(joint.rotation)
         target.ikRootLevel = joint.ikRootLevel
     }
     /* 骨骼段复制到桥接骨架（菱形/面板/时间轴以桥接骨架的 bones 为准） */
@@ -157,6 +148,7 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
         for (const gizmo of gizmos.values()) gizmo.removeFromParent()
         for (const diamond of boneVisuals.values()) diamond.removeFromParent()
         rootGroup.removeFromParent()
+        hierarchy.cleanup()
         for (const material of materials) material.dispose()
         for (const geometry of geometries) geometry.dispose()
     }

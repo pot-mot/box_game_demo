@@ -38,8 +38,5 @@ export const DEFAULT_CASCADE_DEPTH = 16
 /** 级联层数输入上限 */
 export const CASCADE_DEPTH_MAX = 16
 
-/** 预设骨架调色板（默认第 0 套角色配色，外观部件装载用） */
-export const PRESET_PALETTE = {skinColor: 0xf0c8a0, hairColor: 0x3a2218, bodyColor: 0xe06040, legColor: 0x303050} as const
-
 /** 面板最大选中条目数保护（防构造异常数据） */
 export const PANEL_MAX_JOINTS = 128
