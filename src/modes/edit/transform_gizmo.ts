@@ -45,6 +45,10 @@ export interface DragState {
     readonly entityStartQuat: Quaternion
     /** 世界空间轴（局部轴经 gizmo 对齐旋转变换） */
     readonly worldAxis: Vector3
+    /** 旋转拖拽用：上一帧的平面角度（用于跨 ±π 展开，实现连续超过 360° 旋转） */
+    lastAngle: number
+    /** 旋转拖拽用：自起手累计的旋转角（可超过 ±2π） */
+    accumulatedAngle: number
 }
 
 export interface TransformGizmo {
@@ -306,6 +310,10 @@ export const createTransformGizmo = (): TransformGizmo => {
         const startHit = new Vector3()
         if (!raycaster.ray.intersectPlane(plane, startHit)) return undefined
 
+        /* 旋转拖拽：记录起手平面角度作为累计基准 */
+        const start2D = projectToPlane2D(startHit, plane, center)
+        const startAngle = Math.atan2(start2D.v, start2D.u)
+
         return {
             partType,
             callbacks,
@@ -314,6 +322,8 @@ export const createTransformGizmo = (): TransformGizmo => {
             entityStartPos: entityWorldPos.clone(),
             entityStartQuat: entityWorldQuat.clone(),
             worldAxis,
+            lastAngle: startAngle,
+            accumulatedAngle: 0,
         }
     }
 
@@ -330,16 +340,19 @@ export const createTransformGizmo = (): TransformGizmo => {
             const newPos = state.entityStartPos.clone().add(axis.clone().multiplyScalar(projected))
             state.callbacks.onTranslate(newPos)
         } else {
-            /** 旋转：在约束平面上计算角度差 */
+            /** 旋转：在约束平面上计算角度差，逐帧展开避免 ±π 跳变 */
             const axis = state.worldAxis
             const center = state.entityStartPos
-            const start2D = projectToPlane2D(state.startHit, state.plane, center)
             const cur2D = projectToPlane2D(currentHit, state.plane, center)
-            const startAngle = Math.atan2(start2D.v, start2D.u)
             const curAngle = Math.atan2(cur2D.v, cur2D.u)
-            const deltaAngle = curAngle - startAngle
+            let step = curAngle - state.lastAngle
+            /** 单帧步进展开到 (-π, π]，累计后即可连续旋转任意圈数 */
+            if (step > Math.PI) step -= 2 * Math.PI
+            else if (step < -Math.PI) step += 2 * Math.PI
+            state.accumulatedAngle += step
+            state.lastAngle = curAngle
 
-            const deltaQuat = new Quaternion().setFromAxisAngle(axis, deltaAngle)
+            const deltaQuat = new Quaternion().setFromAxisAngle(axis, state.accumulatedAngle)
             const newQuat = deltaQuat.multiply(state.entityStartQuat.clone())
             state.callbacks.onRotate(newQuat)
         }

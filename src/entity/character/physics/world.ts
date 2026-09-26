@@ -1,4 +1,4 @@
-import {type Scene, type Mesh, type LineBasicMaterial, Vector3} from 'three'
+import {type Scene, type Mesh, type LineBasicMaterial, Vector3, Euler, Quaternion} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
@@ -63,6 +63,11 @@ type CharacterRigidBody = RAPIER.RigidBody
 
 /** 刀光轨迹刀尖采样复用向量（避免每帧分配） */
 const _trailTipVec = new Vector3()
+
+/** 角色朝向提取复用对象（将旋转后的前向量投影到水平面求朝向，避免每帧分配） */
+const _facingForward = new Vector3()
+const _facingQuat = new Quaternion()
+const _facingEuler = new Euler()
 
 /** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写；test_weapon 走测试专用链） */
 const weaponRuntimeOf = (attack: AttackConfig, holdMode?: HoldMode): WeaponRuntime => {
@@ -764,9 +769,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
                 const newAngle = currentAngle + diff * Math.min(ROTATION_SPEED * dt, 1)
                 facingAngles.set(entity.id, newAngle)
-                model.group.rotation.y = newAngle
+                /* 运行时朝向仅绕 Y（清除编辑态可能残留的 X/Z 视觉倾斜） */
+                model.group.rotation.set(0, newAngle, 0)
                 /* 碰撞箱可视化同步跟随身体朝向 */
-                entity.mesh.rotation.y = newAngle
+                entity.mesh.rotation.set(0, newAngle, 0)
 
                 if (entity.isPlayer) {
                     model.headNeck.rotation.y = 0
@@ -1066,17 +1072,24 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.mesh.position.set(pos.x, pos.y, pos.z)
         /* 外观动画体一同瞬移（暂停态 syncPositions 不运行，否则模型滞留旧位置） */
         entity.appearanceGroup.position.set(pos.x, pos.y, pos.z)
-        /* 朝向：gizmo 旋转弧（Y 轴）映射到角色朝向角；
-         * X/Z 保留视觉倾斜（物理胶囊 lockRotations，body 不受影响） */
-        const yaw = rotDeg.y * Math.PI / 180
-        facingAngles.set(id, yaw)
-        entity.mesh.rotation.set(
+        /* 朝向：gizmo 旋转弧映射到角色朝向角。
+         * rotDeg 为 XYZ 欧拉角（可能是完整旋转的分解，X/Z 为视觉倾斜）。
+         * 必须先按 XYZ 顺序合成四元数、再投影前向量求水平朝向：
+         * 纯绕 Y 旋转超过 90° 时欧拉 XYZ 会退化为 x=180,y=180-θ,z=180，
+         * 若直接取 rotDeg.y 会把朝向压缩到 ±90°、无法转满 360°。 */
+        _facingEuler.set(
             rotDeg.x * Math.PI / 180,
-            yaw,
+            rotDeg.y * Math.PI / 180,
             rotDeg.z * Math.PI / 180,
+            'XYZ',
         )
+        _facingQuat.setFromEuler(_facingEuler)
+        _facingForward.set(0, 0, 1).applyQuaternion(_facingQuat)
+        const yaw = Math.atan2(_facingForward.x, _facingForward.z)
+        facingAngles.set(id, yaw)
+        entity.mesh.quaternion.copy(_facingQuat)
         const model = appearanceModels.get(id)
-        if (model) model.group.rotation.y = yaw
+        if (model) model.group.quaternion.copy(_facingQuat)
         placeDebugBoxes(entity, pos.x, pos.y + halfH, pos.z, yaw)
     }
 
@@ -1096,7 +1109,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         /* 暂停态 update 不运行，碰撞胶囊与外观模型立即同步朝向 */
         entity.mesh.rotation.set(0, yaw, 0)
         const model = appearanceModels.get(id)
-        if (model) model.group.rotation.y = yaw
+        if (model) model.group.rotation.set(0, yaw, 0)
         const p = entity.body.translation()
         placeDebugBoxes(entity, p.x, p.y, p.z, yaw)
     }

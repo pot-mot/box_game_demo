@@ -192,6 +192,42 @@ describe('transform gizmo 拖拽数学', () => {
         gizmo.dispose()
     })
 
+    it('旋转拖拽跨 ±π 连续累计可超过 360°（不跳变）', () => {
+        const gizmo = createTransformGizmo()
+        const origin = new Vector3(0, 0, 5)
+        /** 构造从 origin 射向 z=0 平面上指定角度的射线 */
+        const rayAtAngle = (angle: number): Raycaster => {
+            const target = new Vector3(Math.cos(angle), Math.sin(angle), 0)
+            const raycaster = new Raycaster()
+            raycaster.ray.origin.copy(origin)
+            raycaster.ray.direction.copy(target.clone().sub(origin).normalize())
+            return raycaster
+        }
+
+        const state = gizmo.startDrag(
+            'rotate_z',
+            new Vector3(0, 0, 0),
+            new Quaternion(),
+            {onTranslate: () => {}, onRotate: () => {}},
+            testCamera(),
+            rayAtAngle(0),
+        )
+        expect(state).toBeDefined()
+        if (state === undefined) return
+
+        /* 从 0 扫到 2π（一整圈），单步 0.05，跨过 atan2 的 ±π 接缝 */
+        const step = 0.05
+        for (let a = step; a <= Math.PI * 2 + step; a += step) {
+            gizmo.updateDrag(state, testCamera(), rayAtAngle(a))
+            /* 累计角单调递增（展开后无 2π 回跳） */
+            expect(state.accumulatedAngle).toBeGreaterThan(0)
+            expect(state.accumulatedAngle).toBeLessThanOrEqual(Math.PI * 2 + 0.1)
+        }
+        /* 扫满一圈：累计角接近 2π 而非回绕到 0 */
+        expect(state.accumulatedAngle).toBeGreaterThan(Math.PI * 2 - 0.1)
+        gizmo.dispose()
+    })
+
     it('隐藏状态下 hitTest 返回 undefined', () => {
         const gizmo = createTransformGizmo()
         const camera = testCamera()
