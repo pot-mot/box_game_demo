@@ -105,7 +105,8 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
             ],
         },
     }),
-    /* 双斧：左右手各一把单刃斧（双持）——副手网格镜像，攻击段副手镜像主手并相位错开半程（交替挥砍） */
+    /* 双斧：左右手各一把单刃斧（双持）——斧刃几何关于矢状面对称，副手与主手同网格；
+     * 攻击段副手相位错开半程（交替挥砍） */
     dual_axe: meleePreset({
         id: 'dual_axe', name: '双斧', type: 'melee',
         holdModes: ['dual_wield'],
@@ -114,7 +115,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
         detectionRange: 7,
         detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
         mesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322 },
-        offhandMesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322, mirror: true },
+        offhandMesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322 },
     }),
     war_hammer: meleePreset({
         id: 'war_hammer', name: '战锤', type: 'melee',

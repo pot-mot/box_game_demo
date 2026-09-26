@@ -177,7 +177,7 @@ describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
         const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         model.equipWeapon({
             main: {id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322},
-            offhand: {id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322, mirror: true},
+            offhand: {id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322},
         })
         expect(model.weaponGroup).not.toBeNull()
         expect(model.offhandWeaponGroup).not.toBeNull()

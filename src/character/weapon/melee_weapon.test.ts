@@ -73,10 +73,10 @@ describe('MELEE_WEAPON_PRESETS', () => {
         expect(new Set(ids).size).toBe(ids.length)
     })
 
-    it('双斧为双持：主手单刃斧 + 镜像副手', () => {
+    it('双斧为双持：主手单刃斧 + 副手（斧刃几何矢状面对称，与主手同网格）', () => {
         const dualAxe = MELEE_WEAPON_PRESETS.dual_axe
         expect(dualAxe.offhandMesh).toBeDefined()
-        expect(dualAxe.offhandMesh).toMatchObject({id: 'dual_axe', mirror: true})
+        expect(dualAxe.offhandMesh).toMatchObject({id: 'dual_axe'})
     })
 
     it('非双持近战武器不含副手网格（单持 / 双手共持）', () => {

@@ -19,7 +19,7 @@ export type WeaponMeshConfig =
     | { id: 'sword';        bladeLen: number; color: number; gripColor: number }
     | { id: 'heavy_sword';  bladeLen: number; color: number; gripColor: number }
     | { id: 'spear';        poleLen: number;  headLen: number; color: number; headColor: number }
-    | { id: 'dual_axe';     bladeSize: number; color: number; gripColor: number; /** 副手镜像（斧刃开向 -X） */ mirror?: boolean }
+    | { id: 'dual_axe';     bladeSize: number; color: number; gripColor: number }
     | { id: 'war_hammer';   headSize: number; color: number; gripColor: number }
     | { id: 'bow';          size: number; color: number; stringColor: number }
     | { id: 'crossbow';     size: number; color: number; metalColor: number }
@@ -194,12 +194,15 @@ const genSword = (cfg: WeaponMeshConfig & { id: 'sword' }): WeaponMeshResult => 
     const bm = mat(cfg.color, 0.35, 0.6)
     const gLen = cfg.bladeLen * 0.35; const gR = 0.03
 
-    mesh(cyl(gR, gR, gLen), gm, 0, -bd * 0.25 - gLen / 2, 0)
-    mesh(box(bw * 2.5, 0.02, bw), bm, 0, -bd * 0.25 - 0.015, 0)
-    mesh(box(bw, bh, bd), bm, 0, bh / 2 + 0.03, 0)
-    /* 命中箱包裹刃部（y ∈ [0.03, bh+0.03]） */
-    return finish(0, bh * 0.35, 0, 0, bh + 0.03, 0, -(0.005 + (cfg.bladeLen * 0.35) / 2),
-        0, bh / 2 + 0.03, 0, bw, bh / 2, bd)
+    /* 刃面立在本地 Y-Z 平面（宽沿本地 Z = 世界上下，薄沿本地 X），护手与刃共面；
+     * 握把 — 护手 — 刃自上而下以 `gripTop` 为分界相互重叠连接 */
+    const gripTop = -bd * 0.25
+    mesh(cyl(gR, gR, gLen), gm, 0, gripTop - gLen / 2, 0)
+    mesh(box(bw, 0.02, bw * 2.5), bm, 0, gripTop, 0)
+    mesh(box(bd, bh, bw), bm, 0, gripTop + bh / 2, 0)
+    /* 命中箱包裹刃部（y ∈ [gripTop, gripTop+bh]） */
+    return finish(0, gripTop + bh * 0.35, 0, 0, gripTop + bh, 0, gripTop - gLen / 2,
+        0, gripTop + bh / 2, 0, bd, bh / 2, bw)
 }
 
 const genHeavySword = (cfg: WeaponMeshConfig & { id: 'heavy_sword' }): WeaponMeshResult => {
@@ -209,11 +212,14 @@ const genHeavySword = (cfg: WeaponMeshConfig & { id: 'heavy_sword' }): WeaponMes
     const bm = mat(cfg.color, 0.3, 0.7)
     const gLen = cfg.bladeLen * 0.3; const gR = 0.035
 
-    mesh(cyl(gR, gR, gLen), gm, 0, -bd * 0.3 - gLen / 2, 0)
-    mesh(box(bw * 3, 0.03, bw), bm, 0, -bd * 0.3 - 0.02, 0)
-    mesh(box(bw, bh, bd), bm, 0, bh / 2 + 0.05, 0)
-    return finish(0, bh * 0.3, 0, 0, bh + 0.05, 0, -(0.012 + (cfg.bladeLen * 0.3) / 2),
-        0, bh / 2 + 0.05, 0, bw, bh / 2, bd)
+    /* 刃面立在本地 Y-Z 平面（宽沿本地 Z = 世界上下，薄沿本地 X），护手与刃共面；
+     * 握把 — 护手 — 刃自上而下以 `gripTop` 为分界相互重叠连接 */
+    const gripTop = -bd * 0.3
+    mesh(cyl(gR, gR, gLen), gm, 0, gripTop - gLen / 2, 0)
+    mesh(box(bw, 0.03, bw * 3), bm, 0, gripTop, 0)
+    mesh(box(bd, bh, bw), bm, 0, gripTop + bh / 2, 0)
+    return finish(0, gripTop + bh * 0.3, 0, 0, gripTop + bh, 0, gripTop - gLen / 2,
+        0, gripTop + bh / 2, 0, bd, bh / 2, bw)
 }
 
 const genSpear = (cfg: WeaponMeshConfig & { id: 'spear' }): WeaponMeshResult => {
@@ -229,7 +235,8 @@ const genSpear = (cfg: WeaponMeshConfig & { id: 'spear' }): WeaponMeshResult => 
         0, cfg.poleLen + cfg.headLen / 2, 0, 0.05, cfg.headLen / 2, 0.04)
 }
 
-/* 单刃斧（双持时左右手各一；`mirror` = 副手镜像，使两把斧的刃口朝外） */
+/* 单刃斧（双持时左右手各一）：斧刃立于本地 Y-Z 平面（宽沿本地 Z、薄沿本地 X），斧刃自柄侧展开。
+ * 该几何在本地 X 轴上对称，左手武器即右手武器关于角色矢状面的镜像，无需再额外翻转。 */
 const genDualAxe = (cfg: WeaponMeshConfig & { id: 'dual_axe' }): WeaponMeshResult => {
     begin()
     const bm = mat(cfg.color, 0.3, 0.7)
@@ -237,19 +244,18 @@ const genDualAxe = (cfg: WeaponMeshConfig & { id: 'dual_axe' }): WeaponMeshResul
     const sz = cfg.bladeSize
     const gLen = sz * 1.7; const gR = 0.03
     const handleTop = -sz * 0.15
-    const side = cfg.mirror === true ? -1 : 1
     const bladeW = sz * 0.5
     const bladeH = sz * 0.95
     const bladeD = 0.035
-    const bladeX = side * sz * 0.32
+    const bladeZ = sz * 0.32
     const bladeY = handleTop - bladeH * 0.15
 
     mesh(cyl(gR, gR, gLen), gm, 0, handleTop - gLen / 2, 0)
-    mesh(box(bladeW, bladeH, bladeD), bm, bladeX, bladeY, 0, 0, -side * Math.PI / 12)
+    mesh(box(bladeD, bladeH, bladeW), bm, 0, bladeY, bladeZ, Math.PI / 12)
     /* 命中箱包裹斧刃；刀尖采样点 = 刃外上角 */
-    return finish(bladeX, bladeY, 0, bladeX + side * bladeW / 2, bladeY + bladeH / 2, 0,
+    return finish(0, bladeY, bladeZ, 0, bladeY + bladeH / 2, bladeZ + bladeW / 2,
         -(sz * 0.15 + gLen / 2),
-        bladeX, bladeY, 0, bladeW / 2, bladeH / 2, bladeD / 2)
+        0, bladeY, bladeZ, bladeD / 2, bladeH / 2, bladeW / 2)
 }
 
 const genWarHammer = (cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshResult => {
@@ -273,12 +279,27 @@ const genBow = (cfg: WeaponMeshConfig & { id: 'bow' }): WeaponMeshResult => {
     begin()
     const bm = mat(cfg.color, 0.6, 0.05)
     const sm = mat(cfg.stringColor, 0.8, 0)
-    const sz = cfg.size; const r = 0.015
+    const gm = mat(0x553322, 0.7, 0.05)
+    const sz = cfg.size; const r = 0.014
 
-    mesh(cyl(r, r, sz * 0.7, 6), bm, 0, sz * 0.15, 0, Math.PI / 12)
-    mesh(cyl(r, r, sz * 0.7, 6), bm, 0, sz * 0.15, 0, -Math.PI / 12)
-    mesh(cyl(0.005, 0.005, sz * 0.3, 4), sm, 0, sz * 0.65, 0)
-    return finish(0, sz * 0.4, 0)
+    /* 弓身立于武器本地 Y-Z 平面（+Y = 射向/目标方向，±Z = 世界上下）：
+     * 两条弓臂自握把（原点）向上下展开，并朝 -Y（射手侧）后掠形成弧背，
+     * 弓弦连接两梢、位于射手侧。握把沿弓臂方向（本地 Z）包裹原点。 */
+    const half = sz / 2
+    const depth = sz * 0.12
+    const limbLen = Math.hypot(half, depth)
+    const rxUp = Math.atan2(-half, -depth)
+    const rxDown = Math.atan2(half, -depth)
+    const limbCy = -depth / 2
+    const limbCz = half / 2
+
+    mesh(cyl(r, r, limbLen, 6), bm, 0, limbCy, -limbCz, rxUp)
+    mesh(cyl(r, r, limbLen, 6), bm, 0, limbCy, limbCz, rxDown)
+    mesh(cyl(r * 1.7, r * 1.7, depth * 1.4, 8), gm, 0, 0, 0, Math.PI / 2)
+    mesh(cyl(0.006, 0.006, half * 2, 4), sm, 0, -depth, 0, Math.PI / 2)
+    /* 命中箱包裹弓身（Y-Z 平面）；弓为远程武器，命中箱不参与伤害，仅保持数据完整 */
+    return finish(0, 0, 0, 0, -depth, -half, 0,
+        0, -depth / 2, 0, r * 2, depth, half)
 }
 
 const genCrossbow = (cfg: WeaponMeshConfig & { id: 'crossbow' }): WeaponMeshResult => {
@@ -287,10 +308,15 @@ const genCrossbow = (cfg: WeaponMeshConfig & { id: 'crossbow' }): WeaponMeshResu
     const mm = mat(cfg.metalColor, 0.3, 0.7)
     const sz = cfg.size
 
-    mesh(box(sz * 0.4, sz * 0.12, sz * 0.2), wm, 0, 0, 0)
-    mesh(box(sz * 0.55, 0.03, 0.03), mm, 0, sz * 0.08, 0)
-    mesh(cyl(0.02, 0.02, sz * 0.35), mm, 0, -sz * 0.1, 0)
-    return finish(0, sz * 0.05, sz * 0.1)
+    /* 木身/枪托沿射向（本地 +Y）；弩弓为前端水平横臂（本地 X），弓弦在其后；
+     * 弩箭置于木身上方（-Z 为上），扳机/握把在下方（+Z） */
+    mesh(box(sz * 0.08, sz * 1.0, sz * 0.1), wm, 0, sz * 0.05, 0)
+    mesh(box(sz * 0.85, sz * 0.05, sz * 0.05), mm, 0, sz * 0.45, 0)
+    mesh(box(sz * 0.8, 0.008, 0.008), mm, 0, sz * 0.37, 0)
+    mesh(box(sz * 0.03, sz * 0.6, sz * 0.025), mm, 0, sz * 0.15, -sz * 0.075)
+    mesh(box(sz * 0.05, sz * 0.12, sz * 0.1), mm, 0, -sz * 0.1, sz * 0.09)
+    return finish(0, sz * 0.3, 0, 0, sz * 0.45, 0, 0,
+        0, sz * 0.05, 0, sz * 0.45, sz * 0.5, sz * 0.1)
 }
 
 const genShotgun = (cfg: WeaponMeshConfig & { id: 'shotgun' }): WeaponMeshResult => {
@@ -299,10 +325,15 @@ const genShotgun = (cfg: WeaponMeshConfig & { id: 'shotgun' }): WeaponMeshResult
     const mm = mat(cfg.metalColor, 0.3, 0.7)
     const sz = cfg.size
 
-    mesh(box(sz * 0.25, sz * 0.2, sz * 0.18), wm, 0, 0, 0)
-    mesh(box(0.03, 0.03, sz * 0.3), mm, 0, -sz * 0.1, 0)
-    mesh(cyl(0.025, 0.025, sz * 0.4), mm, 0, sz * 0.2, 0)
-    return finish(0, sz * 0.2, 0.1)
+    /* 枪管沿射向（本地 +Y）在前上方（-Z 为上）；木质后托在后方，
+     * 泵动护木在枪管下方（+Z），扳机护圈在机匣下方 */
+    mesh(cyl(sz * 0.035, sz * 0.035, sz * 0.75), mm, 0, sz * 0.35, -sz * 0.03)
+    mesh(box(sz * 0.13, sz * 0.3, sz * 0.16), wm, 0, -sz * 0.05, 0)
+    mesh(box(sz * 0.1, sz * 0.45, sz * 0.13), wm, 0, -sz * 0.35, sz * 0.03)
+    mesh(box(sz * 0.11, sz * 0.22, sz * 0.11), wm, 0, sz * 0.28, sz * 0.07)
+    mesh(box(sz * 0.03, sz * 0.1, sz * 0.02), mm, 0, -sz * 0.1, sz * 0.08)
+    return finish(0, sz * 0.3, 0, 0, sz * 0.72, 0, 0,
+        0, sz * 0.2, 0, sz * 0.13, sz * 0.65, sz * 0.12)
 }
 
 const genStaff = (cfg: WeaponMeshConfig & { id: 'staff' }): WeaponMeshResult => {
@@ -333,20 +364,28 @@ const genThrowingAxe = (cfg: WeaponMeshConfig & { id: 'throwing_axe' }): WeaponM
     const gm = mat(cfg.gripColor, 0.7, 0.05)
     const sz = cfg.bladeSize; const gLen = sz * 0.9; const gR = 0.02
 
-    mesh(cyl(gR, gR, gLen), gm, 0, -sz * 0.05 - gLen / 2, 0)
-    mesh(box(sz * 0.5, sz * 0.4, 0.03), bm, 0, gLen * 0.4, 0)
-    return finish(0, gLen * 0.5, 0, 0, gLen * 0.4 + sz * 0.2, 0)
+    /* 刃面立在本地 Y-Z 平面（宽沿本地 Z = 世界上下、薄沿本地 X）；
+     * 斧头压住柄顶，刃与柄相互重叠连接 */
+    const handleTop = -sz * 0.05
+    const headY = handleTop
+    mesh(cyl(gR, gR, gLen), gm, 0, handleTop - gLen / 2, 0)
+    mesh(box(0.03, sz * 0.4, sz * 0.5), bm, 0, headY, 0)
+    return finish(0, gLen * 0.5, 0, 0, headY + sz * 0.2, 0)
 }
 
 const genGrenade = (cfg: WeaponMeshConfig & { id: 'grenade' }): WeaponMeshResult => {
     begin()
     const bodyMat = mat(cfg.color, 0.5, 0.1)
     const bandMat = mat(cfg.bandColor, 0.6, 0.1)
+    const fuseMat = mat(0x666666, 0.4, 0.6)
+    const r = cfg.radius
 
-    mesh(sphere(cfg.radius), bodyMat, 0, 0, 0)
-    mesh(cyl(cfg.radius * 0.4, cfg.radius * 0.4, 0.02, 6), bandMat, 0, cfg.radius * 0.3, 0)
-    mesh(cyl(cfg.radius * 0.4, cfg.radius * 0.4, 0.02, 6), bandMat, 0, -cfg.radius * 0.3, 0)
-    mesh(cyl(0.015, 0.015, cfg.radius * 0.5), mat(0x666666, 0.4, 0.6), 0, cfg.radius + 0.05, 0)
+    mesh(sphere(r), bodyMat, 0, 0, 0)
+    /* 环带略凸出球面并嵌入球身，形成两道箍 */
+    mesh(cyl(r * 1.02, r * 1.02, r * 0.12, 12), bandMat, 0, r * 0.3, 0)
+    mesh(cyl(r * 1.02, r * 1.02, r * 0.12, 12), bandMat, 0, -r * 0.3, 0)
+    /* 引信底部嵌入球顶，向上伸出 */
+    mesh(cyl(0.015, 0.015, r * 0.8, 8), fuseMat, 0, r, 0)
     return finish(0, 0, 0)
 }
 
@@ -354,12 +393,24 @@ const genMolotov = (cfg: WeaponMeshConfig & { id: 'molotov' }): WeaponMeshResult
     begin()
     const glassMat = mat(cfg.color, 0.2, 0.2)
     const fireMat = mat(cfg.fireColor, 0.6, 0)
-    const sz = cfg.size
+    /* 按啤酒瓶比例造型：整体细高——瓶身 / 瓶肩（锥台）/ 瓶颈依次相接，火芯接于瓶口 */
+    const h = cfg.size
+    const bodyH = h * 0.55
+    const shoulderH = h * 0.16
+    const neckH = h * 0.29
+    const bodyR = h * 0.15
+    const neckR = h * 0.055
+    const overlap = h * 0.04
+    const shoulderBottom = bodyH - overlap
+    const shoulderTop = shoulderBottom + shoulderH
+    const neckBottom = shoulderTop - overlap
+    const neckTop = neckBottom + neckH
 
-    mesh(cyl(sz * 0.3, sz * 0.4, sz, 8), glassMat, 0, sz / 2, 0)
-    mesh(cyl(sz * 0.1, sz * 0.1, sz * 0.3, 8), glassMat, 0, sz + 0.1, 0)
-    mesh(cone(sz * 0.15, sz * 0.2), fireMat, 0, sz + 0.2, 0)
-    return finish(0, sz * 0.4, 0)
+    mesh(cyl(bodyR, bodyR, bodyH, 12), glassMat, 0, bodyH / 2, 0)
+    mesh(cyl(neckR, bodyR, shoulderH, 12), glassMat, 0, (shoulderBottom + shoulderTop) / 2, 0)
+    mesh(cyl(neckR, neckR, neckH, 12), glassMat, 0, (neckBottom + neckTop) / 2, 0)
+    mesh(cone(h * 0.13, h * 0.18, 12), fireMat, 0, neckTop - overlap + h * 0.09, 0)
+    return finish(0, h * 0.4, 0)
 }
 
 const genThrowingDart = (cfg: WeaponMeshConfig & { id: 'throwing_dart' }): WeaponMeshResult => {
