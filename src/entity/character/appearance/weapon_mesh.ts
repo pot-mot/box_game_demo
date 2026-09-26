@@ -1,5 +1,5 @@
 import {
-    Group, Mesh, BoxGeometry, CylinderGeometry, SphereGeometry, ConeGeometry,
+    Euler, Group, Mesh, BoxGeometry, CylinderGeometry, SphereGeometry, ConeGeometry, Vector3,
     MeshStandardMaterial, type BufferGeometry,
 } from 'three'
 
@@ -62,8 +62,8 @@ export const WEAPON_MESH_GRIPS: Record<WeaponMeshId, WeaponGripPose> = {
     crossbow:     {x: 0, y: 0, z: 0, rx: -0.6, ry: 0, rz: 0},
     shotgun:      {x: 0, y: 0, z: 0, rx: -0.6, ry: 0, rz: 0},
     magic_wand:   {x: 0, y: 0, z: 0, rx: -0.5, ry: 0, rz: 0},
-    grenade:      {...GRIP_NEUTRAL, y: -0.02, rx: -0.3},
-    molotov:      {...GRIP_NEUTRAL, y: -0.03, rx: -0.3},
+    grenade:      {...GRIP_NEUTRAL, rx: -0.3},
+    molotov:      {...GRIP_NEUTRAL, rx: -0.3},
     throwing_dart: GRIP_NEUTRAL,
 }
 
@@ -92,6 +92,11 @@ export interface WeaponMeshResult {
     tip: Mesh
     /** 握把中心在武器本地坐标的 y（负=在原点下方，0=无握把语义）；装备时叠加偏移使握把对齐手腕 */
     gripY: number
+    /** 握把中心在武器本地坐标的 x/z（枪械握把不一定落在模型轴线上） */
+    gripX: number
+    gripZ: number
+    /** 双手共持时左手相对主握把沿本地 +Y（握把→武器前端）的距离 */
+    supportGripOffset: number
     /** 攻击判定箱本地盒参数（自动外扩 WEAPON_HIT_BOX_PAD） */
     hitBox: WeaponLocalHitBox
     cleanup: () => void
@@ -141,6 +146,7 @@ function finish(
     gripY = 0,
     hbCx = hitX, hbCy = hitY, hbCz = hitZ,
     hbHx = 0.1, hbHy = 0.1, hbHz = 0.1,
+    gripX = 0, gripZ = 0,
 ): WeaponMeshResult {
     const group = new Group()
     for (const m of _meshes) group.add(m)
@@ -175,6 +181,9 @@ function finish(
         hitCenter,
         tip,
         gripY,
+        gripX,
+        gripZ,
+        supportGripOffset: 0,
         hitBox,
         cleanup: () => {
             for (const g of geos) g.dispose()
@@ -298,7 +307,8 @@ const genBow = (cfg: WeaponMeshConfig & { id: 'bow' }): WeaponMeshResult => {
     mesh(cyl(r * 1.7, r * 1.7, depth * 1.4, 8), gm, 0, 0, 0, Math.PI / 2)
     mesh(cyl(0.006, 0.006, half * 2, 4), sm, 0, -depth, 0, Math.PI / 2)
     /* 命中箱包裹弓身（Y-Z 平面）；弓为远程武器，命中箱不参与伤害，仅保持数据完整 */
-    return finish(0, 0, 0, 0, -depth, -half, 0,
+    /* 右手拉弦点位于弓身握把之后；左手副握点在弓身中央握把。 */
+    return finish(0, 0, 0, 0, -depth, -half, -depth,
         0, -depth / 2, 0, r * 2, depth, half)
 }
 
@@ -315,8 +325,8 @@ const genCrossbow = (cfg: WeaponMeshConfig & { id: 'crossbow' }): WeaponMeshResu
     mesh(box(sz * 0.8, 0.008, 0.008), mm, 0, sz * 0.37, 0)
     mesh(box(sz * 0.03, sz * 0.6, sz * 0.025), mm, 0, sz * 0.15, -sz * 0.075)
     mesh(box(sz * 0.05, sz * 0.12, sz * 0.1), mm, 0, -sz * 0.1, sz * 0.09)
-    return finish(0, sz * 0.3, 0, 0, sz * 0.45, 0, 0,
-        0, sz * 0.05, 0, sz * 0.45, sz * 0.5, sz * 0.1)
+    return finish(0, sz * 0.3, 0, 0, sz * 0.45, 0, -sz * 0.1,
+        0, sz * 0.05, 0, sz * 0.45, sz * 0.5, sz * 0.1, 0, sz * 0.09)
 }
 
 const genShotgun = (cfg: WeaponMeshConfig & { id: 'shotgun' }): WeaponMeshResult => {
@@ -332,8 +342,8 @@ const genShotgun = (cfg: WeaponMeshConfig & { id: 'shotgun' }): WeaponMeshResult
     mesh(box(sz * 0.1, sz * 0.45, sz * 0.13), wm, 0, -sz * 0.35, sz * 0.03)
     mesh(box(sz * 0.11, sz * 0.22, sz * 0.11), wm, 0, sz * 0.28, sz * 0.07)
     mesh(box(sz * 0.03, sz * 0.1, sz * 0.02), mm, 0, -sz * 0.1, sz * 0.08)
-    return finish(0, sz * 0.3, 0, 0, sz * 0.72, 0, 0,
-        0, sz * 0.2, 0, sz * 0.13, sz * 0.65, sz * 0.12)
+    return finish(0, sz * 0.3, 0, 0, sz * 0.72, 0, -sz * 0.1,
+        0, sz * 0.2, 0, sz * 0.13, sz * 0.65, sz * 0.12, 0, sz * 0.08)
 }
 
 const genStaff = (cfg: WeaponMeshConfig & { id: 'staff' }): WeaponMeshResult => {
@@ -344,7 +354,7 @@ const genStaff = (cfg: WeaponMeshConfig & { id: 'staff' }): WeaponMeshResult => 
 
     mesh(cyl(pR, pR, cfg.poleLen), pm, 0, cfg.poleLen / 2, 0)
     mesh(sphere(cfg.orbRadius), om, 0, cfg.poleLen + cfg.orbRadius * 0.5, 0)
-    return finish(0, cfg.poleLen * 0.5, 0)
+    return finish(0, cfg.poleLen * 0.5, 0, 0, cfg.poleLen * 0.5, 0, cfg.poleLen * 0.5)
 }
 
 const genMagicWand = (cfg: WeaponMeshConfig & { id: 'magic_wand' }): WeaponMeshResult => {
@@ -355,7 +365,7 @@ const genMagicWand = (cfg: WeaponMeshConfig & { id: 'magic_wand' }): WeaponMeshR
 
     mesh(cyl(r, r * 0.8, cfg.len), wm, 0, cfg.len / 2, 0)
     mesh(sphere(0.03), gm, 0, cfg.len + 0.015, 0)
-    return finish(0, cfg.len * 0.45, 0)
+    return finish(0, cfg.len * 0.45, 0, 0, cfg.len * 0.45, 0, cfg.len * 0.3)
 }
 
 const genThrowingAxe = (cfg: WeaponMeshConfig & { id: 'throwing_axe' }): WeaponMeshResult => {
@@ -370,7 +380,7 @@ const genThrowingAxe = (cfg: WeaponMeshConfig & { id: 'throwing_axe' }): WeaponM
     const headY = handleTop
     mesh(cyl(gR, gR, gLen), gm, 0, handleTop - gLen / 2, 0)
     mesh(box(0.03, sz * 0.4, sz * 0.5), bm, 0, headY, 0)
-    return finish(0, gLen * 0.5, 0, 0, headY + sz * 0.2, 0)
+    return finish(0, gLen * 0.5, 0, 0, headY + sz * 0.2, 0, handleTop - gLen / 2)
 }
 
 const genGrenade = (cfg: WeaponMeshConfig & { id: 'grenade' }): WeaponMeshResult => {
@@ -410,7 +420,7 @@ const genMolotov = (cfg: WeaponMeshConfig & { id: 'molotov' }): WeaponMeshResult
     mesh(cyl(neckR, bodyR, shoulderH, 12), glassMat, 0, (shoulderBottom + shoulderTop) / 2, 0)
     mesh(cyl(neckR, neckR, neckH, 12), glassMat, 0, (neckBottom + neckTop) / 2, 0)
     mesh(cone(h * 0.13, h * 0.18, 12), fireMat, 0, neckTop - overlap + h * 0.09, 0)
-    return finish(0, h * 0.4, 0)
+    return finish(0, h * 0.4, 0, 0, h * 0.4, 0, h * 0.2)
 }
 
 const genThrowingDart = (cfg: WeaponMeshConfig & { id: 'throwing_dart' }): WeaponMeshResult => {
@@ -422,7 +432,21 @@ const genThrowingDart = (cfg: WeaponMeshConfig & { id: 'throwing_dart' }): Weapo
     mesh(box(0.04, 0.02, 0.01), tailMat, 0, cfg.len * 0.7, 0.02, 0, Math.PI / 5)
     mesh(box(0.04, 0.02, 0.01), tailMat, 0, cfg.len * 0.7, -0.02, 0, -Math.PI / 5)
     mesh(cone(0.02, 0.04, 6), bodyMat, 0, cfg.len * 0.65, 0)
-    return finish(0, cfg.len * 0.4, 0)
+    return finish(0, cfg.len * 0.4, 0, 0, cfg.len * 0.4, 0, cfg.len * 0.25)
+}
+
+const supportGripOffsetOf = (config: WeaponMeshConfig): number => {
+    switch (config.id) {
+        case 'sword': return config.bladeLen > 0.4 ? config.bladeLen * 0.16 : 0
+        case 'heavy_sword': return config.bladeLen * 0.1
+        case 'spear': return config.poleLen * 0.14
+        case 'war_hammer': return -config.headSize * 0.23
+        case 'bow': return config.size * 0.12
+        case 'crossbow': return config.size * 0.32
+        case 'shotgun': return config.size * 0.26
+        case 'staff': return config.poleLen * 0.3
+        default: return 0
+    }
 }
 
 // ── 主入口 ──
@@ -449,9 +473,10 @@ export const createWeaponMesh = (config: WeaponMeshConfig): WeaponMeshResult => 
     /* 烘焙固有握持：把握把中心移到武器 Group 原点、按握持角倾斜，使武器可直接挂在武器骨骼下，
      * 运行时不再需要任何外部偏移/倾斜节点（朝向完全由武器骨骼动画控制） */
     const grip = WEAPON_MESH_GRIPS[config.id]
-    const cosR = Math.cos(grip.rx)
-    const sinR = Math.sin(grip.rx)
-    result.group.position.set(grip.x, grip.y - result.gripY * cosR, grip.z - result.gripY * sinR)
+    const gripPoint = new Vector3(result.gripX, result.gripY, result.gripZ)
+        .applyEuler(new Euler(grip.rx, grip.ry, grip.rz))
+    result.group.position.set(grip.x, grip.y, grip.z).sub(gripPoint)
     result.group.rotation.set(grip.rx, grip.ry, grip.rz)
+    result.supportGripOffset = supportGripOffsetOf(config)
     return result
 }

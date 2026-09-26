@@ -41,6 +41,31 @@ const isConnectedAlongY = (intervals: readonly (readonly [number, number])[]): b
 }
 
 describe('程序化武器模型（weapon_mesh）', () => {
+    it('每种武器的指定主握点都被烘焙到模型根节点原点', () => {
+        const cases: readonly WeaponMeshConfig[] = [
+            {id: 'sword', bladeLen: 0.5, color: 0xcc6666, gripColor: 0x553322},
+            {id: 'heavy_sword', bladeLen: 0.65, color: 0x555566, gripColor: 0x332211},
+            {id: 'spear', poleLen: 1, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa},
+            {id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322},
+            {id: 'war_hammer', headSize: 0.35, color: 0x777777, gripColor: 0x443311},
+            {id: 'bow', size: 0.7, color: 0x886633, stringColor: 0xddddcc},
+            {id: 'crossbow', size: 0.5, color: 0x553322, metalColor: 0x888888},
+            {id: 'shotgun', size: 0.6, color: 0x443322, metalColor: 0x666666},
+            {id: 'staff', poleLen: 0.8, orbRadius: 0.12, color: 0x664422, orbColor: 0x44aaff},
+            {id: 'magic_wand', len: 0.5, color: 0x886633, gemColor: 0xff44ff},
+            {id: 'throwing_axe', bladeSize: 0.25, color: 0x888888, gripColor: 0x553322},
+            {id: 'grenade', radius: 0.1, color: 0x445522, bandColor: 0x333311},
+            {id: 'molotov', size: 0.25, color: 0x446622, fireColor: 0xff8800},
+            {id: 'throwing_dart', len: 0.5, color: 0x888888, tailColor: 0xcc3333},
+        ]
+        for (const config of cases) {
+            const result = createWeaponMesh(config)
+            const grip = result.group.localToWorld(new Vector3(result.gripX, result.gripY, result.gripZ))
+            expect(grip.length(), `${config.id} 主握点偏离武器挂点`).toBeLessThan(1e-6)
+            result.cleanup()
+        }
+    })
+
     it('长弓立于本地 Y-Z 平面：弓臂沿 Z 竖立、弓面最薄，而非沿 Y 前伸', () => {
         const size = rawSize({id: 'bow', size: 0.7, color: 0x886633, stringColor: 0xddddcc})
         /* 武器本地 +Y = 射向（前方），±Z = 世界上下；弓臂应沿 Z 展开为最大尺寸 */

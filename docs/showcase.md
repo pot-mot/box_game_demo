@@ -24,6 +24,7 @@
 - 连段时序镜像 `src/character/state_machine/states/attacking/`（段子状态机）：阶段推进、**段末推进**（最终阶段 recovery 完整播完后消费缓冲切换下一段，不出 attacking 状态）。
 - 攻击数据镜像武器模组：展示角色直接持有 `WeaponConfig`，脚本 = `orderedSegments(weapon.attacks)`，段时长/阶段/伤害倍率/倾斜角全部来自武器段定义（与生产同一份数据），不再有技能槽装配与展示顺序重排。
 - 动画注入镜像 `src/entity/character/physics/world.ts`：按同名同语义字段构造 `AnimationContext`（含 `attackSegment`）交给 `createAppearanceSystem()`；段切换触发动画键（`attacking:{段 id}`）变化走快照混合，衔接平滑。
+- 展示角色放大 `ACTOR_SCALE = 1.3`：双手 IK 目标经 `rootObject: model.group` 换算回骨架（未缩放）空间，臂展与目标同空间，双手贴合与 play 模式相对姿态一致（见 `two_handed_ik.ts` 的 `computeTwoHandGripTarget`）。
 - 冷却计时镜像生产：段触发（起手/段末推进）即挂自身段冷却、逐帧递减，供详情卡计时格展示（仅展示不阻断脚本推进）。
 - 装配遵循 modes 约定：`src/modes/showcase/index.ts` 返回 updater 由主页单 RAF 调度，复用共享渲染器、自建独立 Three 场景。
 

@@ -115,8 +115,10 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         if (ctx.holdMode !== 'two_handed' || model.offhandWeaponGroup !== null) return
         solveTwoHandedGrip(bridge, model.weaponGroup ?? undefined, {
             shoulderId: 'leftArmShoulder',
-            /* 副握点沿武器轴相对武器原点：握把局部 y + 握把相对偏移（0 = 主手握把处） */
-            offset: model.weaponGripY + TWO_HAND_GRIP_OFFSET,
+            /* 武器模型原点已对齐主握把，副握点按该武器握把间距沿本地 +Y 定位 */
+            offset: model.weaponSupportGripOffset + TWO_HAND_GRIP_OFFSET,
+            /* 模型根含 scale（展示模式 1.3×）：目标换算回骨架空间 */
+            rootObject: model.group,
         })
     }
 

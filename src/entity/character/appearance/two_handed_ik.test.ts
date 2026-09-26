@@ -32,6 +32,21 @@ describe('双手共持 IK（two_handed_ik）', () => {
         expect(computeTwoHandGripTarget(skeleton, mount, 0.45, out)!.toArray()).toEqual([1, 2.45, 3])
     })
 
+    it('带缩放的根对象：副握点换算回骨架（未缩放）空间', () => {
+        const skeleton = buildSkeleton()
+        const root = new Group()
+        root.position.set(5, 0, 0)
+        root.scale.setScalar(2)
+        const mount = new Group()
+        mount.position.set(1, 2, 3)
+        root.add(mount)
+        const out = new Vector3()
+        /* 有根对象：目标回到骨架空间（= 根局部坐标） */
+        expect(computeTwoHandGripTarget(skeleton, mount, 0.45, out, root)!.toArray()).toEqual([1, 2.45, 3])
+        /* 无根对象：保留旧语义（世界坐标） */
+        expect(computeTwoHandGripTarget(skeleton, mount, 0.45, new Vector3())!.toArray()).toEqual([7, 4.9, 6])
+    })
+
     it('求解后末端到达副握点，左肩标记 IK 根；清理后解除', () => {
         const skeleton = buildSkeleton()
         const shoulder = skeleton.getWorldPosition('leftArmShoulder')!

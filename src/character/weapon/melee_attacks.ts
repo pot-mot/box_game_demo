@@ -4,17 +4,17 @@ import type {AttackEntry, AttackKey, AttackSegment, AttackTransition, WeaponAtta
 /**
  * 近战武器攻击链（武器模组固有数据）：
  * 每个攻击段只声明**玩法数据**（时长/恢复/阶段时序/伤害倍率/冷却/连段拓扑）；
- * 动画是段 id 对应的显式骨骼关键帧（`character/weapon/attack_clip_data.ts`），不再有动画参数。
+ * 动画是段 id 对应的显式骨骼关键帧（`attack_clip_data.ts` 基础轨道 + `attack_pose_edits.ts` 逐段修订），不再有抽象动画参数。
  */
 
-/** 轻段动作时间（秒，仅挥砍动作，不含后摇） */
-export const MELEE_LIGHT_DURATION = 0.2
-/** 重段动作时间（秒，仅挥砍动作，不含后摇） */
-export const MELEE_HEAVY_DURATION = 0.3
-/** 轻段恢复时间（秒，动作结束后的后摇） */
-export const MELEE_LIGHT_RECOVERY = 0.2
-/** 重段恢复时间（秒，动作结束后的后摇） */
-export const MELEE_HEAVY_RECOVERY = 0.2
+/** 轻段动作时间（秒，仅挥砍动作，不含后摇）：原 0.2s 的 0.75 倍速（0.267s，总时长与 clip 关键帧对齐） */
+export const MELEE_LIGHT_DURATION = 0.267
+/** 重段动作时间（秒，仅挥砍动作，不含后摇）：原 0.3s 的 0.75 倍速（0.4s） */
+export const MELEE_HEAVY_DURATION = 0.4
+/** 轻段恢复时间（秒，动作结束后的后摇）：与原 0.2s 的 0.75 倍速对齐（轻段总时长 0.533s） */
+export const MELEE_LIGHT_RECOVERY = 0.266
+/** 重段恢复时间（秒，动作结束后的后摇）：与原 0.2s 的 0.75 倍速对齐（重段总时长 0.667s） */
+export const MELEE_HEAVY_RECOVERY = 0.267
 /** 重段伤害倍率（相对武器基础伤害） */
 export const MELEE_HEAVY_DAMAGE_MULTIPLIER = 1.6
 

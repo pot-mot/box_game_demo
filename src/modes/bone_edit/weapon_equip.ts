@@ -22,7 +22,10 @@ export interface SkeletonWeaponSpec {
 /** 已装载的副手武器（双持） */
 export interface SkeletonWeaponOffhand {
     readonly weaponGroup: Group
+    readonly gripX: number
     readonly gripY: number
+    readonly gripZ: number
+    readonly supportGripOffset: number
     readonly cleanup: () => void
 }
 
@@ -32,7 +35,11 @@ export interface SkeletonWeapon {
     /** 武器模型根 Group（已自带固有握持，直接挂在武器骨骼关节下；朝向由骨骼动画控制） */
     readonly weaponGroup: Group
     /** 握把中心在武器本地 Y 轴上的距离（命中/副握点计算用） */
+    readonly gripX: number
     readonly gripY: number
+    readonly gripZ: number
+    /** 左手副握点相对主握把沿武器本地 +Y 的距离 */
+    readonly supportGripOffset: number
     /** 副手武器（双持；否则 undefined） */
     readonly offhand: SkeletonWeaponOffhand | undefined
     /** 释放武器网格几何/材质并从场景图移除 */
@@ -66,7 +73,10 @@ export const equipSkeletonWeapon = (
             offhandParent.add(offResult.group)
             offhand = {
                 weaponGroup: offResult.group,
+                gripX: offResult.gripX,
                 gripY: offResult.gripY,
+                gripZ: offResult.gripZ,
+                supportGripOffset: offResult.supportGripOffset,
                 cleanup: offResult.cleanup,
             }
         }
@@ -75,7 +85,10 @@ export const equipSkeletonWeapon = (
     return {
         spec,
         weaponGroup: result.group,
+        gripX: result.gripX,
         gripY: result.gripY,
+        gripZ: result.gripZ,
+        supportGripOffset: result.supportGripOffset,
         offhand,
         dispose: (): void => {
             result.group.removeFromParent()

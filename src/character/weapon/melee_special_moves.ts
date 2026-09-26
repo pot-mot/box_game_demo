@@ -28,8 +28,9 @@ export const SPEAR_CHARGE_THRUST: AttackSegment = {
     key: 'light',
     step: 1,
     label: '蓄力突刺',
-    duration: 0.45,
-    recovery: 0.3,
+    /* 0.75 倍速：原 0.45 + 0.3 → 0.6 + 0.4（与 clip 关键帧时间对齐） */
+    duration: 0.6,
+    recovery: 0.4,
     phases: chargeThrustPhases(),
     poses: [{poseId: SPEAR_CHARGE_THRUST_ID, weight: 1}],
     damageMultiplier: 1.8,

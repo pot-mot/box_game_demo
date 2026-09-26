@@ -337,9 +337,9 @@ describe('攻击/冲刺在陡坡结束', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        /* 松开攻击键：无缓冲，当前段播完后收招 */
+        /* 松开攻击键：无缓冲，当前段播完后收招（轻段总时长 0.533s → 40 帧留余量） */
         e.stateMachine.setInput(1, 0, false, false, false, undefined, 0)
-        run(e.stateMachine, e, 30)
+        run(e.stateMachine, e, 40)
         expect(e.stateMachine.currentState).toBe('falling')
     })
 
@@ -349,7 +349,7 @@ describe('攻击/冲刺在陡坡结束', () => {
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
         e.stateMachine.setInput(1, 0, false, false, false, undefined, 0)
-        run(e.stateMachine, e, 30)
+        run(e.stateMachine, e, 40)
         expect(e.stateMachine.currentState).toBe('walking')
     })
 
@@ -482,8 +482,8 @@ describe('输入缓冲连段（轻/重双链）', () => {
         enterAttacking(e)
         /* 持续按住轻击：缓冲恒有值 */
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
-        run(e.stateMachine, e, 13)
-        /* 段中（轻 1 总时长 0.4s = 动作 0.2s + 恢复 0.2s，动作已过、未到段末） */
+        run(e.stateMachine, e, 17)
+        /* 段中（轻 1 总时长 0.533s = 动作 0.267s + 恢复 0.266s，动作已过、未到段末） */
         expect(e.combat.activeSegment?.id).toBe('long_sword_light_1')
         expect(e.combat.phaseIndex).toBe(1)
         /* 段末推进到轻 2（链中下一段），不出 attacking 状态 */
@@ -498,7 +498,7 @@ describe('输入缓冲连段（轻/重双链）', () => {
         const e = makeMock()
         enterAttacking(e)
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0)
-        run(e.stateMachine, e, 30)
+        run(e.stateMachine, e, 40)
         expect(e.stateMachine.currentState).toBe('idle')
         expect(e.combat.activeSegment?.id).toBe('long_sword_light_1')
     })

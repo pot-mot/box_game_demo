@@ -77,8 +77,10 @@ export interface CharacterModel {
     /** 当前武器攻击判定箱本地盒参数（null = 未装备），略大于武器模型 */
     readonly weaponHitBox: WeaponLocalHitBox | null
 
-    /** 主手握把中心在武器本地 Y 轴上的坐标（未装备 = 0），双手副握点计算用 */
+    /** 原始几何中的主握把 Y 坐标（未装备 = 0），用于检视实际模型握点 */
     readonly weaponGripY: number
+    /** 武器模型原点对齐主握把后，左手副握点沿本地 +Y 相对主握点的距离 */
+    readonly weaponSupportGripOffset: number
 
     /** 副手（左手）武器命中检测标记点（null = 无双持） */
     readonly offhandWeaponMesh: Mesh | null

@@ -21,8 +21,10 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
         expect(weapon!.weaponGroup.parent).toBe(mountGroup)
 
         mountGroup.updateMatrixWorld(true)
-        /* 握把中心（武器本地 Y 轴上的 gripY 处）落在右腕节点：这是「武器挂在手上」的精确判定 */
-        const gripCenterWorld = weapon!.weaponGroup.localToWorld(new Vector3(0, weapon!.gripY, 0))
+        /* 武器模型原点按其真实握把坐标校正后落在右腕节点 */
+        const gripCenterWorld = weapon!.weaponGroup.localToWorld(
+            new Vector3(weapon!.gripX, weapon!.gripY, weapon!.gripZ),
+        )
         const wristWorld = visuals.groups.get('rightWristPivot')!.getWorldPosition(new Vector3())
         expect(gripCenterWorld.distanceTo(wristWorld)).toBeLessThan(1e-6)
         expect(wristWorld.length()).toBeGreaterThan(0)
@@ -39,6 +41,20 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
         /* 卸下后从场景图移除（武器骨骼关节自身的小球仍在） */
         expect(weapon!.weaponGroup.parent).toBeNull()
         expect(mountGroup.children).not.toContain(weapon!.weaponGroup)
+        visuals.cleanup()
+    })
+
+    it('双手武器的副握点按武器类型与模型比例和主手拉开距离', () => {
+        const visuals = setup()
+        const cases = ['heavy_sword', 'spear', 'war_hammer', 'longbow', 'crossbow', 'shotgun', 'staff'] as const
+        for (const weaponId of cases) {
+            const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf(weaponId)!)!
+            const supportGrip = weapon.weaponGroup.localToWorld(new Vector3(0, weapon.supportGripOffset, 0))
+            const mainGrip = weapon.weaponGroup.getWorldPosition(new Vector3())
+            expect(supportGrip.distanceTo(mainGrip), `${weaponId} 双手握点未拉开`).toBeGreaterThan(0.06)
+            expect(supportGrip.distanceTo(mainGrip), `${weaponId} 双手握点超出合理握距`).toBeLessThan(0.4)
+            weapon.dispose()
+        }
         visuals.cleanup()
     })
 

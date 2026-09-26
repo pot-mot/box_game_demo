@@ -1,4 +1,4 @@
-import {Vector3, type Object3D} from 'three'
+import {Matrix4, Vector3, type Object3D} from 'three'
 import {rotateJointSubtree, type Skeleton} from '../../../skeleton/skeleton.ts'
 import type {SkeletonJoint} from '../../../skeleton/joint.ts'
 import {resolveIkChain, solveCcd} from '../../../skeleton/ik.ts'
@@ -20,12 +20,18 @@ const LEFT_GRIP_JOINT_CANDIDATES = ['leftWeaponMount', 'leftWristPivot', 'leftHa
 export const leftGripJointId = (skeleton: Skeleton): string =>
     LEFT_GRIP_JOINT_CANDIDATES.find(id => skeleton.findJoint(id) !== undefined) ?? 'leftHandPivot'
 
+/** 根对象世界矩阵的逆（换算回骨架空间用；模块级复用避免逐帧分配） */
+const _rootInverse = new Matrix4()
+
 /**
- * 副握点世界坐标（写入 out）：
+ * 副握点坐标（写入 out）：
  * - 有武器 Group → 武器模型原点沿本地 +Y 偏移 offset（沿武器轴，握把→刃尖）；
- *   调用方传 `weaponGripY + TWO_HAND_GRIP_OFFSET` 即「握把中心处 / 相对握把的偏移」，
- *   否则 offset 会被武器模型原点与握把之间的固有差误算，导致左手抓向刃部（观感「甩出去」）；
+ *   调用方传武器模型原点对齐主握把后的副握距离；
  * - 无武器 Group → 右腕 + （右肘 − 右腕）方向 × offset（生产回退）。
+ *
+ * `rootObject` = 骨架根对应的场景对象（角色为 `model.group`）：传入时把世界目标换算回
+ * **骨架空间**（未缩放、未旋转）——领域骨架 FK 不含根 Group 的缩放，而武器 `matrixWorld`
+ * 含缩放（展示模式 `ACTOR_SCALE = 1.3`），不换算会让 IK 目标与臂展分属两个空间。
  * 返回 undefined 表示骨架缺少所需关节。
  */
 export const computeTwoHandGripTarget = (
@@ -33,11 +39,24 @@ export const computeTwoHandGripTarget = (
     weaponGroup: Object3D | undefined,
     offset: number,
     out: Vector3,
+    rootObject?: Object3D,
 ): Vector3 | undefined => {
     if (weaponGroup !== undefined) {
         /* 更新祖先与自身的世界矩阵：姿态刚写回 Group，matrixWorld 可能尚未刷新 */
         weaponGroup.updateWorldMatrix(true, false)
-        return out.set(0, offset, 0).applyMatrix4(weaponGroup.matrixWorld)
+        out.set(0, offset, 0).applyMatrix4(weaponGroup.matrixWorld)
+        if (rootObject !== undefined) {
+            /* 世界 → 根 Group 局部（去掉根缩放/旋转）：得到骨架根关节系内的链坐标 */
+            out.applyMatrix4(_rootInverse.copy(rootObject.matrixWorld).invert())
+            /* 局部 → 骨架世界系：领域骨架的根关节带自身世界位置/旋转，需补回 */
+            const root = skeleton.getRoots()[0]
+            const rootPos = root !== undefined ? skeleton.getWorldPosition(root.id) : undefined
+            const rootRot = root !== undefined ? skeleton.getWorldRotation(root.id) : undefined
+            if (rootPos !== undefined && rootRot !== undefined) {
+                out.applyQuaternion(rootRot).add(rootPos)
+            }
+        }
+        return out
     }
     const wristWorld = skeleton.getWorldPosition('rightWristPivot') ?? skeleton.getWorldPosition('rightHandPivot')
     const elbowWorld = skeleton.getWorldPosition('rightArmElbow')
@@ -88,6 +107,8 @@ export interface TwoHandGripOptions {
     readonly shoulderId?: string
     /** 副握点沿武器轴的偏移（米） */
     readonly offset: number
+    /** 骨架根对应的场景对象（角色为 `model.group`；传入后目标换算回骨架空间，见 `computeTwoHandGripTarget`） */
+    readonly rootObject?: Object3D
     readonly maxIterations?: number
     readonly tolerance?: number
 }
@@ -108,16 +129,23 @@ export const solveTwoHandedGrip = (
 
     skeleton.updateWorldTransforms()
     const target = new Vector3()
-    if (computeTwoHandGripTarget(skeleton, weaponGroup, options.offset, target) === undefined) return false
+    if (computeTwoHandGripTarget(skeleton, weaponGroup, options.offset, target, options.rootObject) === undefined) return false
 
     shoulder.ikRootLevel = 0
     const chain = resolveIkChain(endJoint)
     if (chain.length <= 1) return false
 
-    /* 目标超出臂展（链长之和）时按臂展截断：避免不可达目标把左臂拉直穿模 */
+    /* 目标超出臂展（链长之和）时按臂展截断：避免不可达目标把左臂拉直穿模。
+     * 臂展必须在世界空间按「相邻关节间距」累加：局部 position.length() 不含模型 scale，
+     * 展示模式等缩放模型（ACTOR_SCALE = 1.3）下会低估臂展，把左手截停在武器之外 */
     const shoulderWorld = skeleton.getWorldPosition(shoulderId)
     if (shoulderWorld !== undefined) {
-        const reach = chain.slice(1).reduce((sum, joint) => sum + joint.position.length(), 0)
+        let reach = 0
+        for (let i = 1; i < chain.length; i++) {
+            const from = skeleton.getWorldPosition(chain[i - 1].id)
+            const to = skeleton.getWorldPosition(chain[i].id)
+            if (from !== undefined && to !== undefined) reach += from.distanceTo(to)
+        }
         const offsetVec = target.clone().sub(shoulderWorld)
         if (reach > 0 && offsetVec.length() > reach) {
             target.copy(shoulderWorld).add(offsetVec.setLength(reach))

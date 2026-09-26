@@ -4,7 +4,7 @@ import type {AttackSegment, WeaponAttacks} from './attack_chain.ts'
 /**
  * 远程武器攻击段（武器模组固有数据）：
  * 每把远程武器拥有 1 个主干段（轻击键触发），只声明**玩法时序**（阶段名/时长/移速/可中断）；
- * 动画是段 id 对应的显式骨骼关键帧（`character/weapon/attack_clip_data.ts`），不再有动画参数。
+ * 动画是段 id 对应的显式骨骼关键帧（`attack_clip_data.ts` 基础轨道 + `attack_pose_edits.ts` 逐段修订），不再有抽象动画参数。
  */
 
 interface RangedAttackSpec {
@@ -21,7 +21,7 @@ interface RangedAttackSpec {
 const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     longbow: {
         segmentId: 'longbow_shot',
-        duration: 0.2,
+        duration: 0.4,
         cooldown: 0,
         phases: [
             {name: 'draw', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
@@ -31,7 +31,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     },
     crossbow: {
         segmentId: 'crossbow_bolt',
-        duration: 0.15,
+        duration: 0.3,
         cooldown: 0,
         phases: [
             {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: true},
@@ -40,7 +40,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     },
     shotgun: {
         segmentId: 'shotgun_blast',
-        duration: 0.3,
+        duration: 0.6,
         cooldown: 0,
         phases: [
             {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true},
@@ -49,7 +49,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     },
     staff: {
         segmentId: 'staff_orb',
-        duration: 0.3,
+        duration: 0.6,
         cooldown: 0,
         phases: [
             {name: 'aim', durationRatio: 0.4, moveSpeedMultiplier: 0.3, cancellable: true},
@@ -58,7 +58,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     },
     magic_wand: {
         segmentId: 'magic_wand_homing',
-        duration: 0.15,
+        duration: 0.3,
         cooldown: 0,
         phases: [
             {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: true},
@@ -67,7 +67,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     },
     throwing_axe: {
         segmentId: 'throwing_axe_hurl',
-        duration: 0.25,
+        duration: 0.5,
         cooldown: 0,
         phases: [
             {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: false},
@@ -76,7 +76,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     },
     grenade: {
         segmentId: 'grenade_throw',
-        duration: 0.4,
+        duration: 0.8,
         cooldown: 0,
         phases: [
             {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
@@ -85,7 +85,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     },
     molotov: {
         segmentId: 'molotov_throw',
-        duration: 0.4,
+        duration: 0.8,
         cooldown: 0,
         phases: [
             {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
@@ -94,7 +94,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     },
     throwing_dart: {
         segmentId: 'throwing_dart_fling',
-        duration: 0.1,
+        duration: 0.2,
         cooldown: 0,
         phases: [
             {name: 'release', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false},

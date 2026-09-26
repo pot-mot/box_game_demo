@@ -7,6 +7,7 @@ import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../physics/
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {createRangedExecutor} from './ranged_executor.ts'
 import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import {resolvePhases} from '../../../character/combat/attack_phases.ts'
 import {defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import type {ExecutorContext} from '../../../character/combat/executor.ts'
@@ -34,11 +35,16 @@ const makeWeaponRuntime = (weaponOverrides: Partial<RangedWeaponConfig> = {}, da
     return {weapon, holdMode: defaultHoldMode(weapon), attacks: weaponAttacksOf(weapon)}
 }
 
-/** 在 +Z 方向开火（执行器只在首次 update 时生成子弹；武器参数取自 combat.weapon） */
+/** 在 +Z 方向开火：进入段的 release 阶段后首次 update 生成子弹（武器参数取自 combat.weapon） */
 const fireForward = (executor: RangedExecutor, shooter: CharacterEntity, runtime: WeaponRuntime): void => {
     shooter.combat.weapon = runtime.weapon
     shooter.combat.attacks = runtime.attacks
     shooter.combat.attackTimer = 0
+    /* 开火门控 = release 阶段：测试直接把段阶段推进到 release */
+    const segment = Object.values(runtime.attacks.segments)[0]
+    shooter.combat.activeSegment = segment
+    const releaseIndex = resolvePhases(segment.phases).findIndex(phase => phase.name === 'release')
+    shooter.combat.phaseIndex = releaseIndex >= 0 ? releaseIndex : 0
     executor.start(shooter.combat, shooter, {x: 0, y: 0, z: 1}, noopCtx)
     executor.update(DT, shooter.combat, shooter, noopCtx)
 }

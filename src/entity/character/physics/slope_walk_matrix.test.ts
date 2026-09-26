@@ -104,6 +104,7 @@ const makeModelMock = (): CharacterModel => ({
     weaponGroup: null,
     weaponHitBox: null,
     weaponGripY: 0,
+    weaponSupportGripOffset: 0,
     offhandWeaponMesh: null,
     offhandWeaponTip: null,
     offhandWeaponGroup: null,

@@ -192,8 +192,9 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
      * 关闭贴合时立即清除 IK 根（左臂回到 clip 姿态），不做任何跨手干预。
      */
     const solveGrip = (): void => {
-        const skeleton = focusSkeleton()
-        if (skeleton === undefined) {
+        const focus = world.getFocus()
+        const skeleton = focus?.skeleton
+        if (skeleton === undefined || focus === undefined) {
             gripSolved = false
             return
         }
@@ -204,8 +205,10 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
         }
         gripSolved = solveTwoHandedGrip(skeleton, equipped.weaponGroup, {
             shoulderId: 'leftArmShoulder',
-            /* 副握点沿武器轴相对武器原点：握把局部 y + 握把相对偏移（0 = 主手握把处） */
-            offset: equipped.gripY + TWO_HAND_GRIP_OFFSET,
+            /* 武器根节点已对齐主握把；按该武器沿柄身分配的间距定位副握点 */
+            offset: equipped.supportGripOffset + TWO_HAND_GRIP_OFFSET,
+            /* 与生产同源：目标换算回骨架空间（编辑器骨架若带根缩放也保持一致） */
+            rootObject: focus.visuals.groups.get('root'),
         })
     }
 

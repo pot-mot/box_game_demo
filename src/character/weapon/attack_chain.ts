@@ -4,7 +4,7 @@ import type {HoldMode} from './hold_mode.ts'
 /**
  * 攻击链领域模型（武器模组拥有）：
  * - 攻击段（AttackSegment）= 武器的一次可播放动作的**玩法数据**（时长/阶段时序/伤害倍率/冷却/连段）；
- *   动画是段 id 对应的显式骨骼关键帧数据（`attack_clip_data.ts`）；
+ *   动画是段 id 对应的显式骨骼关键帧数据（基础轨道在 `attack_clip_data.ts`，姿势修订在 `attack_pose_edits.ts`）；
  * - 攻击链（WeaponAttackChain）= 一个攻击键的起手候选 + 主干段播放顺序；
  * - 连段推进 = **段自身声明的 next 转换函数**（按声明顺序求值，第一个守卫通过者胜出），
  *   状态机只负责调度与消费，不再用「槽位下标 / comboChain 字符串索引」表达连段。
@@ -49,7 +49,7 @@ export interface AttackTransition {
 
 /**
  * 段动作组合中的单个 pose 引用（Q4：「段引用若干 pose + 权重 + 时间进度」的落地）。
- * pose 资产来自 `character/weapon/attack_clip_data.ts`（骨骼关键帧唯一真相源）；
+ * pose 资产来自 `character/weapon/attack_clip_data.ts`（基础轨道）及 `attack_pose_edits.ts`（逐段修订）；
  * 播放时段进度由 `attacking` 时间线推进，各层按 `progressOffset` 映射到自身时间轴。
  */
 export interface SegmentPoseLayer {
@@ -74,7 +74,7 @@ export interface AttackSegment {
     /** 恢复时长（秒） */
     readonly recovery: number
     /** 阶段序列（strike / draw / aim / release …；recovery 阶段时长取本段 recovery）；
-     *  动画由 `poses` 声明的 pose 组合表达（骨骼关键帧数据见 `character/weapon/attack_clip_data.ts`） */
+     *  动画由 `poses` 声明的 pose 组合表达（骨骼关键帧资产见 `attack_clip_data.ts` / `attack_pose_edits.ts`） */
     readonly phases: readonly AttackPhase[]
     /** 动作组合：本段播放的 pose 层（各层按影响程度加权、按时间进度采样同一段时间轴） */
     readonly poses: readonly SegmentPoseLayer[]

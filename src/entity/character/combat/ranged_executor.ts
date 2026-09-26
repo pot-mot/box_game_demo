@@ -8,6 +8,7 @@ import type {SkillExecutor, ExecutorContext} from '../../../character/combat/exe
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import {applyDamage} from '../../../character/combat/damage.ts'
 import {applyExplosionDamage} from '../../../character/combat/explosion.ts'
+import {resolvePhases} from '../../../character/combat/attack_phases.ts'
 import {DEFAULT_BULLET_PASS_THROUGH_CATEGORIES, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import {
     collisionCategoryMask,
@@ -48,6 +49,14 @@ interface BulletInstance {
 }
 
 const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
+
+/** 当前段阶段名（无段/阶段用尽时 undefined；开火门控用） */
+const activePhaseName = (combat: CombatComponent): string | undefined => {
+    const segment = combat.activeSegment
+    if (segment === undefined) return undefined
+    const phases = resolvePhases(segment.phases)
+    return combat.phaseIndex < phases.length ? phases[combat.phaseIndex].name : undefined
+}
 
 const getPlayerFactionMaterial = (faction: number): MeshBasicMaterial => {
     let mat = BULLET_MATERIAL_POOL.get(faction)
@@ -162,7 +171,8 @@ export const createRangedExecutor = (
         const weapon = combat.weapon
         if (weapon.type !== 'ranged') return
 
-        if (combat.attackTimer > 0.016 || firedThisAttack.has(entity.id)) return
+        /* 开火时机 = release 阶段开始（与动画释放姿态对齐）：先拉弓/举枪，释放帧才出弹 */
+        if (firedThisAttack.has(entity.id) || activePhaseName(combat) !== 'release') return
         firedThisAttack.add(entity.id)
 
         const dir = attackDirections.get(entity.id)

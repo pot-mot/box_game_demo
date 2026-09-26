@@ -150,8 +150,9 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         const lightOne = findBuiltinClip('long_sword_light_1')
         expect(lightOne).toBeDefined()
         const records = lightOne!.clip.eventTracks[0].records
-        expect(records[0].time).toBeCloseTo(0.2 * 0.1, 6)
-        expect(records[1].time).toBeCloseTo(0.2 * 0.85, 6)
+        /* 命中窗口对齐打击帧：on ≈ 0.5×动作时间、off ≈ 0.95×动作时间（轻段动作时间 = 0.267s） */
+        expect(records[0].time).toBeCloseTo(0.133, 6)
+        expect(records[1].time).toBeCloseTo(0.253, 6)
     })
 
     it('行走 clip 采样出实际姿态变化（腿摆动），且待机持械/空手姿态不同', () => {

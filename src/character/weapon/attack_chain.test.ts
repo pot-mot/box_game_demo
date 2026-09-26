@@ -92,17 +92,17 @@ describe('近战武器攻击链（武器模组固有数据）', () => {
         }
     })
 
-    it.each(MELEE_WEAPON_IDS)('%s：主干段时长/伤害倍率（轻 0.2+0.2、重 0.3+0.2 ×1.6；变体段自带参数）', (weaponId) => {
+    it.each(MELEE_WEAPON_IDS)('%s：主干段时长/伤害倍率（轻 0.267+0.266、重 0.4+0.267 ×1.6；变体段自带参数）', (weaponId) => {
         const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId])
         const expected = MELEE_CHAIN_STEPS[weaponId]
         const stepIds = new Set([...expected.light, ...expected.heavy].map(step => segmentIdOf(weaponId, step)))
         for (const segment of Object.values(attacks.segments)) {
             if (!stepIds.has(segment.id)) continue
             if (segment.key === 'light') {
-                expect(segmentTotalDuration(segment), segment.id).toBeCloseTo(0.4, 6)
+                expect(segmentTotalDuration(segment), segment.id).toBeCloseTo(0.533, 6)
                 expect(segment.damageMultiplier, segment.id).toBe(1)
             } else {
-                expect(segmentTotalDuration(segment), segment.id).toBeCloseTo(0.5, 6)
+                expect(segmentTotalDuration(segment), segment.id).toBeCloseTo(0.667, 6)
                 expect(segment.damageMultiplier, segment.id).toBeCloseTo(1.6, 6)
             }
         }

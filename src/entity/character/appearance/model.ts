@@ -17,8 +17,9 @@ interface WeaponSlot {
     tip: Mesh | null
     hitBox: WeaponLocalHitBox | null
     cleanup: (() => void) | null
-    /** 握把中心在武器本地 Y 轴上的坐标（负值 = 在原点下方），供双手副握点计算 */
+    /** 原始几何中的主握把 Y 坐标（供骨骼编辑器校验主握点） */
     gripY: number
+    supportGripOffset: number
 }
 
 /** 取关节 Group；预设骨架保证存在，缺失即数据结构错误 */
@@ -58,7 +59,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     const leftWeaponMount = requireGroup(groups, 'leftWeaponMount')
 
     const createSlot = (mountJoint: Group): WeaponSlot => ({
-        mountJoint, group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0,
+        mountJoint, group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0, supportGripOffset: 0,
     })
     const rightSlot = createSlot(rightWeaponMount)
     const leftSlot = createSlot(leftWeaponMount)
@@ -72,6 +73,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         slot.hitBox = null
         slot.cleanup = null
         slot.gripY = 0
+        slot.supportGripOffset = 0
     }
 
     const equipSlot = (slot: WeaponSlot, meshConfig: WeaponMeshConfig | undefined): void => {
@@ -85,6 +87,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         slot.hitBox = result.hitBox
         slot.cleanup = result.cleanup
         slot.gripY = result.gripY
+        slot.supportGripOffset = result.supportGripOffset
         slot.mountJoint.add(result.group)
     }
 
@@ -171,6 +174,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         get weaponGroup() { return rightSlot.group },
         get weaponHitBox() { return rightSlot.hitBox },
         get weaponGripY() { return rightSlot.gripY },
+        get weaponSupportGripOffset() { return rightSlot.supportGripOffset },
         get offhandWeaponMesh() { return leftSlot.hitCenter },
         get offhandWeaponTip() { return leftSlot.tip },
         get offhandWeaponGroup() { return leftSlot.group },
