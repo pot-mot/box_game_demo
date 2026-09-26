@@ -71,6 +71,10 @@ export interface AttackSegment {
     readonly label?: string
 }
 
+/** 段是否双手持握（读取首阶段动画参数；无阶段 = 单手）——生产与编辑器共用的唯一判定 */
+export const segmentTwoHanded = (segment: AttackSegment | undefined): boolean =>
+    segment?.phases[0]?.animConfig.twoHanded ?? false
+
 /** 起手候选：按声明顺序求值（守卫变体在前、兜底在后） */
 export interface AttackEntry {
     readonly segmentId: string

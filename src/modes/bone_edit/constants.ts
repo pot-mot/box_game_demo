@@ -22,6 +22,9 @@ export const KEYFRAME_DIAMOND_SIZE = 9
 /** 拖拽判定阈值（px）：位移小于该值视为点击 */
 export const DRAG_CLICK_THRESHOLD = 4
 
+/** 骨骼/关节拖拽旋转灵敏度（rad/px） */
+export const ROT_SENSITIVITY = 0.012
+
 /** 时间轴配色 */
 export const TIMELINE_BG = '#1b1b22'
 export const TIMELINE_GRID_LINE = '#2a2a33'

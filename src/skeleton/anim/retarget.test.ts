@@ -8,16 +8,16 @@ const makeClip = (): BoneAnimationClip => ({
     duration: 1,
     loop: false,
     jointTracks: [
-        {targetId: 'group', interpolation: {type: 'linear', strategy: 'none'}, records: [
+        {targetId: 'group', interpolation: {type: 'linear'}, records: [
             {time: 0, position: new Vector3(0, 0, 0), rotation: new Quaternion()},
             {time: 1, position: new Vector3(0, 1, 0), rotation: new Quaternion()},
         ]},
-        {targetId: 'spine', interpolation: {type: 'linear', strategy: 'none'}, records: [
+        {targetId: 'spine', interpolation: {type: 'linear'}, records: [
             {time: 0, position: new Vector3(0, 0.5, 0), rotation: new Quaternion()},
         ]},
     ],
     boneTracks: [
-        {targetId: 'torso', interpolation: {type: 'linear', strategy: 'none'}, records: [{time: 0, roll: 0.2}]},
+        {targetId: 'torso', interpolation: {type: 'linear'}, records: [{time: 0, roll: 0.2}]},
     ],
     eventTracks: [{records: [{time: 0.1, eventName: 'hitbox_on'}]}],
 })

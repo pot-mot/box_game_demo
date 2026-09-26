@@ -1,7 +1,8 @@
-import {describe, it, expect, vi, beforeEach} from 'vitest'
+import {describe, it, expect, vi} from 'vitest'
 import {Group, PerspectiveCamera} from 'three'
 import {createTransformGizmo} from '../edit/transform_gizmo.ts'
-import {setupBoneGizmoPointer, isGizmoActive} from './gizmo_pointer.ts'
+import {setupBoneGizmoPointer} from './gizmo_pointer.ts'
+import {createDragCoordinator, type DragCoordinator} from './drag_state.ts'
 import {createSkeleton} from '../../skeleton/skeleton.ts'
 import {createSkeletonJoint} from '../../skeleton/joint.ts'
 import type {SkeletonSceneBridge} from '../../entity/skeleton/render/bridge.ts'
@@ -89,18 +90,19 @@ const HIT_X = ((0.15 + 1) / 2) * 1024
 const HIT_Y = ((1 - 0.15) / 2) * 768
 
 describe('bone_edit gizmo 指针交互', () => {
-    beforeEach(() => {
-        /* 模块级拖拽标志应在上一个测试被清理 */
-        expect(isGizmoActive()).toBe(false)
-    })
+    const setup = (
+        world: SkeletonEntitiesContext,
+        gizmo: ReturnType<typeof createTransformGizmo>,
+        history: BoneEditHistory,
+        setOrbitEnabled: (v: boolean) => void,
+        coordinator: DragCoordinator,
+    ) => setupBoneGizmoPointer(world, testCamera(), gizmo, history, setOrbitEnabled, coordinator)
 
     it('鼠标从未移动时 getHoverPart 不检测（NaN 哨兵避免屏幕中心误命中）', () => {
         const gizmo = createTransformGizmo()
         gizmo.setVisible(true)
         const camera = testCamera()
-        const pointer = setupBoneGizmoPointer(
-            fakeWorld({}), camera, gizmo, fakeHistory(), () => {},
-        )
+        const pointer = setup(fakeWorld({}), gizmo, fakeHistory(), () => {}, createDragCoordinator())
         /* gizmo 可见且屏幕中心射线能命中部件，但无 pointermove → 不检测 */
         expect(pointer.getHoverPart(camera)).toBeUndefined()
         pointer.destroy()
@@ -111,9 +113,7 @@ describe('bone_edit gizmo 指针交互', () => {
         const gizmo = createTransformGizmo()
         gizmo.setVisible(true)
         const camera = testCamera()
-        const pointer = setupBoneGizmoPointer(
-            fakeWorld({}), camera, gizmo, fakeHistory(), () => {},
-        )
+        const pointer = setup(fakeWorld({}), gizmo, fakeHistory(), () => {}, createDragCoordinator())
         pointer.handlePointerMove(new PointerEvent('pointermove', {clientX: HIT_X, clientY: HIT_Y}))
         expect(pointer.getHoverPart(camera)).toBe('rotate_z')
         pointer.destroy()
@@ -123,10 +123,10 @@ describe('bone_edit gizmo 指针交互', () => {
     it('未命中 gizmo 的 pointerdown 不消费事件', () => {
         const gizmo = createTransformGizmo()
         gizmo.setVisible(true)
-        const camera = testCamera()
-        const pointer = setupBoneGizmoPointer(
+        const coordinator = createDragCoordinator()
+        const pointer = setup(
             fakeWorld({focus: fakeEntity(), selection: {kind: 'joint', id: 'joint_1'}}),
-            camera, gizmo, fakeHistory(), () => {},
+            gizmo, fakeHistory(), () => {}, coordinator,
         )
         /* 屏幕角落不命中任何部件 */
         const consumed = pointer.handlePointerDown(
@@ -134,7 +134,7 @@ describe('bone_edit gizmo 指针交互', () => {
         )
         expect(consumed).toBe(false)
         expect(pointer.isDragging()).toBe(false)
-        expect(isGizmoActive()).toBe(false)
+        expect(coordinator.isGizmoActive()).toBe(false)
         pointer.destroy()
         gizmo.dispose()
     })
@@ -142,10 +142,9 @@ describe('bone_edit gizmo 指针交互', () => {
     it('无关节选中时命中 gizmo 也不进入拖拽', () => {
         const gizmo = createTransformGizmo()
         gizmo.setVisible(true)
-        const camera = testCamera()
-        const pointer = setupBoneGizmoPointer(
+        const pointer = setup(
             fakeWorld({focus: fakeEntity()}),
-            camera, gizmo, fakeHistory(), () => {},
+            gizmo, fakeHistory(), () => {}, createDragCoordinator(),
         )
         const consumed = pointer.handlePointerDown(
             new PointerEvent('pointerdown', {clientX: HIT_X, clientY: HIT_Y, button: 0}),
@@ -161,17 +160,18 @@ describe('bone_edit gizmo 指针交互', () => {
         gizmo.setVisible(true)
         const camera = testCamera()
         const history = fakeHistory()
+        const coordinator = createDragCoordinator()
         const orbit: boolean[] = []
-        const pointer = setupBoneGizmoPointer(
+        const pointer = setup(
             fakeWorld({focus: fakeEntity(), selection: {kind: 'joint', id: 'joint_1'}}),
-            camera, gizmo, history, (v) => { orbit.push(v) },
+            gizmo, history, (v) => { orbit.push(v) }, coordinator,
         )
         const consumed = pointer.handlePointerDown(
             new PointerEvent('pointerdown', {clientX: HIT_X, clientY: HIT_Y, button: 0}),
         )
         expect(consumed).toBe(true)
         expect(pointer.isDragging()).toBe(true)
-        expect(isGizmoActive()).toBe(true)
+        expect(coordinator.isGizmoActive()).toBe(true)
         expect(pointer.getActivePart()).toBe('rotate_z')
         /* 拖拽中 hover 检测暂停 */
         expect(pointer.getHoverPart(camera)).toBeUndefined()
@@ -181,7 +181,7 @@ describe('bone_edit gizmo 指针交互', () => {
         /* 左键释放结束拖拽 */
         pointer.handlePointerUp(new PointerEvent('pointerup', {button: 0}))
         expect(pointer.isDragging()).toBe(false)
-        expect(isGizmoActive()).toBe(false)
+        expect(coordinator.isGizmoActive()).toBe(false)
         expect(orbit.at(-1)).toBe(true)
         expect(history.endEdit).toHaveBeenCalledTimes(1)
         pointer.destroy()
@@ -191,10 +191,9 @@ describe('bone_edit gizmo 指针交互', () => {
     it('非左键 pointerup 不结束拖拽', () => {
         const gizmo = createTransformGizmo()
         gizmo.setVisible(true)
-        const camera = testCamera()
-        const pointer = setupBoneGizmoPointer(
+        const pointer = setup(
             fakeWorld({focus: fakeEntity(), selection: {kind: 'joint', id: 'joint_1'}}),
-            camera, gizmo, fakeHistory(), () => {},
+            gizmo, fakeHistory(), () => {}, createDragCoordinator(),
         )
         pointer.handlePointerDown(
             new PointerEvent('pointerdown', {clientX: HIT_X, clientY: HIT_Y, button: 0}),
@@ -212,12 +211,12 @@ describe('bone_edit gizmo 指针交互', () => {
     it('handlePointerCancel 中断拖拽：状态清理并恢复 orbit', () => {
         const gizmo = createTransformGizmo()
         gizmo.setVisible(true)
-        const camera = testCamera()
         const history = fakeHistory()
+        const coordinator = createDragCoordinator()
         const orbit: boolean[] = []
-        const pointer = setupBoneGizmoPointer(
+        const pointer = setup(
             fakeWorld({focus: fakeEntity(), selection: {kind: 'joint', id: 'joint_1'}}),
-            camera, gizmo, history, (v) => { orbit.push(v) },
+            gizmo, history, (v) => { orbit.push(v) }, coordinator,
         )
         pointer.handlePointerDown(
             new PointerEvent('pointerdown', {clientX: HIT_X, clientY: HIT_Y, button: 0}),
@@ -226,7 +225,7 @@ describe('bone_edit gizmo 指针交互', () => {
 
         pointer.handlePointerCancel()
         expect(pointer.isDragging()).toBe(false)
-        expect(isGizmoActive()).toBe(false)
+        expect(coordinator.isGizmoActive()).toBe(false)
         expect(orbit.at(-1)).toBe(true)
         expect(history.endEdit).toHaveBeenCalledTimes(1)
 
@@ -240,12 +239,11 @@ describe('bone_edit gizmo 指针交互', () => {
     it('拖拽移动驱动旋转级联并刷新世界', () => {
         const gizmo = createTransformGizmo()
         gizmo.setVisible(true)
-        const camera = testCamera()
         const refresh = vi.fn()
         const entity = fakeEntity()
-        const pointer = setupBoneGizmoPointer(
+        const pointer = setup(
             fakeWorld({focus: entity, selection: {kind: 'joint', id: 'joint_1'}, refresh}),
-            camera, gizmo, fakeHistory(), () => {},
+            gizmo, fakeHistory(), () => {}, createDragCoordinator(),
         )
         pointer.handlePointerDown(
             new PointerEvent('pointerdown', {clientX: HIT_X, clientY: HIT_Y, button: 0}),

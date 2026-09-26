@@ -106,10 +106,11 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         }
     })
 
-    it('全部轨道目标都是预设骨架的关节（根关节 group 已重定向为 root）', () => {
+    it('全部轨道目标都是预设骨架的关节（根关节 id 统一为 root，无需重定向）', () => {
         const jointIds = new Set(buildCharacterSkeletonDefinition().joints.map(joint => joint.id))
         for (const entry of getBuiltinClips()) {
             const targets = entry.clip.jointTracks.map(track => track.targetId)
+            expect(targets).toContain('root')
             expect(targets).not.toContain('group')
             for (const targetId of targets) {
                 expect(jointIds.has(targetId)).toBe(true)

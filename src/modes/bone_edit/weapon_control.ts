@@ -1,12 +1,12 @@
-import {Vector3, type Object3D} from 'three'
 import type {Skeleton} from '../../skeleton/skeleton.ts'
-import {resolveIkChain, solveCcd} from '../../skeleton/ik.ts'
-import {DEFAULT_IK_MAX_ITERATIONS, DEFAULT_IK_TOLERANCE} from '../../skeleton/constants.ts'
 import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, findWeaponPreset, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {segmentTwoHanded} from '../../character/weapon/attack_chain.ts'
 import {meleeAttackStyleOf} from '../../character/weapon/melee_attacks.ts'
+import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
+import {clearTwoHandGripRoot, solveTwoHandedGrip} from '../../entity/character/appearance/two_handed_ik.ts'
 import {
     equipSkeletonWeapon,
-    LEFT_WEAPON_MOUNT_JOINT,
+    RIGHT_WEAPON_MOUNT_JOINT,
     type SkeletonWeapon,
     type SkeletonWeaponSpec,
 } from './weapon_equip.ts'
@@ -15,7 +15,6 @@ import {
     ANIM_OPTION_WEAPON_AUTO,
     ANIM_OPTION_WEAPON_NONE,
     GRIP_TOGGLE_ID,
-    LEFT_GRIP_OFFSET,
     WEAPON_AUTO_LABEL,
     WEAPON_GROUP_LABEL_MELEE,
     WEAPON_GROUP_LABEL_RANGED,
@@ -29,7 +28,7 @@ import {
  * - 下拉三态：**自动**（跟随当前动画来源：选中内置攻击动作即装备该武器）/ **无武器** / 手动指定某把武器；
  * - 装载：武器网格挂 `rightWeaponMount`（右手武器挂点，随右手动画）；
  * - 双手贴合：段动画参数 `twoHanded` 为真时，左肩设为 IK 根并每次姿态应用后把左手链 CCD 求解到
- *   武器轴上的副握点（链末端 = `leftWeaponMount`），使左手也真正「握住」武器。
+ *   武器轴上的副握点（与生产共用 `entity/character/appearance/two_handed_ik.ts`）。
  */
 
 /** 当前动画的来源信息（用于「自动」模式选武器） */
@@ -62,11 +61,16 @@ export const resolveAutoWeapon = (
     return current ?? weaponSpecOf(DEFAULT_EDITOR_WEAPON_ID)
 }
 
-/** 是否双手持握：优先取该段动画参数（与生产同源），未知段回退武器风格表 */
+/**
+ * 是否双手持握：优先取该段动画参数（与生产同源，经 `segmentTwoHanded`），
+ * 未知段或段无阶段时回退武器风格表。
+ */
 export const isTwoHandedWeapon = (weapon: WeaponConfig, segmentId?: string): boolean => {
     if (weapon.type !== 'melee') return false
     const segment = segmentId !== undefined ? weapon.attacks.segments[segmentId] : undefined
-    return segment?.phases[0]?.animConfig.twoHanded ?? meleeAttackStyleOf(weapon.id).twoHanded
+    return segment !== undefined && segment.phases.length > 0
+        ? segmentTwoHanded(segment)
+        : meleeAttackStyleOf(weapon.id).twoHanded
 }
 
 /** 武器规格（编辑器装载用）；武器 id 未知时返回 undefined */
@@ -75,16 +79,6 @@ export const weaponSpecOf = (weaponId: string, segmentId?: string): SkeletonWeap
     if (weapon === undefined) return undefined
     return {weaponId: weapon.id, meshConfig: weapon.mesh, twoHanded: isTwoHandedWeapon(weapon, segmentId)}
 }
-
-/** 副握点世界坐标：武器挂点沿武器轴（本地 +Y = 握把指向刃尖）偏移 LEFT_GRIP_OFFSET */
-export const gripTargetOf = (weaponMount: Object3D, out: Vector3): Vector3 => {
-    weaponMount.updateMatrixWorld(true)
-    return out.set(0, LEFT_GRIP_OFFSET, 0).applyMatrix4(weaponMount.matrixWorld)
-}
-
-/** 左手链末端关节 id：优先左手武器挂点，自定义骨架回退左腕 */
-export const leftGripJointId = (skeleton: Skeleton): string =>
-    skeleton.findJoint(LEFT_WEAPON_MOUNT_JOINT) !== undefined ? LEFT_WEAPON_MOUNT_JOINT : 'leftWristPivot'
 
 export interface BoneEditWeaponControl {
     /** 控制条上的武器下拉（由 timeline 插入控制条） */
@@ -157,20 +151,16 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
     /** 左手贴合开关（默认关：编辑器里两只手完全独立，互不牵扯） */
     let gripAssist = false
     let gripSolved = false
-    const gripTarget = new Vector3()
+
+    const focusSkeleton = (): Skeleton | undefined => world.getFocus()?.skeleton
 
     /** 释放当前武器并清除左手 IK 根（回到由 clip 驱动左手） */
     const unequip = (): void => {
-        clearGripRoot()
+        const skeleton = focusSkeleton()
+        if (skeleton !== undefined) clearTwoHandGripRoot(skeleton)
         equipped?.dispose()
         equipped = undefined
         gripSolved = false
-    }
-
-    /** 清除左手 IK 根：贴合关闭/卸下武器后，左臂重新由 clip 姿态驱动（不被任何约束牵扯） */
-    const clearGripRoot = (): void => {
-        const leftShoulder = world.getFocus()?.skeleton.findJoint('leftArmShoulder')
-        if (leftShoulder !== undefined) leftShoulder.ikRootLevel = undefined
     }
 
     /** 解析当前应装备的武器规格：自动模式取动画来源（无来源保留当前/上次武器），手动模式取下拉值 */
@@ -204,46 +194,24 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
 
     /**
      * 左手贴合求解（仅在贴合开关打开 + 双手武器 + 播放预览时由 timeline 调用）：
-     * 左肩为 IK 根，链末端为左手武器挂点，目标为武器轴上的副握点。
+     * 左肩为 IK 根，链末端为左手武器挂点，目标为武器轴上的副握点（共享求解器）。
      * 关闭贴合时立即清除 IK 根（左臂回到 clip 姿态），不做任何跨手干预。
      */
     const solveGrip = (): void => {
-        const mount = equipped?.mount
-        const skeleton = world.getFocus()?.skeleton
-        if (!gripAssist || mount === undefined || skeleton === undefined || equipped?.spec.twoHanded !== true) {
-            if (!gripAssist) clearGripRoot()
+        const skeleton = focusSkeleton()
+        if (skeleton === undefined) {
             gripSolved = false
             return
         }
-        const endJoint = skeleton.findJoint(leftGripJointId(skeleton))
-        const shoulder = skeleton.findJoint('leftArmShoulder')
-        if (endJoint === undefined || shoulder === undefined) {
+        if (!gripAssist || equipped === undefined || !equipped.spec.twoHanded) {
+            if (!gripAssist) clearTwoHandGripRoot(skeleton)
             gripSolved = false
             return
         }
-        /* 左肩为 IK 根（与生产双手 IK 同构）：链 = 左肩 → … → 左手武器挂点 */
-        shoulder.ikRootLevel = 0
-        const chain = resolveIkChain(endJoint)
-        if (chain.length <= 1) {
-            gripSolved = false
-            return
-        }
-        gripTargetOf(mount, gripTarget)
-        /* 目标超出臂展（链长之和）时按臂展截断：避免不可达目标把左臂拉直穿模 */
-        const shoulderWorld = skeleton.getWorldPosition('leftArmShoulder')
-        if (shoulderWorld !== undefined) {
-            const reach = chain.slice(1).reduce((sum, joint) => sum + joint.position.length(), 0)
-            const offset = gripTarget.clone().sub(shoulderWorld)
-            if (reach > 0 && offset.length() > reach) {
-                gripTarget.copy(shoulderWorld).add(offset.setLength(reach))
-            }
-        }
-        solveCcd(skeleton, chain, gripTarget, {
-            maxIterations: DEFAULT_IK_MAX_ITERATIONS,
-            tolerance: DEFAULT_IK_TOLERANCE,
+        gripSolved = solveTwoHandedGrip(skeleton, equipped.mount, {
+            shoulderId: 'leftArmShoulder',
+            offset: TWO_HAND_GRIP_OFFSET,
         })
-        skeleton.updateWorldTransforms()
-        gripSolved = true
     }
 
     const refreshGripToggleLabel = (): void => {
@@ -257,7 +225,8 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
         gripAssist = on
         if (!on) {
             /* 关闭：立刻解除左手 IK 根并清状态（由 timeline 重新应用 clip 姿态） */
-            clearGripRoot()
+            const skeleton = focusSkeleton()
+            if (skeleton !== undefined) clearTwoHandGripRoot(skeleton)
             gripSolved = false
         }
         refreshGripToggleLabel()
@@ -281,3 +250,6 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
         dispose: unequip,
     }
 }
+
+/** 右手武器挂点关节 id（编辑器装载用；保留导出便于测试与外部引用） */
+export {RIGHT_WEAPON_MOUNT_JOINT}

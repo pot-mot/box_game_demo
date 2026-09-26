@@ -6,6 +6,7 @@ import {setupBoneEditHistory, type BoneEditHistory} from './history.ts'
 import {setupTimelinePanel, type TimelinePanel} from './timeline.ts'
 import {setupBoneEditPointer} from './pointer.ts'
 import {setupBoneGizmoPointer} from './gizmo_pointer.ts'
+import {createDragCoordinator} from './drag_state.ts'
 import {createTransformGizmo} from '../edit/transform_gizmo.ts'
 import {GIZMO_SCALE_FACTOR, VIEW_ELEVATION, VIEW_FIT_MARGIN, VIEW_MIN_DISTANCE, VIEW_MIN_VISIBLE_RATIO, VIEW_YAW} from './constants.ts'
 import {skeletonToDefinition, clipToJSON, type SkeletonDefinition, type ClipJSON} from '../../skeleton/anim/serialization.ts'
@@ -116,11 +117,14 @@ export const setupBoneEditMode = (
         }
         focusPanel(world.panel)
     }
+    /* 拖拽互斥协调器：gizmo 拖拽进行中时骨骼指针跳过（取代模块级标志） */
+    const dragCoordinator = createDragCoordinator()
+
     /* 指针交互（拾取/拖拽/IK 牵引）：命中骨骼时挂起轨道相机旋转，仅保留拖拽 */
-    setupBoneEditPointer(world, camera, history, () => timeline.isIkEnabled(), onPicked, orbit.setEnabled)
+    setupBoneEditPointer(world, camera, history, () => timeline.isIkEnabled(), onPicked, orbit.setEnabled, dragCoordinator)
 
     /* Gizmo 指针交互（拦截 gizmo 部件拖拽） */
-    const gizmoPointer = setupBoneGizmoPointer(world, camera, gizmo, history, orbit.setEnabled)
+    const gizmoPointer = setupBoneGizmoPointer(world, camera, gizmo, history, orbit.setEnabled, dragCoordinator)
 
     /* Gizmo 指针事件（在原有指针之前拦截） */
     renderer.domElement.addEventListener('pointerdown', gizmoPointer.handlePointerDown)

@@ -5,20 +5,15 @@ import {strikeCurve} from '../character/combat/attack_phases.ts'
 
 describe('线性过渡', () => {
     it('linear：恒速映射 y = t', () => {
-        const spec = {type: 'linear', strategy: 'none'} as const
+        const spec = {type: 'linear'} as const
         expect(applyTransition(0, spec)).toBe(0)
         expect(applyTransition(0.25, spec)).toBeCloseTo(0.25)
         expect(applyTransition(0.5, spec)).toBeCloseTo(0.5)
         expect(applyTransition(1, spec)).toBe(1)
     })
 
-    it('linear：strategy 被忽略', () => {
-        const spec = {type: 'linear', strategy: 'ease_in'} as const
-        expect(applyTransition(0.5, spec)).toBeCloseTo(0.5)
-    })
-
     it('越界进度先夹取到 [0,1]', () => {
-        const spec = {type: 'linear', strategy: 'none'} as const
+        const spec = {type: 'linear'} as const
         expect(applyTransition(-0.5, spec)).toBe(0)
         expect(applyTransition(1.5, spec)).toBe(1)
     })

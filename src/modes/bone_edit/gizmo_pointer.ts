@@ -8,12 +8,7 @@ import type {SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
 import {translateJointCascade, rotateJointCascade} from '../../skeleton/skeleton.ts'
 import type {TransformGizmo, DragState, GizmoDragCallbacks, GizmoPartType} from '../edit/transform_gizmo.ts'
 import type {BoneEditHistory} from './history.ts'
-
-/** 模块级标志：gizmo 拖拽进行中（供 setupBoneEditPointer 检查以避免冲突） */
-let gizmoActive = false
-
-/** 查询 gizmo 是否正在拖拽 */
-export const isGizmoActive = (): boolean => gizmoActive
+import type {DragCoordinator} from './drag_state.ts'
 
 export const setupBoneGizmoPointer = (
     world: SkeletonEntitiesContext,
@@ -21,6 +16,7 @@ export const setupBoneGizmoPointer = (
     gizmo: TransformGizmo,
     history: BoneEditHistory,
     setOrbitEnabled: (v: boolean) => void,
+    coordinator: DragCoordinator,
 ): {
     /** 是否正在 gizmo 拖拽中（供外部检查拖拽状态） */
     isDragging: () => boolean
@@ -86,8 +82,8 @@ export const setupBoneGizmoPointer = (
     const handlePointerDown = (e: PointerEvent): boolean => {
         if (e.button !== 0) return false
         /** 安全重置：上一轮拖拽被中断（如切换标签页丢 pointerup）时清除标志 */
-        if (gizmoActive && dragState === undefined) {
-            gizmoActive = false
+        if (coordinator.isGizmoActive() && dragState === undefined) {
+            coordinator.setGizmoActive(false)
         }
         const partType = hitGizmo(e.clientX, e.clientY)
         if (partType === undefined) return false
@@ -108,7 +104,7 @@ export const setupBoneGizmoPointer = (
             callbacks, camera, raycaster,
         )
         if (dragState !== undefined) {
-            gizmoActive = true
+            coordinator.setGizmoActive(true)
             setOrbitEnabled(false)
             history.startEdit()
             return true
@@ -149,7 +145,7 @@ export const setupBoneGizmoPointer = (
         /** 仅左键释放结束拖拽（避免右键/中键释放提前终止） */
         if (e.button !== 0) return
         dragState = undefined
-        gizmoActive = false
+        coordinator.setGizmoActive(false)
         setOrbitEnabled(true)
         history.endEdit()
     }
@@ -158,7 +154,7 @@ export const setupBoneGizmoPointer = (
     const handlePointerCancel = (): void => {
         if (dragState === undefined) return
         dragState = undefined
-        gizmoActive = false
+        coordinator.setGizmoActive(false)
         setOrbitEnabled(true)
         history.endEdit()
     }
@@ -173,7 +169,7 @@ export const setupBoneGizmoPointer = (
         handlePointerCancel,
         destroy: () => {
             dragState = undefined
-            gizmoActive = false
+            coordinator.setGizmoActive(false)
         },
     }
 }

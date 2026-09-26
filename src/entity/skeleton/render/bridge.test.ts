@@ -72,7 +72,7 @@ describe('场景真源桥接（createSkeletonFromGroups）', () => {
             {jointId: 'root', group: root},
             {jointId: 'mid', group: mid},
             {jointId: 'tip', group: tip},
-        ])
+        ], false, {rootTranslationExternallyManaged: true})
         connectJoint(bridge.findJoint('root')!, bridge.findJoint('mid')!)
         connectJoint(bridge.findJoint('mid')!, bridge.findJoint('tip')!)
         const pose = bridge.readPose()
@@ -110,6 +110,38 @@ describe('场景真源桥接（createSkeletonFromGroups）', () => {
         expect(tipWorld.x).toBeCloseTo(0)
         expect(tipWorld.z).toBeCloseTo(-1)
         expect(tipWorld.y).toBeCloseTo(2)
+    })
+
+    it('骨骼 roll 写回 Group（渲染可见）且 syncFromScene 往返不重复叠加', () => {
+        const {root, mid, tip} = buildGroups()
+        const bridge = createSkeletonFromGroups([
+            {jointId: 'root', group: root},
+            {jointId: 'mid', group: mid},
+            {jointId: 'tip', group: tip},
+        ])
+        connectJoint(bridge.findJoint('root')!, bridge.findJoint('mid')!)
+        connectJoint(bridge.findJoint('mid')!, bridge.findJoint('tip')!)
+        bridge.findJoint('mid')!.position.set(0, 2, 0)
+        bridge.findJoint('tip')!.position.set(1, 0, 0)
+        bridge.updateWorldTransforms()
+        const bone = createSkeletonBone('b', bridge.findJoint('mid')!, bridge.findJoint('tip')!, 1, 'b')
+        bridge.addBone(bone)
+        bone.roll = 0.6
+        bridge.updateWorldTransforms()
+
+        /* 场景图旋转反映 roll（否则渲染不可见） */
+        const rolledLocal = tip.quaternion.clone()
+        expect(rolledLocal.angleTo(new Quaternion())).toBeGreaterThan(0.5)
+        /* 场景世界旋转与领域缓存一致 */
+        root.updateMatrixWorld(true)
+        const groupWorld = tip.getWorldQuaternion(new Quaternion())
+        expect(bridge.getWorldRotation('tip')!.angleTo(groupWorld)).toBeLessThan(1e-6)
+
+        /* syncFromScene 往返：读回剔除 roll，再 FK 写回结果不变（幂等） */
+        bridge.syncFromScene()
+        root.updateMatrixWorld(true)
+        expect(tip.quaternion.angleTo(rolledLocal)).toBeLessThan(1e-6)
+        expect(bridge.getWorldRotation('tip')!.angleTo(groupWorld)).toBeLessThan(1e-6)
     })
 
     it('syncFromScene：外部直接修改 Group 后读回骨架', () => {

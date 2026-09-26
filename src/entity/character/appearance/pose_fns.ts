@@ -32,7 +32,7 @@ export interface PoseState {
     readonly leftLegKnee: JointEulerState
     readonly headNeck: JointEulerState
     readonly spine: {rotation: JointEulerState; position: readonly [number, number, number]}
-    readonly group: {rotation: JointEulerState}
+    readonly root: {rotation: JointEulerState}
 }
 
 const ZERO: JointEulerState = {rx: 0, ry: 0, rz: 0}
@@ -64,7 +64,7 @@ const idlePose = (t: number, ctx: PoseContext): PoseState => ({
     leftLegKnee: ZERO,
     headNeck: {rx: Math.sin(t * 2.5) * 0.02, ry: 0, rz: 0},
     spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
-    group: {rotation: ZERO},
+    root: {rotation: ZERO},
 })
 
 const walkingPose = (t: number, ctx: PoseContext): PoseState => {
@@ -89,7 +89,7 @@ const walkingPose = (t: number, ctx: PoseContext): PoseState => {
         leftLegKnee: {rx: swingAbs > 0.7 ? kneeBend * ((1 - swingAbs) / 0.3) : kneeBend, ry: 0, rz: 0},
         headNeck: {rx: Math.abs(Math.sin(t * 2)) * 0.04 - 0.02, ry: 0, rz: 0},
         spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
-        group: {rotation: ZERO},
+        root: {rotation: ZERO},
     }
 }
 
@@ -129,7 +129,7 @@ const jumpingPose = (t: number): PoseState => {
         leftLegKnee: {rx: knee, ry: 0, rz: 0},
         headNeck: ZERO,
         spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
-        group: {rotation: ZERO},
+        root: {rotation: ZERO},
     }
 }
 
@@ -149,7 +149,7 @@ const fallingPose = (t: number, speed: number): PoseState => {
         leftLegKnee: {rx: 0.1, ry: 0, rz: 0},
         headNeck: {rx: 0.15, ry: 0, rz: 0},
         spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
-        group: {rotation: ZERO},
+        root: {rotation: ZERO},
     }
 }
 
@@ -170,7 +170,7 @@ const dyingPose = (t: number): PoseState => {
         leftLegKnee: {rx: eased * 0.3, ry: 0, rz: 0},
         headNeck: {rx: eased * 0.3, ry: 0, rz: 0},
         spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
-        group: {rotation: {rx: Math.PI / 2 * eased, ry: 0, rz: 0}},
+        root: {rotation: {rx: Math.PI / 2 * eased, ry: 0, rz: 0}},
     }
 }
 
@@ -188,7 +188,7 @@ const dashingPose = (t: number): PoseState => {
         leftLegKnee: {rx: 0.05, ry: 0, rz: 0},
         headNeck: {rx: 0.1, ry: 0, rz: 0},
         spine: {rotation: {rx: -0.15, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
-        group: {rotation: ZERO},
+        root: {rotation: ZERO},
     }
 }
 
@@ -207,7 +207,7 @@ const flinchingPose = (t: number): PoseState => {
         leftLegKnee: ZERO,
         headNeck: {rx: -FLINCH_HEAD_BACK * e, ry: 0, rz: 0},
         spine: {rotation: {rx: -FLINCH_SPINE_BACK * e, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
-        group: {rotation: ZERO},
+        root: {rotation: ZERO},
     }
 }
 

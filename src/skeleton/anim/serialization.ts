@@ -10,8 +10,6 @@ import type {
     BoneJointKeyframeRecord,
     BoneSegmentKeyframeRecord,
 } from './types.ts'
-import type {TransitionSpec} from '../transition.ts'
-
 /** 骨架定义（JSON-safe 表示：位置/旋转用元组，与 save_load 的 Vec3JSON/QuatJSON 约定一致） */
 export interface SkeletonDefinition {
     readonly joints: readonly {
@@ -44,12 +42,15 @@ export interface SkeletonAnimationAsset {
 const Vec3TupleSchema = z.tuple([z.number(), z.number(), z.number()])
 const QuatTupleSchema = z.tuple([z.number(), z.number(), z.number(), z.number()])
 
-const TransitionSpecSchema = z.object({
-    type: z.enum(['linear', 'bezier_quad']),
-    strategy: z.enum(['none', 'ease_in', 'ease_out', 'strike_peak']),
-    customCy: z.number().optional(),
-    peakRatio: z.number().optional(),
-})
+const TransitionSpecSchema = z.discriminatedUnion('type', [
+    z.object({type: z.literal('linear')}),
+    z.object({
+        type: z.literal('bezier_quad'),
+        strategy: z.enum(['none', 'ease_in', 'ease_out', 'strike_peak']),
+        customCy: z.number().optional(),
+        peakRatio: z.number().optional(),
+    }),
+])
 
 const JointRecordSchema = z.object({
     time: z.number(),
@@ -111,43 +112,22 @@ const AssetSchema = z.object({
 })
 
 // ── 领域 ↔ JSON 转换 ──
+// JSON-safe 形状直接由上方 zod schema 推导（单一真相），避免手写接口与 schema 双份维护。
 
-/** 关键帧记录/轨道的 JSON-safe 形状（undo 快照/独立导入导出用） */
-export interface JointRecordJSON {
-    readonly time: number
-    readonly position: readonly [number, number, number]
-    readonly rotation: readonly [number, number, number, number]
-}
-export interface SegmentRecordJSON {
-    readonly time: number
-    readonly roll: number
-}
-export interface EventRecordJSON {
-    readonly time: number
-    readonly eventName: string
-    readonly params?: Readonly<Record<string, string | number>>
-}
-export interface JointTrackJSON {
-    readonly targetId: string
-    readonly interpolation: TransitionSpec
-    readonly records: readonly JointRecordJSON[]
-}
-export interface SegmentTrackJSON {
-    readonly targetId: string
-    readonly interpolation: TransitionSpec
-    readonly records: readonly SegmentRecordJSON[]
-}
-export interface EventTrackJSON {
-    readonly records: readonly EventRecordJSON[]
-}
-export interface ClipJSON {
-    readonly name: string
-    readonly duration: number
-    readonly loop: boolean
-    readonly jointTracks: readonly JointTrackJSON[]
-    readonly boneTracks: readonly SegmentTrackJSON[]
-    readonly eventTracks: readonly EventTrackJSON[]
-}
+/** 关节关键帧记录的 JSON-safe 形状 */
+export type JointRecordJSON = z.infer<typeof JointRecordSchema>
+/** 骨骼段关键帧记录的 JSON-safe 形状 */
+export type SegmentRecordJSON = z.infer<typeof SegmentRecordSchema>
+/** 事件记录的 JSON-safe 形状 */
+export type EventRecordJSON = z.infer<typeof EventRecordSchema>
+/** 关节轨道的 JSON-safe 形状 */
+export type JointTrackJSON = z.infer<typeof JointTrackSchema>
+/** 骨骼段轨道的 JSON-safe 形状 */
+export type SegmentTrackJSON = z.infer<typeof SegmentTrackSchema>
+/** 事件轨道的 JSON-safe 形状 */
+export type EventTrackJSON = z.infer<typeof EventTrackSchema>
+/** 骨骼动画 clip 的 JSON-safe 形状（undo 快照/独立导入导出用） */
+export type ClipJSON = z.infer<typeof ClipSchema>
 
 const jointRecordToJSON = (record: BoneJointKeyframeRecord): JointRecordJSON => ({
     time: record.time,

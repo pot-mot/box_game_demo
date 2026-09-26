@@ -8,7 +8,7 @@ const makeClip = (name: string, x = 0): BoneAnimationClip => ({
     duration: 1,
     loop: false,
     jointTracks: [
-        {targetId: 'spine', interpolation: {type: 'linear', strategy: 'none'}, records: [
+        {targetId: 'spine', interpolation: {type: 'linear'}, records: [
             {time: 0, position: new Vector3(x, 0, 0), rotation: new Quaternion()},
             {time: 1, position: new Vector3(x, 1, 0), rotation: new Quaternion()},
         ]},

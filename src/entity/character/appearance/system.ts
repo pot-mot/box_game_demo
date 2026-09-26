@@ -7,12 +7,9 @@ import {getBaseClip, fallingSpeedTier} from './clips/base_clips.ts'
 import {getAttackClip} from './clips/attack_clips.ts'
 import {createCharacterSkeletonBridge} from './skeleton_bridge.ts'
 import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
-import {resolveIkChain, solveCcd} from '../../../skeleton/ik.ts'
-import {DEFAULT_IK_MAX_ITERATIONS, DEFAULT_IK_TOLERANCE} from '../../../skeleton/constants.ts'
-import {STATE_BLEND_DURATION, walkSpeedScale} from './constants.ts'
-
-/** 双手武器副手握柄沿武器轴（前臂延伸方向）的偏移距离（米） */
-const TWO_HAND_GRIP_OFFSET = 0.45
+import {segmentTwoHanded} from '../../../character/weapon/attack_chain.ts'
+import {solveTwoHandedGrip} from './two_handed_ik.ts'
+import {STATE_BLEND_DURATION, TWO_HAND_GRIP_OFFSET, walkSpeedScale} from './constants.ts'
 
 /** clip 驱动的状态（全部 8 状态；基础状态用基础生成器，attacking 用攻击生成器） */
 const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'dashing', 'flinching', 'attacking']
@@ -76,9 +73,11 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     const setupClip = (state: ClipState, model: CharacterModel, ctx: AnimationContext): void => {
         teardownClip()
         bridge = createCharacterSkeletonBridge(model)
-        /* 双手武器：左肩设为 IK 根，左手腕链（左肩→左肘→左腕）可独立求解贴合握柄 */
-        const leftShoulder = bridge.findJoint('leftArmShoulder')
-        if (leftShoulder !== undefined) leftShoulder.ikRootLevel = 0
+        /* 双手武器：左肩设为 IK 根（仅攻击态且当前段双手时），左手链可独立求解贴合握柄 */
+        if (state === 'attacking' && segmentTwoHanded(ctx.attackSegment)) {
+            const leftShoulder = bridge.findJoint('leftArmShoulder')
+            if (leftShoulder !== undefined) leftShoulder.ikRootLevel = 0
+        }
         if (state === 'attacking') {
             /* 攻击 clip：当前段的武器固有参数（时长/阶段/倾斜角）+ 武器握持前倾；事件轨驱动命中窗口 */
             const segment = ctx.attackSegment
@@ -104,25 +103,14 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         }
     }
 
-    /** 双手武器 IK（评审决议：applyPose 先写、IK 后写覆盖左臂链）：左手腕追右腕武器轴握柄点 */
-    const applyTwoHandedIk = (ctx: AnimationContext): void => {
+    /** 双手武器 IK（applyPose 先写、IK 后写覆盖左臂链）：左手链追武器轴上的副握点 */
+    const applyTwoHandedIk = (ctx: AnimationContext, model: CharacterModel): void => {
         if (bridge === undefined || player === undefined) return
-        const twoHanded = ctx.attackSegment?.phases[0]?.animConfig.twoHanded ?? false
-        if (!twoHanded) return
-        const wristWorld = bridge.getWorldPosition('rightWristPivot')
-        const elbowWorld = bridge.getWorldPosition('rightArmElbow')
-        if (wristWorld === undefined || elbowWorld === undefined) return
-        const gripTarget = wristWorld.clone()
-            .add(elbowWorld.clone().sub(wristWorld).normalize().multiplyScalar(TWO_HAND_GRIP_OFFSET))
-        const leftWrist = bridge.findJoint('leftHandPivot')
-        if (leftWrist === undefined) return
-        const chain = resolveIkChain(leftWrist)
-        if (chain.length > 1) {
-            solveCcd(bridge, chain, gripTarget, {
-                maxIterations: DEFAULT_IK_MAX_ITERATIONS,
-                tolerance: DEFAULT_IK_TOLERANCE,
-            })
-        }
+        if (!segmentTwoHanded(ctx.attackSegment)) return
+        solveTwoHandedGrip(bridge, model.weaponGroup ?? undefined, {
+            shoulderId: 'leftArmShoulder',
+            offset: TWO_HAND_GRIP_OFFSET,
+        })
     }
 
     const onStateChange = (from: CharacterState | null, to: CharacterState, model: CharacterModel, ctx: AnimationContext): void => {
@@ -169,7 +157,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             }
             /* 双手武器 IK（applyPose 后、混合前：IK 覆盖左臂链，评审分层顺序） */
             if (state === 'attacking') {
-                applyTwoHandedIk(ctx)
+                applyTwoHandedIk(ctx, model)
             }
         }
 

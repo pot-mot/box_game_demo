@@ -1,6 +1,7 @@
 import {Mesh, type Scene} from 'three'
 import type {PanelContext} from '../box/base/ui'
 import type {Skeleton, JointCascadeSettings} from '../../skeleton/skeleton.ts'
+import {syncBoneLengths} from '../../skeleton/bone.ts'
 import {skeletonFromDefinition, type SkeletonDefinition} from '../../skeleton/anim/serialization.ts'
 import {createJointVisuals, createRotationGizmo, disposeRotationGizmo, type JointVisuals} from './render/joint_groups.ts'
 import {assembleCharacterAppearance, resizeBoneParts, type CharacterAppearance} from './appearance/assemble.ts'
@@ -78,7 +79,8 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
         addFromDefinition(buildCharacterSkeletonDefinition(), name)
 
     const addFromDefinition = (definition: SkeletonDefinition, name?: string): SkeletonEntity => {
-        /* 领域骨架仅作构建可视化（关节树/骨骼）的脚手架 */
+        /* scaffold 是「定义 → 关节树/骨骼」的一次性构建输入：createJointVisuals 据其建 Group 层级，
+         * 再把局部 pose/骨骼段复制进以场景 Group 为绑定的 bridge；实体骨架以 bridge 为准，scaffold 随后弃用 */
         const scaffold = skeletonFromDefinition(definition)
         const visuals = createJointVisuals(scaffold, scene)
         /* 模型层：方块人外观部件装配到关节 Group 上（随骨架变换） */
@@ -144,7 +146,8 @@ export const setupSkeletonEntities = (scene: Scene): SkeletonEntitiesContext => 
 
     const refresh = (): void => {
         for (const entity of entities.values()) {
-            entity.skeleton.updateWorldTransforms()
+            /* 段长 = 派生缓存（真源为关节位置）：刷新时从实际距离回写，保证面板/部件与骨架一致 */
+            syncBoneLengths(entity.skeleton)
             entity.visuals.resizeBoneVisuals()
             resizeBoneParts(entity.skeleton, entity.appearance)
         }

@@ -1,11 +1,14 @@
 import {Euler, Quaternion, Vector3} from 'three'
-import type {BoneAnimationClip} from '../../../../skeleton/anim/types.ts'
+import type {BoneAnimationClip, BoneJointKeyframeRecord} from '../../../../skeleton/anim/types.ts'
+import type {JointPose} from '../../../../skeleton/skeleton.ts'
 import type {AttackPhase, AttackPhaseName} from '../../../../character/combat/attack_phases.ts'
 import {applyEasing, strikeCurve, DEFAULT_ANIM, phaseDurationOf} from '../../../../character/combat/attack_phases.ts'
 import {
     FALLBACK_WINDUP_END_RATIO,
     FALLBACK_STRIKE_END_RATIO,
     FALLBACK_ATTACK_DURATION,
+    ATTACK_HITBOX_OFF_ACTION_RATIO,
+    ATTACK_HITBOX_ON_RATIO,
     ATTACK_LEFT_ARM_COUNTER,
     ATTACK_LEFT_ELBOW_BEND,
     ATTACK_HEAD_TILT_WINDUP,
@@ -34,6 +37,7 @@ import {
     LUNGE_SPIN,
     LUNGE_RANGED_AIM,
     LUNGE_RANGED_RELEASE,
+    CLIP_SAMPLE_FPS,
 } from '../constants.ts'
 import {CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS, type CharacterJointId} from './base_clips.ts'
 import type {PoseState} from '../pose_fns.ts'
@@ -275,7 +279,7 @@ const attackPoseAt = (
         leftLegKnee: {rx: LUNGE_BACK_KNEE * lunge, ry: 0, rz: 0},
         headNeck: {rx: Math.sin(t * ATTACK_HEAD_BOB_FREQ) * ATTACK_HEAD_BOB, ry: 0, rz: headTilt(phase.name, e)},
         spine: {rotation: {rx: bodyLean, ry: spineY, rz: 0}, position: [0, HIP_Y - LUNGE_SINK * lunge, spineZ]},
-        group: {rotation: zero},
+        root: {rotation: zero},
     }
 }
 
@@ -291,8 +295,6 @@ export interface AttackClipParams {
     readonly gripTilt: number
 }
 
-const SAMPLE_FPS = 60
-
 /** 攻击 clip 总时长：有阶段 = duration + recovery；无阶段 = 回退时长 */
 export const attackClipDurationOf = (params: AttackClipParams): number =>
     params.phases !== undefined && params.phases.length > 0
@@ -303,10 +305,10 @@ export const attackClipDurationOf = (params: AttackClipParams): number =>
 export const buildAttackClip = (params: AttackClipParams): BoneAnimationClip => {
     const total = attackClipDurationOf(params)
     const phases = params.phases !== undefined && params.phases.length > 0 ? params.phases : FALLBACK_PHASES
-    const frameCount = Math.max(2, Math.round(total * SAMPLE_FPS) + 1)
+    const frameCount = Math.max(2, Math.round(total * CLIP_SAMPLE_FPS) + 1)
 
     const tracks = CHARACTER_JOINT_IDS.map(jointId => {
-        const records: {time: number; position: Vector3; rotation: Quaternion}[] = []
+        const records: BoneJointKeyframeRecord[] = []
         for (let i = 0; i < frameCount; i++) {
             const t = total * i / (frameCount - 1)
             const pose = attackPoseAt(t, phases, params.duration, params.recovery, params.tilt, params.gripTilt)
@@ -322,8 +324,8 @@ export const buildAttackClip = (params: AttackClipParams): BoneAnimationClip => 
 
     /* 近战命中窗口事件（仅 melee 有效：ranged 无 weaponHitBox，事件轨置空由调用方按需裁剪） */
     const meleeEvents = [
-        {time: params.duration * 0.1, eventName: 'hitbox_on'},
-        {time: Math.min(params.duration * 0.85, total), eventName: 'hitbox_off'},
+        {time: params.duration * ATTACK_HITBOX_ON_RATIO, eventName: 'hitbox_on'},
+        {time: Math.min(params.duration * ATTACK_HITBOX_OFF_ACTION_RATIO, total), eventName: 'hitbox_off'},
     ]
 
     return {
@@ -336,8 +338,8 @@ export const buildAttackClip = (params: AttackClipParams): BoneAnimationClip => 
     }
 }
 
-const attackPoseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, {position: Vector3; rotation: Quaternion}> => {
-    const map = new Map<CharacterJointId, {position: Vector3; rotation: Quaternion}>()
+const attackPoseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, JointPose> => {
+    const map = new Map<CharacterJointId, JointPose>()
     const joints: Record<CharacterJointId, {rx: number; ry: number; rz: number}> = {
         rightArmShoulder: pose.rightArmShoulder,
         rightArmElbow: pose.rightArmElbow,
@@ -350,7 +352,7 @@ const attackPoseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, {pos
         leftLegKnee: pose.leftLegKnee,
         headNeck: pose.headNeck,
         spine: pose.spine.rotation,
-        group: pose.group.rotation,
+        root: pose.root.rotation,
     }
     for (const jointId of CHARACTER_JOINT_IDS) {
         const e = joints[jointId]

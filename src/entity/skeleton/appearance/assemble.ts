@@ -90,12 +90,18 @@ export const assembleCharacterAppearance = (
     return {boneParts, partMeshes, cleanup}
 }
 
-/** 按骨骼段 length 缩放部件（面板/IK 修改长度后调用）；length <= 0 的段保留基准形态 */
+/** 按骨骼段两端关节实际距离缩放部件（面板/IK/拖拽修改后调用）；零长段保留基准形态。
+ *  直接用世界距离而非 `bone.length`，避免拖拽关节后 length 缓存未同步导致的部件与骨架不一致。 */
 export const resizeBoneParts = (skeleton: Skeleton, appearance: CharacterAppearance): void => {
     for (const [boneId, binding] of appearance.boneParts) {
         const bone = skeleton.findBone(boneId)
-        if (bone === undefined || bone.length <= 0) continue
-        const scale = bone.length / binding.baseHeight
+        if (bone === undefined) continue
+        const headPos = skeleton.getWorldPosition(bone.head.id)
+        const tailPos = skeleton.getWorldPosition(bone.tail.id)
+        if (headPos === undefined || tailPos === undefined) continue
+        const length = headPos.distanceTo(tailPos)
+        if (length <= 0) continue
+        const scale = length / binding.baseHeight
         binding.part.mesh.scale.y = scale
         binding.part.mesh.position.y = -binding.baseHeight * scale / 2
     }

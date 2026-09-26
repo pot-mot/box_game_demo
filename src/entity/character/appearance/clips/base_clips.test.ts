@@ -39,7 +39,7 @@ const quatOf = (state: PoseState, jointId: (typeof CHARACTER_JOINT_IDS)[number])
         leftLegKnee: state.leftLegKnee,
         headNeck: state.headNeck,
         spine: state.spine.rotation,
-        group: state.group.rotation,
+        root: state.root.rotation,
     }
     const e = map[jointId]
     return new Quaternion().setFromEuler(new Euler(e.rx, e.ry, e.rz))
@@ -99,8 +99,8 @@ describe('基础状态 clip 生成器', () => {
         const clip = buildBaseClip('dying', false)
         const atEnd = sampleClip(clip, clip.duration)
         const beyond = sampleClip(clip, clip.duration + 1)
-        const qEnd = atEnd.jointPoses.get('group')!.rotation
-        const qBeyond = beyond.jointPoses.get('group')!.rotation
+        const qEnd = atEnd.jointPoses.get('root')!.rotation
+        const qBeyond = beyond.jointPoses.get('root')!.rotation
         expect(qEnd.angleTo(qBeyond)).toBeLessThan(1e-6)
     })
 
@@ -124,19 +124,21 @@ describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
         stubCanvas2d()
     })
 
-    it('绑定全部可动画关节 + rightHandPivot（Group 层级自动建连）', () => {
+    it('绑定全部可动画关节 + rightHandPivot + leftHandPivot（Group 层级自动建连）', () => {
         const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const bridge = createCharacterSkeletonBridge(model)
-        /* CHARACTER_JOINT_IDS + rightHandPivot */
-        expect(bridge.joints.size).toBe(CHARACTER_JOINT_IDS.length + 1)
+        /* CHARACTER_JOINT_IDS + rightHandPivot（武器挂点）+ leftHandPivot（双手 IK 链末端） */
+        expect(bridge.joints.size).toBe(CHARACTER_JOINT_IDS.length + 2)
         expect(bridge.findJoint('rightHandPivot')).toBeDefined()
-        /* Group 层级 → 骨架树一致：spine 的父是 group */
-        expect(bridge.findJoint('spine')!.parent?.id).toBe('group')
+        expect(bridge.findJoint('leftHandPivot')).toBeDefined()
+        /* Group 层级 → 骨架树一致：spine 的父是 root */
+        expect(bridge.findJoint('spine')!.parent?.id).toBe('root')
         expect(bridge.findJoint('rightArmShoulder')!.parent?.id).toBe('spine')
         expect(bridge.findJoint('rightArmElbow')!.parent?.id).toBe('rightArmShoulder')
         expect(bridge.findJoint('rightHandPivot')!.parent?.id).toBe('rightArmElbow')
         expect(bridge.findJoint('rightWristPivot')!.parent?.id).toBe('rightHandPivot')
-        expect(bridge.findJoint('rightLegHip')!.parent?.id).toBe('group')
+        expect(bridge.findJoint('leftHandPivot')!.parent?.id).toBe('leftArmElbow')
+        expect(bridge.findJoint('rightLegHip')!.parent?.id).toBe('root')
         model.dispose()
     })
 

@@ -1,5 +1,7 @@
 import {Euler, Quaternion, Vector3} from 'three'
-import type {BoneAnimationClip} from '../../../../skeleton/anim/types.ts'
+import type {BoneAnimationClip, BoneJointKeyframeRecord} from '../../../../skeleton/anim/types.ts'
+import type {JointPose} from '../../../../skeleton/skeleton.ts'
+import {CLIP_SAMPLE_FPS} from '../constants.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
 import {
     MODEL_BASE_HEIGHT,
@@ -23,7 +25,7 @@ export const CHARACTER_JOINT_IDS = [
     'leftLegKnee',
     'headNeck',
     'spine',
-    'group',
+    'root',
 ] as const
 
 export type CharacterJointId = typeof CHARACTER_JOINT_IDS[number]
@@ -43,18 +45,15 @@ export const CHARACTER_JOINT_REST_POSITIONS: Readonly<Record<CharacterJointId, r
     rightWristPivot: [0, 0, 0],
     leftArmShoulder: [-REST_SHOULDER_X, REST_BODY_H, 0],
     leftArmElbow: [0, -REST_UPPER_ARM_H, 0],
-    /* 模型原点在脚底：group 直接子关节（双腿髋/spine）位于腿长高度 */
+    /* 模型原点在脚底：root 直接子关节（双腿髋/spine）位于腿长高度 */
     rightLegHip: [REST_HIP_X, REST_LEG_H, 0],
     rightLegKnee: [0, -REST_HIP_H, 0],
     leftLegHip: [-REST_HIP_X, REST_LEG_H, 0],
     leftLegKnee: [0, -REST_HIP_H, 0],
     headNeck: [0, REST_BODY_H, 0],
     spine: [0, REST_LEG_H, 0],
-    group: [0, 0, 0],
+    root: [0, 0, 0],
 }
-
-/** 采样率（fps）：关键帧密度，插值误差 < 1% 波幅 */
-const SAMPLE_FPS = 60
 
 const eulerOf = (state: {rx: number; ry: number; rz: number}): Euler => new Euler(state.rx, state.ry, state.rz)
 
@@ -62,8 +61,8 @@ const eulerOf = (state: {rx: number; ry: number; rz: number}): Euler => new Eule
 const restPositionOf = (jointId: CharacterJointId): Vector3 =>
     new Vector3().fromArray([...CHARACTER_JOINT_REST_POSITIONS[jointId]])
 
-const poseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, {position: Vector3; rotation: Quaternion}> => {
-    const map = new Map<CharacterJointId, {position: Vector3; rotation: Quaternion}>()
+const poseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, JointPose> => {
+    const map = new Map<CharacterJointId, JointPose>()
     const set = (jointId: CharacterJointId, rotation: {rx: number; ry: number; rz: number}, position: Vector3 = restPositionOf(jointId)): void => {
         map.set(jointId, {position, rotation: new Quaternion().setFromEuler(eulerOf(rotation))})
     }
@@ -78,7 +77,7 @@ const poseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, {position:
     set('leftLegKnee', pose.leftLegKnee)
     set('headNeck', pose.headNeck)
     set('spine', pose.spine.rotation, new Vector3().fromArray([...pose.spine.position]))
-    set('group', pose.group.rotation)
+    set('root', pose.root.rotation)
     return map
 }
 
@@ -94,9 +93,9 @@ export const buildBaseClip = (
 ): BoneAnimationClip => {
     const meta = BASE_CLIP_META[state]
     const sampler = BASE_POSE_SAMPLERS[state]
-    const frameCount = Math.max(2, Math.round(meta.duration * SAMPLE_FPS) + 1)
+    const frameCount = Math.max(2, Math.round(meta.duration * CLIP_SAMPLE_FPS) + 1)
     const tracks = CHARACTER_JOINT_IDS.map(jointId => {
-        const records: {time: number; position: Vector3; rotation: Quaternion}[] = []
+        const records: BoneJointKeyframeRecord[] = []
         for (let i = 0; i < frameCount; i++) {
             const t = meta.duration * i / (frameCount - 1)
             const record = poseToRecord(sampler(t, {weaponHeld, horizontalSpeed})).get(jointId)!

@@ -1,5 +1,4 @@
-import {Quaternion, Vector3} from 'three'
-import type {SkeletonPose} from '../skeleton.ts'
+import type {JointPose, SkeletonPose} from '../skeleton.ts'
 import {lerpNumber, lerpQuat, lerpVec3, applyTransition} from '../transition.ts'
 import type {
     BoneEventRecord,
@@ -68,7 +67,7 @@ export const sampleJointTrack = (
     time: number,
     loop = false,
     duration = 0,
-): {position: Vector3; rotation: Quaternion} | undefined => {
+): JointPose | undefined => {
     const segment = findSegment(track.records, time, loop, duration)
     if (segment === undefined) return undefined
     const eased = applyTransition(segment.p, track.interpolation)
@@ -97,7 +96,7 @@ export const sampleClip = (clip: BoneAnimationClip, time: number): SkeletonPose 
         ? ((time % clip.duration) + clip.duration) % clip.duration
         : Math.min(time, clip.duration)
 
-    const jointPoses = new Map<string, {position: Vector3; rotation: Quaternion}>()
+    const jointPoses = new Map<string, JointPose>()
     for (const track of clip.jointTracks) {
         const sampled = sampleJointTrack(track, t, clip.loop, clip.duration)
         if (sampled !== undefined) jointPoses.set(track.targetId, sampled)

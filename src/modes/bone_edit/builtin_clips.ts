@@ -1,8 +1,5 @@
 import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
-import {createTargetIdMapping, remapClipTargets} from '../../skeleton/anim/retarget.ts'
-import {getBaseClip} from '../../entity/character/appearance/clips/base_clips.ts'
-import {getAttackClip} from '../../entity/character/appearance/clips/attack_clips.ts'
-import {WEAPON_GRIP_POSES} from '../../entity/character/appearance/constants.ts'
+import {getAttackClip, getBaseClip, WEAPON_GRIP_POSES} from '../../entity/character/appearance/builtin_catalog.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
 import {ALL_WEAPON_PRESETS, type WeaponConfig} from '../../character/weapon/catalog.ts'
 
@@ -49,18 +46,15 @@ const GROUP_RANGED = '远程攻击'
 /** 内置动作全部分组（按展示顺序） */
 export const BUILTIN_CLIP_GROUP_ORDER: readonly string[] = [GROUP_BASE, GROUP_MELEE, GROUP_RANGED]
 
-/* ── 关节 id 重定向 ── */
+/* ── 关节 id ── */
 
 /**
- * 生产角色 clip 的关节 id → 编辑器预设骨架关节 id：
- * 角色模型的根 Group 名为 `group`，预设骨架的根关节名为 `root`，其余关节同名同构
- * （关节静止局部位置由同一套 render 比例常量推导，见 base_clips.ts 与 entity/skeleton/preset.ts）。
+ * 生产角色 clip 与编辑器预设骨架使用**同一套关节 id**（根关节统一为 `root`，
+ * 静止局部位置由同一套 render 比例常量推导，见 base_clips.ts 与 entity/skeleton/preset.ts），
+ * 因此无需任何目标 id 重定向。
  */
-const CHARACTER_TARGET_ALIASES: Readonly<Record<string, string>> = {group: 'root'}
 
-const TARGET_MAPPING = createTargetIdMapping(CHARACTER_TARGET_ALIASES)
-
-/** 组装条目：重定向关节 id 并把 clip 名改为显示名（记录对象与生产缓存共享，不就地修改） */
+/** 组装条目：把 clip 名改为显示名（记录对象与生产缓存共享，不就地修改） */
 const entryOf = (
     id: string,
     group: string,
@@ -71,7 +65,7 @@ const entryOf = (
     id,
     group,
     label,
-    clip: {...remapClipTargets(source, TARGET_MAPPING), name: label},
+    clip: {...source, name: label},
     weaponId: origin.weaponId,
     segmentId: origin.segmentId,
     weaponHeld: origin.weaponHeld,

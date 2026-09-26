@@ -447,7 +447,7 @@ appearance/
 │   ├── base_clips.ts      ← 基础状态 clip 生成器（60fps 烘焙，循环 wrap/非循环 clamp，weaponHeld 变体）
 │   ├── attack_clips.ts    ← 攻击 clip 生成器（按武器模组段定义的阶段公式烘焙 + hitbox 事件轨）
 │   └── *.test.ts
-├── skeleton_bridge.ts     ← 角色模型 Group ↔ 骨架桥接（以场景为真源）
+├── skeleton_bridge.ts     ← 角色模型 Group ↔ 骨架桥接（领域 FK 缓存为唯一世界变换源）
 └── system.ts              ← clip 调度器（动画键 → 播放器 → 快照加权混合）
 ```
 

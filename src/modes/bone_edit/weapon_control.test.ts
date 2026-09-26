@@ -1,7 +1,8 @@
 import {describe, it, expect} from 'vitest'
 import {Group, Vector3} from 'three'
-import {gripTargetOf, isTwoHandedWeapon, leftGripJointId, resolveAutoWeapon, weaponSpecOf} from './weapon_control.ts'
-import {LEFT_GRIP_OFFSET} from './constants.ts'
+import {isTwoHandedWeapon, resolveAutoWeapon, weaponSpecOf} from './weapon_control.ts'
+import {computeTwoHandGripTarget, leftGripJointId} from '../../entity/character/appearance/two_handed_ik.ts'
+import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
 import {DEFAULT_WEAPON_ID, findWeaponPreset} from '../../character/weapon/catalog.ts'
 import {skeletonFromDefinition} from '../../skeleton/anim/serialization.ts'
 import {buildCharacterSkeletonDefinition} from '../../entity/skeleton/preset.ts'
@@ -48,19 +49,20 @@ describe('编辑器武器规格（weaponSpecOf / isTwoHandedWeapon）', () => {
     })
 })
 
-describe('副握点（gripTargetOf）与左手链末端（leftGripJointId）', () => {
-    it('副握点 = 武器挂点沿武器轴（本地 +Y）偏移 LEFT_GRIP_OFFSET', () => {
+describe('副握点（computeTwoHandGripTarget）与左手链末端（leftGripJointId）', () => {
+    it('副握点 = 武器挂点沿武器轴（本地 +Y）偏移 TWO_HAND_GRIP_OFFSET', () => {
+        const skeleton = skeletonFromDefinition(buildCharacterSkeletonDefinition())
         const mount = new Group()
         mount.position.set(1, 2, 3)
         mount.updateMatrixWorld(true)
         const out = new Vector3()
-        expect(gripTargetOf(mount, out).toArray()).toEqual([1, 2 + LEFT_GRIP_OFFSET, 3])
+        expect(computeTwoHandGripTarget(skeleton, mount, TWO_HAND_GRIP_OFFSET, out)!.toArray()).toEqual([1, 2 + TWO_HAND_GRIP_OFFSET, 3])
 
         /* 挂点绕 Z 轴旋转 90°：本地 +Y 指向世界 -X */
         mount.rotation.set(0, 0, Math.PI / 2)
         mount.updateMatrixWorld(true)
-        const rotated = gripTargetOf(mount, out).toArray()
-        expect(rotated[0]).toBeCloseTo(1 - LEFT_GRIP_OFFSET, 6)
+        const rotated = computeTwoHandGripTarget(skeleton, mount, TWO_HAND_GRIP_OFFSET, out)!.toArray()
+        expect(rotated[0]).toBeCloseTo(1 - TWO_HAND_GRIP_OFFSET, 6)
         expect(rotated[1]).toBeCloseTo(2, 6)
     })
 

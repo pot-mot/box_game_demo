@@ -7,17 +7,25 @@ export type TransitionType = typeof TRANSITION_TYPES[number]
 export const EASING_STRATEGIES = ['none', 'ease_in', 'ease_out', 'strike_peak'] as const
 export type EasingStrategy = typeof EASING_STRATEGIES[number]
 
-/** 过渡规格：关键帧间插值的缓动曲线定义 */
-export interface TransitionSpec {
-    readonly type: TransitionType
-    /** linear 恒速（strategy 忽略）；bezier_quad 按策略取预设控制点 */
+/** 线性过渡：恒速，无缓动参数 */
+export interface LinearTransition {
+    readonly type: 'linear'
+}
+
+/** 二阶贝塞尔过渡：按策略取预设控制点，或自定义 cy / 峰值位置 */
+export interface BezierQuadTransition {
+    readonly type: 'bezier_quad'
+    /** 预设缓动策略（strike_peak 走峰值曲线；none/ease_in/ease_out 走贝塞尔控制点） */
     readonly strategy: EasingStrategy
-    /** bezier_quad 自定义控制点 cy ∈ [0,1]（Pc = (0.5, customCy)：cx 固定 0.5，
+    /** 自定义控制点 cy ∈ [0,1]（Pc = (0.5, customCy)：cx 固定 0.5，
      *  越接近 0 越偏 ease_in，越接近 1 越偏 ease_out，0.5 退化为线性） */
     readonly customCy?: number
     /** strike_peak 的峰值位置 0-1（默认 0.7，同现有 strikePeakRatio） */
     readonly peakRatio?: number
 }
+
+/** 过渡规格：关键帧间插值的缓动曲线定义（判别联合，非法组合不可表达） */
+export type TransitionSpec = LinearTransition | BezierQuadTransition
 
 /** 将线性进度 p ∈ [0,1] 映射为缓动后进度（p 越界时先夹取） */
 export const applyTransition = (p: number, spec: TransitionSpec): number => {

@@ -2,15 +2,15 @@ import {Quaternion, Vector3} from 'three'
 import {disconnectJoint, type SkeletonJoint} from './joint.ts'
 import type {SkeletonBone} from './bone.ts'
 
-/** 关节世界变换缓存（updateWorldTransforms 产出，只读视图） */
-interface WorldTransform {
+/** 单个关节的 pose/世界变换（位置 + 旋转；position/rotation 为可变向量对象，接口字段只读） */
+export interface JointPose {
     readonly position: Vector3
     readonly rotation: Quaternion
 }
 
 /** 骨架姿态：全部关节局部 pose + 骨骼 roll（length 不参与记录） */
 export interface SkeletonPose {
-    readonly jointPoses: ReadonlyMap<string, {position: Vector3; rotation: Quaternion}>
+    readonly jointPoses: ReadonlyMap<string, JointPose>
     readonly boneRolls: ReadonlyMap<string, number>
 }
 
@@ -22,7 +22,9 @@ export interface SkeletonPose {
  * 操作类函数（rotateBone/setBoneLength/solveCcd 等）内部会先调用 updateWorldTransforms 保证缓存有效。
  */
 export interface Skeleton {
+    /** 关节注册表（只读视图：返回内部 Map，消费方禁止就地增删，改动走 addJoint/removeJoint） */
     readonly joints: ReadonlyMap<string, SkeletonJoint>
+    /** 骨骼段注册表（只读视图：返回内部 Map，消费方禁止就地增删，改动走 addBone/removeBone） */
     readonly bones: ReadonlyMap<string, SkeletonBone>
     addJoint: (joint: SkeletonJoint) => void
     /** 添加骨骼段。head 必须是 tail 的祖先；length <= 0 时按当前两端世界距离自动取值 */
@@ -47,12 +49,17 @@ export interface Skeleton {
 export interface SkeletonOptions {
     /** 每次 updateWorldTransforms 完成后回调（桥接场景用于把局部 pose 写回 three Group） */
     readonly onWorldUpdate?: () => void
+    /**
+     * 根关节位移是否由外部管理（角色桥接：body 位置经 syncPositions 写入，动画只驱动旋转）：
+     * true = applyPose 跳过根 position（避免把模型拉回原点）；false（默认）= 根位移动画生效。
+     */
+    readonly rootTranslationExternallyManaged?: boolean
 }
 
 export const createSkeleton = (options?: SkeletonOptions): Skeleton => {
     const joints = new Map<string, SkeletonJoint>()
     const bones = new Map<string, SkeletonBone>()
-    const world = new Map<string, WorldTransform>()
+    const world = new Map<string, JointPose>()
 
     const addJoint = (joint: SkeletonJoint): void => {
         if (joints.has(joint.id)) {
@@ -163,10 +170,11 @@ export const createSkeleton = (options?: SkeletonOptions): Skeleton => {
     const getWorldRotation = (jointId: string): Quaternion | undefined => world.get(jointId)?.rotation
 
     const applyPose = (pose: SkeletonPose): void => {
+        const rootExternallyManaged = options?.rootTranslationExternallyManaged === true
         for (const [jointId, jointPose] of pose.jointPoses) {
             const joint = joints.get(jointId)
             if (joint === undefined) continue
-            if (joint.parent === undefined) {
+            if (joint.parent === undefined && rootExternallyManaged) {
                 /* 根关节位移由外部管理（角色桥接：body 位置经 syncPositions 写入），
                  * 动画只驱动旋转 —— 避免 clip 把根位置写为原点导致模型飞回坐标原点 */
                 joint.rotation.copy(jointPose.rotation)
@@ -184,7 +192,7 @@ export const createSkeleton = (options?: SkeletonOptions): Skeleton => {
     }
 
     const readPose = (): SkeletonPose => {
-        const jointPoses = new Map<string, {position: Vector3; rotation: Quaternion}>()
+        const jointPoses = new Map<string, JointPose>()
         for (const joint of joints.values()) {
             jointPoses.set(joint.id, {
                 position: joint.position.clone(),
@@ -231,7 +239,7 @@ export const rotateJointSubtree = (
 ): void => {
     const subtree = collectSubtree(target)
     const rotation = new Quaternion().setFromAxisAngle(axis, angle)
-    const newWorld = new Map<string, WorldTransform>()
+    const newWorld = new Map<string, JointPose>()
 
     for (const joint of subtree) {
         const old = worldTransformOf(skeleton, joint)
@@ -252,7 +260,7 @@ export const translateJointSubtree = (
     delta: Vector3,
 ): void => {
     const subtree = collectSubtree(target)
-    const newWorld = new Map<string, WorldTransform>()
+    const newWorld = new Map<string, JointPose>()
 
     for (const joint of subtree) {
         const old = worldTransformOf(skeleton, joint)
@@ -292,8 +300,8 @@ const collectDescendantsBeyondDepth = (joint: SkeletonJoint, depth: number): rea
 const snapshotWorldTransforms = (
     skeleton: Skeleton,
     joints: readonly SkeletonJoint[],
-): Map<string, {position: Vector3; rotation: Quaternion}> => {
-    const before = new Map<string, {position: Vector3; rotation: Quaternion}>()
+): Map<string, JointPose> => {
+    const before = new Map<string, JointPose>()
     for (const joint of joints) {
         const pos = skeleton.getWorldPosition(joint.id)
         const rot = skeleton.getWorldRotation(joint.id)
@@ -309,9 +317,9 @@ const snapshotWorldTransforms = (
 const restoreWorldTransforms = (
     skeleton: Skeleton,
     joints: readonly SkeletonJoint[],
-    before: ReadonlyMap<string, {position: Vector3; rotation: Quaternion}>,
+    before: ReadonlyMap<string, JointPose>,
 ): void => {
-    const newWorld = new Map<string, WorldTransform>()
+    const newWorld = new Map<string, JointPose>()
     for (const joint of joints) {
         const b = before.get(joint.id)
         if (b === undefined) continue
@@ -385,7 +393,7 @@ const collectSubtree = (target: SkeletonJoint): readonly SkeletonJoint[] => {
 }
 
 /** 读取关节当前世界变换（缓存），未更新时返回 undefined */
-const worldTransformOf = (skeleton: Skeleton, joint: SkeletonJoint): WorldTransform | undefined => {
+const worldTransformOf = (skeleton: Skeleton, joint: SkeletonJoint): JointPose | undefined => {
     const pos = skeleton.getWorldPosition(joint.id)
     const rot = skeleton.getWorldRotation(joint.id)
     return pos !== undefined && rot !== undefined ? {position: pos, rotation: rot} : undefined
@@ -395,7 +403,7 @@ const worldTransformOf = (skeleton: Skeleton, joint: SkeletonJoint): WorldTransf
 const writeLocalsFromWorld = (
     skeleton: Skeleton,
     subtree: readonly SkeletonJoint[],
-    newWorld: ReadonlyMap<string, WorldTransform>,
+    newWorld: ReadonlyMap<string, JointPose>,
 ): void => {
     for (const joint of subtree) {
         const target = newWorld.get(joint.id)

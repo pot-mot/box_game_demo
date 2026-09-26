@@ -189,8 +189,8 @@ describe('骨架 pose 读写', () => {
         expect(() => skeleton.applyPose({jointPoses: ghostPose, boneRolls: pose.boneRolls})).not.toThrow()
     })
 
-    it('applyPose 不写根关节位置（根位移由外部管理，动画只驱动旋转）', () => {
-        const skeleton = createSkeleton()
+    it('applyPose 不写根关节位置（rootTranslationExternallyManaged = true 时，动画只驱动旋转）', () => {
+        const skeleton = createSkeleton({rootTranslationExternallyManaged: true})
         const a = createSkeletonJoint('a', 'a')
         const b = createSkeletonJoint('b', 'b')
         connectJoint(a, b)
@@ -207,6 +207,18 @@ describe('骨架 pose 读写', () => {
         expect(skeleton.findJoint('a')!.position.z).toBe(3)
         /* 子关节位置照常写入 */
         expect(skeleton.findJoint('b')!.position.x).toBe(0)
+    })
+
+    it('applyPose 默认写根关节位置（rootTranslationExternallyManaged = false，根位移动画生效）', () => {
+        const skeleton = createSkeleton()
+        const a = createSkeletonJoint('a', 'a')
+        a.position.set(5, 0, 3)
+        skeleton.addJoint(a)
+        const pose = skeleton.readPose()
+        pose.jointPoses.get('a')!.position.set(1, 2, 3)
+        skeleton.applyPose(pose)
+        expect(skeleton.findJoint('a')!.position.x).toBe(1)
+        expect(skeleton.findJoint('a')!.position.y).toBe(2)
     })
 })
 

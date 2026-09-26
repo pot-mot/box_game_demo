@@ -75,7 +75,7 @@ describe('sampleJointTrack 采样', () => {
     })
 
     it('空轨返回 undefined', () => {
-        expect(sampleJointTrack({targetId: 'a', interpolation: {type: 'linear', strategy: 'none'}, records: []}, 0.5)).toBeUndefined()
+        expect(sampleJointTrack({targetId: 'a', interpolation: {type: 'linear'}, records: []}, 0.5)).toBeUndefined()
     })
 
     it('单记录轨任何时刻都返回该记录', () => {
@@ -103,7 +103,7 @@ describe('sampleSegmentTrack 采样', () => {
 
     it('越界 nearest 与空轨 undefined', () => {
         expect(sampleSegmentTrack(track, 2)!.roll).toBe(1)
-        expect(sampleSegmentTrack({targetId: 'b', interpolation: {type: 'linear', strategy: 'none'}, records: []}, 0.5)).toBeUndefined()
+        expect(sampleSegmentTrack({targetId: 'b', interpolation: {type: 'linear'}, records: []}, 0.5)).toBeUndefined()
     })
 })
 
@@ -112,8 +112,8 @@ describe('sampleClip 整段采样', () => {
         name: 'clip',
         duration: 1,
         loop,
-        jointTracks: [makeJointTrack([{time: 0, x: 0}, {time: 1, x: 2}], {type: 'linear', strategy: 'none'})],
-        boneTracks: [{targetId: 'b', interpolation: {type: 'linear', strategy: 'none'}, records: [{time: 0, roll: 0}, {time: 1, roll: 0.5}]}],
+        jointTracks: [makeJointTrack([{time: 0, x: 0}, {time: 1, x: 2}], {type: 'linear'})],
+        boneTracks: [{targetId: 'b', interpolation: {type: 'linear'}, records: [{time: 0, roll: 0}, {time: 1, roll: 0.5}]}],
         eventTracks: [],
     })
 

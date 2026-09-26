@@ -77,3 +77,17 @@ export const setBoneLength = (skeleton: Skeleton, bone: SkeletonBone, length: nu
 export const setBoneRoll = (bone: SkeletonBone, roll: number): void => {
     bone.roll = roll
 }
+
+/**
+ * 从两端关节当前世界位置回写段长：`length` 是**派生缓存**（真源为关节位置），
+ * 编辑器拖拽/面板/IK 修改关节后调用，保证面板显示与外观缩放始终与骨架一致。
+ */
+export const syncBoneLengths = (skeleton: Skeleton): void => {
+    skeleton.updateWorldTransforms()
+    for (const bone of skeleton.bones.values()) {
+        const headPos = skeleton.getWorldPosition(bone.head.id)
+        const tailPos = skeleton.getWorldPosition(bone.tail.id)
+        if (headPos === undefined || tailPos === undefined) continue
+        bone.length = headPos.distanceTo(tailPos)
+    }
+}

@@ -133,6 +133,9 @@ export const WEAPON_GRIP_POSES: Record<WeaponMeshId, WeaponGripPose> = {
 /** 双手武器副手（左手）扶柄姿态：肩前举 + 内收 + 微屈肘 */
 export const TWO_HAND_GRIP = {x: -1.1, y: -0.5, elbow: 0.25} as const
 
+/** 双手武器副握点沿武器轴（本地 +Y，握把→刃尖）的偏移距离（米）；生产与编辑器共用 */
+export const TWO_HAND_GRIP_OFFSET = 0.45
+
 /** 挥砍时腕部刃面偏转系数（rotation.y = swingTilt × 系数，横斩时刃面转水平） */
 export const WRIST_EDGE_YAW_FACTOR = 1.0
 
@@ -212,3 +215,14 @@ export const FLINCH_ELBOW = 1.2
 
 /** 受击头部后仰（rad） */
 export const FLINCH_HEAD_BACK = 0.15
+
+// ── clip 烘焙与命中事件 ──
+
+/** clip 关键帧烘焙采样率（fps）：基础状态与攻击动作共用 */
+export const CLIP_SAMPLE_FPS = 60
+
+/** 攻击命中窗口开启时间（动作时长比例，与旧 executor 窗口一致） */
+export const ATTACK_HITBOX_ON_RATIO = 0.1
+
+/** 攻击命中窗口关闭时间（动作时长比例，与旧 executor 窗口一致） */
+export const ATTACK_HITBOX_OFF_ACTION_RATIO = 0.85

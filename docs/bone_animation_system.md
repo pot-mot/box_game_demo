@@ -56,7 +56,7 @@ src/
 │   ├── skeleton/                    # 骨骼实体（Three 渲染映射 + 外观装载 + 面板）
 │   │   ├── constants.ts
 │   │   ├── world.ts                 # setupSkeletonEntities：多骨架 CRUD + 聚焦 + 面板装配
-│   │   ├── render/                  # 关节 gizmo / 外观部件装载 / 同步（以场景为真源）
+│   │   ├── render/                  # 关节 gizmo / 外观部件装载 / 同步（领域 FK 缓存为唯一世界变换源）
 │   │   ├── appearance/              # 方块人外观部件装载（部件 ↔ 骨骼段装配）
 │   │   └── ui/panel.ts              # 属性面板（PanelContext）
 │   └── character/                   # 迁移：外观系统改骨架驱动（见 §8）
@@ -358,10 +358,11 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - 骨架定义（含 ikRootLevel）+ 动画库打包为单一资产文件，编辑器内导入/导出（Blob 下载 + 文件选择，复用 `save_load/actions.ts` 的 `promptLoadFile` 交互模式）。
 ## 6. 骨骼实体与外观装载（`entity/skeleton/`）
 
-### 6.1 渲染映射（`entity/skeleton/render/`，以场景为真源）
+### 6.1 渲染映射（`entity/skeleton/render/`，领域 FK 缓存为唯一世界变换源）
 
-- **权威姿态源 = three 场景图**（评审决议）：桥接模式下关节直接读写对应 `Group` 的 position/quaternion，世界变换一律从 three 读取（`Group.getWorldPosition/getWorldQuaternion`）；领域层 `updateWorldTransforms`/FK 仅服务于纯领域计算与单元测试，桥接场景不双算，避免漂移；
-- 桥接适配器：`createSkeletonFromGroups(entries: {jointId, group}[])` 生成绑定 `Skeleton`（领域 API 写局部 pose 时同步 Group，读世界变换时取自 Group）；**根关节位移以场景为真源**（角色经 `syncPositions`、bone_edit 经场景锚点），桥接写回时对根关节从 Group 读回位置、只写出旋转；
+- **权威姿态源 = 领域 FK 缓存**：桥接模式下 `updateWorldTransforms` 计算世界变换并写回对应 `Group`（场景图级联生效）；`getWorldPosition/getWorldRotation` 读领域缓存，不再从 three 读取，避免双算漂移；
+- **骨骼 `roll` 写回场景图**：tail 关节的局部旋转由世界缓存折算（含 roll）写入 `Group.quaternion`，使 roll 在渲染中可见；`syncFromScene` 读回时剔除 roll，保证往返幂等；
+- 桥接适配器：`createSkeletonFromGroups(entries: {jointId, group}[])` 生成绑定 `Skeleton`（领域 API 写局部 pose 时同步 Group）；**根关节位移是否由外部管理由选项显式声明**（`rootTranslationExternallyManaged`）——角色为 `true`（body 位置经 `syncPositions` 写入，动画只写旋转），编辑器为 `false`（根位移动画生效）；
 - **骨骼可视化（编辑模式）**：关节 = **小球**（`SphereGeometry`，`JOINT_GIZMO_RADIUS`），骨骼段 = **菱形连接段**（`OctahedronGeometry` 挂 head 关节 Group 下，位置 = 段局部中点、方向对准 head→tail、沿段方向拉伸 `scale.y = length`；段长过小隐藏）；
   **细线化约定**：`BONE_DIAMOND_THICKNESS` 与小球直径同量级（0.05，约 1/5 身宽），旋转指针半径/高度/偏移随小球半径同步缩放（保持“锥半径 < 小球半径”避免遮挡拾取），否则 x-ray 覆盖的骨骼层会把模型糊住；
   关节小球带 `userData.jointId`、菱形带 `userData.boneId + jointId`（拾取）；选中高亮 `setSelectedVisual`（joint 高亮小球 / bone 高亮菱形为高亮色），`clearSelectedVisuals` 还原；
@@ -380,7 +381,9 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `rightWeaponMount`（右手武器挂点） | `rightWristPivot` | 武器主体挂点：武器网格（含静态握持姿态）挂其下，随右手动画 |
 | `leftWeaponMount`（左手武器挂点） | `leftWristPivot` | 双手武器的副握点：作为左手链 IK 的末端，被求解到武器轴上 |
 
-两者不参与骨骼段（避免退化零长段），也不参与动画关键帧记录（无 clip 轨道），仅作挂载 / 求解目标；自定义骨架若缺少这两个关节，装载与 IK 自动回退到同名手腕关节。
+两者不参与骨骼段（避免退化零长段），也不参与动画关键帧记录（无 clip 轨道），仅作挂载 / 求解目标；自定义骨架若缺少这两个关节，装载与 IK 按候选顺序回退（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）。
+
+**双手共持 IK 求解器**：生产与编辑器共用 `entity/character/appearance/two_handed_ik.ts`——`leftGripJointId`（末端解析）、`computeTwoHandGripTarget`（副握点：优先武器本地 +Y 偏移，无武器 Group 时回退「右腕 + 右肘方向 × offset」）、`solveTwoHandedGrip`（设 IK 根 + `resolveIkChain` + 臂展截断 + `solveCcd`）、`clearTwoHandGripRoot`。生产角色桥接已绑定完整左臂链（含 `leftHandPivot`），攻击态且当前段 `twoHanded` 时左肩标记 IK 根。
 
 - 编辑器武器控制（`modes/bone_edit/weapon_control.ts` + 装载 `weapon_equip.ts`，控制条「武器」下拉）：
 
@@ -391,11 +394,11 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - 装载复用生产装配：`createWeaponMount`（`entity/character/appearance/weapon_mount.ts`，按 `WEAPON_GRIP_POSES` 施加静态握持姿态）保证编辑器看到的握持与游戏一致；切换武器/锚点/退出编辑器时在 `dispose()` 中释放几何与材质；
 - **双手贴合（可选，默认关）**：控制条「左手贴合：关/开」按钮（`#bone-grip-toggle`）。
   - **关闭（默认）**：编辑器与预览全程**零耦合**——装载/切换武器、拖动任意关节（含两个武器挂点）都只影响该关节子树，绝不会牵扯另一只手；左臂完全由动画驱动或由你手动摆姿。
-  - **打开**：当前武器为双手（段动画参数 `twoHanded: true`，未知段回退武器风格表）时，每帧（含暂停状态）把 `leftArmShoulder` 设为 IK 根（`ikRootLevel = 0`）、
-    `resolveIkChain(leftWeaponMount)` → `solveCcd` 追「武器挂点沿武器轴（本地 +Y）偏移 `LEFT_GRIP_OFFSET = 0.45`」的副握点，再由 `updateWorldTransforms()` 写回场景图；
+  - **打开**：当前武器为双手（段动画参数 `twoHanded: true`，未知段回退武器风格表）时，每帧（含暂停状态）调用共享求解器 `solveTwoHandedGrip`——
+    左肩为 IK 根，左手链末端（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）追「武器挂点沿武器轴（本地 +Y）偏移 `TWO_HAND_GRIP_OFFSET = 0.45`」的副握点；
     目标超出臂展（链长之和）时按臂展截断，避免不可达目标把左臂拉直穿模。此时移动右手/武器，左手会跟随贴合——这是该开关的预期语义。
   - 关闭开关或卸下武器时立即清除左肩 `ikRootLevel` 并重新应用当前 clip 姿态，左臂回到动画姿态（不留约束残留）；
-  - 求解链只到 `leftArmShoulder` 为止，**不会旋转躯干或右臂**；与生产的差异（刻意）：生产双手 IK 的副握点由「右腕 + 右肘方向 × 0.45」推算，编辑器直接取武器自身轴——编辑器里更严格地保证「左手落在武器上」。
+  - 求解链只到 `leftArmShoulder` 为止，**不会旋转躯干或右臂**；与生产共用同一求解器，仅在目标点来源上一致（武器 Group 存在时取武器轴）。
 
 ### 6.3 外观部件装载（`entity/skeleton/appearance/`，备用）
 
@@ -453,11 +456,11 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 - **来源与生产同源**（`modes/bone_edit/builtin_clips.ts`，惰性构建并缓存）：基础状态走 `getBaseClip`（待机/行走 各含空手与持械变体；跳跃/下落/死亡/冲刺/受击硬直 各一份，下落取水平速度 0 档），攻击动作走 `getAttackClip`，参数取自**武器模组的段定义**（`AttackSegment` 的 duration/recovery/phases/swingTilt）+ 武器静态握持前倾 `WEAPON_GRIP_POSES[meshId].rx`。条目共 44 项：基础状态 9 + 近战 26（4 段 × 4 武器 + 巨剑 5 段 + 长枪 5 段〈含蓄力突刺变体〉）+ 远程 9 武器 × 1 段 = 9；
 - **攻击段顺序由武器链数据决定**（`orderedSegments(weapon.attacks)`）：每把武器按 轻击一段 → 轻击二段 → 重击一段 → 重击二段 连续排列（同一链的 1、2 段相邻、轻链在重链之前），条件起手变体段（如蓄力段）接在所属攻击键末尾；不再需要任何展示顺序常量或槽位重排，展示模式/HUD/编辑器三者同源同序；
-- **关节 id 重定向**（`skeleton/anim/retarget.ts` 的 `remapClipTargets`）：角色模型根 Group 名为 `group`、预设骨架根关节名为 `root`，其余关节同名且静止局部位置由同一套 render 比例常量推导（`base_clips.ts` ↔ `entity/skeleton/preset.ts`），故仅需 `group → root` 一条别名即可直接播放，不需要额外骨骼重定向；
+- **关节 id 统一**：生产角色 clip 与编辑器预设骨架使用同一套关节 id（根关节统一为 `root`，静止局部位置由同一套 render 比例常量推导：`base_clips.ts` ↔ `entity/skeleton/preset.ts`），因此无需任何目标 id 重定向（`remapClipTargets` 保留为通用工具，内置动作库不再使用）；
 - **选中即载入副本**：`AnimationStore.importClip` 深拷贝（`cloneClip`）+ 重名自动加后缀 + 选中，副本名 = 内置显示名（如「行走（空手）」「长剑 · 轻击一段」）。内置 clip 与生产共用生成器缓存对象，深拷贝保证编辑器内的编辑不会污染生产动作；同名副本已存在时直接选中，不重复载入。载入动作入库后即可播放/拖移关键帧/改插值/导出，导入的 `hitbox_on/off` 事件轨在事件轨行可见；
 - **切换动画时播放头归零**，并同步刷新时长/循环输入框与轨道列表；
 - **作用范围**：内置清单只读自武器模组与基础状态表（`ALL_WEAPON_PRESETS` × `orderedSegments`），新增武器/攻击段后自动出现在列表中，无手工清单；
-- **局限**：内置动作按**预设骨架**的关节 id 重定向，因此仅对预设（含 `root/spine/headNeck/双臂肩肘腕/双腿髋膝`）骨架完整生效；导入的自定义骨架若关节命名不同，不匹配的轨道不生效（轨道行按聚焦骨架关节生成，故不会显示为无效行），副本仍照常入库。
+- **局限**：内置动作按**预设骨架**的关节 id 直接生效，因此仅对预设（含 `root/spine/headNeck/双臂肩肘腕/双腿髋膝`）骨架完整生效；导入的自定义骨架若关节命名不同，不匹配的轨道不生效（轨道行按聚焦骨架关节生成，故不会显示为无效行），副本仍照常入库。
 
 ### 7.5 动画库导入导出
 
@@ -466,7 +469,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - 每个骨架实体也可单独导出（仅 `SkeletonDefinition`）。
 ## 8. 攻击系统迁移方案（全量轨道化，一次性迁移）
 
-### 8.1 骨架桥接（以场景为真源）
+### 8.1 骨架桥接（领域 FK 缓存为唯一世界变换源）
 
 - 适配器先行：`createSkeletonFromGroups`（§6.1）把现有 Group 关节（spine/headNeck/双臂肩肘腕/双腿髋膝）绑定为领域 `Skeleton`；**three 场景图为权威姿态源**，领域层只做 API 封装，不双算 FK；
 - 此阶段旧 animator 与新 clip 播放器并存，可逐状态切换；
@@ -500,7 +503,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 ### 8.5 补全项（新系统带来的增量能力）
 
-- **双手武器 IK**：attacking 状态下左肩标记 IK 根，左手腕链（左肩→左肘→左腕）每帧 `solveCcd` 追「右腕 + 武器轴方向 × 0.45m」握柄点，替换固定假握；分层顺序（评审决议）：clip `applyPose` 先写全骨架 → IK 后写覆盖左臂链 → 快照混合；
+- **双手武器 IK**：attacking 且当前段 `twoHanded` 时左肩标记 IK 根，经共享求解器 `two_handed_ik.ts` 的 `solveTwoHandedGrip` 追「武器本地 +Y × `TWO_HAND_GRIP_OFFSET`」副握点（无武器 Group 时回退右腕+右肘方向），替换固定假握；分层顺序（评审决议）：clip `applyPose` 先写全骨架 → IK 后写覆盖左臂链 → 快照混合；
 - **动画复用**：AI/玩家/showcase 同源 clip（消除三处镜像逻辑）；
 - **可视编辑**：所有攻击 clip 可在编辑模式直接编辑调优（含事件轨道、缓动曲线）；
 - **速度相关体态**：恢复 `AnimationContext.horizontalSpeed`，行走步频随速度（播放器 setSpeed 变速）、falling 腿张开随速度（离散档 clip）；`horizontalTravel` 不再注入（行走相位由播放器 time 单调累加，无需位移积分）。
@@ -529,7 +532,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `skeleton/anim/sampling.test.ts` | 关键帧精确命中、帧间各策略插值、slerp、wrap 末帧→首帧无缝、clamp、缺邻 nearest、空轨 undefined、`sampleEvents` 区间边界（左开右闭） |
 | `skeleton/anim/player.test.ts` | 播放推进、loop 回绕、非循环停止 + onFinished、seek、setSpeed 变速、onEvent 增量触发不重不漏、applyPose 写入骨架 |
 | `skeleton/anim/serialization.test.ts` | 资产 JSON 往返、非法数据拒绝、缺省字段兜底（zod default）、formatVersion、ikRootLevel 持久化 |
-| `entity/skeleton/render/bridge.test.ts` | 场景真源桥接：Group 局部读入骨架、领域修改写回 Group（场景图级联）、applyPose/rotateBone 经桥接生效、syncFromScene 外部修改读回、根位移以场景为真源 |
+| `entity/skeleton/render/bridge.test.ts` | 桥接（领域 FK 缓存为唯一世界变换源）：Group 局部读入骨架、领域修改写回 Group（场景图级联）、applyPose/rotateBone 经桥接生效、roll 写回场景图且 syncFromScene 往返幂等、`rootTranslationExternallyManaged` 控制根位移真源 |
 | `entity/skeleton/render/joint_groups.test.ts` | 骨骼可视化：关节小球（SphereGeometry）/骨骼段菱形（OctahedronGeometry 对准 head→tail）、拾取标记、选中高亮与还原、resizeBoneVisuals 随段长更新 |
 | `entity/skeleton/preset.test.ts` | 预设骨架锚点与段：root 为脚底锚点（关节最低点 y=0、最高点头顶 y=基准高）、髋部抬至 `HIP_Y`、颈根与肩同高、`torso`/`head` 段端点与正长度；**武器挂点**（`rightWeaponMount`/`leftWeaponMount` 为零偏移腕下关节、不参与骨骼段） |
 | `entity/character/appearance/clips/base_clips.test.ts` | 基础状态 clip 烘焙回归：采样姿态与公式一致（容差 1.7°）、循环 wrap 无缝、持械变体差异、非循环 clamp 末帧；角色模型桥接（自动建连/applyPose 写回 Group/syncFromScene） |
@@ -540,7 +543,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `modes/bone_edit/weapon_control.test.ts` | 编辑器武器：双手判定（按段动画参数，远程恒单手；未知段回退武器风格表）、武器规格（网格 + 双手标记，未知 id → undefined）、**「自动」解析规则**（攻击动作 → 该武器；空手变体 → 卸下；持械/无来源 → 保留当前；无当前 → 默认武器）、副握点沿武器轴取点（含挂点旋转）、左手链末端取左手武器挂点（缺挂点的自定义骨架回退左腕） |
 | `modes/bone_edit/weapon_equip.test.ts` | 武器装载（真实场景图 + 预设骨架）：挂到右手武器挂点关节下、**握把中心精确落在右腕**、网格有真实几何（可见性回归）、随骨架姿态移动、缺挂点时回退右腕、卸下后从场景图移除 |
 | `modes/bone_edit/weapon_independence.test.ts` | **双手独立性回归**：装载/切换武器不改变左手；编辑态拖动右手（右臂关节）左手纹丝不动、左肩无 IK 根；仅在贴合开关打开时才把左手求解到武器副握点（链止于左肩）；关闭贴合立即解除 IK 根并恢复独立 |
-| `modes/bone_edit/builtin_clips.test.ts` | 内置动作库：覆盖全部基础状态与全部武器的攻击段（近战 26 + 远程 9，共 44 条）、分组顺序、每武器按链编排顺序排列（巨剑轻链 3 段、长枪含蓄力突刺变体）、id/显示名/clip 名全库唯一、轨道目标都在预设骨架内（`group → root` 已重定向）、首帧静止位置与预设定义一致、攻击条目带 `hitbox_on/off`（时间同生产窗口）、行走采样有实际姿态变化、惰性缓存 |
+| `modes/bone_edit/builtin_clips.test.ts` | 内置动作库：覆盖全部基础状态与全部武器的攻击段（近战 26 + 远程 9，共 44 条）、分组顺序、每武器按链编排顺序排列（巨剑轻链 3 段、长枪含蓄力突刺变体）、id/显示名/clip 名全库唯一、轨道目标都在预设骨架内（关节 id 已统一为 `root`）、首帧静止位置与预设定义一致、攻击条目带 `hitbox_on/off`（时间同生产窗口）、行走采样有实际姿态变化、惰性缓存 |
 | `modes/bone_edit/animation_store.test.ts` | 动画库存储：新建去重命名、`importClip` 入库并选中、重名加后缀、深拷贝（改副本不影响源 clip）、不修改源 clip 名与记录 |
 | `entity/character` 迁移测试 | 骨架桥接同步（关节 ↔ Group 读写一致）、clip 化 animator 关键时间点姿态快照一致性（迁移回归）、事件轨道命中窗口与旧计时窗口时间区间一致 |
 
@@ -565,7 +568,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | 阶段 | 内容 | 验收 |
 |------|------|------|
 | **M1 领域层** | `skeleton/`（joint/bone/skeleton/ik/transition/anim 全模块）+ 全部领域单元测试 | 领域测试全绿，`pnpm type-check` 通过 |
-| **M2 实体层** | `entity/skeleton/`（渲染映射以场景为真源、外观部件装载、面板、预设骨架）+ 桥接测试 | 桥接测试全绿 |
+| **M2 实体层** | `entity/skeleton/`（渲染映射：领域 FK 缓存为唯一世界变换源、外观部件装载、面板、预设骨架）+ 桥接测试 | 桥接测试全绿 |
 | **M3 编辑模式** | `modes/bone_edit/`（视窗交互 + 全功能时间轴 + undo/redo + 导入导出）+ 相机模块提取 `modes/camera_common.ts` + 启动屏第 4 按钮 + 相机存档扩展 + e2e | e2e 全绿 |
 | **M4a 桥接与基础动画** | 骨架桥接（Group ↔ Skeleton）、idle/walking/jumping/falling/dying/dashing/flinching clip 化、外观系统改 clip 调度器 | 基础状态动画 clip 驱动，快照回归通过 |
 | **M4b 攻击与命中** | 攻击 clip（strike_peak、全量烘焙）、事件轨道命中窗口迁移、executor 改造（播放器先于 executor.update） | 命中窗口时间区间与旧实现一致、无帧量化漏空，伤害行为不变 |
@@ -592,7 +595,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | 时间轴 | canvas + DOM 混合；全功能（缩放/拖移/多选/复制粘贴/洋葱皮/贝塞尔曲线编辑）；可折叠可拖高 |
 | 撤销重做 | 完整双栈 Ctrl+Z / Ctrl+Shift+Z，使用 `@potmot/command-history` |
 | 多骨架 | 并存 + 聚焦（activeSkeleton 隔离编辑） |
-| 内置动作库 | 动画列表直接列出生产已有动作（基础状态 + 全部攻击）：clip 由生产生成器产出、经 `group → root` 关节 id 重定向后复用；选中即深拷贝载入可编辑副本，不回写生产缓存 |
+| 内置动作库 | 动画列表直接列出生产已有动作（基础状态 + 全部攻击）：clip 由生产生成器产出（生产与预设骨架关节 id 统一，无需重定向）后复用；选中即深拷贝载入可编辑副本，不回写生产缓存 |
 | 行走动画 | 固定循环 clip 不注入 horizontalSpeed；滑步明显时按需 setSpeed 对齐 |
 | 工程约定 | 领域层允许依赖 three 数学类型与 zod；character 引入 zod 校验约定 |
 | 存档 | bone_edit 相机写入 ModeInfoJSON |

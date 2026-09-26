@@ -40,9 +40,11 @@ describe('关键帧聚合 → 轨道（keyframesToTracks）', () => {
         const {jointTracks} = keyframesToTracks(makeKeyframes())
         for (const track of jointTracks) {
             expect(track.interpolation.type).toBe('bezier_quad')
-            expect(track.interpolation.strategy).toBe('none')
+            if (track.interpolation.type === 'bezier_quad') {
+                expect(track.interpolation.strategy).toBe('none')
+            }
         }
-        const override = new Map<string, {type: 'linear'; strategy: 'none'}>([['a', {type: 'linear', strategy: 'none'}]])
+        const override = new Map<string, {type: 'linear'}>([['a', {type: 'linear'}]])
         const {jointTracks: overridden} = keyframesToTracks(makeKeyframes(), override)
         expect(overridden.find(t => t.targetId === 'a')!.interpolation.type).toBe('linear')
         expect(overridden.find(t => t.targetId === 'c')!.interpolation.type).toBe('bezier_quad')
@@ -77,7 +79,7 @@ describe('clip 深拷贝（cloneClip）', () => {
             ]},
         ],
         boneTracks: [
-            {targetId: 'torso', interpolation: {type: 'linear', strategy: 'none'}, records: [{time: 0, roll: 0.3}]},
+            {targetId: 'torso', interpolation: {type: 'linear'}, records: [{time: 0, roll: 0.3}]},
         ],
         eventTracks: [{records: [{time: 0.2, eventName: 'hitbox_on'}]}],
     })
@@ -118,13 +120,13 @@ describe('轨道 → 关键帧聚合（tracksToKeyframes）', () => {
             duration: 1,
             loop: false,
             jointTracks: [
-                {targetId: 'a', interpolation: {type: 'linear', strategy: 'none'}, records: [
+                {targetId: 'a', interpolation: {type: 'linear'}, records: [
                     {time: 0.8, position: pos(1), rotation: new Quaternion()},
                     {time: 0.2, position: pos(0), rotation: new Quaternion()},
                 ]},
             ],
             boneTracks: [
-                {targetId: 'b', interpolation: {type: 'linear', strategy: 'none'}, records: [{time: 0.2, roll: 0.1}]},
+                {targetId: 'b', interpolation: {type: 'linear'}, records: [{time: 0.2, roll: 0.1}]},
             ],
             eventTracks: [{records: [{time: 0.5, eventName: 'hitbox_off'}]}],
         }

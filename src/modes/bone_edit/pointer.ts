@@ -5,11 +5,8 @@ import {DEFAULT_IK_MAX_ITERATIONS, DEFAULT_IK_TOLERANCE} from '../../skeleton/co
 import {rotateBone} from '../../skeleton/bone.ts'
 import {rotateJointCascade, translateJointCascade} from '../../skeleton/skeleton.ts'
 import type {BoneEditHistory} from './history.ts'
-import {DRAG_CLICK_THRESHOLD} from './constants.ts'
-import {isGizmoActive} from './gizmo_pointer.ts'
-
-/** 骨骼段拖拽旋转灵敏度（rad/px） */
-const ROT_SENSITIVITY = 0.012
+import {DRAG_CLICK_THRESHOLD, ROT_SENSITIVITY} from './constants.ts'
+import type {DragCoordinator} from './drag_state.ts'
 
 /** 命中信息：gizmo → 关节；外观部件 → 骨骼段（或挂载关节）；旋转指针 → 关节（rotHandle） */
 export interface PickHit {
@@ -31,6 +28,7 @@ export const setupBoneEditPointer = (
     getIkEnabled: () => boolean,
     onPicked: (hit: PickHit) => void,
     setOrbitEnabled: (v: boolean) => void,
+    coordinator: DragCoordinator,
 ): {destroy: () => void} => {
     const raycaster = new Raycaster()
     const ndc = new Vector2()
@@ -137,7 +135,7 @@ export const setupBoneEditPointer = (
     const onMouseDown = (e: MouseEvent): void => {
         if (e.button !== 0) return
         /** gizmo 拖拽进行中，跳过原有指针逻辑 */
-        if (isGizmoActive()) return
+        if (coordinator.isGizmoActive()) return
         downPos = {x: e.clientX, y: e.clientY}
         moved = false
         const hit = pick(e.clientX, e.clientY)

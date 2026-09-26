@@ -18,8 +18,8 @@ export interface SkeletonJoint {
     position: Vector3
     /** 局部旋转（四元数，相对父关节） */
     rotation: Quaternion
-    /** 子关节集合（由 connectJoint / disconnectJoint 维护，只读视图） */
-    readonly children: readonly SkeletonJoint[]
+    /** 子关节集合（由 connectJoint / disconnectJoint 维护；消费方按只读约定使用，勿直接增删） */
+    readonly children: SkeletonJoint[]
     /** IK 根级别（undefined = 普通关节；0 为最高级根） */
     ikRootLevel: number | undefined
 }
@@ -71,14 +71,14 @@ export const connectJoint = (parent: SkeletonJoint, child: SkeletonJoint): void 
         disconnectJoint(child)
     }
     child.parent = parent
-    ;(parent.children as SkeletonJoint[]).push(child)
+    parent.children.push(child)
 }
 
 /** 断开单向连接：从父关节的 children 移除，自身 parent 置 undefined */
 export const disconnectJoint = (joint: SkeletonJoint): void => {
     const parent = joint.parent
     if (parent === undefined) return
-    const siblings = parent.children as SkeletonJoint[]
+    const siblings = parent.children
     const index = siblings.indexOf(joint)
     if (index >= 0) siblings.splice(index, 1)
     joint.parent = undefined
