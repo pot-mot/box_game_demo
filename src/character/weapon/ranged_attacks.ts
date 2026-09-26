@@ -1,19 +1,18 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
-import {DEFAULT_ANIM} from '../combat/attack_phases.ts'
 import type {AttackSegment, WeaponAttacks} from './attack_chain.ts'
 
 /**
  * 远程武器攻击段（武器模组固有数据）：
- * 每把远程武器拥有 1 个主干段（轻击键触发），动画阶段（draw / aim / release 等）与时长在此声明；
- * 段 id 沿用原技能 id（如 `longbow_shot`），作为动画键与清单键。
+ * 每把远程武器拥有 1 个主干段（轻击键触发），只声明**玩法时序**（阶段名/时长/移速/可中断）；
+ * 动画是段 id 对应的显式骨骼关键帧（`character/weapon/attack_clip_data.ts`），不再有动画参数。
  */
 
 interface RangedAttackSpec {
-    /** 段 id（= 原远程技能 id，动画键与清单键） */
+    /** 段 id（= 原远程技能 id，动画键与清单键、骨骼动画数据键） */
     readonly segmentId: string
     /** 动作时长（秒，不含恢复段） */
     readonly duration: number
-    /** 阶段序列（draw / aim / release …） */
+    /** 阶段序列（draw / aim / release …，仅时序） */
     readonly phases: readonly AttackPhase[]
     /** 冷却（秒，0 = 无冷却） */
     readonly cooldown: number
@@ -25,9 +24,9 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.2,
         cooldown: 0,
         phases: [
-            {name: 'draw', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, elbowBend: 0.15, twoHanded: true}},
-            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, elbowBend: 0.15, twoHanded: true}},
-            {name: 'release', durationRatio: 0.4, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, armSwingForwardX: -1.35, elbowBend: 0.1, twoHanded: true}},
+            {name: 'draw', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
+            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true},
+            {name: 'release', durationRatio: 0.4, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
     crossbow: {
@@ -35,8 +34,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.15,
         cooldown: 0,
         phases: [
-            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, elbowBend: 0.1, twoHanded: true}},
-            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.5, armSwingForwardX: -1.4, elbowBend: 0.08, twoHanded: true}},
+            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: true},
+            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
     shotgun: {
@@ -44,8 +43,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.3,
         cooldown: 0,
         phases: [
-            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, elbowBend: 0.5, twoHanded: true}},
-            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.2, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, armSwingForwardX: -1.3, elbowBend: 0.45, bodyLean: -0.1, twoHanded: true}},
+            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true},
+            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.2, cancellable: false},
         ],
     },
     staff: {
@@ -53,8 +52,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.3,
         cooldown: 0,
         phases: [
-            {name: 'aim', durationRatio: 0.4, moveSpeedMultiplier: 0.3, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, armSwingBackZ: 0, elbowBend: 0.1, twoHanded: true}},
-            {name: 'release', durationRatio: 0.6, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.4, armSwingForwardX: -1.3, elbowBend: 0.08, twoHanded: true}},
+            {name: 'aim', durationRatio: 0.4, moveSpeedMultiplier: 0.3, cancellable: true},
+            {name: 'release', durationRatio: 0.6, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
     magic_wand: {
@@ -62,8 +61,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.15,
         cooldown: 0,
         phases: [
-            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: true, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.2, elbowBend: 0.1}},
-            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.4, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.2, armSwingForwardX: -1.1, elbowBend: 0.08}},
+            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: true},
+            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.4, cancellable: false},
         ],
     },
     throwing_axe: {
@@ -71,8 +70,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.25,
         cooldown: 0,
         phases: [
-            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingBackZ: -0.4, elbowBend: 0.8, bodyLean: -0.1}},
-            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingForwardX: 1.6, armSwingBackZ: -0.4, elbowBend: 0.1, bodyLean: 0.15}},
+            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: false},
+            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
     grenade: {
@@ -80,8 +79,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.4,
         cooldown: 0,
         phases: [
-            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingBackZ: -0.4, elbowBend: 0.8, bodyLean: -0.1}},
-            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingForwardX: 1.6, armSwingBackZ: -0.4, elbowBend: 0.1, bodyLean: 0.15}},
+            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
+            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
     molotov: {
@@ -89,8 +88,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.4,
         cooldown: 0,
         phases: [
-            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingBackZ: -0.4, elbowBend: 0.8, bodyLean: -0.1}},
-            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -1.8, armSwingForwardX: 1.6, armSwingBackZ: -0.4, elbowBend: 0.1, bodyLean: 0.15}},
+            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
+            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
     throwing_dart: {
@@ -98,7 +97,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.1,
         cooldown: 0,
         phases: [
-            {name: 'release', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingBackX: -0.9, armSwingForwardX: 0.6, elbowBend: 0.1}},
+            {name: 'release', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false},
         ],
     },
 }
@@ -123,6 +122,8 @@ export const buildRangedAttacks = (weaponId: string): WeaponAttacks => {
         duration: spec.duration,
         recovery: 0,
         phases: spec.phases,
+        /* 动作组合：默认单层（段 id 即 pose 资产 id） */
+        poses: [{poseId: spec.segmentId, weight: 1}],
         damageMultiplier: 1,
         cooldown: spec.cooldown,
         next: [],

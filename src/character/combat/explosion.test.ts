@@ -31,6 +31,7 @@ const makeMock = (id: number, x: number, y: number, z: number, hp: number, facti
         isOnGround: true, groundNormal: { x: 0, y: 1, z: 0 }, groundKeepTimer: 0, airborneTime: 0, groundedTime: 0,
         rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', isDying: false, dyingTimer: 0,
         combat,
+        holdMode: 'one_handed',
         stateMachine: null!,
     }
 }

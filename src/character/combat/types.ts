@@ -38,9 +38,6 @@ export interface CombatComponent {
     attackDirZ: number
     attackedTargets: Set<number>
 
-    /** 近战挥砍倾斜角（rad），0=垂直砍，±PI/2=横砍，取自当前段固有倾斜角 */
-    swingTilt: number
-
     /** 当前段阶段索引（0-based），attacking meta-state 推进 */
     phaseIndex: number
     /** 当前阶段已用时间（秒） */
@@ -92,7 +89,6 @@ export const createCombatComponent = (
     attackDirX: 0,
     attackDirZ: 1,
     attackedTargets: new Set(),
-    swingTilt: 0,
     phaseIndex: 0,
     phaseTimer: 0,
     pendingFlinch: false,

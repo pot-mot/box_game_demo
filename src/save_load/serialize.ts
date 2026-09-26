@@ -185,6 +185,8 @@ export const collectWorldState = (
                     combatStrategy: e.combatStrategy,
                     /* 攻击配置：装备武器 + 数值覆写（攻击动作由武器模组的攻击链决定） */
                     attack: attackConfigOf(e.combat.weapon, e.combat.attacks),
+                    /* 持握模式（持久化；换武器时重置为武器默认模式） */
+                    holdMode: e.holdMode,
                     tendency: e.combat.tendencyConfig,
                     faction: e.combat.faction,
                     maxHealth: e.combat.maxHealth,

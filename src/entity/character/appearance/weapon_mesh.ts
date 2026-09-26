@@ -19,7 +19,7 @@ export type WeaponMeshConfig =
     | { id: 'sword';        bladeLen: number; color: number; gripColor: number }
     | { id: 'heavy_sword';  bladeLen: number; color: number; gripColor: number }
     | { id: 'spear';        poleLen: number;  headLen: number; color: number; headColor: number }
-    | { id: 'dual_axe';     bladeSize: number; color: number; gripColor: number }
+    | { id: 'dual_axe';     bladeSize: number; color: number; gripColor: number; /** 副手镜像（斧刃开向 -X） */ mirror?: boolean }
     | { id: 'war_hammer';   headSize: number; color: number; gripColor: number }
     | { id: 'bow';          size: number; color: number; stringColor: number }
     | { id: 'crossbow';     size: number; color: number; metalColor: number }
@@ -31,7 +31,12 @@ export type WeaponMeshConfig =
     | { id: 'molotov';      size: number; color: number; fireColor: number }
     | { id: 'throwing_dart';len: number; color: number; tailColor: number }
 
-/** 武器静态握持姿态：装备时相对右腕 pivot 的位置偏移与欧拉角（武器本体以 +Y 为轴自握把延伸） */
+/**
+ * 武器固有握持姿态（**武器模型自身属性**，在 `createWeaponMesh` 内直接烘焙进武器 Group）：
+ * 位置偏移 + 欧拉角，武器本体以 +Y 为轴自握把延伸。它描述「这把武器怎么被握住」这一模型固有事实，
+ * 不是动作参数——运行时武器的动态朝向（握持屈角、刃面偏转、逐动作微调）全部由**武器骨骼**
+ * （`rightWeaponMount` / `leftWeaponMount`）的动画轨道控制。
+ */
 export interface WeaponGripPose {
     readonly x: number
     readonly y: number
@@ -39,6 +44,27 @@ export interface WeaponGripPose {
     readonly rx: number
     readonly ry: number
     readonly rz: number
+}
+
+/** 无偏移的单位握持（投掷物等贴掌武器用） */
+const GRIP_NEUTRAL: WeaponGripPose = {x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0}
+
+/** 各武器固有握持姿态（烘焙进模型；仅 rx<0 = 刃尖/枪口前倾、ry = 绕武器轴刃面朝向） */
+export const WEAPON_MESH_GRIPS: Record<WeaponMeshId, WeaponGripPose> = {
+    sword:        {x: 0, y: 0, z: 0, rx: -0.1, ry: 0, rz: 0},
+    heavy_sword:  {x: 0, y: 0, z: 0, rx: -0.12, ry: 0, rz: 0},
+    spear:        {x: 0, y: 0, z: 0, rx: 0.05, ry: 0, rz: -0.12},
+    staff:        {x: 0, y: 0, z: 0, rx: 0.05, ry: 0, rz: 0.1},
+    dual_axe:     {x: 0, y: 0, z: 0, rx: -0.2, ry: 0, rz: 0},
+    war_hammer:   {x: 0, y: 0, z: 0, rx: -0.3, ry: Math.PI / 4, rz: 0},
+    throwing_axe: {x: 0, y: 0, z: 0, rx: -0.3, ry: 0, rz: 0},
+    bow:          {x: 0, y: 0, z: 0, rx: -0.15, ry: 0, rz: 0},
+    crossbow:     {x: 0, y: 0, z: 0, rx: -0.6, ry: 0, rz: 0},
+    shotgun:      {x: 0, y: 0, z: 0, rx: -0.6, ry: 0, rz: 0},
+    magic_wand:   {x: 0, y: 0, z: 0, rx: -0.5, ry: 0, rz: 0},
+    grenade:      {...GRIP_NEUTRAL, y: -0.02, rx: -0.3},
+    molotov:      {...GRIP_NEUTRAL, y: -0.03, rx: -0.3},
+    throwing_dart: GRIP_NEUTRAL,
 }
 
 // ── 攻击判定箱（武器本地命中箱） ──
@@ -203,19 +229,27 @@ const genSpear = (cfg: WeaponMeshConfig & { id: 'spear' }): WeaponMeshResult => 
         0, cfg.poleLen + cfg.headLen / 2, 0, 0.05, cfg.headLen / 2, 0.04)
 }
 
+/* 单刃斧（双持时左右手各一；`mirror` = 副手镜像，使两把斧的刃口朝外） */
 const genDualAxe = (cfg: WeaponMeshConfig & { id: 'dual_axe' }): WeaponMeshResult => {
     begin()
     const bm = mat(cfg.color, 0.3, 0.7)
     const gm = mat(cfg.gripColor, 0.7, 0.05)
-    const gLen = cfg.bladeSize * 1.2; const gR = 0.03
     const sz = cfg.bladeSize
+    const gLen = sz * 1.7; const gR = 0.03
+    const handleTop = -sz * 0.15
+    const side = cfg.mirror === true ? -1 : 1
+    const bladeW = sz * 0.5
+    const bladeH = sz * 0.95
+    const bladeD = 0.035
+    const bladeX = side * sz * 0.32
+    const bladeY = handleTop - bladeH * 0.15
 
-    mesh(cyl(gR, gR, gLen), gm, 0, -sz * 0.1 - gLen / 2, 0)
-    mesh(box(sz * 0.4, sz * 0.6, 0.03), bm, sz * 0.3, gLen * 0.1, 0, 0, Math.PI / 6)
-    mesh(box(sz * 0.4, sz * 0.6, 0.03), bm, -sz * 0.3, gLen * 0.1, 0, 0, -Math.PI / 6)
-    /* 命中箱包裹双斧斧头区 */
-    return finish(0, gLen * 0.5, 0, 0, gLen * 0.1 + sz * 0.3, 0, -(sz * 0.1 + (sz * 1.2) / 2),
-        0, gLen * 0.1, 0, sz * 0.5, sz * 0.35, 0.03)
+    mesh(cyl(gR, gR, gLen), gm, 0, handleTop - gLen / 2, 0)
+    mesh(box(bladeW, bladeH, bladeD), bm, bladeX, bladeY, 0, 0, -side * Math.PI / 12)
+    /* 命中箱包裹斧刃；刀尖采样点 = 刃外上角 */
+    return finish(bladeX, bladeY, 0, bladeX + side * bladeW / 2, bladeY + bladeH / 2, 0,
+        -(sz * 0.15 + gLen / 2),
+        bladeX, bladeY, 0, bladeW / 2, bladeH / 2, bladeD / 2)
 }
 
 const genWarHammer = (cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshResult => {
@@ -223,12 +257,16 @@ const genWarHammer = (cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshR
     const hm = mat(cfg.color, 0.25, 0.8)
     const gm = mat(cfg.gripColor, 0.7, 0.05)
     const hsz = cfg.headSize; const gLen = hsz * 1.5; const gR = 0.04
+    const headH = hsz * 0.5
+    /* 柄顶（= 柄中心 + 半长）= -hsz·0.2；锤头底对齐柄顶，保证柄与锤头连为一体 */
+    const handleTop = -hsz * 0.2
+    const headY = handleTop + headH / 2
 
-    mesh(cyl(gR, gR, gLen), gm, 0, -hsz * 0.2 - gLen / 2, 0)
-    mesh(box(hsz * 0.7, hsz * 0.5, hsz * 0.7), hm, 0, gLen * 0.7, 0)
-    /* 命中箱包裹锤头 */
-    return finish(0, gLen * 0.4, 0, 0, gLen * 0.7 + hsz * 0.25, 0, -(hsz * 0.2 + (hsz * 1.5) / 2),
-        0, gLen * 0.7, 0, hsz * 0.35, hsz * 0.25, hsz * 0.35)
+    mesh(cyl(gR, gR, gLen), gm, 0, handleTop - gLen / 2, 0)
+    mesh(box(hsz * 0.7, headH, hsz * 0.7), hm, 0, headY, 0)
+    /* 命中箱包裹锤头；刀尖采样点 = 锤头顶 */
+    return finish(0, headY, 0, 0, headY + headH / 2, 0, -(hsz * 0.2 + (hsz * 1.5) / 2),
+        0, headY, 0, hsz * 0.35, hsz * 0.25, hsz * 0.35)
 }
 
 const genBow = (cfg: WeaponMeshConfig & { id: 'bow' }): WeaponMeshResult => {
@@ -355,5 +393,14 @@ const meshHandlers = {
     throwing_dart: genThrowingDart,
 } as Record<WeaponMeshId, (cfg: WeaponMeshConfig) => WeaponMeshResult>
 
-export const createWeaponMesh = (config: WeaponMeshConfig): WeaponMeshResult =>
-    meshHandlers[config.id](config)
+export const createWeaponMesh = (config: WeaponMeshConfig): WeaponMeshResult => {
+    const result = meshHandlers[config.id](config)
+    /* 烘焙固有握持：把握把中心移到武器 Group 原点、按握持角倾斜，使武器可直接挂在武器骨骼下，
+     * 运行时不再需要任何外部偏移/倾斜节点（朝向完全由武器骨骼动画控制） */
+    const grip = WEAPON_MESH_GRIPS[config.id]
+    const cosR = Math.cos(grip.rx)
+    const sinR = Math.sin(grip.rx)
+    result.group.position.set(grip.x, grip.y - result.gripY * cosR, grip.z - result.gripY * sinR)
+    result.group.rotation.set(grip.rx, grip.ry, grip.rz)
+    return result
+}

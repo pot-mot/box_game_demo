@@ -1,8 +1,10 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
+import type {HoldMode} from './hold_mode.ts'
 
 /**
  * 攻击链领域模型（武器模组拥有）：
- * - 攻击段（AttackSegment）= 武器的一次可播放动作（时长/阶段/倾斜角/伤害倍率/动画 id）；
+ * - 攻击段（AttackSegment）= 武器的一次可播放动作的**玩法数据**（时长/阶段时序/伤害倍率/冷却/连段）；
+ *   动画是段 id 对应的显式骨骼关键帧数据（`attack_clip_data.ts`）；
  * - 攻击链（WeaponAttackChain）= 一个攻击键的起手候选 + 主干段播放顺序；
  * - 连段推进 = **段自身声明的 next 转换函数**（按声明顺序求值，第一个守卫通过者胜出），
  *   状态机只负责调度与消费，不再用「槽位下标 / comboChain 字符串索引」表达连段。
@@ -45,6 +47,20 @@ export interface AttackTransition {
     readonly guard?: AttackTransitionGuard
 }
 
+/**
+ * 段动作组合中的单个 pose 引用（Q4：「段引用若干 pose + 权重 + 时间进度」的落地）。
+ * pose 资产来自 `character/weapon/attack_clip_data.ts`（骨骼关键帧唯一真相源）；
+ * 播放时段进度由 `attacking` 时间线推进，各层按 `progressOffset` 映射到自身时间轴。
+ */
+export interface SegmentPoseLayer {
+    /** pose 资产 id（攻击关键帧数据的键，如 `short_sword_light_1`） */
+    readonly poseId: string
+    /** 影响程度：与其它层按关节归一化加权（0 不参与，1 = 完全覆盖其余层） */
+    readonly weight: number
+    /** 时间进度偏移（0-1，默认 0）：该层采样进度 = 段总进度 + offset（循环环绕） */
+    readonly progressOffset?: number
+}
+
 /** 攻击段（武器模组拥有的一次可播放动作；id 同时是动画键与展示/编辑器清单键） */
 export interface AttackSegment {
     /** 段 id（武器内唯一，形如 `{weaponId}_{key}_{step}`） */
@@ -57,10 +73,11 @@ export interface AttackSegment {
     readonly duration: number
     /** 恢复时长（秒） */
     readonly recovery: number
-    /** 阶段序列（strike / draw / aim / release …；recovery 阶段时长取本段 recovery） */
+    /** 阶段序列（strike / draw / aim / release …；recovery 阶段时长取本段 recovery）；
+     *  动画由 `poses` 声明的 pose 组合表达（骨骼关键帧数据见 `character/weapon/attack_clip_data.ts`） */
     readonly phases: readonly AttackPhase[]
-    /** 段固有挥砍倾斜角（rad，0 = 竖劈，±π/2 = 横斩） */
-    readonly swingTilt?: number
+    /** 动作组合：本段播放的 pose 层（各层按影响程度加权、按时间进度采样同一段时间轴） */
+    readonly poses: readonly SegmentPoseLayer[]
     /** 伤害倍率（相对武器基础伤害） */
     readonly damageMultiplier: number
     /** 冷却（秒，0 = 无冷却；非 0 时从段触发时刻开始计时，只挡起手） */
@@ -70,10 +87,6 @@ export interface AttackSegment {
     /** 显示名覆写（条件变体段用，如「蓄力重劈」）；缺省按 轻击/重击 + 序号 推导 */
     readonly label?: string
 }
-
-/** 段是否双手持握（读取首阶段动画参数；无阶段 = 单手）——生产与编辑器共用的唯一判定 */
-export const segmentTwoHanded = (segment: AttackSegment | undefined): boolean =>
-    segment?.phases[0]?.animConfig.twoHanded ?? false
 
 /** 起手候选：按声明顺序求值（守卫变体在前、兜底在后） */
 export interface AttackEntry {
@@ -96,6 +109,17 @@ export interface WeaponAttacks {
     /** 段定义索引（id → 段） */
     readonly segments: Readonly<Record<string, AttackSegment>>
 }
+
+/**
+ * 武器按持握模式划分的攻击链 map（键 = 持握模式，仅声明 `holdModes` 中受支持的模式）：
+ * 同一把武器在不同持握方式下可拥有各自独立的连段（如单持快剑链 / 双手重劈链）。
+ * 缺省入口（`catalog.ts` 的 `weaponAttacksOf`）取武器 `holdModes` 中首个已声明模式。
+ */
+export type HoldModeAttacks = Readonly<Partial<Record<HoldMode, WeaponAttacks>>>
+
+/** 取某持握模式的攻击链（该模式未声明攻击链时返回 undefined） */
+export const attacksForHoldMode = (attacks: HoldModeAttacks, holdMode: HoldMode): WeaponAttacks | undefined =>
+    attacks[holdMode]
 
 /* ── 守卫原语（武器模组组合使用） ── */
 

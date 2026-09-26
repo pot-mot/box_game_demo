@@ -9,27 +9,19 @@ import {buildCharacterSkeletonDefinition} from '../../entity/skeleton/preset.ts'
 import {LEFT_WEAPON_MOUNT_JOINT, RIGHT_WEAPON_MOUNT_JOINT} from './weapon_equip.ts'
 
 describe('编辑器武器规格（weaponSpecOf / isTwoHandedWeapon）', () => {
-    it('近战武器按段动画参数判定双手；远程武器恒为单手', () => {
+    it('双手判定取武器数据 twoHanded（近战与远程同源）', () => {
         const shortSword = findWeaponPreset('short_sword')!
         const heavySword = findWeaponPreset('heavy_sword')!
         const spear = findWeaponPreset('spear')!
         const longbow = findWeaponPreset('longbow')!
-        expect(isTwoHandedWeapon(shortSword, 'short_sword_light_1')).toBe(false)
-        expect(isTwoHandedWeapon(heavySword, 'heavy_sword_heavy_1')).toBe(true)
-        expect(isTwoHandedWeapon(spear, 'spear_light_1')).toBe(true)
-        /* 远程武器：无重击/双手概念 */
-        expect(isTwoHandedWeapon(longbow, 'longbow_shot')).toBe(false)
-    })
-
-    it('未知段回退武器风格表（长枪 = 双手，短剑 = 单手）', () => {
-        const spear = findWeaponPreset('spear')!
-        const shortSword = findWeaponPreset('short_sword')!
-        expect(isTwoHandedWeapon(spear)).toBe(true)
         expect(isTwoHandedWeapon(shortSword)).toBe(false)
+        expect(isTwoHandedWeapon(heavySword)).toBe(true)
+        expect(isTwoHandedWeapon(spear)).toBe(true)
+        expect(isTwoHandedWeapon(longbow)).toBe(true)
     })
 
     it('武器规格含网格与双手标记；未知武器 id 返回 undefined', () => {
-        const spec = weaponSpecOf('heavy_sword', 'heavy_sword_light_1')!
+        const spec = weaponSpecOf('heavy_sword')!
         expect(spec.weaponId).toBe('heavy_sword')
         expect(spec.meshConfig.id).toBe('heavy_sword')
         expect(spec.twoHanded).toBe(true)

@@ -45,6 +45,8 @@ const _identityQuat = new Quaternion()
 export interface AttackHitBoxes {
     /** 攻击判定箱线框（红）：跟随武器模型 matrixWorld，几何 = 武器本地命中箱 */
     readonly weaponBox: LineSegments
+    /** 副手（左手）攻击判定箱线框：双持时跟随副手武器模型 */
+    readonly offhandWeaponBox: LineSegments
     /** 受击箱线框（青）：中心 = body 位置，半长由角色 scale 决定，随朝向旋转 */
     readonly targetBox: LineSegments
     /** 攻击检测箱线框（橙）：与角色位置/朝向绑定，覆盖身前与两侧（仅近战） */
@@ -67,6 +69,10 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
     /* 命中箱完全由 matrix（matrixWorld × 本地盒变换）驱动，禁用自动矩阵 */
     weaponBox.matrixAutoUpdate = false
 
+    /* 副手命中箱（双持）：与主手同规格，独立矩阵 */
+    const offhandWeaponBox = new LineSegments(_unitEdges, _weaponBoxMat)
+    offhandWeaponBox.matrixAutoUpdate = false
+
     const targetBox = new LineSegments(_unitEdges, _targetBoxMat)
     const detectBox = new LineSegments(_unitEdges, _detectBoxMat)
     /* 射程圆环与检测箱同为「AI 出招触发区」语义，共用橙色材质 */
@@ -81,11 +87,13 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
     visionFan.frustumCulled = false
 
     weaponBox.visible = false
+    offhandWeaponBox.visible = false
     targetBox.visible = false
     detectBox.visible = false
     rangeRing.visible = false
     visionFan.visible = false
     scene.add(weaponBox)
+    scene.add(offhandWeaponBox)
     scene.add(targetBox)
     scene.add(detectBox)
     scene.add(rangeRing)
@@ -93,6 +101,7 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
 
     return {
         weaponBox,
+        offhandWeaponBox,
         targetBox,
         detectBox,
         rangeRing,
@@ -101,6 +110,7 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
         markVisionDirty: () => { visionAttr.needsUpdate = true },
         dispose: () => {
             scene.remove(weaponBox)
+            scene.remove(offhandWeaponBox)
             scene.remove(targetBox)
             scene.remove(detectBox)
             scene.remove(rangeRing)

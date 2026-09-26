@@ -7,7 +7,7 @@ import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
 import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.ts'
-import {ALL_WEAPON_PRESETS, findWeaponPreset} from '../../../character/weapon/catalog.ts'
+import {ALL_WEAPON_PRESETS, findWeaponPreset, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
@@ -70,8 +70,8 @@ const entryCooldownOfAttacks = (attacks: WeaponAttacks): number => {
     return entryId === undefined ? 0 : (attacks.segments[entryId]?.cooldown ?? 0)
 }
 
-/** 武器预设的起手段冷却（换武器预填用） */
-const entryCooldownOf = (weapon: WeaponConfig): number => entryCooldownOfAttacks(weapon.attacks)
+/** 武器预设的起手段冷却（换武器预填用；取默认持握模式的攻击链） */
+const entryCooldownOf = (weapon: WeaponConfig): number => entryCooldownOfAttacks(weaponAttacksOf(weapon))
 
 /** 远程武器特殊模式文案（散射 / 爆炸 / 追踪 / 抛物线） */
 const rangedModeTags = (weapon: RangedWeaponConfig): readonly string[] => {

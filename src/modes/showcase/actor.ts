@@ -9,6 +9,7 @@ import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.
 import type {NameLabel} from './label.ts'
 import {resolvePhases, phaseDurationOf} from '../../character/combat/attack_phases.ts'
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
+import {defaultHoldMode, weaponAttacksOf} from '../../character/weapon/catalog.ts'
 import type {WeaponConfig} from '../../character/weapon/catalog.ts'
 import {
     orderedSegments,
@@ -61,8 +62,6 @@ export interface ActorStatus {
     /** 当前段（1 起，idle 时为下一段的段号） */
     readonly hitNumber: number
     readonly totalHits: number
-    /** 当前挥砍倾斜角（rad，远程恒 0） */
-    readonly swingTilt: number
     /** 当前阶段名（idle = 'idle'，全部阶段完成 = 'done'） */
     readonly phaseName: AttackPhaseName | 'idle' | 'done'
     /** 当前阶段进度 0-1 */
@@ -137,7 +136,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
      * 演示脚本 = 段展示顺序本身（下标 0..n-1 即播放顺序）：
      * 播放顺序、面板计时行顺序与清单顺序三者一致（统一枚举源，无需重排映射）。
      */
-    const segments: readonly AttackSegment[] = orderedSegments(init.weapon.attacks)
+    const segments: readonly AttackSegment[] = orderedSegments(weaponAttacksOf(init.weapon))
     if (segments.length === 0) {
         throw new Error(`[showcase] actor ${id} 武器 ${init.weapon.id} 没有可展示的攻击段`)
     }
@@ -149,7 +148,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         {speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: ACTOR_SCALE},
         faction,
     )
-    model.equipWeapon(init.weapon.mesh)
+    model.equipWeapon({main: init.weapon.mesh, offhand: init.weapon.offhandMesh})
 
     const anchor = new Group()
     anchor.position.set(x, 0, z)
@@ -168,7 +167,6 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     let attackTimer = 0
     let phaseTimer = 0
     let phaseIndex = 0
-    let swingTilt = 0
     /** 当前脚本位置（0 起；段末推进/重新起链时移动） */
     let scriptPos = 0
     /** 本段衔接方式（进入攻击时取 pendingLink，段末推进直接覆盖） */
@@ -191,8 +189,6 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         phaseIndex = 0
         phaseTimer = 0
         const segment = currentSegment()
-        /* 段固有倾斜角 —— 与 attacking.enter 的 c.swingTilt = segment.swingTilt ?? 0 一致 */
-        swingTilt = segment.swingTilt ?? 0
         link = nextLink
         /* 触发即挂自身冷却（镜像生产起手 enter） */
         cooldownTimers.set(segment.id, segment.cooldown)
@@ -241,7 +237,6 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             phaseIndex = 0
             scriptPos++
             const nextSegment = currentSegment()
-            swingTilt = nextSegment.swingTilt ?? 0
             link = '段内推进'
             /* 链中段触发同样挂自身冷却（镜像生产段末推进） */
             cooldownTimers.set(nextSegment.id, nextSegment.cooldown)
@@ -290,7 +285,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             stateTime,
             /* 展示场景站立攻击：速度恒 0（生产为物理体实时速度） */
             horizontalSpeed: 0,
-            swingTilt,
+            holdMode: defaultHoldMode(init.weapon),
             attackSegment: inAttacking ? segment : undefined,
             attackPhase: ctxPhaseName,
             attackPhaseProgress: phaseDuration > 0 ? phaseTimer / phaseDuration : 0,
@@ -339,7 +334,6 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             mode,
             hitNumber: scriptPos + 1,
             totalHits,
-            swingTilt,
             phaseName: mode === 'idle' ? 'idle' : phaseIndex < phases.length ? phases[phaseIndex].name : 'done',
             phaseProgress: mode === 'idle'
                 ? 0

@@ -1,13 +1,12 @@
 import type {CharacterState} from '../../../character/state_machine/types.ts'
 import {Group} from 'three'
 import type {CharacterModel, AnimationContext} from './types.ts'
-import {createBoneAnimationPlayer} from '../../../skeleton/anim/player.ts'
+import {createComposedAnimationPlayer, type ComposedAnimationPlayer, type ComposedPlayerLayer} from '../../../skeleton/anim/composed_player.ts'
 import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
-import {getBaseClip, fallingSpeedTier} from './clips/base_clips.ts'
-import {getAttackClip} from './clips/attack_clips.ts'
+import {getBaseClipForHoldMode, fallingSpeedTier} from './clips/base_clips.ts'
+import {getAttackClipById} from './clips/attack_clips.ts'
 import {createCharacterSkeletonBridge} from './skeleton_bridge.ts'
 import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
-import {segmentTwoHanded} from '../../../character/weapon/attack_chain.ts'
 import {solveTwoHandedGrip} from './two_handed_ik.ts'
 import {STATE_BLEND_DURATION, TWO_HAND_GRIP_OFFSET, walkSpeedScale} from './constants.ts'
 
@@ -31,8 +30,8 @@ interface JointSnapshot {
 
 /** 收集模型全部可动画关节（顺序固定，与 CHARACTER_JOINT_IDS 一致） */
 const snapshotJoints = (model: CharacterModel): JointSnapshot[] => [
-    model.rightArmShoulder, model.rightArmElbow, model.rightWristPivot,
-    model.leftArmShoulder, model.leftArmElbow,
+    model.rightArmShoulder, model.rightArmElbow, model.rightWristPivot, model.rightWeaponMount,
+    model.leftArmShoulder, model.leftArmElbow, model.leftWristPivot, model.leftWeaponMount,
     model.rightLegHip, model.rightLegKnee, model.leftLegHip, model.leftLegKnee,
     model.headNeck, model.spine, model.group,
 ].map(joint => ({
@@ -60,9 +59,9 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     /* 状态切换瞬间的关节快照：新状态动画输出向快照混合，消除关节角突跳 */
     let blendFrom: readonly JointSnapshot[] | null = null
     let blendT = 0
-    /* clip 播放器（全部状态）/ 桥接骨架（以场景为真源） */
+    /* 组合动画播放器（全部状态）/ 桥接骨架（以场景为真源） */
     let bridge: SkeletonSceneBridge | undefined
-    let player: ReturnType<typeof createBoneAnimationPlayer> | undefined
+    let player: ComposedAnimationPlayer | undefined
 
     const teardownClip = (): void => {
         player?.pause()
@@ -70,31 +69,37 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         bridge = undefined
     }
 
+    /** 攻击段动作组合 → 播放器层（段引用的 pose 资产 + 权重 + 时间进度偏移） */
+    const attackLayersOf = (ctx: AnimationContext): readonly ComposedPlayerLayer[] => {
+        const segment = ctx.attackSegment
+        if (segment === undefined) return []
+        return segment.poses.map(pose => ({
+            clip: getAttackClipById(pose.poseId),
+            weight: pose.weight,
+            progressOffset: pose.progressOffset,
+        }))
+    }
+
     const setupClip = (state: ClipState, model: CharacterModel, ctx: AnimationContext): void => {
         teardownClip()
         bridge = createCharacterSkeletonBridge(model)
-        /* 双手武器：左肩设为 IK 根（仅攻击态且当前段双手时），左手链可独立求解贴合握柄 */
-        if (state === 'attacking' && segmentTwoHanded(ctx.attackSegment)) {
+        /* 双手共持：左肩设为 IK 根（仅攻击态、武器双手且非双持时），左手链可独立求解贴合握柄。
+         * 双持武器左手握持自身武器，不走共享 IK（左臂由 clip 的武器骨骼/左臂关键帧驱动）。 */
+        if (state === 'attacking' && ctx.holdMode === 'two_handed' && model.offhandWeaponGroup === null) {
             const leftShoulder = bridge.findJoint('leftArmShoulder')
             if (leftShoulder !== undefined) leftShoulder.ikRootLevel = 0
         }
         if (state === 'attacking') {
-            /* 攻击 clip：当前段的武器固有参数（时长/阶段/倾斜角）+ 武器握持前倾；事件轨驱动命中窗口 */
-            const segment = ctx.attackSegment
-            if (segment === undefined) return
-            const clip = getAttackClip({
-                segmentId: segment.id,
-                duration: segment.duration,
-                recovery: segment.recovery,
-                phases: segment.phases,
-                tilt: ctx.swingTilt,
-                gripTilt: model.weaponGripTilt,
-            })
-            player = createBoneAnimationPlayer(bridge, clip)
+            /* 攻击段动作组合：段引用的 pose 层（含 hitbox 事件轨），按权重合成 */
+            const layers = attackLayersOf(ctx)
+            if (layers.length === 0) return
+            player = createComposedAnimationPlayer(bridge, layers)
             player.onEvent = (record) => onAttackEvent?.(record)
             player.play()
         } else {
-            player = createBoneAnimationPlayer(bridge, getBaseClip(state, ctx.weaponHeld, ctx.horizontalSpeed))
+            /* 基础状态：持握模式感知的完整 clip（下半身 + 上半身已离线预组合，运行时不产生组合开销） */
+            const clip = getBaseClipForHoldMode(state, ctx.weaponHeld, ctx.holdMode, ctx.horizontalSpeed)
+            player = createComposedAnimationPlayer(bridge, [{clip, weight: 1}])
             player.play()
             /* 行走：步频随水平速度变速 */
             if (state === 'walking') {
@@ -106,10 +111,12 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     /** 双手武器 IK（applyPose 先写、IK 后写覆盖左臂链）：左手链追武器轴上的副握点 */
     const applyTwoHandedIk = (ctx: AnimationContext, model: CharacterModel): void => {
         if (bridge === undefined || player === undefined) return
-        if (!segmentTwoHanded(ctx.attackSegment)) return
+        /* 双持：左手握持自身武器，不做共享 IK */
+        if (ctx.holdMode !== 'two_handed' || model.offhandWeaponGroup !== null) return
         solveTwoHandedGrip(bridge, model.weaponGroup ?? undefined, {
             shoulderId: 'leftArmShoulder',
-            offset: TWO_HAND_GRIP_OFFSET,
+            /* 副握点沿武器轴相对武器原点：握把局部 y + 握把相对偏移（0 = 主手握把处） */
+            offset: model.weaponGripY + TWO_HAND_GRIP_OFFSET,
         })
     }
 
@@ -130,7 +137,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             }
             /* 用真实 ctx 生成 clip（falling 速度档 / attacking 阶段配置等依赖当前上下文） */
             setupClip(to, model, ctx)
-            player?.seek(0)
+            player?.seekProgress(0)
         } else {
             teardownClip()
         }
@@ -138,11 +145,12 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
 
     const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {
         /* 动画键：attacking 用当前段 id（段切换触发混合）；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
+        const weaponKey = ctx.weaponHeld ? `:${ctx.holdMode}` : ':n'
         const animKey = state === 'attacking' && ctx.attackSegment !== undefined
             ? `attacking:${ctx.attackSegment.id}`
             : state === 'falling'
-                ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${ctx.weaponHeld ? ':w' : ':n'}`
-                : `${state}${ctx.weaponHeld ? ':w' : ':n'}`
+                ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${weaponKey}`
+                : `${state}${weaponKey}`
         if (animKey !== currentAnimKey || model !== currentModel) {
             onStateChange(currentState, state, model, ctx)
             currentAnimKey = animKey

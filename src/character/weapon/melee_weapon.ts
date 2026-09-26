@@ -1,7 +1,8 @@
 import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
-import type { WeaponAttacks } from './attack_chain.ts'
+import type { HoldMode } from './hold_mode.ts'
+import type { HoldModeAttacks } from './attack_chain.ts'
 import { holdAtLeast } from './attack_chain.ts'
-import { buildMeleeAttacks, meleeAttackStyleOf, type BuildMeleeAttacksOptions } from './melee_attacks.ts'
+import { buildMeleeAttacks, type BuildMeleeAttacksOptions } from './melee_attacks.ts'
 import { SPEAR_CHARGE_HOLD, SPEAR_CHARGE_THRUST } from './melee_special_moves.ts'
 
 /**
@@ -18,7 +19,7 @@ export interface MeleeDetectBox {
 
 /**
  * 近战武器配置 — 玩家装备该武器的全部固有属性。
- * **攻击动作（轻重链/段/动画/时长/倾斜角/伤害倍率）由武器模组拥有**（`attacks`），
+ * **攻击动作（轻重链/段/时长/阶段时序/伤害倍率）由武器模组拥有**（`attacks`），
  * 角色实体只持有武器与数值覆写，不再维护技能槽位与连段索引。
  */
 export interface MeleeWeaponConfig {
@@ -33,24 +34,30 @@ export interface MeleeWeaponConfig {
     readonly detectionRange: number
     /** 攻击检测箱：尺寸 + 身体偏移，驱动出招触发判定 */
     readonly detectBox: MeleeDetectBox
-    /** 程序化武器模型 */
+    /** 可支持的持握模式（数组；首个为默认模式，换武器时角色持握模式重置为首个） */
+    readonly holdModes: readonly HoldMode[]
+    /** 程序化武器模型（主手 / 右手） */
     readonly mesh: WeaponMeshConfig
-    /** 攻击链（轻/重键起手候选 + 主干段顺序 + 段定义与段间转换） */
-    readonly attacks: WeaponAttacks
+    /** 副手（左手）武器模型；`dual_wield` 模式的副手武器（如双斧）；undefined = 无副手武器 */
+    readonly offhandMesh?: WeaponMeshConfig
+    /** 持握模式 → 攻击链 map（键 = `holdModes` 中受支持的模式；动画为段引用的 pose 组合） */
+    readonly attacks: HoldModeAttacks
 }
 
-/** 近战预设装配：按武器 id 注入固有攻击链（风格系数取自 melee_attacks 的武器风格表） */
+/** 近战预设装配：按武器 id + 默认持握模式注入固有攻击链 */
 const meleePreset = (
     base: Omit<MeleeWeaponConfig, 'attacks'>,
     attackOptions: BuildMeleeAttacksOptions = {},
-): MeleeWeaponConfig => ({
-    ...base,
-    attacks: buildMeleeAttacks(base.id, meleeAttackStyleOf(base.id), attackOptions),
-})
+): MeleeWeaponConfig => {
+    const attacks: Partial<Record<HoldMode, ReturnType<typeof buildMeleeAttacks>>> = {}
+    attacks[base.holdModes[0]] = buildMeleeAttacks(base.id, attackOptions)
+    return {...base, attacks}
+}
 
 export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     short_sword: meleePreset({
         id: 'short_sword', name: '短剑', type: 'melee',
+        holdModes: ['one_handed'],
         damage: 2,
         knockbackForce: 2, knockbackY: 1,
         detectionRange: 6,
@@ -59,6 +66,8 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     }),
     long_sword: meleePreset({
         id: 'long_sword', name: '长剑', type: 'melee',
+        /* 长剑可单持亦可双手共持（演示多持握模式：默认单持，切换双手共用同一套动作） */
+        holdModes: ['one_handed', 'two_handed'],
         damage: 3,
         knockbackForce: 5, knockbackY: 2,
         detectionRange: 8,
@@ -68,6 +77,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     /* 巨剑：轻型链加长为三段（轻 1 → 轻 2 → 轻 3 循环），重链保持两段 */
     heavy_sword: meleePreset({
         id: 'heavy_sword', name: '巨剑', type: 'melee',
+        holdModes: ['two_handed'],
         damage: 8,
         knockbackForce: 8, knockbackY: 3,
         detectionRange: 10,
@@ -79,6 +89,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     /* 长枪：轻击键增加蓄力突刺变体（长按 >= SPEAR_CHARGE_HOLD 松开触发；冷却中自动回退到轻 1 段） */
     spear: meleePreset({
         id: 'spear', name: '长枪', type: 'melee',
+        holdModes: ['two_handed'],
         damage: 5,
         knockbackForce: 4, knockbackY: 1,
         detectionRange: 10,
@@ -94,16 +105,20 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
             ],
         },
     }),
+    /* 双斧：左右手各一把单刃斧（双持）——副手网格镜像，攻击段副手镜像主手并相位错开半程（交替挥砍） */
     dual_axe: meleePreset({
         id: 'dual_axe', name: '双斧', type: 'melee',
+        holdModes: ['dual_wield'],
         damage: 6,
         knockbackForce: 7, knockbackY: 2,
         detectionRange: 7,
         detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
         mesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322 },
+        offhandMesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322, mirror: true },
     }),
     war_hammer: meleePreset({
         id: 'war_hammer', name: '战锤', type: 'melee',
+        holdModes: ['two_handed'],
         damage: 10,
         knockbackForce: 10, knockbackY: 4,
         detectionRange: 8,

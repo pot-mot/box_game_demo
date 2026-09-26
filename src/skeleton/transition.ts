@@ -20,7 +20,7 @@ export interface BezierQuadTransition {
     /** 自定义控制点 cy ∈ [0,1]（Pc = (0.5, customCy)：cx 固定 0.5，
      *  越接近 0 越偏 ease_in，越接近 1 越偏 ease_out，0.5 退化为线性） */
     readonly customCy?: number
-    /** strike_peak 的峰值位置 0-1（默认 0.7，同现有 strikePeakRatio） */
+    /** strike_peak 的峰值位置 0-1（默认 0.7） */
     readonly peakRatio?: number
 }
 
@@ -55,7 +55,7 @@ const presetCy = (strategy: EasingStrategy): number => {
 
 /**
  * 末端速度峰值曲线（打击手感）：峰值前加速（ease_in 段）、峰值后减速（ease_out 段），
- * 两段二阶贝塞尔在峰值处拼接；与 attack_phases.strikeCurve 数学完全一致。
+ * 两段二阶贝塞尔在峰值处拼接。
  */
 const strikePeak = (t: number, peak: number): number => {
     const k = Math.min(Math.max(peak, 0), 1)

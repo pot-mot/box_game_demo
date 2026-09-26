@@ -102,7 +102,9 @@
    - 依赖方向：`entity/character/` → `character/state_machine/` → `character/types.ts`
    - **攻击连段**由 `states/attacking/` 的段子状态机表达：`attacking` meta-state 负责调度，段定义（含自身声明的 `next` 转换）由武器模组拥有（`character/weapon/`），禁止在角色侧重建槽位/连段索引
 
-4. **攻击动作归属** — 武器的段（时长 / 恢复 / 阶段 / 动画 / 倾斜角 / 伤害倍率 / 冷却 / 连段拓扑）一律写在武器模组（`character/weapon/melee_attacks.ts`、`ranged_attacks.ts`）；角色与存档只持有「武器 + 数值覆写」（伤害 / 起手段冷却 / 远程弹道）。新增或调整攻击动作时改武器模组，不要在角色或状态机里加分支。
+4. **攻击动作归属** — 武器的段（时长 / 恢复 / 阶段时序 / 伤害倍率 / 冷却 / 连段拓扑）一律写在武器模组（`character/weapon/melee_attacks.ts`、`ranged_attacks.ts`）；**动画不再由抽象参数生成**，而是段通过 `poses`（`SegmentPoseLayer[]`：pose id + 影响程度 + 时间进度偏移）引用的**显式骨骼关键帧 pose 资产**（`character/weapon/attack_clip_data.ts`，由骨骼动画系统按权重组合播放）。角色与存档只持有「武器 + 持握模式 + 数值覆写」（伤害 / 起手段冷却 / 远程弹道）。新增或调整攻击动作时改武器模组并同步关键帧数据，不要在角色或状态机里加分支。
+5. **持握模式** — 三态常量 `HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`（`character/weapon/hold_mode.ts`）。角色实体持久化 `holdMode`（换武器重置为 `holdModes[0]`，`world.ts` 的 `setHoldMode` 切换，武器不支持时回退默认且不抛错）；武器以 `holdModes: readonly HoldMode[]` 声明可支持模式，并以 `attacks: HoldModeAttacks`（持握模式 → `WeaponAttacks` 的 map）提供各模式连段，用 `catalog.ts` 的 `weaponAttacksOf(weapon, holdMode?)` 解析（缺省/未声明回退默认模式）。
+6. **骨骼动画组合** — `skeleton/anim/composition.ts` 的 `composePoses(layers)` / `applyComposedPose(skeleton, layers)` 按**关节归一化加权平均**合成任意层（`PoseLayer = {clip, weight, progress}`），未被任何层覆盖的关节保留骨架当前值（实现上下半身任意拼装）；单层有效贡献时走快速路径直接采样（零额外开销）。`skeleton/anim/composed_player.ts` 的 `createComposedAnimationPlayer` 驱动组合播放与分层事件。基础状态的分层（下半身/体态 + 按持握模式的上半身）在 `appearance/clips/base_clips.ts` 中**离线预组合**为单 clip（`getBaseClipForHoldMode`，运行时单层播放），需要运行时动态权重时用 `getBaseLayers` + `composePoses`；攻击段即 `segment.poses` 组合。
 
 ## 项目结构
 
@@ -113,7 +115,7 @@ src/
 ├── render/                      # Three.js 渲染
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
-│   ├── weapon/                  # 武器模组（固有属性 + 攻击链：attack_chain / melee_attacks / ranged_attacks / catalog / weapon_runtime）
+│   ├── weapon/                  # 武器模组（固有属性 + 持握模式 hold_mode / 攻击链：attack_chain（含段→pose 组合 SegmentPoseLayer）/ melee_attacks / ranged_attacks / catalog / weapon_runtime / attack_clip_data（骨骼关键帧 pose 资产唯一真相源））
 │   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害、冲刺）
 │   └── state_machine/states/    # idle / walking / jumping / falling / attacking（段子状态机）/ dying / dashing / flinching
 ├── entity/
@@ -161,6 +163,7 @@ src/
 | [`docs/edit_mode.md`](docs/edit_mode.md) | 编辑模式：与主循环的关系、执行面板（Execute / Stop / Step / Run / Reset）语义与快照基线生命周期、其余控制与文件索引 |
 | [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
+| [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 骨骼动画动作调优规范：坐标系与朝向、关节总表、旋转符号速查（肘前折/膝后折）、阶段与相位、动作→改动位置映射、提示词模版、双持与左右手参数方案 a、陷阱。同目录逐个动作建档（`武器名-攻击段名.md` / `动作名.md`） |
 
 **扩展 AI 功能时**：阅读 `docs/ai_system.md` → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。
 
@@ -178,5 +181,8 @@ src/
 - 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 3`）
 - 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；默认值只在 `localStorage` 无记录时生效，已存过旧绑定的浏览器需「重置默认」或导入配置
 - 鼠标动作按模式生效：`MOUSE_ACTIONS_BY_MODE` 决定操作设置面板中各模式可改的指针动作，"平移视角 / 生成物体" 默认同为右键但分属不同模式，改动其中一个需同步核对另一个的默认值
-- 预设骨架为武器预留两个零偏移关节 `rightWeaponMount`（`rightWristPivot` 下，武器主体挂点）与 `leftWeaponMount`（`leftWristPivot` 下，双手武器副握点/左手 IK 末端）：它们不参与骨骼段与关键帧，仅作挂载与求解目标；自定义骨架缺这两个关节时自动回退同名手腕关节（编辑器装载在 `modes/bone_edit/weapon_equip.ts` + 控制逻辑 `weapon_control.ts`；生产挂载在 `entity/character/appearance/weapon_mount.ts`）
+- 武器挂点为两个零偏移关节 `rightWeaponMount`（`rightWristPivot` 下，主手武器挂点）与 `leftWeaponMount`（`leftWristPivot` 下，副手武器挂点/双手 IK 末端）：**它们是可动画关节**（静止为单位变换，武器模型自带固有握持、直接挂其下），自定义骨架缺这两个关节时自动回退同名手腕关节（编辑器装载在 `modes/bone_edit/weapon_equip.ts` + 控制逻辑 `weapon_control.ts`；生产挂载在 `entity/character/appearance/model.ts`）
+- 持握模式由武器数据推导：**单持**（`twoHanded:false`、无 `offhandMesh`）/ **双手共持**（`weapon.twoHanded:true`、无 `offhandMesh`，左手链 IK 贴合主手武器）/ **双持**（有 `offhandMesh`，左手握持自身武器；不走共享 IK）。武器副手网格见 `WeaponConfig.offhandMesh`（双斧用 `mirror: true`）。攻击 clip 的命中事件按槽分组（`params.weapon: 'main' | 'offhand'`），近战执行器 `setHitWindow(active, weapon?)` 按槽开关——详见 `docs/bone_animation/动作设计规范.md` §7。**双手共持 IK**：副握点 = `weaponGripY + TWO_HAND_GRIP_OFFSET`（握把处，勿从武器原点算否则抓住刃部）；主手臂展约 0.36m，双手武器的主手肘须在关键帧中明显屈起（原 `elbowBendScale` 已烘焙进 `attack_clip_data.ts`），否则握把超出左手臂展、左手 IK 永远够不到；左手链带**肘极向约束**（`two_handed_ik.ts`，防左肘反折）
+- 角色动画肘关节一律前折（`elbow rx < 0`）、膝后折（`rx > 0`）；武器的偏移/倾斜/旋转**完全由武器骨骼** `rightWeaponMount` / `leftWeaponMount` 控制（层级 `腕 → 武器骨骼 → 武器模型`，固有握持由 `weapon_mesh.ts` 烘焙进模型，运行时无外部握持常量/挂点节点），握持屈角 `WEAPON_GRIP_FLEX = 1.7` 写在武器骨骼轨道上，待机/行走（持械）与攻击关键帧数据共用（`pose_fns.ts` / `attack_clip_data.ts`），腕关节不承担握持角，瞬态状态（跳跃/下落/死亡/受击）不施加握持角
+- 攻击动画数据 `character/weapon/attack_clip_data.ts` 是**攻击动作的唯一真相源**（段 id → 稀疏骨骼关键帧，轨道插值 `strike_peak`）：`getAttackClipById(段 id)` 惰性解析缓存；改动作即在骨骼动画编辑器编辑对应段后导出替换该数据。抽象动画参数（`AttackAnimConfig` / `ArmAnimConfig` / `swingTilt` / `easing` / `strikePeakRatio` / `overshootRatio` / `attackType` / `twoHanded`（段级））已全部移除
 - 新增碰撞体必须显式 `setCollisionGroups`，并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注碰撞类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）——投掷物的「可穿过类别」判定依赖类别位；类别位从 membership 第 5 位起，不参与交互，但未声明碰撞组的碰撞体 membership 全 1，会被解析为 `ground` 并挡下子弹（fail-closed）

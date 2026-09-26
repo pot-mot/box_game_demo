@@ -140,6 +140,8 @@ const CharacterConfigInner = z.object({
     scale: z.number().positive().default(CHARACTER_CONFIG_DEFAULTS.scale),
     peaceStrategy: z.enum(['patrol', 'build']).optional(),
     combatStrategy: z.enum(['tactical', 'aggressive', 'cowardly']).optional(),
+    /* 持握模式：非法值安全回退 undefined（由运行时按武器默认模式处理），不抛错 */
+    holdMode: z.enum(['one_handed', 'two_handed', 'dual_wield']).optional().catch(undefined),
     attack: AttackConfigSchema.default(CHARACTER_SAVE_ATTACK_DEFAULT),
     tendency: TendencyConfigSchema.default(CHARACTER_SAVE_TENDENCY_DEFAULT),
     faction: z.number().default(0),

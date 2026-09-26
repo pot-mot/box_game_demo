@@ -8,6 +8,7 @@ import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/typ
 import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/common/types'
 import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
 import type {AttackConfig} from '../character/archetypes.ts'
+import type {HoldMode} from '../character/weapon/hold_mode.ts'
 
 /** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」 */
 export const SAVE_FORMAT_VERSION = 3
@@ -109,6 +110,11 @@ export interface CharacterSaveConfig {
     combatStrategy?: 'tactical' | 'aggressive' | 'cowardly'
     /** 攻击配置：装备武器 + 数值覆写（动作/时长/动画由武器模组的攻击链决定） */
     attack: AttackConfig
+    /**
+     * 持握模式（持久化）：缺省 = 武器默认模式；旧存档无此字段时安全回退默认，
+     * 武器不支持时由 `setHoldMode` 回退默认模式（不抛错）。
+     */
+    holdMode?: HoldMode
     tendency: {
         tendencyId: 'hostileAll' | 'hostileExceptSelf' | 'hostileTo' | 'hostileExcept' | 'pacifist'
         targetFactions?: number[]

@@ -1,8 +1,10 @@
 import {Euler, Quaternion, Vector3} from 'three'
 import type {BoneAnimationClip, BoneJointKeyframeRecord} from '../../../../skeleton/anim/types.ts'
 import type {JointPose} from '../../../../skeleton/skeleton.ts'
+import type {PoseLayer} from '../../../../skeleton/anim/composition.ts'
+import type {HoldMode} from '../../../../character/weapon/hold_mode.ts'
 import {CLIP_SAMPLE_FPS} from '../constants.ts'
-import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
+import {BASE_CLIP_META, BASE_POSE_SAMPLERS, adjustArmsForHoldMode, type PoseState} from '../pose_fns.ts'
 import {
     MODEL_BASE_HEIGHT,
     MODEL_BASE_WIDTH,
@@ -17,8 +19,11 @@ export const CHARACTER_JOINT_IDS = [
     'rightArmShoulder',
     'rightArmElbow',
     'rightWristPivot',
+    'rightWeaponMount',
     'leftArmShoulder',
     'leftArmElbow',
+    'leftWristPivot',
+    'leftWeaponMount',
     'rightLegHip',
     'rightLegKnee',
     'leftLegHip',
@@ -29,6 +34,23 @@ export const CHARACTER_JOINT_IDS = [
 ] as const
 
 export type CharacterJointId = typeof CHARACTER_JOINT_IDS[number]
+
+/**
+ * 基础状态分层（Q3：一个 state 由多条同时生效的动画组合而成）：
+ * - **下半身/体态层**（root + 双腿 + spine + 头部）：步态与前倾/下沉，跨持握模式复用；
+ * - **上半身层**（8 个手臂关节）：按持握模式选择手臂姿态。
+ * 两层关节不重叠，按关节归一化加权合成后即完整姿态。
+ */
+export const BASE_LOCOMOTION_JOINTS: readonly CharacterJointId[] = [
+    'root',
+    'rightLegHip', 'rightLegKnee', 'leftLegHip', 'leftLegKnee',
+    'spine', 'headNeck',
+]
+
+export const BASE_UPPER_JOINTS: readonly CharacterJointId[] = [
+    'rightArmShoulder', 'rightArmElbow', 'rightWristPivot', 'rightWeaponMount',
+    'leftArmShoulder', 'leftArmElbow', 'leftWristPivot', 'leftWeaponMount',
+]
 
 /* ── 关节静止局部位置（模型 Group 层级，相对父关节；由 render 比例常量推导）。
  *   动画只改旋转，关节 position 固定 —— 播放器 applyPose 写回这些静止值，防止头部等部位被拉回原点 ── */
@@ -43,8 +65,11 @@ export const CHARACTER_JOINT_REST_POSITIONS: Readonly<Record<CharacterJointId, r
     rightArmShoulder: [REST_SHOULDER_X, REST_BODY_H, 0],
     rightArmElbow: [0, -REST_UPPER_ARM_H, 0],
     rightWristPivot: [0, 0, 0],
+    rightWeaponMount: [0, 0, 0],
     leftArmShoulder: [-REST_SHOULDER_X, REST_BODY_H, 0],
     leftArmElbow: [0, -REST_UPPER_ARM_H, 0],
+    leftWristPivot: [0, 0, 0],
+    leftWeaponMount: [0, 0, 0],
     /* 模型原点在脚底：root 直接子关节（双腿髋/spine）位于腿长高度 */
     rightLegHip: [REST_HIP_X, REST_LEG_H, 0],
     rightLegKnee: [0, -REST_HIP_H, 0],
@@ -69,8 +94,11 @@ const poseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, JointPose>
     set('rightArmShoulder', pose.rightArmShoulder)
     set('rightArmElbow', pose.rightArmElbow)
     set('rightWristPivot', pose.rightWristPivot)
+    set('rightWeaponMount', pose.rightWeaponMount)
     set('leftArmShoulder', pose.leftArmShoulder)
     set('leftArmElbow', pose.leftArmElbow)
+    set('leftWristPivot', pose.leftWristPivot)
+    set('leftWeaponMount', pose.leftWeaponMount)
     set('rightLegHip', pose.rightLegHip)
     set('rightLegKnee', pose.rightLegKnee)
     set('leftLegHip', pose.leftLegHip)
@@ -86,19 +114,23 @@ const poseToRecord = (pose: PoseState): ReadonlyMap<CharacterJointId, JointPose>
  * horizontalSpeed 仅影响 falling（腿张开随速度，离散档）；行走步频由播放器 setSpeed 变速。
  * 循环动画采样 [0, duration]（含末帧，wrap 无缝由采样器处理）；非循环采样全程。
  */
-export const buildBaseClip = (
+/** 用指定关节子集烘焙基础状态 clip（分层：下半身/体态 与 上半身手臂分别生成） */
+const buildBaseClipWithJoints = (
     state: keyof typeof BASE_POSE_SAMPLERS,
+    jointIds: readonly CharacterJointId[],
     weaponHeld: boolean,
-    horizontalSpeed = 0,
+    horizontalSpeed: number,
+    holdMode: HoldMode | undefined,
 ): BoneAnimationClip => {
     const meta = BASE_CLIP_META[state]
     const sampler = BASE_POSE_SAMPLERS[state]
     const frameCount = Math.max(2, Math.round(meta.duration * CLIP_SAMPLE_FPS) + 1)
-    const tracks = CHARACTER_JOINT_IDS.map(jointId => {
+    const tracks = jointIds.map(jointId => {
         const records: BoneJointKeyframeRecord[] = []
         for (let i = 0; i < frameCount; i++) {
             const t = meta.duration * i / (frameCount - 1)
-            const record = poseToRecord(sampler(t, {weaponHeld, horizontalSpeed})).get(jointId)!
+            const pose = adjustArmsForHoldMode(sampler(t, {weaponHeld, horizontalSpeed}), holdMode, weaponHeld, state)
+            const record = poseToRecord(pose).get(jointId)!
             records.push({time: t, position: record.position, rotation: record.rotation})
         }
         return {
@@ -119,6 +151,14 @@ export const buildBaseClip = (
     }
 }
 
+/** 完整基础状态 clip（编辑器动画库 / 兼容全骨架播放） */
+export const buildBaseClip = (
+    state: keyof typeof BASE_POSE_SAMPLERS,
+    weaponHeld: boolean,
+    horizontalSpeed = 0,
+): BoneAnimationClip =>
+    buildBaseClipWithJoints(state, CHARACTER_JOINT_IDS, weaponHeld, horizontalSpeed, undefined)
+
 /** falling 腿张开速度档（legSpread = min(speed,4)×0.04，取整档避免频繁切 clip） */
 export const fallingSpeedTier = (horizontalSpeed: number): number =>
     Math.min(Math.max(Math.round(Math.min(horizontalSpeed, 4)), 0), 4)
@@ -137,5 +177,76 @@ export const getBaseClip = (
     if (cached !== undefined) return cached
     const clip = buildBaseClip(state, weaponHeld, horizontalSpeed)
     clipCache.set(key, clip)
+    return clip
+}
+
+/* ── 分层 clip 缓存（下半身与上半身分别缓存；上半身按持握模式） ── */
+const lowerClipCache = new Map<string, BoneAnimationClip>()
+const upperClipCache = new Map<string, BoneAnimationClip>()
+
+const getLowerClip = (state: keyof typeof BASE_POSE_SAMPLERS, horizontalSpeed: number): BoneAnimationClip => {
+    const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
+    const key = `${state}${speedKey}`
+    const cached = lowerClipCache.get(key)
+    if (cached !== undefined) return cached
+    const clip = buildBaseClipWithJoints(state, BASE_LOCOMOTION_JOINTS, false, horizontalSpeed, undefined)
+    lowerClipCache.set(key, clip)
+    return clip
+}
+
+const getUpperClip = (
+    state: keyof typeof BASE_POSE_SAMPLERS,
+    weaponHeld: boolean,
+    holdMode: HoldMode | undefined,
+    horizontalSpeed: number,
+): BoneAnimationClip => {
+    const key = `${state}:${weaponHeld ? holdMode ?? 'held' : 'n'}`
+    const cached = upperClipCache.get(key)
+    if (cached !== undefined) return cached
+    const clip = buildBaseClipWithJoints(state, BASE_UPPER_JOINTS, weaponHeld, horizontalSpeed, weaponHeld ? holdMode : undefined)
+    upperClipCache.set(key, clip)
+    return clip
+}
+
+/**
+ * 基础状态的组合层：下半身/体态层（跨持握模式复用）+ 上半身层（按持握模式选择）。
+ * 两层关节不重叠，按关节归一化加权即还原完整姿态 —— 即「一个 state 对应多条同时生效的动画」。
+ */
+export const getBaseLayers = (
+    state: keyof typeof BASE_POSE_SAMPLERS,
+    weaponHeld: boolean,
+    holdMode: HoldMode,
+    horizontalSpeed = 0,
+): readonly PoseLayer[] => [
+    {clip: getLowerClip(state, horizontalSpeed), weight: 1, progress: 0},
+    {clip: getUpperClip(state, weaponHeld, holdMode, horizontalSpeed), weight: 1, progress: 0},
+]
+
+/* ── 持握模式感知的完整基础状态 clip（离线预组合：运行时单层播放，零组合开销） ── */
+const holdClipCache = new Map<string, BoneAnimationClip>()
+
+/**
+ * 均匀权重下，分层组合（`getBaseLayers`，下半身 + 上半身，关节不重叠）与单层全身姿态等价：
+ * 这里离线烘焙为**单个完整 clip**（按持握模式调整手臂），运行时按单 clip 播放即可，
+ * 避免每帧对两层分别采样 + 合成。需要运行时动态权重/多来源组合时用 `getBaseLayers` + `composePoses`。
+ */
+export const getBaseClipForHoldMode = (
+    state: keyof typeof BASE_POSE_SAMPLERS,
+    weaponHeld: boolean,
+    holdMode: HoldMode,
+    horizontalSpeed = 0,
+): BoneAnimationClip => {
+    const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
+    const key = `${state}:${weaponHeld ? holdMode : 'n'}${speedKey}`
+    const cached = holdClipCache.get(key)
+    if (cached !== undefined) return cached
+    const clip = buildBaseClipWithJoints(
+        state,
+        CHARACTER_JOINT_IDS,
+        weaponHeld,
+        horizontalSpeed,
+        weaponHeld ? holdMode : undefined,
+    )
+    holdClipCache.set(key, clip)
     return clip
 }

@@ -1,9 +1,10 @@
 import type {MeleeWeaponConfig} from '../weapon/melee_weapon.ts'
+import type {HoldMode} from '../weapon/hold_mode.ts'
 import type {WeaponAttacks, AttackSegment} from '../weapon/attack_chain.ts'
 import {hasMoveInput, holdAtLeast} from '../weapon/attack_chain.ts'
 import {registerWeaponPreset} from '../weapon/catalog.ts'
 import {createWeaponRuntime, type WeaponRuntime} from '../weapon/weapon_runtime.ts'
-import {DEFAULT_ANIM, type AttackPhase} from './attack_phases.ts'
+import type {AttackPhase} from './attack_phases.ts'
 
 /**
  * 测试武器（test_weapon）— 仅供单元测试 / 连段机制验证，不进生产武器列表（MELEE_WEAPON_PRESETS）。
@@ -24,44 +25,45 @@ export const TEST_WEAPON_CHARGE_HOLD = 0.5
 
 /** 段阶段序列：strike 动作段（ratio = 1，时长取段 duration）+ recovery 恢复段（时长取段 recovery） */
 const segmentPhases = (): readonly AttackPhase[] => [
-    {name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false, animConfig: {...DEFAULT_ANIM, armSwingForwardX: 1.8, elbowBend: 0.2, bodyLean: 0.08}},
-    {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.35, cancellable: false, animConfig: {...DEFAULT_ANIM, elbowBend: 0.2, bodyLean: 0}},
+    {name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false},
+    {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.35, cancellable: false},
 ]
 
 /** 测试武器攻击链（段 id 均带 test_weapon 前缀，避免与生产段 id 混淆） */
 const buildTestWeaponAttacks = (): WeaponAttacks => {
+    const pose = (id: string): readonly {poseId: string; weight: number}[] => [{poseId: id, weight: 1}]
     const charge: AttackSegment = {
         id: 'test_weapon_charge', key: 'light', step: 1, label: '蓄力重劈',
-        duration: 0.42, recovery: 0.28, phases: segmentPhases(),
+        duration: 0.42, recovery: 0.28, phases: segmentPhases(), poses: pose('test_weapon_charge'),
         damageMultiplier: 1, cooldown: 1.2, next: [],
     }
     const tap: AttackSegment = {
         id: 'test_weapon_tap', key: 'light', step: 1, label: '点按轻击',
-        duration: 0.2, recovery: 0.2, phases: segmentPhases(),
+        duration: 0.2, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_tap'),
         damageMultiplier: 1, cooldown: 0.3,
         next: [{to: 'test_weapon_thrust', guard: hasMoveInput}, {to: 'test_weapon_light_2'}],
     }
     const thrust: AttackSegment = {
         id: 'test_weapon_thrust', key: 'light', step: 2, label: '方向突刺',
-        duration: 0.2, recovery: 0.2, phases: segmentPhases(),
+        duration: 0.2, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_thrust'),
         damageMultiplier: 1, cooldown: 0,
         next: [{to: 'test_weapon_tap'}],
     }
     const light2: AttackSegment = {
         id: 'test_weapon_light_2', key: 'light', step: 2,
-        duration: 0.2, recovery: 0.2, phases: segmentPhases(), swingTilt: -Math.PI * 0.22,
+        duration: 0.2, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_light_2'),
         damageMultiplier: 1, cooldown: 0,
         next: [{to: 'test_weapon_tap'}],
     }
     const heavy1: AttackSegment = {
         id: 'test_weapon_heavy_1', key: 'heavy', step: 1,
-        duration: 0.3, recovery: 0.2, phases: segmentPhases(), swingTilt: Math.PI * 0.48,
+        duration: 0.3, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_heavy_1'),
         damageMultiplier: 1, cooldown: 0.6,
         next: [{to: 'test_weapon_heavy_2'}],
     }
     const heavy2: AttackSegment = {
         id: 'test_weapon_heavy_2', key: 'heavy', step: 2,
-        duration: 0.3, recovery: 0.2, phases: segmentPhases(), swingTilt: Math.PI * 0.48,
+        duration: 0.3, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_heavy_2'),
         damageMultiplier: 1, cooldown: 0,
         next: [{to: 'test_weapon_heavy_1'}],
     }
@@ -91,16 +93,17 @@ const buildTestWeaponAttacks = (): WeaponAttacks => {
 
 export const TEST_WEAPON: MeleeWeaponConfig = {
     id: TEST_WEAPON_ID, name: '测试武器', type: 'melee',
+    holdModes: ['one_handed'],
     damage: 3,
     knockbackForce: 4, knockbackY: 2,
     detectionRange: 8,
     detectBox: {size: {x: 0.45, y: 1.1, z: 1.3}, offset: {x: 0, y: 0, z: 0.45}},
     mesh: {id: 'sword', bladeLen: 0.45, color: 0x55cc88, gripColor: 0x334433},
-    attacks: buildTestWeaponAttacks(),
+    attacks: {one_handed: buildTestWeaponAttacks()},
 }
 
 /** 创建测试武器运行时（注册额外预设后解析；生产装配对 TEST_WEAPON_ID 特判调用本函数） */
-export const createTestWeaponRuntime = (): WeaponRuntime => {
+export const createTestWeaponRuntime = (holdMode?: HoldMode): WeaponRuntime => {
     registerWeaponPreset(TEST_WEAPON)
-    return createWeaponRuntime(TEST_WEAPON_ID)
+    return createWeaponRuntime(TEST_WEAPON_ID, {}, holdMode)
 }

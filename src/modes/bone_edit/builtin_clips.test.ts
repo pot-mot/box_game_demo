@@ -5,15 +5,16 @@ import {buildCharacterSkeletonDefinition} from '../../entity/skeleton/preset.ts'
 import {sampleClip} from '../../skeleton/anim/sampling.ts'
 import {MELEE_WEAPON_PRESETS} from '../../character/weapon/melee_weapon.ts'
 import {RANGED_WEAPON_PRESETS} from '../../character/weapon/ranged_weapon.ts'
-import {orderedSegments, type WeaponAttacks} from '../../character/weapon/attack_chain.ts'
+import {orderedSegments} from '../../character/weapon/attack_chain.ts'
+import {weaponAttacksOf, type WeaponConfig} from '../../character/weapon/catalog.ts'
 import type {BuiltinClipEntry} from './builtin_clips.ts'
 
 const entriesOf = (group: string): readonly BuiltinClipEntry[] =>
     getBuiltinClips().filter(entry => entry.group === group)
 
 /** 武器模组声明的全部攻击段 id（与内置动作库同一枚举顺序） */
-const segmentIdsOf = (weapons: readonly {readonly attacks: WeaponAttacks}[]): ReadonlySet<string> =>
-    new Set(weapons.flatMap(weapon => orderedSegments(weapon.attacks).map(segment => segment.id)))
+const segmentIdsOf = (weapons: readonly WeaponConfig[]): ReadonlySet<string> =>
+    new Set(weapons.flatMap(weapon => orderedSegments(weaponAttacksOf(weapon)).map(segment => segment.id)))
 
 const presetPositions = (): ReadonlyMap<string, Vector3> => {
     const definition = buildCharacterSkeletonDefinition()
@@ -136,10 +137,15 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         expect(attacks.length).toBe(35)
         for (const entry of attacks) {
             const records = entry.clip.eventTracks[0]?.records ?? []
-            expect(records.map(record => record.eventName)).toEqual(['hitbox_on', 'hitbox_off'])
-            expect(records[0].time).toBeGreaterThanOrEqual(0)
-            expect(records[1].time).toBeGreaterThan(records[0].time)
-            expect(records[1].time).toBeLessThanOrEqual(entry.clip.duration)
+            const names = records.map(record => record.eventName)
+            /* 双持（双斧）主/副手各一对事件；其余武器仅主手一对 */
+            expect(names).toEqual(records.length === 4
+                ? ['hitbox_on', 'hitbox_off', 'hitbox_on', 'hitbox_off']
+                : ['hitbox_on', 'hitbox_off'])
+            for (const record of records) {
+                expect(record.time).toBeGreaterThanOrEqual(0)
+                expect(record.time).toBeLessThanOrEqual(entry.clip.duration)
+            }
         }
         const lightOne = findBuiltinClip('long_sword_light_1')
         expect(lightOne).toBeDefined()

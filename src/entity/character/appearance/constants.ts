@@ -1,5 +1,4 @@
 import type {CharacterColorPalette} from './types.ts'
-import type {WeaponGripPose, WeaponMeshId} from './weapon_mesh.ts'
 import {darkenColor, lightenColor} from '../../../render/constants.ts'
 
 /** 6 套基础调色板，按 faction % 6 选取 */
@@ -63,138 +62,40 @@ export const VELOCITY_DIR_THRESHOLD = 0.05
 /** 头部水平旋转相对身体的最大角度（rad），±90° */
 export const HEAD_TURN_LIMIT = Math.PI / 2
 
-// ── 攻击动画 ──
+// ── 持握与武器骨骼动态 ──
 
-/** 无阶段信息回退：虚拟三阶段在总时长中的分界点（0-1） */
-export const FALLBACK_WINDUP_END_RATIO = 0.3
-export const FALLBACK_STRIKE_END_RATIO = 0.6
-
-/** 无阶段信息回退：用 stateTime 驱动的假设攻击时长（秒） */
-export const FALLBACK_ATTACK_DURATION = 0.5
-
-/** 左臂平衡反摆幅度（rad，与持械臂动作互补） */
-export const ATTACK_LEFT_ARM_COUNTER = 0.2
-
-/** 左臂随动肘弯曲（rad） */
-export const ATTACK_LEFT_ELBOW_BEND = 0.15
-
-/** 蓄力阶段头部侧偏幅度（rad） */
-export const ATTACK_HEAD_TILT_WINDUP = 0.08
-
-/** 打击阶段头部反侧偏幅度（rad） */
-export const ATTACK_HEAD_TILT_STRIKE = 0.05
-
-/** 头部前后微晃幅度（rad） */
-export const ATTACK_HEAD_BOB = 0.02
-
-/** 头部微晃角频率（rad/s） */
-export const ATTACK_HEAD_BOB_FREQ = 8
-
-/** 瞄准/旋转维持阶段的持械臂微颤幅度（rad） */
-export const ATTACK_HOLD_SWAY = 0.015
-
-/** 维持阶段微颤角频率（rad/s） */
-export const ATTACK_HOLD_SWAY_FREQ = 4
-
-// ── 武器握持姿态 ──
-
-/** 无姿态偏移的单位姿态（投掷物等贴掌武器用） */
-const GRIP_NEUTRAL: WeaponGripPose = {x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0}
+/*
+ * 武器的固有握持姿态（怎么被握住）是**武器模型自身属性**，已随模型烘焙（`weapon_mesh.ts` 的
+ * `WEAPON_MESH_GRIPS`）；武器与前臂的夹角、刃面偏转、逐动作微调全部由武器骨骼
+ * （`rightWeaponMount` / `leftWeaponMount`）的动画轨道控制。此处不再有任何外部武器握持常量。
+ */
 
 /**
- * 各武器静态握持姿态（相对右腕 pivot）：
- * 武器 +Y 轴自握把延伸，rx<0 = 刃尖向前倾，ry 绕武器轴旋转控制刃面朝向。
- * 近战武器 rx 保持小角度，攻击时腕关节会动态对齐抵消 rx 使武器与前臂共线（guard 位）。
+ * 双手武器副握点相对**握把中心**沿武器轴（本地 +Y，握把→刃尖）的偏移距离（米）：
+ * 0 = 与主手同握把处，正值朝刃尖、负值朝柄尾。生产与编辑器共用。
+ * 调用方需叠加武器模型的握把局部 y（`weaponGripY`）得到相对武器原点的偏移。
  */
-export const WEAPON_GRIP_POSES: Record<WeaponMeshId, WeaponGripPose> = {
-    /* 剑类：戒备位——刃尖朝上微前倾，武器收至体侧前方；攻击时腕部对齐抵消 rx 至共线 guard 位 */
-    sword:       {x: 0, y: 0, z: 0, rx: -0.1, ry: 0, rz: 0},
-    heavy_sword: {x: 0, y: 0, z: 0, rx: -0.12, ry: 0, rz: 0},
-    /* 长杆类：竖提、微外八（与臂近乎共线，利于刺击） */
-    spear:       {x: 0, y: 0, z: 0, rx: 0.05, ry: 0, rz: -0.12},
-    staff:       {x: 0, y: 0, z: 0, rx: 0.05, ry: 0, rz: 0.1},
-    /* 斧锤类：头朝上微前倾（小幅调整，本轮以剑类为主） */
-    dual_axe:    {x: 0, y: 0, z: 0, rx: -0.2, ry: 0, rz: 0},
-    war_hammer:  {x: 0, y: 0, z: 0, rx: -0.3, ry: Math.PI / 4, rz: 0},
-    throwing_axe:{x: 0, y: 0, z: 0, rx: -0.3, ry: 0, rz: 0},
-    /* 远程类：携带态枪口/弓臂朝下前倾 */
-    bow:         {x: 0, y: 0, z: 0, rx: -0.15, ry: 0, rz: 0},
-    crossbow:    {x: 0, y: 0, z: 0, rx: -0.6, ry: 0, rz: 0},
-    shotgun:     {x: 0, y: 0, z: 0, rx: -0.6, ry: 0, rz: 0},
-    magic_wand:  {x: 0, y: 0, z: 0, rx: -0.5, ry: 0, rz: 0},
-    /* 投掷物：贴掌居中 */
-    grenade:     {...GRIP_NEUTRAL, y: -0.02, rx: -0.3},
-    molotov:     {...GRIP_NEUTRAL, y: -0.03, rx: -0.3},
-    throwing_dart: GRIP_NEUTRAL,
-}
-
-// ── 双手握持与腕部动态 ──
-
-/** 双手武器副手（左手）扶柄姿态：肩前举 + 内收 + 微屈肘 */
-export const TWO_HAND_GRIP = {x: -1.1, y: -0.5, elbow: 0.25} as const
-
-/** 双手武器副握点沿武器轴（本地 +Y，握把→刃尖）的偏移距离（米）；生产与编辑器共用 */
-export const TWO_HAND_GRIP_OFFSET = 0.45
-
-/** 挥砍时腕部刃面偏转系数（rotation.y = swingTilt × 系数，横斩时刃面转水平） */
-export const WRIST_EDGE_YAW_FACTOR = 1.0
+export const TWO_HAND_GRIP_OFFSET = 0
 
 /** 持械戒备位：肩前举角（rad，负值 = 前摆，刃尖朝上收至体侧前方） */
 export const WEAPON_READY_SHOULDER = -0.45
 
-/** 持械戒备位：肘弯曲（rad，加大弯曲使武器竖持体前） */
-export const WEAPON_READY_ELBOW = 0.85
+/** 持械戒备位：肘弯曲（rad，负值 = 前臂向前折、肘尖朝后，符合人体；见 docs/bone_animation/动作设计规范.md §3） */
+export const WEAPON_READY_ELBOW = -0.85
 
 /** 持械戒备位：持械臂微摆幅度（rad，武器竖持微摆） */
 export const WEAPON_READY_SWAY = 0.03
 
+/**
+ * 武器骨骼握持屈角（rad，施加在左右手武器骨骼 `rightWeaponMount` / `leftWeaponMount` 上）：
+ * 使武器相对前臂近乎垂直的天然握持姿态。待机/行走（持械）与攻击 clip 通用——
+ * 武器骨骼控制武器模型朝向（腕关节不再承担握持角）。
+ * 武器与前臂夹角 = 180° − |WEAPON_GRIP_FLEX + 该武器固有前倾（模型烘焙）| ≈ 83°~90°。
+ */
+export const WEAPON_GRIP_FLEX = 1.7
+
 /** 持械行走：持械臂摆动幅度（rad，远小于空手摆臂） */
 export const WEAPON_WALK_ARM_SWING = 0.12
-
-// ── 攻击动力链 ──
-
-/** 拧腰幅度：蓄力反向拧转（rad，按横斩分量 |sinTilt| 缩放） */
-export const TWIST_WINDUP = 0.3
-
-/** 拧腰幅度：打击顺向拧转（rad） */
-export const TWIST_STRIKE = 0.35
-
-/** 刺击探身距离（m，spine 前移量） */
-export const THRUST_LUNGE_DIST = 0.09
-
-/** 刺击预备反向拧转（rad） */
-export const THRUST_COIL = 0.1
-
-/** 旋转攻击蓄力拧转角（rad） */
-export const SPIN_COIL = 0.5
-
-/** 旋转攻击结束残余角（rad，recovery 由此回正，避免反向整圈回卷） */
-export const SPIN_RESIDUAL = 0.3
-
-/** 恢复惯性过冲缩放系数（过冲量 = 摆动末姿态幅度 × overshootRatio × 此系数） */
-export const OVERSHOOT_SCALE = 1.0
-
-/** 弓步：前（右）腿髋前迈角（rad） */
-export const LUNGE_FRONT_HIP = 0.3
-
-/** 弓步：前腿膝弯曲（rad） */
-export const LUNGE_FRONT_KNEE = 0.25
-
-/** 弓步：后（左）腿髋后展角（rad） */
-export const LUNGE_BACK_HIP = 0.2
-
-/** 弓步：后腿膝弯曲（rad） */
-export const LUNGE_BACK_KNEE = 0.35
-
-/** 弓步重心下沉（m） */
-export const LUNGE_SINK = 0.05
-
-/** 弓步各阶段量：windup 微蹲 / strike 满弓步 / spin 低架势 */
-export const LUNGE_WINDUP = 0.1
-export const LUNGE_STRIKE = 1.0
-export const LUNGE_SPIN = 0.35
-export const LUNGE_RANGED_AIM = 0.1
-export const LUNGE_RANGED_RELEASE = 0.25
 
 /** 状态过渡混合时长（秒）：新状态动画从切换前关节快照收敛，消除关节角突跳 */
 export const STATE_BLEND_DURATION = 0.15
@@ -210,19 +111,13 @@ export const FLINCH_ARM_RAISE = 0.9
 /** 受击双臂外张（rad，肩 Z） */
 export const FLINCH_ARM_SPREAD = 0.5
 
-/** 受击屈肘（rad） */
-export const FLINCH_ELBOW = 1.2
+/** 受击屈肘（rad，负值 = 前折） */
+export const FLINCH_ELBOW = -1.2
 
 /** 受击头部后仰（rad） */
 export const FLINCH_HEAD_BACK = 0.15
 
-// ── clip 烘焙与命中事件 ──
+// ── 基础状态 clip 烘焙 ──
 
-/** clip 关键帧烘焙采样率（fps）：基础状态与攻击动作共用 */
+/** clip 关键帧烘焙采样率（fps）：基础状态动画使用 */
 export const CLIP_SAMPLE_FPS = 60
-
-/** 攻击命中窗口开启时间（动作时长比例，与旧 executor 窗口一致） */
-export const ATTACK_HITBOX_ON_RATIO = 0.1
-
-/** 攻击命中窗口关闭时间（动作时长比例，与旧 executor 窗口一致） */
-export const ATTACK_HITBOX_OFF_ACTION_RATIO = 0.85

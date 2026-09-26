@@ -53,7 +53,6 @@ const makeChar = (
         attackDirX: 0,
         attackDirZ: 1,
         attackedTargets: new Set(),
-        swingTilt: 0,
         phaseIndex: 0,
         phaseTimer: 0,
         pendingFlinch: false,

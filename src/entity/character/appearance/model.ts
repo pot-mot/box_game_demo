@@ -1,8 +1,7 @@
 import {Group, Mesh} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
-import type {CharacterModel, CharacterColorPalette} from './types.ts'
-import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
-import {createWeaponMount} from './weapon_mount.ts'
+import type {CharacterModel, CharacterColorPalette, WeaponEquipConfig} from './types.ts'
+import {createWeaponMesh, type WeaponMeshConfig, type WeaponLocalHitBox} from './weapon_mesh.ts'
 import {SELECT_PALETTE} from './constants.ts'
 import {
     HEAD_RATIO,
@@ -25,6 +24,18 @@ import {
     disposeBoxPart,
     type TrackedBoxPart,
 } from '../../../render/box_parts.ts'
+
+/** 单个武器槽（主手/副手各一）：武器骨骼挂点 + 武器网格状态 */
+interface WeaponSlot {
+    readonly mountJoint: Group
+    group: Group | null
+    hitCenter: Mesh | null
+    tip: Mesh | null
+    hitBox: WeaponLocalHitBox | null
+    cleanup: (() => void) | null
+    /** 握把中心在武器本地 Y 轴上的坐标（负值 = 在原点下方），供双手副握点计算 */
+    gripY: number
+}
 
 /** 构建完整的方块人模型 Group 层级，返回模型引用 + 武器挂载点 */
 export const createCharacterModel = (config: CharacterConfig, faction: number): CharacterModel => {
@@ -130,9 +141,13 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     rightHandPivot.position.y = -forearmH
     rightArmElbow.add(rightHandPivot)
 
-    /* 动态腕关节：动画器驱动（攻击对齐/刃面偏转），静止时为单位变换；武器经静态握持 mount 挂其下 */
+    /* 动态腕关节：动画器驱动（攻击对齐/刃面偏转），静止时为单位变换；武器经右武器挂点挂其下 */
     const rightWristPivot = new Group()
     rightHandPivot.add(rightWristPivot)
+
+    /* 右手武器挂点（可动画关节，静止为单位变换；武器模型自带固有握持，直接挂其下） */
+    const rightWeaponMount = new Group()
+    rightWristPivot.add(rightWeaponMount)
 
     spine.add(rightArmShoulder)
 
@@ -156,6 +171,12 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     leftHandPivot.position.y = -forearmH
     leftArmElbow.add(leftHandPivot)
 
+    /* 左腕动态关节 + 左手武器挂点（双持副手武器挂其下；双手 IK 末端） */
+    const leftWristPivot = new Group()
+    leftHandPivot.add(leftWristPivot)
+    const leftWeaponMount = new Group()
+    leftWristPivot.add(leftWeaponMount)
+
     spine.add(leftArmShoulder)
 
     // ── 头 ──
@@ -169,40 +190,45 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     group.scale.set(config.scale, config.scale, config.scale)
 
-    let weaponGroup: Group | null = null
-    let weaponHitCenter: Mesh | null = null
-    let weaponTipMesh: Mesh | null = null
-    let weaponHitBoxData: WeaponLocalHitBox | null = null
-    let weaponCleanup: (() => void) | null = null
-    let weaponMount: Group | null = null
-    let weaponGripTilt = 0
+    const createSlot = (mountJoint: Group): WeaponSlot => ({
+        mountJoint, group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0,
+    })
+    const rightSlot = createSlot(rightWeaponMount)
+    const leftSlot = createSlot(leftWeaponMount)
 
-    const removeWeapon = (): void => {
-        if (weaponGroup) {
-            weaponMount?.remove(weaponGroup)
-            weaponCleanup?.()
-            weaponGroup = null
-            weaponHitCenter = null
-            weaponTipMesh = null
-            weaponHitBoxData = null
-            weaponCleanup = null
-            weaponMount = null
-            weaponGripTilt = 0
-        }
+    const clearSlot = (slot: WeaponSlot): void => {
+        if (slot.group !== null) slot.mountJoint.remove(slot.group)
+        slot.cleanup?.()
+        slot.group = null
+        slot.hitCenter = null
+        slot.tip = null
+        slot.hitBox = null
+        slot.cleanup = null
+        slot.gripY = 0
     }
 
-    const equipWeapon = (meshConfig: WeaponMeshConfig): void => {
-        removeWeapon()
-        /* 静态握持 mount 由共享装配函数创建（位置偏移 + 欧拉角，握把中心精确落于手腕节点） */
-        const {mount, result, gripTilt} = createWeaponMount(meshConfig)
-        weaponGroup = result.group
-        weaponHitCenter = result.hitCenter
-        weaponTipMesh = result.tip
-        weaponHitBoxData = result.hitBox
-        weaponCleanup = result.cleanup
-        weaponMount = mount
-        weaponGripTilt = gripTilt
-        rightWristPivot.add(mount)
+    const equipSlot = (slot: WeaponSlot, meshConfig: WeaponMeshConfig | undefined): void => {
+        clearSlot(slot)
+        if (meshConfig === undefined) return
+        /* 武器模型已自带固有握持（握把中心在模型原点）；直接挂到武器骨骼下，朝向完全由骨骼动画控制 */
+        const result = createWeaponMesh(meshConfig)
+        slot.group = result.group
+        slot.hitCenter = result.hitCenter
+        slot.tip = result.tip
+        slot.hitBox = result.hitBox
+        slot.cleanup = result.cleanup
+        slot.gripY = result.gripY
+        slot.mountJoint.add(result.group)
+    }
+
+    const removeWeapon = (): void => {
+        clearSlot(rightSlot)
+        clearSlot(leftSlot)
+    }
+
+    const equipWeapon = (equipConfig: WeaponEquipConfig): void => {
+        equipSlot(rightSlot, equipConfig.main)
+        equipSlot(leftSlot, equipConfig.offhand)
     }
 
     /** 根据新调色板原地更新所有部位材质颜色（不重建几何体） */
@@ -243,6 +269,9 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         leftArmElbow,
         leftForearm: leftForearmPart.mesh,
         leftHandPivot,
+        leftWristPivot,
+        rightWeaponMount,
+        leftWeaponMount,
         rightLegHip,
         rightThigh: rightThighPart.mesh,
         rightLegKnee,
@@ -254,11 +283,16 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         equipWeapon,
         removeWeapon,
         recolor,
-        get weaponMesh() { return weaponHitCenter },
-        get weaponTip() { return weaponTipMesh },
-        get weaponGroup() { return weaponGroup },
-        get weaponHitBox() { return weaponHitBoxData },
-        get weaponGripTilt() { return weaponGripTilt },
+        get weaponMesh() { return rightSlot.hitCenter },
+        get weaponTip() { return rightSlot.tip },
+        get weaponGroup() { return rightSlot.group },
+        get weaponHitBox() { return rightSlot.hitBox },
+        get weaponGripY() { return rightSlot.gripY },
+        get offhandWeaponMesh() { return leftSlot.hitCenter },
+        get offhandWeaponTip() { return leftSlot.tip },
+        get offhandWeaponGroup() { return leftSlot.group },
+        get offhandWeaponHitBox() { return leftSlot.hitBox },
+        get offhandWeaponGripY() { return leftSlot.gripY },
         dispose,
     }
 }

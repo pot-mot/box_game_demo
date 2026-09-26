@@ -1,7 +1,6 @@
 import {describe, it, expect} from 'vitest'
 import {Quaternion, Vector3} from 'three'
 import {applyTransition, lerpNumber, lerpVec3, lerpQuat} from './transition.ts'
-import {strikeCurve} from '../character/combat/attack_phases.ts'
 
 describe('线性过渡', () => {
     it('linear：恒速映射 y = t', () => {
@@ -70,24 +69,6 @@ describe('二阶贝塞尔缓动', () => {
 })
 
 describe('strike_peak 末端速度峰值曲线', () => {
-    it('与 strikeCurve 逐点一致（默认峰值 0.7）', () => {
-        const spec = {type: 'bezier_quad', strategy: 'strike_peak'} as const
-        for (let i = 0; i <= 100; i++) {
-            const t = i / 100
-            expect(applyTransition(t, spec)).toBeCloseTo(strikeCurve(t, 0.7))
-        }
-    })
-
-    it('peakRatio 参数生效且与 strikeCurve 一致', () => {
-        for (const peak of [0.3, 0.5, 0.9]) {
-            const spec = {type: 'bezier_quad', strategy: 'strike_peak', peakRatio: peak} as const
-            for (let i = 0; i <= 100; i++) {
-                const t = i / 100
-                expect(applyTransition(t, spec)).toBeCloseTo(strikeCurve(t, peak))
-            }
-        }
-    })
-
     it('峰值处速度连续（左右导数接近）', () => {
         const peak = 0.7
         const spec = {type: 'bezier_quad', strategy: 'strike_peak', peakRatio: peak} as const

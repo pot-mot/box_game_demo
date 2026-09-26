@@ -109,8 +109,6 @@ const setFill = (el: HTMLElement, ratio: number, color: string): void => {
     if (el.style.background !== color) el.style.background = color
 }
 
-const toDeg = (rad: number): string => `${(rad * 180 / Math.PI).toFixed(0)}°`
-
 /** 名称拼接：名称行与副名相同（重构后同为武器中文名）时只显示一次，避免重复文案 */
 const joinNames = (primary: string, secondary: string): string =>
     primary === secondary || secondary === '' ? primary : `${primary} · ${secondary}`
@@ -377,7 +375,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
             setText(refs.hit, st.mode === 'idle'
                 ? '待机'
-                : `${st.isMelee ? `击${st.hitNumber}/${st.totalHits}` : '射击'} · ${toDeg(st.swingTilt)}`)
+                : `${st.isMelee ? `击${st.hitNumber}/${st.totalHits}` : '射击'}`)
             const phaseText = st.phaseName === 'idle' ? 'idle' : st.phaseName === 'done' ? 'done' : st.phaseName
             setText(refs.phase, ` ${phaseText}`)
             const doneClass = st.phaseName === 'done' || st.phaseName === 'idle'
@@ -397,7 +395,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
             setText(detailTitle, joinNames(st.skillName, st.weaponName))
             setText(detailHit, st.mode === 'idle'
                 ? '状态：待机'
-                : `${st.isMelee ? `连段第 ${st.hitNumber}/${st.totalHits} 击 · tilt ${toDeg(st.swingTilt)} (${st.swingTilt.toFixed(2)} rad)` : '远程射击序列'}`)
+                : `${st.isMelee ? `连段第 ${st.hitNumber}/${st.totalHits} 击` : '远程射击序列'}`)
             setText(detailPhase, st.mode === 'idle'
                 ? '阶段：—'
                 : `阶段：${st.phaseName === 'done' ? '收势(全部阶段完成)' : st.phaseName} · ${(st.phaseProgress * 100).toFixed(0)}%`)

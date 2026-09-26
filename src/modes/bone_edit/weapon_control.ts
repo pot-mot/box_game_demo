@@ -1,7 +1,5 @@
 import type {Skeleton} from '../../skeleton/skeleton.ts'
-import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, findWeaponPreset, type WeaponConfig} from '../../character/weapon/catalog.ts'
-import {segmentTwoHanded} from '../../character/weapon/attack_chain.ts'
-import {meleeAttackStyleOf} from '../../character/weapon/melee_attacks.ts'
+import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, type WeaponConfig} from '../../character/weapon/catalog.ts'
 import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
 import {clearTwoHandGripRoot, solveTwoHandedGrip} from '../../entity/character/appearance/two_handed_ik.ts'
 import {
@@ -27,7 +25,7 @@ import {
  *
  * - 下拉三态：**自动**（跟随当前动画来源：选中内置攻击动作即装备该武器）/ **无武器** / 手动指定某把武器；
  * - 装载：武器网格挂 `rightWeaponMount`（右手武器挂点，随右手动画）；
- * - 双手贴合：段动画参数 `twoHanded` 为真时，左肩设为 IK 根并每次姿态应用后把左手链 CCD 求解到
+ * - 双手贴合：武器 `twoHanded` 为真时，左肩设为 IK 根并每次姿态应用后把左手链 CCD 求解到
  *   武器轴上的副握点（与生产共用 `entity/character/appearance/two_handed_ik.ts`）。
  */
 
@@ -56,28 +54,24 @@ export const resolveAutoWeapon = (
     source: ClipWeaponSource,
     current: SkeletonWeaponSpec | undefined,
 ): SkeletonWeaponSpec | undefined => {
-    if (source.weaponId !== undefined) return weaponSpecOf(source.weaponId, source.segmentId)
+    if (source.weaponId !== undefined) return weaponSpecOf(source.weaponId)
     if (source.weaponHeld === false) return undefined
     return current ?? weaponSpecOf(DEFAULT_EDITOR_WEAPON_ID)
 }
 
-/**
- * 是否双手持握：优先取该段动画参数（与生产同源，经 `segmentTwoHanded`），
- * 未知段或段无阶段时回退武器风格表。
- */
-export const isTwoHandedWeapon = (weapon: WeaponConfig, segmentId?: string): boolean => {
-    if (weapon.type !== 'melee') return false
-    const segment = segmentId !== undefined ? weapon.attacks.segments[segmentId] : undefined
-    return segment !== undefined && segment.phases.length > 0
-        ? segmentTwoHanded(segment)
-        : meleeAttackStyleOf(weapon.id).twoHanded
-}
+/** 是否双手持握：取武器**默认持握模式**是否为双手共持（生产与编辑器同源） */
+export const isTwoHandedWeapon = (weapon: WeaponConfig): boolean => defaultHoldMode(weapon) === 'two_handed'
 
 /** 武器规格（编辑器装载用）；武器 id 未知时返回 undefined */
-export const weaponSpecOf = (weaponId: string, segmentId?: string): SkeletonWeaponSpec | undefined => {
+export const weaponSpecOf = (weaponId: string): SkeletonWeaponSpec | undefined => {
     const weapon = findWeaponPreset(weaponId)
     if (weapon === undefined) return undefined
-    return {weaponId: weapon.id, meshConfig: weapon.mesh, twoHanded: isTwoHandedWeapon(weapon, segmentId)}
+    return {
+        weaponId: weapon.id,
+        meshConfig: weapon.mesh,
+        offhandMeshConfig: weapon.offhandMesh,
+        twoHanded: defaultHoldMode(weapon) === 'two_handed',
+    }
 }
 
 export interface BoneEditWeaponControl {
@@ -208,9 +202,10 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
             gripSolved = false
             return
         }
-        gripSolved = solveTwoHandedGrip(skeleton, equipped.mount, {
+        gripSolved = solveTwoHandedGrip(skeleton, equipped.weaponGroup, {
             shoulderId: 'leftArmShoulder',
-            offset: TWO_HAND_GRIP_OFFSET,
+            /* 副握点沿武器轴相对武器原点：握把局部 y + 握把相对偏移（0 = 主手握把处） */
+            offset: equipped.gripY + TWO_HAND_GRIP_OFFSET,
         })
     }
 

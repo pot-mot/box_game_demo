@@ -22,7 +22,7 @@ export interface SegmentInput {
     readonly attackKey: AttackKey | undefined
 }
 
-/** 进入攻击段：重置计时/阶段、挂段冷却、清空命中记录、取段固有倾斜角并唤醒刚体 */
+/** 进入攻击段：重置计时/阶段、挂段冷却、清空命中记录并唤醒刚体（动画取段 id 的骨骼关键帧数据） */
 export const enterAttackSegment = (c: CombatComponent, segment: AttackSegment, entity: CharacterEntity): void => {
     c.activeSegment = segment
     c.bufferedSegment = undefined
@@ -30,7 +30,6 @@ export const enterAttackSegment = (c: CombatComponent, segment: AttackSegment, e
     c.phaseIndex = 0
     c.phaseTimer = 0
     c.attackedTargets.clear()
-    c.swingTilt = segment.swingTilt ?? 0
     /* 冷却从触发时刻开始计时（链中段冷却为 0，不受影响） */
     armSegmentCooldown(c, segment)
     entity.body.wakeUp()

@@ -7,6 +7,7 @@ import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../physics/
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {createRangedExecutor} from './ranged_executor.ts'
 import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import {defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import type {ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
@@ -30,7 +31,7 @@ const makeWeaponRuntime = (weaponOverrides: Partial<RangedWeaponConfig> = {}, da
         knockbackForce: 0,
         ...weaponOverrides,
     }
-    return {weapon, attacks: weapon.attacks}
+    return {weapon, holdMode: defaultHoldMode(weapon), attacks: weaponAttacksOf(weapon)}
 }
 
 /** 在 +Z 方向开火（执行器只在首次 update 时生成子弹；武器参数取自 combat.weapon） */

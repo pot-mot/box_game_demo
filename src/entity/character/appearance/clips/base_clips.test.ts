@@ -1,8 +1,9 @@
 import {describe, it, expect, beforeAll, vi} from 'vitest'
 import {Euler, Quaternion, Vector3} from 'three'
-import {buildBaseClip, CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
+import {buildBaseClip, getBaseClipForHoldMode, getBaseLayers, CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
 import {sampleClip} from '../../../../skeleton/anim/sampling.ts'
+import {composePoses} from '../../../../skeleton/anim/composition.ts'
 import {createCharacterSkeletonBridge} from '../skeleton_bridge.ts'
 import {createCharacterModel} from '../model.ts'
 
@@ -31,8 +32,11 @@ const quatOf = (state: PoseState, jointId: (typeof CHARACTER_JOINT_IDS)[number])
         rightArmShoulder: state.rightArmShoulder,
         rightArmElbow: state.rightArmElbow,
         rightWristPivot: state.rightWristPivot,
+        rightWeaponMount: state.rightWeaponMount,
         leftArmShoulder: state.leftArmShoulder,
         leftArmElbow: state.leftArmElbow,
+        leftWristPivot: state.leftWristPivot,
+        leftWeaponMount: state.leftWeaponMount,
         rightLegHip: state.rightLegHip,
         rightLegKnee: state.rightLegKnee,
         leftLegHip: state.leftLegHip,
@@ -167,5 +171,41 @@ describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
         const euler = new Euler().setFromQuaternion(bridge.findJoint('headNeck')!.rotation)
         expect(euler.x).toBeCloseTo(0.3)
         model.dispose()
+    })
+
+    it('双武器装配：主手 / 副手各挂到对应武器挂点，removeWeapon 一并卸载', () => {
+        const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        model.equipWeapon({
+            main: {id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322},
+            offhand: {id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322, mirror: true},
+        })
+        expect(model.weaponGroup).not.toBeNull()
+        expect(model.offhandWeaponGroup).not.toBeNull()
+        expect(model.rightWeaponMount.children).toHaveLength(1)
+        expect(model.leftWeaponMount.children).toHaveLength(1)
+        model.removeWeapon()
+        expect(model.weaponGroup).toBeNull()
+        expect(model.offhandWeaponGroup).toBeNull()
+        expect(model.rightWeaponMount.children).toHaveLength(0)
+        expect(model.leftWeaponMount.children).toHaveLength(0)
+        model.dispose()
+    })
+
+    it('持握模式合并 clip 与分层组合等价（均匀权重、下半身/上半身关节不重叠）', () => {
+        for (const [state, holdMode] of [['idle', 'one_handed'], ['walking', 'two_handed'], ['walking', 'dual_wield']] as const) {
+            const merged = getBaseClipForHoldMode(state, true, holdMode, 0)
+            /* 全身 15 关节都写在合并 clip 里 */
+            expect(merged.jointTracks.map(track => track.targetId).sort()).toEqual([...CHARACTER_JOINT_IDS].sort())
+            for (const ratio of [0, 0.3, 0.7]) {
+                const composed = composePoses(
+                    getBaseLayers(state, true, holdMode, 0).map(layer => ({...layer, progress: ratio})),
+                )
+                const sampled = sampleClip(merged, merged.duration * ratio)
+                for (const [jointId, pose] of composed.jointPoses) {
+                    const direct = sampled.jointPoses.get(jointId)!
+                    expect(direct.rotation.angleTo(pose.rotation), jointId).toBeLessThan(1e-6)
+                }
+            }
+        }
     })
 })

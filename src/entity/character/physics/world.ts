@@ -12,6 +12,8 @@ import type { AttackResult } from '../../../character/combat/types.ts'
 import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/attack_runtime.ts'
 import {TEST_WEAPON_ID, createTestWeaponRuntime} from '../../../character/combat/test_weapon.ts'
 import {createWeaponRuntime, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
+import {defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
+import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import type {AttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
@@ -32,6 +34,7 @@ import {createAppearanceSystem} from '../appearance/system.ts'
 import type {AppearanceSystem} from '../appearance/system.ts'
 import {createWeaponTrail, type WeaponTrail} from '../appearance/weapon_trail.ts'
 import type {CharacterModel} from '../appearance/types.ts'
+import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
 import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG} from '../validation.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE} from '../constants.ts'
@@ -62,14 +65,21 @@ type CharacterRigidBody = RAPIER.RigidBody
 const _trailTipVec = new Vector3()
 
 /** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写；test_weapon 走测试专用链） */
-const weaponRuntimeOf = (attack: AttackConfig): WeaponRuntime => {
-    if (attack.weaponId === TEST_WEAPON_ID) return createTestWeaponRuntime()
+const weaponRuntimeOf = (attack: AttackConfig, holdMode?: HoldMode): WeaponRuntime => {
+    if (attack.weaponId === TEST_WEAPON_ID) return createTestWeaponRuntime(holdMode)
     return createWeaponRuntime(attack.weaponId, {
         damage: attack.damage,
         cooldown: attack.cooldown,
         ranged: attack.ranged,
-    })
+    }, holdMode)
 }
+
+/** 由已覆写武器重建运行时（换持握模式用；武器对象已含覆写，仅按模式重解析攻击链） */
+const runtimeForHoldMode = (weapon: WeaponRuntime['weapon'], holdMode: HoldMode): WeaponRuntime => ({
+    weapon,
+    holdMode,
+    attacks: weaponAttacksOf(weapon, holdMode),
+})
 
 /* 视线扇形可视化 castFan 命中距离复用缓冲 */
 const _fanVizDists = new Float32Array(VISION_FAN_RAY_COUNT)
@@ -145,6 +155,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     getFacing: (id: number) => number
     /** 设置角色朝向角（度，自动归一到 0-360，编辑暂停态亦即时生效） */
     setFacing: (id: number, degrees: number) => void
+    /** 切换持握模式（武器不支持时回退默认模式）；返回是否成功命中请求的模式 */
+    setHoldMode: (id: number, holdMode: HoldMode) => boolean
     /** 配置 AI 感知（视线检查 + 导航传感器，需在所有实体系统初始化后调用） */
     setupAI: (systems: readonly EntityInfoSource[]) => void
     /** 设置单角色导航感知开关 */
@@ -209,10 +221,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 清除全部在飞子弹（同时移除物理刚体与场景 mesh），供世界还原 / 载入存档时调用 */
     const clearBullets = (): void => { rangedExecutor.clear() }
-    /* 攻击动画事件轨道 → 近战命中窗口（hitbox_on/off，与视觉动画同步） */
-    const onAttackEvent = (record: {eventName: string}): void => {
-        if (record.eventName === 'hitbox_on') meleeExecutor.setHitWindow(true)
-        if (record.eventName === 'hitbox_off') meleeExecutor.setHitWindow(false)
+    /* 攻击动画事件轨道 → 近战命中窗口（hitbox_on/off，与视觉动画同步）；
+     * 事件 params.weapon 指定主手/副手（双持），缺省 = 两手同时开关（如状态切换的合成关闭事件） */
+    const onAttackEvent = (record: BoneEventRecord): void => {
+        const slot = record.params?.weapon === 'offhand' ? 'offhand'
+            : record.params?.weapon === 'main' ? 'main'
+            : undefined
+        if (record.eventName === 'hitbox_on') meleeExecutor.setHitWindow(true, slot)
+        if (record.eventName === 'hitbox_off') meleeExecutor.setHitWindow(false, slot)
     }
     /** 追踪当前激活的近战攻击（用于 start/end 生命周期） */
     const activatedAttacks = new Set<number>()
@@ -291,7 +307,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         scene.add(mesh)
 
         const model = createCharacterModel(config, faction)
-        model.equipWeapon(runtime.weapon.mesh)
+        model.equipWeapon({main: runtime.weapon.mesh, offhand: runtime.weapon.offhandMesh})
         model.group.position.set(x, y, z)
         scene.add(model.group)
 
@@ -347,6 +363,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             isDying: false,
             dyingTimer: 0,
             combat,
+            holdMode: defaultHoldMode(runtime.weapon),
             stateMachine,
         }
 
@@ -472,7 +489,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             weapon.detectionRange)
         hitBoxes.visionFan.visible = show
         /* 攻击判定箱（红）需逐帧跟随武器 matrixWorld，暂停态不强行显示，由 update() 维护 */
-        if (!show) hitBoxes.weaponBox.visible = false
+        if (!show) {
+            hitBoxes.weaponBox.visible = false
+            hitBoxes.offhandWeaponBox.visible = false
+        }
     }
 
     /** 刷新选中态可视化：胶囊体/受击箱/检测块/判定箱/检测射线等仅被选中角色显示；
@@ -494,6 +514,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             } else {
                 hb.targetBox.visible = false
                 hb.weaponBox.visible = false
+                hb.offhandWeaponBox.visible = false
                 hb.detectBox.visible = false
                 hb.rangeRing.visible = false
                 hb.visionFan.visible = false
@@ -704,7 +725,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
-                    swingTilt: entity.combat.swingTilt,
+                    holdMode: entity.holdMode,
                     attackSegment: inAttacking ? activeSegment : undefined,
                     attackPhase: ctxPhaseName,
                     attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
@@ -794,6 +815,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         hitBoxes.weaponBox.visible = true
                     } else {
                         hitBoxes.weaponBox.visible = false
+                    }
+
+                    /* 副手攻击判定箱（双持）：跟随副手武器模型 */
+                    if (showDebug && meleeWeapon !== undefined && model.offhandWeaponGroup !== null && model.offhandWeaponHitBox !== null) {
+                        model.offhandWeaponGroup.updateMatrixWorld()
+                        syncWeaponDebugBox(hitBoxes.offhandWeaponBox, model.offhandWeaponGroup.matrixWorld,
+                            model.offhandWeaponHitBox.center, model.offhandWeaponHitBox.half)
+                        hitBoxes.offhandWeaponBox.visible = true
+                    } else {
+                        hitBoxes.offhandWeaponBox.visible = false
                     }
 
                     /* 攻击检测箱（橙）：与角色位置/朝向绑定，尺寸与偏移由武器 detectBox 配置驱动 */
@@ -1016,6 +1047,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
         const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, scale: saveConfig.scale}
         const entity = spawnEntity(cfg, saveConfig.attack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
+        /* 持握模式：存档支持时应用，武器不支持时 setHoldMode 回退默认模式（不抛错） */
+        if (saveConfig.holdMode !== undefined) setHoldMode(entity.id, saveConfig.holdMode)
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
@@ -1068,6 +1101,25 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         placeDebugBoxes(entity, p.x, p.y, p.z, yaw)
     }
 
+    /**
+     * 切换持握模式：武器支持时切换，不支持时回退默认模式；返回是否成功命中请求的模式。
+     * 切换后按新模式重解析攻击链并清空段冷却 / 当前段（避免残留旧链的段）。
+     */
+    const setHoldMode = (id: number, holdMode: HoldMode): boolean => {
+        const entity = characters.find(c => c.id === id)
+        if (entity === undefined) return false
+        const supported = entity.combat.weapon.holdModes.includes(holdMode)
+        const mode = supported ? holdMode : defaultHoldMode(entity.combat.weapon)
+        if (entity.holdMode !== mode) {
+            setCombatWeapon(entity.combat, runtimeForHoldMode(entity.combat.weapon, mode))
+            entity.holdMode = mode
+            entity.combat.activeSegment = undefined
+            entity.combat.bufferedSegment = undefined
+            entity.combat.segmentCooldowns.clear()
+        }
+        return supported
+    }
+
     const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
@@ -1112,14 +1164,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
         }
         if (newAttackSlot) {
-            /* 换装：整体替换武器运行时（武器 + 攻击链 + 数值覆写），清空段冷却与当前段 */
-            setCombatWeapon(entity.combat, weaponRuntimeOf(newAttackSlot))
+            /* 换装：整体替换武器运行时（武器 + 攻击链 + 数值覆写），持握模式重置为默认，清空段冷却与当前段 */
+            const runtime = weaponRuntimeOf(newAttackSlot)
+            setCombatWeapon(entity.combat, runtime)
+            entity.holdMode = runtime.holdMode
             entity.combat.activeSegment = undefined
             entity.combat.bufferedSegment = undefined
             entity.combat.segmentCooldowns.clear()
             const model = appearanceModels.get(entity.id)
             if (model) {
-                model.equipWeapon(entity.combat.weapon.mesh)
+                model.equipWeapon({main: entity.combat.weapon.mesh, offhand: entity.combat.weapon.offhandMesh})
             }
         }
         if (newFaction !== undefined) {
@@ -1226,6 +1280,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setCollisionVisible,
         getFacing,
         setFacing,
+        setHoldMode,
         setupAI,
         setNavEnabled,
         setOnMeleeImpact,

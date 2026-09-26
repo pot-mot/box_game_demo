@@ -1,7 +1,7 @@
 import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
-import {getAttackClip, getBaseClip, WEAPON_GRIP_POSES} from '../../entity/character/appearance/builtin_catalog.ts'
+import {getAttackClipById, getBaseClip} from '../../entity/character/appearance/builtin_catalog.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
-import {ALL_WEAPON_PRESETS, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {ALL_WEAPON_PRESETS, weaponAttacksOf} from '../../character/weapon/catalog.ts'
 
 /** 基础状态键（与姿态采样器状态一致） */
 type BaseState = Parameters<typeof getBaseClip>[0]
@@ -114,18 +114,8 @@ const buildBaseEntries = (): BuiltinClipEntry[] => {
 
 /* ── 攻击动作（全部武器 × 其武器模组声明的攻击段） ── */
 
-/**
- * 攻击 clip 生成参数与生产装配一致（`appearance/system.ts`）：
- * 阶段/时长/倾斜角取武器模组的段定义，握持前倾取武器静态握持姿态 rx。
- */
-const buildAttackSource = (weapon: WeaponConfig, segment: AttackSegment): BoneAnimationClip => getAttackClip({
-    segmentId: segment.id,
-    duration: segment.duration,
-    recovery: segment.recovery,
-    phases: segment.phases,
-    tilt: segment.swingTilt ?? 0,
-    gripTilt: WEAPON_GRIP_POSES[weapon.mesh.id].rx,
-})
+/** 攻击 clip：取段 id 对应的显式骨骼关键帧数据（与生产装配 `appearance/system.ts` 同源） */
+const buildAttackSource = (segment: AttackSegment): BoneAnimationClip => getAttackClipById(segment.id)
 
 /**
  * 攻击条目：逐武器枚举其攻击段（顺序 = `orderedSegments`：轻1 → 轻2 → 重1 → 重2，
@@ -134,12 +124,12 @@ const buildAttackSource = (weapon: WeaponConfig, segment: AttackSegment): BoneAn
  */
 const buildAttackEntries = (): BuiltinClipEntry[] =>
     ALL_WEAPON_PRESETS.flatMap(weapon => {
-        const segments = orderedSegments(weapon.attacks)
+        const segments = orderedSegments(weaponAttacksOf(weapon))
         return segments.map(segment => entryOf(
             segment.id,
             weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,
             segments.length > 1 ? `${weapon.name} · ${segmentDisplayName(segment)}` : weapon.name,
-            buildAttackSource(weapon, segment),
+            buildAttackSource(segment),
             {weaponId: weapon.id, segmentId: segment.id},
         ))
     })

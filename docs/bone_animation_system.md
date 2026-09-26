@@ -4,6 +4,7 @@
 > 分支：`feature/bone-system`
 > 参照：Godot `Skeleton3D` 骨骼层级、`SkeletonIK3D`（CCD 求解）、AnimationPlayer 轨道/关键帧/插值/事件模型
 > 相关文档：[attack_system.md](attack_system.md)、[showcase.md](showcase.md)、[ai_system.md](ai_system.md)
+> 动作调优（关节/朝向/提示词模版）见 [bone_animation/动作设计规范.md](bone_animation/动作设计规范.md)
 
 ## 1. 目标
 
@@ -225,7 +226,7 @@ export const lerpNumber: (a: number, b: number, k: number) => number
 - `bezier_quad` + `none`：Pc=(0.5,0.5) → y = t（退化为线性）；
 - `bezier_quad` + `ease_in`：Pc=(1,0) → y = t²（先慢后快，末端加速）；
 - `bezier_quad` + `ease_out`：Pc=(0,1) → y = 2t−t²（先快后慢，末端减速）；
-- `strike_peak`：**两段二阶贝塞尔拼接**——峰值前 y = k·(t/k)²（加速段），峰值后 y = k + (1−k)·(1−(1−u)²)（减速段），u = (t−k)/(1−k)；与现有 `strikeCurve` 数学完全一致（`attack_phases.ts:53`），保证打击手感无回归；
+- `strike_peak`：**两段二阶贝塞尔拼接**——峰值前 y = k·(t/k)²（加速段），峰值后 y = k + (1−k)·(1−(1−u)²)（减速段），u = (t−k)/(1−k)；攻击动画关键帧轨默认使用该策略（末端加速）；
 - `customCy`：Pc = (0.5, customCy)，按通用二次贝塞尔解 y，编辑器曲线编辑器可拖拽控制点（仅纵轴分量）。
 
 运行时无状态 tween API：过渡需求全部由「关键帧间插值」（§5.2）覆盖，不提供额外 Tween 对象。
@@ -378,10 +379,11 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 | 关节 | 父关节 | 作用 |
 |---|---|---|
-| `rightWeaponMount`（右手武器挂点） | `rightWristPivot` | 武器主体挂点：武器网格（含静态握持姿态）挂其下，随右手动画 |
+| `rightWeaponMount`（右手武器挂点） | `rightWristPivot` | 武器主体挂点：武器模型（固有握持已烘焙在模型上）直接挂其下，随右手动画；朝向由该骨骼轨道控制 |
 | `leftWeaponMount`（左手武器挂点） | `leftWristPivot` | 双手武器的副握点：作为左手链 IK 的末端，被求解到武器轴上 |
 
-两者不参与骨骼段（避免退化零长段），也不参与动画关键帧记录（无 clip 轨道），仅作挂载 / 求解目标；自定义骨架若缺少这两个关节，装载与 IK 按候选顺序回退（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）。
+两者不参与骨骼段（避免退化零长段），但**已纳入可动画关节**（`CHARACTER_JOINT_IDS`，静止为单位变换；武器模型自带固有握持，直接挂其下）；自定义骨架若缺少这两个关节，装载与 IK 按候选顺序回退（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）。
+**三种持握模式与双持**见 [`bone_animation/动作设计规范.md`](bone_animation/动作设计规范.md) §7（双持武器含 `offhandMesh`，左手握持自身武器、不走共享 IK；攻击段 `leftArm` 参数 + `phaseOffset` 驱动交替挥砍，命中事件按 `params.weapon` 分槽）。
 
 **双手共持 IK 求解器**：生产与编辑器共用 `entity/character/appearance/two_handed_ik.ts`——`leftGripJointId`（末端解析）、`computeTwoHandGripTarget`（副握点：优先武器本地 +Y 偏移，无武器 Group 时回退「右腕 + 右肘方向 × offset」）、`solveTwoHandedGrip`（设 IK 根 + `resolveIkChain` + 臂展截断 + `solveCcd`）、`clearTwoHandGripRoot`。生产角色桥接已绑定完整左臂链（含 `leftHandPivot`），攻击态且当前段 `twoHanded` 时左肩标记 IK 根。
 
@@ -391,11 +393,11 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
   - 动画带武器来源（内置攻击动作及其载入的副本）→ 装备该武器（双手状态按该段 `twoHanded` 判定）；
   - 基础状态**空手**变体（`weaponHeld === false`，如「待机（空手）」）→ 卸下武器（仍记住上次使用的武器）；
   - 其余（「待机（持械）」、跳跃/下落/死亡/冲刺/受击、自定义动画）→ **保留当前（或上次）武器**；进入编辑器时尚无当前武器则回退默认武器 `long_sword` —— 保证**一进编辑器就有武器可编辑**，不会出现「武器没出来」；
-- 装载复用生产装配：`createWeaponMount`（`entity/character/appearance/weapon_mount.ts`，按 `WEAPON_GRIP_POSES` 施加静态握持姿态）保证编辑器看到的握持与游戏一致；切换武器/锚点/退出编辑器时在 `dispose()` 中释放几何与材质；
+- 装载复用生产装配：`createWeaponMesh`（`entity/character/appearance/weapon_mesh.ts`，固有握持已烘焙进模型）保证编辑器看到的握持与游戏一致；切换武器/锚点/退出编辑器时在 `dispose()` 中释放几何与材质；
 - **双手贴合（可选，默认关）**：控制条「左手贴合：关/开」按钮（`#bone-grip-toggle`）。
   - **关闭（默认）**：编辑器与预览全程**零耦合**——装载/切换武器、拖动任意关节（含两个武器挂点）都只影响该关节子树，绝不会牵扯另一只手；左臂完全由动画驱动或由你手动摆姿。
   - **打开**：当前武器为双手（段动画参数 `twoHanded: true`，未知段回退武器风格表）时，每帧（含暂停状态）调用共享求解器 `solveTwoHandedGrip`——
-    左肩为 IK 根，左手链末端（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）追「武器挂点沿武器轴（本地 +Y）偏移 `TWO_HAND_GRIP_OFFSET = 0.45`」的副握点；
+    左肩为 IK 根，左手链末端（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）追「武器模型原点沿本地 +Y 偏移 `weaponGripY + TWO_HAND_GRIP_OFFSET`（= 握把中心处）」的副握点；
     目标超出臂展（链长之和）时按臂展截断，避免不可达目标把左臂拉直穿模。此时移动右手/武器，左手会跟随贴合——这是该开关的预期语义。
   - 关闭开关或卸下武器时立即清除左肩 `ikRootLevel` 并重新应用当前 clip 姿态，左臂回到动画姿态（不留约束残留）；
   - 求解链只到 `leftArmShoulder` 为止，**不会旋转躯干或右臂**；与生产共用同一求解器，仅在目标点来源上一致（武器 Group 存在时取武器轴）。
@@ -454,7 +456,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 动画下拉分两组：**编辑动画**（当前动画库内的 clip，可编辑/导出）+ **内置动作**（生产已有动作清单，`（选中载入副本）` 提示），后者让编辑器直接打开并调优游戏里实际在用的动作：
 
-- **来源与生产同源**（`modes/bone_edit/builtin_clips.ts`，惰性构建并缓存）：基础状态走 `getBaseClip`（待机/行走 各含空手与持械变体；跳跃/下落/死亡/冲刺/受击硬直 各一份，下落取水平速度 0 档），攻击动作走 `getAttackClip`，参数取自**武器模组的段定义**（`AttackSegment` 的 duration/recovery/phases/swingTilt）+ 武器静态握持前倾 `WEAPON_GRIP_POSES[meshId].rx`。条目共 44 项：基础状态 9 + 近战 26（4 段 × 4 武器 + 巨剑 5 段 + 长枪 5 段〈含蓄力突刺变体〉）+ 远程 9 武器 × 1 段 = 9；
+- **来源与生产同源**（`modes/bone_edit/builtin_clips.ts`，惰性构建并缓存）：基础状态走 `getBaseClip`（待机/行走 各含空手与持械变体；跳跃/下落/死亡/冲刺/受击硬直 各一份，下落取水平速度 0 档），攻击动作走 `getAttackClipById`（段 id → `attack_clip_data.ts` 的显式骨骼关键帧）。条目共 44 项：基础状态 9 + 近战 26（4 段 × 4 武器 + 巨剑 5 段 + 长枪 5 段〈含蓄力突刺变体〉）+ 远程 9 武器 × 1 段 = 9；
 - **攻击段顺序由武器链数据决定**（`orderedSegments(weapon.attacks)`）：每把武器按 轻击一段 → 轻击二段 → 重击一段 → 重击二段 连续排列（同一链的 1、2 段相邻、轻链在重链之前），条件起手变体段（如蓄力段）接在所属攻击键末尾；不再需要任何展示顺序常量或槽位重排，展示模式/HUD/编辑器三者同源同序；
 - **关节 id 统一**：生产角色 clip 与编辑器预设骨架使用同一套关节 id（根关节统一为 `root`，静止局部位置由同一套 render 比例常量推导：`base_clips.ts` ↔ `entity/skeleton/preset.ts`），因此无需任何目标 id 重定向（`remapClipTargets` 保留为通用工具，内置动作库不再使用）；
 - **选中即载入副本**：`AnimationStore.importClip` 深拷贝（`cloneClip`）+ 重名自动加后缀 + 选中，副本名 = 内置显示名（如「行走（空手）」「长剑 · 轻击一段」）。内置 clip 与生产共用生成器缓存对象，深拷贝保证编辑器内的编辑不会污染生产动作；同名副本已存在时直接选中，不重复载入。载入动作入库后即可播放/拖移关键帧/改插值/导出，导入的 `hitbox_on/off` 事件轨在事件轨行可见；
@@ -490,7 +492,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - 每个技能生成攻击 clip（单段或整链），由 attacking 状态机三计时驱动：`phaseTimer/phaseDuration` → clip 时间 seek 映射；
 - **变速语义**（评审修正）：现有生产配置各阶段时长均为技能静态配置（`phaseDurationOf` = `duration × ratio` / `config.recovery`），无运行时时长源——预烘焙 clip 按静态配置时长录制，生产环境 `speed = 1`，满足无回归；`setSpeed` 保留用于「行走滑步对齐」及未来引入运行时可变段长（如随属性变化的 recovery）时按比例整体缩放，且需重新评估 §8.6 命中窗口一致性约束；
 - **烘焙实现（M4b）**：`appearance/clips/attack_clips.ts` 提取旧 attacking.ts 全部公式（阶段末姿态、链式 lerp、`strike_peak` 末端加速、overshoot 惯性过冲、aim/spin 微颤、弓步腿角、腕部刃面偏转、左臂平衡/扶柄、头部侧偏/微晃），按 60fps 烘焙为 clip；`t`（clip 时间）经阶段时长累加映射为阶段跨度（`spanAt`），全部完成后维持末阶段 p=1（clamp）；无阶段信息走虚拟三阶段回退（时长 = `FALLBACK_ATTACK_DURATION`）；
-- `swingTilt` 段参数（评审决议：**预烘焙多套 clip**）：swingTilt 为技能段固有配置（`skill.config.swingTilt`），每技能段单一 clip 即含对应 tilt；`attackType`（slash/thrust/spin）由阶段配置内置于 clip；`gripTilt`（武器静态握持前倾）作为生成参数随模型武器装配；
+- **动画全量烘焙为显式关键帧**：攻击动作的方向（原 `swingTilt`）、类型（原 `attackType`）、幅度（原 `armSwingForwardX` 等）、双手、弓步等全部烘焙进各段 id 的关键帧（`character/weapon/attack_clip_data.ts`）；武器固有前倾已烘焙进模型；段级不再有动画参数；
 - **运行时驱动**：attacking 状态 = 普通播放器播放（clip 时长 = duration + recovery，与状态机计时天然同步，speed=1）；链段切换（动画键 `attacking:skillId` 变化）→ 重建播放器 + 快照混合；进入 attacking/链段切换时合成 `hitbox_off` 事件关闭旧命中窗口（新 clip 的 hitbox_on 稍后重新打开）；
 - `appearance/animators/` 目录已全部删除（8 状态全量 clip 化）。
 
@@ -503,7 +505,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 ### 8.5 补全项（新系统带来的增量能力）
 
-- **双手武器 IK**：attacking 且当前段 `twoHanded` 时左肩标记 IK 根，经共享求解器 `two_handed_ik.ts` 的 `solveTwoHandedGrip` 追「武器本地 +Y × `TWO_HAND_GRIP_OFFSET`」副握点（无武器 Group 时回退右腕+右肘方向），替换固定假握；分层顺序（评审决议）：clip `applyPose` 先写全骨架 → IK 后写覆盖左臂链 → 快照混合；
+- **双手武器 IK**：attacking 且当前段 `twoHanded` 时左肩标记 IK 根，经共享求解器 `two_handed_ik.ts` 的 `solveTwoHandedGrip` 追「武器模型原点沿本地 +Y 偏移 `weaponGripY + TWO_HAND_GRIP_OFFSET`（握把处）」副握点（无武器 Group 时回退右腕+右肘方向），替换固定假握；分层顺序（评审决议）：clip `applyPose` 先写全骨架 → IK 后写覆盖左臂链 → 快照混合；
 - **动画复用**：AI/玩家/showcase 同源 clip（消除三处镜像逻辑）；
 - **可视编辑**：所有攻击 clip 可在编辑模式直接编辑调优（含事件轨道、缓动曲线）；
 - **速度相关体态**：恢复 `AnimationContext.horizontalSpeed`，行走步频随速度（播放器 setSpeed 变速）、falling 腿张开随速度（离散档 clip）；`horizontalTravel` 不再注入（行走相位由播放器 time 单调累加，无需位移积分）。
@@ -511,7 +513,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 ### 8.6 迁移验收标准
 
 - 全部状态动画由 clip 驱动（`animators/` 目录已移除）；
-- 攻击阶段姿态与迁移前采样一致（回归测试）；`strike_peak` 曲线与 `strikeCurve` 输出逐点一致；
+- 攻击动画为显式骨骼关键帧（`attack_clip_data.ts`），运行时不生成；
 - 命中窗口由事件轨道驱动，伤害判定行为不变；播放器 updater 先于 `executor.update` 执行（§8.4 时序要求）；
 - 双手武器左手实时贴合握柄（IK）；clip applyPose 与 IK 写入分层顺序生效；
 - showcase 与 play 共用同一动画资产来源。
@@ -526,7 +528,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `skeleton/bone.test.ts` | 方向派生、`rotateBone` 级联（tail 子树整体旋转）、`setBoneLength`（长度变化 + 级联平移）、roll |
 | `skeleton/skeleton.test.ts` | FK 级联正确性、applyPose/readPose 往返（含 roll、不含 length）、`removeJoint` 仅断开（子树独立成根、下游世界变换不变、关联骨骼段一并移除） |
 | `skeleton/ik.test.ts` | `resolveIkChain` 回溯规则（首个 IK 根 / 无根回退**本树根** / 多根骨架不跨树）、退化单关节链不修改姿态、CCD 收敛（可达目标 error < tolerance）、不可达目标误差不增、迭代上限 |
-| `skeleton/transition.test.ts` | linear；ease_in/ease_out 与解析式（t²、2t−t²）一致且单调；`strike_peak` 与现有 `strikeCurve` 逐点一致、峰值处连续；customCy；端点 |
+| `skeleton/transition.test.ts` | linear；ease_in/ease_out 与解析式（t²、2t−t²）一致且单调；`strike_peak` 峰值处连续；customCy；端点 |
 | `skeleton/anim/types.test.ts` | 关键帧 ↔ 轨道互转无损、记录按 time 排序、事件轨归并；`cloneClip` 深拷贝（记录对象独立、数组独立、时长/循环/插值保留） |
 | `skeleton/anim/retarget.test.ts` | `remapClipTargets`：关节轨/骨骼段轨目标 id 改写、未映射 id 原样保留、空映射返回原 clip、源 clip 不被修改 |
 | `skeleton/anim/sampling.test.ts` | 关键帧精确命中、帧间各策略插值、slerp、wrap 末帧→首帧无缝、clamp、缺邻 nearest、空轨 undefined、`sampleEvents` 区间边界（左开右闭） |
@@ -587,7 +589,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | 命中判定 | 迁移至动画事件轨道（hitbox_on/off 为通用命名事件的实例），窗口内判定逻辑不变 |
 | 事件轨道 | 通用命名事件 + 参数（可扩展脚步声/特效等） |
 | 攻击变速 | clip 支持整体均匀变速（playbackRate），对齐可变阶段时长 |
-| swingTilt | 每技能 × 每 tilt 预烘焙独立 clip，纯数据无程序化旋转 |
+| 攻击动画 | 全量烘焙为段 id 的显式骨骼关键帧（`attack_clip_data.ts`），无动画参数、无程序化旋转 |
 | 状态混合 | 加权混合：新 clip 输出 × w + 快照 × (1−w)，0.15s 三次 ease-out |
 | 雕刻 | 本期不实现（已从方案移除）；外观部件装载保留，渲染层可插拔预留外部模型扩展 |
 | 过渡系统 | 无状态 API（无 Tween）；strike_peak 预设 = 两段二阶贝塞尔拼接 |
@@ -613,3 +615,26 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - **旧动画回归**：快照一致性测试兜底；`strike_peak` 逐点一致测试保证手感；
 - **单 RAF**：clip 播放器、IK 求解、visual 同步全部走 updater，禁止自行 RAF；
 - **类型规范**：`verbatimModuleSyntax`、禁 enum/class/any、命名导出、常量集中——新代码严格对齐 AGENTS.md。
+
+## 13. 任意姿态组合与持握模式分层
+
+### 13.1 组合 API（`skeleton/anim/composition.ts`）
+
+- `PoseLayer = {clip: BoneAnimationClip; weight: number; progress: number}`：单层姿态引用（pose 资产 + 影响程度 + 时间进度 0-1，采样时间 = `progress × clip.duration`）。
+- `composePoses(layers): SkeletonPose`：**按关节归一化加权平均**。对每个关节只统计「定义了该关节」的层，权重归一后加权；旋转用四元数增量 slerp、位置增量 lerp、骨骼 roll 增量 lerp。结果与层顺序无关；未被任何层覆盖的关节**不出现在结果里**，`applyPose` 时保留骨架当前值 —— 这是「上下半身任意拼装」的基础。
+- `applyComposedPose(skeleton, layers)`：采样合成后写入骨架（`skeleton.applyPose`）。
+- 对应 Q3 的 `{pose, 影响程度, 时间进度}`：`pose` = `clip`，`影响程度` = `weight`，`时间进度` = `progress`。
+
+### 13.2 组合播放器（`skeleton/anim/composed_player.ts`）
+
+- `createComposedAnimationPlayer(skeleton, layers: ComposedPlayerLayer[])`：主时间轴时长 = 各层 clip 时长最大值；全部层循环时主时间轴循环，否则非循环播完自停。
+- 每层时间进度 = 主进度 × `progressScale` + `progressOffset`（错相位，如双持副手半程错开）。
+- 事件按层各自时间轴增量触发（区间左开右闭，循环跨边界分两段）——攻击段的 hitbox 启停由此驱动。
+
+### 13.3 基础状态分层（持握模式的上半身复用）
+
+- `appearance/clips/base_clips.ts` 的 `getBaseLayers(state, weaponHeld, holdMode, speed)` 返回两层：
+  - **下半身/体态层**（`BASE_LOCOMOTION_JOINTS`：root + 双腿 + spine + headNeck）——跨持握模式复用；
+  - **上半身层**（`BASE_UPPER_JOINTS`：8 个手臂关节）——按 `holdMode` 选取手臂姿态（`pose_fns.ts` 的 `adjustArmsForHoldMode`：双手共持/双持时左臂与右臂同向前伸/挥摆；瞬态状态与非持械不变）。
+- 两层关节不重叠，合成即完整姿态。**性能路径**：均匀权重下分层组合与单层全身姿态等价，故 `getBaseClipForHoldMode(state, weaponHeld, holdMode, speed)` 在**离线预组合**为单 clip（手臂按持握模式调整），运行时按单层播放，不产生每帧组合开销；`getBaseLayers` + `composePoses` 保留给需要运行时动态权重/多来源组合的场景。攻击状态播放 `segment.poses` 组合（当前单层，走 `composePoses` 快速路径）。动画键加入 `holdMode`，切换持握模式触发重建与过渡混合。
+- **取舍**：现有 35 条攻击关键帧仍是整段全身动作，迁移后作为单层 pose 被段引用（`poses: [{poseId: segment.id, weight: 1}]`）；组合能力已就绪，后续可在编辑器拆分并叠加多段 pose（如上半身挥砍 + 下半身弓步）。

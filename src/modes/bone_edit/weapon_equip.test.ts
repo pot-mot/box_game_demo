@@ -15,10 +15,10 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
 
     it('武器挂到右手武器挂点关节下（世界位置落在右腕，且有真实几何）', () => {
         const visuals = setup()
-        const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf('long_sword', 'long_sword_light_1')!)
+        const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf('long_sword')!)
         expect(weapon).toBeDefined()
         const mountGroup = visuals.groups.get('rightWeaponMount')!
-        expect(weapon!.mount.parent).toBe(mountGroup)
+        expect(weapon!.weaponGroup.parent).toBe(mountGroup)
 
         mountGroup.updateMatrixWorld(true)
         /* 握把中心（武器本地 Y 轴上的 gripY 处）落在右腕节点：这是「武器挂在手上」的精确判定 */
@@ -26,19 +26,19 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
         const wristWorld = visuals.groups.get('rightWristPivot')!.getWorldPosition(new Vector3())
         expect(gripCenterWorld.distanceTo(wristWorld)).toBeLessThan(1e-6)
         expect(wristWorld.length()).toBeGreaterThan(0)
-        expect(weapon!.mount.getWorldPosition(new Vector3()).length()).toBeGreaterThan(0)
-        /* 挂点朝向 = 静态握持姿态（rx/ry/rz 非零则武器有前倾/刃面偏转） */
-        expect(weapon!.mount.quaternion.angleTo(visuals.groups.get('rightWristPivot')!.quaternion)).toBeGreaterThan(0)
+        expect(weapon!.weaponGroup.getWorldPosition(new Vector3()).length()).toBeGreaterThan(0)
+        /* 武器自身朝向 = 固有握持姿态（rx/ry/rz 非零则武器有前倾/刃面偏转） */
+        expect(weapon!.weaponGroup.quaternion.angleTo(visuals.groups.get('rightWristPivot')!.quaternion)).toBeGreaterThan(0)
 
         /* 武器网格有真实几何（可见性回归：空包围盒 = 看不见） */
-        const box = new Box3().setFromObject(weapon!.mount)
+        const box = new Box3().setFromObject(weapon!.weaponGroup)
         expect(box.isEmpty()).toBe(false)
         expect(box.getSize(new Vector3()).length()).toBeGreaterThan(0.1)
 
         weapon!.dispose()
-        /* 卸下后挂点从场景图移除（挂点关节自身的小球仍在） */
-        expect(weapon!.mount.parent).toBeNull()
-        expect(mountGroup.children).not.toContain(weapon!.mount)
+        /* 卸下后从场景图移除（武器骨骼关节自身的小球仍在） */
+        expect(weapon!.weaponGroup.parent).toBeNull()
+        expect(mountGroup.children).not.toContain(weapon!.weaponGroup)
         visuals.cleanup()
     })
 
@@ -46,15 +46,30 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
         const visuals = setup()
         const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf('long_sword')!)!
         visuals.bridge.updateWorldTransforms()
-        const before = weapon.mount.getWorldPosition(new Vector3())
+        const before = weapon.weaponGroup.getWorldPosition(new Vector3())
 
         const shoulder = visuals.bridge.findJoint('rightArmShoulder')!
         shoulder.rotation.setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 3)
         visuals.bridge.updateWorldTransforms()
-        const after = weapon.mount.getWorldPosition(new Vector3())
+        const after = weapon.weaponGroup.getWorldPosition(new Vector3())
         expect(after.distanceTo(before)).toBeGreaterThan(0.05)
 
         weapon.dispose()
+        visuals.cleanup()
+    })
+
+    it('双持：副手武器挂到左手武器挂点（有真实几何），dispose 一并卸载', () => {
+        const visuals = setup()
+        const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf('dual_axe')!)!
+        expect(weapon.offhand).toBeDefined()
+        expect(weapon.offhand!.weaponGroup.parent).toBe(visuals.groups.get('leftWeaponMount'))
+        const box = new Box3().setFromObject(weapon.offhand!.weaponGroup)
+        expect(box.isEmpty()).toBe(false)
+        expect(box.getSize(new Vector3()).length()).toBeGreaterThan(0.1)
+
+        weapon.dispose()
+        expect(weapon.weaponGroup.parent).toBeNull()
+        expect(weapon.offhand!.weaponGroup.parent).toBeNull()
         visuals.cleanup()
     })
 
@@ -67,7 +82,7 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
         const scene = new Scene()
         const visuals = createJointVisuals(skeletonFromDefinition(stripped), scene)
         const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf('short_sword')!)
-        expect(weapon!.mount.parent).toBe(visuals.groups.get('rightWristPivot'))
+        expect(weapon!.weaponGroup.parent).toBe(visuals.groups.get('rightWristPivot'))
         weapon!.dispose()
         visuals.cleanup()
     })

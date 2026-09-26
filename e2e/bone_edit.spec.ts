@@ -129,10 +129,10 @@ test.describe('骨骼动画编辑模式', () => {
         await expect(page.locator('#bone-timeline')).toBeVisible()
         await page.selectOption('#bone-anim-select', 'builtin:long_sword_light_1')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-current-clip', '长剑 · 轻击一段')
-        /* 事件轨（hitbox_on / hitbox_off）与关节关键帧均已载入 */
+        /* 事件轨（hitbox_on / hitbox_off）与关节关键帧均已载入（动画为稀疏关键帧：起手 + 阶段末姿态） */
         await expect(page.locator('[data-track-target="__events__"] [data-keyframe-count]')).toHaveAttribute('data-keyframe-count', '2')
         const armCount = Number(await page.locator('[data-track-target="rightArmShoulder"] [data-keyframe-count]').getAttribute('data-keyframe-count'))
-        expect(armCount).toBeGreaterThan(10)
+        expect(armCount).toBeGreaterThanOrEqual(2)
     })
 
     test('编辑器武器：攻击动作自动装备对应武器，双手武器左手贴合到武器', async ({page}) => {

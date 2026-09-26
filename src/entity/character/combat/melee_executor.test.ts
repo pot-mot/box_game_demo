@@ -1,10 +1,12 @@
 import {describe, it, expect, vi} from 'vitest'
+import {Group} from 'three'
 import {targetHitBoxHalves, testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
+import type {CharacterModel} from '../appearance/types.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
-import {weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
+import {weaponAttacksOf, weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {createCombatComponent} from '../../../character/combat/types.ts'
 import type {ExecutorContext} from '../../../character/combat/executor.ts'
@@ -142,7 +144,7 @@ describe('attackDetectOBB / testAttackDetect（攻击检测箱由武器 detectBo
 
 describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
     /** 当前段：短剑轻 1 攻击段（原「技能配置」由武器模组的段定义替代） */
-    const makeSegment = (): AttackSegment => weaponPresetOrDefault('short_sword').attacks.segments['short_sword_light_1']
+    const makeSegment = (): AttackSegment => weaponAttacksOf(weaponPresetOrDefault('short_sword')).segments['short_sword_light_1']
 
     /** 构造执行器用例所需的最小实体（body 只保留执行器读取的 translation） */
     const makeEntity = (): CharacterEntity => {
@@ -205,5 +207,68 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         executor.setHitWindow(true)
         executor.update(0.016, combat, entity, {} as ExecutorContext)
         expect(getModel).not.toHaveBeenCalled()
+    })
+
+    it('双持：主手未命中、副手命中时照常结算（每段每目标一次）', () => {
+        const runtime = createWeaponRuntime('dual_axe')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        combat.activeSegment = runtime.attacks.segments['dual_axe_light_1']
+        const attacker = makeEntity()
+        attacker.combat = combat
+
+        const targetCombat = createCombatComponent(
+            createWeaponRuntime('short_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
+        )
+        const target = makeEntity()
+        target.id = 2
+        target.combat = targetCombat
+
+        /* 主手置于远处（必然落空），副手置于目标处（命中） */
+        const mainGroup = new Group()
+        mainGroup.position.set(100, 0, 0)
+        const offhandGroup = new Group()
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: mainGroup,
+            weaponHitBox: local,
+            offhandWeaponGroup: offhandGroup,
+            offhandWeaponHitBox: local,
+        } as unknown as CharacterModel
+
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
+        executor.setHitWindow(true)
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        expect(combat.attackedTargets.has(2)).toBe(true)
+        expect(targetCombat.health).toBeLessThan(15)
+    })
+
+    it('双持：命中窗口按槽独立开关（仅副手窗口时主手不判定）', () => {
+        const runtime = createWeaponRuntime('dual_axe')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        combat.activeSegment = runtime.attacks.segments['dual_axe_light_1']
+        const attacker = makeEntity()
+        attacker.combat = combat
+        const target = makeEntity()
+        target.id = 2
+
+        /* 主手命中、副手远离：只有主手窗口打开时才会结算 */
+        const mainGroup = new Group()
+        const offhandGroup = new Group()
+        offhandGroup.position.set(100, 0, 0)
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: mainGroup,
+            weaponHitBox: local,
+            offhandWeaponGroup: offhandGroup,
+            offhandWeaponHitBox: local,
+        } as unknown as CharacterModel
+
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
+        executor.setHitWindow(true, 'offhand')
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        expect(combat.attackedTargets.has(2)).toBe(false)
+        executor.setHitWindow(true, 'main')
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        expect(combat.attackedTargets.has(2)).toBe(true)
     })
 })
