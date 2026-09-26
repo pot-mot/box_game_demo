@@ -1,62 +1,60 @@
-import {type Scene, type Mesh, type LineBasicMaterial, Vector3, Euler, Quaternion} from 'three'
+import {Euler, type LineBasicMaterial, type Mesh, Quaternion, type Scene, Vector3} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
-import {createContactTracker, queryColliderContacts, type ContactTracker} from '../../../physics/contact_tracking.ts'
+import {type ContactTracker, createContactTracker, queryColliderContacts} from '../../../physics/contact_tracking.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
+import type {AttackResult} from '../../../character/combat/types.ts'
 import {createCombatComponent, setCombatWeapon} from '../../../character/combat/types.ts'
-import type { AttackResult } from '../../../character/combat/types.ts'
 import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/attack_runtime.ts'
-import {TEST_WEAPON_ID, createTestWeaponRuntime} from '../../../character/combat/test_weapon.ts'
+import {createTestWeaponRuntime, TEST_WEAPON_ID} from '../../../character/combat/test_weapon.ts'
 import {createWeaponRuntime, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import type {AttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
-import type {AIContext} from '../ai/types.ts'
-import type {PeaceSubStrategy, CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
+import type {AIContext, SpawnBoxCallback} from '../ai/types.ts'
+import type {CombatSubStrategy, PeaceSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
-import type {SpawnBoxCallback} from '../ai/types.ts'
 import {createNavSensor, type NavSensor} from '../ai/nav/sensor.ts'
 import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_sight.ts'
-import {createAIMachine, updateAI, notifyAIDamaged} from '../ai/machine.ts'
+import {createAIMachine, notifyAIDamaged, updateAI} from '../ai/machine.ts'
 import {processNav} from '../ai/nav/machine.ts'
 import {createCharacterMesh, updateCharacterMesh} from '../render'
 import {COLLIDER_MESH_OPACITY} from '../render/constants.ts'
 import {createCharacterModel} from '../appearance/model.ts'
-import {createAppearanceSystem} from '../appearance/system.ts'
 import type {AppearanceSystem} from '../appearance/system.ts'
+import {createAppearanceSystem} from '../appearance/system.ts'
 import {createWeaponTrail, type WeaponTrail} from '../appearance/weapon_trail.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
-import {ROTATION_SPEED, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
+import {ROTATION_SPEED, SELECT_PALETTE, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG} from '../validation.ts'
-import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE} from '../constants.ts'
+import {CHARACTER_BASE_SIZE, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
-import {resolveGroundState} from './ground_state.ts'
 import type {GroundContactLike} from './ground_state.ts'
+import {resolveGroundState} from './ground_state.ts'
 import {computeSeparation, separationSlopeDy} from './separation.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
-import {registerSkillExecutor, getSkillExecutor} from '../../../character/combat/executor.ts'
-import {SELECT_PALETTE} from '../appearance/constants.ts'
-import {createMeleeExecutor, testAttackDetect, attackDetectOBB, targetHitBoxHalves} from '../combat/melee_executor.ts'
+import {getSkillExecutor, registerSkillExecutor} from '../../../character/combat/executor.ts'
+import {attackDetectOBB, createMeleeExecutor, targetHitBoxHalves, testAttackDetect} from '../combat/melee_executor.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
-import {createAttackHitBoxes, syncWeaponDebugBox, type AttackHitBoxes} from '../combat_vfx/hitbox_debug.ts'
+import {type AttackHitBoxes, createAttackHitBoxes, syncWeaponDebugBox} from '../combat_vfx/hitbox_debug.ts'
 import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP} from '../ai/constants.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
-import {createWireframe, cleanupWireframe} from '../../box/base/render'
+import {cleanupWireframe, createWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
-import {resolvePhases, phaseDurationOf} from '../../../character/combat/attack_phases.ts'
+import {phaseDurationOf, resolvePhases} from '../../../character/combat/attack_phases.ts'
 
 /** Rapier 带 body/bodyHandle 反查的超类型 */
 type CharacterRigidBody = RAPIER.RigidBody
@@ -68,6 +66,12 @@ const _trailTipVec = new Vector3()
 const _facingForward = new Vector3()
 const _facingQuat = new Quaternion()
 const _facingEuler = new Euler()
+
+/** 死亡倒下合成复用对象（绕「上 × 倒向」轴旋转 dyingFallAngle 再叠加朝向，避免每帧分配） */
+const _deathFallAxis = new Vector3()
+const _deathFallQuat = new Quaternion()
+const _deathYawQuat = new Quaternion()
+const _upAxis = new Vector3(0, 1, 0)
 
 /** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写；test_weapon 走测试专用链） */
 const weaponRuntimeOf = (attack: AttackConfig, holdMode?: HoldMode): WeaponRuntime => {
@@ -367,6 +371,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             combatStrategy,
             isDying: false,
             dyingTimer: 0,
+            dyingFallDirX: 0,
+            dyingFallDirZ: 0,
+            dyingFallAngle: 0,
             combat,
             holdMode: defaultHoldMode(runtime.weapon),
             stateMachine,
@@ -389,6 +396,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const originalOnDamage = flash.onDamage
         entity.combat.onDamageTaken = (amount: number, event) => {
             originalOnDamage(amount)
+            /* 记录冲击方向（死亡倒向依据）：伤害事件携带世界水平单位向量，仅在有效方向时覆盖旧值 */
+            if (event.dirX !== undefined && event.dirZ !== undefined && (event.dirX !== 0 || event.dirZ !== 0)) {
+                entity.combat.lastHitDirX = event.dirX
+                entity.combat.lastHitDirZ = event.dirZ
+            }
             /* 攻击中被击中时标记硬直；受击保护窗口内不再触发，防止无限连段锁死（伤害照常） */
             if (entity.combat.attackActive && entity.combat.health > 0 && entity.combat.flinchImmunityTimer <= 0) {
                 entity.combat.pendingFlinch = true
@@ -666,9 +678,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                             const otherBody = otherCollider.parent()
                             if (!otherBody) continue
                             if (!bodyCharMap.has(otherBody.handle)) continue
-                            const ob = otherBody
                             /* 仅当 AI 输入方向指向接触对方时阻断，允许沿接触面滑开 */
-                            const obPos = ob.translation()
+                            const obPos = otherBody.translation()
                             const myPos = entity.body.translation()
                             const nx = obPos.x - myPos.x
                             const nz = obPos.z - myPos.z
@@ -769,8 +780,22 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
                 const newAngle = currentAngle + diff * Math.min(ROTATION_SPEED * dt, 1)
                 facingAngles.set(entity.id, newAngle)
-                /* 运行时朝向仅绕 Y（清除编辑态可能残留的 X/Z 视觉倾斜） */
-                model.group.rotation.set(0, newAngle, 0)
+                if (entity.isDying) {
+                    /* 死亡倒下：绕世界轴「上 × 倒向」旋转 dyingFallAngle（方向/角度由 dying state 决定），
+                     * 再叠加保持的最后朝向；模型原点在脚底，因此以脚为支点倒向冲击方向 */
+                    _deathFallAxis.set(entity.dyingFallDirZ, 0, -entity.dyingFallDirX)
+                    if (_deathFallAxis.lengthSq() > 1e-8) {
+                        _deathFallAxis.normalize()
+                        _deathFallQuat.setFromAxisAngle(_deathFallAxis, entity.dyingFallAngle)
+                        _deathYawQuat.setFromAxisAngle(_upAxis, newAngle)
+                        model.group.quaternion.copy(_deathFallQuat).multiply(_deathYawQuat)
+                    } else {
+                        model.group.rotation.set(0, newAngle, 0)
+                    }
+                } else {
+                    /* 运行时朝向仅绕 Y（清除编辑态可能残留的 X/Z 视觉倾斜） */
+                    model.group.rotation.set(0, newAngle, 0)
+                }
                 /* 碰撞箱可视化同步跟随身体朝向 */
                 entity.mesh.rotation.set(0, newAngle, 0)
 

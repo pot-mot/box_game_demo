@@ -45,7 +45,7 @@ const createCombatStub = (): CombatComponent => {
         phaseIndex: 0,
         phaseTimer: 0,
         pendingFlinch: false,
-        flinchImmunityTimer: 0,
+        flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
         dashSkill: createDashSkillRuntime(),
         faction: 0,
         attackTendency: () => false,
@@ -118,6 +118,9 @@ const createCharEntity = (
         combatStrategy: 'tactical' as const,
         isDying: false,
         dyingTimer: 0,
+        dyingFallDirX: 0,
+        dyingFallDirZ: 0,
+        dyingFallAngle: 0,
         combat: createCombatStub(),
         stateMachine: {
             currentState: 'idle',
@@ -568,7 +571,7 @@ const createCharOnBox = (boxTopY: number): CharacterEntity => {
         airborneTime: 0, groundedTime: 0, rowText: 'OnBox',
         isPlayer: false, navEnabled: true,
         peaceStrategy: 'patrol' as const, combatStrategy: 'tactical' as const,
-        isDying: false, dyingTimer: 0,
+        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
         combat: createCombatStub(),
         stateMachine: {
             currentState: 'idle', previousState: null, stateTime: 0,

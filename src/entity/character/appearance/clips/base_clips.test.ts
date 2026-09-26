@@ -101,13 +101,15 @@ describe('基础状态 clip 生成器', () => {
         expect(qHeld.angleTo(qFree)).toBeGreaterThan(0.1)
     })
 
-    it('非循环 clip 越界 clamp 到末帧（dying 保持倒地姿态）', () => {
+    it('非循环 clip 越界 clamp 到末帧（dying 末帧保持直立）', () => {
         const clip = buildBaseClip('dying', false)
         const atEnd = sampleClip(clip, clip.duration)
         const beyond = sampleClip(clip, clip.duration + 1)
         const qEnd = atEnd.jointPoses.get('root')!.rotation
         const qBeyond = beyond.jointPoses.get('root')!.rotation
         expect(qEnd.angleTo(qBeyond)).toBeLessThan(1e-6)
+        /* 死亡动画保持直立：倒地方向由 dying state 依据最后受击方向决定（world.ts 合成根旋转） */
+        expect(qEnd.angleTo(new Quaternion())).toBeLessThan(1e-6)
     })
 
     it('关节 position 保持静止局部位置（头部等部位不被拉回原点）', () => {

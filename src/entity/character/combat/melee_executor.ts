@@ -176,26 +176,30 @@ export const createMeleeExecutor = (
 
                 if (!testMeleeHit(elements, local.center, local.half, tTrans, target.config.scale, getFacingAngle(target.id))) continue
 
+                /* 冲击方向 = 武器握把 → 目标（水平）：伤害事件携带（死亡倒向依据）并与击退共用 */
+                v3Set(_tmpVec, tx - wx, 0, tz - wz)
+                const len = Math.hypot(_tmpVec.x, _tmpVec.z)
+                const hasDir = len > 0.0001
+                const dirX = hasDir ? _tmpVec.x / len : 0
+                const dirZ = hasDir ? _tmpVec.z / len : 0
+
                 applyDamage(target.combat, {
                     sourceId: entity.id,
                     targetId: target.id,
                     baseAmount: damage,
                     finalAmount: damage,
                     skillId: attackId,
+                    ...(hasDir ? {dirX, dirZ} : {}),
                 })
                 combat.attackedTargets.add(target.id)
                 onHit?.(wx, wy, wz)
 
-                v3Set(_tmpVec, tx - wx, 0, tz - wz)
-                const len = Math.hypot(_tmpVec.x, _tmpVec.z)
-                if (len > 0.0001) {
-                    _tmpVec.x /= len
-                    _tmpVec.z /= len
+                if (hasDir) {
                     target.body.applyImpulseAtPoint(
                         {
-                            x: _tmpVec.x * weapon.knockbackForce,
+                            x: dirX * weapon.knockbackForce,
                             y: weapon.knockbackY,
-                            z: _tmpVec.z * weapon.knockbackForce,
+                            z: dirZ * weapon.knockbackForce,
                         },
                         target.body.translation(),
                         true,

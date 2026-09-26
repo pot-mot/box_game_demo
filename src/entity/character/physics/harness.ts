@@ -1,23 +1,23 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld, type SharedWorld} from '../../../physics/world.ts'
-import {createColliderForBody, quatFromAxisAngle, clearAllForces, setBodyMass} from '../../../physics/rapier_utils.ts'
-import {createContactTracker, queryColliderContacts, type ContactTracker} from '../../../physics/contact_tracking.ts'
+import {clearAllForces, createColliderForBody, quatFromAxisAngle, setBodyMass} from '../../../physics/rapier_utils.ts'
+import {type ContactTracker, createContactTracker, queryColliderContacts} from '../../../physics/contact_tracking.ts'
 import {
-    FIXED_TIME_STEP,
     DEFAULT_COLLISION_GROUP,
     DEFAULT_COLLISION_MASK,
+    FIXED_TIME_STEP,
     TERRAIN_COLLISION_GROUP,
     TERRAIN_COLLISION_MASK,
 } from '../../../physics/constants.ts'
-import {resolveGroundState, type GroundState} from './ground_state.ts'
+import {type GroundState, resolveGroundState} from './ground_state.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {computeSeparation, separationSlopeDy} from './separation.ts'
-import {CHARACTER_SEPARATION_SPEED, CHARACTER_LINEAR_DAMPING} from './constants.ts'
+import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {createDashSkillRuntime} from '../../../character/combat/dash_skill.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
-import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, CHARACTER_BASE_SIZE} from '../constants.ts'
+import {CHARACTER_BASE_SIZE, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
 
 /** 测试固定时间步长（与游戏物理循环一致） */
 export const DT = FIXED_TIME_STEP
@@ -78,7 +78,7 @@ export const makeChar = (
 
     /* 测试武器：长剑（真实武器运行时，含攻击链） */
     const runtime = createWeaponRuntime('long_sword')
-    const entity: CharacterEntity = {
+    return {
         id,
         config: {speed, jumpHeight: 2, scale: 1},
         mesh: null!,
@@ -98,6 +98,9 @@ export const makeChar = (
         combatStrategy: 'tactical',
         isDying: false,
         dyingTimer: 0,
+        dyingFallDirX: 0,
+        dyingFallDirZ: 0,
+        dyingFallAngle: 0,
         /* 测试专用最小 combat mock（集中窄化一次，避免测试文件散落 as unknown as） */
         combat: {
             faction: 0,
@@ -121,12 +124,11 @@ export const makeChar = (
             attackedTargets: new Set(),
             attackDirX: 0,
             attackDirZ: 0,
-            phaseIndex: 0, phaseTimer: 0, pendingFlinch: false, flinchImmunityTimer: 0,
+            phaseIndex: 0, phaseTimer: 0, pendingFlinch: false, flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
         },
         holdMode: runtime.holdMode,
         stateMachine: createCharacterStateMachine(),
     }
-    return entity
 }
 
 /** 构造静态箱子（场景默认碰撞组，摩擦 0.5） */

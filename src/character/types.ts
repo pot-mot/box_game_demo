@@ -50,6 +50,11 @@ export interface CharacterEntity {
     /** 死亡动画计时（非持久状态） */
     isDying: boolean
     dyingTimer: number
+    /** 死亡倒向（世界水平单位向量，由死亡 state 依据最后受击冲击方向写入；无受击记录时默认向后倒） */
+    dyingFallDirX: number
+    dyingFallDirZ: number
+    /** 死亡倒下角度（rad，0 → π/2，由死亡 state 按缓动推进；世界层据此绕「上 × 倒向」轴合成根旋转） */
+    dyingFallAngle: number
 
     combat: CombatComponent
 

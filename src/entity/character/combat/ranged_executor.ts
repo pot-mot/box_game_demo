@@ -314,34 +314,36 @@ export const createRangedExecutor = (
                         if (bullet.explosionRadius > 0) {
                             detonateAt(bullet, bulletPos.x, bulletPos.y, bulletPos.z, allCharacters)
                         } else {
+                            /* 冲击方向 = 弹丸 → 目标（水平）：伤害事件携带（死亡倒向依据）并与击退共用 */
+                            v3Set(_tmpVec,
+                                tp.x - bulletPos.x,
+                                0,
+                                tp.z - bulletPos.z,
+                            )
+                            const len = v3Length(_tmpVec)
+                            const hasDir = len > 0.0001
+                            const dirX = hasDir ? _tmpVec.x / len : 0
+                            const dirZ = hasDir ? _tmpVec.z / len : 0
+
                             applyDamage(target.combat, {
                                 sourceId: bullet.ownerId,
                                 targetId: target.id,
                                 baseAmount: bullet.damage,
                                 finalAmount: bullet.damage,
                                 skillId: 'ranged',
+                                ...(hasDir ? {dirX, dirZ} : {}),
                             })
 
-                            if (bullet.knockbackForce > 0) {
-                                v3Set(_tmpVec,
-                                    tp.x - bulletPos.x,
-                                    0,
-                                    tp.z - bulletPos.z,
+                            if (bullet.knockbackForce > 0 && hasDir) {
+                                target.body.applyImpulseAtPoint(
+                                    {
+                                        x: dirX * bullet.knockbackForce,
+                                        y: 1,
+                                        z: dirZ * bullet.knockbackForce,
+                                    },
+                                    target.body.translation(),
+                                    true,
                                 )
-                                const len = v3Length(_tmpVec)
-                                if (len > 0.0001) {
-                                    _tmpVec.x /= len
-                                    _tmpVec.z /= len
-                                    target.body.applyImpulseAtPoint(
-                                        {
-                                            x: _tmpVec.x * bullet.knockbackForce,
-                                            y: 1,
-                                            z: _tmpVec.z * bullet.knockbackForce,
-                                        },
-                                        target.body.translation(),
-                                        true,
-                                    )
-                                }
                             }
                         }
                     }

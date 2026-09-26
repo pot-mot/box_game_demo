@@ -24,7 +24,7 @@ const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterE
     groundKeepTimer: 0,
     airborneTime: 0, groundedTime: 0,
     rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
-    isDying: false, dyingTimer: 0,
+    isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
     combat: null!, holdMode: 'one_handed', stateMachine: null!,
 })
 
@@ -69,8 +69,8 @@ describe('projectToSlope', () => {
         expect(ok).toBe(true)
         expect(setLinvelX).toBe(3)
         expect(setLinvelZ).toBe(4)
-        expect(setLinvelY).toBeCloseTo(-(3 * 0 + 4 * 0.8) / 0.6, 10)
-        const dot = 3 * 0 + setLinvelY * 0.6 + 4 * 0.8
+        expect(setLinvelY).toBeCloseTo(-(4 * 0.8) / 0.6, 10)
+        const dot = setLinvelY * 0.6 + 4 * 0.8
         expect(Math.abs(dot)).toBeLessThan(1e-9)
     })
 

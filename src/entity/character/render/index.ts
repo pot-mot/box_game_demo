@@ -1,4 +1,4 @@
-import {CapsuleGeometry, Mesh, MeshStandardMaterial} from 'three'
+﻿import {CapsuleGeometry, Mesh, MeshStandardMaterial} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {COLLIDER_CAPSULE_CAP_SEGMENTS, COLLIDER_CAPSULE_RADIAL_SEGMENTS, COLLIDER_MESH_OPACITY} from './constants.ts'
@@ -25,6 +25,10 @@ export const createCharacterMesh = (config: CharacterConfig): Mesh => {
         metalness: 0.1,
         transparent: true,
         opacity: COLLIDER_MESH_OPACITY,
+        /* 纯叠加调试层：不写深度。否则会挡住透明地面网格条纹
+         * （无限网格 depthWrite: false 且在胶囊之后绘制，条纹会被胶囊深度剔除）；
+         * 角色/箱体等不透明几何仍在胶囊之前绘制、照常遮挡它 */
+        depthWrite: false,
     })
     const mesh = new Mesh(geom, mat)
     mesh.castShadow = false

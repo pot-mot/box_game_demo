@@ -191,6 +191,7 @@ src/
 - 武器挂点为两个零偏移关节 `rightWeaponMount` 与 `leftWeaponMount`：它们是可动画关节，模型按各自几何握点与固有旋转将主握点校正到挂点原点。自定义骨架缺关节时自动回退同名手腕关节。**手部与武器挂点是不同关节**：手部模型挂在 `rightHandPivot` / `leftHandPivot`，武器模型直接挂在腕下的武器挂点。
 - 持握模式由武器数据推导：**单持** / **双手共持**（左手 IK 到该武器单独声明的 `supportGripOffset`）/ **双持**（左手握持自身武器，不走共享 IK）。双持命中事件按 `main` / `offhand` 分槽。双手副握点以主握把为原点沿武器本地 `+Y` 定位；勿将不同武器统一设为同一点。主手肘保持屈曲，左手链带肘极向约束。**左臂链长仅约 0.36m**：双手段每个关键帧与插值路径都要让左肩→副握点 ≤ ~0.34m（双手收向身体中线、躯干前倾带距离），否则 IK 截断、左手脱柄（`system.test.ts` 逐帧锁定副握残差 < 0.18m）。
 - 角色动画肘关节一律前折（`elbow rx < 0`）、膝后折（`rx > 0`）；武器朝向由武器骨骼控制，握把模型坐标与固有握持在 `weapon_mesh.ts` 烘焙；`WEAPON_GRIP_FLEX`（武器⊥前臂）是戒备/待机握法，攻击打击帧要用武器骨骼（必要时腕）把刃/枪口转向打击方向。攻击基础轨道在 `attack_clip_data.ts`，逐段修订在 `attack_pose_edits.ts`。
+- 死亡动画保持直立（`pose_fns.ts` 的 `dyingPose` 不旋转根关节）：倒地方向由 `states/dying.ts` 取最后受击的冲击方向（`DamageEvent.dirX/dirZ` → `combat.lastHitDirX/Z`，无记录默认向后倒）决定，`world.ts` 绕「上 × 倒向」轴把 `dyingFallAngle`（0→90°，0.3s）合成到模型根旋转；新增伤害路径须携带方向，否则角色一律向后倒。
 - 攻击动画由基础关键帧资产与显式逐段姿势修订共同定义；`getAttackClipById` 惰性解析缓存。新增或修改姿势时校验修订关节/时间与基础轨道一致；不增加抽象动作参数或每帧生成动画。
 - **远程弹丸在 `release` 阶段开始发射**（`ranged_executor`）：动画 t=0 即起手瞄准位（枪口 / 箭向 / 杖头朝目标），释放帧朝向与弹道一致；`hitbox_on/off` 事件对远程只是遗留数据。
 - 新增碰撞体必须显式 `setCollisionGroups`，并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注碰撞类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）——投掷物的「可穿过类别」判定依赖类别位；类别位从 membership 第 5 位起，不参与交互，但未声明碰撞组的碰撞体 membership 全 1，会被解析为 `ground` 并挡下子弹（fail-closed）

@@ -56,7 +56,7 @@ const makeMock = (runtime: WeaponRuntime = createWeaponRuntime('long_sword')): C
         groundKeepTimer: 0,
         airborneTime: 0, groundedTime: 0,
         rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
-        isDying: false, dyingTimer: 0,
+        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
         combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15),
         holdMode: runtime.holdMode,
         stateMachine: createCharacterStateMachine(),

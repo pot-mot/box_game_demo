@@ -1,17 +1,17 @@
-import {describe, it, expect, vi, afterEach} from 'vitest'
+import {afterEach, describe, expect, it, vi} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {createDashSkillRuntime} from '../../../character/combat/dash_skill.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
-import {DEFAULT_COMBAT_CONFIGS, type CombatConfig} from '../../../character/ai_strategy/combat.ts'
+import {type CombatConfig, DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {AIContext, AISetInput} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
 import {createNavRunContext, processNav} from './nav/machine.ts'
-import type {NavSensor, NavSenseOutput} from './nav/types.ts'
-import {createAIMachine, updateAI, notifyAIDamaged} from './machine.ts'
+import type {NavSenseOutput, NavSensor} from './nav/types.ts'
+import {createAIMachine, notifyAIDamaged, updateAI} from './machine.ts'
 import {updateCombatFSM} from './combat/machine.ts'
 import {chaseHandler} from './combat/states/chase.ts'
 import {attackHandler} from './combat/states/attack.ts'
@@ -56,7 +56,7 @@ const makeChar = (
         phaseIndex: 0,
         phaseTimer: 0,
         pendingFlinch: false,
-        flinchImmunityTimer: 0,
+        flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
         dashSkill: createDashSkillRuntime(),
         faction,
         attackTendency: (a: number, b: number) => a !== b,
@@ -83,14 +83,14 @@ const makeChar = (
         navEnabled: true,
         peaceStrategy: 'patrol' as const,
         combatStrategy,
-        isDying: false, dyingTimer: 0,
+        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
         stateMachine: null!,
     } as unknown as CharacterEntity
 }
 
 const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: number): AIContext => {
     const combatConfig = DEFAULT_COMBAT_CONFIGS[combatStrategy] as CombatConfig
-    const ctx: AIContext = {
+    return {
         characterId: 0,
         spawnPoint: {x: 0, y: 0, z: 0},
         losChecker: null,
@@ -121,7 +121,6 @@ const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: numb
         waitTimer: 0,
         buildTimer: 0,
     }
-    return ctx
 }
 
 // ── 战斗 FSM 单元测试 ──

@@ -388,6 +388,8 @@ idle/walking ──→ attacking (段子状态机)
 
 SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次）→ `applyDamage` + 击退冲量（方向 = 武器握把 → 目标的水平方向）+ `onHit` 回调（顿帧/相机震动等打击感）。击退方向以武器握把世界位置为起点（`weaponGroup.getWorldPosition`）。
 
+**冲击方向入伤害事件**：`DamageEvent.dirX` / `dirZ`（世界水平单位向量，来源 → 受击者）由各命中路径写入——近战 = 武器握把 → 目标、远程 = 弹丸 → 目标、爆炸 = 爆心 → 目标。`world.ts` 在 `onDamageTaken` 中记录到 `combat.lastHitDirX/Z`，供死亡状态决定倒地方向（见 §5.5）。
+
 ### 5.4 投掷物（子弹）碰撞与可穿过类别
 
 **文件**：`src/entity/character/combat/ranged_executor.ts`
@@ -402,6 +404,12 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 - **兜底路径**：生命期耗尽、坠出世界（`y < -10`）、爆炸子弹掉到地面以下（`y < 0`，正常已被地面扫描拦下）、命中后速度 < 1，均沿用原有消失逻辑。
 - **未标注类别的碰撞体**（武器、其它子弹）不阻挡子弹；未显式声明碰撞组者 membership 全 1，按声明顺序解析为 `ground` → 阻挡（fail-closed）。
 - **世界级清理**：子弹是战斗期临时对象，既不是实体系统的实体也不进存档。编辑模式 Reset 还原世界、`Ctrl+O` 载入存档时，由 `main.ts` 的 `clearWorld()` 调用 `CharacterEntitySystem.clearBullets()`（→ `rangedExecutor.clear()`）连同物理刚体与场景 mesh 一并清除，避免旧子弹残留到还原后的世界里继续飞行。
+
+### 5.5 死亡倒下（方向由最后受击决定）
+
+- **死亡动画（clip）保持直立**：`pose_fns.ts` 的 `dyingPose` 只做四肢/躯干塌陷，根关节不旋转（骨骼动画模式预览即直立姿态）。
+- **倒地方向由死亡 state 控制**（`states/dying.ts`）：进入死亡时取 `combat.lastHitDirX/Z`（最后受击的冲击方向，来源 → 受击者）并归一化；无受击记录时默认沿面朝反方向向后倒。按 `DYING_FALL_DURATION`（0.3s，与 clip 动作时长一致）缓动推进 `entity.dyingFallAngle`（0 → 90°）。
+- **世界层合成根旋转**（`physics/world.ts`）：`entity.isDying` 时模型根四元数 = 绕世界轴「上 × 倒向」旋转 `dyingFallAngle` ∘ 保持最后朝向的 yaw；模型原点在脚底，因此以脚为支点倒向冲击方向。倒向/角度按实体字段暴露，放置（edit）与游玩（play）共用同一路径。
 
 ---
 
@@ -441,7 +449,7 @@ entity/character/appearance/
 
 ```ts
 /* entity/character/appearance/clips/attack_clips.ts */
-export const getAttackClipById = (clipId: string): BoneAnimationClip
+export const getAttackClipById = (clipId: string): BoneAnimationClip => {}
 ```
 
 - **关键帧时间** = 0 与各阶段边界（`phaseDurationOf` 累加）；姿态是显式关节旋转/位置，修订只覆盖基础轨道里已存在的关键时刻。**三段式约定**：t=0 起手/蓄力 → 中帧（动作段结束）= 打击完成姿态（刃/枪口位于打击平面内、双手副握点在左臂臂展内）→ 末帧 = 持械戒备（与 idle 一致）。挥砍平面与刃面朝向由武器骨骼（`rightWeaponMount` / `leftWeaponMount`）承担，收招帧回到 `WEAPON_GRIP_FLEX`。双持副手相位由原有关键帧表达。
@@ -721,6 +729,7 @@ const phaseKey = c.phaseIndex < phases.length
 | `dashSkill` | `DashSkillRuntime` | 冲刺技能运行时（角色能力，独立于攻击段） |
 | `pendingFlinch` | `boolean` | 是否被标记为需要受击硬直 |
 | `flinchImmunityTimer` | `number` | 受击保护剩余时间（秒）：flinching 退出后免再触发硬直，防无限连段锁死；伤害不受影响 |
+| `lastHitDirX` / `lastHitDirZ` | `number` | 最近一次受击的冲击方向（世界水平单位向量，来源 → 受击者；无记录为 0）；死亡 state 据此决定倒地方向（§5.5） |
 
 **已删除字段**：`currentSkillIndex`、`chainEntryIndex`、`bufferedSkillIndex`、`skills`（技能槽列表）、`SkillSlot` / `SkillTimingConfig` 相关类型。
 

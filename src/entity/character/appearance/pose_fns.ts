@@ -119,8 +119,8 @@ const EXTEND_END = 0.3
 const jumpingPose = (t: number): PoseState => {
     let hip = 0
     let knee = 0
-    let armUp = 0
-    let elbow = 0
+    let armUp: number
+    let elbow: number
     if (t < CROUCH_END) {
         const p = t / CROUCH_END
         hip = p * 0.3
@@ -185,6 +185,11 @@ const fallingPose = (t: number, speed: number): PoseState => {
 
 const FALL_END = 0.3
 
+/**
+ * 死亡动画（保持直立）：只做四肢与躯干的松散塌陷，**不旋转根关节**。
+ * 倒下方向由死亡 state 依据最后受击的冲击方向决定，在世界层（`world.ts`）绕水平轴合成，
+ * 以便放置 / 游玩模式按受击方向倒地（骨骼编辑器预览即直立姿态）。
+ */
 const dyingPose = (t: number): PoseState => {
     const p = clamp01(t / FALL_END)
     const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2
@@ -205,7 +210,7 @@ const dyingPose = (t: number): PoseState => {
         leftLegKnee: {rx: eased * 0.3, ry: 0, rz: 0},
         headNeck: {rx: eased * 0.3, ry: 0, rz: 0},
         spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
-        root: {rotation: {rx: Math.PI / 2 * eased, ry: 0, rz: 0}},
+        root: {rotation: ZERO},
     }
 }
 

@@ -14,30 +14,23 @@ interface FlashEntry {
     originalEmissive: number
 }
 
-/** 遍历 Group 收集所有 MeshStandardMaterial 的原始颜色 */
-const collectMaterials = (entity: CharacterEntity): FlashEntry[] => {
-    const entries: FlashEntry[] = []
+/** 遍历 Group 收集所有 MeshStandardMaterial */
+const collectMaterials = (entity: CharacterEntity): MeshStandardMaterial[] => {
+    const materials: MeshStandardMaterial[] = []
     entity.appearanceGroup.traverse((obj) => {
         if (!(obj instanceof Mesh)) return
-        const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
-        for (const mat of materials) {
-            if (!(mat instanceof MeshStandardMaterial)) continue
-            entries.push({
-                material: mat,
-                originalColor: mat.color.getHex(),
-                originalEmissive: mat.emissive.getHex(),
-            })
+        const list = Array.isArray(obj.material) ? obj.material : [obj.material]
+        for (const mat of list) {
+            if (mat instanceof MeshStandardMaterial) materials.push(mat)
         }
     })
-    return entries
+    return materials
 }
 
 export const createDamageFlash = (entity: CharacterEntity): FlashState => {
-    const entries = collectMaterials(entity)
-    if (entries.length === 0) {
-        return {tick: () => {}, onDamage: () => {}}
-    }
-
+    /* 闪红开始时才快照颜色：阵营改色（recolor）与换装都会改动/重建材质，
+     * 若在构造期快照，恢复时会写回旧的阵营色（编辑模式改阵营后受击即回退的根因） */
+    let entries: FlashEntry[] = []
     let flashTimer = 0
 
     const tick = (dt: number): void => {
@@ -48,10 +41,19 @@ export const createDamageFlash = (entity: CharacterEntity): FlashState => {
                 e.material.color.setHex(e.originalColor)
                 e.material.emissive.setHex(e.originalEmissive)
             }
+            entries = []
         }
     }
 
     const onDamage = (_amount: number): void => {
+        /* 连击刷新时仍在闪红，沿用首帧快照，避免把闪红颜色当成「原色」存下 */
+        if (flashTimer <= 0) {
+            entries = collectMaterials(entity).map((mat) => ({
+                material: mat,
+                originalColor: mat.color.getHex(),
+                originalEmissive: mat.emissive.getHex(),
+            }))
+        }
         for (const e of entries) {
             e.material.color.setHex(DAMAGE_FLASH_COLOR)
             e.material.emissive.setHex(0x330000)

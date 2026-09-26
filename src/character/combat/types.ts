@@ -48,6 +48,14 @@ export interface CombatComponent {
     /** 受击保护剩余时间（秒）：flinching 退出后的免硬直窗口，防止无限连段把目标永久锁在受击状态；伤害不受影响 */
     flinchImmunityTimer: number
 
+    /**
+     * 最近一次受击的冲击方向（世界水平单位向量，来源 → 受击者；无记录为 0,0）：
+     * 由伤害事件携带（近战 = 武器 → 目标、远程 = 弹丸 → 目标、爆炸 = 爆心 → 目标），
+     * 死亡 state 用它决定倒地方向。
+     */
+    lastHitDirX: number
+    lastHitDirZ: number
+
     /** 冲刺技能（移动技能，属角色能力而非武器；冷却挡起手） */
     dashSkill: DashSkillRuntime
 
@@ -93,6 +101,8 @@ export const createCombatComponent = (
     phaseTimer: 0,
     pendingFlinch: false,
     flinchImmunityTimer: 0,
+    lastHitDirX: 0,
+    lastHitDirZ: 0,
     dashSkill: createDashSkillRuntime(),
     faction,
     attackTendency,
