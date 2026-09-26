@@ -6,9 +6,9 @@ const BASE_PALETTES: readonly CharacterColorPalette[] = [
     {skinColor: 0xf0c8a0, hairColor: 0x3a2218, bodyColor: 0xe06040, legColor: 0x303050},
     {skinColor: 0xf0c8a0, hairColor: 0x1a1a2a, bodyColor: 0x4060e0, legColor: 0x2a3050},
     {skinColor: 0xf0c8a0, hairColor: 0x2a3a18, bodyColor: 0x40a040, legColor: 0x2a302a},
-    {skinColor: 0xe8c070, hairColor: 0x3a3018, bodyColor: 0xc0a040, legColor: 0x403030},
+    {skinColor: 0xf0c8a0, hairColor: 0x3a3018, bodyColor: 0xc0a040, legColor: 0x403030},
     {skinColor: 0xf0c8a0, hairColor: 0x3a1a22, bodyColor: 0xc04060, legColor: 0x402040},
-    {skinColor: 0xf0d0b8, hairColor: 0x2a2a2a, bodyColor: 0x808080, legColor: 0x404040},
+    {skinColor: 0xf0c8a0, hairColor: 0x2a2a2a, bodyColor: 0x808080, legColor: 0x404040},
 ]
 
 /** 根据 faction 选取调色板，faction > 5 时在基础色上微调明暗 */
