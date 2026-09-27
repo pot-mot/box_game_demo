@@ -18,6 +18,7 @@ import {createTestWeaponRuntime, TEST_WEAPON_ID} from '../../../character/combat
 import {createWeaponRuntime, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
+import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
 import type {AttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
@@ -178,6 +179,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setFacing: (id: number, degrees: number) => void
     /** 切换持握模式（武器不支持时回退默认模式）；返回是否成功命中请求的模式 */
     setHoldMode: (id: number, holdMode: HoldMode) => boolean
+    /** 设置角色的额外锁定点（默认身体中心点不可配置；非法条目安全剔除） */
+    setLockPoints: (id: number, points: readonly LockPointConfig[]) => void
     /** 配置 AI 感知（视线检查 + 导航传感器，需在所有实体系统初始化后调用） */
     setupAI: (systems: readonly EntityInfoSource[]) => void
     /** 设置单角色导航感知开关 */
@@ -391,6 +394,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             dyingFallAngle: 0,
             combat,
             holdMode: defaultHoldMode(runtime.weapon),
+            lockPoints: [],
             stateMachine,
         }
 
@@ -1116,6 +1120,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (saveConfig.holdMode !== undefined) setHoldMode(entity.id, saveConfig.holdMode)
         /* 防御与护甲：旧档缺字段回退零防御空护甲；未知护甲 id 由 resolveArmorLoadout 安全剔除 */
         setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {})
+        /* 额外锁定点：旧档缺字段回退仅默认身体中心点；非法条目由 sanitizeLockPoints 安全剔除 */
+        entity.lockPoints = sanitizeLockPoints(saveConfig.lockPoints)
         const model = appearanceModels.get(entity.id)
         if (model) model.equipArmor(resolveArmorLoadout(entity.combat.armor))
         entity.combat.maxHealth = saveConfig.maxHealth
@@ -1194,6 +1200,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.combat.segmentCooldowns.clear()
         }
         return supported
+    }
+
+    /** 设置额外锁定点：非法条目安全剔除（不抛错），默认身体中心点不受影响 */
+    const setLockPoints = (id: number, points: readonly LockPointConfig[]): void => {
+        const entity = characters.find(c => c.id === id)
+        if (entity === undefined) return
+        entity.lockPoints = sanitizeLockPoints(points)
     }
 
     const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout}): void => {
@@ -1367,6 +1380,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         getFacing,
         setFacing,
         setHoldMode,
+        setLockPoints,
         setupAI,
         setNavEnabled,
         setOnMeleeImpact,

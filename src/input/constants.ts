@@ -22,6 +22,8 @@ export const DEFAULT_BINDINGS: BindingsMap = {
     mouse_pan: [['Mouse2']],
     /* 生成物体：默认右键（编辑模式），与展示模式的右键平移互不冲突，可在操作设置中修改 */
     spawn_entity: [['Mouse2']],
+    /* 锁定目标：默认中键（游玩模式） */
+    lock_target: [['Mouse1']],
 }
 
 /** 鼠标按键码前缀（Mouse0 = 左键 / Mouse1 = 中键 / Mouse2 = 右键，与 KeyboardEvent.code 共用同一绑定空间） */

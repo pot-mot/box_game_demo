@@ -42,6 +42,7 @@ const makeMock = (yaw = 0): CharacterEntity => {
         dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
         combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15),
         holdMode: runtime.holdMode,
+        lockPoints: [],
         stateMachine: createCharacterStateMachine(),
     }
 }

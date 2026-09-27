@@ -5,6 +5,8 @@ import type {CharacterEntitySystem} from '../../entity/character/physics/world.t
 import type {SpawnBoxCallback} from '../../entity/character/ai/types.ts'
 import {setupPlayerKeyboard} from './keyboard.ts'
 import {setupPlayCamera} from './camera.ts'
+import {createPlayerLockOn} from './lock_on.ts'
+import {setupLockMarker} from './lock_marker.ts'
 import {setupHealthBars} from './health_bar.ts'
 import type {SkillTimerRowData, TimerCellData, TimerRowData} from './player_hud.ts'
 import {createPlayerHUD} from './player_hud.ts'
@@ -33,6 +35,7 @@ export const setupPlayMode = (
     const playerInput = setupPlayerKeyboard(camera, characterSystem)
     /* 相机跟随目标取身体中心（mesh 原点在脚底，直接用 mesh.position 会导致相机压低） */
     const cameraTarget = new Vector3()
+    const lockOn = createPlayerLockOn(characterSystem, camera)
     const playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () => {
         const player = characterSystem.getPlayerCharacter()
         if (!player) return undefined
@@ -44,7 +47,13 @@ export const setupPlayMode = (
         onLightAttack: (held) => characterSystem.setPlayerAttack('light', held),
         onHeavyAttack: (held) => characterSystem.setPlayerAttack('heavy', held),
     },
+    {
+        onToggle: lockOn.toggle,
+        getAimPoint: lockOn.getAimPoint,
+        onOrbit: lockOn.release,
+    },
     )
+    const lockMarkerUpdate = setupLockMarker(scene).update
     const healthBarUpdate = setupHealthBars(
         scene,
         () => characterSystem.getPlayerCharacter(),
@@ -77,6 +86,7 @@ export const setupPlayMode = (
         playerInput()
         characterSystem.update(dt)
         playCameraUpdate(dt)
+        lockMarkerUpdate(lockOn.getAimPoint())
         applyHitShake(dt)
         healthBarUpdate(camera, dt)
 

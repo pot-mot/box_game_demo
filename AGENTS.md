@@ -133,7 +133,7 @@ src/
 │   └── terrain/                 # Trimesh 地形（高度数组生成，heightfield 禁用）
 ├── modes/
 │   ├── edit/                    # 编辑模式（轨道相机、键盘、指针交互）
-│   ├── play/                    # 游玩模式（第三人称、状态机驱动）
+│   ├── play/                    # 游玩模式（第三人称、状态机驱动、中键镜头锁定）
 │   ├── showcase/                # 展示模式（攻击动作展示台，复现生产动画时序）
 │   ├── startup_screen.ts
 │   └── free_flight.ts
@@ -168,6 +168,7 @@ src/
 | [`docs/attack_system.md`](docs/attack_system.md) | 攻击系统：武器模组攻击链（段模型）与段子状态连段、起手解析与输入缓冲、受击硬直、伤害判定几何、动画系统 |
 | [`docs/edit_mode.md`](docs/edit_mode.md) | 编辑模式：与主循环的关系、执行面板（Execute / Stop / Step / Run / Reset）语义与快照基线生命周期、其余控制与文件索引 |
 | [`docs/equipment_system.md`](docs/equipment_system.md) | 装备与防御系统：攻击类别（物理/魔法）、护甲槽位与预设、防御固定减伤与存档兼容 |
+| [`docs/play_mode.md`](docs/play_mode.md) | 游玩模式：第三人称相机、镜头锁定（中键、选取与脱锁规则）、验证方式 |
 | [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 骨骼动画动作调优规范：坐标系与朝向、关节总表、旋转符号速查（肘前折/膝后折）、阶段与相位、动作→改动位置映射、提示词模版、双持与左右手参数方案 a、陷阱。同目录逐个动作建档（`武器名-攻击段名.md` / `动作名.md`） |
@@ -187,8 +188,8 @@ src/
 - rapier3d-compat 的休眠 body 无视 velocity 写入，操作 velocity 前必须 `body.wakeUp()`（`setLinvel(vel, true)` 第二参数同样会唤醒，本项目一律传 `true`）
 - 角色 collider 是**竖直胶囊**（半径 = `CHARACTER_BASE_SIZE.width/2`，总高 = `height`），不是 cuboid。平底 cuboid 在 trimesh 地形上坡时会跨网格顶点线被内部棱幽灵水平法线卡死（原地 walking 不动）；rapier3d-compat 0.19/0.20 的 `FIX_INTERNAL_EDGES` 已损坏（开启后 trimesh 完全无碰撞），禁止使用；heightfield 在该版本 wasm 直接崩溃，禁止使用（地形用 `RAPIER.ColliderDesc.trimesh` 生成）
 - 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击**阶段**子状态（`attacking_{segmentId}_{phaseName}`）通过 `states/attacking/index.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为；攻击**段**子状态不在此列——它由武器模组的段定义（含 `next` 转换）驱动，新增/调整段只改 `character/weapon/*_attacks.ts`
-- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 4`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，旧档缺失时安全回退零防御空护甲）
-- 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；默认值只在 `localStorage` 无记录时生效，已存过旧绑定的浏览器需「重置默认」或导入配置
+- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 5`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，v5 起增加可选锁定点 `lockPoints`，旧档缺失时安全回退默认）
+- 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；`localStorage` 与导入文件中已有动作的绑定不会被新默认值覆盖（需「重置默认」或导入配置），缺失的动作（如版本新增）由 `loadFromStorageInternal` / 导入校验自动以默认值补齐
 - 鼠标动作按模式生效：`MOUSE_ACTIONS_BY_MODE` 决定操作设置面板中各模式可改的指针动作，"平移视角 / 生成物体" 默认同为右键但分属不同模式，改动其中一个需同步核对另一个的默认值
 - 武器挂点为两个零偏移关节 `rightWeaponMount` 与 `leftWeaponMount`：它们是可动画关节，模型按各自几何握点与固有旋转将主握点校正到挂点原点。自定义骨架缺关节时自动回退同名手腕关节。**手部与武器挂点是不同关节**：手部模型挂在 `rightHandPivot` / `leftHandPivot`，武器模型直接挂在腕下的武器挂点。
 - 持握模式由武器数据推导：**单持** / **双手共持**（左手 IK 到该武器单独声明的 `supportGripOffset`）/ **双持**（左手握持自身武器，不走共享 IK）。双持命中事件按 `main` / `offhand` 分槽。双手副握点以主握把为原点沿武器本地 `+Y` 定位；勿将不同武器统一设为同一点。主手肘保持屈曲，左手链带肘极向约束。**左臂链长仅约 0.36m**：双手段每个关键帧与插值路径都要让左肩→副握点 ≤ ~0.34m（双手收向身体中线、躯干前倾带距离），否则 IK 截断、左手脱柄（`system.test.ts` 逐帧锁定副握残差 < 0.18m）。
@@ -201,3 +202,4 @@ src/
 - 护甲（`character/armor/`，四槽位 head/chest/arms/legs）提供逐类别防御、逐类别攻击加成与移速乘数：`armor`（槽位 → 护甲 id）与 `defense`（基础逐类别防御）是存档可选字段，未知 id / 槽位不匹配一律回退空槽；`CombatComponent` 的 `setCombatEquipment` 统一重算有效防御 / `attackBonus` / `moveSpeedMultiplier`（攻击加成在攻击侧并入近战/远程伤害，仅与武器类别匹配才计入；状态机移速一律走 `moveSpeedOf(entity)`，禁止在面板或状态机里对 `config.speed` 预乘装备系数）；护甲件是关节下的纯视觉子节点，不建碰撞体、不进 `getMeshes()`，不影响受击箱 / 视线 / 导航
 - 翻滚与死亡的全身体根旋转都由 `world.ts` 合成：基础 clip 不写根关节自转（`rollingPose` 只表达抱团蜷缩），否则根原点在脚底会绕脚底划大圈/沉入地面；翻滚中段无敌帧由 `states/rolling.ts` 在窗口内逐帧写 `combat.invincibleTimer`（`exit` 清零），免疫判定统一走 `damage.ts` 的 `isDamageImmune(target)`（`applyDamage` 顶部短路，先于 modifier/防御，不触发任何受击回调），新增伤害路径不得绕过；三条命中路径也用它跳过击退与命中反馈——近战不写 `attackedTargets`/不 `onHit`（无敌结束后同一命中窗口内仍可命中）、远程弹丸穿过无敌目标不消耗、爆炸跳过该目标
 - 角色材质表面效果（受击闪红 / 翻滚无敌半透明白）统一走 `entity/character/combat_vfx/material_effects.ts`（惰性快照 → 按优先级覆写 → 全部结束统一还原；闪红优先于闪白，`transparent` 仅在真正变化时置 `needsUpdate`），禁止在别处直接改角色模型材质颜色/透明度或另建快照还原逻辑
+- 角色锁定点（`character/lock_point.ts`）：默认锁定点恒为身体最中心（`body.translation()`，不落数组），额外点 = 关节 id + **关节本地**偏移（`CharacterEntity.lockPoints`，面板「锁定点」区增删改、存档可选字段 `lockPoints`）；play 锁定选取按**锁定点**（而非角色）判定半径/角度，白点标记与相机瞄准点同为命中的数据点（同一 `getAimPoint`）。关节解析先 `updateWorldMatrix(true, false)` 再 `localToWorld`（动画刚写入 Group、`matrixWorld` 可能滞后），找不到关节的点跳过，锁定期间点被移除即自动解除

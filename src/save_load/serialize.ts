@@ -7,6 +7,7 @@ import type {AttackConfig} from '../character/archetypes.ts'
 import type {WeaponAttacks} from '../character/weapon/attack_chain.ts'
 import {chainOf} from '../character/weapon/attack_chain.ts'
 import type {WeaponConfig} from '../character/weapon/catalog.ts'
+import type {LockPointConfig} from '../character/lock_point.ts'
 import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON, ModeInfoJSON, CameraInfoJSON, EntitySourceMap} from './types.ts'
 import {SAVE_FORMAT_VERSION} from './types.ts'
 import {CHARACTER_BASE_SIZE} from '../entity/character/constants.ts'
@@ -193,6 +194,11 @@ export const collectWorldState = (
                     /* 基础防御 + 护甲装备（旧代码读到缺字段安全回退零防御空护甲） */
                     defense: e.combat.baseDefense,
                     armor: e.combat.armor,
+                    /* 额外锁定点（拷贝为 JSON-safe 元组；缺省 = 仅默认身体中心点） */
+                    lockPoints: e.lockPoints.map((point): LockPointConfig => ({
+                        jointId: point.jointId,
+                        offset: [point.offset[0], point.offset[1], point.offset[2]],
+                    })),
                     isPlayer: e.isPlayer,
                     navEnabled: e.navEnabled,
                 },

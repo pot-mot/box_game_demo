@@ -65,6 +65,28 @@ test.describe('角色装备与属性面板', () => {
         await expect(page.locator('#element-list-panel [data-id]', {hasText: 'def:物0/魔0'})).toHaveCount(1)
     })
 
+    test('锁定点：添加额外锁定点（关节 + 偏移）Apply 后面板回显', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        await expect(panel).toContainText('默认：身体中心（不可删除）')
+        await panel.locator('button', {hasText: '添加锁定点'}).click()
+
+        const row = panel.locator('.lock-point-row')
+        await expect(row).toHaveCount(1)
+        await row.locator('.lock-point-joint').selectOption('headNeck')
+        /* 第二个偏移输入 = Y */
+        await row.locator('.lock-point-offset').nth(1).fill('0.3')
+
+        await panel.locator('button', {hasText: 'Apply'}).click()
+
+        /* 重新聚焦面板（点击角色行）后回显已 Apply 的锁定点 */
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel .lock-point-row')).toHaveCount(1)
+        await expect(page.locator('#character-panel .lock-point-joint')).toHaveValue('headNeck')
+        await expect(page.locator('#character-panel .lock-point-offset').nth(1)).toHaveValue('0.3')
+    })
+
     test('臂甲与加速鞋：攻击加成 / 有效移速预览与列表行同步', async ({page}) => {
         await openCharacterPanel(page)
 

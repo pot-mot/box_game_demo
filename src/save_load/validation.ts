@@ -144,6 +144,13 @@ const ArmorLoadoutSchema = z.object({
     legs: z.string().optional(),
 }).optional().catch(undefined)
 
+/* 额外锁定点：关节 id + 关节本地偏移；非法结构整体回退 undefined（运行时仅保留默认身体中心点），不抛错 */
+const LockPointSchema = z.object({
+    jointId: z.string().min(1),
+    offset: z.tuple([z.number(), z.number(), z.number()]),
+})
+const LockPointsSchema = z.array(LockPointSchema).optional().catch(undefined)
+
 /** character 存档共享默认值（供内联 schema .default() 和外层 CHARACTER_SAVE_CONFIG_DEFAULTS 共用） */
 const CHARACTER_SAVE_ATTACK_DEFAULT = {weaponId: 'long_sword', damage: 3}
 const CHARACTER_SAVE_TENDENCY_DEFAULT = {tendencyId: 'hostileExceptSelf' as const}
@@ -162,6 +169,7 @@ const CharacterConfigInner = z.object({
     maxHealth: z.number().positive().default(100),
     defense: DefenseProfileSchema,
     armor: ArmorLoadoutSchema,
+    lockPoints: LockPointsSchema,
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),
 })

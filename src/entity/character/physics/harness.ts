@@ -101,6 +101,7 @@ export const makeChar = (
         dyingFallDirX: 0,
         dyingFallDirZ: 0,
         dyingFallAngle: 0,
+        lockPoints: [],
         /* 测试专用最小 combat mock（集中窄化一次，避免测试文件散落 as unknown as） */
         combat: {
             faction: 0,

@@ -3,6 +3,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import type {CharacterStateMachine} from './state_machine/types.ts'
 import type { CombatComponent } from './combat/types.ts'
 import type { HoldMode } from './weapon/hold_mode.ts'
+import type {LockPointConfig} from './lock_point.ts'
 import type {PeaceSubStrategy} from './ai_strategy/types.ts'
 import type {CombatSubStrategy} from './ai_strategy/types.ts'
 
@@ -63,6 +64,12 @@ export interface CharacterEntity {
      * 换武器时重置为该武器支持的首个模式。动画系统按它选择上半身姿态与双手 IK。
      */
     holdMode: HoldMode
+
+    /**
+     * 额外锁定点（持久化）：默认锁定点恒为身体中心、不在数组内；
+     * 数组项为「关节 id + 关节本地偏移」，play 模式锁定镜头时与默认点一起参与选取。
+     */
+    lockPoints: readonly LockPointConfig[]
 
     stateMachine: CharacterStateMachine
 }

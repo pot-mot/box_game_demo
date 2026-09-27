@@ -25,7 +25,7 @@ const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterE
     airborneTime: 0, groundedTime: 0,
     rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
     isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
-    combat: null!, holdMode: 'one_handed', stateMachine: null!,
+    combat: null!, holdMode: 'one_handed', lockPoints: [], stateMachine: null!,
 })
 
 describe('isSupportedOn', () => {

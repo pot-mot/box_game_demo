@@ -1,6 +1,6 @@
 import {describe, it, expect, beforeEach} from 'vitest'
 import {createInputRegistry, getInputRegistry} from './registry.ts'
-import {DEFAULT_BINDINGS} from './constants.ts'
+import {DEFAULT_BINDINGS, STORAGE_KEY} from './constants.ts'
 import {INPUT_ACTIONS, type BindingsMap, type InputAction, type KeyCombo} from './types.ts'
 
 /** 约定的默认操作配置（与导出的 box_demo_keybindings.json 一致：WASD 移动 + Z/X 升降） */
@@ -22,6 +22,7 @@ const EXPECTED_DEFAULTS: Record<InputAction, readonly (readonly string[])[]> = {
     mouse_orbit: [['Mouse0']],
     mouse_pan: [['Mouse2']],
     spawn_entity: [['Mouse2']],
+    lock_target: [['Mouse1']],
 }
 
 /** 克隆默认绑定为可变映射（测试内构造绑定用例） */
@@ -52,6 +53,36 @@ describe('输入注册表：默认绑定', () => {
     })
 })
 
+describe('输入注册表：旧版本绑定记录', () => {
+    beforeEach(() => {
+        localStorage.clear()
+        createInputRegistry()
+    })
+
+    it('缺少新增动作时保留其余绑定并用默认值补齐', () => {
+        const legacy: Record<string, unknown> = {}
+        for (const action of INPUT_ACTIONS) {
+            /* 模拟加入 lock_target 之前保存的记录 */
+            if (action === 'lock_target') continue
+            legacy[action] = DEFAULT_BINDINGS[action].map(c => [...c])
+        }
+        legacy.jump = [['KeyJ']]
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy))
+
+        createInputRegistry()
+        const bindings = getInputRegistry().getBindings()
+        expect(bindings.jump).toEqual([['KeyJ']])
+        expect(bindings.lock_target).toEqual([['Mouse1']])
+    })
+
+    it('结构损坏的记录整体回退默认值', () => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({jump: 'KeyJ'}))
+
+        createInputRegistry()
+        expect(getInputRegistry().getBindings()).toEqual(DEFAULT_BINDINGS)
+    })
+})
+
 describe('输入注册表：鼠标绑定', () => {
     beforeEach(() => {
         localStorage.clear()
@@ -65,6 +96,8 @@ describe('输入注册表：鼠标绑定', () => {
         expect(input.matchesMouseButton('mouse_pan', 2)).toBe(true)
         expect(input.matchesMouseButton('spawn_entity', 2)).toBe(true)
         expect(input.matchesMouseButton('spawn_entity', 0)).toBe(false)
+        expect(input.matchesMouseButton('lock_target', 1)).toBe(true)
+        expect(input.matchesMouseButton('lock_target', 0)).toBe(false)
     })
 
     it('鼠标捕获：按下再松开左键得到 Mouse0 组合', () => {

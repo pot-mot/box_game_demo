@@ -20,6 +20,7 @@ export const INPUT_ACTIONS = [
     'mouse_orbit',
     'mouse_pan',
     'spawn_entity',
+    'lock_target',
 ] as const
 
 export type InputAction = typeof INPUT_ACTIONS[number]
@@ -49,6 +50,7 @@ export const ACTION_LABELS: Record<InputAction, string> = {
     mouse_orbit: '旋转视角',
     mouse_pan: '平移视角',
     spawn_entity: '生成物体',
+    lock_target: '锁定目标',
 }
 
 /** 动作分组 */
@@ -78,7 +80,7 @@ export type MouseOperationsMode = typeof MOUSE_OPERATION_MODES[number]
  */
 export const MOUSE_ACTIONS_BY_MODE: Record<MouseOperationsMode, readonly InputAction[]> = {
     edit: ['mouse_orbit', 'spawn_entity'],
-    play: ['mouse_orbit'],
+    play: ['mouse_orbit', 'lock_target'],
     showcase: ['mouse_orbit', 'mouse_pan'],
     bone_edit: ['mouse_orbit'],
 }

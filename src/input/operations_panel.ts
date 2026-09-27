@@ -1,7 +1,7 @@
 import {getInputRegistry} from './registry.ts'
 import type {InputAction, KeyCombo, BindingsMap, FixedMouseOperation, MouseOperationsMode} from './types.ts'
 import {INPUT_ACTIONS, ACTION_LABELS, ACTION_GROUPS, MOUSE_ACTIONS_BY_MODE, FIXED_MOUSE_OPERATIONS} from './types.ts'
-import {findConflicts} from './constants.ts'
+import {DEFAULT_BINDINGS, findConflicts} from './constants.ts'
 import {keyComboToDisplay} from './display.ts'
 import type {DeepReadonly} from '../types/readonly.ts'
 
@@ -398,6 +398,12 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
                         return
                     }
                     const obj = parsed as Record<string, unknown>
+                    /* 旧版本导出的文件可能缺少后新增的动作：用默认绑定补齐，不整体拒绝 */
+                    for (const action of INPUT_ACTIONS) {
+                        if (obj[action] === undefined) {
+                            obj[action] = DEFAULT_BINDINGS[action].map(combo => [...combo])
+                        }
+                    }
                     for (const action of INPUT_ACTIONS) {
                         if (!Array.isArray(obj[action])) {
                             showToast(`文件格式无效：缺少动作 "${action}"`)

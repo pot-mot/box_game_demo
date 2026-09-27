@@ -42,6 +42,7 @@ const makeMock = (
         rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
         combat,
         holdMode: 'one_handed',
+        lockPoints: [],
         stateMachine: null!,
     }
 }

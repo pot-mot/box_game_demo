@@ -29,11 +29,13 @@ test.describe('操作设置面板', () => {
         await expect(page.locator('.bp-row', {hasText: '雕刻地形'})).toContainText('不可修改')
     })
 
-    test('游玩模式：鼠标分组只列旋转视角，固定项为攻击与滚轮', async ({page}) => {
+    test('游玩模式：鼠标分组列出旋转视角与锁定目标，固定项为攻击与滚轮', async ({page}) => {
         await openOperationsPanel(page, '游玩模式')
 
         await expect(page.locator('.bp-group-title').first()).toHaveText('鼠标')
         await expect(page.locator('.bp-row', {hasText: '旋转视角'})).toHaveCount(1)
+        await expect(page.locator('.bp-row', {hasText: '锁定目标'}).locator('.bp-row-key')).toHaveText('鼠标中键')
+        await expect(page.locator('.bp-row', {hasText: '锁定目标'}).locator('.bp-row-btn', {hasText: '✎'})).toBeVisible()
         /* 生成物体 / 平移视角不参与游玩模式，不在面板中列出 */
         await expect(page.locator('.bp-row', {hasText: '生成物体'})).toHaveCount(0)
         await expect(page.locator('.bp-row', {hasText: '平移视角'})).toHaveCount(0)
@@ -42,7 +44,7 @@ test.describe('操作设置面板', () => {
         await expect(page.locator('.bp-row', {hasText: '重攻击'})).toContainText('右键松开')
     })
 
-    test('把「生成物体」改绑到鼠标中键', async ({page}) => {
+    test('把「生成物体」改绑到鼠标中键（与锁定目标冲突时确认覆盖）', async ({page}) => {
         await openOperationsPanel(page, '编辑模式')
 
         const spawnRow = page.locator('.bp-row', {hasText: '生成物体'})
@@ -53,10 +55,13 @@ test.describe('操作设置面板', () => {
         await page.mouse.down({button: 'middle'})
         await page.mouse.up({button: 'middle'})
 
+        /* 中键默认绑定游玩模式的「锁定目标」，需确认覆盖 */
+        await expect(page.locator('.bp-conflict-box')).toContainText('锁定目标')
+        await page.locator('.bp-btn-confirm').click()
+
         await expect(spawnRow.locator('.bp-row-key')).toHaveText('鼠标中键')
-        /* 捕获后的 click 被吞掉：面板保持打开且无冲突弹窗 */
+        /* 捕获后的 click 被吞掉：面板保持打开 */
         await expect(page.locator('.bp-panel')).toBeVisible()
-        await expect(page.locator('.bp-conflict-box')).toHaveCount(0)
     })
 
     test('重绑到已被占用的按键会弹出冲突确认（覆盖后旧绑定被移除）', async ({page}) => {
@@ -130,6 +135,8 @@ test.describe('生成物体绑定生效', () => {
         await page.mouse.move(600, 400)
         await page.mouse.down({button: 'middle'})
         await page.mouse.up({button: 'middle'})
+        /* 中键与「锁定目标」冲突：确认覆盖后才能完成改绑 */
+        await page.locator('.bp-btn-confirm').click()
         await expect(spawnRow.locator('.bp-row-key')).toHaveText('鼠标中键')
         await page.locator('.bp-close-btn').click()
 

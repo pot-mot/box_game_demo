@@ -16,6 +16,26 @@ import type {ArmorLoadout, ArmorPieceConfig} from '../../../character/armor/type
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
 import {DAMAGE_TYPE_LABELS} from '../../../character/combat/damage_type.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
+import type {LockPointConfig} from '../../../character/lock_point.ts'
+import {CHARACTER_JOINT_IDS} from '../appearance/clips/base_clips.ts'
+import {buildCharacterSkeletonDefinition} from '../skeleton/preset.ts'
+
+/** 锁定点下拉关节选项：骨架定义中文名 + 关节 id */
+const JOINT_LOCK_POINT_OPTIONS: ReadonlyArray<{readonly id: string; readonly label: string}> = (() => {
+    const names = new Map(buildCharacterSkeletonDefinition().joints.map(joint => [joint.id, joint.name]))
+    return CHARACTER_JOINT_IDS.map(id => ({id, label: `${names.get(id) ?? id} (${id})`}))
+})()
+
+/** 锁定点偏移输入标签（X / Y / Z） */
+const OFFSET_AXIS_LABELS = ['X', 'Y', 'Z'] as const
+/** 新增锁定点的默认关节（髋部：接近身体中心，便于调整） */
+const LOCK_POINT_DEFAULT_JOINT = 'spine'
+
+/** 锁定点编辑缓存行（偏移为输入框原值字符串，Apply 时解析） */
+interface LockPointEditRow {
+    jointId: string
+    offset: [string, string, string]
+}
 
 /** 下拉项：武器 id（option.value）+ 所属类型（option.dataset.weaponType，用于收窄类型） */
 interface WeaponOption {
@@ -334,6 +354,63 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     baseDefMagic.oninput = updateEquipmentPreview
     speed.oninput = updateEquipmentPreview
 
+    /* 锁定点区：默认身体中心点（不可编辑）+ 可增删改的关节锁定点（关节 id + 关节本地偏移） */
+    el.appendChild(createSection('锁定点'))
+    const defaultLockPointTag = document.createElement('div')
+    defaultLockPointTag.style.cssText = 'font-size:11px;color:#888;margin-bottom:2px'
+    defaultLockPointTag.textContent = '默认：身体中心（不可删除）'
+    el.appendChild(defaultLockPointTag)
+
+    const lockPointsContainer = document.createElement('div')
+    lockPointsContainer.style.cssText = 'max-height:120px;overflow-y:auto;margin:2px 0'
+    el.appendChild(lockPointsContainer)
+
+    const addLockPointBtn = document.createElement('button')
+    addLockPointBtn.textContent = '+ 添加锁定点'
+    addLockPointBtn.style.cssText = 'font-size:12px'
+    el.appendChild(addLockPointBtn)
+
+    let cachedLockPoints: LockPointEditRow[] = []
+
+    const refreshLockPointList = (): void => {
+        lockPointsContainer.innerHTML = ''
+        for (let index = 0; index < cachedLockPoints.length; index++) {
+            const point = cachedLockPoints[index]
+            const row = document.createElement('div')
+            row.className = 'lock-point-row'
+            row.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:11px;padding:2px 0'
+            const jointSelect = document.createElement('select')
+            jointSelect.className = 'lock-point-joint'
+            jointSelect.style.cssText = 'max-width:118px;font-size:11px'
+            for (const option of JOINT_LOCK_POINT_OPTIONS) {
+                const o = document.createElement('option')
+                o.value = option.id
+                o.textContent = option.label
+                jointSelect.appendChild(o)
+            }
+            jointSelect.value = point.jointId
+            jointSelect.onchange = () => { point.jointId = jointSelect.value }
+            row.appendChild(jointSelect)
+            for (let axis = 0; axis < point.offset.length; axis++) {
+                const input = createLabeledNumberInput(row, OFFSET_AXIS_LABELS[axis], {step: '0.01', style: 'width:42px'})
+                input.className = 'lock-point-offset'
+                input.value = point.offset[axis]
+                input.oninput = () => { point.offset[axis] = input.value }
+            }
+            const delBtn = document.createElement('button')
+            delBtn.textContent = '×'
+            delBtn.style.cssText = 'font-size:10px;padding:0 3px'
+            delBtn.onclick = () => { cachedLockPoints.splice(index, 1); refreshLockPointList() }
+            row.appendChild(delBtn)
+            lockPointsContainer.appendChild(row)
+        }
+    }
+
+    addLockPointBtn.onclick = () => {
+        cachedLockPoints.push({jointId: LOCK_POINT_DEFAULT_JOINT, offset: ['0', '0', '0']})
+        refreshLockPointList()
+    }
+
     el.appendChild(createSection('Player'))
     const playerRow = document.createElement('div')
     playerRow.style.cssText = 'display:flex;gap:8px;align-items:center'
@@ -612,6 +689,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         baseDefMagic.value = formatNumber(sel.combat.baseDefense.magic)
         updateEquipmentPreview()
 
+        /* 额外锁定点回显（默认身体中心点固定，不在此列表） */
+        cachedLockPoints = sel.lockPoints.map((point): LockPointEditRow => ({
+            jointId: point.jointId,
+            offset: [formatNumber(point.offset[0]), formatNumber(point.offset[1]), formatNumber(point.offset[2])],
+        }))
+        refreshLockPointList()
+
         playerCheck.checked = sel.isPlayer
         peaceSelect.value = sel.peaceStrategy
         combatSelect.value = sel.combatStrategy
@@ -718,6 +802,15 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     baseDefense: readBaseDefense(),
                     armor: readArmorLoadout(),
                 })
+                /* 额外锁定点：默认身体中心点由运行时提供；非法偏移输入解析为 0（运行时仍会剔除） */
+                ctx.setLockPoints?.(cur.id, cachedLockPoints.map((point): LockPointConfig => ({
+                    jointId: point.jointId,
+                    offset: [
+                        parseFloat(point.offset[0]) || 0,
+                        parseFloat(point.offset[1]) || 0,
+                        parseFloat(point.offset[2]) || 0,
+                    ],
+                })))
                 const updated = getSelected()
                 if (updated) {
                     maxHP.value = String(updated.combat.maxHealth)

@@ -172,11 +172,16 @@ class InputRegistryImpl implements InputRegistry {
             if (!raw) return undefined
             const parsed = JSON.parse(raw) as unknown
             if (parsed === null || typeof parsed !== 'object') return undefined
-            /* 基础校验：确保所有动作都有对应的数组 */
+            /* 基础校验；旧版本记录缺少后新增的动作时用默认绑定补齐，避免整体回退丢失用户配置 */
             const obj = parsed as Record<string, unknown>
             for (const action of INPUT_ACTIONS) {
-                if (!Array.isArray(obj[action])) return undefined
-                const combos = obj[action] as unknown[]
+                const value = obj[action]
+                if (value === undefined) {
+                    obj[action] = DEFAULT_BINDINGS[action].map(combo => [...combo])
+                    continue
+                }
+                if (!Array.isArray(value)) return undefined
+                const combos: unknown[] = value
                 for (const combo of combos) {
                     if (!Array.isArray(combo)) return undefined
                     if (combo.some((c: unknown) => typeof c !== 'string')) return undefined

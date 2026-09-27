@@ -219,12 +219,54 @@ describe('validateSaveData', () => {
         }
     })
 
-    it('character 旧存档缺 defense / armor 字段：缺省为 undefined（运行时零防御空护甲）', () => {
+    it('character 锁定点 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    attack: {weaponId: 'long_sword', damage: 3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        const valid = validateSaveData(characterConfig({
+            lockPoints: [
+                {jointId: 'headNeck', offset: [0, 0.2, 0]},
+                {jointId: 'rightHandPivot', offset: [0.1, 0, -0.05]},
+            ],
+        }))
+        const e0 = valid.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.config.lockPoints).toEqual([
+                {jointId: 'headNeck', offset: [0, 0.2, 0]},
+                {jointId: 'rightHandPivot', offset: [0.1, 0, -0.05]},
+            ])
+        }
+
+        /* 非法结构（偏移长度错误 / 非数字 / 空关节 id / 非数组）：整体回退 undefined，不抛错 */
+        expect(() => validateSaveData(characterConfig({lockPoints: [{jointId: 'spine', offset: [0, 1]}]}))).not.toThrow()
+        expect(() => validateSaveData(characterConfig({lockPoints: [{jointId: 'spine', offset: ['a', 0, 0]}]}))).not.toThrow()
+        expect(() => validateSaveData(characterConfig({lockPoints: [{jointId: '', offset: [0, 0, 0]}]}))).not.toThrow()
+        expect(() => validateSaveData(characterConfig({lockPoints: 5}))).not.toThrow()
+        const invalid = validateSaveData(characterConfig({lockPoints: [{jointId: 'spine', offset: [0, 1]}]}))
+        const e1 = invalid.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.lockPoints).toBeUndefined()
+        }
+    })
+
+    it('character 旧存档缺 defense / armor / lockPoints 字段：缺省为 undefined', () => {
         const result = validateSaveData({entities: [{type: 'character'}]})
         const entity = result.entities[0]
         if (entity.type === 'character') {
             expect(entity.config.defense).toBeUndefined()
             expect(entity.config.armor).toBeUndefined()
+            expect(entity.config.lockPoints).toBeUndefined()
         }
     })
 

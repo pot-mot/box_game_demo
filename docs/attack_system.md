@@ -702,7 +702,7 @@ const phaseKey = c.phaseIndex < phases.length
 | `src/character/state_machine/states/rolling.ts` | 翻滚状态 handler：锁定方向位移 + 中段无敌帧写入 `invincibleTimer`（exit 清零），结束转 walking/idle/falling |
 | `src/character/state_machine/states/flinching.ts` | 受击硬直状态 handler（enter 清 `bufferedSegment` 与阶段计时，exit 挂免疫窗口） |
 | `src/character/archetypes.ts` | 存档 / 面板的攻击配置：`AttackConfig = {weaponId, damage?, cooldown?, ranged?}`（只有武器与数值覆写）、`ATTACK_PRESETS` |
-| `src/save_load/types.ts` | `SAVE_FORMAT_VERSION = 3`；`CharacterSaveConfig.attack: AttackConfig`（原 `attackSlot` 已删除） |
+| `src/save_load/types.ts` | `CharacterSaveConfig.attack: AttackConfig`（v3 起；当前 `SAVE_FORMAT_VERSION = 5`，原 `attackSlot` 已删除） |
 
 ### 9.4 实体表现与调试
 
