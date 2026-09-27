@@ -1,3 +1,4 @@
+import type {Object3D} from 'three'
 import type {CharacterEntity} from '../../../../character/types.ts'
 import type {NavRunContext, NavState, NavStateHandler, NavSensor, NavSenseOutput} from './types.ts'
 import {DEFAULT_CHECK_RADIUS, DEFAULT_CHECK_DISTANCE, DEFAULT_STUCK_TIMEOUT} from './constants.ts'
@@ -14,6 +15,7 @@ const findSteerAngle = (
     sensor: NavSensor,
     config: NavRunContext['config'],
     preferDirection: number,
+    ignoredMesh: Object3D | null,
 ): number | null => {
     const fLen = Math.hypot(forwardX, forwardZ)
     if (fLen < 0.001) return null
@@ -29,7 +31,7 @@ const findSteerAngle = (
         const tx = fx * cosA - fz * sinA
         const tz = fx * sinA + fz * cosA
 
-        const result = sensor.sense(entity, tx, tz, config)
+        const result = sensor.sense(entity, tx, tz, config, ignoredMesh)
         if (result.result === 'clear') {
             return angle
         }
@@ -43,7 +45,7 @@ const findSteerAngle = (
         const tx = fx * cosA - fz * sinA
         const tz = fx * sinA + fz * cosA
 
-        const result = sensor.sense(entity, tx, tz, config)
+        const result = sensor.sense(entity, tx, tz, config, ignoredMesh)
         if (result.result === 'clear') {
             return angle
         }
@@ -63,7 +65,7 @@ const senseOrCache = (
     intendedDZ: number,
 ): NavSenseOutput => {
     if (ctx.preSense !== null) return ctx.preSense
-    return sensor.sense(entity, intendedDX, intendedDZ, ctx.config)
+    return sensor.sense(entity, intendedDX, intendedDZ, ctx.config, ctx.ignoredMesh)
 }
 
 const navigatingHandler: NavStateHandler = {
@@ -103,7 +105,7 @@ const navigatingHandler: NavStateHandler = {
                     return {dx: 0, dz: 0, jump: false}
                 }
 
-                const angle = findSteerAngle(entity, fx, fz, sensor, ctx.config, ctx.steerDirection)
+                const angle = findSteerAngle(entity, fx, fz, sensor, ctx.config, ctx.steerDirection, ctx.ignoredMesh)
                 if (angle !== null) {
                     ctx.steerAngle = angle
                     const cosA = Math.cos(angle)
@@ -172,11 +174,11 @@ const steeringHandler: NavStateHandler = {
         const sz = fx * sinA + fz * cosA
 
         /* 检查偏转方向是否畅通 */
-        const sense = sensor.sense(entity, sx, sz, ctx.config)
+        const sense = sensor.sense(entity, sx, sz, ctx.config, ctx.ignoredMesh)
 
         if (sense.result === 'clear') {
             /* 路径已恢复，检查原方向是否也畅通 */
-            const origSense = sensor.sense(entity, fx, fz, ctx.config)
+            const origSense = sensor.sense(entity, fx, fz, ctx.config, ctx.ignoredMesh)
             if (origSense.result === 'clear') {
                 /* 原方向恢复，逐步回正 */
                 ctx.steerAngle *= 0.5
@@ -189,7 +191,7 @@ const steeringHandler: NavStateHandler = {
         }
 
         /* 偏转方向被堵，尝试调整角度 */
-        const newAngle = findSteerAngle(entity, fx, fz, sensor, ctx.config, ctx.steerDirection)
+        const newAngle = findSteerAngle(entity, fx, fz, sensor, ctx.config, ctx.steerDirection, ctx.ignoredMesh)
         if (newAngle !== null) {
             ctx.steerAngle = newAngle
             const ca = Math.cos(ctx.steerAngle)
@@ -206,7 +208,7 @@ const steeringHandler: NavStateHandler = {
             to: 'navigating',
             guard: (ctx, entity, sensor, intendedDX, intendedDZ) => {
                 if (Math.hypot(intendedDX, intendedDZ) < 0.001) return false
-                const sense = sensor.sense(entity, intendedDX, intendedDZ, ctx.config)
+                const sense = sensor.sense(entity, intendedDX, intendedDZ, ctx.config, ctx.ignoredMesh)
                 return sense.result === 'clear'
             },
         },
@@ -222,7 +224,7 @@ const steeringHandler: NavStateHandler = {
                 const sinA = Math.sin(ctx.steerAngle)
                 const sx = fx * cosA - fz * sinA
                 const sz = fx * sinA + fz * cosA
-                const sense = sensor.sense(entity, sx, sz, ctx.config)
+                const sense = sensor.sense(entity, sx, sz, ctx.config, ctx.ignoredMesh)
                 return sense.result === 'blocked_low'
             },
         },
@@ -261,7 +263,7 @@ const jumpingHandler: NavStateHandler = {
         /* 跳跃过程中保持方向，但不再重复触发 jump */
         if (entity.isOnGround && ctx.stateTime > 0.3) {
             /* 已落地，检查前方 */
-            const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config)
+            const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config, ctx.ignoredMesh)
             if (sense.result === 'clear') {
                 return {dx: intendedDX, dz: intendedDZ, jump: false}
             }
@@ -285,7 +287,7 @@ const jumpingHandler: NavStateHandler = {
                 if (!entity.isOnGround) return false
                 const fLen = Math.hypot(intendedDX, intendedDZ)
                 if (fLen < 0.001) return true
-                const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config)
+                const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config, ctx.ignoredMesh)
                 return sense.result === 'clear'
             },
         },
@@ -296,7 +298,7 @@ const jumpingHandler: NavStateHandler = {
                 if (!entity.isOnGround) return false
                 const fLen = Math.hypot(intendedDX, intendedDZ)
                 if (fLen < 0.001) return false
-                const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config)
+                const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config, ctx.ignoredMesh)
                 return sense.result !== 'clear'
             },
         },
@@ -342,7 +344,7 @@ const stuckHandler: NavStateHandler = {
         /* 定期检查路径是否恢复 */
         if (ctx.stateTime > 1.0) {
             if (fLen > 0.001) {
-                const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config)
+                const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config, ctx.ignoredMesh)
                 if (sense.result === 'clear') {
                     /* 路径恢复 */
                     return {dx: intendedDX, dz: intendedDZ, jump: false}
@@ -361,7 +363,7 @@ const stuckHandler: NavStateHandler = {
             guard: (ctx, entity, sensor, intendedDX, intendedDZ) => {
                 const fLen = Math.hypot(intendedDX, intendedDZ)
                 if (fLen < 0.001) return false
-                const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config)
+                const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config, ctx.ignoredMesh)
                 return sense.result === 'clear'
             },
         },
@@ -389,6 +391,7 @@ export const createNavRunContext = (enabled: boolean): NavRunContext => ({
     lastPosX: 0,
     lastPosZ: 0,
     preSense: null,
+    ignoredMesh: null,
     config: {
         checkRadius: DEFAULT_CHECK_RADIUS,
         checkDistance: DEFAULT_CHECK_DISTANCE,
@@ -436,7 +439,7 @@ export const processNav = (
 
     /* 预计算传感器结果，避免 transition guard 与 update 重复调用 sense() */
     ctx.preSense = Math.hypot(intendedDX, intendedDZ) > 0.001
-        ? sensor.sense(entity, intendedDX, intendedDZ, ctx.config)
+        ? sensor.sense(entity, intendedDX, intendedDZ, ctx.config, ctx.ignoredMesh)
         : null
 
     /* 检查状态转移 */

@@ -1,3 +1,4 @@
+import type {Object3D} from 'three'
 import type {CharacterEntity} from '../../../../character/types.ts'
 
 /* 导航 FSM 状态 */
@@ -56,6 +57,9 @@ export interface NavRunContext {
     enabled: boolean
     /** 预计算传感器结果缓存，由 processNav 在每帧开始时填充（避免 guard/update 重复调用 sense） */
     preSense: NavSenseOutput | null
+    /** 导航感知应忽略的 mesh（战斗中为当前 combat target）：不视作障碍、不参与遮挡分类；
+     *  目标相对走位交由战斗 FSM 与接触闸门/分离处理，避免贴脸前被当作墙绕行导致环绕不打 */
+    ignoredMesh: Object3D | null
 }
 
 /** 传感器接口 */
@@ -65,6 +69,8 @@ export interface NavSensor {
         forwardX: number,
         forwardZ: number,
         config: NavConfig,
+        /** 本次感知需忽略的 mesh（如当前 combat target），缺省不忽略 */
+        ignoredMesh?: Object3D | null,
     ) => NavSenseOutput
 }
 

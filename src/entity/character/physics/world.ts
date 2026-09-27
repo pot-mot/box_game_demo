@@ -674,6 +674,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const buildGroundContacts = (entity: CharacterEntity): GroundContactLike[] =>
         queryColliderContacts(world, entity.mainCollider, contactTracker.pairsInvolving(entity.mainCollider.handle))
+            .filter(c => !bodyCharMap.has(c.bodyBHandle))
 
     const checkGround = (entity: CharacterEntity, dt: number): void => {
         const contacts = buildGroundContacts(entity)
@@ -709,6 +710,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
             const aiCtx = aiMap.get(entity.id)
             if (aiCtx && aiEnabled) {
+                /* 战斗中把当前攻击目标排除出导航感知：目标相对走位由战斗 FSM 负责，
+                 * 否则贴脸前会被当成墙绕行（两个近战 AI 互相绕圈不打） */
+                const combatTarget = aiCtx.activeFsm === 'combat' && aiCtx.combatTargetId !== undefined
+                    ? characters.find(c => c.id === aiCtx.combatTargetId && !c.combat.isDead)
+                    : undefined
+                aiCtx.nav.ignoredMesh = combatTarget?.mesh ?? null
+
                 updateAI(dt, aiCtx, entity, characters, (dx, dz, attack, attackDX, attackDZ) => {
                     /* 若与另一个角色有物理接触，禁止继续向其方向推挤 */
                     let finalDX = dx
@@ -765,6 +773,26 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
 
             entity.stateMachine.update(dt, entity)
+            /* EXPERIMENT: 抑制朝向其他角色的速度分量，防止深穿透触发胶囊垂直解算 */
+            {
+                const myPos = entity.body.translation()
+                const lv0 = entity.body.linvel()
+                let vx = lv0.x
+                let vz = lv0.z
+                for (const other of characters) {
+                    if (other === entity || other.combat.isDead) continue
+                    const op = other.body.translation()
+                    const nx = op.x - myPos.x
+                    const nz = op.z - myPos.z
+                    const d = Math.hypot(nx, nz)
+                    if (d > 0.3 || d < 1e-6) continue
+                    const ux = nx / d
+                    const uz = nz / d
+                    const inward = vx * ux + vz * uz
+                    if (inward > 0) { vx -= inward * ux; vz -= inward * uz }
+                }
+                if (vx !== lv0.x || vz !== lv0.z) entity.body.setLinvel({x: vx, y: lv0.y, z: vz}, true)
+            }
             /* 翻滚无敌帧视觉：材质统一效果层切换为半透明白（与受击闪红共用快照/还原） */
             materialEffects.get(entity.id)?.setInvincible(entity.combat.invincibleTimer > 0)
 

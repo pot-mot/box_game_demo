@@ -47,6 +47,7 @@ export const createNavSensor = (
         forwardX: number,
         forwardZ: number,
         config: NavConfig,
+        ignoredMesh?: Object3D | null,
     ): NavSenseOutput => {
         const scale = entity.config.scale
         const jumpHeight = entity.config.jumpHeight
@@ -80,10 +81,11 @@ export const createNavSensor = (
         const obstacles: Object3D[] = []
         const charSet = new WeakSet<Object3D>()
         for (const m of rawCharacters) {
-            if (m !== selfMesh) charSet.add(m)
+            if (m !== selfMesh && m !== ignoredMesh) charSet.add(m)
         }
         for (const m of rawObstacles) {
-            if (m !== selfMesh) obstacles.push(m)
+            /* 忽略自身与「战斗中当前目标」：目标不计入障碍，避免被当作墙绕行 */
+            if (m !== selfMesh && m !== ignoredMesh) obstacles.push(m)
         }
         const grounds = groundMeshesGetter()
 

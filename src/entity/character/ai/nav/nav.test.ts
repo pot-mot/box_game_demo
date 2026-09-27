@@ -1071,6 +1071,33 @@ describe('NavFSM 角色障碍行为', () => {
         }
         expect(navCtx.state).not.toBe('stuck')
     })
+
+    it('40b. 前方角色为 ignoredMesh（战斗目标）→ 不绕行，输出原方向', () => {
+        const target = createBoxMesh(1.2, 0.5, 0, 0.25, 1.0, 0.16)
+        obstacles.push(target)
+        chars.push(target)
+        /* 战斗中当前目标被排除出导航感知 */
+        navCtx.ignoredMesh = target
+
+        const result = processNav(FIXED_DT, navCtx, entity, sensor, 1, 0)
+        expect(result.jump).toBe(false)
+        expect(navCtx.state).toBe('navigating')
+        expect(result.dx).toBeCloseTo(1)
+        expect(result.dz).toBeCloseTo(0)
+    })
+
+    it('40c. 忽略目标后仍会对其它角色绕行', () => {
+        const target = createBoxMesh(1.0, 0.5, 0, 0.25, 1.0, 0.16)
+        const other = createBoxMesh(1.2, 0.5, 0, 0.25, 1.0, 0.16)
+        obstacles.push(target, other)
+        chars.push(target, other)
+        navCtx.ignoredMesh = target
+
+        const result = processNav(FIXED_DT, navCtx, entity, sensor, 1, 0)
+        /* 目标被忽略，但前方另一角色仍触发绕行 */
+        expect(navCtx.state).toBe('steering')
+        expect(result.dx).not.toBe(0)
+    })
 })
 
 /* ── F 组：角色站在箱子/碎片上 ── */
