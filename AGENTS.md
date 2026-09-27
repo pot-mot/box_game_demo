@@ -118,12 +118,13 @@ src/
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
 │   ├── weapon/                  # 武器模组（固有属性 + 持握模式 hold_mode / 攻击链：attack_chain（含段→pose 组合 SegmentPoseLayer）/ melee_attacks / ranged_attacks / catalog / weapon_runtime / attack_clip_data（基础关键帧）/ attack_pose_edits（逐段姿势修订））
-│   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害、冲刺）
+│   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害/攻击类别与防御、冲刺）
+│   ├── armor/                   # 护甲领域模型（四槽位 slots / 预设 armor_pieces（防御·攻击加成·移速）/ 目录与装备表校验 catalog / 类型 types）
 │   └── state_machine/states/    # idle / walking / jumping / falling / attacking（段子状态机）/ dying / dashing / flinching
 ├── entity/
 │   ├── character/               # 角色实体
 │   │   ├── skeleton/            # 角色骨架定义（人形预设 preset.ts + PRESET_PART_SIZES + preset_appearance.ts，引用 entity/skeleton）
-│   │   └── appearance/          # 方块人外观（统一模型构建器：预设骨架→Group 层级→部件装配，含手部）+ 动画/武器装配
+│   │   └── appearance/          # 方块人外观（统一模型构建器：预设骨架→Group 层级→部件装配，含手部与护甲 armor_mesh）+ 动画/武器装配
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（小球/菱形、面板、桥接；人形无关，预设由外部注入）
 │   ├── box/                     # common / destructed / burning / magnet / elasticity
 │   ├── fragment/common/         # 碎片实体
@@ -166,6 +167,7 @@ src/
 | [`docs/ai_system.md`](docs/ai_system.md) | 角色 AI 寻路索敌系统：双层 FSM 架构、状态转移图、全量配置项、类型定义、扩展指南、核心文件索引 |
 | [`docs/attack_system.md`](docs/attack_system.md) | 攻击系统：武器模组攻击链（段模型）与段子状态连段、起手解析与输入缓冲、受击硬直、伤害判定几何、动画系统 |
 | [`docs/edit_mode.md`](docs/edit_mode.md) | 编辑模式：与主循环的关系、执行面板（Execute / Stop / Step / Run / Reset）语义与快照基线生命周期、其余控制与文件索引 |
+| [`docs/equipment_system.md`](docs/equipment_system.md) | 装备与防御系统：攻击类别（物理/魔法）、护甲槽位与预设、防御固定减伤与存档兼容 |
 | [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 骨骼动画动作调优规范：坐标系与朝向、关节总表、旋转符号速查（肘前折/膝后折）、阶段与相位、动作→改动位置映射、提示词模版、双持与左右手参数方案 a、陷阱。同目录逐个动作建档（`武器名-攻击段名.md` / `动作名.md`） |
@@ -185,7 +187,7 @@ src/
 - rapier3d-compat 的休眠 body 无视 velocity 写入，操作 velocity 前必须 `body.wakeUp()`（`setLinvel(vel, true)` 第二参数同样会唤醒，本项目一律传 `true`）
 - 角色 collider 是**竖直胶囊**（半径 = `CHARACTER_BASE_SIZE.width/2`，总高 = `height`），不是 cuboid。平底 cuboid 在 trimesh 地形上坡时会跨网格顶点线被内部棱幽灵水平法线卡死（原地 walking 不动）；rapier3d-compat 0.19/0.20 的 `FIX_INTERNAL_EDGES` 已损坏（开启后 trimesh 完全无碰撞），禁止使用；heightfield 在该版本 wasm 直接崩溃，禁止使用（地形用 `RAPIER.ColliderDesc.trimesh` 生成）
 - 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击**阶段**子状态（`attacking_{segmentId}_{phaseName}`）通过 `states/attacking/index.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为；攻击**段**子状态不在此列——它由武器模组的段定义（含 `next` 转换）驱动，新增/调整段只改 `character/weapon/*_attacks.ts`
-- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 3`）
+- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 4`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，旧档缺失时安全回退零防御空护甲）
 - 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；默认值只在 `localStorage` 无记录时生效，已存过旧绑定的浏览器需「重置默认」或导入配置
 - 鼠标动作按模式生效：`MOUSE_ACTIONS_BY_MODE` 决定操作设置面板中各模式可改的指针动作，"平移视角 / 生成物体" 默认同为右键但分属不同模式，改动其中一个需同步核对另一个的默认值
 - 武器挂点为两个零偏移关节 `rightWeaponMount` 与 `leftWeaponMount`：它们是可动画关节，模型按各自几何握点与固有旋转将主握点校正到挂点原点。自定义骨架缺关节时自动回退同名手腕关节。**手部与武器挂点是不同关节**：手部模型挂在 `rightHandPivot` / `leftHandPivot`，武器模型直接挂在腕下的武器挂点。
@@ -195,3 +197,5 @@ src/
 - 攻击动画由基础关键帧资产与显式逐段姿势修订共同定义；`getAttackClipById` 惰性解析缓存。新增或修改姿势时校验修订关节/时间与基础轨道一致；不增加抽象动作参数或每帧生成动画。
 - **远程弹丸在 `release` 阶段开始发射**（`ranged_executor`）：动画 t=0 即起手瞄准位（枪口 / 箭向 / 杖头朝目标），释放帧朝向与弹道一致；`hitbox_on/off` 事件对远程只是遗留数据。
 - 新增碰撞体必须显式 `setCollisionGroups`，并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注碰撞类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）——投掷物的「可穿过类别」判定依赖类别位；类别位从 membership 第 5 位起，不参与交互，但未声明碰撞组的碰撞体 membership 全 1，会被解析为 `ground` 并挡下子弹（fail-closed）
+- 伤害事件 `DamageEvent.damageType` 必填（武器固有：近战/远程直取当前武器、爆炸继承所属武器）；新增伤害路径漏填即编译报错。防御力在 `applyDamage` 内、`damageModifiers` 之后按类别固定减免（`max(MIN_DAMAGE=1, 伤害 − defense[damageType])`，低于 1 点的原始伤害保持原值），禁止在别处重复减伤
+- 护甲（`character/armor/`，四槽位 head/chest/arms/legs）提供逐类别防御、逐类别攻击加成与移速乘数：`armor`（槽位 → 护甲 id）与 `defense`（基础逐类别防御）是存档可选字段，未知 id / 槽位不匹配一律回退空槽；`CombatComponent` 的 `setCombatEquipment` 统一重算有效防御 / `attackBonus` / `moveSpeedMultiplier`（攻击加成在攻击侧并入近战/远程伤害，仅与武器类别匹配才计入；状态机移速一律走 `moveSpeedOf(entity)`，禁止在面板或状态机里对 `config.speed` 预乘装备系数）；护甲件是关节下的纯视觉子节点，不建碰撞体、不进 `getMeshes()`，不影响受击箱 / 视线 / 导航

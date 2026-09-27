@@ -1,4 +1,5 @@
 import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
+import type { DamageType } from '../combat/damage_type.ts'
 import type { CollisionCategory } from '../../physics/collision_category.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks } from './attack_chain.ts'
@@ -20,6 +21,8 @@ export interface RangedWeaponConfig {
     /** 武器中文名（面向玩家显示，如面板武器下拉、展示场景标签） */
     readonly name: string
     readonly type: 'ranged'
+    /** 攻击类别（武器固有，不可被存档/面板覆写）：弹丸与爆炸伤害均按此类别结算防御 */
+    readonly damageType: DamageType
     /** 可支持的持握模式（数组；首个为默认模式，换武器时角色持握模式重置为首个） */
     readonly holdModes: readonly HoldMode[]
     readonly damage: number
@@ -67,6 +70,7 @@ const rangedPreset = (base: Omit<RangedWeaponConfig, 'attacks'>): RangedWeaponCo
 export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     longbow: rangedPreset({
         id: 'longbow', name: '长弓', type: 'ranged',
+        damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 2, range: 10,
         knockbackForce: 3, projectileSpeed: 20, projectileLifetime: 3,
@@ -75,6 +79,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     }),
     crossbow: rangedPreset({
         id: 'crossbow', name: '弩', type: 'ranged',
+        damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 5, range: 8,
         knockbackForce: 4, projectileSpeed: 45, projectileLifetime: 1.5,
@@ -83,6 +88,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     }),
     shotgun: rangedPreset({
         id: 'shotgun', name: '霰弹枪', type: 'ranged',
+        damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 1, range: 6,
         knockbackForce: 6, projectileSpeed: 15, projectileLifetime: 1.5,
@@ -92,6 +98,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     }),
     staff: rangedPreset({
         id: 'staff', name: '法杖', type: 'ranged',
+        damageType: 'magic',
         holdModes: ['two_handed'],
         damage: 3, range: 8,
         knockbackForce: 4, projectileSpeed: 10, projectileLifetime: 5,
@@ -101,6 +108,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     }),
     magic_wand: rangedPreset({
         id: 'magic_wand', name: '魔杖', type: 'ranged',
+        damageType: 'magic',
         holdModes: ['one_handed'],
         damage: 1.5, range: 10,
         knockbackForce: 2, projectileSpeed: 8, projectileLifetime: 4,
@@ -110,6 +118,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     }),
     throwing_axe: rangedPreset({
         id: 'throwing_axe', name: '飞斧', type: 'ranged',
+        damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 6, range: 10,
         knockbackForce: 5, projectileSpeed: 15, projectileLifetime: 3,
@@ -119,6 +128,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     }),
     grenade: rangedPreset({
         id: 'grenade', name: '手雷', type: 'ranged',
+        damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 4, range: 10,
         knockbackForce: 8, projectileSpeed: 10, projectileLifetime: 4,
@@ -128,6 +138,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     }),
     molotov: rangedPreset({
         id: 'molotov', name: '燃烧瓶', type: 'ranged',
+        damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 2, range: 10,
         knockbackForce: 5, projectileSpeed: 10, projectileLifetime: 4,
@@ -137,6 +148,7 @@ export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
     }),
     throwing_dart: rangedPreset({
         id: 'throwing_dart', name: '飞镖', type: 'ranged',
+        damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 1.5, range: 12,
         knockbackForce: 1, projectileSpeed: 30, projectileLifetime: 2,

@@ -6,6 +6,7 @@ import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
+import type {DamageType} from '../../../character/combat/damage_type.ts'
 import {applyDamage} from '../../../character/combat/damage.ts'
 import {applyExplosionDamage} from '../../../character/combat/explosion.ts'
 import {resolvePhases} from '../../../character/combat/attack_phases.ts'
@@ -36,6 +37,8 @@ interface BulletInstance {
     ownerFaction: number
     ownerAttackTendency: import('../../../character/faction.ts').AttackTendency
     damage: number
+    /** 攻击类别（创建子弹时取自武器）：直击与爆炸伤害均按此类别结算防御 */
+    damageType: DamageType
     knockbackForce: number
     lifetime: number
     homingStrength: number
@@ -136,7 +139,9 @@ export const createRangedExecutor = (
             ownerId: character.id,
             ownerFaction: character.combat.faction,
             ownerAttackTendency: character.combat.attackTendency,
-            damage: weapon.damage,
+            /* 伤害 = 武器基础伤害 + 装备攻击加成（与武器类别匹配）；爆炸伤害继承该值 */
+            damage: weapon.damage + character.combat.attackBonus[weapon.damageType],
+            damageType: weapon.damageType,
             knockbackForce: weapon.knockbackForce,
             lifetime: weapon.projectileLifetime,
             homingStrength: weapon.homingStrength ?? 0,
@@ -235,7 +240,7 @@ export const createRangedExecutor = (
         if (!owner) return
         applyExplosionDamage(
             x, y, z,
-            bullet.explosionRadius, bullet.damage, bullet.knockbackForce,
+            bullet.explosionRadius, bullet.damage, bullet.damageType, bullet.knockbackForce,
             owner, allCharacters,
         )
     }
@@ -328,6 +333,7 @@ export const createRangedExecutor = (
                             applyDamage(target.combat, {
                                 sourceId: bullet.ownerId,
                                 targetId: target.id,
+                                damageType: bullet.damageType,
                                 baseAmount: bullet.damage,
                                 finalAmount: bullet.damage,
                                 skillId: 'ranged',

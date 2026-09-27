@@ -93,6 +93,7 @@ const buildTestWeaponAttacks = (): WeaponAttacks => {
 
 export const TEST_WEAPON: MeleeWeaponConfig = {
     id: TEST_WEAPON_ID, name: '测试武器', type: 'melee',
+    damageType: 'physical',
     holdModes: ['one_handed'],
     damage: 3,
     knockbackForce: 4, knockbackY: 2,

@@ -67,5 +67,9 @@ export interface CharacterEntity {
     stateMachine: CharacterStateMachine
 }
 
+/** 当前有效移速 = 基础移速（config.speed）× 装备移速乘数；状态机全部移动速度统一由此推导 */
+export const moveSpeedOf = (entity: CharacterEntity): number =>
+    entity.config.speed * entity.combat.moveSpeedMultiplier
+
 export type { Faction, AttackTendency, TendencyConfig } from './faction.ts'
 export type { AttackConfig } from './archetypes.ts'

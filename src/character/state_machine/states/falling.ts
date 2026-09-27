@@ -9,6 +9,7 @@ import {
 } from '../constants.ts'
 import {isSupportedOn, projectToSlope} from '../ground.ts'
 import {v3Length} from '../../../physics/rapier_utils.ts'
+import {moveSpeedOf} from '../../types.ts'
 
 export const fallingHandler: StateHandler = {
     enter: () => {},
@@ -23,8 +24,9 @@ export const fallingHandler: StateHandler = {
             newVx = vx * AIR_DAMPING
             newVz = vz * AIR_DAMPING
         } else {
-            const tx = (input.dx / len) * entity.config.speed
-            const tz = (input.dz / len) * entity.config.speed
+            const speed = moveSpeedOf(entity)
+            const tx = (input.dx / len) * speed
+            const tz = (input.dz / len) * speed
             newVx = vx + (tx - vx) * AIR_CONTROL_FACTOR
             newVz = vz + (tz - vz) * AIR_CONTROL_FACTOR
         }
@@ -32,7 +34,7 @@ export const fallingHandler: StateHandler = {
         /* 有支撑面（陡坡）时沿表面滑动（v·n = 0），防止铲地导致接触法线抖动 */
         projectToSlope(entity, newVx, newVz, FALL_SLIDE_MIN_NY)
         /* 钳制总速度（含 vy），防止陡坡下滑/坠落无限加速 */
-        const maxSpeed = entity.config.speed * FALL_MAX_SPEED_MULTIPLIER
+        const maxSpeed = moveSpeedOf(entity) * FALL_MAX_SPEED_MULTIPLIER
         const finalLinvel = entity.body.linvel()
         const speed = v3Length(finalLinvel)
         if (speed > maxSpeed) {

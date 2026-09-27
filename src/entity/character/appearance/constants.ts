@@ -99,6 +99,11 @@ export const WEAPON_WALK_ARM_SWING = 0.12
 /** 状态过渡混合时长（秒）：新状态动画从切换前关节快照收敛，消除关节角突跳 */
 export const STATE_BLEND_DURATION = 0.15
 
+// ── 护甲外观 ──
+
+/** 护甲外扩边距（米）：包裹对应身体部件且不产生明显穿模 */
+export const ARMOR_PAD = 0.03
+
 // ── 受击硬直 ──
 
 /** 受击后仰幅度（rad，spine.rotation.x 负值 = 向后仰） */

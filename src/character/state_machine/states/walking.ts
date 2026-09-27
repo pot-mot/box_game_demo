@@ -2,6 +2,7 @@ import type {StateHandler} from '../types.ts'
 import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY, STATE_FLIP_MIN_TIME} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlopeAtSpeed, applySlopeSink} from '../ground.ts'
 import {canStartAttack} from '../../combat/attack_runtime.ts'
+import {moveSpeedOf} from '../../types.ts'
 
 export const walkingHandler: StateHandler = {
     enter: (entity) => {
@@ -10,7 +11,7 @@ export const walkingHandler: StateHandler = {
     update: (_dt, input, entity) => {
         const len = Math.hypot(input.dx, input.dz)
         if (len < 0.001) return
-        const speed = entity.config.speed
+        const speed = moveSpeedOf(entity)
         const dx = input.dx / len
         const dz = input.dz / len
         if (!projectToSlopeAtSpeed(entity, dx, dz, speed, SLOPE_WALK_THRESHOLD)) {

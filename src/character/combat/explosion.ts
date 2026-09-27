@@ -1,16 +1,18 @@
 import {v3Set, v3Length, type RapVector3} from '../../physics/rapier_utils.ts'
 import type {CharacterEntity} from '../types.ts'
+import type {DamageType} from './damage_type.ts'
 import {applyDamage} from './damage.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
-/** 对爆炸半径内所有角色施加距离衰减伤害和径向击退 */
+/** 对爆炸半径内所有角色施加距离衰减伤害和径向击退（伤害类别继承所属武器） */
 export const applyExplosionDamage = (
     centerX: number,
     centerY: number,
     centerZ: number,
     radius: number,
     damage: number,
+    damageType: DamageType,
     knockbackForce: number,
     sourceEntity: CharacterEntity,
     allCharacters: readonly CharacterEntity[],
@@ -32,6 +34,7 @@ export const applyExplosionDamage = (
         applyDamage(target.combat, {
             sourceId: sourceEntity.id,
             targetId: target.id,
+            damageType,
             baseAmount: dmg,
             finalAmount: dmg,
             skillId: 'explosion',

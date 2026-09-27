@@ -377,7 +377,7 @@ idle/walking ──→ attacking (段子状态机)
 
 - **来源**：武器构建时提供本地盒参数（`appearance/weapon_mesh.ts` 的 `WeaponLocalHitBox`，略包裹武器打击部位 + `WEAPON_HIT_BOX_PAD` 外扩），经 `CharacterModel.weaponGroup` / `weaponHitBox` 暴露；近战武器显式指定刃部/枪头/斧头/锤头区域，远程/投掷取默认盒。
 - **reach 字段**：命中箱沿武器本地 +Y 轴（自握把延伸方向）的最大前伸量（`center.y + half.y`，含外扩边距），即武器打击部位距握把的最远距离；仅作命中箱几何属性保留，攻击检测箱已改由武器 `detectBox` 配置显式驱动（见 `docs/ai_system.md` 2.5）。
-- **运行时**：命中窗口由攻击 clip 的事件轨驱动（`hitbox_on` ≈ 0.5×动作时间、`hitbox_off` ≈ 0.95×动作时间，与打击帧对齐，见 6.3），窗口内每帧强制 `weaponGroup.updateMatrixWorld()`，取 `matrixWorld.elements` 经 `obbFromTransform`（列主序，列向量含缩放）得世界 OBB。伤害 = `weapon.damage × activeSegment.damageMultiplier`（重段 ×1.6）。
+- **运行时**：命中窗口由攻击 clip 的事件轨驱动（`hitbox_on` ≈ 0.5×动作时间、`hitbox_off` ≈ 0.95×动作时间，与打击帧对齐，见 6.3），窗口内每帧强制 `weaponGroup.updateMatrixWorld()`，取 `matrixWorld.elements` 经 `obbFromTransform`（列主序，列向量含缩放）得世界 OBB。伤害 = `(weapon.damage + attackBonus[weapon.damageType]) × activeSegment.damageMultiplier`（重段 ×1.6）；武器固有**攻击类别**（`weapon.damageType`，物理/魔法）随伤害事件传递（见 5.6）。
 - **判定**：与目标受击箱 OBB 做 15 轴 SAT 相交（`combat/obb.ts` `obbIntersect`）。判定与 debug 可视化（`combat_vfx/hitbox_debug.ts` `syncWeaponDebugBox`）同源。
 
 ### 5.2 受击箱
@@ -410,6 +410,14 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 - **死亡动画（clip）保持直立**：`pose_fns.ts` 的 `dyingPose` 只做四肢/躯干塌陷，根关节不旋转（骨骼动画模式预览即直立姿态）。
 - **倒地方向由死亡 state 控制**（`states/dying.ts`）：进入死亡时取 `combat.lastHitDirX/Z`（最后受击的冲击方向，来源 → 受击者）并归一化；无受击记录时默认沿面朝反方向向后倒。按 `DYING_FALL_DURATION`（0.3s，与 clip 动作时长一致）缓动推进 `entity.dyingFallAngle`（0 → 90°）。
 - **世界层合成根旋转**（`physics/world.ts`）：`entity.isDying` 时模型根四元数 = 绕世界轴「上 × 倒向」旋转 `dyingFallAngle` ∘ 保持最后朝向的 yaw；模型原点在脚底，因此以脚为支点倒向冲击方向。倒向/角度按实体字段暴露，放置（edit）与游玩（play）共用同一路径。
+
+### 5.6 攻击类别与防御结算
+
+- **攻击类别**（`DAMAGE_TYPES = ['physical', 'magic']`，`character/combat/damage_type.ts`）是武器固有属性（`MeleeWeaponConfig.damageType` / `RangedWeaponConfig.damageType`，不可被存档/面板覆写）：近战与远程直击取当前武器类别，爆炸子弹的爆炸伤害继承所属武器类别。`DamageEvent.damageType` 为必填字段——三条命中路径（近战 / 远程直击 / 爆炸）漏填即编译报错。
+- **装备攻击加成**：护甲可提供逐类别攻击加成（`CombatComponent.attackBonus`，由 `setCombatEquipment` 汇总）；攻击时仅计入与武器类别匹配的项——近战 `(weapon.damage + attackBonus[类别]) × damageMultiplier`，远程并入子弹 `damage`（爆炸继承）。
+- **防御力**：角色有效防御 = 基础防御（`CharacterSaveConfig.defense`，角色固有）+ 各槽位护甲防御之和，由 `CombatComponent` 的 `setCombatEquipment` 统一重算（未知护甲 id 安全回退空槽）。
+- **结算顺序**：`applyDamage` 先跑 `damageModifiers`，再按事件类别做**固定减伤**——`finalAmount = max(MIN_DAMAGE, 修饰器后伤害 − defense[damageType])`；`MIN_DAMAGE = 1`（`character/combat/constants.ts`）保证高防不会完全免疫，低于 1 点的原始伤害保持原值（不被托底放大）。`baseAmount` 始终保持武器原始伤害。
+- 护甲槽位、攻击加成 / 移速修正与外观装配详见 [`equipment_system.md`](equipment_system.md)。
 
 ---
 
@@ -727,6 +735,11 @@ const phaseKey = c.phaseIndex < phases.length
 | `phaseTimer` | `number` | 当前阶段已用时间（秒） |
 | `attackedTargets` | `Set<number>` | 本次段已命中的目标（每段切换时清空，同一段内只结算一次） |
 | `dashSkill` | `DashSkillRuntime` | 冲刺技能运行时（角色能力，独立于攻击段） |
+| `baseDefense` | `DefenseProfile` | 基础防御（角色固有，存档持久化；见 §5.6 与 [`equipment_system.md`](equipment_system.md)） |
+| `armor` | `ArmorLoadout` | 装备的护甲（槽位 → 护甲 id；缺省 = 空槽），由 `setCombatEquipment` 变更 |
+| `defense` | `DefenseProfile` | 有效防御 = 基础防御 + 各护甲之和；`applyDamage` 按伤害事件类别取用 |
+| `attackBonus` | `DamageTypeProfile` | 装备攻击加成（逐类别，与武器类别匹配才计入伤害） |
+| `moveSpeedMultiplier` | `number` | 装备移速乘数（多件相乘；状态机经 `moveSpeedOf(entity)` 读取） |
 | `pendingFlinch` | `boolean` | 是否被标记为需要受击硬直 |
 | `flinchImmunityTimer` | `number` | 受击保护剩余时间（秒）：flinching 退出后免再触发硬直，防无限连段锁死；伤害不受影响 |
 | `lastHitDirX` / `lastHitDirZ` | `number` | 最近一次受击的冲击方向（世界水平单位向量，来源 → 受击者；无记录为 0）；死亡 state 据此决定倒地方向（§5.5） |

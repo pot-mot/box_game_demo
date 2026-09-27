@@ -4,6 +4,7 @@ import {segmentTotalDuration} from '../../../weapon/attack_chain.ts'
 import {resolvePhases} from '../../../combat/attack_phases.ts'
 import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlope, projectToSlopeAtSpeed, applySlopeAntiGravity, applySlopeSink} from '../../ground.ts'
+import {moveSpeedOf} from '../../../types.ts'
 import {advanceSegmentPhases, enterAttackSegment, resolveSegmentNextState, type SegmentInput} from './segment.ts'
 
 /**
@@ -98,7 +99,7 @@ export const attackingHandler: StateHandler = {
             : 0.3
         const inputLen = Math.hypot(input.dx, input.dz)
         if (inputLen > 0.001) {
-            const speed = entity.config.speed * moveMul
+            const speed = moveSpeedOf(entity) * moveMul
             const dx = input.dx / inputLen
             const dz = input.dz / inputLen
             if (!projectToSlopeAtSpeed(entity, dx, dz, speed, SLOPE_WALK_THRESHOLD)) {

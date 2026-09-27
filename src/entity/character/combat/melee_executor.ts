@@ -149,8 +149,9 @@ export const createMeleeExecutor = (
         const model = getModel(entity.id)
         if (!model) return
 
-        /* 伤害 = 武器基础伤害 × 当前段伤害倍率（重段 ×1.6） */
-        const damage = weapon.damage * (combat.activeSegment?.damageMultiplier ?? 1)
+        /* 伤害 = (武器基础伤害 + 装备攻击加成，与武器类别匹配) × 当前段伤害倍率（重段 ×1.6） */
+        const damage = (weapon.damage + combat.attackBonus[weapon.damageType])
+            * (combat.activeSegment?.damageMultiplier ?? 1)
         const attackId = combat.activeSegment?.id ?? weapon.id
 
         /** 用单个武器的命中箱做一次判定（主手/副手各调用一次；每段每目标仍只结算一次） */
@@ -186,6 +187,7 @@ export const createMeleeExecutor = (
                 applyDamage(target.combat, {
                     sourceId: entity.id,
                     targetId: target.id,
+                    damageType: weapon.damageType,
                     baseAmount: damage,
                     finalAmount: damage,
                     skillId: attackId,

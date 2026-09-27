@@ -190,6 +190,9 @@ export const collectWorldState = (
                     tendency: e.combat.tendencyConfig,
                     faction: e.combat.faction,
                     maxHealth: e.combat.maxHealth,
+                    /* 基础防御 + 护甲装备（旧代码读到缺字段安全回退零防御空护甲） */
+                    defense: e.combat.baseDefense,
+                    armor: e.combat.armor,
                     isPlayer: e.isPlayer,
                     navEnabled: e.navEnabled,
                 },

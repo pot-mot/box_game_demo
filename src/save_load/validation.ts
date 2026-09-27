@@ -130,6 +130,20 @@ const TendencyConfigSchema = z.object({
     targetFactions: z.array(z.number()).optional(),
 })
 
+/* 基础防御：逐攻击类别固定减伤（负值非法）；非法结构整体回退 undefined（运行时零防御），不抛错 */
+const DefenseProfileSchema = z.object({
+    physical: z.number().min(0).default(0),
+    magic: z.number().min(0).default(0),
+}).optional().catch(undefined)
+
+/* 护甲装备表：槽位 → 护甲 id；非法结构整体回退 undefined（运行时空护甲），未知 id 由运行时回退空槽 */
+const ArmorLoadoutSchema = z.object({
+    head: z.string().optional(),
+    chest: z.string().optional(),
+    arms: z.string().optional(),
+    legs: z.string().optional(),
+}).optional().catch(undefined)
+
 /** character 存档共享默认值（供内联 schema .default() 和外层 CHARACTER_SAVE_CONFIG_DEFAULTS 共用） */
 const CHARACTER_SAVE_ATTACK_DEFAULT = {weaponId: 'long_sword', damage: 3}
 const CHARACTER_SAVE_TENDENCY_DEFAULT = {tendencyId: 'hostileExceptSelf' as const}
@@ -146,6 +160,8 @@ const CharacterConfigInner = z.object({
     tendency: TendencyConfigSchema.default(CHARACTER_SAVE_TENDENCY_DEFAULT),
     faction: z.number().default(0),
     maxHealth: z.number().positive().default(100),
+    defense: DefenseProfileSchema,
+    armor: ArmorLoadoutSchema,
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),
 })

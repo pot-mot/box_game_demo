@@ -219,4 +219,74 @@ describe('投掷物可穿过类别', () => {
         expect(executor.getBulletCount()).toBe(0)
         expect(bystander.combat.health).toBeLessThan(bystander.combat.maxHealth)
     })
+
+    it('魔法弹丸按目标魔法防御固定减伤（攻击类别取自武器 damageType）', () => {
+        const hw = createHarnessWorld()
+        const executor = createRangedExecutor(hw.shared, new Scene())
+        const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+        const target = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
+        target.combat.defense = {physical: 0, magic: 3}
+
+        fireForward(executor, shooter, makeWeaponRuntime({damageType: 'magic'}, 5))
+        runFrames(hw, executor, [shooter, target], 30)
+
+        expect(target.combat.health).toBe(target.combat.maxHealth - 2)
+    })
+
+    it('物理弹丸不按目标魔法防御结算（按类别取对应防御）', () => {
+        const hw = createHarnessWorld()
+        const executor = createRangedExecutor(hw.shared, new Scene())
+        const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+        const target = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
+        target.combat.defense = {physical: 0, magic: 3}
+
+        fireForward(executor, shooter, makeWeaponRuntime())
+        runFrames(hw, executor, [shooter, target], 30)
+
+        expect(target.combat.health).toBe(target.combat.maxHealth - 5)
+    })
+
+    it('装备攻击加成计入弹丸伤害：仅与武器类别匹配时生效', () => {
+        const hw = createHarnessWorld()
+        const executor = createRangedExecutor(hw.shared, new Scene())
+        const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+        const target = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
+        shooter.combat.attackBonus = {physical: 2, magic: 9}
+
+        fireForward(executor, shooter, makeWeaponRuntime())
+        runFrames(hw, executor, [shooter, target], 30)
+
+        /* 长弓物理：(5 + 物理加成 2)；魔法加成 9 不参与 */
+        expect(target.combat.health).toBe(target.combat.maxHealth - 7)
+    })
+
+    it('爆炸伤害继承武器攻击类别：魔法爆炸按目标魔法防御减免', () => {
+        const hw = createHarnessWorld()
+        const executor = createRangedExecutor(hw.shared, new Scene())
+        const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+        const target = makeChar(hw, 2, 0, SHOOTER_Y, 3.0)
+        target.combat.defense = {physical: 0, magic: 5}
+        /* 箱面 z=1.75，目标 z=3.0：衰减伤害约 2，被 5 点魔防压到最小 1 */
+        makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
+
+        fireForward(executor, shooter, makeWeaponRuntime({damageType: 'magic', explosionRadius: 2}))
+        runFrames(hw, executor, [shooter, target], 10)
+
+        expect(target.combat.health).toBe(target.combat.maxHealth - 1)
+    })
+
+    it('魔法爆炸伤害计入装备攻击加成（与武器类别匹配，物理加成不参与）', () => {
+        const hw = createHarnessWorld()
+        const executor = createRangedExecutor(hw.shared, new Scene())
+        const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+        const target = makeChar(hw, 2, 0, SHOOTER_Y, 3.0)
+        shooter.combat.attackBonus = {physical: 9, magic: 1}
+        /* 箱面 z=1.75，目标 z=3.0：衰减系数约 0.37 → ceil((5+1)×0.37)=3 */
+        makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
+
+        fireForward(executor, shooter, makeWeaponRuntime({damageType: 'magic', explosionRadius: 2}))
+        runFrames(hw, executor, [shooter, target], 10)
+
+        expect(target.combat.health).toBe(target.combat.maxHealth - 3)
+    })
 })

@@ -1,6 +1,7 @@
 import type {StateHandler} from '../types.ts'
 import {AIR_DAMPING, AIR_CONTROL_FACTOR, SLOPE_WALK_THRESHOLD, JUMP_LAND_MIN_TIME} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
+import {moveSpeedOf} from '../../types.ts'
 
 export const jumpingHandler: StateHandler = {
     enter: (entity) => {
@@ -15,8 +16,9 @@ export const jumpingHandler: StateHandler = {
         if (len < 0.001) {
             entity.body.setLinvel({x: vx * AIR_DAMPING, y: linvel.y, z: vz * AIR_DAMPING}, true)
         } else {
-            const tx = (input.dx / len) * entity.config.speed
-            const tz = (input.dz / len) * entity.config.speed
+            const speed = moveSpeedOf(entity)
+            const tx = (input.dx / len) * speed
+            const tz = (input.dz / len) * speed
             entity.body.setLinvel({x: vx + (tx - vx) * AIR_CONTROL_FACTOR, y: linvel.y, z: vz + (tz - vz) * AIR_CONTROL_FACTOR}, true)
         }
     },

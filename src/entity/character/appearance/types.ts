@@ -3,6 +3,7 @@ import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
 import type {AttackPhaseName} from '../../../character/combat/attack_phases.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
+import type {ResolvedArmorLoadout} from '../../../character/armor/types.ts'
 import type {BoxPartPalette} from '../../../render/box_parts.ts'
 
 /** 角色配色 palette（方块人部件共享，见 render/box_parts） */
@@ -64,6 +65,12 @@ export interface CharacterModel {
 
     /** 移除全部武器 */
     removeWeapon: () => void
+
+    /** 装备护甲（四槽，会先移除旧护甲；空槽 = 移除该槽） */
+    equipArmor: (loadout: ResolvedArmorLoadout) => void
+
+    /** 移除全部护甲 */
+    removeArmor: () => void
 
     /** 当前武器命中检测标记点（null = 未装备），供 melee_executor 使用 */
     readonly weaponMesh: Mesh | null

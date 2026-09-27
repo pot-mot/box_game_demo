@@ -21,6 +21,10 @@ describe('MELEE_WEAPON_PRESETS', () => {
         expect(MELEE_WEAPON_PRESETS[key].damage).toBeGreaterThan(0)
     })
 
+    it.each(presetIds)('%s 的攻击类别合法（近战当前均为物理）', (key) => {
+        expect(MELEE_WEAPON_PRESETS[key].damageType).toBe('physical')
+    })
+
     it.each(presetIds)('%s 的 knockbackForce > 0', (key) => {
         expect(MELEE_WEAPON_PRESETS[key].knockbackForce).toBeGreaterThan(0)
     })

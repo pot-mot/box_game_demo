@@ -242,6 +242,66 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         expect(targetCombat.health).toBeLessThan(15)
     })
 
+    it('目标物理防御固定减免近战伤害（攻击类别取自武器 damageType）', () => {
+        const runtime = createWeaponRuntime('war_hammer')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        combat.activeSegment = runtime.attacks.segments['war_hammer_light_1']
+        const attacker = makeEntity()
+        attacker.combat = combat
+
+        const targetCombat = createCombatComponent(
+            createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
+        )
+        targetCombat.defense = {physical: 4, magic: 0}
+        const target = makeEntity()
+        target.id = 2
+        target.combat = targetCombat
+
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: new Group(),
+            weaponHitBox: local,
+            offhandWeaponGroup: null,
+            offhandWeaponHitBox: null,
+        } as unknown as CharacterModel
+
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
+        executor.setHitWindow(true)
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        /* 战锤轻 1 段伤害 = 10 × 1，物理防御 4 → 实际扣 6 */
+        expect(targetCombat.health).toBe(15 - 6)
+    })
+
+    it('装备攻击加成计入近战伤害：仅与武器类别匹配时生效', () => {
+        const runtime = createWeaponRuntime('war_hammer')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        combat.activeSegment = runtime.attacks.segments['war_hammer_light_1']
+        combat.attackBonus = {physical: 2, magic: 9}
+        const attacker = makeEntity()
+        attacker.combat = combat
+
+        const targetCombat = createCombatComponent(
+            createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 30,
+        )
+        const target = makeEntity()
+        target.id = 2
+        target.combat = targetCombat
+
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: new Group(),
+            weaponHitBox: local,
+            offhandWeaponGroup: null,
+            offhandWeaponHitBox: null,
+        } as unknown as CharacterModel
+
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
+        executor.setHitWindow(true)
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        /* 战锤物理轻 1 段：(10 + 物理加成 2) × 1；魔法加成 9 不参与 */
+        expect(targetCombat.health).toBe(30 - 12)
+    })
+
     it('双持：命中窗口按槽独立开关（仅副手窗口时主手不判定）', () => {
         const runtime = createWeaponRuntime('dual_axe')
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)

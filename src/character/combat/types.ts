@@ -2,8 +2,12 @@ import type { Faction, AttackTendency, TendencyConfig } from '../faction.ts'
 import type { AttackSegment, WeaponAttacks } from '../weapon/attack_chain.ts'
 import type { WeaponConfig } from '../weapon/catalog.ts'
 import type { WeaponRuntime } from '../weapon/weapon_runtime.ts'
+import type { ArmorLoadout } from '../armor/types.ts'
+import { resolveArmorLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf } from '../armor/catalog.ts'
 import { createDashSkillRuntime, type DashSkillRuntime } from './dash_skill.ts'
 import type { DamageEvent, DamageModifier } from './damage.ts'
+import { ZERO_PROFILE, type DefenseProfile } from './defense.ts'
+import type { DamageTypeProfile } from './damage_type.ts'
 
 /** 攻击结果码 */
 export const ATTACK_RESULT_CODES = ['ok', 'cooldown', 'dead', 'already_attacking', 'no_valid_skill'] as const
@@ -66,6 +70,17 @@ export interface CombatComponent {
     maxHealth: number
     isDead: boolean
 
+    /** 基础防御（角色固有，存档持久化） */
+    baseDefense: DefenseProfile
+    /** 装备的护甲（槽位 → 护甲 id；缺省 = 空槽） */
+    armor: ArmorLoadout
+    /** 有效防御 = 基础防御 + 各护甲之和；`setCombatEquipment` 统一重算，applyDamage 按伤害事件类别取用 */
+    defense: DefenseProfile
+    /** 装备提供的攻击加成（逐类别；攻击时与武器类别匹配才计入伤害） */
+    attackBonus: DamageTypeProfile
+    /** 装备提供的移速乘数（多件相乘，1 = 无修正；`moveSpeedOf` 与基础移速相乘） */
+    moveSpeedMultiplier: number
+
     readonly damageModifiers: readonly DamageModifier[]
 
     onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
@@ -77,6 +92,20 @@ export interface CombatComponent {
 export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime): void => {
     c.weapon = runtime.weapon
     c.attacks = runtime.attacks
+}
+
+/** 变更基础防御 / 护甲：校验装备表并重算有效防御、攻击加成与移速乘数（未知护甲 id 安全回退空槽，不抛错） */
+export const setCombatEquipment = (
+    c: CombatComponent,
+    baseDefense: DefenseProfile,
+    armor: ArmorLoadout,
+): void => {
+    c.baseDefense = baseDefense
+    c.armor = armor
+    const resolved = resolveArmorLoadout(armor)
+    c.defense = totalDefenseOf(baseDefense, resolved)
+    c.attackBonus = totalAttackOf(resolved)
+    c.moveSpeedMultiplier = totalMoveSpeedOf(resolved)
 }
 
 /** 创建初始化的战斗组件（武器运行时 + 阵营/倾向/血量） */
@@ -110,6 +139,11 @@ export const createCombatComponent = (
     health: maxHealth,
     maxHealth,
     isDead: false,
+    baseDefense: ZERO_PROFILE,
+    armor: {},
+    defense: ZERO_PROFILE,
+    attackBonus: ZERO_PROFILE,
+    moveSpeedMultiplier: 1,
     damageModifiers: [],
     onDamageTaken: null,
     onDamageDealt: null,

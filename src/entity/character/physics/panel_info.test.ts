@@ -1,10 +1,11 @@
 import {describe, it, expect, beforeAll, afterAll, beforeEach, vi} from 'vitest'
-import {Scene} from 'three'
+import {Mesh, Scene} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld} from '../../../physics/world.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
+import type {CharacterEntity} from '../../../character/types.ts'
 
 /** happy-dom 不支持 canvas 2d，这里注入一个最小 2d 上下文桩（仅覆盖 model.ts 用到的方法） */
 const canvasCtxStub = (): Record<string, unknown> => {
@@ -62,6 +63,15 @@ const meleeAttack = (damage: number): AttackConfig => ({
     weaponId: 'long_sword',
     damage,
 })
+
+/** 统计外观组内 Mesh 数量（护甲装配/移除的可观测信号） */
+const countMeshes = (entity: CharacterEntity): number => {
+    let count = 0
+    entity.appearanceGroup.traverse(obj => {
+        if (obj instanceof Mesh) count++
+    })
+    return count
+}
 
 describe('角色 panelInfo 同步', () => {
     let system: CharacterEntitySystem
@@ -122,6 +132,74 @@ describe('角色 panelInfo 同步', () => {
         expect(row!.rowText).toContain('长剑(5)')
         expect(row!.rowText).toContain('spd:9')
         expect(row!.badgeLabel).toBe('F2')
+    })
+
+    it('add() 带护甲与基础防御：有效防御 = 基础 + 各护甲之和，未知护甲 id 安全回退', () => {
+        const {id} = system.add(meleeSaveConfig({
+            defense: {physical: 1, magic: 0},
+            armor: {head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'},
+        }), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+        /* chest 未知 id 回退空槽：物理 1+2，魔法 0+2 */
+        expect(entity.combat.defense).toEqual({physical: 3, magic: 2})
+        /* 原始装备表保留（未知 id 不写回） */
+        expect(entity.combat.armor).toEqual({head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'})
+        const row = system.panelInfo.find(p => p.id === id)
+        expect(row!.rowText).toContain('def:物3/魔2')
+    })
+
+    it('add() 装备攻击加成与移速乘数：按类别区分、多件相乘并反映到列表行', () => {
+        const {id} = system.add(meleeSaveConfig({
+            /* 法师兜帽（魔攻+1）、战臂甲（物攻+2、移速×0.97）、疾行靴（移速×1.15） */
+            armor: {head: 'mage_hood', arms: 'battle_bracers', legs: 'swift_boots'},
+        }), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+        expect(entity.combat.attackBonus).toEqual({physical: 2, magic: 1})
+        expect(entity.combat.moveSpeedMultiplier).toBeCloseTo(0.97 * 1.15, 6)
+        /* 列表行展示有效移速（6 × 0.97 × 1.15 = 6.69） */
+        const row = system.panelInfo.find(p => p.id === id)
+        expect(row!.rowText).toContain('spd:6.69')
+    })
+
+    it('updateCharacterConfig 装备护甲后立即重算有效防御并同步 panelInfo', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            baseDefense: {physical: 0, magic: 1},
+            armor: {chest: 'iron_plate'},
+        })
+        const entity = system.getAll().find(e => e.id === id)!
+        expect(entity.combat.defense).toEqual({physical: 3, magic: 1})
+        const row = system.panelInfo.find(p => p.id === id)
+        expect(row!.rowText).toContain('def:物3/魔1')
+    })
+
+    it('updateCharacterConfig 换装重甲与加速鞋：防御 / 攻击 / 移速一并重算', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            baseDefense: {physical: 0, magic: 1},
+            armor: {chest: 'iron_plate', arms: 'iron_bracers', legs: 'wind_boots'},
+        })
+        const entity = system.getAll().find(e => e.id === id)!
+        expect(entity.combat.defense).toEqual({physical: 5, magic: 2})
+        expect(entity.combat.attackBonus).toEqual({physical: 1, magic: 0})
+        /* 铁胸甲 ×0.9 × 疾风靴 ×1.25 = 1.125 → 有效移速 6.75 */
+        expect(entity.combat.moveSpeedMultiplier).toBeCloseTo(1.125, 6)
+        const row = system.panelInfo.find(p => p.id === id)
+        expect(row!.rowText).toContain('spd:6.75')
+    })
+
+    it('护甲外观随装备同步装配与移除（换装不残留部件）', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+        const before = countMeshes(entity)
+
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            armor: {head: 'iron_helmet', chest: 'iron_plate'},
+        })
+        expect(countMeshes(entity)).toBeGreaterThan(before)
+
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {armor: {}})
+        expect(countMeshes(entity)).toBe(before)
     })
 
     it('markPlayer 后 panelInfo 立即反映玩家标记与徽标', () => {

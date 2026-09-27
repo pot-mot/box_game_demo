@@ -76,6 +76,7 @@ describe('死亡倒下（世界层按最后受击方向合成根旋转）', () =
         entity.combat.onDamageTaken?.(1, {
             sourceId: 999,
             targetId: id,
+            damageType: 'physical',
             baseAmount: 1,
             finalAmount: 1,
             skillId: 'test',

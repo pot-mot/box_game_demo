@@ -175,6 +175,59 @@ describe('validateSaveData', () => {
         }
     })
 
+    it('character 基础防御 / 护甲 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    attack: {weaponId: 'long_sword', damage: 3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        const valid = validateSaveData(characterConfig({
+            defense: {physical: 2, magic: 1},
+            armor: {head: 'iron_helmet', chest: 'iron_plate', arms: 'iron_bracers', legs: 'iron_greaves'},
+        }))
+        const e0 = valid.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.config.defense).toEqual({physical: 2, magic: 1})
+            expect(e0.config.armor).toEqual({head: 'iron_helmet', chest: 'iron_plate', arms: 'iron_bracers', legs: 'iron_greaves'})
+        }
+
+        /* 未知护甲 id 属于运行时容错范畴：校验层保留字符串，加载时由 resolveArmorLoadout 回退空槽 */
+        const unknownId = validateSaveData(characterConfig({armor: {chest: 'no_such_armor'}}))
+        const e1 = unknownId.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.armor?.chest).toBe('no_such_armor')
+        }
+
+        /* 负防御 / 非对象结构：整体回退 undefined，不抛错 */
+        expect(() => validateSaveData(characterConfig({defense: {physical: -1, magic: 0}}))).not.toThrow()
+        expect(() => validateSaveData(characterConfig({defense: 5}))).not.toThrow()
+        expect(() => validateSaveData(characterConfig({armor: {head: 42}}))).not.toThrow()
+        const invalid = validateSaveData(characterConfig({defense: 5, armor: {head: 42}}))
+        const e2 = invalid.entities[0]
+        if (e2.type === 'character') {
+            expect(e2.config.defense).toBeUndefined()
+            expect(e2.config.armor).toBeUndefined()
+        }
+    })
+
+    it('character 旧存档缺 defense / armor 字段：缺省为 undefined（运行时零防御空护甲）', () => {
+        const result = validateSaveData({entities: [{type: 'character'}]})
+        const entity = result.entities[0]
+        if (entity.type === 'character') {
+            expect(entity.config.defense).toBeUndefined()
+            expect(entity.config.armor).toBeUndefined()
+        }
+    })
+
     it('character facing 朝向角 — 可选字段，旧存档缺省时为 undefined，越界拒绝', () => {
         const withFacing = validateSaveData({entities: [{type: 'character', facing: 270}]})
         const e0 = withFacing.entities[0]

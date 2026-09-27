@@ -1,6 +1,7 @@
 import type {StateHandler} from '../types.ts'
 import {DASH_SPEED_MULTIPLIER, DASH_DURATION, SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlopeAtSpeed, applySlopeSink} from '../ground.ts'
+import {moveSpeedOf} from '../../types.ts'
 
 /** 进入冲刺时锁定的方向 */
 let dashDirX = 0
@@ -24,7 +25,7 @@ export const dashingHandler: StateHandler = {
         entity.body.wakeUp()
     },
     update: (_dt, _input, entity) => {
-        const speed = entity.config.speed * DASH_SPEED_MULTIPLIER
+        const speed = moveSpeedOf(entity) * DASH_SPEED_MULTIPLIER
         if (!projectToSlopeAtSpeed(entity, dashDirX, dashDirZ, speed, SLOPE_WALK_THRESHOLD)) {
             /* 瞬态棱法线伪影时限速投影（同 walking），防止水平速度把角色甩离近平垂直墙面 */
             if (!projectToSlopeAtSpeed(entity, dashDirX, dashDirZ, speed, SLOPE_TRANSIENT_MIN_NY)) {

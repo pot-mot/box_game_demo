@@ -49,6 +49,15 @@ describe('RANGED_WEAPON_PRESETS', () => {
         expect(RANGED_WEAPON_PRESETS[key].knockbackForce).toBeGreaterThan(0)
     })
 
+    it('法杖与魔杖为魔法武器，其余远程为物理', () => {
+        expect(RANGED_WEAPON_PRESETS.staff.damageType).toBe('magic')
+        expect(RANGED_WEAPON_PRESETS.magic_wand.damageType).toBe('magic')
+        for (const [, w] of presets) {
+            if (w.id === 'staff' || w.id === 'magic_wand') continue
+            expect(w.damageType).toBe('physical')
+        }
+    })
+
     it('shotgun 有 spreadCount=6 且 spreadAngle>0', () => {
         const s = RANGED_WEAPON_PRESETS.shotgun
         expect(s.spreadCount).toBe(6)

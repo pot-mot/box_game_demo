@@ -9,9 +9,12 @@ import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/com
 import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
 import type {AttackConfig} from '../character/archetypes.ts'
 import type {HoldMode} from '../character/weapon/hold_mode.ts'
+import type {DefenseProfile} from '../character/combat/defense.ts'
+import type {ArmorLoadout} from '../character/armor/types.ts'
 
-/** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」 */
-export const SAVE_FORMAT_VERSION = 3
+/** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」；
+ *  v4 起 character 增加基础防御 defense 与护甲装备 armor（均为可选字段，旧档加载时安全回退默认） */
+export const SAVE_FORMAT_VERSION = 4
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -121,6 +124,10 @@ export interface CharacterSaveConfig {
     }
     faction: number
     maxHealth: number
+    /** 基础防御（逐攻击类别固定减伤；缺省 = 0/0，旧存档无此字段时安全回退） */
+    defense?: DefenseProfile
+    /** 护甲装备（槽位 → 护甲 id；缺省 / 未知 id = 空槽，不抛错） */
+    armor?: ArmorLoadout
     isPlayer: boolean
     navEnabled?: boolean
 }

@@ -97,6 +97,7 @@ describe('受击闪红颜色恢复', () => {
         applyDamage(entity.combat, {
             sourceId: -1,
             targetId: id,
+            damageType: 'physical',
             baseAmount: 5,
             finalAmount: 5,
             skillId: 'test',
@@ -114,7 +115,7 @@ describe('受击闪红颜色恢复', () => {
         system.updateCharacterConfig(id, {}, undefined, 3)
         const recolored = collectColors(entity)
 
-        const hit = {sourceId: -1, targetId: id, baseAmount: 2, finalAmount: 2, skillId: 'test'}
+        const hit = {sourceId: -1, targetId: id, damageType: 'physical' as const, baseAmount: 2, finalAmount: 2, skillId: 'test'}
         applyDamage(entity.combat, hit)
         system.update(1 / 60)
         applyDamage(entity.combat, hit)

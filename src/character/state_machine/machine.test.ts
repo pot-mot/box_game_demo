@@ -213,6 +213,15 @@ describe('平地移动', () => {
         run(e.stateMachine, e, 60)
         expect(e.stateMachine.currentState).toBe('walking')
     })
+
+    it('装备移速乘数：walking 速度 = 基础移速 × 乘数', () => {
+        const e = makeMock()
+        e.combat.moveSpeedMultiplier = 0.5
+        e.stateMachine.setInput(1, 0, false, false)
+        run(e.stateMachine, e, 2)
+        expect(e.stateMachine.currentState).toBe('walking')
+        expect(getMockBody(e).linvel().x).toBeCloseTo(3, 5)
+    })
 })
 
 describe('斜坡 falling 判定', () => {

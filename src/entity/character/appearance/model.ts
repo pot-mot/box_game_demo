@@ -1,7 +1,10 @@
 import type {Group, Mesh} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import type {CharacterModel, CharacterColorPalette, WeaponEquipConfig} from './types.ts'
+import type {ResolvedArmorLoadout} from '../../../character/armor/types.ts'
+import {ARMOR_SLOTS, type ArmorSlot} from '../../../character/armor/slots.ts'
 import {createWeaponMesh, type WeaponMeshConfig, type WeaponLocalHitBox} from './weapon_mesh.ts'
+import {createArmorMesh} from './armor_mesh.ts'
 import {SELECT_PALETTE} from './constants.ts'
 import {recolorTwoFaceBoxPart, recolorHeadBoxPart, type TrackedBoxPart} from '../../../render/box_parts.ts'
 import {skeletonFromDefinition} from '../../../skeleton/anim/serialization.ts'
@@ -34,6 +37,20 @@ const requirePart = (jointParts: ReadonlyMap<string, TrackedBoxPart>, jointId: s
     const part = jointParts.get(jointId)
     if (part === undefined) throw new Error(`角色模型缺少部件 ${jointId}`)
     return part.mesh
+}
+
+/** 护甲槽位 → 挂载关节：护甲件挂在被动画驱动的关节下，自动跟随姿态（纯视觉，不参与判定） */
+const ARMOR_SLOT_JOINTS: Readonly<Record<ArmorSlot, readonly string[]>> = {
+    head: ['headNeck'],
+    chest: ['spine'],
+    arms: ['rightArmElbow', 'leftArmElbow'],
+    legs: ['leftLegHip', 'rightLegHip', 'leftLegKnee', 'rightLegKnee'],
+}
+
+/** 已装配的护甲部件（换装/释放时统一清理） */
+interface MountedArmorPart {
+    readonly group: Group
+    readonly cleanup: () => void
 }
 
 /**
@@ -101,6 +118,32 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         equipSlot(leftSlot, equipConfig.offhand)
     }
 
+    /* ── 护甲：纯视觉部件，逐槽挂到对应关节（骨架编辑后缺失的关节安全跳过） ── */
+    let mountedArmor: MountedArmorPart[] = []
+
+    const removeArmor = (): void => {
+        for (const part of mountedArmor) {
+            part.group.removeFromParent()
+            part.cleanup()
+        }
+        mountedArmor = []
+    }
+
+    const equipArmor = (loadout: ResolvedArmorLoadout): void => {
+        removeArmor()
+        for (const slot of ARMOR_SLOTS) {
+            const piece = loadout[slot]
+            if (piece === undefined) continue
+            for (const jointId of ARMOR_SLOT_JOINTS[slot]) {
+                const joint = groups.get(jointId)
+                if (joint === undefined) continue
+                const result = createArmorMesh(piece.mesh, jointId)
+                joint.add(result.group)
+                mountedArmor.push({group: result.group, cleanup: result.cleanup})
+            }
+        }
+    }
+
     /* 部件 mesh 引用（recolor 用；躯干/头/手为无骨骼段绑定部件，故从 jointParts 取） */
     const bodyMesh = requirePart(jointParts, 'spine')
     const headMesh = requirePart(jointParts, 'headNeck')
@@ -134,6 +177,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     const dispose = (): void => {
         removeWeapon()
+        removeArmor()
         appearance.cleanup()
         hierarchy.cleanup()
     }
@@ -168,6 +212,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         leftShin: leftShinMesh,
         equipWeapon,
         removeWeapon,
+        equipArmor,
+        removeArmor,
         recolor,
         get weaponMesh() { return rightSlot.hitCenter },
         get weaponTip() { return rightSlot.tip },

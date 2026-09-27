@@ -10,6 +10,11 @@ import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.t
 import {ALL_WEAPON_PRESETS, findWeaponPreset, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
+import {ARMOR_SLOTS, ARMOR_SLOT_LABELS, type ArmorSlot} from '../../../character/armor/slots.ts'
+import {armorPiecesOfSlot, findArmorPreset, resolveArmorLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf} from '../../../character/armor/catalog.ts'
+import type {ArmorLoadout, ArmorPieceConfig} from '../../../character/armor/types.ts'
+import type {DefenseProfile} from '../../../character/combat/defense.ts'
+import {DAMAGE_TYPE_LABELS} from '../../../character/combat/damage_type.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
 
 /** 下拉项：武器 id（option.value）+ 所属类型（option.dataset.weaponType，用于收窄类型） */
@@ -64,6 +69,17 @@ interface AttackFields {
 /** 数字转输入框文本（避免 3.0000000000000004 之类的浮点尾巴） */
 const formatNumber = (value: number): string => String(Number(value.toFixed(4)))
 
+/** 护甲预设 → 下拉项文案：列出非零的防御 / 攻击加成与移速修正（无任何修正时只显示名称） */
+const describeArmorPiece = (piece: ArmorPieceConfig): string => {
+    const tags: string[] = []
+    if (piece.defense.physical > 0) tags.push(`物防${piece.defense.physical}`)
+    if (piece.defense.magic > 0) tags.push(`魔防${piece.defense.magic}`)
+    if (piece.attack.physical > 0) tags.push(`物攻+${piece.attack.physical}`)
+    if (piece.attack.magic > 0) tags.push(`魔攻+${piece.attack.magic}`)
+    if (piece.moveSpeedMultiplier !== 1) tags.push(`移速×${formatNumber(piece.moveSpeedMultiplier)}`)
+    return tags.length > 0 ? `${piece.name}（${tags.join(' ')}）` : piece.name
+}
+
 /** 起手段冷却：取轻击链首段（角色的冷却覆写落在段定义上） */
 const entryCooldownOfAttacks = (attacks: WeaponAttacks): number => {
     const entryId = chainOf(attacks, 'light').entries[0]?.segmentId
@@ -89,14 +105,15 @@ const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
     if (weapon === undefined) return
     fields.atkDmg.value = formatNumber(weapon.damage)
     fields.atkCD.value = formatNumber(entryCooldownOf(weapon))
+    const damageTypeLabel = `  ·  ${DAMAGE_TYPE_LABELS[weapon.damageType]}`
     if (weapon.type === 'ranged') {
-        fields.weaponTag.textContent = [weapon.name, ...rangedModeTags(weapon)].join('  ')
+        fields.weaponTag.textContent = [weapon.name, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
         fields.atkRange.value = formatNumber(weapon.range)
         fields.bulletSpeed.value = formatNumber(weapon.projectileSpeed)
         fields.bulletKB.value = formatNumber(weapon.knockbackForce)
         fields.bulletLife.value = formatNumber(weapon.projectileLifetime)
     } else {
-        fields.weaponTag.textContent = weapon.name
+        fields.weaponTag.textContent = weapon.name + damageTypeLabel
     }
 }
 
@@ -207,8 +224,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         return {tendencyId}
     }
 
-    /* 武器下拉：近战/远程同列并按 optgroup 分组；攻击类型由所选武器决定，故不再有类型选择器 */
-    el.appendChild(createSection('Attack'))
+    /* 装备模块：武器（下拉 + 数值覆写）与护甲（四槽下拉）统一放置 */
+    el.appendChild(createSection('装备'))
     const atkRow = document.createElement('div')
     atkRow.style.cssText = 'display:flex;gap:8px;align-items:center'
     const weaponSelectLabel = document.createElement('label')
@@ -246,12 +263,76 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const bulletKB = createLabeledNumberInput(el, 'BulKnock', {min: '0', step: '0.5', value: '3'})
     const bulletLife = createLabeledNumberInput(el, 'BulLife', {min: '0.5', step: '0.5', value: '3'})
 
-    /** 攻击区字段集合（预填与回显共用） */
+    /* 攻击区字段集合（预填与回显共用） */
     const attackFields: AttackFields = {atkRange, atkDmg, atkCD, bulletSpeed, bulletKB, bulletLife, weaponTag}
 
-    el.appendChild(createSection('Health'))
+    /* 护甲下拉：首项「无」= 空槽；选项文案列出该件的防御 / 攻击加成 / 移速影响（非零项才列出） */
+    const armorSelects: Record<ArmorSlot, HTMLSelectElement> = {head: document.createElement('select'), chest: document.createElement('select'), arms: document.createElement('select'), legs: document.createElement('select')}
+    for (const slot of ARMOR_SLOTS) {
+        const row = document.createElement('div')
+        row.style.cssText = 'display:flex;gap:8px;align-items:center'
+        const label = document.createElement('label')
+        label.textContent = `${ARMOR_SLOT_LABELS[slot]} `
+        const select = armorSelects[slot]
+        select.style.cssText = 'max-width:230px'
+        const noneOption = document.createElement('option')
+        noneOption.value = ''
+        noneOption.textContent = '无'
+        select.appendChild(noneOption)
+        for (const piece of armorPiecesOfSlot(slot)) {
+            const option = document.createElement('option')
+            option.value = piece.id
+            option.textContent = describeArmorPiece(piece)
+            select.appendChild(option)
+        }
+        label.appendChild(select)
+        row.appendChild(label)
+        el.appendChild(row)
+    }
+
+    /* 属性模块：生命、基础防御与装备数值预览（有效防御 / 攻击加成 / 有效移速） */
+    el.appendChild(createSection('属性'))
     const maxHP = createLabeledNumberInput(el, 'MaxHP', {min: '1', step: '1', value: '15'})
     const curHP = createLabeledNumberInput(el, 'CurHP', {min: '0', step: '1', value: '15'})
+    const baseDefPhys = createLabeledNumberInput(el, '基础物防', {min: '0', step: '1', value: '0'})
+    const baseDefMagic = createLabeledNumberInput(el, '基础魔防', {min: '0', step: '1', value: '0'})
+    const equipmentPreviewTag = document.createElement('div')
+    equipmentPreviewTag.style.cssText = 'font-size:11px;color:#aaa;margin-bottom:4px;white-space:pre-line'
+    el.appendChild(equipmentPreviewTag)
+
+    /** 读取当前护甲选择（空 value = 空槽） */
+    const readArmorLoadout = (): ArmorLoadout => {
+        const loadout: Partial<Record<ArmorSlot, string>> = {}
+        for (const slot of ARMOR_SLOTS) {
+            const value = armorSelects[slot].value
+            if (value.length > 0) loadout[slot] = value
+        }
+        return loadout
+    }
+
+    /** 读取基础防御（负值/空值安全回退 0） */
+    const readBaseDefense = (): DefenseProfile => ({
+        physical: Math.max(0, parseFloat(baseDefPhys.value) || 0),
+        magic: Math.max(0, parseFloat(baseDefMagic.value) || 0),
+    })
+
+    /** 装备数值预览：复用目录汇总函数（与运行时 setCombatEquipment 同一口径）：有效防御 / 攻击加成 / 有效移速 */
+    const updateEquipmentPreview = (): void => {
+        const resolved = resolveArmorLoadout(readArmorLoadout())
+        const defense = totalDefenseOf(readBaseDefense(), resolved)
+        const attack = totalAttackOf(resolved)
+        const moveSpeedMultiplier = totalMoveSpeedOf(resolved)
+        const baseSpeed = parseFloat(speed.value) || 0
+        equipmentPreviewTag.textContent = [
+            `有效防御：物 ${formatNumber(defense.physical)} / 魔 ${formatNumber(defense.magic)}`,
+            `攻击加成：物 ${formatNumber(attack.physical)} / 魔 ${formatNumber(attack.magic)}`,
+            `有效移速：${formatNumber(baseSpeed * moveSpeedMultiplier)}（基础 ${formatNumber(baseSpeed)} × 装备 ${formatNumber(moveSpeedMultiplier)}）`,
+        ].join('\n')
+    }
+    for (const slot of ARMOR_SLOTS) armorSelects[slot].onchange = updateEquipmentPreview
+    baseDefPhys.oninput = updateEquipmentPreview
+    baseDefMagic.oninput = updateEquipmentPreview
+    speed.oninput = updateEquipmentPreview
 
     el.appendChild(createSection('Player'))
     const playerRow = document.createElement('div')
@@ -510,16 +591,26 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             bulletLife.value = formatNumber(attack.ranged.bulletLifetime)
         }
         const weaponPreset = findWeaponPreset(attack.weaponId)
+        const damageTypeLabel = weaponPreset === undefined ? '' : `  ·  ${DAMAGE_TYPE_LABELS[weaponPreset.damageType]}`
         weaponTag.textContent = weaponPreset === undefined
             ? ''
             : weaponPreset.type === 'ranged'
-                ? [weaponPreset.name, ...rangedModeTags(weaponPreset)].join('  ')
-                : weaponPreset.name
+                ? [weaponPreset.name, ...rangedModeTags(weaponPreset)].join('  ') + damageTypeLabel
+                : weaponPreset.name + damageTypeLabel
         /* 当前攻击段 / 连段信息（不再有槽位与连段索引） */
         const activeSegment = sel.combat.activeSegment
         attackSegmentTag.textContent = activeSegment === undefined
             ? `${sel.combat.weapon.name} · 待机`
             : `${sel.combat.weapon.name} · ${segmentDisplayName(activeSegment)}`
+
+        /* 护甲与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
+        for (const slot of ARMOR_SLOTS) {
+            const piece = findArmorPreset(sel.combat.armor[slot])
+            armorSelects[slot].value = piece !== undefined && piece.slot === slot ? piece.id : ''
+        }
+        baseDefPhys.value = formatNumber(sel.combat.baseDefense.physical)
+        baseDefMagic.value = formatNumber(sel.combat.baseDefense.magic)
+        updateEquipmentPreview()
 
         playerCheck.checked = sel.isPlayer
         peaceSelect.value = sel.peaceStrategy
@@ -623,7 +714,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
                     scale: parseFloat(scale.value),
-                }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value))
+                }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
+                    baseDefense: readBaseDefense(),
+                    armor: readArmorLoadout(),
+                })
                 const updated = getSelected()
                 if (updated) {
                     maxHP.value = String(updated.combat.maxHealth)

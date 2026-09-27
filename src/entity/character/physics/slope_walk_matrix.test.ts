@@ -99,6 +99,8 @@ const makeModelMock = (): CharacterModel => ({
     leftShin: new Mesh(),
     equipWeapon: () => {},
     removeWeapon: () => {},
+    equipArmor: () => {},
+    removeArmor: () => {},
     weaponMesh: null,
     weaponTip: null,
     weaponGroup: null,

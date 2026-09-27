@@ -1,4 +1,5 @@
 import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
+import type { DamageType } from '../combat/damage_type.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks } from './attack_chain.ts'
 import { holdAtLeast } from './attack_chain.ts'
@@ -27,6 +28,8 @@ export interface MeleeWeaponConfig {
     /** 武器中文名（面向玩家显示，如面板武器下拉、展示场景标签） */
     readonly name: string
     readonly type: 'melee'
+    /** 攻击类别（武器固有，不可被存档/面板覆写）：决定按哪一类防御结算固定减伤 */
+    readonly damageType: DamageType
     readonly damage: number
     readonly knockbackForce: number
     readonly knockbackY: number
@@ -57,6 +60,7 @@ const meleePreset = (
 export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     short_sword: meleePreset({
         id: 'short_sword', name: '短剑', type: 'melee',
+        damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 2,
         knockbackForce: 2, knockbackY: 1,
@@ -66,6 +70,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     }),
     long_sword: meleePreset({
         id: 'long_sword', name: '长剑', type: 'melee',
+        damageType: 'physical',
         /* 长剑可单持亦可双手共持（演示多持握模式：默认单持，切换双手共用同一套动作） */
         holdModes: ['one_handed', 'two_handed'],
         damage: 3,
@@ -77,6 +82,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     /* 巨剑：轻型链加长为三段（轻 1 → 轻 2 → 轻 3 循环），重链保持两段 */
     heavy_sword: meleePreset({
         id: 'heavy_sword', name: '巨剑', type: 'melee',
+        damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 8,
         knockbackForce: 8, knockbackY: 3,
@@ -89,6 +95,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     /* 长枪：轻击键增加蓄力突刺变体（长按 >= SPEAR_CHARGE_HOLD 松开触发；冷却中自动回退到轻 1 段） */
     spear: meleePreset({
         id: 'spear', name: '长枪', type: 'melee',
+        damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 5,
         knockbackForce: 4, knockbackY: 1,
@@ -109,6 +116,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
      * 攻击段副手相位错开半程（交替挥砍） */
     dual_axe: meleePreset({
         id: 'dual_axe', name: '双斧', type: 'melee',
+        damageType: 'physical',
         holdModes: ['dual_wield'],
         damage: 6,
         knockbackForce: 7, knockbackY: 2,
@@ -119,6 +127,7 @@ export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = {
     }),
     war_hammer: meleePreset({
         id: 'war_hammer', name: '战锤', type: 'melee',
+        damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 10,
         knockbackForce: 10, knockbackY: 4,
