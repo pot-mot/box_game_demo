@@ -10,7 +10,7 @@ import {
     TERRAIN_COLLISION_MASK,
 } from '../../../physics/constants.ts'
 import {type GroundState, resolveGroundState} from './ground_state.ts'
-import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
+import {categoryCollisionGroups, collisionCategoryOf} from '../../../physics/collision_category.ts'
 import {computeSeparation, separationSlopeDy} from './separation.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
@@ -278,11 +278,12 @@ export const tick = (
     jump = false,
 ): GroundState => {
     stepWorld(hw)
+    /* 与 world.ts 一致：地面检测排除角色接触（对方胶囊法线不得成为 groundNormal） */
     const contacts = queryColliderContacts(
         hw.shared.world,
         entity.mainCollider,
         hw.tracker.pairsInvolving(entity.mainCollider.handle),
-    )
+    ).filter(c => collisionCategoryOf(c.otherCollisionGroups) !== 'character')
     const next = resolveGroundState(contacts, entity.body.handle, gs, DT)
     entity.isOnGround = next.isOnGround
     entity.groundNormal = next.groundNormal
@@ -311,7 +312,7 @@ export const tickMulti = (
             hw.shared.world,
             entity.mainCollider,
             hw.tracker.pairsInvolving(entity.mainCollider.handle),
-        )
+        ).filter(c => collisionCategoryOf(c.otherCollisionGroups) !== 'character')
         const gs = resolveGroundState(contacts, entity.body.handle, states[i].gs, DT)
         entity.isOnGround = gs.isOnGround
         entity.groundNormal = gs.groundNormal

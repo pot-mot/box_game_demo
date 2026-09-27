@@ -60,6 +60,8 @@ export interface ColliderContact {
     bodyAHandle: number
     /** 对方刚体的 handle */
     bodyBHandle: number
+    /** 对方碰撞体的碰撞组（供按类别过滤，如地面检测排除角色接触） */
+    otherCollisionGroups: number
 }
 
 /**
@@ -89,6 +91,7 @@ export const queryColliderContacts = (
             normal: {x: contactShape.normal1.x, y: contactShape.normal1.y, z: contactShape.normal1.z},
             bodyAHandle: myBody.handle,
             bodyBHandle: otherBody.handle,
+            otherCollisionGroups: otherCollider.collisionGroups(),
         })
     }
     return contacts

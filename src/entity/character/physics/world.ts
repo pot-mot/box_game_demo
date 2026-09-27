@@ -42,7 +42,7 @@ import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
 import {ROTATION_SPEED, SELECT_PALETTE, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG} from '../validation.ts'
 import {CHARACTER_BASE_SIZE, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
-import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
+import {categoryCollisionGroups, collisionCategoryOf} from '../../../physics/collision_category.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import type {GroundContactLike} from './ground_state.ts'
 import {resolveGroundState} from './ground_state.ts'
@@ -672,9 +672,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const setAIEnabled = (enabled: boolean): void => { aiEnabled = enabled }
 
+    /* 地面检测排除角色接触：否则对方竖直胶囊的近水平侧面法线会成为 groundNormal，
+     * 瞬态坡面投影把水平速度转成垂直速度（翻滚撞人时表现为「跳到对方头顶」），也会误判为着地而站在对方身上 */
     const buildGroundContacts = (entity: CharacterEntity): GroundContactLike[] =>
         queryColliderContacts(world, entity.mainCollider, contactTracker.pairsInvolving(entity.mainCollider.handle))
-            .filter(c => !bodyCharMap.has(c.bodyBHandle))
+            .filter(c => collisionCategoryOf(c.otherCollisionGroups) !== 'character')
 
     const checkGround = (entity: CharacterEntity, dt: number): void => {
         const contacts = buildGroundContacts(entity)
@@ -773,26 +775,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
 
             entity.stateMachine.update(dt, entity)
-            /* EXPERIMENT: 抑制朝向其他角色的速度分量，防止深穿透触发胶囊垂直解算 */
-            {
-                const myPos = entity.body.translation()
-                const lv0 = entity.body.linvel()
-                let vx = lv0.x
-                let vz = lv0.z
-                for (const other of characters) {
-                    if (other === entity || other.combat.isDead) continue
-                    const op = other.body.translation()
-                    const nx = op.x - myPos.x
-                    const nz = op.z - myPos.z
-                    const d = Math.hypot(nx, nz)
-                    if (d > 0.3 || d < 1e-6) continue
-                    const ux = nx / d
-                    const uz = nz / d
-                    const inward = vx * ux + vz * uz
-                    if (inward > 0) { vx -= inward * ux; vz -= inward * uz }
-                }
-                if (vx !== lv0.x || vz !== lv0.z) entity.body.setLinvel({x: vx, y: lv0.y, z: vz}, true)
-            }
             /* 翻滚无敌帧视觉：材质统一效果层切换为半透明白（与受击闪红共用快照/还原） */
             materialEffects.get(entity.id)?.setInvincible(entity.combat.invincibleTimer > 0)
 

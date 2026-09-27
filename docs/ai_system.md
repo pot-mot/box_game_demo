@@ -446,6 +446,8 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 | 隐式平面回退 | 探针完全未命中任何 mesh 时，下方只剩隐式无限平面 y=0（物理地面非 mesh）：脚底到平面距离 `footY ≤ jumpHeight` 即视为可走（角色在 y=0 基础平面上不误判坑洞），超出则为真实落差（悬崖/深坑）。与旧实现（仅 `grounds.length === 0` 时回退）的区别：有地形 mesh 存在时基础平面同样可见，修复"从 terrain 跌落到 y=0 后所有方向都被判 blocked_pit"的卡死 |
 | 上坡兜底 | 上坡时探针起点位于坡面内部必然 miss，此时若正前方（hAngle=0）射线命中可行走坡面，说明地形持续向上延伸 → 视为有地面，避免误判 `blocked_pit` 导致 AI 在斜坡上无限绕行（持续 walking 不前进） |
 | 角色分离坡面补偿 | `separation.ts` 的 `separationSlopeDy()`：角色间强制分离的水平瞬移按支撑面平面方程补偿 Y（`SEPARATION_SLOPE_MIN_NY = 0.5` 以下不补偿），防止斜坡上纯水平平移把碰撞体埋进坡面（穿模 + 物理暴力弹出） |
+| 角色分离速度踢 | `CHARACTER_SEPARATION_SPEED = 8`（每边 4 m/s）：分离以 `computeSeparation()` 的位置修正为主，速度踢仅辅助防回穿；过大（旧值 24）会把对方弹飞很远 |
+| 地面检测排除角色 | `world.ts` 的 `buildGroundContacts()` 按碰撞类别过滤掉 `character` 接触（`collisionCategoryOf`）：对方竖直胶囊的近水平侧面法线若进入 `groundNormal`，瞬态坡面投影会把水平速度转成垂直速度（翻滚撞人表现为「跳到对方头顶」），也会误判为着地而站在对方身上 |
 | 战斗目标排除 | 导航传感器把「除自己以外所有角色 mesh」视为 `blocked_wall` 并绕行（用于和平态/非目标角色的互相避让）；但**当前 combat target 必须排除**，否则 AI 在贴脸前（近战攻击检测箱前缘仅 ≈0.4m，而导航前向探测距离 1.5m）就被自己的目标判为墙而绕行，表现为原地环绕目标、永不进入 `attack`（两个近战 AI 会互相绕圈直到 `chaseTimeout`）。实现：`NavRunContext.ignoredMesh`（`NavSensor.sense` 第 5 参）在 `world.ts` 每帧按 `activeFsm === 'combat' && combatTargetId` 设为目标 mesh，传感器在障碍列表与角色集合两处都跳过它；目标重叠/推挤仍由接触推挤闸门与强制分离兜底 |
 
 ### 5.7 阵营与攻击倾向
