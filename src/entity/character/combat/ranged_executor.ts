@@ -7,7 +7,7 @@ import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import type {DamageType} from '../../../character/combat/damage_type.ts'
-import {applyDamage} from '../../../character/combat/damage.ts'
+import {applyDamage, isDamageImmune} from '../../../character/combat/damage.ts'
 import {applyExplosionDamage} from '../../../character/combat/explosion.ts'
 import {resolvePhases} from '../../../character/combat/attack_phases.ts'
 import {DEFAULT_BULLET_PASS_THROUGH_CATEGORIES, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
@@ -300,7 +300,8 @@ export const createRangedExecutor = (
             bullet.mesh.position.set(bulletPos.x, bulletPos.y, bulletPos.z)
 
             /* 1) 角色命中 —— 沿用宽容半径判定（角色类别不参与形状扫描）。
-             * 命中角色即消失（角色不在可穿过类别内时）；仅敌对阵营结算伤害 / 击退 / 爆炸 */
+             * 命中角色即消失（角色不在可穿过类别内时）；仅敌对阵营结算伤害 / 击退 / 爆炸；
+             * 翻滚无敌目标视为穿过（不消耗、不结算，可命中其后目标） */
             let hit = false
             if (!maskIncludesCategory(bullet.passThroughMask, 'character')) {
                 for (const target of allCharacters) {
@@ -316,6 +317,8 @@ export const createRangedExecutor = (
                     if (dist > BULLET_HIT_RADIUS) continue
 
                     if (bullet.ownerAttackTendency(bullet.ownerFaction, target.combat.faction)) {
+                        /* 翻滚无敌帧：弹丸穿过无敌目标（不消耗、不结算伤害/击退），可命中其后目标 */
+                        if (isDamageImmune(target.combat)) continue
                         if (bullet.explosionRadius > 0) {
                             detonateAt(bullet, bulletPos.x, bulletPos.y, bulletPos.z, allCharacters)
                         } else {

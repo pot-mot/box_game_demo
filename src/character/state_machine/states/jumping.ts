@@ -60,8 +60,8 @@ export const jumpingHandler: StateHandler = {
             guard: (_input, entity) => shouldFall(entity) && entity.body.linvel().y <= 0,
         },
         {
-            to: 'dashing',
-            guard: (input, entity) => input.sprint && entity.combat.dashSkill.cooldownTimer <= 0,
+            to: 'rolling',
+            guard: (input, entity) => input.roll && entity.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',

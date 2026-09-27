@@ -4,7 +4,7 @@ import {createCharacterStateMachine} from './machine.ts'
 import type {CharacterStateMachine} from './types.ts'
 import {createWeaponRuntime, type WeaponRuntime} from '../weapon/weapon_runtime.ts'
 import {createCombatComponent} from '../combat/types.ts'
-import {DASH_COOLDOWN} from '../combat/dash_skill.ts'
+import {ROLL_COOLDOWN} from '../combat/roll_skill.ts'
 import {createTestWeaponRuntime, TEST_WEAPON_CHARGE_HOLD} from '../combat/test_weapon.ts'
 import {SPEAR_CHARGE_HOLD, SPEAR_CHARGE_THRUST_ID} from '../weapon/melee_special_moves.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
@@ -338,7 +338,7 @@ describe('falling 行为', () => {
     })
 })
 
-describe('攻击/冲刺在陡坡结束', () => {
+describe('攻击/翻滚在陡坡结束', () => {
     it('attacking 在陡坡（ny=0.4）攻击结束进入 falling', () => {
         const e = makeMock()
         e.isOnGround = true
@@ -362,26 +362,27 @@ describe('攻击/冲刺在陡坡结束', () => {
         expect(e.stateMachine.currentState).toBe('walking')
     })
 
-    it('dashing 在陡坡（ny=0.4）冲刺结束进入 falling', () => {
+    it('rolling 在陡坡（ny=0.4）翻滚结束进入 falling', () => {
         const e = makeMock()
         e.isOnGround = true
         e.groundNormal = {x: 0, y: 0.04, z: 0.999}
         e.stateMachine.setInput(1, 0, false, false, true)
         e.stateMachine.update(DT, e)
         e.stateMachine.update(DT, e)
-        expect(e.stateMachine.currentState).toBe('dashing')
-        run(e.stateMachine, e, 17)
+        expect(e.stateMachine.currentState).toBe('rolling')
+        /* 翻滚时长 0.6s → 36 帧，留余量 */
+        run(e.stateMachine, e, 40)
         expect(e.stateMachine.currentState).toBe('falling')
     })
 
-    it('dashing 在平地冲刺结束进入 walking，起手即挂冲刺冷却', () => {
+    it('rolling 在平地翻滚结束进入 walking，起手即挂翻滚冷却', () => {
         const e = makeMock()
         e.stateMachine.setInput(1, 0, false, false, true)
         e.stateMachine.update(DT, e)
         e.stateMachine.update(DT, e)
-        expect(e.stateMachine.currentState).toBe('dashing')
-        expect(e.combat.dashSkill.cooldownTimer).toBe(DASH_COOLDOWN)
-        run(e.stateMachine, e, 17)
+        expect(e.stateMachine.currentState).toBe('rolling')
+        expect(e.combat.rollSkill.cooldownTimer).toBe(ROLL_COOLDOWN)
+        run(e.stateMachine, e, 40)
         expect(e.stateMachine.currentState).toBe('walking')
     })
 })

@@ -136,9 +136,9 @@ export const attackingHandler: StateHandler = {
             guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
         },
         {
-            to: 'dashing',
+            to: 'rolling',
             guard: (input, entity) => {
-                if (!input.sprint || entity.combat.dashSkill.cooldownTimer > 0) return false
+                if (!input.roll || entity.combat.rollSkill.cooldownTimer > 0) return false
                 const segment = entity.combat.activeSegment
                 if (segment === undefined) return false
                 const phases = resolvePhases(segment.phases)

@@ -4,7 +4,7 @@ import type { WeaponConfig } from '../weapon/catalog.ts'
 import type { WeaponRuntime } from '../weapon/weapon_runtime.ts'
 import type { ArmorLoadout } from '../armor/types.ts'
 import { resolveArmorLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf } from '../armor/catalog.ts'
-import { createDashSkillRuntime, type DashSkillRuntime } from './dash_skill.ts'
+import { createRollSkillRuntime, type RollSkillRuntime } from './roll_skill.ts'
 import type { DamageEvent, DamageModifier } from './damage.ts'
 import { ZERO_PROFILE, type DefenseProfile } from './defense.ts'
 import type { DamageTypeProfile } from './damage_type.ts'
@@ -60,8 +60,13 @@ export interface CombatComponent {
     lastHitDirX: number
     lastHitDirZ: number
 
-    /** 冲刺技能（移动技能，属角色能力而非武器；冷却挡起手） */
-    dashSkill: DashSkillRuntime
+    /** 翻滚技能（移动技能，属角色能力而非武器；冷却挡起手，中段无敌帧） */
+    rollSkill: RollSkillRuntime
+    /**
+     * 无敌帧剩余时间（秒）：> 0 时 `applyDamage` 完全免疫伤害且不触发任何受击回调；
+     * 由 rolling 状态在无敌窗口内逐帧写入，退出状态清零（world 逐帧递减仅作安全网）。
+     */
+    invincibleTimer: number
 
     faction: Faction
     attackTendency: AttackTendency
@@ -132,7 +137,8 @@ export const createCombatComponent = (
     flinchImmunityTimer: 0,
     lastHitDirX: 0,
     lastHitDirZ: 0,
-    dashSkill: createDashSkillRuntime(),
+    rollSkill: createRollSkillRuntime(),
+    invincibleTimer: 0,
     faction,
     attackTendency,
     tendencyConfig,

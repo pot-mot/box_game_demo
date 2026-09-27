@@ -1,7 +1,7 @@
 import {v3Set, v3Length, type RapVector3} from '../../physics/rapier_utils.ts'
 import type {CharacterEntity} from '../types.ts'
 import type {DamageType} from './damage_type.ts'
-import {applyDamage} from './damage.ts'
+import {applyDamage, isDamageImmune} from './damage.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -20,6 +20,8 @@ export const applyExplosionDamage = (
     for (const target of allCharacters) {
         if (target.id === sourceEntity.id || target.combat.isDead) continue
         if (!sourceEntity.combat.attackTendency(sourceEntity.combat.faction, target.combat.faction)) continue
+        /* 翻滚无敌帧：完全免疫爆炸 —— 不伤害、不径向击退 */
+        if (isDamageImmune(target.combat)) continue
 
         const tPos = target.body.translation()
         v3Set(_dir, tPos.x - centerX, tPos.y - centerY, tPos.z - centerZ)

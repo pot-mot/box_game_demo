@@ -46,7 +46,7 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         expect(labels).toContain('跳跃')
         expect(labels).toContain('下落')
         expect(labels).toContain('死亡')
-        expect(labels).toContain('冲刺')
+        expect(labels).toContain('翻滚')
         expect(labels).toContain('受击硬直')
     })
 

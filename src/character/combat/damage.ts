@@ -24,6 +24,14 @@ export interface DamageEvent {
 export type DamageModifier = (event: DamageEvent) => DamageEvent
 
 /**
+ * 目标当前是否处于伤害免疫（翻滚无敌帧）：`applyDamage` 据此完全免疫；
+ * 三条命中路径（近战 / 远程 / 爆炸）也用它跳过击退、命中反馈与命中消耗，
+ * 保证「无敌」在伤害与物理反馈上语义一致。
+ */
+export const isDamageImmune = (target: { readonly invincibleTimer?: number }): boolean =>
+    (target.invincibleTimer ?? 0) > 0
+
+/**
  * 统一伤害应用 — 遍历 modifier → 按目标对应类别防御固定减伤 → 扣血 → 触发回调（不设 isDead，由状态机 dying 处理）。
  * 结算顺序：修饰器 → 防御（最后一步，不可被修饰器绕过）；
  * `baseAmount` 始终保持原始伤害，`finalAmount` 为实际扣血值（最小 1 点）。
@@ -34,12 +42,18 @@ export const applyDamage = (
         maxHealth: number
         /** 有效防御（缺省 = 不结算防御减伤；仅测试替身可不填） */
         readonly defense?: DefenseProfile
+        /** 无敌帧剩余时间（秒，翻滚移动技能）：> 0 时完全免疫伤害，可选（仅测试替身可不填） */
+        readonly invincibleTimer?: number
         readonly damageModifiers?: readonly DamageModifier[]
         onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
         onDeath: (() => void) | null
     },
     event: DamageEvent,
 ): DamageEvent => {
+    /* 无敌帧：不扣血、不触发受击回调（闪红 / 硬直 / 仇恨均不发生），也不判定死亡 */
+    if (isDamageImmune(target)) {
+        return {...event, finalAmount: 0}
+    }
     let finalEvent = event
     if (target.damageModifiers) {
         for (const mod of target.damageModifiers) {

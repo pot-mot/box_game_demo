@@ -14,7 +14,7 @@ import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {computeSeparation, separationSlopeDy} from './separation.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
-import {createDashSkillRuntime} from '../../../character/combat/dash_skill.ts'
+import {createRollSkillRuntime} from '../../../character/combat/roll_skill.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {CHARACTER_BASE_SIZE, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
@@ -123,7 +123,8 @@ export const makeChar = (
             segmentCooldowns: new Map(),
             activeSegment: undefined,
             bufferedSegment: undefined,
-            dashSkill: createDashSkillRuntime(),
+            rollSkill: createRollSkillRuntime(),
+            invincibleTimer: 0,
             attackActive: false,
             attackTimer: 0,
             attackedTargets: new Set(),

@@ -51,7 +51,7 @@ import {getSkillExecutor, registerSkillExecutor} from '../../../character/combat
 import {attackDetectOBB, createMeleeExecutor, targetHitBoxHalves, testAttackDetect} from '../combat/melee_executor.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
-import {createDamageFlash} from '../combat_vfx/damage_flash.ts'
+import {createMaterialEffects} from '../combat_vfx/material_effects.ts'
 import {type AttackHitBoxes, createAttackHitBoxes, syncWeaponDebugBox} from '../combat_vfx/hitbox_debug.ts'
 import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP} from '../ai/constants.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
@@ -59,6 +59,7 @@ import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {cleanupWireframe, createWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
 import {phaseDurationOf, resolvePhases} from '../../../character/combat/attack_phases.ts'
+import {rollSpinProgress} from '../../../character/combat/roll_skill.ts'
 
 /** Rapier 带 body/bodyHandle 反查的超类型 */
 type CharacterRigidBody = RAPIER.RigidBody
@@ -76,6 +77,13 @@ const _deathFallAxis = new Vector3()
 const _deathFallQuat = new Quaternion()
 const _deathYawQuat = new Quaternion()
 const _upAxis = new Vector3(0, 1, 0)
+
+/** 翻滚根旋转合成复用对象（朝向 × 本地前滚翻自转，并绕身体中心做位置补偿，避免每帧分配） */
+const _rollAxis = new Vector3(1, 0, 0)
+const _rollSpinQuat = new Quaternion()
+const _rollYawQuat = new Quaternion()
+const _rollPivot = new Vector3()
+const _rollOffset = new Vector3()
 
 /** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写；test_weapon 走测试专用链） */
 const weaponRuntimeOf = (attack: AttackConfig, holdMode?: HoldMode): WeaponRuntime => {
@@ -142,7 +150,7 @@ const factionBadgeColor = (faction: number, isPlayer: boolean): string => {
 export interface CharacterEntitySystem extends EntityInfoSource {
     markPlayer: (id: number) => void
     unmarkPlayer: () => void
-    setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, sprint?: boolean) => void
+    setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean) => void
     setPlayerAttack: (attackKey?: AttackKey, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
     getPlayerCharacter: () => CharacterEntity | undefined
     getHostileTo: (faction: number) => CharacterEntity[]
@@ -201,7 +209,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let playerDx = 0
     let playerDz = 0
     let playerJump = false
-    let playerSprint = false
+    let playerRoll = false
     let playerForwardX = 0
     let playerForwardZ = 1
 
@@ -245,8 +253,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
     /** 追踪当前激活的近战攻击（用于 start/end 生命周期） */
     const activatedAttacks = new Set<number>()
-    /** 受击闪红状态 */
-    const flashStates = new Map<number, ReturnType<typeof createDamageFlash>>()
+    /** 材质表面效果（受击闪红 + 翻滚无敌半透明白） */
+    const materialEffects = new Map<number, ReturnType<typeof createMaterialEffects>>()
     const noopExecCtx: import('../../../character/combat/executor.ts').ExecutorContext = {
         fireProjectile: () => {},
     }
@@ -398,11 +406,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
          * placeDebugBoxes 接收的是物理中心坐标 */
         placeDebugBoxes(entity, x, y + halfH, z, 0)
 
-        const flash = createDamageFlash(entity)
-        flashStates.set(entity.id, flash)
-        const originalOnDamage = flash.onDamage
+        const effects = createMaterialEffects(entity)
+        materialEffects.set(entity.id, effects)
         entity.combat.onDamageTaken = (amount: number, event) => {
-            originalOnDamage(amount)
+            effects.onDamage(amount)
             /* 记录冲击方向（死亡倒向依据）：伤害事件携带世界水平单位向量，仅在有效方向时覆盖旧值 */
             if (event.dirX !== undefined && event.dirZ !== undefined && (event.dirX !== 0 || event.dirZ !== 0)) {
                 entity.combat.lastHitDirX = event.dirX
@@ -586,7 +593,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         characters.splice(idx, 1)
         aiMap.delete(id)
         aiTargetDirs.delete(id)
-        flashStates.delete(id)
+        materialEffects.delete(id)
 
         const pi = panelInfos.findIndex(p => p.id === id)
         if (pi !== -1) panelInfos.splice(pi, 1)
@@ -598,11 +605,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const getEntityList = (): Array<{id: number; mesh: Mesh}> => characters.map(c => ({id: c.id, mesh: c.mesh}))
     const getAll = (): readonly CharacterEntity[] => characters
 
-    const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, sprint?: boolean): void => {
+    const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean): void => {
         playerDx = dx
         playerDz = dz
         playerJump = jump
-        playerSprint = sprint ?? false
+        playerRoll = roll ?? false
         playerForwardX = forwardX
         playerForwardZ = forwardZ
     }
@@ -664,9 +671,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
             /* 段冷却逐帧递减（只挡起手，链推进不查冷却） */
             tickSegmentCooldowns(entity.combat, dt)
-            entity.combat.dashSkill.cooldownTimer = Math.max(0, entity.combat.dashSkill.cooldownTimer - dt)
+            entity.combat.rollSkill.cooldownTimer = Math.max(0, entity.combat.rollSkill.cooldownTimer - dt)
             entity.combat.flinchImmunityTimer = Math.max(0, entity.combat.flinchImmunityTimer - dt)
-            flashStates.get(entity.id)?.tick(dt)
+            /* 无敌帧计时安全网：rolling 状态在窗口内每帧重算，退出状态已清零；此处递减兜底异常残留 */
+            entity.combat.invincibleTimer = Math.max(0, entity.combat.invincibleTimer - dt)
+            materialEffects.get(entity.id)?.tick(dt)
             checkGround(entity, dt)
 
             const aiCtx = aiMap.get(entity.id)
@@ -719,7 +728,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 })
             } else if (entity.isPlayer) {
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerSprint, playerAttackKey, playerAttackHoldDuration)
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration)
                 if (playerAttackPending) {
                     entity.combat.attackDirX = playerForwardX
                     entity.combat.attackDirZ = playerForwardZ
@@ -727,6 +736,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
 
             entity.stateMachine.update(dt, entity)
+            /* 翻滚无敌帧视觉：材质统一效果层切换为半透明白（与受击闪红共用快照/还原） */
+            materialEffects.get(entity.id)?.setInvincible(entity.combat.invincibleTimer > 0)
 
             const model = appearanceModels.get(entity.id)
             const sys = appearanceSystems.get(entity.id)
@@ -760,11 +771,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const vx = entity.body.linvel().x
                 const vz = entity.body.linvel().z
                 const currentAngle = facingAngles.get(entity.id) ?? 0
+                const isRolling = entity.stateMachine.currentState === 'rolling'
 
                 let targetAngle: number
                 if (entity.isPlayer) {
                     const inputLen = Math.hypot(playerDx, playerDz)
-                    if (inputLen > VELOCITY_DIR_THRESHOLD) {
+                    if (isRolling) {
+                        /* 翻滚期间朝向锁定翻滚方向：输入转向不改变朝向，避免边滚边原地打转 */
+                        targetAngle = Math.atan2(entity.combat.rollSkill.dirX, entity.combat.rollSkill.dirZ)
+                    } else if (inputLen > VELOCITY_DIR_THRESHOLD) {
                         targetAngle = Math.atan2(playerDx, playerDz)
                     } else {
                         targetAngle = currentAngle
@@ -799,6 +814,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     } else {
                         model.group.rotation.set(0, newAngle, 0)
                     }
+                } else if (isRolling) {
+                    /* 翻滚前滚翻：clip 只含蜷缩姿态，根自转由状态驻留时间推导（同死亡倒地由 world 合成）；
+                     * 根原点在脚底，绕身体中心自转需位置补偿 `center − Q·center`，否则会绕脚底划大圈 */
+                    _rollSpinQuat.setFromAxisAngle(_rollAxis, Math.PI * 2 * rollSpinProgress(
+                        entity.stateMachine.stateTime,
+                        entity.combat.rollSkill.config.duration,
+                    ))
+                    _rollYawQuat.setFromAxisAngle(_upAxis, newAngle)
+                    model.group.quaternion.copy(_rollYawQuat).multiply(_rollSpinQuat)
+                    _rollPivot.set(0, originToCenterY(entity.config), 0)
+                    _rollOffset.copy(_rollPivot).applyQuaternion(model.group.quaternion)
+                    model.group.position.add(_rollPivot).sub(_rollOffset)
                 } else {
                     /* 运行时朝向仅绕 Y（清除编辑态可能残留的 X/Z 视觉倾斜） */
                     model.group.rotation.set(0, newAngle, 0)
@@ -986,7 +1013,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         playerAttackPending = false
         playerAttackHoldDuration = 0
         playerJump = false
-        playerSprint = false
+        playerRoll = false
 
         rangedExecutor.updateBullets(dt, characters)
 

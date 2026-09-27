@@ -272,6 +272,47 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         expect(targetCombat.health).toBe(15 - 6)
     })
 
+    it('翻滚无敌帧目标不算命中（不伤害/不消耗/无打击反馈），无敌结束后同一窗口内仍可命中', () => {
+        const runtime = createWeaponRuntime('war_hammer')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        combat.activeSegment = runtime.attacks.segments['war_hammer_light_1']
+        const attacker = makeEntity()
+        attacker.combat = combat
+
+        const targetCombat = createCombatComponent(
+            createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
+        )
+        targetCombat.invincibleTimer = 0.3
+        const target = makeEntity()
+        target.id = 2
+        target.combat = targetCombat
+
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: new Group(),
+            weaponHitBox: local,
+            offhandWeaponGroup: null,
+            offhandWeaponHitBox: null,
+        } as unknown as CharacterModel
+
+        const onHit = vi.fn()
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0, onHit)
+        executor.setHitWindow(true)
+
+        /* 无敌：不扣血、不写 attackedTargets、不触发打击反馈 */
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        expect(targetCombat.health).toBe(15)
+        expect(combat.attackedTargets.has(2)).toBe(false)
+        expect(onHit).not.toHaveBeenCalled()
+
+        /* 无敌结束（仍在同一命中窗口）：正常结算 */
+        targetCombat.invincibleTimer = 0
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        expect(targetCombat.health).toBeLessThan(15)
+        expect(combat.attackedTargets.has(2)).toBe(true)
+        expect(onHit).toHaveBeenCalled()
+    })
+
     it('装备攻击加成计入近战伤害：仅与武器类别匹配时生效', () => {
         const runtime = createWeaponRuntime('war_hammer')
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)

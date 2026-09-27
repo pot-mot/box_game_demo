@@ -118,9 +118,9 @@ src/
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
 │   ├── weapon/                  # 武器模组（固有属性 + 持握模式 hold_mode / 攻击链：attack_chain（含段→pose 组合 SegmentPoseLayer）/ melee_attacks / ranged_attacks / catalog / weapon_runtime / attack_clip_data（基础关键帧）/ attack_pose_edits（逐段姿势修订））
-│   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害/攻击类别与防御、冲刺）
+│   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害/攻击类别与防御、翻滚技能与无敌帧）
 │   ├── armor/                   # 护甲领域模型（四槽位 slots / 预设 armor_pieces（防御·攻击加成·移速）/ 目录与装备表校验 catalog / 类型 types）
-│   └── state_machine/states/    # idle / walking / jumping / falling / attacking（段子状态机）/ dying / dashing / flinching
+│   └── state_machine/states/    # idle / walking / jumping / falling / attacking（段子状态机）/ dying / rolling（翻滚，中段无敌帧）/ flinching
 ├── entity/
 │   ├── character/               # 角色实体
 │   │   ├── skeleton/            # 角色骨架定义（人形预设 preset.ts + PRESET_PART_SIZES + preset_appearance.ts，引用 entity/skeleton）
@@ -199,3 +199,5 @@ src/
 - 新增碰撞体必须显式 `setCollisionGroups`，并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注碰撞类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）——投掷物的「可穿过类别」判定依赖类别位；类别位从 membership 第 5 位起，不参与交互，但未声明碰撞组的碰撞体 membership 全 1，会被解析为 `ground` 并挡下子弹（fail-closed）
 - 伤害事件 `DamageEvent.damageType` 必填（武器固有：近战/远程直取当前武器、爆炸继承所属武器）；新增伤害路径漏填即编译报错。防御力在 `applyDamage` 内、`damageModifiers` 之后按类别固定减免（`max(MIN_DAMAGE=1, 伤害 − defense[damageType])`，低于 1 点的原始伤害保持原值），禁止在别处重复减伤
 - 护甲（`character/armor/`，四槽位 head/chest/arms/legs）提供逐类别防御、逐类别攻击加成与移速乘数：`armor`（槽位 → 护甲 id）与 `defense`（基础逐类别防御）是存档可选字段，未知 id / 槽位不匹配一律回退空槽；`CombatComponent` 的 `setCombatEquipment` 统一重算有效防御 / `attackBonus` / `moveSpeedMultiplier`（攻击加成在攻击侧并入近战/远程伤害，仅与武器类别匹配才计入；状态机移速一律走 `moveSpeedOf(entity)`，禁止在面板或状态机里对 `config.speed` 预乘装备系数）；护甲件是关节下的纯视觉子节点，不建碰撞体、不进 `getMeshes()`，不影响受击箱 / 视线 / 导航
+- 翻滚与死亡的全身体根旋转都由 `world.ts` 合成：基础 clip 不写根关节自转（`rollingPose` 只表达抱团蜷缩），否则根原点在脚底会绕脚底划大圈/沉入地面；翻滚中段无敌帧由 `states/rolling.ts` 在窗口内逐帧写 `combat.invincibleTimer`（`exit` 清零），免疫判定统一走 `damage.ts` 的 `isDamageImmune(target)`（`applyDamage` 顶部短路，先于 modifier/防御，不触发任何受击回调），新增伤害路径不得绕过；三条命中路径也用它跳过击退与命中反馈——近战不写 `attackedTargets`/不 `onHit`（无敌结束后同一命中窗口内仍可命中）、远程弹丸穿过无敌目标不消耗、爆炸跳过该目标
+- 角色材质表面效果（受击闪红 / 翻滚无敌半透明白）统一走 `entity/character/combat_vfx/material_effects.ts`（惰性快照 → 按优先级覆写 → 全部结束统一还原；闪红优先于闪白，`transparent` 仅在真正变化时置 `needsUpdate`），禁止在别处直接改角色模型材质颜色/透明度或另建快照还原逻辑

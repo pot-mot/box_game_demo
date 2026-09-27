@@ -17,7 +17,7 @@ export interface AttackPhase {
     readonly durationRatio: number
     /** 移速倍率：0 = 完全定身，1 = 全速移动 */
     readonly moveSpeedMultiplier: number
-    /** 是否可被 dash / jump 打断（combo 输入走段末缓冲，不受此限制） */
+    /** 是否可被翻滚 / 跳跃打断（combo 输入走段末缓冲，不受此限制） */
     readonly cancellable: boolean
 }
 

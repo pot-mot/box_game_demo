@@ -397,7 +397,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 - 三态：**自动**（默认）/ **无武器** / 手动指定某把武器（近战、远程分组）。自动模式的解析规则（`resolveAutoWeapon`）：
   - 动画带武器来源（内置攻击动作及其载入的副本）→ 装备该武器（双手状态按该段 `twoHanded` 判定）；
   - 基础状态**空手**变体（`weaponHeld === false`，如「待机（空手）」）→ 卸下武器（仍记住上次使用的武器）；
-  - 其余（「待机（持械）」、跳跃/下落/死亡/冲刺/受击、自定义动画）→ **保留当前（或上次）武器**；进入编辑器时尚无当前武器则回退默认武器 `long_sword` —— 保证**一进编辑器就有武器可编辑**，不会出现「武器没出来」；
+  - 其余（「待机（持械）」、跳跃/下落/死亡/翻滚/受击、自定义动画）→ **保留当前（或上次）武器**；进入编辑器时尚无当前武器则回退默认武器 `long_sword` —— 保证**一进编辑器就有武器可编辑**，不会出现「武器没出来」；
 - 装载复用生产装配：`createWeaponMesh`（`entity/character/appearance/weapon_mesh.ts`，固有握持已烘焙进模型）保证编辑器看到的握持与游戏一致；切换武器/锚点/退出编辑器时在 `dispose()` 中释放几何与材质；
 - **双手贴合（可选，默认关）**：控制条「左手贴合：关/开」按钮（`#bone-grip-toggle`）。
   - **关闭（默认）**：编辑器与预览全程**零耦合**——装载/切换武器、拖动任意关节（含两个武器挂点）都只影响该关节子树，绝不会牵扯另一只手；左臂完全由动画驱动或由你手动摆姿。
@@ -578,7 +578,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | **M1 领域层** | `skeleton/`（joint/bone/skeleton/ik/transition/anim 全模块）+ 全部领域单元测试 | 领域测试全绿，`pnpm type-check` 通过 |
 | **M2 实体层** | `entity/skeleton/`（渲染映射：领域 FK 缓存为唯一世界变换源、外观部件装载、面板、预设骨架）+ 桥接测试 | 桥接测试全绿 |
 | **M3 编辑模式** | `modes/bone_edit/`（视窗交互 + 全功能时间轴 + undo/redo + 导入导出）+ 相机模块提取 `modes/camera_common.ts` + 启动屏第 4 按钮 + 相机存档扩展 + e2e | e2e 全绿 |
-| **M4a 桥接与基础动画** | 骨架桥接（Group ↔ Skeleton）、idle/walking/jumping/falling/dying/dashing/flinching clip 化、外观系统改 clip 调度器 | 基础状态动画 clip 驱动，快照回归通过 |
+| **M4a 桥接与基础动画** | 骨架桥接（Group ↔ Skeleton）、idle/walking/jumping/falling/dying/rolling/flinching clip 化、外观系统改 clip 调度器 | 基础状态动画 clip 驱动，快照回归通过 |
 | **M4b 攻击与命中** | 攻击 clip（strike_peak、全量烘焙）、事件轨道命中窗口迁移、executor 改造（播放器先于 executor.update） | 命中窗口时间区间与旧实现一致、无帧量化漏空，伤害行为不变 |
 | **M4c 接入与补全** | play/showcase 全量接入、行走/攻击变速对齐、双手 IK、`AnimationContext` 字段清理 | §8.6 验收标准全部满足 |
 | **M5 文档收尾** | 更新本文档为最终实现文档；同步 `attack_system.md`、`showcase.md`、`AGENTS.md` | 文档与实现一致 |

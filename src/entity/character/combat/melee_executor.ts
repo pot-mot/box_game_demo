@@ -2,7 +2,7 @@ import {v3Set, type RapVector3} from '../../../physics/rapier_utils.ts'
 import {Vector3, type Group} from 'three'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
-import {applyDamage} from '../../../character/combat/damage.ts'
+import {applyDamage, isDamageImmune} from '../../../character/combat/damage.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from './obb.ts'
@@ -176,6 +176,10 @@ export const createMeleeExecutor = (
                 const tz = tTrans.z
 
                 if (!testMeleeHit(elements, local.center, local.half, tTrans, target.config.scale, getFacingAngle(target.id))) continue
+
+                /* 翻滚无敌帧：不算命中 —— 不写 attackedTargets、不击退、不触发打击反馈（顿帧/震动）；
+                 * 无敌结束后只要仍在命中窗口内，同一段仍可命中该目标 */
+                if (isDamageImmune(target.combat)) continue
 
                 /* 冲击方向 = 武器握把 → 目标（水平）：伤害事件携带（死亡倒向依据）并与击退共用 */
                 v3Set(_tmpVec, tx - wx, 0, tz - wz)

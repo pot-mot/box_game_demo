@@ -23,8 +23,9 @@ export const setupPlayerKeyboard = (
         if (input.isActionActive('move_left')) { dx -= right.x; dz -= right.z }
         if (input.isActionActive('move_right')) { dx += right.x; dz += right.z }
 
-        const sprinting = input.wasActionPressed('sprint')
+        /* 移动技能键：动作 id 保留 sprint（兼容既有键位存档），语义为翻滚 */
+        const rolling = input.wasActionPressed('sprint')
         const jumped = input.wasActionPressed('jump')
-        characterSystem.setPlayerMove(dx, dz, jumped, forward.x, forward.z, sprinting)
+        characterSystem.setPlayerMove(dx, dz, jumped, forward.x, forward.z, rolling)
     }
 }

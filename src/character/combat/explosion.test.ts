@@ -4,9 +4,18 @@ import {applyExplosionDamage} from './explosion.ts'
 import {createCombatComponent} from './types.ts'
 import {createWeaponRuntime} from '../weapon/weapon_runtime.ts'
 
-/** 构造最低限度 CharacterEntity mock */
-const makeMock = (id: number, x: number, y: number, z: number, hp: number, faction: number, isDead: boolean): Parameters<typeof applyExplosionDamage>[7] => {
-    /* 战斗组件走生产工厂（武器运行时 + 阵营 + 倾向）；本用例只消费 health / 阵营判定 */
+/** 构造最低限度 CharacterEntity mock（overrides：无敌帧计时 / 冲量回调） */
+const makeMock = (
+    id: number,
+    x: number,
+    y: number,
+    z: number,
+    hp: number,
+    faction: number,
+    isDead: boolean,
+    overrides?: { readonly invincibleTimer?: number; readonly onImpulse?: () => void },
+): Parameters<typeof applyExplosionDamage>[7] => {
+    /* 战斗组件走生产工厂（武器运行时 + 阵营 + 倾向）；本用例只消费 health / 阵营判定 / 无敌帧 */
     const combat = createCombatComponent(
         createWeaponRuntime('long_sword'),
         faction,
@@ -15,6 +24,7 @@ const makeMock = (id: number, x: number, y: number, z: number, hp: number, facti
         hp,
     )
     combat.isDead = isDead
+    combat.invincibleTimer = overrides?.invincibleTimer ?? 0
 
     return {
         id,
@@ -23,7 +33,7 @@ const makeMock = (id: number, x: number, y: number, z: number, hp: number, facti
         body: {
             translation: () => ({x, y, z}),
             linvel: () => ({x: 0, y: 0, z: 0}),
-            applyImpulseAtPoint: () => {},
+            applyImpulseAtPoint: () => { overrides?.onImpulse?.() },
             wakeUp: () => {},
             handle: id,
         } as unknown as Parameters<typeof applyExplosionDamage>[7]['body'],
@@ -81,6 +91,18 @@ describe('applyExplosionDamage', () => {
         applyExplosionDamage(0, 0, 0, 3, 10, 'physical', 5, src, [t1, t2])
         expect(t1.combat.health).toBeLessThan(50)
         expect(t2.combat.health).toBeLessThan(50)
+    })
+
+    it('翻滚无敌帧目标完全免疫：不伤害、不径向击退', () => {
+        const src = makeMock(1, 0, 0, 0, 100, 0, false)
+        let impulses = 0
+        const target = makeMock(2, 0.1, 0, 0, 50, 1, false, {
+            invincibleTimer: 0.3,
+            onImpulse: () => { impulses++ },
+        })
+        applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
+        expect(target.combat.health).toBe(50)
+        expect(impulses).toBe(0)
     })
 
     it('最小伤害不小于 1', () => {

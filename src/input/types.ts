@@ -9,6 +9,7 @@ export const INPUT_ACTIONS = [
     'move_up',
     'move_down',
     'jump',
+    /* 移动技能（翻滚）：动作 id 保留 sprint 以兼容既有键位存档 */
     'sprint',
     'cycle_spawn_up',
     'cycle_spawn_down',
@@ -38,7 +39,7 @@ export const ACTION_LABELS: Record<InputAction, string> = {
     move_up: '上升',
     move_down: '下降',
     jump: '跳跃',
-    sprint: '冲刺',
+    sprint: '翻滚',
     cycle_spawn_up: '上一个生成类型',
     cycle_spawn_down: '下一个生成类型',
     delete_entity: '删除实体',

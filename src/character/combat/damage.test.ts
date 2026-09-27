@@ -91,6 +91,37 @@ describe('applyDamage 防御结算', () => {
         expect(result.skillId).toBe('spear_light_1')
         expect(result.finalAmount).toBe(9)
     })
+
+    it('翻滚无敌帧（invincibleTimer > 0）完全免疫：不扣血、不触发受击回调、不判死', () => {
+        let taken = 0
+        let died = false
+        const target = {
+            health: 1,
+            maxHealth: 100,
+            invincibleTimer: 0.2,
+            onDamageTaken: () => { taken++ },
+            onDeath: () => { died = true },
+        }
+        const result = applyDamage(target, makeEvent())
+        expect(result.finalAmount).toBe(0)
+        expect(target.health).toBe(1)
+        expect(taken).toBe(0)
+        expect(died).toBe(false)
+    })
+
+    it('无敌计时归零后恢复结算（含防御减伤）', () => {
+        const target = {
+            health: 100,
+            maxHealth: 100,
+            invincibleTimer: 0,
+            defense: {physical: 3, magic: 0},
+            onDamageTaken: null,
+            onDeath: null,
+        }
+        const result = applyDamage(target, makeEvent())
+        expect(result.finalAmount).toBe(7)
+        expect(target.health).toBe(93)
+    })
 })
 
 describe('防御工具函数', () => {

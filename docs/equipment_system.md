@@ -136,12 +136,18 @@ export const applyDamage = (
         maxHealth: number
         /** 有效防御（缺省不结算防御减伤；测试 mock 可不填） */
         readonly defense?: DefenseProfile
+        /** 无敌帧剩余时间（秒，翻滚中段）：> 0 时完全免疫，测试 mock 可不填 */
+        readonly invincibleTimer?: number
         readonly damageModifiers?: readonly DamageModifier[]
         onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
         onDeath: (() => void) | null
     },
     event: DamageEvent,
 ): DamageEvent => {
+    /* 翻滚无敌帧：先于一切结算直接免疫（不扣血 / 不回调 / 不判死，见 attack_system.md §3.7） */
+    if ((target.invincibleTimer ?? 0) > 0) {
+        return {...event, finalAmount: 0}
+    }
     let finalEvent = event
     if (target.damageModifiers) {
         for (const mod of target.damageModifiers) finalEvent = mod(finalEvent)
@@ -214,7 +220,7 @@ export const moveSpeedOf = (entity: CharacterEntity): number =>
     entity.config.speed * entity.combat.moveSpeedMultiplier
 ```
 
-`walking` / `jumping` / `falling`（含最大速度钳制）/ `dashing` / `attacking` 默认阶段行为的移动速度全部改读 `moveSpeedOf(entity)`。
+`walking` / `jumping` / `falling`（含最大速度钳制）/ `rolling` / `attacking` 默认阶段行为的移动速度全部改读 `moveSpeedOf(entity)`。
 - 所有直接构造 `CombatComponent` 的测试夹具（`physics/harness.ts`、`ai/ai.test.ts`、`ai/nav/nav.test.ts`）补五个字段。
 
 ---
@@ -444,14 +450,14 @@ armor?: {head?: string; chest?: string; arms?: string; legs?: string}
 | `src/character/combat/explosion.ts` | `damageType` 参数 |
 | `src/character/combat/types.ts` | `baseDefense` / `armor` / `defense` / `attackBonus` / `moveSpeedMultiplier` + `setCombatEquipment` |
 | `src/character/types.ts` | `moveSpeedOf`（有效移速统一入口） |
-| `src/character/state_machine/states/` | `walking` / `jumping` / `falling` / `dashing` / `attacking` 改读 `moveSpeedOf` |
+| `src/character/state_machine/states/` | `walking` / `jumping` / `falling` / `rolling` / `attacking` 改读 `moveSpeedOf` |
 | `src/character/weapon/melee_weapon.ts` / `ranged_weapon.ts` | 全部预设补 `damageType` |
 | `src/entity/character/combat/melee_executor.ts` / `ranged_executor.ts` | 命中路径填 `damageType`；伤害计入攻击加成 |
 | `src/entity/character/appearance/types.ts` / `model.ts` | `equipArmor` / `removeArmor` + 四槽位关节映射 |
 | `src/entity/character/physics/world.ts` | spawn/add/面板提交接线、行文本（def + 有效移速） |
 | `src/entity/character/ui/panel.ts` | 护甲与防御区（四下拉 + 防御/攻击/移速预览） |
 | `src/save_load/types.ts` / `validation.ts` / `serialize.ts` | 存档字段与 v4（armor 含 arms） |
-| 测试夹具 | `physics/harness.ts`、`ai/ai.test.ts`、`ai/nav/nav.test.ts` 补 combat 字段；`physics/death_fall.test.ts`、`combat_vfx/damage_flash.test.ts` 等补伤害事件 `damageType` |
+| 测试夹具 | `physics/harness.ts`、`ai/ai.test.ts`、`ai/nav/nav.test.ts` 补 combat 字段；`physics/death_fall.test.ts`、`combat_vfx/material_effects.test.ts` 等补伤害事件 `damageType` |
 | `docs/attack_system.md`、`AGENTS.md` | 实施收尾同步（第五节伤害链路、结构/陷阱/文档表） |
 
 ---

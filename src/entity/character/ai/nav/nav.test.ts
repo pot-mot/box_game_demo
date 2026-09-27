@@ -7,7 +7,7 @@ import {STUCK_ESCAPE_DURATION, STUCK_ESCAPE_MAX_RETRIES} from './constants.ts'
 import type {NavSensor, NavRunContext, NavConfig} from './types.ts'
 import type {CharacterEntity} from '../../../../character/types.ts'
 import {createWeaponRuntime} from '../../../../character/weapon/weapon_runtime.ts'
-import {createDashSkillRuntime} from '../../../../character/combat/dash_skill.ts'
+import {createRollSkillRuntime} from '../../../../character/combat/roll_skill.ts'
 import type {CombatComponent} from '../../../../character/combat/types.ts'
 import {CHARACTER_BASE_SIZE} from '../../constants.ts'
 
@@ -46,7 +46,8 @@ const createCombatStub = (): CombatComponent => {
         phaseTimer: 0,
         pendingFlinch: false,
         flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
-        dashSkill: createDashSkillRuntime(),
+        rollSkill: createRollSkillRuntime(),
+        invincibleTimer: 0,
         faction: 0,
         attackTendency: () => false,
         tendencyConfig: {tendencyId: 'hostileExceptSelf'},

@@ -62,7 +62,7 @@ export interface AttackPhase {
     readonly durationRatio: number
     /** 移速倍率：0 = 完全定身，1 = 全速移动 */
     readonly moveSpeedMultiplier: number
-    /** 是否可被 dash / jump 打断（combo 输入走段末缓冲，不受此限制） */
+    /** 是否可被翻滚 / 跳跃打断（combo 输入走段末缓冲，不受此限制） */
     readonly cancellable: boolean
 }
 ```
@@ -203,7 +203,7 @@ export interface WeaponAttacks {
 
 **弹丸在 `release` 阶段开始的那一帧发射**（`ranged_executor.update`：`activePhaseName === 'release'` 且本段未发射；每段只发射一次）：先拉弓 / 举枪 / 后引，动画走到释放帧才出弹，弹道与武器朝向一致。飞镖段只有 `release` 阶段，等价于起手即甩出。
 
-阶段序列按武器语义声明：弓箭为 `draw / aim / release`，弩与枪械为 `aim / release`，投掷类（飞斧 / 手雷 / 燃烧瓶）为 `windup / release`，飞镖为单 `release`。多数阶段 `cancellable: true`（瞄准期可被 dash 打断），释放段不可打断。
+阶段序列按武器语义声明：弓箭为 `draw / aim / release`，弩与枪械为 `aim / release`，投掷类（飞斧 / 手雷 / 燃烧瓶）为 `windup / release`，飞镖为单 `release`。多数阶段 `cancellable: true`（瞄准期可被翻滚打断），释放段不可打断。
 
 **若要为远程武器组连段**（如三连射、蓄力-释放两段）：在该武器的 `buildRangedAttacks` 里追加段定义并填写 `next`（可选守卫 `holdAtLeast` 等），段末推进逻辑无需任何改动。
 
@@ -279,19 +279,26 @@ attacking update(dt):
 
 `enterAttackSegment` 是段切换的唯一入口（进入 attacking 时由 `machine.ts` 先完成起手解析写入 `activeSegment`，再由此初始化段子状态）。
 
-**玩家侧**：`world.ts` `setPlayerAttack(attackKey, holdDuration)` 攻击中不再拒绝，写单帧脉冲（含攻击键与按住时长）经 `input.attack + attackKey + attackHoldDuration` 由上述解析消费；未攻击时先用 `canStartAttack` 判定（键组内守卫变体与兜底段冷却独立，不能只查单个段冷却），无候选则返回 `'cooldown'`。**HUD 展示**：`modes/play/index.ts` 按 `orderedSegments(player.combat.attacks)` 每段一行，同行展示动作 / 恢复 / 冷却三个计时器（`skillTimers`，冷却读 `segmentCooldownRemaining`；SKILLS 区块首行是冲刺技能）。**AI 侧**：AI 各战斗状态守卫用 `canStartAttack(combat, {..., holdDuration: 0, attackKey: 'light'})` 判断能否出招，出招后持续 `setInput(..., attack=true)` → 缓冲恒有值，自动无限走轻链，无需感知链结构（AI 不蓄力，holdDuration 恒 0 → 命中兜底段）。
+**玩家侧**：`world.ts` `setPlayerAttack(attackKey, holdDuration)` 攻击中不再拒绝，写单帧脉冲（含攻击键与按住时长）经 `input.attack + attackKey + attackHoldDuration` 由上述解析消费；未攻击时先用 `canStartAttack` 判定（键组内守卫变体与兜底段冷却独立，不能只查单个段冷却），无候选则返回 `'cooldown'`。**HUD 展示**：`modes/play/index.ts` 按 `orderedSegments(player.combat.attacks)` 每段一行，同行展示动作 / 恢复 / 冷却三个计时器（`skillTimers`，冷却读 `segmentCooldownRemaining`；SKILLS 区块首行是翻滚技能）。**AI 侧**：AI 各战斗状态守卫用 `canStartAttack(combat, {..., holdDuration: 0, attackKey: 'light'})` 判断能否出招，出招后持续 `setInput(..., attack=true)` → 缓冲恒有值，自动无限走轻链，无需感知链结构（AI 不蓄力，holdDuration 恒 0 → 命中兜底段）。
 
 ### 3.6 确定性挥砍方向
 
 每段动作的方向（竖劈 / 横斩 / 斜劈的倾斜角）已**烘焙进该段的骨骼关键帧**（含武器骨骼与刃面偏转），同段每次播放方向一致；运行时不再有 `swingTilt` 参数或状态。
 
-### 3.7 移动技能：冲刺（dash）
+### 3.7 移动技能：翻滚（roll）与无敌帧
 
-冲刺是**角色能力而非武器技能**（`src/character/combat/dash_skill.ts`）：`DashSkillRuntime` 持有 `DashSkillConfig`（id `dash`，`DASH_DURATION = 0.25s` 动作时间 / recovery = 0 / `DASH_COOLDOWN = 1.0s`）与 `cooldownTimer`，由 `createDashSkillRuntime()` 创建后挂在 `CombatComponent.dashSkill`。它**不参与起手解析、攻击链与执行器调度**（`WeaponAttacks` 里没有冲刺段）。运行时语义与攻击段一致：
+翻滚是**角色能力而非武器技能**（`src/character/combat/roll_skill.ts`）：`RollSkillRuntime` 持有 `RollSkillConfig`（id `roll`，`ROLL_DURATION = 0.6s` 动作时间 / recovery = 0 / `ROLL_COOLDOWN = 1.0s` / 无敌帧窗口 `ROLL_IFRAME_START = 0.15s` ~ `ROLL_IFRAME_END = 0.45s`）、`cooldownTimer` 与进入时锁定的翻滚方向 `dirX` / `dirZ`，由 `createRollSkillRuntime()` 创建后挂在 `CombatComponent.rollSkill`。它**不参与起手解析、攻击链与执行器调度**（`WeaponAttacks` 里没有翻滚段）。运行时语义与攻击段一致：
 
-- **冷却挡起手**：idle/walking/jumping/falling/attacking 的 `→ dashing` 转换守卫读 `combat.dashSkill.cooldownTimer <= 0`；`dashing.enter` 触发即挂 `config.cooldown`，由 `world.ts` 与段冷却同循环递减（`tickSegmentCooldowns` 与冲刺冷却各自递减）。
-- **类型形态**：原通用的 `SkillSlot` / `SkillTimingConfig` 已随槽位模型移除，冲刺保留自身最小配置类型，攻击链路无需任何窄化。
-- **HUD**：play 面板 SKILLS 区块首行展示 `dash`（动作格 = 冲刺期间状态机驻留时间，恢复格恒 `-`，冷却格同攻击段规则）。
+- **冷却挡起手**：idle/walking/jumping/falling/attacking 的 `→ rolling` 转换守卫读 `combat.rollSkill.cooldownTimer <= 0`；`rolling.enter` 触发即挂 `config.cooldown`，由 `world.ts` 与段冷却同循环递减（`tickSegmentCooldowns` 与翻滚冷却各自递减）。
+- **无敌帧（中段）**：`rolling.update` 在窗口内逐帧把剩余时间写入 `combat.invincibleTimer`，`exit` 清零；伤害与物理反馈共用 `damage.ts` 的 `isDamageImmune(target)` 判定，**完全免疫**：
+  - `applyDamage` 在一切结算之前短路（`finalAmount = 0`，不扣血、不触发 `onDamageTaken` → 闪红 / 硬直 / 仇恨均不发生、不判死）；
+  - 近战命中路径在几何通过后跳过无敌目标：**不写 `attackedTargets`、不击退、不触发 `onHit`**（顿帧 / 相机震动）——若命中窗口在无敌结束后仍开着，同一段仍可命中（闪避需覆盖整个接触窗口）；
+  - 远程弹丸**穿过**无敌目标（不消耗、不结算），可继续命中其后方目标；爆炸直接跳过该目标（不伤害、不径向击退）。
+  起手（0 ~ 0.15s）与收招（0.45 ~ 0.6s）仍可被命中。
+- **根自转与朝向**：基础状态 clip 只表达抱团蜷缩（`pose_fns.ts` 的 `rollingPose`）；前滚翻的根自转 2π 与「绕身体中心」的位置补偿由 `world.ts` 按状态驻留时间（`rollSpinProgress`）合成 —— 与死亡倒地同模式（骨骼编辑器预览只含蜷缩姿态）。翻滚期间朝向锁定翻滚方向，输入转向不会让角色原地打转。
+- **视觉**：无敌期间模型材质切换为半透明白，与受击闪红共用材质效果层（`entity/character/combat_vfx/material_effects.ts`：惰性快照 + 优先级覆写 + 统一还原；闪红优先于闪白，半透明只由无敌控制）。
+- **类型形态**：原通用的 `SkillSlot` / `SkillTimingConfig` 已随槽位模型移除，翻滚保留自身最小配置类型，攻击链路无需任何窄化。
+- **HUD**：play 面板 SKILLS 区块首行展示「翻滚」（动作格 = 翻滚期间状态机驻留时间，恢复格恒 `-`，冷却格同攻击段规则）。
 
 ---
 
@@ -304,7 +311,7 @@ attacking update(dt):
 ```ts
 export const CHARACTER_STATES = [
     'idle', 'walking', 'jumping', 'falling',
-    'attacking', 'dying', 'dashing', 'flinching',
+    'attacking', 'dying', 'rolling', 'flinching',
 ] as const
 ```
 
@@ -338,9 +345,9 @@ export const CHARACTER_STATES = [
 - 链内推进（本段 `next`）免冷却；普通攻击（近战段 / 远程预设）冷却恒 0，节奏由动作/恢复时间形成；特殊段（如 test_weapon 蓄力段）的非 0 冷却从段触发时开始计时，只挡起手不惩罚链中段
 - 中途改按另一攻击键 = 段末切链（需该键起手候选守卫通过且冷却完毕，普通攻击恒满足）
 
-### 4.3 Dash / Jump 取消（自中断）
+### 4.3 翻滚 / 跳跃取消（自中断）
 
-- 仅在 `cancellable === true` 的阶段，dashing / jumping 的 transition guard 可以通过
+- 仅在 `cancellable === true` 的阶段，rolling / jumping 的 transition guard 可以通过
 - attacking meta-state 在 exit 时清理（冷却已在段触发时挂上、`bufferedSegment`/阶段计时重置）
 
 ### 4.4 状态转移图
@@ -353,8 +360,8 @@ idle/walking ──→ attacking (段子状态机)
                      │  段推进：当前段阶段0(cancellable) → 阶段1 → … → recovery
                      │       │
                      │   攻击输入?（任意时刻）→ 写缓冲；段播完后按段的 next 转换推进下一段（不退出 attacking）
-                     │   dash/jump?（仅 cancellable 阶段）
-                     │   → dashing/jumping
+                     │   翻滚/跳跃?（仅 cancellable 阶段）
+                     │   → rolling/jumping
                      │
                      └─→ walking/idle/falling/jumping (段播完且无缓冲 / 链终止)
 ```
@@ -416,7 +423,7 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 - **攻击类别**（`DAMAGE_TYPES = ['physical', 'magic']`，`character/combat/damage_type.ts`）是武器固有属性（`MeleeWeaponConfig.damageType` / `RangedWeaponConfig.damageType`，不可被存档/面板覆写）：近战与远程直击取当前武器类别，爆炸子弹的爆炸伤害继承所属武器类别。`DamageEvent.damageType` 为必填字段——三条命中路径（近战 / 远程直击 / 爆炸）漏填即编译报错。
 - **装备攻击加成**：护甲可提供逐类别攻击加成（`CombatComponent.attackBonus`，由 `setCombatEquipment` 汇总）；攻击时仅计入与武器类别匹配的项——近战 `(weapon.damage + attackBonus[类别]) × damageMultiplier`，远程并入子弹 `damage`（爆炸继承）。
 - **防御力**：角色有效防御 = 基础防御（`CharacterSaveConfig.defense`，角色固有）+ 各槽位护甲防御之和，由 `CombatComponent` 的 `setCombatEquipment` 统一重算（未知护甲 id 安全回退空槽）。
-- **结算顺序**：`applyDamage` 先跑 `damageModifiers`，再按事件类别做**固定减伤**——`finalAmount = max(MIN_DAMAGE, 修饰器后伤害 − defense[damageType])`；`MIN_DAMAGE = 1`（`character/combat/constants.ts`）保证高防不会完全免疫，低于 1 点的原始伤害保持原值（不被托底放大）。`baseAmount` 始终保持武器原始伤害。
+- **结算顺序**：`applyDamage` 先用 `isDamageImmune(target)` 检查翻滚无敌帧（命中即直接返回 `finalAmount = 0`，不回调 / 不判死；三条命中路径同样用它跳过击退与命中反馈，见 §3.7），再跑 `damageModifiers`，最后按事件类别做**固定减伤**——`finalAmount = max(MIN_DAMAGE, 修饰器后伤害 − defense[damageType])`；`MIN_DAMAGE = 1`（`character/combat/constants.ts`）保证高防不会完全免疫，低于 1 点的原始伤害保持原值（不被托底放大）。`baseAmount` 始终保持武器原始伤害。
 - 护甲槽位、攻击加成 / 移速修正与外观装配详见 [`equipment_system.md`](equipment_system.md)。
 
 ---
@@ -496,7 +503,7 @@ export const getAttackClipById = (clipId: string): BoneAnimationClip => {}
 
 ```ts
 // character/state_machine/types.ts
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying', 'dashing', 'flinching'] as const
+export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying', 'rolling', 'flinching'] as const
 export type CharacterState = typeof CHARACTER_STATES[number]
 
 // character/state_machine/machine.ts
@@ -618,7 +625,7 @@ const phaseKey = c.phaseIndex < phases.length
 
 ### 8.5 新增远程武器
 
-1. 在 `src/character/weapon/ranged_attacks.ts` 的 `RANGED_ATTACK_SPECS` 中添加该武器的段规格（`segmentId` / `duration` / `cooldown` / `phases`）。**阶段必须有**（阶段名取自 `ATTACK_PHASES`，远程常用 `draw` / `aim` / `release` / `windup`），动作比例之和应为 1；`aim` 类阶段建议 `cancellable: true` 以便瞄准期被 dash 打断。
+1. 在 `src/character/weapon/ranged_attacks.ts` 的 `RANGED_ATTACK_SPECS` 中添加该武器的段规格（`segmentId` / `duration` / `cooldown` / `phases`）。**阶段必须有**（阶段名取自 `ATTACK_PHASES`，远程常用 `draw` / `aim` / `release` / `windup`），动作比例之和应为 1；`aim` 类阶段建议 `cancellable: true` 以便瞄准期被翻滚打断。
 2. 在 `src/character/weapon/ranged_weapon.ts` 的 `RANGED_WEAPON_PRESETS` 中用 `rangedPreset({...})` 添加预设（`name` 中文名必填，弹道数值、`detectionRange` / `idealRange` / `retreatRange` 按定位给定）；攻击链由 `buildRangedAttacks(base.id)` 自动注入。
 3. 远程目前是**单段**（`next: []`、`heavy` 空链）：需要多段（三连射、蓄力-释放）时在 `RANGED_ATTACK_SPECS` 里加段并在 `buildRangedAttacks` 中填写 `next`/`steps`（与近战同构：`entries` 决定起手、`steps` 决定清单与顺序、`next` 决定推进）。
 
@@ -676,10 +683,10 @@ const phaseKey = c.phaseIndex < phases.length
 
 | 文件 | 内容 |
 |------|------|
-| `types.ts` | `CombatComponent`（`weapon` / `attacks` / `segmentCooldowns` / `activeSegment` / `bufferedSegment` / `attackTimer` / `phaseIndex` / `phaseTimer` / `attackedTargets` / `dashSkill` …）；`createCombatComponent`、`setCombatWeapon`（换装整体替换武器运行时） |
+| `types.ts` | `CombatComponent`（`weapon` / `attacks` / `segmentCooldowns` / `activeSegment` / `bufferedSegment` / `attackTimer` / `phaseIndex` / `phaseTimer` / `attackedTargets` / `rollSkill` / `invincibleTimer` …）；`createCombatComponent`、`setCombatWeapon`（换装整体替换武器运行时） |
 | `attack_runtime.ts` | 段冷却读写与上下文构造：`segmentCooldownRemaining` / `armSegmentCooldown` / `tickSegmentCooldowns` / `attackContextOf` / `canStartAttack` |
 | `attack_phases.ts` | `ATTACK_PHASES` / `AttackPhaseName`、`AttackPhase`（仅时序/移速/可中断）、`resolvePhases`（未定义时回退单阶段）、`phaseDurationOf`、`FLINCH_DURATION` / `FLINCH_IMMUNITY_DURATION` |
-| `dash_skill.ts` | 冲刺（角色能力，非武器段）：`DashSkillConfig` / `DashSkillRuntime`、`createDashSkillRuntime` |
+| `roll_skill.ts` | 翻滚（角色能力，非武器段）：`RollSkillConfig` / `RollSkillRuntime`、`ROLL_DURATION` / `ROLL_COOLDOWN` / `ROLL_IFRAME_START` / `ROLL_IFRAME_END`、`createRollSkillRuntime`、`rollSpinProgress`（world 根自转进度） |
 | `test_weapon.ts` | 测试武器：6 段守卫链夹具（蓄力 / 点按兜底 / 键组分离 / 方向变体 / 循环链 / 无链单发 / 非 0 冷却），仅供单元测试 |
 | `executor.ts` / `damage.ts` / `explosion.ts` | 执行器接口与伤害结算（命中窗口由动画事件轨驱动） |
 
@@ -687,11 +694,12 @@ const phaseKey = c.phaseIndex < phases.length
 
 | 文件 | 内容 |
 |------|------|
-| `src/character/state_machine/types.ts` | `CHARACTER_STATES`（含 `'flinching'`）；`CharacterInput.attackKey: AttackKey \| undefined`、`attackHoldDuration`（`setInput` 第 6/7 参）；`MachineContext.attackPhase` |
+| `src/character/state_machine/types.ts` | `CHARACTER_STATES`（含 `'rolling'` / `'flinching'`）；`CharacterInput.roll`（`setInput` 第 5 参，由 `sprint` 键触发）、`attackKey: AttackKey \| undefined`、`attackHoldDuration`（第 6/7 参）；`MachineContext.attackPhase` |
 | `src/character/state_machine/machine.ts` | 静态 `Record<CharacterState, StateHandler>` 注册 8 状态；transition guard 检查 + `onStateChange` 派发；**进入 attacking 时用 `resolveEntrySegment` 完成起手解析并写入 `combat.activeSegment`** |
 | `src/character/state_machine/states/attacking/index.ts` | attacking 段子状态调度器：推进阶段时间线 → 按输入求段转换写缓冲 → 段播完推进下一段（不退出状态）→ 委托阶段 handler 或走默认行为；导出 `phaseHandlerRegistry` / `registerPhaseHandler` |
 | `src/character/state_machine/states/attacking/segment.ts` | 段子状态单元：`enterAttackSegment`（重置计时/挂段冷却/清命中记录/唤醒刚体）、`advanceSegmentPhases`、`isSegmentPhasesDone`、`resolveSegmentNextState`（同键 → 本段 `next`；异键 → 该键起手解析） |
 | `src/character/state_machine/states/{idle,walking}.ts` | 攻击转换 guard 复用 `canStartAttack`（无起手候选则不进入 attacking） |
+| `src/character/state_machine/states/rolling.ts` | 翻滚状态 handler：锁定方向位移 + 中段无敌帧写入 `invincibleTimer`（exit 清零），结束转 walking/idle/falling |
 | `src/character/state_machine/states/flinching.ts` | 受击硬直状态 handler（enter 清 `bufferedSegment` 与阶段计时，exit 挂免疫窗口） |
 | `src/character/archetypes.ts` | 存档 / 面板的攻击配置：`AttackConfig = {weaponId, damage?, cooldown?, ranged?}`（只有武器与数值覆写）、`ATTACK_PRESETS` |
 | `src/save_load/types.ts` | `SAVE_FORMAT_VERSION = 3`；`CharacterSaveConfig.attack: AttackConfig`（原 `attackSlot` 已删除） |
@@ -709,9 +717,10 @@ const phaseKey = c.phaseIndex < phases.length
 | `src/entity/character/combat/obb.ts` | OBB 类型 + `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
 | `src/entity/character/combat/ranged_executor.ts` | 子弹生命周期与可穿过类别判定（`castShape` 位移扫描 + 角色宽容半径判定） |
 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/ 受击箱（青）/ 检测箱（橙）/ 射程圆环（橙，远程）/ 视线扇形（蓝）debug 可视化 |
-| `src/entity/character/physics/world.ts` | `weaponRuntimeOf(attack)`（test_weapon 特判）；`setPlayerAttack(attackKey, holdDuration)` 起手解析与攻击中写脉冲；每帧段冷却递减（`tickSegmentCooldowns`）与 `AnimationContext` 装配；换装 `setCombatWeapon` + 清空段冷却/当前段 |
+| `src/entity/character/physics/world.ts` | `weaponRuntimeOf(attack)`（test_weapon 特判）；`setPlayerAttack(attackKey, holdDuration)` 起手解析与攻击中写脉冲；每帧段冷却/翻滚冷却/无敌计时递减与 `AnimationContext` 装配；翻滚期间朝向锁定 + `rollSpinProgress` 根自转与绕身体中心位置补偿；换装 `setCombatWeapon` + 清空段冷却/当前段 |
+| `src/entity/character/combat_vfx/material_effects.ts` | 材质表面效果统一封装：受击闪红（`DAMAGE_FLASH_*`）与翻滚无敌闪白半透明（`INVINCIBLE_FLASH_*`）共用惰性快照 / 优先级覆写 / 统一还原 |
 | `src/modes/play/camera.ts` | 攻击键按住计时（mousedown 记录时刻，mouseup 携带按住秒数触发，右键重击同为松开触发） |
-| `src/modes/play/index.ts` | HUD 技能计时：SKILLS 首行冲刺 + 按 `orderedSegments` 每段一行（动作 / 恢复 / 冷却） |
+| `src/modes/play/index.ts` | HUD 技能计时：SKILLS 首行翻滚 + 按 `orderedSegments` 每段一行（动作 / 恢复 / 冷却） |
 | `src/modes/bone_edit/builtin_clips.ts` | 骨骼动画内置动作库：按 `orderedSegments` 枚举全部武器段（`segmentDisplayName` 作显示名） |
 | `src/entity/character/ui/panel.ts` | 属性面板攻击区：武器下拉（`ALL_WEAPON_PRESETS`）+ 伤害 / 起手段冷却 / 远程弹道覆写 |
 | `src/physics/collision_category.ts` | 碰撞类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）与 membership 位打包 / 解析 / 掩码工具 |
@@ -734,7 +743,8 @@ const phaseKey = c.phaseIndex < phases.length
 | `phaseIndex` | `number` | 当前阶段索引（0-based，越界表示阶段已完成） |
 | `phaseTimer` | `number` | 当前阶段已用时间（秒） |
 | `attackedTargets` | `Set<number>` | 本次段已命中的目标（每段切换时清空，同一段内只结算一次） |
-| `dashSkill` | `DashSkillRuntime` | 冲刺技能运行时（角色能力，独立于攻击段） |
+| `rollSkill` | `RollSkillRuntime` | 翻滚技能运行时（角色能力，独立于攻击段；含锁定方向 `dirX` / `dirZ`） |
+| `invincibleTimer` | `number` | 无敌帧剩余时间（秒）：> 0 时 `applyDamage` 完全免疫，不触发任何受击回调；rolling 状态在窗口中段逐帧写入，exit 清零 |
 | `baseDefense` | `DefenseProfile` | 基础防御（角色固有，存档持久化；见 §5.6 与 [`equipment_system.md`](equipment_system.md)） |
 | `armor` | `ArmorLoadout` | 装备的护甲（槽位 → 护甲 id；缺省 = 空槽），由 `setCombatEquipment` 变更 |
 | `defense` | `DefenseProfile` | 有效防御 = 基础防御 + 各护甲之和；`applyDamage` 按伤害事件类别取用 |
@@ -783,7 +793,7 @@ const phaseKey = c.phaseIndex < phases.length
 
 ### 11.4 状态机与连段 — `character/state_machine/machine.test.ts`
 
-describe 区块：连段守卫（test_weapon 蓄力/方向组合键）、平地移动、斜坡 falling 判定、falling 行为、攻击/冲刺在陡坡结束、斜坡防滑、跳跃、输入缓冲连段（轻/重双链）、受击硬直与保护窗口。
+describe 区块：连段守卫（test_weapon 蓄力/方向组合键）、平地移动、斜坡 falling 判定、falling 行为、攻击/翻滚在陡坡结束、斜坡防滑、跳跃、输入缓冲连段（轻/重双链）、受击硬直与保护窗口。
 
 | 覆盖点 | 验证方式 |
 |--------|----------|
@@ -793,6 +803,8 @@ describe 区块：连段守卫（test_weapon 蓄力/方向组合键）、平地�
 | 冷却夹具 | 蓄力段触发即挂冷却（`segmentCooldowns.get('test_weapon_charge') === charge.cooldown`），点按兜底段冷却独立仍可起手 |
 | 跨键切链 | 段中改按重击键 → 段末切到重链起手段且不退出 attacking |
 | flinching | 攻击中被击中（`pendingFlinch`）立即中断攻击进入 flinching；硬直播完按支撑/输入转换；退出挂 `FLINCH_IMMUNITY_DURATION` 保护窗口；dying 优先级高于 flinching |
+| 翻滚 | `rolling` 起手即挂 `ROLL_COOLDOWN`；陡坡翻滚结束进入 falling、平地进入 walking（改名后语义不变） |
+| 无敌帧 | `material_effects.test.ts`：中段 `invincibleTimer > 0` 时 `applyDamage` 不扣血且材质半透明白，窗口外/结束后恢复结算与外观；`damage.test.ts` 另覆盖 `applyDamage` 的免疫分支（不回调、不判死） |
 
 ### 11.5 伤害判定几何 — `entity/character/combat/obb.test.ts` / `melee_executor.test.ts`
 

@@ -36,8 +36,8 @@ export const idleHandler: StateHandler = {
                 input.jump && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
-            to: 'dashing',
-            guard: (input, entity) => input.sprint && entity.combat.dashSkill.cooldownTimer <= 0,
+            to: 'rolling',
+            guard: (input, entity) => input.roll && entity.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',

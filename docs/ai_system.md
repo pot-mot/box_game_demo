@@ -13,7 +13,7 @@ AI 决策层（entity/character/ai/machine.ts）
   └── 战斗子 FSM: chase / approach / volley / kite / attack / flee / inactive
         ↓ 设置输入 (dx, dz, attack)
 角色动作层（character/state_machine/）
-  └── idle / walking / jumping / falling / attacking / dying / dashing / flinching
+  └── idle / walking / jumping / falling / attacking / dying / rolling / flinching
         ↓ 操作物理体
   rapier3d-compat RigidBody
 ```
@@ -258,9 +258,7 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 | `GROUND_DAMPING` | `0.85` | 地面摩擦 |
 | `AIR_DAMPING` | `0.95` | 空中摩擦 |
 | `AIR_CONTROL_FACTOR` | `0.15` | 空中操控系数 |
-| `DASH_SPEED_MULTIPLIER` | `2` | 冲刺速度倍率 |
-| `DASH_DURATION` | `0.25` | 冲刺动作时间（秒）；定义已迁至 `character/combat/dash_skill.ts`（冲刺技能三计时属性），本处仅转出 |
-| `DASH_COOLDOWN` | `1.0` | 冲刺冷却时间（秒）；同上 |
+| `ROLL_SPEED_MULTIPLIER` | `1.8` | 翻滚位移速度倍率 |
 | `SLOPE_WALK_THRESHOLD` | `0.06` | 站立所需最小法线 Y（≈86.6°） |
 | `SLOPE_TRANSIENT_MIN_NY` | `0.01` | 行走瞬态棱法线容忍下限（胶囊跨 trimesh 棱线时的限速投影，防甩离墙面） |
 | `SLOPE_RECOVER_THRESHOLD` | `0.08` | 从下落恢复所需最小法线 Y |

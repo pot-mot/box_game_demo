@@ -58,8 +58,8 @@ export const fallingHandler: StateHandler = {
                 && entity.groundedTime >= STATE_FLIP_MIN_TIME,
         },
         {
-            to: 'dashing',
-            guard: (input, entity) => input.sprint && entity.combat.dashSkill.cooldownTimer <= 0,
+            to: 'rolling',
+            guard: (input, entity) => input.roll && entity.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',

@@ -101,17 +101,17 @@ export const setupPlayMode = (
                 }
                 : emptyCell('0.0s')
 
-            /* 冲刺技能（移动技能）：只有动作与冷却两段，动作期间用状态机驻留时间填充 */
-            const dash = player.combat.dashSkill
-            const dashCfg = dash.config
-            const dashing = player.stateMachine.currentState === 'dashing'
+            /* 翻滚技能（移动技能）：只有动作与冷却两段，动作期间用状态机驻留时间填充 */
+            const roll = player.combat.rollSkill
+            const rollCfg = roll.config
+            const rolling = player.stateMachine.currentState === 'rolling'
             skillTimers.push({
-                label: dashCfg.id,
-                action: dashing
-                    ? {fillRatio: Math.min(1, player.stateMachine.stateTime / dashCfg.duration), fillColor: '#ffaa00', text: `${player.stateMachine.stateTime.toFixed(2)}s`}
-                    : emptyCell(`${dashCfg.duration.toFixed(2)}s`),
+                label: '翻滚',
+                action: rolling
+                    ? {fillRatio: Math.min(1, player.stateMachine.stateTime / rollCfg.duration), fillColor: '#ffaa00', text: `${player.stateMachine.stateTime.toFixed(2)}s`}
+                    : emptyCell(`${rollCfg.duration.toFixed(2)}s`),
                 recovery: emptyCell('-'),
-                cooldown: cooldownCell(dash.cooldownTimer, dashCfg.cooldown),
+                cooldown: cooldownCell(roll.cooldownTimer, rollCfg.cooldown),
             })
 
             for (const segment of orderedSegments(player.combat.attacks)) {

@@ -79,7 +79,7 @@ describe('基础状态 clip 生成器', () => {
     }
 
     it('循环动画 wrap 无缝：首帧与末帧值一致（同频波形）', () => {
-        for (const state of ['walking', 'falling', 'dashing'] as const) {
+        for (const state of ['walking', 'falling'] as const) {
             const clip = buildBaseClip(state, false)
             const pose0 = sampleClip(clip, 0)
             const poseEnd = sampleClip(clip, clip.duration)

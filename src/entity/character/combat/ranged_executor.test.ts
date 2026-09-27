@@ -193,6 +193,23 @@ describe('投掷物可穿过类别', () => {
         expect(enemy2.combat.health).toBe(enemy2.combat.maxHealth)
     })
 
+    it('翻滚无敌帧：弹丸穿过无敌目标并命中其后目标（不结算伤害/击退）', () => {
+        const hw = createHarnessWorld()
+        const executor = createRangedExecutor(hw.shared, new Scene())
+        const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+        const immune = makeChar(hw, 2, 0, SHOOTER_Y, 2)
+        const target = makeChar(hw, 3, 0, SHOOTER_Y, TARGET_Z)
+        immune.combat.invincibleTimer = 1
+
+        fireForward(executor, shooter, makeWeaponRuntime())
+        /* 无敌目标视为穿过：子弹不消耗、不伤害，继续飞行命中后方目标 */
+        runFrames(hw, executor, [shooter, immune, target], 30)
+
+        expect(immune.combat.health).toBe(immune.combat.maxHealth)
+        expect(target.combat.health).toBe(target.combat.maxHealth - 5)
+        expect(executor.getBulletCount()).toBe(0)
+    })
+
     it('可穿过列表为空：命中场景几何即消失', () => {
         const hw = createHarnessWorld()
         const executor = createRangedExecutor(hw.shared, new Scene())

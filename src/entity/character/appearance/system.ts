@@ -11,9 +11,9 @@ import {solveTwoHandedGrip} from './two_handed_ik.ts'
 import {STATE_BLEND_DURATION, TWO_HAND_GRIP_OFFSET, walkSpeedScale} from './constants.ts'
 
 /** clip 驱动的状态（全部 8 状态；基础状态用基础生成器，attacking 用攻击生成器） */
-const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'dashing', 'flinching', 'attacking']
+const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'rolling', 'flinching', 'attacking']
 
-type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'dashing' | 'flinching' | 'attacking'
+type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'attacking'
 
 const isClipState = (state: CharacterState): state is ClipState => CLIP_STATES.includes(state)
 

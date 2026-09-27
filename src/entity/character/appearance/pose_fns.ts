@@ -12,6 +12,7 @@ import {
     FLINCH_HEAD_BACK,
 } from './constants.ts'
 import {FLINCH_DURATION} from '../../../character/combat/attack_phases.ts'
+import {ROLL_DURATION} from '../../../character/combat/roll_skill.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 
 /** 关节欧拉姿态 */
@@ -214,25 +215,42 @@ const dyingPose = (t: number): PoseState => {
     }
 }
 
-const dashingPose = (t: number): PoseState => {
-    const legSwing = Math.sin(t * 30) * 0.15
+/** 翻滚蜷缩收拢进度（0-1 动作时间）：起手 25% 抱团 → 中段保持 → 末段 25% 展开站立 */
+const ROLL_TUCK_IN_END = 0.25
+const ROLL_RELEASE_START = 0.75
+
+/**
+ * 翻滚：抱团蜷缩（肩/髋前收、肘膝深屈、躯干前屈）。
+ * **前滚翻的根自转 2π 由 world 层按动作时间合成**（同死亡倒地：编辑器预览只含蜷缩姿态，
+ * 避免根关节绕脚底原点旋转出现沉入地面的大圈）。
+ */
+const rollingPose = (t: number, ctx: PoseContext): PoseState => {
+    const p = clamp01(t / ROLL_DURATION)
+    const raw = p < ROLL_TUCK_IN_END
+        ? p / ROLL_TUCK_IN_END
+        : p < ROLL_RELEASE_START
+            ? 1
+            : 1 - (p - ROLL_RELEASE_START) / (1 - ROLL_RELEASE_START)
+    const e = raw * raw * (3 - 2 * raw)
+    /* 持械时武器骨骼回到垂直握持，避免蜷缩时武器穿身 */
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
-        rightArmShoulder: {rx: -0.5, ry: 0, rz: 0},
-        rightArmElbow: {rx: -0.3, ry: 0, rz: 0},
+        rightArmShoulder: {rx: -1.35 * e, ry: 0, rz: 0.2 * e},
+        rightArmElbow: {rx: -1.7 * e, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
-        rightWeaponMount: ZERO,
-        leftArmShoulder: {rx: -0.5, ry: 0, rz: 0},
-        leftArmElbow: {rx: -0.3, ry: 0, rz: 0},
+        rightWeaponMount: grip,
+        leftArmShoulder: {rx: -1.35 * e, ry: 0, rz: -0.2 * e},
+        leftArmElbow: {rx: -1.7 * e, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
-        leftWeaponMount: ZERO,
-        rightLegHip: {rx: legSwing, ry: 0, rz: 0},
-        rightLegKnee: {rx: 0.05, ry: 0, rz: 0},
-        leftLegHip: {rx: -legSwing, ry: 0, rz: 0},
-        leftLegKnee: {rx: 0.05, ry: 0, rz: 0},
-        headNeck: {rx: 0.1, ry: 0, rz: 0},
-        spine: {rotation: {rx: -0.15, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
+        leftWeaponMount: grip,
+        rightLegHip: {rx: -1.25 * e, ry: 0, rz: 0},
+        rightLegKnee: {rx: 2 * e, ry: 0, rz: 0},
+        leftLegHip: {rx: -1.25 * e, ry: 0, rz: 0},
+        leftLegKnee: {rx: 2 * e, ry: 0, rz: 0},
+        headNeck: {rx: 0.5 * e, ry: 0, rz: 0},
+        spine: {rotation: {rx: 0.55 * e, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
         root: {rotation: ZERO},
     }
 }
@@ -264,13 +282,13 @@ const flinchingPose = (t: number): PoseState => {
 export type PoseSampler = (t: number, ctx: PoseContext) => PoseState
 
 /** 基础状态 → 姿态采样器（公式与旧 animators 一一对应；falling 腿张开随速度，行走步频由播放器变速） */
-export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'dashing' | 'flinching', PoseSampler> = {
+export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching', PoseSampler> = {
     idle: (t, ctx) => idlePose(t, ctx),
     walking: (t, ctx) => walkingPose(t * WALK_CYCLE_FREQ, ctx),
     jumping: (t) => jumpingPose(t),
     falling: (t, ctx) => fallingPose(t, ctx.horizontalSpeed),
     dying: (t) => dyingPose(t),
-    dashing: (t) => dashingPose(t),
+    rolling: (t, ctx) => rollingPose(t, ctx),
     flinching: (t) => flinchingPose(t),
 }
 
@@ -305,6 +323,6 @@ export const BASE_CLIP_META: Record<keyof typeof BASE_POSE_SAMPLERS, {duration: 
     jumping: {duration: EXTEND_END, loop: false},
     falling: {duration: 1, loop: true},
     dying: {duration: FALL_END, loop: false},
-    dashing: {duration: (Math.PI * 2) / 30, loop: true},
+    rolling: {duration: ROLL_DURATION, loop: false},
     flinching: {duration: FLINCH_DURATION, loop: false},
 }

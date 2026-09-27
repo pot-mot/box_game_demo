@@ -1,7 +1,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
-import {createDashSkillRuntime} from '../../../character/combat/dash_skill.ts'
+import {createRollSkillRuntime} from '../../../character/combat/roll_skill.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import {type CombatConfig, DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
@@ -57,7 +57,8 @@ const makeChar = (
         phaseTimer: 0,
         pendingFlinch: false,
         flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
-        dashSkill: createDashSkillRuntime(),
+        rollSkill: createRollSkillRuntime(),
+        invincibleTimer: 0,
         faction,
         attackTendency: (a: number, b: number) => a !== b,
         tendencyConfig: {tendencyId: 'hostileExceptSelf'},

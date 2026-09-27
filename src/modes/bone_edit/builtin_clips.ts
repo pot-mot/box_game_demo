@@ -71,7 +71,7 @@ const entryOf = (
     weaponHeld: origin.weaponHeld,
 })
 
-/* ── 基础状态（待机/行走/跳跃/下落/死亡/冲刺/受击） ── */
+/* ── 基础状态（待机/行走/跳跃/下落/死亡/翻滚/受击） ── */
 
 const BASE_STATE_LABELS: Record<BaseState, string> = {
     idle: '待机',
@@ -79,12 +79,12 @@ const BASE_STATE_LABELS: Record<BaseState, string> = {
     jumping: '跳跃',
     falling: '下落',
     dying: '死亡',
-    dashing: '冲刺',
+    rolling: '翻滚',
     flinching: '受击硬直',
 }
 
 /** 基础状态展示顺序（待机 → 移动 → 受击/倒地） */
-const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'dashing', 'flinching', 'dying']
+const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'rolling', 'flinching', 'dying']
 
 /** 姿态公式区分持械/空手的状态（其余状态两种变体姿态相同，只列出一份） */
 const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']
@@ -104,7 +104,7 @@ const buildBaseEntries = (): BuiltinClipEntry[] => {
                 `${BASE_STATE_LABELS[state]}${suffix}`,
                 getBaseClip(state, held, 0),
                 /* 仅持械/空手变体带标记：空手变体在编辑器里卸下武器，持械变体保留当前武器；
-                 * 其余基础状态（跳跃/下落/死亡/冲刺/受击）无持械语义 → 保留当前武器 */
+                 * 其余基础状态（跳跃/下落/死亡/翻滚/受击）无持械语义 → 保留当前武器 */
                 hasWeaponVariants ? {weaponHeld: held} : {},
             ))
         }
