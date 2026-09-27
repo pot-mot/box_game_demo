@@ -108,6 +108,8 @@
 
 7. **统一模型构建器** — 人类骨架与方块人外观只有一套构建路径：骨架定义 `entity/character/skeleton/preset.ts` 的 `buildCharacterSkeletonDefinition()` 为唯一真相源；`entity/character/appearance/model.ts` 的 `createCharacterModel`（游玩/展示）与 `modes/bone_edit`（编辑器）都经 `skeleton/render/joint_hierarchy.ts` 的 `createJointHierarchy` 建 Group 层级、再用 `entity/character/appearance/assemble.ts` 的 `assembleCharacterAppearance` 装配部件（**含手部模型**）。手部关节 `rightHandPivot` / `leftHandPivot` 与其骨骼段 `rightHand` / `leftHand` 两侧都有，且已纳入 `CHARACTER_JOINT_IDS`（可被动画驱动）；武器挂点 `rightWeaponMount` / `leftWeaponMount` 是腕下独立零偏移关节，不并入手部骨骼；`backWeaponMount` 为背部视觉挂点（双手共持时副手武器挂背，无 clip 轨道）。`entity/skeleton` 为通用骨架实体，人形预设/外观经 `createCharacterSkeletonPreset()` 注入。
 
+8. **程序化网格构建器** — 武器与护甲的外观模型共用 `entity/character/appearance/mesh_builder.ts` 的 `createMeshBuilder()`：它提供几何 / 材质工厂（`box` / `cylinder` / `sphere` / `cone` / `material`）与组装接口（`add` / `faceBox`），统一登记并 `dispose` 释放，取代原先 `weapon_mesh` 的模块级 `begin()` 共享数组。`weapon_mesh` 与 `armor_mesh` 的每个模型都是**独立参数化 `gen` 函数**（接收 `(builder, 参数)`，各自拼装部件），派发表只做 id → gen 的映射；护甲 gen 的尺寸参数来自 `PRESET_PART_SIZES` 的关节基准部件，武器 gen 的参数来自自身 `WeaponMeshConfig`。**新增/修改武器或护甲外观只改对应 gen**，不要重建通用构建逻辑。
+
 ## 项目结构
 
 ```

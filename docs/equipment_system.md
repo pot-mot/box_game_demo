@@ -322,9 +322,30 @@ export const totalMoveSpeedOf = (resolved: ResolvedArmorLoadout): number => ...
 - **重甲减速**：铁盔 / 铁胸甲 / 铁胫甲 / 战臂甲 / 鳞甲均 `moveSpeedMultiplier < 1`；满配物理重甲约 ×0.81，用移速换取防御。
 - **加速鞋**：`swift_boots`（疾行靴 ×1.15）与 `wind_boots`（疾风靴 ×1.25）占护腿槽位、无防御收益，作为移速流代价。
 
-### 4.2 外观装配（统一模型构建器扩展）
+### 4.2 外观装配（共享网格构建器 + 独立 gen）
 
-新增 `src/entity/character/appearance/armor_mesh.ts`：
+`src/entity/character/appearance/mesh_builder.ts`（**新增，武器与护甲共用**）：
+
+```ts
+/** 程序化网格构建器：统一登记几何 / 材质 / 网格，集中释放 */
+export interface MeshBuilder {
+    readonly group: Group
+    readonly material: (color: number, roughness?: number, metalness?: number) => MeshStandardMaterial
+    readonly box: (w: number, h: number, d: number) => BoxGeometry
+    readonly cylinder: (rTop: number, rBottom: number, height: number, segments?: number) => CylinderGeometry
+    readonly sphere: (radius: number, widthSegments?: number, heightSegments?: number) => SphereGeometry
+    readonly cone: (radius: number, height: number, segments?: number) => ConeGeometry
+    readonly add: (geometry, material, x, y, z, rx?, ry?, rz?) => Mesh
+    /** 六面明暗方块部件（与方块人身体同风格） */
+    readonly faceBox: (w, h, d, color, x, y, z) => Mesh
+    readonly dispose: () => void
+}
+export const createMeshBuilder = (): MeshBuilder
+```
+
+- 该构建器从 `weapon_mesh.ts` 抽离共用工具（几何 / 材质工厂、网格组装、生命周期统一释放），并按需补一个与身体一致的 `faceBox`。**武器与护甲都经它构建**：`weapon_mesh` 的 `gen*` 与 `armor_mesh` 的 `gen*` 均接收 `(builder, 参数)`，各自独立拼装模型，不再有模块级共享数组与全局 `begin()`。
+
+`src/entity/character/appearance/armor_mesh.ts`（**重写：每个形状一个独立 `gen` 构造函数**）：
 
 ```ts
 /** 护甲外观形状 id（常量 + 索引类型推导） */
@@ -342,12 +363,13 @@ export interface ArmorMeshResult {
     readonly cleanup: () => void
 }
 
-/** 按配方 + 挂载关节构建护甲部件（复用 render/box_parts 的方块部件与调色） */
+/** 按配方 + 挂载关节构建护甲部件 */
 export const createArmorMesh = (config: ArmorMeshConfig, jointId: string): ArmorMeshResult
 ```
 
-- 部件尺寸取 `entity/character/skeleton/preset.ts` 的 `PRESET_PART_SIZES` 对应身体部件 + 外扩常量 `ARMOR_PAD`（`appearance/constants.ts`）；形状差异由 `ARMOR_SHAPES` 的尺寸乘数表表达，部分形状附带装饰条（如铁盔帽檐、法袍下摆、靴尖前伸的脚尖条 `accent.z`）。
-- `jointId` 决定覆盖部位：`headNeck` = 头、`spine` = 躯干、`right/leftArmElbow` = 前臂、大腿关节 = 腿甲、膝关节 = 胫甲；形状可声明 `joints` 白名单（靴只包小腿、不包大腿）；未知关节返回空 Group（骨架被编辑后安全跳过）。
+- **参数化 gen**：每个形状是一个显式生成器 `ArmorGen = (b: MeshBuilder, p: ArmorGenParams) => void`，参数 `p` 携带关节基准部件尺寸 `base`（`PRESET_PART_SIZES` 对应身体部件）与已解析的 `color` / `accentColor`（缺省回退主色暗化）。`ARMOR_SHAPES: Record<ArmorMeshId, {joints?, gen}>` 只做「形状 → 生成器 + 关节白名单」的派发，尺寸 / 部件构成全部写在各 `gen` 内（参照 `weapon_mesh` 的 `genSword` / `genStaff` 等）。
+- 关节基准尺寸决定覆盖部位：`headNeck` = 头、`spine` = 躯干、`right/leftArmElbow` = 前臂、大腿关节 = 腿甲、膝关节 = 胫甲；形状可声明 `joints` 白名单（靴只包小腿、不包大腿）；未知关节返回空 Group（骨架被编辑后安全跳过）。
+- 主体尺寸统一 `身体部件 × 乘数 + 2 × ARMOR_PAD`（`appearance/constants.ts`）；装饰件（铁盔额檐 / 顶脊、法袍下摆 / 领口、胸甲肩甲、兜帽尖顶与垂布、护腕束带、胫甲护片、绑腿束结、靴尖前伸）由各 `gen` 独立表达。
 - 外观件是**纯视觉子节点**：不生成碰撞体、不进入 `getMeshes()`（角色系统只返回胶囊 mesh）、不参与受击箱 / 视线 / 导航，因此不会影响任何判定。
 
 `CharacterModel`（`appearance/types.ts`）新增：
@@ -436,8 +458,10 @@ armor?: {head?: string; chest?: string; arms?: string; legs?: string}
 | `src/character/armor/catalog.ts` | 目录查询 / 校验 / 防御与攻击汇总 / 移速汇总 |
 | `src/character/armor/armor_pieces.ts` | 护甲预设数据（含臂甲与加速鞋） |
 | `src/character/armor/catalog.test.ts` | 目录、数值汇总与回退单测 |
-| `src/entity/character/appearance/armor_mesh.ts` | 程序化护甲部件构建器（含臂甲 / 靴形状） |
-| `src/entity/character/appearance/armor_mesh.test.ts` | 构建 / 清理 / 关节白名单单测 |
+| `src/entity/character/appearance/mesh_builder.ts` | 共享网格构建器（武器 / 护甲共用的几何 / 材质工厂与生命周期管理） |
+| `src/entity/character/appearance/mesh_builder.test.ts` | 构建器几何工厂 / 组装 / 释放单测 |
+| `src/entity/character/appearance/armor_mesh.ts` | 程序化护甲部件构建器（每形状独立 gen + 关节白名单） |
+| `src/entity/character/appearance/armor_mesh.test.ts` | 构建 / 清理 / 关节白名单 / 外扩尺寸单测 |
 | `e2e/character_equipment.spec.ts` | 面板护甲交互端到端用例 |
 | `docs/equipment_system.md` | 本文档 |
 
@@ -509,6 +533,7 @@ armor?: {head?: string; chest?: string; arms?: string; legs?: string}
 | 单测 | `weapon/melee_weapon.test.ts` / `ranged_weapon.test.ts` | 每个预设声明了合法 `damageType`；法杖 / 魔杖为 `magic` |
 | 单测 | `entity/character/combat/melee_executor.test.ts` / `ranged_executor.test.ts` | 物理防御减免近战；魔法防御减免法杖弹丸、物理防御不减免；攻击加成按武器类别匹配计入（不匹配不参与）；爆炸继承类别与加成 |
 | 单测 | `combat/explosion.test.ts` | `damageType` 参数生效、目标防御参与结算 |
+| 单测 | `appearance/mesh_builder.test.ts` | 几何工厂类型、`add` 组装（位置 / 旋转 / 阴影）、`faceBox` 六面材质、`dispose` 清空 group、实例隔离 |
 | 单测 | `appearance/armor_mesh.test.ts` | 各槽位部件挂到正确关节（含臂部 / 靴白名单）、尺寸外扩大于身体部件、脚尖条前伸、`cleanup` 释放几何/材质 |
 | 单测 | `state_machine/machine.test.ts` | 装备移速乘数生效：walking 速度 = 基础 × 乘数 |
 | 单测 | `save_load/validation.test.ts` | 旧档缺 `armor`/`defense` 回退默认；非法值回退；armor 含四槽位 roundtrip |
