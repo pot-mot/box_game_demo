@@ -382,8 +382,8 @@ idle/walking ──→ attacking (段子状态机)
 
 ### 5.1 攻击判定箱（武器本地命中箱）
 
-- **来源**：武器构建时提供本地盒参数（`appearance/weapon_mesh.ts` 的 `WeaponLocalHitBox`，略包裹武器打击部位 + `WEAPON_HIT_BOX_PAD` 外扩），经 `CharacterModel.weaponGroup` / `weaponHitBox` 暴露；近战武器显式指定刃部/枪头/斧头/锤头区域，远程/投掷取默认盒。
-- **reach 字段**：命中箱沿武器本地 +Y 轴（自握把延伸方向）的最大前伸量（`center.y + half.y`，含外扩边距），即武器打击部位距握把的最远距离；仅作命中箱几何属性保留，攻击检测箱已改由武器 `detectBox` 配置显式驱动（见 `docs/ai_system.md` 2.5）。
+- **来源**：每种武器在自己的 `gen`（`appearance/weapon_mesh.ts`）中**显式声明**本地命中盒 `WeaponLocalHitBox`（不再由 `finish` 统一外扩），经 `CharacterModel.weaponGroup` / `weaponHitBox` 暴露。近战武器用**单个盒近似包裹整把武器（柄 + 打击端）**，因此**与柄相交同样造成伤害**（更易命中）；远程/投掷的命中盒不参与伤害（弹丸机制），保留默认盒。
+- **reach 字段**：命中箱沿武器本地 +Y 轴的前缘相对**握把**的前伸量 `center.y + half.y − gripY`（`gripY` 为握把中心相对模型原点的 Y 偏移，握把已烘焙到武器挂点原点），即本地命中盒最前端距握把的距离。它是近战攻击检测箱 `detectBox` 估算的输入（见 `docs/ai_system.md` 2.5.1）：`reach` 随武器模型尺寸变化，攻击范围随之不同。
 - **运行时**：命中窗口由攻击 clip 的事件轨驱动（`hitbox_on` ≈ 0.5×动作时间、`hitbox_off` ≈ 0.95×动作时间，与打击帧对齐，见 6.3），窗口内每帧强制 `weaponGroup.updateMatrixWorld()`，取 `matrixWorld.elements` 经 `obbFromTransform`（列主序，列向量含缩放）得世界 OBB。伤害 = `(weapon.damage + attackBonus[weapon.damageType]) × activeSegment.damageMultiplier`（重段 ×1.6）；武器固有**攻击类别**（`weapon.damageType`，物理/魔法）随伤害事件传递（见 5.6）。
 - **判定**：与目标受击箱 OBB 做 15 轴 SAT 相交（`combat/obb.ts` `obbIntersect`）。判定与 debug 可视化（`combat_vfx/hitbox_debug.ts` `syncWeaponDebugBox`）同源。
 
@@ -790,7 +790,7 @@ const phaseKey = c.phaseIndex < phases.length
 |--------|----------|
 | 预设完整性 | 近战 6 种 / 远程 9 种；id 与 key 匹配；`type` 正确；每个键名唯一 |
 | 武器中文名 | `name` 非空、纯中文、与 `id` 不同、同类内互不重复 |
-| 近战数值约束 | 伤害 / 击退 / `knockbackY` 为正；`war_hammer` 伤害最高；`detectBox` 尺寸分量为正且前缘在身体前方；`spear` 检测箱前缘最远 |
+| 近战数值约束 | 伤害 / 击退 / `knockbackY` 为正；`war_hammer` 伤害最高；`detectBox` 尺寸分量为正且前缘在身体前方；`spear` 检测箱前缘最远（逐武器范围见 `detect_box.test.ts`，公式见 `docs/ai_system.md` 2.5.1） |
 | 远程数值约束 | 弹道参数为正；`crossbow` 弹速最快；`shotgun` 有 `spreadCount` / `spreadAngle`；`staff` 有 `explosionRadius`；`magic_wand` 有 `homingStrength`；`grenade` 有 `throwAngle` 与 `explosionRadius`；远程侦测范围大于近战 |
 | 子弹可穿过类别 | `DEFAULT_BULLET_PASS_THROUGH_CATEGORIES` 默认为 `['area']` |
 
@@ -815,7 +815,7 @@ describe 区块：连段守卫（test_weapon 蓄力/方向组合键）、平地�
 
 ### 11.5 伤害判定几何 — `entity/character/combat/obb.test.ts` / `melee_executor.test.ts`
 
-OBB 构造与 15 轴 SAT 相交；`targetHitBoxHalves` 随 scale 缩放；武器命中箱判定（`testMeleeHit`：重叠命中 / 远离不命中 / 高度分离不命中 / 武器姿态旋转与目标朝向旋转）；命中箱 `reach` 几何属性（长杆 > 短刃）；攻击检测箱（`attackDetectOBB` / `testAttackDetect`：几何参数、scale 缩放、身前命中、身后余量、侧面覆盖、武器差异、朝向旋转）；命中窗口（`setHitWindow` 事件轨驱动：窗口关闭时 update 早退、非近战武器早退）。
+OBB 构造与 15 轴 SAT 相交；`targetHitBoxHalves` 随 scale 缩放；武器命中箱判定（`testMeleeHit`：重叠命中 / 远离不命中 / 高度分离不命中 / 武器姿态旋转与目标朝向旋转）；命中箱 `reach` 几何属性（`center.y + half.y − gripY`、长杆 > 短刃、战锤计入 gripY）；近战命中箱包裹整把武器含柄（逐武器断言本地盒 Y 区间跨越握把）；攻击检测箱（`attackDetectOBB` / `testAttackDetect`：几何参数、scale 缩放、身前命中、身后余量、侧面覆盖、武器差异、朝向旋转）；detectBox 估算锁定（`detect_box.test.ts`：每个近战预设的 `detectBox` = 估算公式 + 0.05，范围随武器长度递增、长枪最远）；命中窗口（`setHitWindow` 事件轨驱动：窗口关闭时 update 早退、非近战武器早退）。
 
 ### 11.6 攻击动画数据 — `character/weapon/attack_clip_data.ts` / `entity/character/appearance/clips/attack_clips.ts`
 

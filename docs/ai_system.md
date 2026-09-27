@@ -156,7 +156,7 @@ interface CombatStateHandler {
 
 ### 2.5 攻击检测箱（attackDetectChecker）
 
-AI 出招门控不用圆形距离判定（`dist <= weapon.range`），而是用**攻击检测箱**——与角色位置/朝向绑定的朝向 OBB，尺寸与位置由近战武器配置的 `detectBox` 属性显式驱动（不同武器各自配置，不再从命中箱几何推导）：
+AI 出招门控不用圆形距离判定（`dist <= weapon.range`），而是用**攻击检测箱**——与角色位置/朝向绑定的朝向 OBB，尺寸与位置由近战武器配置的 `detectBox` 属性显式驱动（**逐武器按动作模组离线估算**，非统一值）：
 
 ```ts
 /** 攻击检测箱检查器：目标是否在角色的攻击检测箱内（缺失时 AI 回退圆形距离判定） */
@@ -166,12 +166,51 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 - **几何**：`entity/character/combat/melee_executor.ts` 导出 `attackDetectOBB(pos, detectBox, scale, yaw)`：
     - `detectBox` 为 `MeleeWeaponConfig.detectBox`（`character/weapon/melee_weapon.ts` `MeleeDetectBox`）：`size{x,y,z}` 盒尺寸 + `offset{x,y,z}` 相对身体中心偏移（身体局部坐标，+Z = 朝向）；同模块的 `name` 为武器中文名（面板 / 展示标签展示用，不参与任何判定）
     - 半长 = `size / 2 × scale`；盒中心 = 身体位置 + `offset × scale` 绕 yaw 旋转（局部 +Z → (sin, 0, cos)），主体覆盖角色前方与两侧，身后覆盖由 `offset.z - size.z / 2` 决定（预设保留少量贴背余量）
-    - 预设值按武器攻击距离区分（如短剑前缘 ≈ 0.95、长枪前缘 ≈ 1.9，单位 m，scale=1）
 - **判定**：`testAttackDetect()` 用检测箱 OBB 与目标受击箱 OBB（与碰撞箱同尺寸的竖直胶囊包围盒，随目标朝向旋转）做 15 轴 SAT 相交（`combat/obb.ts`）。
 - **注入链路**：`world.ts` `activateAI` 创建 AI 时传入闭包——近战直接取当前技能武器的 `detectBox` 走 `testAttackDetect`（朝向取 `facingAngles`，无需武器模型在场）；远程回退 `Math.hypot <= weapon.range` 圆形判定（保持原有行为，edit debug 以橙色射程圆环显示，半径 = `weapon.range`）。近战武器配置已无 `range` 字段，攻击触发判定完全由武器 `detectBox` 驱动。
 - **生效点**（仅近战）：`attack.update` 出招门控、`attack → chase`（出箱）guard、`chase → attack`（入箱）guard、`kite` 射程内判定；`detectionRange`（索敌感知半径）语义不变。
 - **回退**：checker 缺失（测试环境）时回退圆形距离判定（近战用 `MELEE_FALLBACK_DETECT_RANGE`，远程用 `weapon.range`），保证无装配环境下 AI 行为不变。
 - **与伤害判定的边界**：攻击检测箱仅用于 AI 出招触发（橙色 debug 线框）；实际伤害由**攻击判定箱**（武器本地盒随 `weaponGroup.matrixWorld` 变换的世界 OBB，红色 debug 线框）与受击箱 SAT 相交决定，两者职责分离、几何不同。
+
+#### 2.5.1 detectBox 估算方法（逐武器）
+
+`detectBox` 不在运行时推导：它按武器**动作模组**的几何结构离线估算后写入 `character/weapon/melee_weapon.ts`，再由 `entity/character/combat/detect_box.test.ts` 锁定「配置 = 估算公式」。估算只用现有代码数据（武器命中箱 `reach` + 角色基准尺寸 + 固定臂前伸量），不模拟逐帧姿态——目的是让不同近战武器的攻击范围与其长度一致，而非精确复现挥砍体积。
+
+输入：武器命中箱 `reach`（`WeaponLocalHitBox.reach` = 本地盒前缘相对握把的前伸量；本地盒由武器 `gen` 显式声明并包裹整把武器含柄，随武器模型变化；见 `attack_system.md` 5.1）。常量在 `entity/character/combat/constants.ts`：
+
+| 常量 | 值 | 含义 |
+|------|----|------|
+| `MELEE_ARM_FORWARD_REACH` | 0.5 | 持械臂完全前伸量（上臂 + 前臂 `bodyH=0.36` + 躯干前侧/刺击探身余量） |
+| `MELEE_DETECT_SIDE_MARGIN` | 0.1 | 侧向相对身体碰撞箱外扩半长 |
+| `MELEE_DETECT_HEIGHT_MARGIN` | 0.05 | 竖直相对身体碰撞箱外扩半高 |
+| `MELEE_DETECT_BACK_MARGIN` | 0.1 | 向身后延伸量（覆盖贴背目标） |
+| `MELEE_DETECT_MARGIN` | 0.05 | detectBox 相对估算盒的每轴外扩余量 |
+| `MELEE_DETECT_FORWARD_SCALE` | 0.8 | 前向探测收缩系数（仅在朝向方向收短，避免 AI 对过远目标提前出招） |
+
+估算攻击范围盒（scale=1，身体局部，+Z=朝向）：
+
+```text
+前缘 = (MELEE_ARM_FORWARD_REACH + 武器 reach) × MELEE_DETECT_FORWARD_SCALE   // 前向收短
+估算 size.x = CHARACTER_BASE_SIZE.width  + 2 × MELEE_DETECT_SIDE_MARGIN
+估算 size.y = CHARACTER_BASE_SIZE.height + 2 × MELEE_DETECT_HEIGHT_MARGIN
+估算 size.z = 前缘 + MELEE_DETECT_BACK_MARGIN
+估算 offset.z = (前缘 − MELEE_DETECT_BACK_MARGIN) / 2      // 身后贴背余量固定
+detectBox.size[轴] = 估算 size[轴] + MELEE_DETECT_MARGIN      // 略大于估算盒
+detectBox.offset   = 估算 offset
+```
+
+当前生产预设（`reach` 为武器显式命中盒实测值、`前缘` 已乘 0.8，单位 m，scale=1）：
+
+| 武器 | reach | 前缘 | size.x | size.y | size.z | offset.z |
+|------|------:|-----:|-------:|-------:|-------:|---------:|
+| 短剑 `short_sword` | 0.3125 | 0.65 | 0.5 | 1.15 | 0.8 | 0.275 |
+| 长剑 `long_sword` | 0.4875 | 0.79 | 0.5 | 1.15 | 0.94 | 0.345 |
+| 巨剑 `heavy_sword` | 0.6025 | 0.882 | 0.5 | 1.15 | 1.032 | 0.391 |
+| 长枪 `spear` | 1.17 | 1.336 | 0.5 | 1.15 | 1.486 | 0.618 |
+| 双斧 `dual_axe` | 0.4193 | 0.73544 | 0.5 | 1.15 | 0.88544 | 0.31772 |
+| 战锤 `war_hammer` | 0.4875 | 0.79 | 0.5 | 1.15 | 0.94 | 0.345 |
+
+> 修改任一近战武器模型（长度等）后必须重算对应 `detectBox`：`detect_box.test.ts` 会用上表公式重算并断言配置一致，防止范围漂移。`test_weapon`（`character/combat/test_weapon.ts`）为测试夹具，不参与本表。
 
 ---
 
@@ -448,7 +487,7 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 | 角色分离坡面补偿 | `separation.ts` 的 `separationSlopeDy()`：角色间强制分离的水平瞬移按支撑面平面方程补偿 Y（`SEPARATION_SLOPE_MIN_NY = 0.5` 以下不补偿），防止斜坡上纯水平平移把碰撞体埋进坡面（穿模 + 物理暴力弹出） |
 | 角色分离速度踢 | `CHARACTER_SEPARATION_SPEED = 8`（每边 4 m/s）：分离以 `computeSeparation()` 的位置修正为主，速度踢仅辅助防回穿；过大（旧值 24）会把对方弹飞很远 |
 | 地面检测排除角色 | `world.ts` 的 `buildGroundContacts()` 按碰撞类别过滤掉 `character` 接触（`collisionCategoryOf`）：对方竖直胶囊的近水平侧面法线若进入 `groundNormal`，瞬态坡面投影会把水平速度转成垂直速度（翻滚撞人表现为「跳到对方头顶」），也会误判为着地而站在对方身上 |
-| 战斗目标排除 | 导航传感器把「除自己以外所有角色 mesh」视为 `blocked_wall` 并绕行（用于和平态/非目标角色的互相避让）；但**当前 combat target 必须排除**，否则 AI 在贴脸前（近战攻击检测箱前缘仅 ≈0.4m，而导航前向探测距离 1.5m）就被自己的目标判为墙而绕行，表现为原地环绕目标、永不进入 `attack`（两个近战 AI 会互相绕圈直到 `chaseTimeout`）。实现：`NavRunContext.ignoredMesh`（`NavSensor.sense` 第 5 参）在 `world.ts` 每帧按 `activeFsm === 'combat' && combatTargetId` 设为目标 mesh，传感器在障碍列表与角色集合两处都跳过它；目标重叠/推挤仍由接触推挤闸门与强制分离兜底 |
+| 战斗目标排除 | 导航传感器把「除自己以外所有角色 mesh」视为 `blocked_wall` 并绕行（用于和平态/非目标角色的互相避让）；但**当前 combat target 必须排除**，否则 AI 在贴脸前（短近战武器攻击检测箱前缘如短剑 ≈0.68m，小于导航前向探测距离 1.5m）就被自己的目标判为墙而绕行，表现为原地环绕目标、永不进入 `attack`（两个近战 AI 会互相绕圈直到 `chaseTimeout`）。实现：`NavRunContext.ignoredMesh`（`NavSensor.sense` 第 5 参）在 `world.ts` 每帧按 `activeFsm === 'combat' && combatTargetId` 设为目标 mesh，传感器在障碍列表与角色集合两处都跳过它；目标重叠/推挤仍由接触推挤闸门与强制分离兜底 |
 
 ### 5.7 阵营与攻击倾向
 

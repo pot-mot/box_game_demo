@@ -81,7 +81,8 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         damage: 2,
         knockbackForce: 2, knockbackY: 1,
         detectionRange: 6,
-        detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
+        /* 前缘 = (0.5 + reach 0.3125) × 0.8 = 0.65，外扩 +0.05 见 docs/ai_system.md 2.5.1 */
+        detectBox: { size: { x: 0.5, y: 1.15, z: 0.8 }, offset: { x: 0, y: 0, z: 0.275 } },
     }, {
         one_handed: {},
         two_handed: {},
@@ -94,7 +95,8 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         damage: 3,
         knockbackForce: 5, knockbackY: 2,
         detectionRange: 8,
-        detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
+        /* 前缘 = (0.5 + reach 0.4875) × 0.8 = 0.79 */
+        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
     }, {
         one_handed: {},
         two_handed: {},
@@ -108,7 +110,8 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         damage: 8,
         knockbackForce: 8, knockbackY: 3,
         detectionRange: 10,
-        detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
+        /* 前缘 = (0.5 + reach 0.6025) × 0.8 = 0.882 */
+        detectBox: { size: { x: 0.5, y: 1.15, z: 1.032 }, offset: { x: 0, y: 0, z: 0.391 } },
     }, {
         one_handed: {},
         two_handed: {chains: {light: {steps: ['light_1', 'light_2', 'light_3'], loop: true}}},
@@ -122,7 +125,8 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         damage: 5,
         knockbackForce: 4, knockbackY: 1,
         detectionRange: 10,
-        detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
+        /* 前缘 = (0.5 + reach 1.17) × 0.8 = 1.336（长杆武器攻击距离优势） */
+        detectBox: { size: { x: 0.5, y: 1.15, z: 1.486 }, offset: { x: 0, y: 0, z: 0.618 } },
     }, {
         one_handed: {},
         two_handed: {
@@ -145,7 +149,8 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         damage: 6,
         knockbackForce: 7, knockbackY: 2,
         detectionRange: 7,
-        detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
+        /* 前缘 = (0.5 + reach 0.4193) × 0.8 = 0.73544 */
+        detectBox: { size: { x: 0.5, y: 1.15, z: 0.88544 }, offset: { x: 0, y: 0, z: 0.31772 } },
     }, {
         one_handed: {},
         two_handed: {},
@@ -158,7 +163,8 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         damage: 10,
         knockbackForce: 10, knockbackY: 4,
         detectionRange: 8,
-        detectBox: { size: { x: 0.4, y: 1, z: 0.4 }, offset: { x: 0, y: 0, z: 0.2 } },
+        /* 前缘 = (0.5 + reach 0.4875) × 0.8 = 0.79（战锤握把偏低，reach 已计入 gripY） */
+        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
     }, {
         one_handed: {},
         two_handed: {},

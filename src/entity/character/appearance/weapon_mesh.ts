@@ -67,16 +67,14 @@ export const WEAPON_MESH_GRIPS: Record<WeaponMeshId, WeaponGripPose> = {
 
 // ── 攻击判定箱（武器本地命中箱） ──
 
-/** 命中箱相对武器模型的外扩边距（略大于武器模型） */
-const WEAPON_HIT_BOX_PAD = 0.08
-
-/** 武器本地命中箱：武器本地坐标系内略包裹武器模型（以打击部位为主）的盒参数，
- * 运行时经武器 group 的 matrixWorld 变换为世界空间 OBB 参与伤害判定 */
+/** 武器本地命中箱：每个武器在自己的 `gen` 中显式声明（不再由 `finish` 统一外扩），
+ * 单个盒按武器几何近似包裹整把武器（含柄）；运行时经武器 group 的 matrixWorld
+ * 变换为世界空间 OBB 参与伤害判定 */
 export interface WeaponLocalHitBox {
     readonly center: { readonly x: number; readonly y: number; readonly z: number }
     readonly half: { readonly x: number; readonly y: number; readonly z: number }
-    /** 命中箱沿武器本地 +Y 轴（自握把延伸方向）的最大前伸量（含外扩边距），
-     * 即武器打击部位距握把的最远距离，供攻击检测箱推导实际攻击距离 */
+    /** 命中箱沿武器本地 +Y 轴（自握把原点延伸方向）的最大前伸量，
+     * 即武器打击部位距**握把**的最远距离，供攻击检测箱推导实际攻击距离 */
     readonly reach: number
 }
 
@@ -95,14 +93,19 @@ export interface WeaponMeshResult {
     gripZ: number
     /** 双手共持时左手相对主握把沿本地 +Y（握把→武器前端）的距离 */
     supportGripOffset: number
-    /** 攻击判定箱本地盒参数（自动外扩 WEAPON_HIT_BOX_PAD） */
+    /** 攻击判定箱本地盒参数（逐武器在 gen 中显式声明） */
     hitBox: WeaponLocalHitBox
     cleanup: () => void
 }
 
 // ── 工具（基于共享 mesh_builder） ──
 
-/** 收尾：收敛命中箱 / 命中采样点 / 刀尖采样点，返回统一结果（cleanup 即 builder.dispose） */
+/**
+ * 收尾：收敛命中箱 / 命中采样点 / 刀尖采样点，返回统一结果（cleanup 即 builder.dispose）。
+ * 命中箱由各 `gen` 通过 `hbC*` / `hbH*` 显式给出（模型原点坐标系），`finish` 不再统一外扩。
+ * `reach` = 命中箱前缘（hbCy + hbHy）相对**握把**的前伸量：减去握把中心相对模型原点的 Y 偏移
+ * gripY（握把已由 createWeaponMesh 烘焙到武器挂点原点；gripY 为 0 的贴掌武器不受影响）。
+ */
 function finish(
     b: MeshBuilder,
     hitX: number, hitY: number, hitZ: number,
@@ -112,11 +115,10 @@ function finish(
     hbHx = 0.1, hbHy = 0.1, hbHz = 0.1,
     gripX = 0, gripZ = 0,
 ): WeaponMeshResult {
-    /* 命中箱统一外扩边距，保证略大于武器模型 */
     const hitBox: WeaponLocalHitBox = {
         center: {x: hbCx, y: hbCy, z: hbCz},
-        half: {x: hbHx + WEAPON_HIT_BOX_PAD, y: hbHy + WEAPON_HIT_BOX_PAD, z: hbHz + WEAPON_HIT_BOX_PAD},
-        reach: hbCy + hbHy + WEAPON_HIT_BOX_PAD,
+        half: {x: hbHx, y: hbHy, z: hbHz},
+        reach: hbCy + hbHy - gripY,
     }
 
     const hitCenter = b.add(b.box(0.01, 0.01, 0.01), b.material(0xff0000, 1, 0), hitX, hitY, hitZ)
@@ -152,9 +154,15 @@ const genSword = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'sword' }): Weap
     b.add(b.cylinder(gR, gR, gLen), gm, 0, gripTop - gLen / 2, 0)
     b.add(b.box(bw, 0.02, bw * 2.5), bm, 0, gripTop, 0)
     b.add(b.box(bd, bh, bw), bm, 0, gripTop + bh / 2, 0)
-    /* 命中箱包裹刃部（y ∈ [gripTop, gripTop+bh]） */
+    /* 命中箱：单盒包裹整把武器（柄 — 护手 — 刃），柄相交同样造成伤害；横向按最宽部件取整 + 局部外扩 */
+    const hitMargin = 0.05
+    const hitLowY = gripTop - gLen
+    const hitHighY = gripTop + bh
+    const hitHalfX = Math.max(gR, bw / 2, bd / 2) + hitMargin
+    const hitHalfZ = Math.max(gR, bw * 1.25, bw / 2) + hitMargin
     return finish(b, 0, gripTop + bh * 0.35, 0, 0, gripTop + bh, 0, gripTop - gLen / 2,
-        0, gripTop + bh / 2, 0, bd, bh / 2, bw)
+        0, (hitLowY + hitHighY) / 2, 0,
+        hitHalfX, (hitHighY - hitLowY) / 2 + hitMargin, hitHalfZ)
 }
 
 const genHeavySword = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'heavy_sword' }): WeaponMeshResult => {
@@ -169,8 +177,15 @@ const genHeavySword = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'heavy_swor
     b.add(b.cylinder(gR, gR, gLen), gm, 0, gripTop - gLen / 2, 0)
     b.add(b.box(bw, 0.03, bw * 3), bm, 0, gripTop, 0)
     b.add(b.box(bd, bh, bw), bm, 0, gripTop + bh / 2, 0)
+    /* 命中箱：单盒包裹整把武器（柄 — 护手 — 刃），柄相交同样造成伤害 */
+    const hitMargin = 0.05
+    const hitLowY = gripTop - gLen
+    const hitHighY = gripTop + bh
+    const hitHalfX = Math.max(gR, bw / 2, bd / 2) + hitMargin
+    const hitHalfZ = Math.max(gR, bw * 1.5, bw / 2) + hitMargin
     return finish(b, 0, gripTop + bh * 0.3, 0, 0, gripTop + bh, 0, gripTop - gLen / 2,
-        0, gripTop + bh / 2, 0, bd, bh / 2, bw)
+        0, (hitLowY + hitHighY) / 2, 0,
+        hitHalfX, (hitHighY - hitLowY) / 2 + hitMargin, hitHalfZ)
 }
 
 const genSpear = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'spear' }): WeaponMeshResult => {
@@ -180,9 +195,15 @@ const genSpear = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'spear' }): Weap
 
     b.add(b.cylinder(pR, pR, cfg.poleLen), pm, 0, cfg.poleLen / 2, 0)
     b.add(b.box(0.05, cfg.headLen, 0.04), hm, 0, cfg.poleLen + cfg.headLen / 2, 0)
-    /* 命中箱包裹枪头 */
+    /* 命中箱：单盒沿杆贯穿整把武器（杆 — 枪头），杆相交同样造成伤害 */
+    const hitMargin = 0.05
+    const hitLowY = 0
+    const hitHighY = cfg.poleLen + cfg.headLen
+    const hitHalfX = Math.max(pR, 0.05 / 2) + hitMargin
+    const hitHalfZ = Math.max(pR, 0.04 / 2) + hitMargin
     return finish(b, 0, cfg.poleLen * 0.6, 0, 0, cfg.poleLen + cfg.headLen, 0, cfg.poleLen * 0.08,
-        0, cfg.poleLen + cfg.headLen / 2, 0, 0.05, cfg.headLen / 2, 0.04)
+        0, (hitLowY + hitHighY) / 2, 0,
+        hitHalfX, (hitHighY - hitLowY) / 2 + hitMargin, hitHalfZ)
 }
 
 /* 单刃斧（双持时左右手各一）：斧刃立于本地 Y-Z 平面（宽沿本地 Z、薄沿本地 X），斧刃自柄侧展开。
@@ -201,10 +222,22 @@ const genDualAxe = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'dual_axe' }):
 
     b.add(b.cylinder(gR, gR, gLen), gm, 0, handleTop - gLen / 2, 0)
     b.add(b.box(bladeD, bladeH, bladeW), bm, 0, bladeY, bladeZ, Math.PI / 12, 0, 0)
-    /* 命中箱包裹斧刃；刀尖采样点 = 刃外上角 */
+    /* 命中箱：单盒包裹整把武器（柄 + 绕 X 倾斜的斧刃），柄相交同样造成伤害。
+     * 绕 X 旋转 rx 后刃在 Y/Z 上的半长按旋转分量展开 */
+    const hitMargin = 0.05
+    const rx = Math.PI / 12
+    const bladeHy = bladeH / 2 * Math.cos(rx) + bladeW / 2 * Math.sin(rx)
+    const bladeHz = bladeH / 2 * Math.sin(rx) + bladeW / 2 * Math.cos(rx)
+    const hitLowY = Math.min(handleTop - gLen, bladeY - bladeHy)
+    const hitHighY = Math.max(handleTop, bladeY + bladeHy)
+    const hitLowZ = Math.min(-gR, bladeZ - bladeHz)
+    const hitHighZ = Math.max(gR, bladeZ + bladeHz)
+    const hitHalfX = Math.max(gR, bladeD / 2) + hitMargin
+    /* 刀尖采样点 = 刃外上角 */
     return finish(b, 0, bladeY, bladeZ, 0, bladeY + bladeH / 2, bladeZ + bladeW / 2,
         -(sz * 0.15 + gLen / 2),
-        0, bladeY, bladeZ, bladeD / 2, bladeH / 2, bladeW / 2)
+        0, (hitLowY + hitHighY) / 2, (hitLowZ + hitHighZ) / 2,
+        hitHalfX, (hitHighY - hitLowY) / 2 + hitMargin, (hitHighZ - hitLowZ) / 2 + hitMargin)
 }
 
 const genWarHammer = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshResult => {
@@ -218,9 +251,14 @@ const genWarHammer = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'war_hammer'
 
     b.add(b.cylinder(gR, gR, gLen), gm, 0, handleTop - gLen / 2, 0)
     b.add(b.box(hsz * 0.7, headH, hsz * 0.7), hm, 0, headY, 0)
-    /* 命中箱包裹锤头；刀尖采样点 = 锤头顶 */
+    /* 命中箱：单盒包裹整把武器（柄 + 锤头），柄相交同样造成伤害；刀尖采样点 = 锤头顶 */
+    const hitMargin = 0.05
+    const hitLowY = Math.min(handleTop - gLen, headY - headH / 2)
+    const hitHighY = Math.max(handleTop, headY + headH / 2)
+    const hitHalf = Math.max(gR, hsz * 0.35) + hitMargin
     return finish(b, 0, headY, 0, 0, headY + headH / 2, 0, -(hsz * 0.2 + (hsz * 1.5) / 2),
-        0, headY, 0, hsz * 0.35, hsz * 0.25, hsz * 0.35)
+        0, (hitLowY + hitHighY) / 2, 0,
+        hitHalf, (hitHighY - hitLowY) / 2 + hitMargin, hitHalf)
 }
 
 const genBow = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'bow' }): WeaponMeshResult => {
