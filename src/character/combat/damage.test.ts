@@ -85,10 +85,10 @@ describe('applyDamage 防御结算', () => {
 
     it('返回事件保留方向与技能字段（含减免后的 finalAmount）', () => {
         const target = makeTarget({defense: {physical: 1, magic: 0}})
-        const result = applyDamage(target, makeEvent({dirX: 0.6, dirZ: 0.8, skillId: 'spear_light_1'}))
+        const result = applyDamage(target, makeEvent({dirX: 0.6, dirZ: 0.8, skillId: 'spear_two_handed_light_1'}))
         expect(result.dirX).toBe(0.6)
         expect(result.dirZ).toBe(0.8)
-        expect(result.skillId).toBe('spear_light_1')
+        expect(result.skillId).toBe('spear_two_handed_light_1')
         expect(result.finalAmount).toBe(9)
     })
 

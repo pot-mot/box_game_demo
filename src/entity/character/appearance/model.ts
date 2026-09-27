@@ -23,6 +23,8 @@ interface WeaponSlot {
     /** 原始几何中的主握把 Y 坐标（供骨骼编辑器校验主握点） */
     gripY: number
     supportGripOffset: number
+    /** 当前装配的网格配置引用（同引用时跳过重建，只做挂背/回手换父节点） */
+    meshConfig: WeaponMeshConfig | undefined
 }
 
 /** 取关节 Group；预设骨架保证存在，缺失即数据结构错误 */
@@ -56,7 +58,8 @@ interface MountedArmorPart {
 /**
  * 构建完整的方块人模型：由**人形预设骨架定义**生成关节 Group 层级（`createJointHierarchy`），
  * 再用**游戏与骨骼编辑器共用的外观装配器**（`assembleCharacterAppearance`）挂上方块部件（含手部模型）。
- * 武器挂点（rightWeaponMount / leftWeaponMount）是独立关节，不并入手部骨骼。
+ * 武器挂点（rightWeaponMount / leftWeaponMount / backWeaponMount）是独立关节，不并入手部骨骼：
+ * 主手武器挂右腕，副手武器平时握左手、双手共持时挂背（`setOffhandStowed`）。
  */
 export const createCharacterModel = (config: CharacterConfig, faction: number): CharacterModel => {
     const palette = SELECT_PALETTE(faction)
@@ -74,9 +77,10 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     const rightWeaponMount = requireGroup(groups, 'rightWeaponMount')
     const leftWeaponMount = requireGroup(groups, 'leftWeaponMount')
+    const backWeaponMount = requireGroup(groups, 'backWeaponMount')
 
     const createSlot = (mountJoint: Group): WeaponSlot => ({
-        mountJoint, group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0, supportGripOffset: 0,
+        mountJoint, group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0, supportGripOffset: 0, meshConfig: undefined,
     })
     const rightSlot = createSlot(rightWeaponMount)
     const leftSlot = createSlot(leftWeaponMount)
@@ -91,9 +95,12 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         slot.cleanup = null
         slot.gripY = 0
         slot.supportGripOffset = 0
+        slot.meshConfig = undefined
     }
 
     const equipSlot = (slot: WeaponSlot, meshConfig: WeaponMeshConfig | undefined): void => {
+        /* 同一网格配置引用：跳过重建（换持握模式只改挂背状态时零开销） */
+        if (slot.meshConfig === meshConfig) return
         clearSlot(slot)
         if (meshConfig === undefined) return
         /* 武器模型已自带固有握持（握把中心在模型原点）；直接挂到武器骨骼下，朝向完全由骨骼动画控制 */
@@ -105,6 +112,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         slot.cleanup = result.cleanup
         slot.gripY = result.gripY
         slot.supportGripOffset = result.supportGripOffset
+        slot.meshConfig = meshConfig
         slot.mountJoint.add(result.group)
     }
 
@@ -113,9 +121,19 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         clearSlot(leftSlot)
     }
 
+    /** 副手武器挂背 / 回手：只换父节点，不重建几何（双手共持时挂背，其余模式握在左手） */
+    const setOffhandStowed = (stowed: boolean): void => {
+        const group = leftSlot.group
+        if (group === null) return
+        const target = stowed ? backWeaponMount : leftWeaponMount
+        if (group.parent !== target) target.add(group)
+    }
+
     const equipWeapon = (equipConfig: WeaponEquipConfig): void => {
         equipSlot(rightSlot, equipConfig.main)
         equipSlot(leftSlot, equipConfig.offhand)
+        /* 缺省 = 握在左手；显式 offhandStowed = 挂背（双手共持） */
+        setOffhandStowed(equipConfig.offhandStowed === true)
     }
 
     /* ── 护甲：纯视觉部件，逐槽挂到对应关节（骨架编辑后缺失的关节安全跳过） ── */
@@ -202,6 +220,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         leftWristPivot: requireGroup(groups, 'leftWristPivot'),
         rightWeaponMount,
         leftWeaponMount,
+        backWeaponMount,
         rightLegHip: requireGroup(groups, 'rightLegHip'),
         rightThigh: rightThighMesh,
         rightLegKnee: requireGroup(groups, 'rightLegKnee'),
@@ -211,6 +230,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         leftLegKnee: requireGroup(groups, 'leftLegKnee'),
         leftShin: leftShinMesh,
         equipWeapon,
+        setOffhandStowed,
         removeWeapon,
         equipArmor,
         removeArmor,

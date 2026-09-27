@@ -6,11 +6,14 @@ import {createWeaponRuntime, type WeaponRuntime} from '../weapon/weapon_runtime.
 import {createCombatComponent} from '../combat/types.ts'
 import {ROLL_COOLDOWN} from '../combat/roll_skill.ts'
 import {createTestWeaponRuntime, TEST_WEAPON_CHARGE_HOLD} from '../combat/test_weapon.ts'
-import {SPEAR_CHARGE_HOLD, SPEAR_CHARGE_THRUST_ID} from '../weapon/melee_special_moves.ts'
+import {SPEAR_CHARGE_HOLD, spearChargeThrustId} from '../weapon/melee_special_moves.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
 import type {CharacterEntity} from '../types.ts'
 
 const DT = 1 / 60
+
+/** 长枪双手蓄力突刺段 id（段 id 带持握模式命名空间） */
+const SPEAR_CHARGE_THRUST_ID = spearChargeThrustId('spear', 'two_handed')
 
 /** 状态机路径用到的 mock body 子集（真实 Rapier RigidBody 的最小替身，速度/位置按值联动） */
 type MockBody = {
@@ -100,8 +103,8 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
     })
 
     it('长枪蓄力突刺（生产武器变体）：长按命中变体段并挂段冷却；单发不推进；冷却期内长按回退轻 1 段', () => {
-        /* 长按：起手 = 蓄力突刺（守卫变体优先） */
-        const e = makeMock(createWeaponRuntime('spear'))
+        /* 长按：起手 = 蓄力突刺（守卫变体优先；蓄力变体仅存在于双手链） */
+        const e = makeMock(createWeaponRuntime('spear', {}, 'two_handed'))
         e.stateMachine.setInput(0, 0, false, true, false, 'light', SPEAR_CHARGE_HOLD)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
@@ -123,21 +126,21 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', SPEAR_CHARGE_HOLD)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('spear_light_1')
+        expect(e.combat.activeSegment?.id).toBe('spear_two_handed_light_1')
 
         /* 点按（hold < 阈值）：直接走轻 1 段 */
-        const tapped = makeMock(createWeaponRuntime('spear'))
+        const tapped = makeMock(createWeaponRuntime('spear', {}, 'two_handed'))
         tapped.stateMachine.setInput(0, 0, false, true, false, 'light', SPEAR_CHARGE_HOLD - 0.01)
         tapped.stateMachine.update(DT, tapped)
-        expect(tapped.combat.activeSegment?.id).toBe('spear_light_1')
+        expect(tapped.combat.activeSegment?.id).toBe('spear_two_handed_light_1')
     })
 
-    it('巨剑三段轻链：按住轻击键依次 轻1 → 轻2 → 轻3 → 轻1', () => {
-        const e = makeMock(createWeaponRuntime('heavy_sword'))
+    it('巨剑三段轻链（双手链）：按住轻击键依次 轻1 → 轻2 → 轻3 → 轻1', () => {
+        const e = makeMock(createWeaponRuntime('heavy_sword', {}, 'two_handed'))
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
-        expect(e.combat.activeSegment?.id).toBe('heavy_sword_light_1')
-        for (const expected of ['heavy_sword_light_2', 'heavy_sword_light_3', 'heavy_sword_light_1']) {
+        expect(e.combat.activeSegment?.id).toBe('heavy_sword_two_handed_light_1')
+        for (const expected of ['heavy_sword_two_handed_light_2', 'heavy_sword_two_handed_light_3', 'heavy_sword_two_handed_light_1']) {
             e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
             for (let i = 0; i < 90 && e.combat.activeSegment?.id !== expected; i++) {
                 e.stateMachine.update(DT, e)
@@ -495,11 +498,11 @@ describe('输入缓冲连段（轻/重双链）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         run(e.stateMachine, e, 17)
         /* 段中（轻 1 总时长 0.533s = 动作 0.267s + 恢复 0.266s，动作已过、未到段末） */
-        expect(e.combat.activeSegment?.id).toBe('long_sword_light_1')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
         expect(e.combat.phaseIndex).toBe(1)
         /* 段末推进到轻 2（链中下一段），不出 attacking 状态 */
-        runUntilSegment(e, 'long_sword_light_2')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_light_2')
+        runUntilSegment(e, 'long_sword_one_handed_light_2')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
         expect(e.stateMachine.currentState).toBe('attacking')
         /* 推进时计时器重置 */
         expect(e.combat.attackTimer).toBeLessThan(0.1)
@@ -511,17 +514,17 @@ describe('输入缓冲连段（轻/重双链）', () => {
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0)
         run(e.stateMachine, e, 40)
         expect(e.stateMachine.currentState).toBe('idle')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_light_1')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
     })
 
     it('轻链无限循环：按住轻击 轻1→轻2→轻1', () => {
         const e = makeMock()
         enterAttacking(e)
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
-        runUntilSegment(e, 'long_sword_light_2')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_light_2')
-        runUntilSegment(e, 'long_sword_light_1')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_light_1')
+        runUntilSegment(e, 'long_sword_one_handed_light_2')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
+        runUntilSegment(e, 'long_sword_one_handed_light_1')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
         expect(e.stateMachine.currentState).toBe('attacking')
     })
 
@@ -531,8 +534,8 @@ describe('输入缓冲连段（轻/重双链）', () => {
         /* 普通攻击 cooldown = 0：触发时不挂冷却 */
         expect(e.combat.segmentCooldowns.size).toBe(0)
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
-        runUntilSegment(e, 'long_sword_light_2')
-        runUntilSegment(e, 'long_sword_light_1')
+        runUntilSegment(e, 'long_sword_one_handed_light_2')
+        runUntilSegment(e, 'long_sword_one_handed_light_1')
         /* 循环链回到轻 1：全程无冷却阻塞；轻 2（链中段）同样恒 0 */
         expect(e.combat.segmentCooldowns.size).toBe(0)
     })
@@ -542,8 +545,8 @@ describe('输入缓冲连段（轻/重双链）', () => {
         enterAttacking(e)
         /* 轻 1 段中改按重击键 */
         e.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0)
-        runUntilSegment(e, 'long_sword_heavy_1')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_heavy_1')
+        runUntilSegment(e, 'long_sword_one_handed_heavy_1')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
         expect(e.stateMachine.currentState).toBe('attacking')
     })
 })

@@ -7,14 +7,22 @@ import {MELEE_WEAPON_PRESETS} from '../../character/weapon/melee_weapon.ts'
 import {RANGED_WEAPON_PRESETS} from '../../character/weapon/ranged_weapon.ts'
 import {orderedSegments} from '../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {HOLD_MODE_LABELS} from '../../character/weapon/hold_mode.ts'
 import type {BuiltinClipEntry} from './builtin_clips.ts'
 
 const entriesOf = (group: string): readonly BuiltinClipEntry[] =>
     getBuiltinClips().filter(entry => entry.group === group)
 
-/** 武器模组声明的全部攻击段 id（与内置动作库同一枚举顺序） */
+/** 武器模组声明的全部攻击段 id（全部持握模式，与内置动作库同一枚举顺序） */
 const segmentIdsOf = (weapons: readonly WeaponConfig[]): ReadonlySet<string> =>
-    new Set(weapons.flatMap(weapon => orderedSegments(weaponAttacksOf(weapon)).map(segment => segment.id)))
+    new Set(weapons.flatMap(weapon =>
+        weapon.holdModes.flatMap(mode => orderedSegments(weaponAttacksOf(weapon, mode)).map(segment => segment.id)),
+    ))
+
+/** 近战武器全部攻击段总数（6 武器 × 3 模式；巨剑/长枪双手链各多一段） */
+const MELEE_SEGMENT_COUNT = Object.values(MELEE_WEAPON_PRESETS)
+    .reduce((sum, weapon) => sum + weapon.holdModes
+        .reduce((modeSum, mode) => modeSum + orderedSegments(weaponAttacksOf(weapon, mode)).length, 0), 0)
 
 const presetPositions = (): ReadonlyMap<string, Vector3> => {
     const definition = buildCharacterSkeletonDefinition()
@@ -22,10 +30,10 @@ const presetPositions = (): ReadonlyMap<string, Vector3> => {
 }
 
 describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
-    it('覆盖全部基础状态与全部武器的攻击段', () => {
+    it('覆盖全部基础状态与全部武器的攻击段（含全部持握模式）', () => {
         const library = getBuiltinClips()
-        /* 基础状态 9 + 近战 26（4 段 × 4 武器 + 巨剑 5 段 + 长枪 5 段）+ 远程 9 */
-        expect(library.length).toBe(9 + 26 + 9)
+        /* 基础状态 9 + 近战全模式段 + 远程 9 */
+        expect(library.length).toBe(9 + MELEE_SEGMENT_COUNT + 9)
         const meleeIds = new Set(entriesOf('近战攻击').map(entry => entry.id))
         const rangedIds = new Set(entriesOf('远程攻击').map(entry => entry.id))
         expect(meleeIds).toEqual(segmentIdsOf(Object.values(MELEE_WEAPON_PRESETS)))
@@ -50,40 +58,38 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         expect(labels).toContain('受击硬直')
     })
 
-    it('近战条目按武器分组，每武器内先主干段（按链编排）后变体段', () => {
+    it('近战条目按武器 + 持握模式分组，每模式内先主干段（按链编排）后变体段', () => {
         const labels = entriesOf('近战攻击').map(entry => entry.label)
-        /* 巨剑轻链 3 段、长枪多一个蓄力突刺变体，其余武器 4 段 */
-        const expected: Readonly<Record<string, readonly string[]>> = {
-            短剑: ['轻击一段', '轻击二段', '重击一段', '重击二段'],
-            长剑: ['轻击一段', '轻击二段', '重击一段', '重击二段'],
-            巨剑: ['轻击一段', '轻击二段', '轻击三段', '重击一段', '重击二段'],
-            长枪: ['轻击一段', '轻击二段', '蓄力突刺', '重击一段', '重击二段'],
-            双斧: ['轻击一段', '轻击二段', '重击一段', '重击二段'],
-            战锤: ['轻击一段', '轻击二段', '重击一段', '重击二段'],
+        /* 期望顺序 = 武器 × 模式 × 段展示顺序（标签带模式名） */
+        const expected: string[] = []
+        for (const weapon of Object.values(MELEE_WEAPON_PRESETS)) {
+            for (const mode of weapon.holdModes) {
+                const segments = orderedSegments(weaponAttacksOf(weapon, mode))
+                for (const segment of segments) {
+                    const display = segment.label ?? `${segment.key === 'light' ? '轻击' : '重击'}${['一', '二', '三'][segment.step - 1] ?? segment.step}段`
+                    expected.push(`${weapon.name} · ${HOLD_MODE_LABELS[mode]} · ${display}`)
+                }
+            }
         }
-        for (const [weapon, segmentLabels] of Object.entries(expected)) {
-            const start = labels.indexOf(`${weapon} · ${segmentLabels[0]}`)
-            expect(start, `${weapon} 应出现在清单中`).toBeGreaterThanOrEqual(0)
-            expect(labels.slice(start, start + segmentLabels.length)).toEqual(segmentLabels.map(label => `${weapon} · ${label}`))
-        }
-        /* 武器之间不交叉：清单长度 = 各武器段数之和 */
-        const total = Object.values(expected).reduce((sum, segmentLabels) => sum + segmentLabels.length, 0)
-        expect(labels).toHaveLength(total)
+        expect(labels).toEqual(expected)
     })
 
-    it('攻击条目带武器与段来源（编辑器据此自动装备武器）；基础状态条目不带', () => {
+    it('攻击条目带武器 / 段 / 持握模式来源（编辑器据此自动装备武器）；基础状态条目不带', () => {
         const attacks = [...entriesOf('近战攻击'), ...entriesOf('远程攻击')]
         for (const entry of attacks) {
             expect(entry.weaponId, entry.label).toBeDefined()
             expect(entry.segmentId, entry.label).toBe(entry.id)
+            expect(entry.holdMode, entry.label).toBeDefined()
         }
         for (const entry of entriesOf('基础状态')) {
             expect(entry.weaponId).toBeUndefined()
             expect(entry.segmentId).toBeUndefined()
+            expect(entry.holdMode).toBeUndefined()
         }
-        expect(findBuiltinClip('heavy_sword_light_3')?.weaponId).toBe('heavy_sword')
-        expect(findBuiltinClip('spear_charge_thrust')?.segmentId).toBe('spear_charge_thrust')
+        expect(findBuiltinClip('heavy_sword_two_handed_light_3')?.weaponId).toBe('heavy_sword')
+        expect(findBuiltinClip('spear_two_handed_charge_thrust')?.segmentId).toBe('spear_two_handed_charge_thrust')
         expect(findBuiltinClip('longbow_shot')?.weaponId).toBe('longbow')
+        expect(findBuiltinClip('long_sword_dual_wield_light_1')?.holdMode).toBe('dual_wield')
     })
 
     it('id 与显示名（载入动画库后的 clip 名）全库唯一', () => {
@@ -133,12 +139,12 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
 
     it('攻击条目带 hitbox_on / hitbox_off 事件轨（时间同生产窗口）', () => {
         const attacks = [...entriesOf('近战攻击'), ...entriesOf('远程攻击')]
-        /* 近战 26（巨剑轻链 3 段 + 长枪蓄力变体）+ 远程 9 */
-        expect(attacks.length).toBe(35)
+        /* 全部武器 × 全部持握模式的攻击段 */
+        expect(attacks.length).toBe(MELEE_SEGMENT_COUNT + 9)
         for (const entry of attacks) {
             const records = entry.clip.eventTracks[0]?.records ?? []
             const names = records.map(record => record.eventName)
-            /* 双持（双斧）主/副手各一对事件；其余武器仅主手一对 */
+            /* 双持主/副手各一对事件；其余模式仅主手一对 */
             expect(names).toEqual(records.length === 4
                 ? ['hitbox_on', 'hitbox_off', 'hitbox_on', 'hitbox_off']
                 : ['hitbox_on', 'hitbox_off'])
@@ -147,7 +153,7 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
                 expect(record.time).toBeLessThanOrEqual(entry.clip.duration)
             }
         }
-        const lightOne = findBuiltinClip('long_sword_light_1')
+        const lightOne = findBuiltinClip('long_sword_one_handed_light_1')
         expect(lightOne).toBeDefined()
         const records = lightOne!.clip.eventTracks[0].records
         /* 命中窗口对齐打击帧：on ≈ 0.5×动作时间、off ≈ 0.95×动作时间（轻段动作时间 = 0.267s） */

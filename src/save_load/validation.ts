@@ -16,6 +16,7 @@ import {DEFAULT_WATER_CONFIG} from '../entity/area/water/validation.ts'
 import {DEFAULT_TERRAIN_CONFIG} from '../entity/terrain/base/validation.ts'
 import {DEFAULT_FRAGMENT_CONFIG} from '../entity/fragment/common/validation.ts'
 import {CHARACTER_CONFIG_DEFAULTS} from '../entity/character/constants.ts'
+import {HOLD_MODES} from '../character/weapon/hold_mode.ts'
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0])
 const Quat = z.tuple([z.number(), z.number(), z.number(), z.number()]).default([0, 0, 0, 1])
@@ -125,6 +126,9 @@ const AttackConfigSchema = z.object({
     ranged: RangedOverrideSchema.optional(),
 })
 
+/* 副手武器配置：结构非法整体回退 undefined（运行时无副手）；未知武器 id 由 world.add 安全丢弃 */
+const OffhandConfigSchema = AttackConfigSchema.optional().catch(undefined)
+
 const TendencyConfigSchema = z.object({
     tendencyId: z.enum(['hostileAll', 'hostileExceptSelf', 'hostileTo', 'hostileExcept', 'pacifist']),
     targetFactions: z.array(z.number()).optional(),
@@ -162,8 +166,9 @@ const CharacterConfigInner = z.object({
     peaceStrategy: z.enum(['patrol', 'build']).optional(),
     combatStrategy: z.enum(['tactical', 'aggressive', 'cowardly']).optional(),
     /* 持握模式：非法值安全回退 undefined（由运行时按武器默认模式处理），不抛错 */
-    holdMode: z.enum(['one_handed', 'two_handed', 'dual_wield']).optional().catch(undefined),
+    holdMode: z.enum(HOLD_MODES).optional().catch(undefined),
     attack: AttackConfigSchema.default(CHARACTER_SAVE_ATTACK_DEFAULT),
+    offhand: OffhandConfigSchema,
     tendency: TendencyConfigSchema.default(CHARACTER_SAVE_TENDENCY_DEFAULT),
     faction: z.number().default(0),
     maxHealth: z.number().positive().default(100),

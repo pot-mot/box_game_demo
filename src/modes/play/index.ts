@@ -12,6 +12,7 @@ import type {SkillTimerRowData, TimerCellData, TimerRowData} from './player_hud.
 import {createPlayerHUD} from './player_hud.ts'
 import {createDeathScreen} from './death_screen.ts'
 import {orderedSegments, segmentDisplayName} from '../../character/weapon/attack_chain.ts'
+import {HOLD_MODE_LABELS} from '../../character/weapon/hold_mode.ts'
 import {segmentCooldownRemaining} from '../../character/combat/attack_runtime.ts'
 import {HIT_SHAKE_DURATION, HIT_SHAKE_AMPLITUDE} from './constants.ts'
 
@@ -154,6 +155,8 @@ export const setupPlayMode = (
                 stateTime: player.stateMachine.stateTime,
                 timers,
                 skillTimers,
+                weaponLabel: player.combat.weapon.name,
+                holdModeLabel: HOLD_MODE_LABELS[player.holdMode],
             })
         } else {
             hud.setVisible(false)

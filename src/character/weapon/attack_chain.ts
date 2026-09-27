@@ -53,7 +53,7 @@ export interface AttackTransition {
  * 播放时段进度由 `attacking` 时间线推进，各层按 `progressOffset` 映射到自身时间轴。
  */
 export interface SegmentPoseLayer {
-    /** pose 资产 id（攻击关键帧数据的键，如 `short_sword_light_1`） */
+    /** pose 资产 id（攻击关键帧数据的键，如 `short_sword_one_handed_light_1`） */
     readonly poseId: string
     /** 影响程度：与其它层按关节归一化加权（0 不参与，1 = 完全覆盖其余层） */
     readonly weight: number

@@ -8,7 +8,7 @@ import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from './obb.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 import type {WeaponLocalHitBox} from '../appearance/weapon_mesh.ts'
-import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
+import type {MeleeDetectBox, MeleeWeaponConfig} from '../../../character/weapon/melee_weapon.ts'
 
 const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
 const _tmpVec3 = new Vector3()
@@ -149,14 +149,17 @@ export const createMeleeExecutor = (
         const model = getModel(entity.id)
         if (!model) return
 
-        /* 伤害 = (武器基础伤害 + 装备攻击加成，与武器类别匹配) × 当前段伤害倍率（重段 ×1.6） */
-        const damage = (weapon.damage + combat.attackBonus[weapon.damageType])
-            * (combat.activeSegment?.damageMultiplier ?? 1)
         const attackId = combat.activeSegment?.id ?? weapon.id
 
-        /** 用单个武器的命中箱做一次判定（主手/副手各调用一次；每段每目标仍只结算一次） */
-        const strikeWith = (group: Group | null, local: WeaponLocalHitBox | null): void => {
+        /**
+         * 用单个武器（主手 / 副手）的命中箱与数值做一次判定：
+         * 伤害 = (该武器基础伤害 + 装备攻击加成，与武器类别匹配) × 当前段伤害倍率（重段 ×1.6）。
+         * 双持时副手命中按**副手武器**结算（同类武器，数值可能因模型覆写不同）；每段每目标只结算一次。
+         */
+        const strikeWith = (group: Group | null, local: WeaponLocalHitBox | null, slotWeapon: MeleeWeaponConfig): void => {
             if (group === null || local === null) return
+            const damage = (slotWeapon.damage + combat.attackBonus[slotWeapon.damageType])
+                * (combat.activeSegment?.damageMultiplier ?? 1)
             /* matrixWorld 在渲染器绘制前可能滞后，先强制刷新武器子树变换 */
             group.updateMatrixWorld()
             const elements = group.matrixWorld.elements
@@ -191,7 +194,7 @@ export const createMeleeExecutor = (
                 applyDamage(target.combat, {
                     sourceId: entity.id,
                     targetId: target.id,
-                    damageType: weapon.damageType,
+                    damageType: slotWeapon.damageType,
                     baseAmount: damage,
                     finalAmount: damage,
                     skillId: attackId,
@@ -203,9 +206,9 @@ export const createMeleeExecutor = (
                 if (hasDir) {
                     target.body.applyImpulseAtPoint(
                         {
-                            x: dirX * weapon.knockbackForce,
-                            y: weapon.knockbackY,
-                            z: dirZ * weapon.knockbackForce,
+                            x: dirX * slotWeapon.knockbackForce,
+                            y: slotWeapon.knockbackY,
+                            z: dirZ * slotWeapon.knockbackForce,
                         },
                         target.body.translation(),
                         true,
@@ -214,8 +217,13 @@ export const createMeleeExecutor = (
             }
         }
 
-        if (mainWindowActive) strikeWith(model.weaponGroup, model.weaponHitBox)
-        if (offhandWindowActive) strikeWith(model.offhandWeaponGroup, model.offhandWeaponHitBox)
+        if (mainWindowActive) strikeWith(model.weaponGroup, model.weaponHitBox, weapon)
+        if (offhandWindowActive) {
+            /* 副手武器缺失（异常数据）时回退主手数值，保证命中不丢失 */
+            const offhand = combat.offhand?.weapon
+            const offhandWeapon = offhand !== undefined && offhand.type === 'melee' ? offhand : weapon
+            strikeWith(model.offhandWeaponGroup, model.offhandWeaponHitBox, offhandWeapon)
+        }
     }
 
     const end = (

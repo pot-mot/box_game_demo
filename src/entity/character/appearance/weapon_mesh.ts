@@ -441,6 +441,8 @@ const supportGripOffsetOf = (config: WeaponMeshConfig): number => {
         case 'heavy_sword': return config.bladeLen * 0.1
         case 'spear': return config.poleLen * 0.14
         case 'war_hammer': return -config.headSize * 0.23
+        /* 双刃斧：握把中心在模型原点下方（gripY ≈ -0.55×bladeSize），副握点取握把上方约 0.4×bladeSize */
+        case 'dual_axe': return -(config.bladeSize * 0.15 + config.bladeSize * 1.7 / 2) + config.bladeSize * 0.4
         case 'bow': return config.size * 0.12
         case 'crossbow': return config.size * 0.32
         case 'shotgun': return config.size * 0.26

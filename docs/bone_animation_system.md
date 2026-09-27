@@ -385,23 +385,24 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | 关节 | 父关节 | 作用 |
 |---|---|---|
 | `rightWeaponMount`（右手武器挂点） | `rightWristPivot` | 武器主体挂点：武器模型（固有握持已烘焙在模型上）直接挂其下，随右手动画；朝向由该骨骼轨道控制 |
-| `leftWeaponMount`（左手武器挂点） | `leftWristPivot` | 双手武器的副握点：作为左手链 IK 的末端，被求解到武器轴上 |
+| `leftWeaponMount`（左手武器挂点） | `leftWristPivot` | 副手武器挂点（单持 / 双持）兼双手副握点：作为左手链 IK 的末端，被求解到武器轴上 |
+| `backWeaponMount`（背部武器挂点） | `spine` | 视觉挂点：双手共持时副手武器挂背（`setOffhandStowed`，无 clip 轨道） |
 
-两者不参与骨骼段（避免退化零长段），但**已纳入可动画关节**（`CHARACTER_JOINT_IDS`，静止为单位变换；武器模型自带固有握持，直接挂其下）；自定义骨架若缺少这两个关节，装载与 IK 按候选顺序回退（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）。
-**三种持握模式与双持**见 [`bone_animation/动作设计规范.md`](bone_animation/动作设计规范.md) §7（双持武器含 `offhandMesh`，左手握持自身武器、不走共享 IK；左右交替由攻击关键帧表达，命中事件按 `params.weapon` 分槽）。
+前两者不参与骨骼段（避免退化零长段），但**已纳入可动画关节**（`CHARACTER_JOINT_IDS`，静止为单位变换；武器模型自带固有握持，直接挂其下）；自定义骨架若缺少这两个关节，装载与 IK 按候选顺序回退（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）。
+**三种持握模式与副手槽**见 [`bone_animation/动作设计规范.md`](bone_animation/动作设计规范.md) §7（单持 / 双持副手握在左手，双手共持挂背；双持需副手同类近战，左手握持自身武器、不走共享 IK；左右交替由攻击关键帧表达，命中事件按 `params.weapon` 分槽）。
 
-**双手共持 IK 求解器**：生产与编辑器共用 `entity/character/appearance/two_handed_ik.ts`——`leftGripJointId`（末端解析）、`computeTwoHandGripTarget`（副握点：优先武器本地 +Y 偏移，无武器 Group 时回退「右腕 + 右肘方向 × offset」）、`solveTwoHandedGrip`（设 IK 根 + `resolveIkChain` + 臂展截断 + `solveCcd`）、`clearTwoHandGripRoot`。生产角色桥接已绑定完整左臂链（含 `leftHandPivot`），攻击态且当前段 `twoHanded` 时左肩标记 IK 根。
+**双手共持 IK 求解器**：生产与编辑器共用 `entity/character/appearance/two_handed_ik.ts`——`leftGripJointId`（末端解析）、`computeTwoHandGripTarget`（副握点：优先武器本地 +Y 偏移，无武器 Group 时回退「右腕 + 右肘方向 × offset」）、`solveTwoHandedGrip`（设 IK 根 + `resolveIkChain` + 臂展截断 + `solveCcd`）、`clearTwoHandGripRoot`。生产角色桥接已绑定完整左臂链（含 `leftHandPivot`），攻击态且 `holdMode === 'two_handed'` 时左肩标记 IK 根（副手挂背不影响）。
 
 - 编辑器武器控制（`modes/bone_edit/weapon_control.ts` + 装载 `weapon_equip.ts`，控制条「武器」下拉）：
 
 - 三态：**自动**（默认）/ **无武器** / 手动指定某把武器（近战、远程分组）。自动模式的解析规则（`resolveAutoWeapon`）：
-  - 动画带武器来源（内置攻击动作及其载入的副本）→ 装备该武器（双手状态按该段 `twoHanded` 判定）；
+  - 动画带武器来源（内置攻击动作及其载入的副本）→ 装备该武器（双手 / 双持状态按该段所属持握模式 `holdMode` 判定）；
   - 基础状态**空手**变体（`weaponHeld === false`，如「待机（空手）」）→ 卸下武器（仍记住上次使用的武器）；
   - 其余（「待机（持械）」、跳跃/下落/死亡/翻滚/受击、自定义动画）→ **保留当前（或上次）武器**；进入编辑器时尚无当前武器则回退默认武器 `long_sword` —— 保证**一进编辑器就有武器可编辑**，不会出现「武器没出来」；
 - 装载复用生产装配：`createWeaponMesh`（`entity/character/appearance/weapon_mesh.ts`，固有握持已烘焙进模型）保证编辑器看到的握持与游戏一致；切换武器/锚点/退出编辑器时在 `dispose()` 中释放几何与材质；
 - **双手贴合（可选，默认关）**：控制条「左手贴合：关/开」按钮（`#bone-grip-toggle`）。
   - **关闭（默认）**：编辑器与预览全程**零耦合**——装载/切换武器、拖动任意关节（含两个武器挂点）都只影响该关节子树，绝不会牵扯另一只手；左臂完全由动画驱动或由你手动摆姿。
-  - **打开**：当前武器为双手（段动画参数 `twoHanded: true`，未知段回退武器风格表）时，每帧（含暂停状态）调用共享求解器 `solveTwoHandedGrip`——
+  - **打开**：当前武器为双手（当前动画段的持握模式为 `two_handed`，未知段回退武器默认模式）时，每帧（含暂停状态）调用共享求解器 `solveTwoHandedGrip`——
     左肩为 IK 根，左手链末端（`leftWeaponMount` → `leftWristPivot` → `leftHandPivot`）追按武器模型单独配置的 `supportGripOffset`；模型原点已校正到主握点，副握点沿本地 `+Y` 放在柄身另一处；
     目标超出臂展（链长之和）时按臂展截断，避免不可达目标把左臂拉直穿模。此时移动右手/武器，左手会跟随贴合——这是该开关的预期语义。
   - 关闭开关或卸下武器时立即清除左肩 `ikRootLevel` 并重新应用当前 clip 姿态，左臂回到动画姿态（不留约束残留）；
@@ -462,7 +463,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 动画下拉分两组：**编辑动画**（当前动画库内的 clip，可编辑/导出）+ **内置动作**（生产已有动作清单，`（选中载入副本）` 提示），后者让编辑器直接打开并调优游戏里实际在用的动作：
 
-- **来源与生产同源**（`modes/bone_edit/builtin_clips.ts`，惰性构建并缓存）：基础状态走 `getBaseClip`；攻击动作走 `getAttackClipById`（段 id → 基础 `attack_clip_data.ts` + 逐段 `attack_pose_edits.ts` 修订后的 clip）。条目共 44 项：基础状态 9 + 近战 26 + 远程 9；
+- **来源与生产同源**（`modes/bone_edit/builtin_clips.ts`，惰性构建并缓存）：基础状态走 `getBaseClip`；攻击动作走 `getAttackClipById`（段 id → 基础 `attack_clip_data.ts` + 逐段 `attack_pose_edits.ts` 修订后的 clip）。条目共 92 项：基础状态 9 + 近战 74（6 武器 × 3 持握模式）+ 远程 9；
 - **攻击段顺序由武器链数据决定**（`orderedSegments(weapon.attacks)`）：每把武器按 轻击一段 → 轻击二段 → 重击一段 → 重击二段 连续排列（同一链的 1、2 段相邻、轻链在重链之前），条件起手变体段（如蓄力段）接在所属攻击键末尾；不再需要任何展示顺序常量或槽位重排，展示模式/HUD/编辑器三者同源同序；
 - **关节 id 统一**：生产角色 clip 与编辑器预设骨架使用同一套关节 id（根关节统一为 `root`，静止局部位置由同一套 render 比例常量推导：`base_clips.ts` ↔ `entity/character/skeleton/preset.ts`），因此无需任何目标 id 重定向（`remapClipTargets` 保留为通用工具，内置动作库不再使用）；
 - **选中即载入副本**：`AnimationStore.importClip` 深拷贝（`cloneClip`）+ 重名自动加后缀 + 选中，副本名 = 内置显示名（如「行走（空手）」「长剑 · 轻击一段」）。内置 clip 与生产共用生成器缓存对象，深拷贝保证编辑器内的编辑不会污染生产动作；同名副本已存在时直接选中，不重复载入。载入动作入库后即可播放/拖移关键帧/改插值/导出，导入的 `hitbox_on/off` 事件轨在事件轨行可见；
@@ -551,7 +552,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 | `modes/bone_edit/weapon_control.test.ts` | 编辑器武器：双手判定（按段动画参数，远程恒单手；未知段回退武器风格表）、武器规格（网格 + 双手标记，未知 id → undefined）、**「自动」解析规则**（攻击动作 → 该武器；空手变体 → 卸下；持械/无来源 → 保留当前；无当前 → 默认武器）、副握点沿武器轴取点（含挂点旋转）、左手链末端取左手武器挂点（缺挂点的自定义骨架回退左腕） |
 | `modes/bone_edit/weapon_equip.test.ts` | 武器装载（真实场景图 + 预设骨架）：挂到右手武器挂点关节下、**握把中心精确落在右腕**、网格有真实几何（可见性回归）、随骨架姿态移动、缺挂点时回退右腕、卸下后从场景图移除 |
 | `modes/bone_edit/weapon_independence.test.ts` | **双手独立性回归**：装载/切换武器不改变左手；编辑态拖动右手（右臂关节）左手纹丝不动、左肩无 IK 根；仅在贴合开关打开时才把左手求解到武器副握点（链止于左肩）；关闭贴合立即解除 IK 根并恢复独立 |
-| `modes/bone_edit/builtin_clips.test.ts` | 内置动作库：覆盖全部基础状态与全部武器的攻击段（近战 26 + 远程 9，共 44 条）、分组顺序、每武器按链编排顺序排列（巨剑轻链 3 段、长枪含蓄力突刺变体）、id/显示名/clip 名全库唯一、轨道目标都在预设骨架内（关节 id 已统一为 `root`）、首帧静止位置与预设定义一致、攻击条目带 `hitbox_on/off`（时间同生产窗口）、行走采样有实际姿态变化、惰性缓存 |
+| `modes/bone_edit/builtin_clips.test.ts` | 内置动作库：覆盖全部基础状态与全部武器全部持握模式的攻击段（近战 74 + 远程 9，共 92 条）、分组顺序、每武器 × 模式按链编排顺序排列（巨剑双手轻链 3 段、长枪双手含蓄力突刺变体）、id/显示名/clip 名全库唯一、轨道目标都在预设骨架内（关节 id 已统一为 `root`）、首帧静止位置与预设定义一致、攻击条目带 `hitbox_on/off`（时间同生产窗口）、行走采样有实际姿态变化、惰性缓存 |
 | `modes/bone_edit/animation_store.test.ts` | 动画库存储：新建去重命名、`importClip` 入库并选中、重名加后缀、深拷贝（改副本不影响源 clip）、不修改源 clip 名与记录 |
 | `entity/character` 迁移测试 | 骨架桥接同步（关节 ↔ Group 读写一致）、clip 化 animator 关键时间点姿态快照一致性（迁移回归）、事件轨道命中窗口与旧计时窗口时间区间一致 |
 

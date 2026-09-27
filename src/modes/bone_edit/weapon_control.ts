@@ -1,5 +1,6 @@
 import type {Skeleton} from '../../skeleton/skeleton.ts'
-import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, supportsHoldMode, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import type {HoldMode} from '../../character/weapon/hold_mode.ts'
 import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
 import {clearTwoHandGripRoot, solveTwoHandedGrip} from '../../entity/character/appearance/two_handed_ik.ts'
 import {
@@ -33,6 +34,8 @@ import {
 export interface ClipWeaponSource {
     readonly weaponId?: string
     readonly segmentId?: string
+    /** 段所在持握模式（决定编辑器预览时是否双手贴合 / 装配副手；缺省 = 武器默认模式） */
+    readonly holdMode?: HoldMode
     /**
      * 基础状态是否持械（仅 待机/行走 的持械-空手变体携带）：
      * false = 明确空手（卸下武器）；true / undefined = 保留当前武器。
@@ -54,23 +57,26 @@ export const resolveAutoWeapon = (
     source: ClipWeaponSource,
     current: SkeletonWeaponSpec | undefined,
 ): SkeletonWeaponSpec | undefined => {
-    if (source.weaponId !== undefined) return weaponSpecOf(source.weaponId)
+    if (source.weaponId !== undefined) return weaponSpecOf(source.weaponId, source.holdMode)
     if (source.weaponHeld === false) return undefined
     return current ?? weaponSpecOf(DEFAULT_EDITOR_WEAPON_ID)
 }
 
-/** 是否双手持握：取武器**默认持握模式**是否为双手共持（生产与编辑器同源） */
-export const isTwoHandedWeapon = (weapon: WeaponConfig): boolean => defaultHoldMode(weapon) === 'two_handed'
+/** 是否双手持握：显式模式优先，缺省取武器默认持握模式（生产与编辑器同源） */
+export const isTwoHandedWeapon = (weapon: WeaponConfig, holdMode?: HoldMode): boolean =>
+    (holdMode !== undefined && supportsHoldMode(weapon, holdMode) ? holdMode : defaultHoldMode(weapon)) === 'two_handed'
 
-/** 武器规格（编辑器装载用）；武器 id 未知时返回 undefined */
-export const weaponSpecOf = (weaponId: string): SkeletonWeaponSpec | undefined => {
+/** 武器规格（编辑器装载用）；武器 id 未知时返回 undefined。holdMode 缺省取武器默认模式 */
+export const weaponSpecOf = (weaponId: string, holdMode?: HoldMode): SkeletonWeaponSpec | undefined => {
     const weapon = findWeaponPreset(weaponId)
     if (weapon === undefined) return undefined
+    const mode = holdMode !== undefined && supportsHoldMode(weapon, holdMode) ? holdMode : defaultHoldMode(weapon)
     return {
         weaponId: weapon.id,
         meshConfig: weapon.mesh,
-        offhandMeshConfig: weapon.offhandMesh,
-        twoHanded: defaultHoldMode(weapon) === 'two_handed',
+        /* 双持预览：副手用同类默认模型（与主手同一网格）；双手共持 / 单持不装配副手 */
+        offhandMeshConfig: mode === 'dual_wield' ? weapon.mesh : undefined,
+        twoHanded: mode === 'two_handed',
     }
 }
 

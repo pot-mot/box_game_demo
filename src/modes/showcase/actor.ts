@@ -9,7 +9,8 @@ import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.
 import type {NameLabel} from './label.ts'
 import {resolvePhases, phaseDurationOf} from '../../character/combat/attack_phases.ts'
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
-import {defaultHoldMode, weaponAttacksOf} from '../../character/weapon/catalog.ts'
+import {weaponAttacksOf} from '../../character/weapon/catalog.ts'
+import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 import type {WeaponConfig} from '../../character/weapon/catalog.ts'
 import {
     orderedSegments,
@@ -57,6 +58,8 @@ export interface ActorStatus {
      */
     readonly skillName: string
     readonly weaponName: string
+    /** 当前持握模式中文名（单持 / 双手共持 / 双持） */
+    readonly holdModeLabel: string
     readonly isMelee: boolean
     readonly mode: 'idle' | 'attacking'
     /** 当前段（1 起，idle 时为下一段的段号） */
@@ -78,6 +81,8 @@ export interface ShowcaseActor {
     readonly id: number
     readonly anchor: Group
     readonly weaponName: string
+    /** 当前持握模式中文名（面板行/详情用） */
+    readonly holdModeLabel: string
     /** 推进一帧：调度时间线 + 注入动画上下文 + 更新刀光 */
     update: (dt: number) => void
     status: () => ActorStatus
@@ -93,6 +98,8 @@ export interface ShowcaseActorInit {
     readonly scene: Scene
     /** 展示武器模组：攻击链（段/时长/阶段/冷却/倾斜角）+ 模型一并取自它 */
     readonly weapon: WeaponConfig
+    /** 展示的持握模式（近战三模式分开展示；远程 = 默认模式） */
+    readonly holdMode: HoldMode
     readonly faction: number
     readonly x: number
     readonly z: number
@@ -130,13 +137,13 @@ interface MaterialSnapshot {
  * 不阻断脚本推进。
  */
 export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
-    const {id, scene, faction, x, z, weaponName} = init
+    const {id, scene, faction, x, z, weaponName, holdMode} = init
     const isMelee = init.weapon.type === 'melee'
     /*
      * 演示脚本 = 段展示顺序本身（下标 0..n-1 即播放顺序）：
      * 播放顺序、面板计时行顺序与清单顺序三者一致（统一枚举源，无需重排映射）。
      */
-    const segments: readonly AttackSegment[] = orderedSegments(weaponAttacksOf(init.weapon))
+    const segments: readonly AttackSegment[] = orderedSegments(weaponAttacksOf(init.weapon, holdMode))
     if (segments.length === 0) {
         throw new Error(`[showcase] actor ${id} 武器 ${init.weapon.id} 没有可展示的攻击段`)
     }
@@ -148,7 +155,20 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         {speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: ACTOR_SCALE},
         faction,
     )
-    model.equipWeapon({main: init.weapon.mesh, offhand: init.weapon.offhandMesh})
+    /* 近战三模式分开展示副手：
+     * - 单持：不装备副手武器（单持模组本身即主手单手使用）；
+     * - 双持：同类武器握在左手；
+     * - 双手共持：副手挂背（展示挂背逻辑），双手 IK 仍贴合主手武器。
+     * 远程无副手。 */
+    if (isMelee && holdMode !== 'one_handed') {
+        model.equipWeapon({
+            main: init.weapon.mesh,
+            offhand: init.weapon.mesh,
+            offhandStowed: holdMode === 'two_handed',
+        })
+    } else {
+        model.equipWeapon({main: init.weapon.mesh})
+    }
 
     const anchor = new Group()
     anchor.position.set(x, 0, z)
@@ -285,7 +305,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             stateTime,
             /* 展示场景站立攻击：速度恒 0（生产为物理体实时速度） */
             horizontalSpeed: 0,
-            holdMode: defaultHoldMode(init.weapon),
+            holdMode,
             attackSegment: inAttacking ? segment : undefined,
             attackPhase: ctxPhaseName,
             attackPhaseProgress: phaseDuration > 0 ? phaseTimer / phaseDuration : 0,
@@ -330,6 +350,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             skillId: segment.id,
             skillName: weaponName,
             weaponName,
+            holdModeLabel: HOLD_MODE_LABELS[holdMode],
             isMelee,
             mode,
             hitNumber: scriptPos + 1,
@@ -400,5 +421,5 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         scene.remove(anchor)
     }
 
-    return {id, anchor, weaponName, update, status, attachLabel, setDimmed, dispose}
+    return {id, anchor, weaponName, holdModeLabel: HOLD_MODE_LABELS[holdMode], update, status, attachLabel, setDimmed, dispose}
 }

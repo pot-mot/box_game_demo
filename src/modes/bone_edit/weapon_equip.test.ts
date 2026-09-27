@@ -76,7 +76,7 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
 
     it('双持：副手武器挂到左手武器挂点（有真实几何），dispose 一并卸载', () => {
         const visuals = setup()
-        const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf('dual_axe')!)!
+        const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf('dual_axe', 'dual_wield')!)!
         expect(weapon.offhand).toBeDefined()
         expect(weapon.offhand!.weaponGroup.parent).toBe(visuals.groups.get('leftWeaponMount'))
         const box = new Box3().setFromObject(weapon.offhand!.weaponGroup)

@@ -21,12 +21,12 @@ import {
     type AttackTransitionContext,
 } from './attack_chain.ts'
 import type {AttackSegment, WeaponAttacks} from './attack_chain.ts'
-import {ALL_WEAPON_PRESETS, findWeaponPreset, weaponAttacksOf, weaponPresetOrDefault} from './catalog.ts'
-import {MELEE_WEAPON_PRESETS} from './melee_weapon.ts'
+import {ALL_WEAPON_PRESETS, defaultHoldMode, findWeaponPreset, weaponAttacksOf, weaponPresetOrDefault} from './catalog.ts'
+import {MELEE_WEAPON_CLASSES, MELEE_WEAPON_PRESETS} from './melee_weapon.ts'
 import {buildMeleeAttacks} from './melee_attacks.ts'
 import {RANGED_WEAPON_PRESETS} from './ranged_weapon.ts'
 import {createWeaponRuntime} from './weapon_runtime.ts'
-import {SPEAR_CHARGE_HOLD, SPEAR_CHARGE_THRUST_ID} from './melee_special_moves.ts'
+import {SPEAR_CHARGE_HOLD, spearChargeThrustId} from './melee_special_moves.ts'
 import {
     TEST_WEAPON_CHARGE_HOLD,
     createTestWeaponRuntime,
@@ -46,44 +46,47 @@ const ctxOf = (overrides: Partial<AttackTransitionContext> = {}): AttackTransiti
     ...overrides,
 })
 
-const segmentIdOf = (weaponId: string, suffix: string): string => `${weaponId}_${suffix}`
+const segmentIdOf = (weaponId: string, holdMode: string, suffix: string): string => `${weaponId}_${holdMode}_${suffix}`
 
-/** 每把近战武器的主干段编排（链长度是可配的：巨剑轻链 3 段，其余 2 段） */
+/** 默认持握模式（全部近战 = 单持）的主干段编排 */
 const MELEE_CHAIN_STEPS: Readonly<Record<string, {light: readonly string[]; heavy: readonly string[]}>> = {
     short_sword: {light: ['light_1', 'light_2'], heavy: ['heavy_1', 'heavy_2']},
     long_sword: {light: ['light_1', 'light_2'], heavy: ['heavy_1', 'heavy_2']},
-    heavy_sword: {light: ['light_1', 'light_2', 'light_3'], heavy: ['heavy_1', 'heavy_2']},
+    heavy_sword: {light: ['light_1', 'light_2'], heavy: ['heavy_1', 'heavy_2']},
     spear: {light: ['light_1', 'light_2'], heavy: ['heavy_1', 'heavy_2']},
     dual_axe: {light: ['light_1', 'light_2'], heavy: ['heavy_1', 'heavy_2']},
     war_hammer: {light: ['light_1', 'light_2'], heavy: ['heavy_1', 'heavy_2']},
 }
 
-describe('近战武器攻击链（武器模组固有数据）', () => {
-    it.each(MELEE_WEAPON_IDS)('%s：主干段与链编排一致（主干段数 = 轻链 + 重链条数，可变体段另计）', (weaponId) => {
+describe('近战武器攻击链（武器类固有数据，默认单持）', () => {
+    it.each(MELEE_WEAPON_IDS)('%s：默认模式主干段与链编排一致', (weaponId) => {
         const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId])
+        const mode = defaultHoldMode(MELEE_WEAPON_PRESETS[weaponId])
         const expected = MELEE_CHAIN_STEPS[weaponId]
-        const stepIds = new Set([...expected.light, ...expected.heavy].map(step => segmentIdOf(weaponId, step)))
+        const stepIds = new Set([...expected.light, ...expected.heavy].map(step => segmentIdOf(weaponId, mode, step)))
         const allIds = Object.keys(attacks.segments)
         /* 主干段恰好是编排里的那些段；追加的条件变体段不属于主干 */
         expect(allIds.filter(id => stepIds.has(id)).sort()).toEqual([...stepIds].sort())
         expect(allIds.length).toBeGreaterThanOrEqual(stepIds.size)
-        expect(chainOf(attacks, 'light').steps).toEqual(expected.light.map(step => segmentIdOf(weaponId, step)))
-        expect(chainOf(attacks, 'heavy').steps).toEqual(expected.heavy.map(step => segmentIdOf(weaponId, step)))
+        expect(chainOf(attacks, 'light').steps).toEqual(expected.light.map(step => segmentIdOf(weaponId, mode, step)))
+        expect(chainOf(attacks, 'heavy').steps).toEqual(expected.heavy.map(step => segmentIdOf(weaponId, mode, step)))
     })
 
-    it.each(MELEE_WEAPON_IDS)('%s：轻重键起手候选分别为轻 1 / 重 1（长枪多一个蓄力变体候选，见下）', (weaponId) => {
-        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId])
-        const lightEntries = chainOf(attacks, 'light').entries
-        /* 兜底候选恒为轻 1 段；长枪在其之前多一个蓄力守卫变体 */
-        expect(lightEntries[lightEntries.length - 1]).toEqual({segmentId: segmentIdOf(weaponId, 'light_1')})
-        expect(chainOf(attacks, 'heavy').entries).toEqual([{segmentId: segmentIdOf(weaponId, 'heavy_1')}])
+    it.each(MELEE_WEAPON_IDS)('%s：轻重键起手候选分别为轻 1 / 重 1', (weaponId) => {
+        const weapon = MELEE_WEAPON_PRESETS[weaponId]
+        const mode = defaultHoldMode(weapon)
+        const attacks = weaponAttacksOf(weapon)
+        expect(chainOf(attacks, 'light').entries).toEqual([{segmentId: segmentIdOf(weaponId, mode, 'light_1')}])
+        expect(chainOf(attacks, 'heavy').entries).toEqual([{segmentId: segmentIdOf(weaponId, mode, 'heavy_1')}])
     })
 
     it.each(MELEE_WEAPON_IDS)('%s：同链依编排推进（末段回到首段 = 循环链）', (weaponId) => {
-        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId])
+        const weapon = MELEE_WEAPON_PRESETS[weaponId]
+        const mode = defaultHoldMode(weapon)
+        const attacks = weaponAttacksOf(weapon)
         const expected = MELEE_CHAIN_STEPS[weaponId]
         for (const key of ['light', 'heavy'] as const) {
-            const steps = expected[key].map(step => segmentIdOf(weaponId, step))
+            const steps = expected[key].map(step => segmentIdOf(weaponId, mode, step))
             for (let i = 0; i < steps.length; i++) {
                 const segment = findSegment(attacks, steps[i])!
                 const nextId = steps[(i + 1) % steps.length]
@@ -92,10 +95,12 @@ describe('近战武器攻击链（武器模组固有数据）', () => {
         }
     })
 
-    it.each(MELEE_WEAPON_IDS)('%s：主干段时长/伤害倍率（轻 0.267+0.266、重 0.4+0.267 ×1.6；变体段自带参数）', (weaponId) => {
-        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId])
+    it.each(MELEE_WEAPON_IDS)('%s：主干段时长/伤害倍率（轻 0.267+0.266、重 0.4+0.267 ×1.6）', (weaponId) => {
+        const weapon = MELEE_WEAPON_PRESETS[weaponId]
+        const mode = defaultHoldMode(weapon)
+        const attacks = weaponAttacksOf(weapon)
         const expected = MELEE_CHAIN_STEPS[weaponId]
-        const stepIds = new Set([...expected.light, ...expected.heavy].map(step => segmentIdOf(weaponId, step)))
+        const stepIds = new Set([...expected.light, ...expected.heavy].map(step => segmentIdOf(weaponId, mode, step)))
         for (const segment of Object.values(attacks.segments)) {
             if (!stepIds.has(segment.id)) continue
             if (segment.key === 'light') {
@@ -108,47 +113,68 @@ describe('近战武器攻击链（武器模组固有数据）', () => {
         }
     })
 
-    it('巨剑轻链为三段：轻 1 → 轻 2 → 轻 3 → 轻 1', () => {
-        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.heavy_sword)
+    it('巨剑双手链为三段：轻 1 → 轻 2 → 轻 3 → 轻 1', () => {
+        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.heavy_sword, 'two_handed')
         expect(chainOf(attacks, 'light').steps).toEqual([
-            'heavy_sword_light_1', 'heavy_sword_light_2', 'heavy_sword_light_3',
+            'heavy_sword_two_handed_light_1', 'heavy_sword_two_handed_light_2', 'heavy_sword_two_handed_light_3',
         ])
         expect(orderedSegments(attacks).map(segment => segment.id)).toEqual([
-            'heavy_sword_light_1', 'heavy_sword_light_2', 'heavy_sword_light_3',
-            'heavy_sword_heavy_1', 'heavy_sword_heavy_2',
+            'heavy_sword_two_handed_light_1', 'heavy_sword_two_handed_light_2', 'heavy_sword_two_handed_light_3',
+            'heavy_sword_two_handed_heavy_1', 'heavy_sword_two_handed_heavy_2',
         ])
-        expect(segmentDisplayName(findSegment(attacks, 'heavy_sword_light_3')!)).toBe('轻击三段')
+        expect(segmentDisplayName(findSegment(attacks, 'heavy_sword_two_handed_light_3')!)).toBe('轻击三段')
     })
 
-    it('长枪蓄力突刺变体：长按起手、单发无连段、带冷却，且只出现在轻击键清单末尾', () => {
-        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.spear)
-        const charge = findSegment(attacks, SPEAR_CHARGE_THRUST_ID)!
+    it('长枪双手蓄力突刺变体：长按起手、单发无连段、带冷却，且只出现在轻击键清单末尾', () => {
+        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.spear, 'two_handed')
+        const chargeId = spearChargeThrustId('spear', 'two_handed')
+        const charge = findSegment(attacks, chargeId)!
         expect(charge.label).toBe('蓄力突刺')
         expect(charge.next).toEqual([])
         expect(charge.cooldown).toBeGreaterThan(0)
         expect(charge.damageMultiplier).toBeGreaterThan(1)
         /* 起手：长按命中蓄力变体，点按落回轻 1 段 */
-        expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: SPEAR_CHARGE_HOLD}))?.id).toBe(SPEAR_CHARGE_THRUST_ID)
-        expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: SPEAR_CHARGE_HOLD - 0.01}))?.id).toBe('spear_light_1')
+        expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: SPEAR_CHARGE_HOLD}))?.id).toBe(chargeId)
+        expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: SPEAR_CHARGE_HOLD - 0.01}))?.id).toBe('spear_two_handed_light_1')
         /* 冷却中就绪性回退到兜底候选 */
         const cooling = ctxOf({
             holdDuration: SPEAR_CHARGE_HOLD,
-            cooldownRemaining: (id) => id === SPEAR_CHARGE_THRUST_ID ? 0.5 : 0,
+            cooldownRemaining: (id) => id === chargeId ? 0.5 : 0,
         })
-        expect(resolveEntrySegment(attacks, 'light', cooling)?.id).toBe('spear_light_1')
+        expect(resolveEntrySegment(attacks, 'light', cooling)?.id).toBe('spear_two_handed_light_1')
         /* 清单顺序：主干段在前，变体段接在所属攻击键末尾 */
         expect(orderedSegments(attacks).map(segment => segment.id)).toEqual([
-            'spear_light_1', 'spear_light_2', SPEAR_CHARGE_THRUST_ID, 'spear_heavy_1', 'spear_heavy_2',
+            'spear_two_handed_light_1', 'spear_two_handed_light_2', chargeId, 'spear_two_handed_heavy_1', 'spear_two_handed_heavy_2',
         ])
+    })
+
+    it('全部近战武器类：三种持握模式各自声明独立连段（段 id 带模式命名空间）', () => {
+        for (const weaponId of MELEE_WEAPON_IDS) {
+            const weaponClass = MELEE_WEAPON_CLASSES[weaponId]
+            expect(weaponClass.holdModes, weaponId).toEqual(['one_handed', 'two_handed', 'dual_wield'])
+            for (const mode of weaponClass.holdModes) {
+                const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
+                const segments = orderedSegments(attacks)
+                expect(segments.length, `${weaponId}/${mode}`).toBeGreaterThanOrEqual(4)
+                for (const segment of segments) {
+                    expect(segment.id, `${weaponId}/${mode}`).toContain(`_${mode}_`)
+                }
+            }
+            /* 三模式链互不相同（独立连段数据） */
+            const lightSteps = new Set(weaponClass.holdModes.map(mode => weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode).chains.light.steps.join(',')))
+            expect(lightSteps.size, weaponId).toBe(3)
+        }
     })
 
     it('主干段冷却全为 0（节奏由动作 + 恢复时间形成；条件变体段可自带冷却）', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
-            const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId])
-            const stepIds = new Set([...chainOf(attacks, 'light').steps, ...chainOf(attacks, 'heavy').steps])
-            for (const segment of Object.values(attacks.segments)) {
-                if (!stepIds.has(segment.id)) continue
-                expect(segment.cooldown, segment.id).toBe(0)
+            for (const mode of MELEE_WEAPON_CLASSES[weaponId].holdModes) {
+                const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
+                const stepIds = new Set([...chainOf(attacks, 'light').steps, ...chainOf(attacks, 'heavy').steps])
+                for (const segment of Object.values(attacks.segments)) {
+                    if (!stepIds.has(segment.id)) continue
+                    expect(segment.cooldown, segment.id).toBe(0)
+                }
             }
         }
     })
@@ -181,9 +207,11 @@ describe('远程武器攻击链（单段开火动作）', () => {
 })
 
 describe('段清单顺序（orderedSegments）', () => {
-    it('每把近战武器：轻击键段整体在重击键段之前，且每键内先主干段（按编排顺序）后变体段', () => {
+    it('每把近战武器默认链：轻击键段整体在重击键段之前，且每键内先主干段（按编排顺序）后变体段', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
-            const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId])
+            const weapon = MELEE_WEAPON_PRESETS[weaponId]
+            const mode = defaultHoldMode(weapon)
+            const attacks = weaponAttacksOf(weapon)
             const ordered = orderedSegments(attacks)
             const lightSegments = ordered.filter(segment => segment.key === 'light')
             const heavySegments = ordered.filter(segment => segment.key === 'heavy')
@@ -195,11 +223,11 @@ describe('段清单顺序（orderedSegments）', () => {
             /* 每键内：主干段按编排顺序连续排在前面，变体段接在其后 */
             const expected = MELEE_CHAIN_STEPS[weaponId]
             expect(lightSegments.slice(0, expected.light.length).map(segment => segment.id))
-                .toEqual(expected.light.map(step => segmentIdOf(weaponId, step)))
+                .toEqual(expected.light.map(step => segmentIdOf(weaponId, mode, step)))
             expect(heavySegments.slice(0, expected.heavy.length).map(segment => segment.id))
-                .toEqual(expected.heavy.map(step => segmentIdOf(weaponId, step)))
+                .toEqual(expected.heavy.map(step => segmentIdOf(weaponId, mode, step)))
             for (const variant of [...lightSegments.slice(expected.light.length), ...heavySegments.slice(expected.heavy.length)]) {
-                expect(expected.light.includes(variant.id.replace(`${weaponId}_`, ''))).toBe(false)
+                expect(expected.light.includes(variant.id.replace(`${weaponId}_${mode}_`, ''))).toBe(false)
             }
         }
     })
@@ -218,11 +246,13 @@ describe('段清单顺序（orderedSegments）', () => {
 
     it('全部生产武器的段顺序中，轻链整体位于重链之前', () => {
         for (const weapon of ALL_WEAPON_PRESETS) {
-            const segments = orderedSegments(weaponAttacksOf(weapon))
-            const lastLight = segments.map(segment => segment.key).lastIndexOf('light')
-            const firstHeavy = segments.map(segment => segment.key).indexOf('heavy')
-            if (firstHeavy === -1) continue
-            expect(lastLight).toBeLessThan(firstHeavy)
+            for (const mode of weapon.holdModes) {
+                const segments = orderedSegments(weaponAttacksOf(weapon, mode))
+                const lastLight = segments.map(segment => segment.key).lastIndexOf('light')
+                const firstHeavy = segments.map(segment => segment.key).indexOf('heavy')
+                if (firstHeavy === -1) continue
+                expect(lastLight).toBeLessThan(firstHeavy)
+            }
         }
     })
 })
@@ -230,19 +260,19 @@ describe('段清单顺序（orderedSegments）', () => {
 describe('起手解析（resolveEntrySegment）', () => {
     it('无条件候选：直接返回起手段', () => {
         const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.short_sword)
-        expect(resolveEntrySegment(attacks, 'light', ctxOf())?.id).toBe('short_sword_light_1')
-        expect(resolveEntrySegment(attacks, 'heavy', ctxOf())?.id).toBe('short_sword_heavy_1')
+        expect(resolveEntrySegment(attacks, 'light', ctxOf())?.id).toBe('short_sword_one_handed_light_1')
+        expect(resolveEntrySegment(attacks, 'heavy', ctxOf())?.id).toBe('short_sword_one_handed_heavy_1')
     })
 
     it('冷却未就绪 → 无候选（undefined）', () => {
         const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.short_sword)
-        const ctx = ctxOf({cooldownRemaining: (id) => id === 'short_sword_light_1' ? 0.5 : 0})
+        const ctx = ctxOf({cooldownRemaining: (id) => id === 'short_sword_one_handed_light_1' ? 0.5 : 0})
         expect(resolveEntrySegment(attacks, 'light', ctx)).toBeUndefined()
     })
 
     it('不切到自身（攻击中重复按同键不应重启本段）', () => {
         const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.short_sword)
-        expect(resolveEntrySegment(attacks, 'light', ctxOf(), 'short_sword_light_1')).toBeUndefined()
+        expect(resolveEntrySegment(attacks, 'light', ctxOf(), 'short_sword_one_handed_light_1')).toBeUndefined()
     })
 
     it('守卫变体优先于同键兜底（长按触发蓄力段）', () => {
@@ -330,36 +360,36 @@ describe('守卫原语（武器模组组合使用）', () => {
 describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', () => {
     it('链编排是增删段的唯一入口：改编排即改播放顺序与 next（无需改状态机）', () => {
         /* heavy 链改成 2 段非循环；light 链顺序反转为 轻2 → 轻1（仍循环） */
-        const attacks = buildMeleeAttacks('demo_blade', {
+        const attacks = buildMeleeAttacks('demo_blade', 'one_handed', {
             chains: {
                 light: {steps: ['light_2', 'light_1'], loop: true},
                 heavy: {steps: ['heavy_1', 'heavy_2'], loop: false},
             },
         })
         /* 起手 = 编排首段 */
-        expect(resolveEntrySegment(attacks, 'light', ctxOf())?.id).toBe('demo_blade_light_2')
-        expect(chainOf(attacks, 'light').steps).toEqual(['demo_blade_light_2', 'demo_blade_light_1'])
+        expect(resolveEntrySegment(attacks, 'light', ctxOf())?.id).toBe('demo_blade_one_handed_light_2')
+        expect(chainOf(attacks, 'light').steps).toEqual(['demo_blade_one_handed_light_2', 'demo_blade_one_handed_light_1'])
         /* next 依编排生成：轻2 → 轻1 → 轻2（循环） */
-        const light2 = findSegment(attacks, 'demo_blade_light_2')!
-        const light1 = findSegment(attacks, 'demo_blade_light_1')!
+        const light2 = findSegment(attacks, 'demo_blade_one_handed_light_2')!
+        const light1 = findSegment(attacks, 'demo_blade_one_handed_light_1')!
         expect(resolveNextSegment(attacks, light2, ctxOf({attackKey: 'light'}))?.id).toBe(light1.id)
         expect(resolveNextSegment(attacks, light1, ctxOf({attackKey: 'light'}))?.id).toBe(light2.id)
         /* 清单顺序跟随编排（每键内按 steps 顺序） */
         expect(orderedSegments(attacks).map(segment => segment.id)).toEqual([
-            'demo_blade_light_2', 'demo_blade_light_1', 'demo_blade_heavy_1', 'demo_blade_heavy_2',
+            'demo_blade_one_handed_light_2', 'demo_blade_one_handed_light_1', 'demo_blade_one_handed_heavy_1', 'demo_blade_one_handed_heavy_2',
         ])
     })
 
     it('非循环链：末段无 next（播完收招），起手仍是首段', () => {
-        const attacks = buildMeleeAttacks('demo_spear', {
+        const attacks = buildMeleeAttacks('demo_spear', 'two_handed', {
             chains: {light: {steps: ['light_1', 'light_2'], loop: false}},
         })
-        const light1 = findSegment(attacks, 'demo_spear_light_1')!
-        const light2 = findSegment(attacks, 'demo_spear_light_2')!
+        const light1 = findSegment(attacks, 'demo_spear_two_handed_light_1')!
+        const light2 = findSegment(attacks, 'demo_spear_two_handed_light_2')!
         expect(resolveNextSegment(attacks, light1, ctxOf({attackKey: 'light'}))?.id).toBe(light2.id)
         expect(light2.next).toEqual([])
         expect(resolveNextSegment(attacks, light2, ctxOf({attackKey: 'light'}))).toBeUndefined()
-        expect(chainOf(attacks, 'light').entries).toEqual([{segmentId: 'demo_spear_light_1'}])
+        expect(chainOf(attacks, 'light').entries).toEqual([{segmentId: 'demo_spear_two_handed_light_1'}])
     })
 
     it('追加条件变体段：起手候选守卫 + 挂到某个段的 next 上（无需改状态机）', () => {
@@ -371,37 +401,38 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
             id: 'demo_axe_thrust', key: 'light', step: 2, label: '方向突刺',
             duration: 0.25, recovery: 0.2, phases: [], poses: [{poseId: 'demo_axe_thrust', weight: 1}], damageMultiplier: 1, cooldown: 0, next: [],
         }
-        const attacks = buildMeleeAttacks('demo_axe', {
+        const attacks = buildMeleeAttacks('demo_axe', 'dual_wield', {
             extraSegments: [charge, thrust],
-            entries: {light: [{segmentId: charge.id, guard: holdAtLeast(0.5)}, {segmentId: 'demo_axe_light_1'}]},
+            entries: {light: [{segmentId: charge.id, guard: holdAtLeast(0.5)}, {segmentId: 'demo_axe_dual_wield_light_1'}]},
             chains: {light: {steps: ['light_1', 'light_2'], loop: true}},
         })
         /* 追加段可用（清单里出现在所属键末尾） */
         expect(findSegment(attacks, 'demo_axe_charge')).toBe(charge)
         expect(orderedSegments(attacks).map(segment => segment.id)).toEqual([
-            'demo_axe_light_1', 'demo_axe_light_2', 'demo_axe_charge', 'demo_axe_thrust', 'demo_axe_heavy_1', 'demo_axe_heavy_2',
+            'demo_axe_dual_wield_light_1', 'demo_axe_dual_wield_light_2', 'demo_axe_charge', 'demo_axe_thrust',
+            'demo_axe_dual_wield_heavy_1', 'demo_axe_dual_wield_heavy_2',
         ])
         /* 起手：长按命中守卫变体，点按落回兜底段 */
         expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: 0.6}))?.id).toBe('demo_axe_charge')
-        expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: 0.1}))?.id).toBe('demo_axe_light_1')
+        expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: 0.1}))?.id).toBe('demo_axe_dual_wield_light_1')
     })
 
     it('追加段 id 与模板段冲突时构建失败（fail loudly）', () => {
         const duplicate: AttackSegment = {
-            id: 'demo_sword_light_1', key: 'light', step: 1,
-            duration: 0.2, recovery: 0.2, phases: [], poses: [{poseId: 'demo_sword_light_1', weight: 1}], damageMultiplier: 1, cooldown: 0, next: [],
+            id: 'demo_sword_one_handed_light_1', key: 'light', step: 1,
+            duration: 0.2, recovery: 0.2, phases: [], poses: [{poseId: 'demo_sword_one_handed_light_1', weight: 1}], damageMultiplier: 1, cooldown: 0, next: [],
         }
-        expect(() => buildMeleeAttacks('demo_sword', {extraSegments: [duplicate]})).toThrow()
+        expect(() => buildMeleeAttacks('demo_sword', 'one_handed', {extraSegments: [duplicate]})).toThrow()
     })
 })
 
 describe('段展示名（segmentDisplayName）', () => {
     it('缺省按 轻击/重击 + 中文序号', () => {
         const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.long_sword)
-        expect(segmentDisplayName(findSegment(attacks, 'long_sword_light_1')!)).toBe('轻击一段')
-        expect(segmentDisplayName(findSegment(attacks, 'long_sword_light_2')!)).toBe('轻击二段')
-        expect(segmentDisplayName(findSegment(attacks, 'long_sword_heavy_1')!)).toBe('重击一段')
-        expect(segmentDisplayName(findSegment(attacks, 'long_sword_heavy_2')!)).toBe('重击二段')
+        expect(segmentDisplayName(findSegment(attacks, 'long_sword_one_handed_light_1')!)).toBe('轻击一段')
+        expect(segmentDisplayName(findSegment(attacks, 'long_sword_one_handed_light_2')!)).toBe('轻击二段')
+        expect(segmentDisplayName(findSegment(attacks, 'long_sword_one_handed_heavy_1')!)).toBe('重击一段')
+        expect(segmentDisplayName(findSegment(attacks, 'long_sword_one_handed_heavy_2')!)).toBe('重击二段')
     })
 
     it('条件变体段用武器模组给的 label', () => {
@@ -418,11 +449,11 @@ describe('武器运行时（createWeaponRuntime）', () => {
 
     it('起手段冷却覆写只作用于起手段（链中段保持预设）', () => {
         const runtime = createWeaponRuntime('long_sword', {cooldown: 0.8})
-        expect(runtime.attacks.segments.long_sword_light_1.cooldown).toBe(0.8)
-        expect(runtime.attacks.segments.long_sword_heavy_1.cooldown).toBe(0.8)
-        expect(runtime.attacks.segments.long_sword_light_2.cooldown).toBe(0)
+        expect(runtime.attacks.segments.long_sword_one_handed_light_1.cooldown).toBe(0.8)
+        expect(runtime.attacks.segments.long_sword_one_handed_heavy_1.cooldown).toBe(0.8)
+        expect(runtime.attacks.segments.long_sword_one_handed_light_2.cooldown).toBe(0)
         /* 不修改武器预设共享数据 */
-        expect(weaponAttacksOf(MELEE_WEAPON_PRESETS.long_sword).segments.long_sword_light_1.cooldown).toBe(0)
+        expect(weaponAttacksOf(MELEE_WEAPON_PRESETS.long_sword).segments.long_sword_one_handed_light_1.cooldown).toBe(0)
     })
 
     it('远程弹道数值覆写生效', () => {

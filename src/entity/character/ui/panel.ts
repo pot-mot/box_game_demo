@@ -7,7 +7,8 @@ import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
 import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.ts'
-import {ALL_WEAPON_PRESETS, findWeaponPreset, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
+import {ALL_WEAPON_PRESETS, availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
+import {HOLD_MODE_LABELS, isHoldMode} from '../../../character/weapon/hold_mode.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {ARMOR_SLOTS, ARMOR_SLOT_LABELS, type ArmorSlot} from '../../../character/armor/slots.ts'
@@ -74,6 +75,28 @@ const buildWeaponOptions = (): {melee: readonly WeaponOption[]; ranged: readonly
 
 /** 武器下拉数据（模块级构建一次：预设为静态数据） */
 const WEAPON_OPTIONS = buildWeaponOptions()
+
+/** 填充武器下拉：近战 / 远程分组（withNone = 追加「无」空项，供副手选择） */
+const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean): void => {
+    if (withNone) {
+        const none = document.createElement('option')
+        none.value = ''
+        none.textContent = '无'
+        select.appendChild(none)
+    }
+    for (const group of [{label: WEAPON_GROUP_LABEL_MELEE, options: WEAPON_OPTIONS.melee}, {label: WEAPON_GROUP_LABEL_RANGED, options: WEAPON_OPTIONS.ranged}]) {
+        const optGroup = document.createElement('optgroup')
+        optGroup.label = group.label
+        for (const opt of group.options) {
+            const o = document.createElement('option')
+            o.value = opt.id
+            o.dataset.weaponType = opt.type
+            o.textContent = opt.label
+            optGroup.appendChild(o)
+        }
+        select.appendChild(optGroup)
+    }
+}
 
 /** 面板攻击区可见字段 */
 interface AttackFields {
@@ -258,22 +281,41 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const attackSegmentTag = document.createElement('div')
     attackSegmentTag.style.cssText = 'font-size:11px;color:#aaa;margin-top:2px'
     el.appendChild(attackSegmentTag)
-    for (const group of [{label: WEAPON_GROUP_LABEL_MELEE, options: WEAPON_OPTIONS.melee}, {label: WEAPON_GROUP_LABEL_RANGED, options: WEAPON_OPTIONS.ranged}]) {
-        const optGroup = document.createElement('optgroup')
-        optGroup.label = group.label
-        for (const opt of group.options) {
-            const o = document.createElement('option')
-            o.value = opt.id
-            o.dataset.weaponType = opt.type
-            o.textContent = opt.label
-            optGroup.appendChild(o)
-        }
-        weaponSelect.appendChild(optGroup)
-    }
+    fillWeaponSelect(weaponSelect, false)
 
     const weaponTag = document.createElement('div')
     weaponTag.style.cssText = 'font-size:11px;color:#aaa;margin-top:2px;margin-bottom:4px'
     el.appendChild(weaponTag)
+
+    /* 副手武器（近战主手可用）：单持握左手 / 双手共持挂背 / 与主手同类近战时启用双持 */
+    const offhandRow = document.createElement('div')
+    offhandRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    const offhandLabel = document.createElement('label')
+    offhandLabel.textContent = 'Off '
+    offhandLabel.title = '副手武器：单持时左手持握、双手共持时挂背；与主手同类近战可双持'
+    const offhandSelect = document.createElement('select')
+    offhandSelect.id = 'offhand-weapon-select'
+    offhandSelect.style.cssText = 'max-width:180px'
+    fillWeaponSelect(offhandSelect, true)
+    offhandLabel.appendChild(offhandSelect)
+    offhandRow.appendChild(offhandLabel)
+    el.appendChild(offhandRow)
+
+    /* 持握模式（选项 = 主手武器声明的模式 ∩ 双持可用性；默认单持） */
+    const holdRow = document.createElement('div')
+    holdRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    const holdLabel = document.createElement('label')
+    holdLabel.textContent = 'Hold '
+    holdLabel.title = '持握模式：单持 / 双手共持 / 双持（双持需副手装备同类近战武器）'
+    const holdModeSelect = document.createElement('select')
+    holdModeSelect.id = 'hold-mode-select'
+    holdLabel.appendChild(holdModeSelect)
+    holdRow.appendChild(holdLabel)
+    el.appendChild(holdRow)
+    const holdModeHint = document.createElement('div')
+    holdModeHint.style.cssText = 'font-size:11px;color:#aa8844;margin-bottom:4px;display:none'
+    holdModeHint.textContent = '双持需副手装备同类近战武器'
+    el.appendChild(holdModeHint)
 
     const atkRange = createLabeledNumberInput(el, 'Range', {min: '0.1', step: '0.1', value: '10'})
     const atkDmg = createLabeledNumberInput(el, 'Damage', {min: '0.1', step: '0.1', value: '3'})
@@ -534,12 +576,43 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     weaponSelect.onchange = () => {
         if (weaponSelect.value.length > 0) autoFillFromWeapon(weaponSelect.value, attackFields)
         showRanged()
+        updateOffhandAvailability()
+        rebuildHoldModeOptions()
     }
+
+    offhandSelect.onchange = () => rebuildHoldModeOptions()
 
     const getSelected = (): CharacterEntity | undefined => {
         const id = ctx.getSelectedId()
         if (id === undefined) return undefined
         return ctx.getAll().find(c => c.id === id)
+    }
+
+    /** 当前副手选择（空 value = 无副手） */
+    const selectedOffhandWeapon = (): WeaponConfig | undefined => selectedWeaponOf(offhandSelect)
+
+    /** 主手为远程时副手不参与（禁用选择；数据保留，切回近战恢复展示与可用性） */
+    const updateOffhandAvailability = (): void => {
+        const main = selectedWeaponOf(weaponSelect)
+        offhandSelect.disabled = main !== undefined && main.type === 'ranged'
+    }
+
+    /** 重建持握模式选项：可用模式 = 主手声明 ∩ 双持（副手同类近战）；保留仍可用的当前选择 */
+    const rebuildHoldModeOptions = (): void => {
+        const main = selectedWeaponOf(weaponSelect)
+        const previous = holdModeSelect.value
+        holdModeSelect.innerHTML = ''
+        const modes = main === undefined ? [] : availableHoldModes(main, selectedOffhandWeapon())
+        for (const mode of modes) {
+            const option = document.createElement('option')
+            option.value = mode
+            option.textContent = HOLD_MODE_LABELS[mode]
+            holdModeSelect.appendChild(option)
+        }
+        holdModeSelect.value = modes.some(mode => mode === previous) ? previous : (modes[0] ?? '')
+        /* 提示：近战主手但副手不构成双持时，说明双持条件 */
+        const dualAvailable = main !== undefined && main.type === 'melee' && isDualWieldPair(main, selectedOffhandWeapon())
+        holdModeHint.style.display = (main !== undefined && main.type === 'melee' && !dualAvailable) ? '' : 'none'
     }
 
     /* 运行时箱型配置缓存 */
@@ -680,6 +753,15 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             ? `${sel.combat.weapon.name} · 待机`
             : `${sel.combat.weapon.name} · ${segmentDisplayName(activeSegment)}`
 
+        /* 副手武器与持握模式回显（未知 / 已移除的副手武器视为无） */
+        const offhandWeapon = sel.combat.offhand?.weapon
+        offhandSelect.value = offhandWeapon !== undefined && findWeaponPreset(offhandWeapon.id) !== undefined
+            ? offhandWeapon.id
+            : ''
+        updateOffhandAvailability()
+        rebuildHoldModeOptions()
+        holdModeSelect.value = sel.holdMode
+
         /* 护甲与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
         for (const slot of ARMOR_SLOTS) {
             const piece = findArmorPreset(sel.combat.armor[slot])
@@ -794,6 +876,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                         }}
                         : {}),
                 }
+                /* 副手武器：空选择 = 卸下（null）；否则按所选武器（数值取预设，可后续扩展覆写） */
+                const selectedOffhand = selectedOffhandWeapon()
+                const newOffhand: AttackConfig | null = selectedOffhand === undefined ? null : {weaponId: selectedOffhand.id}
                 ctx.updateCharacterConfig?.(cur.id, {
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
@@ -801,7 +886,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
                     baseDefense: readBaseDefense(),
                     armor: readArmorLoadout(),
-                })
+                }, newOffhand)
+                /* 持握模式：换装重置为默认后再按面板选择显式设置（不可用时 setHoldMode 回退默认模式） */
+                const holdValue = holdModeSelect.value
+                if (isHoldMode(holdValue)) ctx.setHoldMode?.(cur.id, holdValue)
                 /* 额外锁定点：默认身体中心点由运行时提供；非法偏移输入解析为 0（运行时仍会剔除） */
                 ctx.setLockPoints?.(cur.id, cachedLockPoints.map((point): LockPointConfig => ({
                     jointId: point.jointId,

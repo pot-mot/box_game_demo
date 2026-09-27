@@ -120,6 +120,7 @@ export const makeChar = (
             onDeath: null,
             onDamageDealt: null,
             weapon: runtime.weapon,
+            offhand: undefined,
             attacks: runtime.attacks,
             segmentCooldowns: new Map(),
             activeSegment: undefined,

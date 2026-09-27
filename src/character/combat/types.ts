@@ -23,6 +23,12 @@ export type AttackResult = typeof ATTACK_RESULT_CODES[number]
 export interface CombatComponent {
     /** 装备武器（含伤害 / 远程弹道数值覆写） */
     weapon: WeaponConfig
+    /**
+     * 副手武器运行时（单持 / 双持时装备；双手共持时挂背；undefined = 无副手武器）。
+     * 副手不携带独立攻击链：双持连段由**主手武器类**的 `dual_wield` 链驱动，
+     * 副手只提供外观、命中箱与伤害 / 击退数值（与主手同类，数值可能因模型覆写不同）。
+     */
+    offhand: WeaponRuntime | undefined
     /** 攻击链（武器固有段定义 + 起手段冷却覆写）；换武器时由 `setCombatWeapon` 同步更新 */
     attacks: WeaponAttacks
 
@@ -99,6 +105,11 @@ export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime): voi
     c.attacks = runtime.attacks
 }
 
+/** 变更副手武器（undefined = 卸下；双持可用性判定见 world.ts 的 setHoldMode） */
+export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | undefined): void => {
+    c.offhand = runtime
+}
+
 /** 变更基础防御 / 护甲：校验装备表并重算有效防御、攻击加成与移速乘数（未知护甲 id 安全回退空槽，不抛错） */
 export const setCombatEquipment = (
     c: CombatComponent,
@@ -122,6 +133,7 @@ export const createCombatComponent = (
     maxHealth: number,
 ): CombatComponent => ({
     weapon: runtime.weapon,
+    offhand: undefined,
     attacks: runtime.attacks,
     segmentCooldowns: new Map(),
     activeSegment: undefined,

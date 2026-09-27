@@ -186,6 +186,10 @@ export const collectWorldState = (
                     combatStrategy: e.combatStrategy,
                     /* 攻击配置：装备武器 + 数值覆写（攻击动作由武器模组的攻击链决定） */
                     attack: attackConfigOf(e.combat.weapon, e.combat.attacks),
+                    /* 副手武器配置（可选）：单持 / 双持时装备，双手共持时挂背 */
+                    ...(e.combat.offhand !== undefined
+                        ? {offhand: attackConfigOf(e.combat.offhand.weapon, e.combat.offhand.attacks)}
+                        : {}),
                     /* 持握模式（持久化；换武器时重置为武器默认模式） */
                     holdMode: e.holdMode,
                     tendency: e.combat.tendencyConfig,

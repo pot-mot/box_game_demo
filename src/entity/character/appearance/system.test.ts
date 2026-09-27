@@ -3,9 +3,8 @@ import {Vector3} from 'three'
 import type {AnimationContext} from './types.ts'
 import {createAppearanceSystem} from './system.ts'
 import {createCharacterModel} from './model.ts'
-import {defaultHoldMode, weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
+import {weaponAttacksOf, weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {orderedSegments} from '../../../character/weapon/attack_chain.ts'
-import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 
 /** happy-dom 无 2d 上下文：stub canvas.getContext（脸部纹理绘制用） */
 const stubCanvas2d = (): void => {
@@ -80,18 +79,20 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
     })
 
     it('双手共持（含远程，含缩放模型）：左手吸附各武器对应的副握点，且左肘朝下（不生反关节）', () => {
-        const ids = ['heavy_sword', 'spear', 'war_hammer', 'longbow', 'crossbow', 'shotgun', 'staff']
+        /* 全部支持双手共持的武器：6 近战 + 4 远程；武器按显式 two_handed 模式解析连段 */
+        const ids = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer', 'longbow', 'crossbow', 'shotgun', 'staff']
         /* scale = 1（play/edit）与 1.3（展示模式 ACTOR_SCALE）：IK 目标/臂展须在同一骨架空间计算，
          * 且模型根位置（play 中为 body 位置）不得引入偏移（残差按模型空间归一后两者一致） */
         for (const scale of [1, 1.3]) {
             for (const id of ids) {
                 const preset = weaponPresetOrDefault(id)
-                const segments = orderedSegments(createWeaponRuntime(id).attacks)
+                const segments = orderedSegments(weaponAttacksOf(preset, 'two_handed'))
                 for (const seg of segments) {
                     const model = createCharacterModel({speed: 6, jumpHeight: 2, scale}, 0)
                     /* 模拟生产：模型根由物理 body 管理（非原点） */
                     model.group.position.set(3, 1, -2)
-                    model.equipWeapon({main: preset.mesh, offhand: preset.offhandMesh})
+                    /* 双手共持：不装备副手武器（副手挂背同样不干扰 IK，但此测试聚焦徒手贴合） */
+                    model.equipWeapon({main: preset.mesh})
                     const sys = createAppearanceSystem()
                     const total = seg.duration + seg.recovery
                     let maxDist = 0
@@ -100,7 +101,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
                         const t = Math.min(i / 60, total)
                         sys.update(1 / 60, model, 'attacking', makeCtx({
                             stateTime: t,
-                            holdMode: defaultHoldMode(preset),
+                            holdMode: 'two_handed',
                             attackSegment: seg,
                             attackPhase: 'aim',
                             attackPhaseProgress: 0.5,

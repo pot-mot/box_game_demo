@@ -6,7 +6,7 @@
 
 /** 攻击配置（角色存档/面板）：只描述装备武器与数值覆写，攻击动作由武器模组决定 */
 export interface AttackConfig {
-    /** 武器 id：MELEE_WEAPON_PRESETS / RANGED_WEAPON_PRESETS 的键（未知 id 回退默认武器） */
+    /** 武器（模型）id：MELEE_WEAPON_MODELS / RANGED_WEAPON_MODELS 的键（未知 id 回退默认武器） */
     readonly weaponId: string
     /** 伤害覆写（undefined = 取武器预设伤害） */
     readonly damage?: number

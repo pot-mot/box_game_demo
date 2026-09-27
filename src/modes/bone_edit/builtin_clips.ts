@@ -2,6 +2,7 @@ import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
 import {getAttackClipById, getBaseClip} from '../../entity/character/appearance/builtin_catalog.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
 import {ALL_WEAPON_PRESETS, weaponAttacksOf} from '../../character/weapon/catalog.ts'
+import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 
 /** 基础状态键（与姿态采样器状态一致） */
 type BaseState = Parameters<typeof getBaseClip>[0]
@@ -21,8 +22,10 @@ export interface BuiltinClipEntry {
     readonly clip: BoneAnimationClip
     /** 攻击条目所属武器 id（编辑器据此自动装备武器；基础状态条目为 undefined） */
     readonly weaponId?: string
-    /** 攻击条目对应的武器段 id（用于查该段是否双手持握；基础状态条目为 undefined） */
+    /** 攻击条目对应的武器段 id（基础状态条目为 undefined） */
     readonly segmentId?: string
+    /** 攻击条目所在攻击链的持握模式（编辑器据此决定双手贴合 / 副手装备；基础状态条目为 undefined） */
+    readonly holdMode?: HoldMode
     /**
      * 基础状态持械标记（仅 待机/行走 的持械-空手变体携带）：
      * false = 空手变体（编辑器「自动」模式卸下武器）；true = 持械变体（保留当前武器）。
@@ -30,10 +33,11 @@ export interface BuiltinClipEntry {
     readonly weaponHeld?: boolean
 }
 
-/** 条目来源（武器/段/持械标记；基础状态与攻击动作各用其一） */
+/** 条目来源（武器/段/持握模式/持械标记；基础状态与攻击动作各用其一） */
 interface EntryOrigin {
     readonly weaponId?: string
     readonly segmentId?: string
+    readonly holdMode?: HoldMode
     readonly weaponHeld?: boolean
 }
 
@@ -68,6 +72,7 @@ const entryOf = (
     clip: {...source, name: label},
     weaponId: origin.weaponId,
     segmentId: origin.segmentId,
+    holdMode: origin.holdMode,
     weaponHeld: origin.weaponHeld,
 })
 
@@ -118,20 +123,25 @@ const buildBaseEntries = (): BuiltinClipEntry[] => {
 const buildAttackSource = (segment: AttackSegment): BoneAnimationClip => getAttackClipById(segment.id)
 
 /**
- * 攻击条目：逐武器枚举其攻击段（顺序 = `orderedSegments`：轻1 → 轻2 → 重1 → 重2，
+ * 攻击条目：逐武器枚举其**全部持握模式**的攻击段（顺序 = `orderedSegments`：轻1 → 轻2 → 重1 → 重2，
  * 条件起手变体段接在所属攻击键末尾），故「同链 1、2 段相邻、轻链在重链之前」由武器链数据本身保证。
- * 单段武器（远程）标签只用武器名。
+ * 多模式武器（近战）标签带持握模式名以保持全库唯一；单段武器（远程）标签只用武器名。
  */
 const buildAttackEntries = (): BuiltinClipEntry[] =>
     ALL_WEAPON_PRESETS.flatMap(weapon => {
-        const segments = orderedSegments(weaponAttacksOf(weapon))
-        return segments.map(segment => entryOf(
-            segment.id,
-            weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,
-            segments.length > 1 ? `${weapon.name} · ${segmentDisplayName(segment)}` : weapon.name,
-            buildAttackSource(segment),
-            {weaponId: weapon.id, segmentId: segment.id},
-        ))
+        const multiMode = weapon.holdModes.length > 1
+        return weapon.holdModes.flatMap(holdMode => {
+            const segments = orderedSegments(weaponAttacksOf(weapon, holdMode))
+            return segments.map(segment => entryOf(
+                segment.id,
+                weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,
+                segments.length > 1
+                    ? `${weapon.name} · ${multiMode ? `${HOLD_MODE_LABELS[holdMode]} · ` : ''}${segmentDisplayName(segment)}`
+                    : weapon.name,
+                buildAttackSource(segment),
+                {weaponId: weapon.id, segmentId: segment.id, holdMode},
+            ))
+        })
     })
 
 /* ── 动画库（惰性构建并缓存：主入口静态导入本模块，构建成本推迟到进入骨骼动画模式） ── */

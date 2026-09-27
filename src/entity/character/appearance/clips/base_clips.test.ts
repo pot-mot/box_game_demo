@@ -195,6 +195,32 @@ describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
         model.dispose()
     })
 
+    it('副手挂背 / 回手：setOffhandStowed 只换父节点，不重建几何（双手共持用）', () => {
+        const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        model.equipWeapon({
+            main: {id: 'sword', bladeLen: 0.5, color: 0xcc6666, gripColor: 0x553322},
+            offhand: {id: 'sword', bladeLen: 0.3, color: 0xcc5555, gripColor: 0x664422},
+        })
+        const offhandGroup = model.offhandWeaponGroup
+        expect(offhandGroup).not.toBeNull()
+        expect(model.leftWeaponMount.children).toHaveLength(1)
+
+        model.setOffhandStowed(true)
+        /* 同一个 Group 换父节点：命中箱/刀尖引用不变 */
+        expect(model.offhandWeaponGroup).toBe(offhandGroup)
+        expect(model.leftWeaponMount.children).toHaveLength(0)
+        expect(model.backWeaponMount.children).toHaveLength(1)
+
+        model.setOffhandStowed(false)
+        expect(model.leftWeaponMount.children).toHaveLength(1)
+        expect(model.backWeaponMount.children).toHaveLength(0)
+
+        model.removeWeapon()
+        expect(model.backWeaponMount.children).toHaveLength(0)
+        expect(model.leftWeaponMount.children).toHaveLength(0)
+        model.dispose()
+    })
+
     it('持握模式合并 clip 与分层组合等价（均匀权重、下半身/上半身关节不重叠）', () => {
         for (const [state, holdMode] of [['idle', 'one_handed'], ['walking', 'two_handed'], ['walking', 'dual_wield']] as const) {
             const merged = getBaseClipForHoldMode(state, true, holdMode, 0)

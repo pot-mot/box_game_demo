@@ -260,13 +260,59 @@ describe('validateSaveData', () => {
         }
     })
 
-    it('character 旧存档缺 defense / armor / lockPoints 字段：缺省为 undefined', () => {
+    it('character 持握模式 / 副手武器 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    attack: {weaponId: 'long_sword', damage: 3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        const valid = validateSaveData(characterConfig({
+            holdMode: 'dual_wield',
+            offhand: {weaponId: 'short_sword', damage: 2},
+        }))
+        const e0 = valid.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.config.holdMode).toBe('dual_wield')
+            expect(e0.config.offhand).toEqual({weaponId: 'short_sword', damage: 2})
+        }
+
+        /* 未知武器 id 属于运行时容错范畴：校验层保留字符串，world.add 加载时安全丢弃 */
+        const unknownId = validateSaveData(characterConfig({offhand: {weaponId: 'no_such_weapon'}}))
+        const e1 = unknownId.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.offhand?.weaponId).toBe('no_such_weapon')
+        }
+
+        /* 非法持握模式 / 非法副手结构：回退 undefined，不抛错 */
+        expect(() => validateSaveData(characterConfig({holdMode: 'nope'}))).not.toThrow()
+        expect(() => validateSaveData(characterConfig({offhand: 5}))).not.toThrow()
+        expect(() => validateSaveData(characterConfig({offhand: {weaponId: 42}}))).not.toThrow()
+        const invalid = validateSaveData(characterConfig({holdMode: 'nope', offhand: {weaponId: 42}}))
+        const e2 = invalid.entities[0]
+        if (e2.type === 'character') {
+            expect(e2.config.holdMode).toBeUndefined()
+            expect(e2.config.offhand).toBeUndefined()
+        }
+    })
+
+    it('character 旧存档缺 defense / armor / lockPoints / holdMode / offhand 字段：缺省为 undefined', () => {
         const result = validateSaveData({entities: [{type: 'character'}]})
         const entity = result.entities[0]
         if (entity.type === 'character') {
             expect(entity.config.defense).toBeUndefined()
             expect(entity.config.armor).toBeUndefined()
             expect(entity.config.lockPoints).toBeUndefined()
+            expect(entity.config.holdMode).toBeUndefined()
+            expect(entity.config.offhand).toBeUndefined()
         }
     })
 

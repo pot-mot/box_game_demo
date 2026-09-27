@@ -11,6 +11,8 @@ export const INPUT_ACTIONS = [
     'jump',
     /* 移动技能（翻滚）：动作 id 保留 sprint 以兼容既有键位存档 */
     'sprint',
+    /* 近战持握模式切换（单持 → 双手共持 → 双持循环；副手同类近战才含双持） */
+    'cycle_hold_mode',
     'cycle_spawn_up',
     'cycle_spawn_down',
     'delete_entity',
@@ -41,6 +43,7 @@ export const ACTION_LABELS: Record<InputAction, string> = {
     move_down: '下降',
     jump: '跳跃',
     sprint: '翻滚',
+    cycle_hold_mode: '切换持握模式',
     cycle_spawn_up: '上一个生成类型',
     cycle_spawn_down: '下一个生成类型',
     delete_entity: '删除实体',
@@ -56,7 +59,7 @@ export const ACTION_LABELS: Record<InputAction, string> = {
 /** 动作分组 */
 export const ACTION_GROUPS: readonly { readonly name: string; readonly actions: readonly InputAction[] }[] = [
     {name: '移动', actions: ['move_forward', 'move_backward', 'move_left', 'move_right', 'move_up', 'move_down']},
-    {name: '角色', actions: ['jump', 'sprint']},
+    {name: '角色', actions: ['jump', 'sprint', 'cycle_hold_mode']},
     {name: '编辑工具', actions: ['cycle_spawn_up', 'cycle_spawn_down']},
     {name: 'UI', actions: ['delete_entity', 'close_panel']},
     {name: '系统', actions: ['save_world', 'load_world']},

@@ -13,6 +13,7 @@ const EXPECTED_DEFAULTS: Record<InputAction, readonly (readonly string[])[]> = {
     move_down: [['KeyX']],
     jump: [['Space']],
     sprint: [['ShiftLeft'], ['ShiftRight']],
+    cycle_hold_mode: [['ControlLeft'], ['ControlRight']],
     cycle_spawn_up: [['ArrowUp']],
     cycle_spawn_down: [['ArrowDown']],
     delete_entity: [['Delete']],

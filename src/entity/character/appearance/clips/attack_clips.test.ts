@@ -5,7 +5,8 @@ import {getAttackClipById} from './attack_clips.ts'
 
 describe('攻击动作逐段姿势修订', () => {
     it('每个攻击段的修订时间、关节轨道都对应现有 clip 关键帧', () => {
-        expect(Object.keys(ATTACK_POSE_EDITS)).toHaveLength(35)
+        /* 近战 6 武器 × 3 持握模式 + 远程 9 单段（双持/双手链的额外关键帧也计入修订） */
+        expect(Object.keys(ATTACK_POSE_EDITS)).toHaveLength(83)
         for (const [clipId, edits] of Object.entries(ATTACK_POSE_EDITS)) {
             const clip = getAttackClipById(clipId)
             expect(ATTACK_CLIP_JSON[clipId], `${clipId} 缺少基础动画资产`).toBeDefined()

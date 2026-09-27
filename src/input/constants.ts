@@ -11,6 +11,8 @@ export const DEFAULT_BINDINGS: BindingsMap = {
     move_down: [['KeyX']],
     jump: [['Space']],
     sprint: [['ShiftLeft'], ['ShiftRight']],
+    /* 持握模式切换：默认 Ctrl（仅 Ctrl 单独按下时生效；Ctrl+S / Ctrl+O 被更长组合遮蔽，不会误触发） */
+    cycle_hold_mode: [['ControlLeft'], ['ControlRight']],
     cycle_spawn_up: [['ArrowUp']],
     cycle_spawn_down: [['ArrowDown']],
     delete_entity: [['Delete']],

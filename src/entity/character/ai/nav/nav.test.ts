@@ -33,6 +33,7 @@ const createCombatStub = (): CombatComponent => {
     const weaponRuntime = createWeaponRuntime('long_sword')
     return {
         weapon: weaponRuntime.weapon,
+        offhand: undefined,
         attacks: weaponRuntime.attacks,
         segmentCooldowns: new Map(),
         activeSegment: undefined,

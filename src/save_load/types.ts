@@ -15,8 +15,9 @@ import type {LockPointConfig} from '../character/lock_point.ts'
 
 /** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」；
  *  v4 起 character 增加基础防御 defense 与护甲装备 armor；
- *  v5 起 character 增加额外锁定点 lockPoints（均为可选字段，旧档加载时安全回退默认） */
-export const SAVE_FORMAT_VERSION = 5
+ *  v5 起 character 增加额外锁定点 lockPoints；
+ *  v6 起 character 增加副手武器 offhand（均为可选字段，旧档加载时安全回退默认） */
+export const SAVE_FORMAT_VERSION = 6
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -115,6 +116,11 @@ export interface CharacterSaveConfig {
     combatStrategy?: 'tactical' | 'aggressive' | 'cowardly'
     /** 攻击配置：装备武器 + 数值覆写（动作/时长/动画由武器模组的攻击链决定） */
     attack: AttackConfig
+    /**
+     * 副手武器配置（可选）：单持 / 双持时装备，双手共持时挂背；主手为远程时不展示。
+     * 缺省 = 无副手武器；未知武器 id 加载时安全丢弃（回退无副手），不抛错。
+     */
+    offhand?: AttackConfig
     /**
      * 持握模式（持久化）：缺省 = 武器默认模式；旧存档无此字段时安全回退默认，
      * 武器不支持时由 `setHoldMode` 回退默认模式（不抛错）。

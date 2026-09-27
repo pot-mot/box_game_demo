@@ -23,7 +23,8 @@ import {
  * **武器挂点**：右腕/左腕下各挂一个零偏移关节 `rightWeaponMount` / `leftWeaponMount`——
  * 它们是「武器占用的两个骨骼位」：武器主体挂在右手挂点（跟随右手动画），
  * 左手挂点是双手武器的副握点（由左手链 IK 贴合武器，见 modes/bone_edit 与生产双手 IK）。
- * 两者不参与动画关键帧记录（无 clip 轨道），仅作为挂载/求解目标。
+ * `backWeaponMount` 为背部视觉挂点（双手共持时副手武器挂背），不参与动画关键帧记录。
+ * 三者均不参与动画关键帧记录（无 clip 轨道），仅作为挂载/求解目标。
  */
 export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
     const bodyW = MODEL_BASE_WIDTH
@@ -53,6 +54,8 @@ export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
             {id: 'leftHandPivot', name: '左手', parentId: 'leftArmElbow', position: [0, -forearmH, 0], rotation: identity},
             {id: 'leftWristPivot', name: '左腕', parentId: 'leftHandPivot', position: [0, 0, 0], rotation: identity},
             {id: 'leftWeaponMount', name: '左手武器挂点', parentId: 'leftWristPivot', position: [0, 0, 0], rotation: identity},
+            /* 背部武器挂点（视觉挂点）：双手共持时副手武器挂到背后（绕 Z 倾斜 0.9rad 斜挂） */
+            {id: 'backWeaponMount', name: '背部武器挂点', parentId: 'spine', position: [0, bodyH * 0.55, -bodyW * BODY_DEPTH_RATIO * 0.6], rotation: [0, 0, 0.43487, 0.90045]},
             {id: 'rightLegHip', name: '右髋', parentId: 'root', position: [hipX, HIP_Y, 0], rotation: identity},
             {id: 'rightLegKnee', name: '右膝', parentId: 'rightLegHip', position: [0, -hipH, 0], rotation: identity},
             {id: 'rightFoot', name: '右脚', parentId: 'rightLegKnee', position: [0, -shinH, 0], rotation: identity},

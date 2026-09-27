@@ -69,12 +69,12 @@ test.describe('骨骼动画编辑模式', () => {
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '骨骼动画'}).click()
         await expect(page.locator('#bone-timeline')).toBeVisible()
-        /* 内置条目总数 = 基础状态 9 + 近战 26（巨剑/长枪各 5 段）+ 远程 9 */
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-builtin-clip-count', '44')
+        /* 内置条目总数 = 基础状态 9 + 近战 6 武器 × 3 持握模式（巨剑/长枪双手链各多 1 段）+ 远程 9 */
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-builtin-clip-count', '92')
         const builtinOptions = page.locator('#bone-anim-select option[data-builtin-id]')
-        await expect(builtinOptions).toHaveCount(44)
+        await expect(builtinOptions).toHaveCount(92)
         /* 抽取代表性条目：行走/跳跃/近战链段（含巨剑轻 3 与长枪蓄力变体）/远程技能 */
-        for (const id of ['state/walking', 'state/jumping', 'short_sword_light_1', 'heavy_sword_light_3', 'spear_charge_thrust', 'long_sword_heavy_2', 'longbow_shot']) {
+        for (const id of ['state/walking', 'state/jumping', 'short_sword_one_handed_light_1', 'heavy_sword_two_handed_light_3', 'spear_two_handed_charge_thrust', 'long_sword_one_handed_heavy_2', 'longbow_shot']) {
             await expect(page.locator(`#bone-anim-select option[data-builtin-id="${id}"]`)).toBeAttached()
         }
     })
@@ -100,25 +100,24 @@ test.describe('骨骼动画编辑模式', () => {
         expect(t2).toBeGreaterThan(t1)
     })
 
-    test('内置近战动作按武器分组、链段顺序连续排列（巨剑轻链 3 段、长枪含蓄力变体）', async ({page}) => {
+    test('内置近战动作按武器 + 持握模式分组、链段顺序连续排列（巨剑双手轻链 3 段、长枪含蓄力变体）', async ({page}) => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '骨骼动画'}).click()
         await expect(page.locator('#bone-timeline')).toBeVisible()
         const labels = await page.locator('#bone-anim-select optgroup[label^="近战攻击"] option').allTextContents()
-        expect(labels).toHaveLength(26)
-        const expected: Readonly<Record<string, readonly string[]>> = {
-            短剑: ['轻击一段', '轻击二段', '重击一段', '重击二段'],
-            长剑: ['轻击一段', '轻击二段', '重击一段', '重击二段'],
-            巨剑: ['轻击一段', '轻击二段', '轻击三段', '重击一段', '重击二段'],
-            长枪: ['轻击一段', '轻击二段', '蓄力突刺', '重击一段', '重击二段'],
-            双斧: ['轻击一段', '轻击二段', '重击一段', '重击二段'],
-            战锤: ['轻击一段', '轻击二段', '重击一段', '重击二段'],
-        }
-        for (const [weapon, segmentLabels] of Object.entries(expected)) {
-            const start = labels.indexOf(`${weapon} · ${segmentLabels[0]}`)
-            expect(start, `${weapon} 应出现在内置清单中`).toBeGreaterThanOrEqual(0)
-            expect(labels.slice(start, start + segmentLabels.length)).toEqual(segmentLabels.map(label => `${weapon} · ${label}`))
+        /* 近战 6 武器 × 3 模式 × 4 段 + 巨剑双手多 1 段 + 长枪双手蓄力变体 1 段 = 74 */
+        expect(labels).toHaveLength(74)
+        /* 代表性命中：三种模式分列，同模式内链段顺序正确 */
+        for (const label of [
+            '短剑 · 单持 · 轻击一段',
+            '短剑 · 双手共持 · 轻击一段',
+            '短剑 · 双持 · 重击二段',
+            '巨剑 · 双手共持 · 轻击三段',
+            '长枪 · 双手共持 · 蓄力突刺',
+            '战锤 · 单持 · 重击一段',
+        ]) {
+            expect(labels, label).toContain(label)
         }
     })
 
@@ -127,8 +126,8 @@ test.describe('骨骼动画编辑模式', () => {
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '骨骼动画'}).click()
         await expect(page.locator('#bone-timeline')).toBeVisible()
-        await page.selectOption('#bone-anim-select', 'builtin:long_sword_light_1')
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-current-clip', '长剑 · 轻击一段')
+        await page.selectOption('#bone-anim-select', 'builtin:long_sword_one_handed_light_1')
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-current-clip', '长剑 · 单持 · 轻击一段')
         /* 事件轨（hitbox_on / hitbox_off）与关节关键帧均已载入（动画为稀疏关键帧：起手 + 阶段末姿态） */
         await expect(page.locator('[data-track-target="__events__"] [data-keyframe-count]')).toHaveAttribute('data-keyframe-count', '2')
         const armCount = Number(await page.locator('[data-track-target="rightArmShoulder"] [data-keyframe-count]').getAttribute('data-keyframe-count'))
@@ -148,12 +147,12 @@ test.describe('骨骼动画编辑模式', () => {
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-assist', 'off')
 
         /* 选长剑轻击一段 → 自动装备长剑（单手，不求解左手） */
-        await page.selectOption('#bone-anim-select', 'builtin:long_sword_light_1')
+        await page.selectOption('#bone-anim-select', 'builtin:long_sword_one_handed_light_1')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'long_sword')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-two-handed', 'false')
 
         /* 选巨剑 → 自动换成巨剑（双手）；贴合默认关闭，播放时左手也不被牵扯 */
-        await page.selectOption('#bone-anim-select', 'builtin:heavy_sword_light_1')
+        await page.selectOption('#bone-anim-select', 'builtin:heavy_sword_two_handed_light_1')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'heavy_sword')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-two-handed', 'true')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-solved', 'false')
@@ -181,10 +180,10 @@ test.describe('骨骼动画编辑模式', () => {
         await page.selectOption('#bone-weapon-select', 'none')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', '')
 
-        /* 手动指定战锤（双手） */
+        /* 手动指定战锤（无动画来源 → 默认单持模式，非双手） */
         await page.selectOption('#bone-weapon-select', 'war_hammer')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'war_hammer')
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-two-handed', 'true')
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-two-handed', 'false')
     })
 
     test('导出资产触发下载', async ({page}) => {

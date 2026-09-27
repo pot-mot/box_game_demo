@@ -44,6 +44,7 @@ const makeChar = (
 
     const combat: CombatComponent = {
         weapon: weaponRuntime.weapon,
+        offhand: undefined,
         attacks: weaponRuntime.attacks,
         segmentCooldowns,
         activeSegment: undefined,

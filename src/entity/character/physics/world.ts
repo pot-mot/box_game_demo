@@ -9,14 +9,14 @@ import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
 import type {AttackResult} from '../../../character/combat/types.ts'
-import {createCombatComponent, setCombatEquipment, setCombatWeapon} from '../../../character/combat/types.ts'
+import {createCombatComponent, setCombatEquipment, setCombatOffhand, setCombatWeapon} from '../../../character/combat/types.ts'
 import {ZERO_PROFILE, type DefenseProfile} from '../../../character/combat/defense.ts'
 import type {ArmorLoadout} from '../../../character/armor/types.ts'
 import {resolveArmorLoadout} from '../../../character/armor/catalog.ts'
 import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/attack_runtime.ts'
 import {createTestWeaponRuntime, TEST_WEAPON_ID} from '../../../character/combat/test_weapon.ts'
-import {createWeaponRuntime, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
-import {defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
+import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
+import {availableHoldModes, defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
 import type {AttackKey} from '../../../character/weapon/attack_chain.ts'
@@ -162,7 +162,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
     getAll: () => readonly CharacterEntity[]
     setTransform: (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}) => void
-    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout}) => void
+    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout}, newOffhand?: AttackConfig | null) => void
     /** 设置单个角色的和平策略 */
     setPeaceStrategy: (id: number, strategy: PeaceSubStrategy) => void
     /** 设置单个角色的和平策略配置 */
@@ -179,6 +179,11 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setFacing: (id: number, degrees: number) => void
     /** 切换持握模式（武器不支持时回退默认模式）；返回是否成功命中请求的模式 */
     setHoldMode: (id: number, holdMode: HoldMode) => boolean
+    /**
+     * 玩家持握模式环切：按当前可用模式列表（单持 → 双手共持 → 双持）取下一个；
+     * 无玩家 / 无可用模式时不动作。返回切换后的模式（未动作 = undefined）。
+     */
+    cyclePlayerHoldMode: () => HoldMode | undefined
     /** 设置角色的额外锁定点（默认身体中心点不可配置；非法条目安全剔除） */
     setLockPoints: (id: number, points: readonly LockPointConfig[]) => void
     /** 配置 AI 感知（视线检查 + 导航传感器，需在所有实体系统初始化后调用） */
@@ -207,6 +212,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let nextId = 1
     let selectedId: number | undefined
     let aiEnabled = false
+
+    /** 按当前主手 / 副手武器与持握模式同步外观装配（副手在双手共持时挂背，其余模式握在左手；主手为远程时不展示副手） */
+    const syncWeaponAppearance = (entity: CharacterEntity): void => {
+        const model = appearanceModels.get(entity.id)
+        if (model === undefined) return
+        model.equipWeapon({
+            main: entity.combat.weapon.mesh,
+            ...(entity.combat.weapon.type === 'melee'
+                ? {offhand: entity.combat.offhand?.weapon.mesh, offhandStowed: entity.holdMode === 'two_handed'}
+                : {}),
+        })
+    }
 
     let playerAttackPending = false
     let playerDx = 0
@@ -309,6 +326,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const spawnEntity = (
         config: CharacterConfig,
         attack: AttackConfig,
+        offhandAttack: AttackConfig | undefined,
         tendencyConfig: TendencyConfig,
         faction: number,
         x: number, y: number, z: number,
@@ -319,6 +337,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     ): CharacterEntity => {
         /* 武器运行时（武器预设 + 存档数值覆写）：外观武器模型、攻击链、血量档位都由它决定 */
         const runtime = weaponRuntimeOf(attack)
+        /* 副手武器运行时（可选）：单持 / 双持时装备，双手共持时挂背；主手为远程时仅存数据不展示 */
+        const offhandRuntime = offhandAttack !== undefined ? weaponRuntimeOf(offhandAttack) : undefined
         const mesh = createCharacterMesh(config)
         /* 实体原点在脚底：mesh/外观模型定位到原点，物理刚体（胶囊）中心上移半高 */
         const halfH = originToCenterY(config)
@@ -334,7 +354,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         scene.add(mesh)
 
         const model = createCharacterModel(config, faction)
-        model.equipWeapon({main: runtime.weapon.mesh, offhand: runtime.weapon.offhandMesh})
+        /* 主手为远程时不展示副手（副手仅服务近战三持握模组）；近战时副手挂左手（默认单持） */
+        model.equipWeapon({
+            main: runtime.weapon.mesh,
+            ...(runtime.weapon.type === 'melee' ? {offhand: offhandRuntime?.weapon.mesh} : {}),
+        })
         model.group.position.set(x, y, z)
         scene.add(model.group)
 
@@ -368,6 +392,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             runtime, faction,
             resolveTendency(tendencyConfig), tendencyConfig, maxHP,
         )
+        setCombatOffhand(combat, offhandRuntime)
 
         const entity: CharacterEntity = {
             id,
@@ -440,7 +465,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const spawnAt = (x: number, y: number, z: number): void => {
         const meleePreset: AttackConfig = {weaponId: 'long_sword'}
-        const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
+        const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, undefined, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
         select(entity.id)
     }
 
@@ -1115,7 +1140,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
         const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, scale: saveConfig.scale}
-        const entity = spawnEntity(cfg, saveConfig.attack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
+        /* 副手：未知武器 id 安全丢弃（回退无副手），避免未知 id 被静默替换成默认武器带入存档 */
+        const offhandAttack = saveConfig.offhand !== undefined && isKnownWeaponId(saveConfig.offhand.weaponId)
+            ? saveConfig.offhand
+            : undefined
+        const entity = spawnEntity(cfg, saveConfig.attack, offhandAttack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
         /* 持握模式：存档支持时应用，武器不支持时 setHoldMode 回退默认模式（不抛错） */
         if (saveConfig.holdMode !== undefined) setHoldMode(entity.id, saveConfig.holdMode)
         /* 防御与护甲：旧档缺字段回退零防御空护甲；未知护甲 id 由 resolveArmorLoadout 安全剔除 */
@@ -1184,13 +1213,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     /**
-     * 切换持握模式：武器支持时切换，不支持时回退默认模式；返回是否成功命中请求的模式。
-     * 切换后按新模式重解析攻击链并清空段冷却 / 当前段（避免残留旧链的段）。
+     * 切换持握模式：模式在武器声明范围内、且双持时副手为同类近战武器才接受；否则回退默认模式并返回 false。
+     * 切换后按新模式重解析攻击链、清空段冷却 / 当前段，并同步外观（副手在双手共持时挂背、其余模式回手）。
      */
     const setHoldMode = (id: number, holdMode: HoldMode): boolean => {
         const entity = characters.find(c => c.id === id)
         if (entity === undefined) return false
-        const supported = entity.combat.weapon.holdModes.includes(holdMode)
+        const supported = availableHoldModes(entity.combat.weapon, entity.combat.offhand?.weapon).includes(holdMode)
         const mode = supported ? holdMode : defaultHoldMode(entity.combat.weapon)
         if (entity.holdMode !== mode) {
             setCombatWeapon(entity.combat, runtimeForHoldMode(entity.combat.weapon, mode))
@@ -1198,8 +1227,21 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.combat.activeSegment = undefined
             entity.combat.bufferedSegment = undefined
             entity.combat.segmentCooldowns.clear()
+            syncWeaponAppearance(entity)
         }
         return supported
+    }
+
+    /** 玩家持握模式环切（单持 → 双手共持 → 双持 → 单持；可用列表按武器声明 + 副手同类过滤） */
+    const cyclePlayerHoldMode = (): HoldMode | undefined => {
+        const entity = characters.find(c => c.isPlayer)
+        if (entity === undefined) return undefined
+        const modes = availableHoldModes(entity.combat.weapon, entity.combat.offhand?.weapon)
+        if (modes.length === 0) return undefined
+        const index = modes.indexOf(entity.holdMode)
+        const next = modes[(index + 1) % modes.length] ?? modes[0]
+        setHoldMode(entity.id, next)
+        return entity.holdMode
     }
 
     /** 设置额外锁定点：非法条目安全剔除（不抛错），默认身体中心点不受影响 */
@@ -1209,7 +1251,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.lockPoints = sanitizeLockPoints(points)
     }
 
-    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout}): void => {
+    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout}, newOffhand?: AttackConfig | null): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
         if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
@@ -1252,18 +1294,21 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 entity.wireframe = newWire
             }
         }
-        if (newAttackSlot) {
-            /* 换装：整体替换武器运行时（武器 + 攻击链 + 数值覆写），持握模式重置为默认，清空段冷却与当前段 */
-            const runtime = weaponRuntimeOf(newAttackSlot)
-            setCombatWeapon(entity.combat, runtime)
-            entity.holdMode = runtime.holdMode
+        if (newAttackSlot || newOffhand !== undefined) {
+            if (newAttackSlot) {
+                /* 换装：整体替换武器运行时（武器 + 攻击链 + 数值覆写） */
+                setCombatWeapon(entity.combat, weaponRuntimeOf(newAttackSlot))
+            }
+            if (newOffhand !== undefined) {
+                /* 副手变更：null = 卸下；undefined = 保持原副手 */
+                setCombatOffhand(entity.combat, newOffhand === null ? undefined : weaponRuntimeOf(newOffhand))
+            }
+            /* 持握模式重置为该武器支持的首个模式（面板随后可再显式 setHoldMode），清空段冷却与当前段 */
+            entity.holdMode = defaultHoldMode(entity.combat.weapon)
             entity.combat.activeSegment = undefined
             entity.combat.bufferedSegment = undefined
             entity.combat.segmentCooldowns.clear()
-            const model = appearanceModels.get(entity.id)
-            if (model) {
-                model.equipWeapon({main: entity.combat.weapon.mesh, offhand: entity.combat.weapon.offhandMesh})
-            }
+            syncWeaponAppearance(entity)
         }
         if (newFaction !== undefined) {
             entity.combat.faction = newFaction
@@ -1380,6 +1425,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         getFacing,
         setFacing,
         setHoldMode,
+        cyclePlayerHoldMode,
         setLockPoints,
         setupAI,
         setNavEnabled,

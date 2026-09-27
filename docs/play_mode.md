@@ -9,6 +9,13 @@
 - 无玩家（未标记玩家或玩家死亡）：相机回退自由飞行（`src/modes/free_flight.ts`）。
 - 近战命中触发短促相机震动（`index.ts` 的 `applyHitShake`，叠加在相机更新之后）。
 
+## 持握模式切换（「切换持握模式」绑定，默认 Ctrl）
+
+- 近战武器按 `availableHoldModes`（武器声明 ∩ 双持需副手同类近战）环切：单持 → 双手共持 → 双持 → 单持；`src/modes/play/keyboard.ts` 轮询输入动作 `cycle_hold_mode` 后调用 `characterSystem.cyclePlayerHoldMode()`。
+- 仅 Ctrl 单独按下时生效：`isActionActive('cycle_hold_mode')` 走最长组合遮蔽，Ctrl+S / Ctrl+O 按下时该动作被 `save_world` / `load_world` 遮蔽，不会误触发切换。
+- 切换由 `world.ts` 的 `setHoldMode` 统一处理（重解析攻击链、清段冷却与当前段、同步副手挂背/回手）；HUD 装备行显示当前武器与持握模式。
+- 副手装备与持握模式的显式选择在编辑模式角色面板「装备」区（副手武器下拉 + 持握下拉），存档字段 `offhand` / `holdMode`（v6）。
+
 ## 镜头锁定（「锁定目标」绑定，默认鼠标中键）
 
 - 按下切换：已锁定 → 解除；未锁定 → 搜索并锁定；再次按下同样解除。绑定默认中键、可改绑键盘（鼠标路径走 `mousedown` 的 `matchesMouseButton`，键盘路径走 `wasActionPressed` 边沿）；手动拖拽旋转视角累计超过点击阈值（5px，与攻击 click/drag 判定一致）后解除，避免攻击点击时的指针抖动误解除。

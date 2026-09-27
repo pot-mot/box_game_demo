@@ -9,12 +9,14 @@ import type {BoxPartPalette} from '../../../render/box_parts.ts'
 /** 角色配色 palette（方块人部件共享，见 render/box_parts） */
 export type CharacterColorPalette = BoxPartPalette
 
-/** 武器装配：主手（右手）必备，副手（左手）仅双持武器提供 */
+/** 武器装配：主手（右手）必备，副手（左手）仅单持 / 双持时提供 */
 export interface WeaponEquipConfig {
     /** 主手武器网格；undefined = 空手（卸下） */
     readonly main: WeaponMeshConfig | undefined
-    /** 副手武器网格（双持）；undefined = 无副手武器 */
+    /** 副手武器网格（单持 / 双持；双手共持挂背）；undefined = 无副手武器 */
     readonly offhand?: WeaponMeshConfig
+    /** 副手是否挂背（双手共持 = true；缺省 = 握在左手） */
+    readonly offhandStowed?: boolean
 }
 
 /** 方块人外观模型，暴露所有关节 pivot 供动画系统直接操纵 */
@@ -49,6 +51,8 @@ export interface CharacterModel {
     readonly rightWeaponMount: Group
     /** 左手武器挂点（副手武器/双手 IK 末端；可被动画驱动） */
     readonly leftWeaponMount: Group
+    /** 背部武器挂点（双手共持时副手武器挂背；仅视觉挂点，无 clip 轨道） */
+    readonly backWeaponMount: Group
 
     readonly rightLegHip: Group
     readonly rightThigh: Mesh
@@ -60,8 +64,11 @@ export interface CharacterModel {
     readonly leftLegKnee: Group
     readonly leftShin: Mesh
 
-    /** 装配武器（主手 + 可选副手，会先移除旧武器） */
+    /** 装配武器（主手 + 可选副手，会先移除旧武器；offhandStowed = 副手挂背） */
     equipWeapon: (config: WeaponEquipConfig) => void
+
+    /** 副手武器挂背 / 回手（仅换父节点，不重建几何；无副手武器时空操作） */
+    setOffhandStowed: (stowed: boolean) => void
 
     /** 移除全部武器 */
     removeWeapon: () => void

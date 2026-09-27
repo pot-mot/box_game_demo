@@ -1,10 +1,14 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
 import type {AttackEntry, AttackKey, AttackSegment, AttackTransition, WeaponAttackChain, WeaponAttacks} from './attack_chain.ts'
+import type {HoldMode} from './hold_mode.ts'
 
 /**
- * 近战武器攻击链（武器模组固有数据）：
+ * 近战武器攻击链（武器类固有数据）：
  * 每个攻击段只声明**玩法数据**（时长/恢复/阶段时序/伤害倍率/冷却/连段拓扑）；
  * 动画是段 id 对应的显式骨骼关键帧（`attack_clip_data.ts` 基础轨道 + `attack_pose_edits.ts` 逐段修订），不再有抽象动画参数。
+ *
+ * **段 id 约定**：`{classId}_{holdMode}_{模板键}`（如 `long_sword_two_handed_light_1`）——
+ * 每种持握模式拥有独立段 id 命名空间，三模式连段互不覆盖。
  */
 
 /** 轻段动作时间（秒，仅挥砍动作，不含后摇）：原 0.2s 的 0.75 倍速（0.267s，总时长与 clip 关键帧对齐） */
@@ -37,9 +41,9 @@ const segmentPhases = (): readonly AttackPhase[] => [
     {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.35, cancellable: false},
 ]
 
-/** 段 id：`{weaponId}_{模板键}`（与武器一一对应，同时是动画键与清单键、以及骨骼动画数据键） */
-export const meleeSegmentId = (weaponId: string, segmentKey: MeleeSegmentKey): string =>
-    `${weaponId}_${segmentKey}`
+/** 段 id：`{classId}_{holdMode}_{模板键}`（与武器类 + 持握模式一一对应，同时是动画键与骨骼动画数据键） */
+export const meleeSegmentId = (classId: string, holdMode: HoldMode, segmentKey: MeleeSegmentKey): string =>
+    `${classId}_${holdMode}_${segmentKey}`
 
 /** 单条攻击键链的编排：主干段模板序列（顺序 = 播放与清单顺序）+ 是否循环回第一段 */
 export interface MeleeChainSpec {
@@ -68,21 +72,22 @@ export interface BuildMeleeAttacksOptions {
 }
 
 /** 由链编排生成段转换：loop → 末段回首段；非 loop → 顺序推进、末段无候选（链终止） */
-const transitionsFor = (weaponId: string, spec: MeleeChainSpec, step: MeleeSegmentKey): readonly AttackTransition[] => {
+const transitionsFor = (classId: string, holdMode: HoldMode, spec: MeleeChainSpec, step: MeleeSegmentKey): readonly AttackTransition[] => {
     const index = spec.steps.indexOf(step)
     if (index < 0) return []
     const nextKey = spec.steps[index + 1] ?? (spec.loop ? spec.steps[0] : undefined)
-    return nextKey !== undefined ? [{to: meleeSegmentId(weaponId, nextKey)}] : []
+    return nextKey !== undefined ? [{to: meleeSegmentId(classId, holdMode, nextKey)}] : []
 }
 
 /**
- * 构建近战武器攻击链：
+ * 构建近战武器类某持握模式的攻击链：
  * - 段：按链编排涉及的模板键生成（时长由轻重决定，重段伤害倍率 1.6）；
  * - 起手：缺省各键第一个主干段（无守卫，普通攻击恒定可起手）；
  * - 连段：**由段自身声明的 next 转换表达**。
  */
 export const buildMeleeAttacks = (
-    weaponId: string,
+    classId: string,
+    holdMode: HoldMode,
     options: BuildMeleeAttacksOptions = {},
 ): WeaponAttacks => {
     const chains: Record<AttackKey, MeleeChainSpec> = {
@@ -96,7 +101,7 @@ export const buildMeleeAttacks = (
     const make = (segmentKey: MeleeSegmentKey): AttackSegment => {
         const meta = SEGMENT_META[segmentKey]
         const heavy = meta.heavy
-        const id = meleeSegmentId(weaponId, segmentKey)
+        const id = meleeSegmentId(classId, holdMode, segmentKey)
         return {
             id,
             key: meta.key,
@@ -108,7 +113,7 @@ export const buildMeleeAttacks = (
             poses: [{poseId: id, weight: 1}],
             damageMultiplier: heavy ? MELEE_HEAVY_DAMAGE_MULTIPLIER : 1,
             cooldown: 0,
-            next: transitionsFor(weaponId, chains[meta.key], segmentKey),
+            next: transitionsFor(classId, holdMode, chains[meta.key], segmentKey),
         }
     }
 
@@ -125,7 +130,7 @@ export const buildMeleeAttacks = (
     }
 
     const chainOfKey = (key: AttackKey): WeaponAttackChain => {
-        const steps = chains[key].steps.map(step => meleeSegmentId(weaponId, step))
+        const steps = chains[key].steps.map(step => meleeSegmentId(classId, holdMode, step))
         const entries = options.entries?.[key] ?? (steps.length > 0 ? [{segmentId: steps[0]}] : [])
         return {key, entries, steps}
     }

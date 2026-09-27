@@ -383,7 +383,7 @@ const ARMOR_SLOT_JOINTS: Record<ArmorSlot, readonly string[]> = {
 
 角色面板按「装备 / 属性」两模块组织（与其它分区同风格，复用 `createSection` / `createLabeledNumberInput`）。
 
-**装备模块**：武器与护甲统一放置——武器下拉（含数值覆写与攻击类别标签）与四槽护甲下拉。
+**装备模块**：武器与护甲统一放置——武器下拉（含数值覆写与攻击类别标签）、**副手武器下拉**（首项「无」；主手为远程时禁用）与**持握模式下拉**（选项 = 武器类 `holdModes` ∩ 双持可用性，`HOLD_MODE_LABELS` 中文名）、四槽护甲下拉。Apply 顺序 = 主手 / 副手配置 → `setHoldMode`（详见 [`melee_hold_modes.md`](melee_hold_modes.md)）。
 
 | 控件 | 类型 | 行为 |
 |------|------|------|

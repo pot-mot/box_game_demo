@@ -38,6 +38,10 @@ export interface PlayerHUDData {
     stateTime: number
     timers: ReadonlyArray<TimerRowData>
     skillTimers: ReadonlyArray<SkillTimerRowData>
+    /** 当前武器名（HUD 装备行显示） */
+    weaponLabel: string
+    /** 当前持握模式中文名（单持 / 双手共持 / 双持） */
+    holdModeLabel: string
 }
 
 export interface PlayerHUD {
@@ -104,6 +108,11 @@ export const createPlayerHUD = (): PlayerHUD => {
     const stateEl = document.createElement('div')
     stateEl.style.cssText = 'font-size:12px'
     el.appendChild(stateEl)
+
+    /* 装备行：当前武器 + 持握模式（Ctrl 切换） */
+    const loadoutEl = document.createElement('div')
+    loadoutEl.style.cssText = 'font-size:12px;opacity:.85'
+    el.appendChild(loadoutEl)
 
     const timersTitle = document.createElement('div')
     timersTitle.style.cssText = 'font-size:11px;opacity:.7;margin-top:4px'
@@ -223,6 +232,7 @@ export const createPlayerHUD = (): PlayerHUD => {
         hpText.textContent = `${data.health} / ${data.maxHealth}`
 
         stateEl.textContent = `ST: ${data.stateName}  ${data.stateTime.toFixed(2)}s`
+        loadoutEl.textContent = `${data.weaponLabel} · ${data.holdModeLabel}（Ctrl 切换）`
 
         const count = data.timers.length
         ensureTimerRows(count)

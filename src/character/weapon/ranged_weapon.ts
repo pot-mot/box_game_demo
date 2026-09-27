@@ -2,8 +2,9 @@ import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_
 import type { DamageType } from '../combat/damage_type.ts'
 import type { CollisionCategory } from '../../physics/collision_category.ts'
 import type { HoldMode } from './hold_mode.ts'
-import type { HoldModeAttacks } from './attack_chain.ts'
+import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
 import { buildRangedAttacks } from './ranged_attacks.ts'
+import type { WeaponModelConfig } from './weapon_class.ts'
 
 /**
  * 投掷物默认可穿过的碰撞类别 —— 仅水域（area）：
@@ -12,14 +13,11 @@ import { buildRangedAttacks } from './ranged_attacks.ts'
 export const DEFAULT_BULLET_PASS_THROUGH_CATEGORIES: readonly CollisionCategory[] = ['area']
 
 /**
- * 远程武器配置 — 玩家装备该武器的全部固有属性。
- * **开火动作（阶段时序/时长）由武器模组拥有**（`attacks`），角色实体只持有武器与数值覆写；
- * 动画是段 id 对应的显式骨骼关键帧数据。
+ * 远程武器类（weapon class）— 同类全部模型共享的固有属性。
+ * **开火动作（阶段时序/时长）由武器类拥有**（`attacks`），动画是段 id 对应的显式骨骼关键帧数据。
  */
-export interface RangedWeaponConfig {
+export interface RangedWeaponClassConfig {
     readonly id: string
-    /** 武器中文名（面向玩家显示，如面板武器下拉、展示场景标签） */
-    readonly name: string
     readonly type: 'ranged'
     /** 攻击类别（武器固有，不可被存档/面板覆写）：弹丸与爆炸伤害均按此类别结算防御 */
     readonly damageType: DamageType
@@ -38,11 +36,6 @@ export interface RangedWeaponConfig {
     /** 开始后撤的距离 */
     readonly retreatRange: number
 
-    /** 程序化武器模型（主手 / 右手） */
-    readonly mesh: WeaponMeshConfig
-    /** 副手（左手）武器模型（`dual_wield` 模式用；远程目前不使用）；undefined = 无副手武器 */
-    readonly offhandMesh?: WeaponMeshConfig
-
     // ── 可选模式 ──
 
     readonly spreadCount?: number
@@ -60,100 +53,156 @@ export interface RangedWeaponConfig {
     readonly attacks: HoldModeAttacks
 }
 
-/** 远程预设装配：按默认持握模式注入固有开火动作链 */
-const rangedPreset = (base: Omit<RangedWeaponConfig, 'attacks'>): RangedWeaponConfig => {
-    const attacks: Partial<Record<HoldMode, ReturnType<typeof buildRangedAttacks>>> = {}
+/** 解析后的远程武器 = 武器类固有属性 + 所属模型（模型 id / 名称 / 网格） */
+export interface RangedWeaponConfig extends RangedWeaponClassConfig {
+    /** 所属武器类 id（双持同类判定用；见 catalog.ts 的 sameWeaponClass） */
+    readonly classId: string
+    /** 武器中文名（面向玩家显示，如面板武器下拉、展示场景标签） */
+    readonly name: string
+    /** 程序化武器模型（主手 / 右手） */
+    readonly mesh: WeaponMeshConfig
+}
+
+/** 远程武器类装配：按默认持握模式注入固有开火动作链 */
+const rangedClass = (base: Omit<RangedWeaponClassConfig, 'attacks'>): RangedWeaponClassConfig => {
+    const attacks: Partial<Record<HoldMode, WeaponAttacks>> = {}
     attacks[base.holdModes[0]] = buildRangedAttacks(base.id)
     return {...base, attacks}
 }
 
-export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = {
-    longbow: rangedPreset({
-        id: 'longbow', name: '长弓', type: 'ranged',
+/** 远程武器类目录（键 = 类 id） */
+export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
+    longbow: rangedClass({
+        id: 'longbow', type: 'ranged',
         damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 2, range: 10,
         knockbackForce: 3, projectileSpeed: 20, projectileLifetime: 3,
         detectionRange: 20, idealRange: 7, retreatRange: 4,
-        mesh: { id: 'bow', size: 0.7, color: 0x886633, stringColor: 0xddddcc },
     }),
-    crossbow: rangedPreset({
-        id: 'crossbow', name: '弩', type: 'ranged',
+    crossbow: rangedClass({
+        id: 'crossbow', type: 'ranged',
         damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 5, range: 8,
         knockbackForce: 4, projectileSpeed: 45, projectileLifetime: 1.5,
         detectionRange: 15, idealRange: 5, retreatRange: 3,
-        mesh: { id: 'crossbow', size: 0.5, color: 0x553322, metalColor: 0x888888 },
     }),
-    shotgun: rangedPreset({
-        id: 'shotgun', name: '霰弹枪', type: 'ranged',
+    shotgun: rangedClass({
+        id: 'shotgun', type: 'ranged',
         damageType: 'physical',
         holdModes: ['two_handed'],
         damage: 1, range: 6,
         knockbackForce: 6, projectileSpeed: 15, projectileLifetime: 1.5,
         detectionRange: 10, idealRange: 3, retreatRange: 2,
         spreadCount: 6, spreadAngle: Math.PI * 0.08,
-        mesh: { id: 'shotgun', size: 0.6, color: 0x443322, metalColor: 0x666666 },
     }),
-    staff: rangedPreset({
-        id: 'staff', name: '法杖', type: 'ranged',
+    staff: rangedClass({
+        id: 'staff', type: 'ranged',
         damageType: 'magic',
         holdModes: ['two_handed'],
         damage: 3, range: 8,
         knockbackForce: 4, projectileSpeed: 10, projectileLifetime: 5,
         detectionRange: 18, idealRange: 5, retreatRange: 3,
         explosionRadius: 1.2,
-        mesh: { id: 'staff', poleLen: 0.8, orbRadius: 0.12, color: 0x664422, orbColor: 0x44aaff },
     }),
-    magic_wand: rangedPreset({
-        id: 'magic_wand', name: '魔杖', type: 'ranged',
+    magic_wand: rangedClass({
+        id: 'magic_wand', type: 'ranged',
         damageType: 'magic',
         holdModes: ['one_handed'],
         damage: 1.5, range: 10,
         knockbackForce: 2, projectileSpeed: 8, projectileLifetime: 4,
         detectionRange: 16, idealRange: 6, retreatRange: 4,
         homingStrength: 0.3,
-        mesh: { id: 'magic_wand', len: 0.5, color: 0x886633, gemColor: 0xff44ff },
     }),
-    throwing_axe: rangedPreset({
-        id: 'throwing_axe', name: '飞斧', type: 'ranged',
+    throwing_axe: rangedClass({
+        id: 'throwing_axe', type: 'ranged',
         damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 6, range: 10,
         knockbackForce: 5, projectileSpeed: 15, projectileLifetime: 3,
         detectionRange: 12, idealRange: 6, retreatRange: 3,
         throwAngle: Math.PI / 8,
-        mesh: { id: 'throwing_axe', bladeSize: 0.25, color: 0x888888, gripColor: 0x553322 },
     }),
-    grenade: rangedPreset({
-        id: 'grenade', name: '手雷', type: 'ranged',
+    grenade: rangedClass({
+        id: 'grenade', type: 'ranged',
         damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 4, range: 10,
         knockbackForce: 8, projectileSpeed: 10, projectileLifetime: 4,
         detectionRange: 14, idealRange: 6, retreatRange: 3,
         throwAngle: Math.PI / 5, explosionRadius: 2.0,
-        mesh: { id: 'grenade', radius: 0.1, color: 0x445522, bandColor: 0x333311 },
     }),
-    molotov: rangedPreset({
-        id: 'molotov', name: '燃烧瓶', type: 'ranged',
+    molotov: rangedClass({
+        id: 'molotov', type: 'ranged',
         damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 2, range: 10,
         knockbackForce: 5, projectileSpeed: 10, projectileLifetime: 4,
         detectionRange: 12, idealRange: 6, retreatRange: 3,
         explosionRadius: 1.5,
-        mesh: { id: 'molotov', size: 0.25, color: 0x446622, fireColor: 0xff8800 },
     }),
-    throwing_dart: rangedPreset({
-        id: 'throwing_dart', name: '飞镖', type: 'ranged',
+    throwing_dart: rangedClass({
+        id: 'throwing_dart', type: 'ranged',
         damageType: 'physical',
         holdModes: ['one_handed'],
         damage: 1.5, range: 12,
         knockbackForce: 1, projectileSpeed: 30, projectileLifetime: 2,
         detectionRange: 16, idealRange: 8, retreatRange: 4,
         throwAngle: 0,
-        mesh: { id: 'throwing_dart', len: 0.5, color: 0x888888, tailColor: 0xcc3333 },
     }),
 }
+
+/** 远程武器模型目录（键 = 模型 id；当前每类只有默认模型，模型 id = 类 id） */
+export const RANGED_WEAPON_MODELS: Record<string, WeaponModelConfig> = {
+    longbow: {
+        id: 'longbow', classId: 'longbow', name: '长弓',
+        mesh: { id: 'bow', size: 0.7, color: 0x886633, stringColor: 0xddddcc },
+    },
+    crossbow: {
+        id: 'crossbow', classId: 'crossbow', name: '弩',
+        mesh: { id: 'crossbow', size: 0.5, color: 0x553322, metalColor: 0x888888 },
+    },
+    shotgun: {
+        id: 'shotgun', classId: 'shotgun', name: '霰弹枪',
+        mesh: { id: 'shotgun', size: 0.6, color: 0x443322, metalColor: 0x666666 },
+    },
+    staff: {
+        id: 'staff', classId: 'staff', name: '法杖',
+        mesh: { id: 'staff', poleLen: 0.8, orbRadius: 0.12, color: 0x664422, orbColor: 0x44aaff },
+    },
+    magic_wand: {
+        id: 'magic_wand', classId: 'magic_wand', name: '魔杖',
+        mesh: { id: 'magic_wand', len: 0.5, color: 0x886633, gemColor: 0xff44ff },
+    },
+    throwing_axe: {
+        id: 'throwing_axe', classId: 'throwing_axe', name: '飞斧',
+        mesh: { id: 'throwing_axe', bladeSize: 0.25, color: 0x888888, gripColor: 0x553322 },
+    },
+    grenade: {
+        id: 'grenade', classId: 'grenade', name: '手雷',
+        mesh: { id: 'grenade', radius: 0.1, color: 0x445522, bandColor: 0x333311 },
+    },
+    molotov: {
+        id: 'molotov', classId: 'molotov', name: '燃烧瓶',
+        mesh: { id: 'molotov', size: 0.25, color: 0x446622, fireColor: 0xff8800 },
+    },
+    throwing_dart: {
+        id: 'throwing_dart', classId: 'throwing_dart', name: '飞镖',
+        mesh: { id: 'throwing_dart', len: 0.5, color: 0x888888, tailColor: 0xcc3333 },
+    },
+}
+
+/** 合并武器类固有属性与模型，得到运行时 / 面板 / 存档统一使用的武器配置 */
+export const resolveRangedWeapon = (model: WeaponModelConfig): RangedWeaponConfig => {
+    const weaponClass = RANGED_WEAPON_CLASSES[model.classId]
+    if (weaponClass === undefined) {
+        throw new Error(`远程武器模型 ${model.id} 引用了未知武器类 ${model.classId}`)
+    }
+    return {...weaponClass, classId: model.classId, id: model.id, name: model.name, mesh: model.mesh}
+}
+
+/** 生产远程武器预设（当前 = 各类的默认模型解析结果；键 = 模型 id） */
+export const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = Object.fromEntries(
+    Object.entries(RANGED_WEAPON_MODELS).map(([id, model]) => [id, resolveRangedWeapon(model)]),
+)

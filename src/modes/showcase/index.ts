@@ -8,7 +8,8 @@ import type {ShowcaseActor} from './actor.ts'
 import {createNameLabel} from './label.ts'
 import {createPanel} from './panel.ts'
 import type {PanelRowInfo} from './panel.ts'
-import {weaponPresetOrDefault} from '../../character/weapon/catalog.ts'
+import {defaultHoldMode, weaponPresetOrDefault} from '../../character/weapon/catalog.ts'
+import {HOLD_MODES, HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 import {SELECT_PALETTE} from '../../entity/character/appearance/constants.ts'
 import {
     CLICK_SLOP_PX,
@@ -17,6 +18,7 @@ import {
     FOCUS_RING_OUTER,
     FOCUS_RING_PULSE_FREQ,
     MELEE_ROW_Z,
+    MELEE_ROW_SPACING,
     MELEE_SPACING,
     RANGED_ROW_Z,
     RANGED_SPACING,
@@ -55,37 +57,40 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
     /* —— 键盘相机移动（对标 edit 模式的 setupKeyboardCamera） —— */
     const keyboardCamera = setupKeyboardCamera(sceneCtx.orbit)
 
-    /* —— 按清单创建展示角色：近战一行（前排）+ 远程一行（后排），全部面向 +Z —— */
+    /* —— 按清单创建展示角色：近战按持握模式三排（单持 → 双手共持 → 双持）+ 远程一排，全部面向 +Z —— */
     const actors: ShowcaseActor[] = []
     const anchorToActor = new Map<Object3D, ShowcaseActor>()
     let nextFaction = 0
 
-    const placeRow = (kind: 'melee' | 'ranged', rowZ: number, spacing: number): void => {
-        const entries = SHOWCASE_ROSTER.filter(e => e.kind === kind)
+    const placeRow = (kind: 'melee' | 'ranged', holdMode: HoldMode | undefined, rowZ: number, spacing: number): void => {
+        const entries = SHOWCASE_ROSTER.filter(e => e.kind === kind && e.holdMode === holdMode)
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i]
             if (entry === undefined) continue
-            /* 清单条目 skillId 即武器 id：攻击链（段/时长/阶段/冷却/倾斜角）与模型全部取自武器模组 */
+            /* 清单条目 skillId 即武器 id：攻击链（段/时长/阶段/冷却）与模型全部取自武器模组 */
             const weapon = weaponPresetOrDefault(entry.skillId)
-            /* 重构后无独立技能概念：名称行与副名同为武器中文名（面板/标签按相同值去重显示） */
+            const mode = entry.holdMode ?? defaultHoldMode(weapon)
             const weaponName = weapon.name
             const actor = createShowcaseActor({
                 id: actors.length,
                 scene: sceneCtx.scene,
                 weapon,
+                holdMode: mode,
                 faction: nextFaction++,
                 x: (i - (entries.length - 1) / 2) * spacing,
                 z: rowZ,
                 weaponName,
             })
-            /* 头顶名称标签（武器名 + 武器类型）—— 句柄交给 actor，随其 dispose 统一回收 */
-            actor.attachLabel(createNameLabel(weaponName, weapon.type === 'melee' ? '近战武器' : '远程武器'))
+            /* 头顶名称标签（武器名 + 类型/持握模式）—— 句柄交给 actor，随其 dispose 统一回收 */
+            actor.attachLabel(createNameLabel(weaponName, weapon.type === 'melee' ? `近战 · ${HOLD_MODE_LABELS[mode]}` : '远程武器'))
             actors.push(actor)
             anchorToActor.set(actor.anchor, actor)
         }
     }
-    placeRow('melee', MELEE_ROW_Z, MELEE_SPACING)
-    placeRow('ranged', RANGED_ROW_Z, RANGED_SPACING)
+    for (const [index, mode] of HOLD_MODES.entries()) {
+        placeRow('melee', mode, MELEE_ROW_Z - index * MELEE_ROW_SPACING, MELEE_SPACING)
+    }
+    placeRow('ranged', undefined, RANGED_ROW_Z, RANGED_SPACING)
 
     /* —— 聚焦高亮环（脚下呼吸光环） —— */
     const ringGeometry = new RingGeometry(FOCUS_RING_INNER, FOCUS_RING_OUTER, 48)
@@ -128,9 +133,10 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
     /* —— 信息面板 —— */
     const panelInfos: PanelRowInfo[] = actors.map(actor => ({
         id: actor.id,
-        /* 技能名与武器名同为武器中文名（面板内部对相同值去重显示） */
+        /* 技能名与武器名同为武器中文名（面板内部对相同值去重显示）；持握模式单独成列 */
         skillName: actor.weaponName,
         weaponName: actor.weaponName,
+        holdModeLabel: actor.holdModeLabel,
         colorHex: `#${SELECT_PALETTE(actors.indexOf(actor)).bodyColor.toString(16).padStart(6, '0')}`,
     }))
     const panel = createPanel(panelInfos, {

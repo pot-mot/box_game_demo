@@ -9,28 +9,39 @@ import {buildCharacterSkeletonDefinition} from '../../entity/character/skeleton/
 import {LEFT_WEAPON_MOUNT_JOINT, RIGHT_WEAPON_MOUNT_JOINT} from './weapon_equip.ts'
 
 describe('编辑器武器规格（weaponSpecOf / isTwoHandedWeapon）', () => {
-    it('双手判定取武器数据 twoHanded（近战与远程同源）', () => {
+    it('双手判定按显式持握模式，缺省取武器默认模式（近战默认单持）', () => {
         const shortSword = findWeaponPreset('short_sword')!
         const heavySword = findWeaponPreset('heavy_sword')!
         const spear = findWeaponPreset('spear')!
         const longbow = findWeaponPreset('longbow')!
         expect(isTwoHandedWeapon(shortSword)).toBe(false)
-        expect(isTwoHandedWeapon(heavySword)).toBe(true)
-        expect(isTwoHandedWeapon(spear)).toBe(true)
+        /* 近战默认单持：不显式给模式时不是双手 */
+        expect(isTwoHandedWeapon(heavySword)).toBe(false)
+        expect(isTwoHandedWeapon(heavySword, 'two_handed')).toBe(true)
+        expect(isTwoHandedWeapon(spear, 'two_handed')).toBe(true)
+        /* 远程默认即双手 */
         expect(isTwoHandedWeapon(longbow)).toBe(true)
     })
 
-    it('武器规格含网格与双手标记；未知武器 id 返回 undefined', () => {
-        const spec = weaponSpecOf('heavy_sword')!
+    it('武器规格含网格与双手标记；双持模式附带同类副手网格；未知武器 id 返回 undefined', () => {
+        const spec = weaponSpecOf('heavy_sword', 'two_handed')!
         expect(spec.weaponId).toBe('heavy_sword')
         expect(spec.meshConfig.id).toBe('heavy_sword')
         expect(spec.twoHanded).toBe(true)
+        expect(spec.offhandMeshConfig).toBeUndefined()
+
+        const dual = weaponSpecOf('long_sword', 'dual_wield')!
+        expect(dual.twoHanded).toBe(false)
+        expect(dual.offhandMeshConfig).toMatchObject({id: 'sword'})
+
         expect(weaponSpecOf('nope')).toBeUndefined()
     })
 
-    it('「自动」模式解析：攻击动作 → 该武器；空手变体 → 卸下；无来源 → 保留当前，无当前则默认武器', () => {
-        /* 攻击动作（含内置副本）→ 该武器 */
-        expect(resolveAutoWeapon({weaponId: 'spear', segmentId: 'spear_light_1'}, undefined)?.weaponId).toBe('spear')
+    it('「自动」模式解析：攻击动作 → 该武器（带段所属持握模式）；空手变体 → 卸下；无来源 → 保留当前，无当前则默认武器', () => {
+        /* 攻击动作（含内置副本）→ 该武器 + 段所属持握模式 */
+        const spearSpec = resolveAutoWeapon({weaponId: 'spear', segmentId: 'spear_two_handed_light_1', holdMode: 'two_handed'}, undefined)
+        expect(spearSpec?.weaponId).toBe('spear')
+        expect(spearSpec?.twoHanded).toBe(true)
         /* 空手变体 → 卸下武器 */
         expect(resolveAutoWeapon({weaponHeld: false}, weaponSpecOf('heavy_sword'))).toBeUndefined()
         /* 持械变体 / 无来源动画（自定义动画、跳跃等）→ 保留当前武器 */

@@ -8,7 +8,7 @@ import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
-import {createCombatComponent} from '../../../character/combat/types.ts'
+import {createCombatComponent, setCombatOffhand} from '../../../character/combat/types.ts'
 import type {ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
@@ -144,7 +144,7 @@ describe('attackDetectOBB / testAttackDetect（攻击检测箱由武器 detectBo
 
 describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
     /** 当前段：短剑轻 1 攻击段（原「技能配置」由武器模组的段定义替代） */
-    const makeSegment = (): AttackSegment => weaponAttacksOf(weaponPresetOrDefault('short_sword')).segments['short_sword_light_1']
+    const makeSegment = (): AttackSegment => weaponAttacksOf(weaponPresetOrDefault('short_sword')).segments['short_sword_one_handed_light_1']
 
     /** 构造执行器用例所需的最小实体（body 只保留执行器读取的 translation） */
     const makeEntity = (): CharacterEntity => {
@@ -210,9 +210,10 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
     })
 
     it('双持：主手未命中、副手命中时照常结算（每段每目标一次）', () => {
-        const runtime = createWeaponRuntime('dual_axe')
+        const runtime = createWeaponRuntime('dual_axe', {}, 'dual_wield')
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
-        combat.activeSegment = runtime.attacks.segments['dual_axe_light_1']
+        setCombatOffhand(combat, createWeaponRuntime('dual_axe', {}, 'dual_wield'))
+        combat.activeSegment = runtime.attacks.segments['dual_axe_dual_wield_light_1']
         const attacker = makeEntity()
         attacker.combat = combat
 
@@ -245,7 +246,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
     it('目标物理防御固定减免近战伤害（攻击类别取自武器 damageType）', () => {
         const runtime = createWeaponRuntime('war_hammer')
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
-        combat.activeSegment = runtime.attacks.segments['war_hammer_light_1']
+        combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
         const attacker = makeEntity()
         attacker.combat = combat
 
@@ -275,7 +276,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
     it('翻滚无敌帧目标不算命中（不伤害/不消耗/无打击反馈），无敌结束后同一窗口内仍可命中', () => {
         const runtime = createWeaponRuntime('war_hammer')
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
-        combat.activeSegment = runtime.attacks.segments['war_hammer_light_1']
+        combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
         const attacker = makeEntity()
         attacker.combat = combat
 
@@ -316,7 +317,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
     it('装备攻击加成计入近战伤害：仅与武器类别匹配时生效', () => {
         const runtime = createWeaponRuntime('war_hammer')
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
-        combat.activeSegment = runtime.attacks.segments['war_hammer_light_1']
+        combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
         combat.attackBonus = {physical: 2, magic: 9}
         const attacker = makeEntity()
         attacker.combat = combat
@@ -344,9 +345,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
     })
 
     it('双持：命中窗口按槽独立开关（仅副手窗口时主手不判定）', () => {
-        const runtime = createWeaponRuntime('dual_axe')
+        const runtime = createWeaponRuntime('dual_axe', {}, 'dual_wield')
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
-        combat.activeSegment = runtime.attacks.segments['dual_axe_light_1']
+        combat.activeSegment = runtime.attacks.segments['dual_axe_dual_wield_light_1']
         const attacker = makeEntity()
         attacker.combat = combat
         const target = makeEntity()
@@ -371,5 +372,38 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         executor.setHitWindow(true, 'main')
         executor.update(0.016, combat, attacker, {} as ExecutorContext)
         expect(combat.attackedTargets.has(2)).toBe(true)
+    })
+
+    it('双持：副手命中按副手武器伤害结算（主/副手数值可独立覆写）', () => {
+        /* 主手伤害 1、副手伤害 99：副手窗口命中应使用副手数值 */
+        const runtime = createWeaponRuntime('dual_axe', {damage: 1}, 'dual_wield')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        setCombatOffhand(combat, createWeaponRuntime('dual_axe', {damage: 99}, 'dual_wield'))
+        combat.activeSegment = runtime.attacks.segments['dual_axe_dual_wield_light_1']
+        const attacker = makeEntity()
+        attacker.combat = combat
+
+        const targetCombat = createCombatComponent(
+            createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 200,
+        )
+        const target = makeEntity()
+        target.id = 2
+        target.combat = targetCombat
+
+        const mainGroup = new Group()
+        mainGroup.position.set(100, 0, 0)
+        const offhandGroup = new Group()
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: mainGroup,
+            weaponHitBox: local,
+            offhandWeaponGroup: offhandGroup,
+            offhandWeaponHitBox: local,
+        } as unknown as CharacterModel
+
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
+        executor.setHitWindow(true, 'offhand')
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        expect(targetCombat.health).toBe(200 - 99)
     })
 })

@@ -15,6 +15,8 @@ export interface PanelRowInfo {
     /** 名称行（重构后为武器中文名，与 weaponName 同值） */
     readonly skillName: string
     readonly weaponName: string
+    /** 持握模式中文名（单持 / 双手共持 / 双持） */
+    readonly holdModeLabel: string
     /** 阵营主色（css 颜色字符串） */
     readonly colorHex: string
 }
@@ -62,6 +64,7 @@ const injectStyles = (): HTMLStyleElement => {
 .sch-names { flex: 1; min-width: 0; }
 .sch-skill { font-weight: 700; }
 .sch-weapon { color: #9aa3b2; font-size: 11px; margin-left: 6px; }
+.sch-hold { color: #ffd070; font-size: 10px; margin-left: 6px; }
 .sch-mid { text-align: right; flex: none; font-size: 11px; color: #c8cdd8; min-width: 108px; }
 .sch-phase { color: #ffd070; }
 .sch-phase.done { color: #77808f; }
@@ -108,10 +111,6 @@ const setFill = (el: HTMLElement, ratio: number, color: string): void => {
     setBar(el, ratio)
     if (el.style.background !== color) el.style.background = color
 }
-
-/** 名称拼接：名称行与副名相同（重构后同为武器中文名）时只显示一次，避免重复文案 */
-const joinNames = (primary: string, secondary: string): string =>
-    primary === secondary || secondary === '' ? primary : `${primary} · ${secondary}`
 
 /** 行级 DOM 引用（refresh 时只改内容不重建） */
 interface RowRefs {
@@ -181,7 +180,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     for (const info of infos) {
         const opt = document.createElement('option')
         opt.value = String(info.id)
-        opt.textContent = info.skillName
+        opt.textContent = info.holdModeLabel.length > 0 ? `${info.skillName} · ${info.holdModeLabel}` : info.skillName
         focusSelect.appendChild(opt)
     }
     focusSelect.addEventListener('change', () => {
@@ -214,8 +213,12 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         weaponSpan.className = 'sch-weapon'
         /* 副名与名称行同值时留空（重构后二者同为武器中文名） */
         weaponSpan.textContent = info.weaponName === info.skillName ? '' : info.weaponName
+        const holdSpan = document.createElement('span')
+        holdSpan.className = 'sch-hold'
+        holdSpan.textContent = info.holdModeLabel
         names.appendChild(skillSpan)
         names.appendChild(weaponSpan)
+        names.appendChild(holdSpan)
         root.appendChild(names)
 
         const mid = document.createElement('div')
@@ -392,7 +395,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         }
         if (focusedStatus !== undefined) {
             const st = focusedStatus
-            setText(detailTitle, joinNames(st.skillName, st.weaponName))
+            setText(detailTitle, `${st.weaponName} · ${st.holdModeLabel}`)
             setText(detailHit, st.mode === 'idle'
                 ? '状态：待机'
                 : `${st.isMelee ? `连段第 ${st.hitNumber}/${st.totalHits} 击` : '远程射击序列'}`)

@@ -27,5 +27,11 @@ export const setupPlayerKeyboard = (
         const rolling = input.wasActionPressed('sprint')
         const jumped = input.wasActionPressed('jump')
         characterSystem.setPlayerMove(dx, dz, jumped, forward.x, forward.z, rolling)
+
+        /* 持握模式切换（默认 Ctrl）：isActionActive 走最长组合遮蔽，
+         * Ctrl+S / Ctrl+O 按下时该动作被更长组合遮蔽，不会误触发切换 */
+        if (input.wasActionPressed('cycle_hold_mode') && input.isActionActive('cycle_hold_mode')) {
+            characterSystem.cyclePlayerHoldMode()
+        }
     }
 }

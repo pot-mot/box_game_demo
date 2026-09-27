@@ -83,9 +83,9 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     const setupClip = (state: ClipState, model: CharacterModel, ctx: AnimationContext): void => {
         teardownClip()
         bridge = createCharacterSkeletonBridge(model)
-        /* 双手共持：左肩设为 IK 根（仅攻击态、武器双手且非双持时），左手链可独立求解贴合握柄。
-         * 双持武器左手握持自身武器，不走共享 IK（左臂由 clip 的武器骨骼/左臂关键帧驱动）。 */
-        if (state === 'attacking' && ctx.holdMode === 'two_handed' && model.offhandWeaponGroup === null) {
+        /* 双手共持：左肩设为 IK 根（仅攻击态、持握模式为双手时），左手链可独立求解贴合握柄。
+         * 副手武器（若装备）在双手模式下挂背，不影响 IK；双持模式左手握持自身武器，不走共享 IK。 */
+        if (state === 'attacking' && ctx.holdMode === 'two_handed') {
             const leftShoulder = bridge.findJoint('leftArmShoulder')
             if (leftShoulder !== undefined) leftShoulder.ikRootLevel = 0
         }
@@ -112,7 +112,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     const applyTwoHandedIk = (ctx: AnimationContext, model: CharacterModel): void => {
         if (bridge === undefined || player === undefined) return
         /* 双持：左手握持自身武器，不做共享 IK */
-        if (ctx.holdMode !== 'two_handed' || model.offhandWeaponGroup !== null) return
+        if (ctx.holdMode !== 'two_handed') return
         solveTwoHandedGrip(bridge, model.weaponGroup ?? undefined, {
             shoulderId: 'leftArmShoulder',
             /* 武器模型原点已对齐主握把，副握点按该武器握把间距沿本地 +Y 定位 */

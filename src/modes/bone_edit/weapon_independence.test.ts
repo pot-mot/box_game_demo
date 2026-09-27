@@ -44,8 +44,8 @@ describe('编辑器武器与手的独立性', () => {
         expect(control.currentWeaponId()).toBe('long_sword')
         const before = leftHandPositions(entity)
 
-        /* 换双手武器（战锤）→ 只换了手部武器，不触碰左臂 */
-        control.syncForClip({weaponId: 'war_hammer'})
+        /* 换双手武器（战锤双手模式）→ 只换了手部武器，不触碰左臂 */
+        control.syncForClip({weaponId: 'war_hammer', holdMode: 'two_handed'})
         expect(control.currentWeaponId()).toBe('war_hammer')
         expect(control.isTwoHanded()).toBe(true)
         for (const [i, pos] of leftHandPositions(entity).entries()) {
@@ -63,7 +63,7 @@ describe('编辑器武器与手的独立性', () => {
         const scene = new Scene()
         const entity = makeEntity(scene)
         const control = createBoneEditWeaponControl(makeWorld(entity))
-        control.syncForClip({weaponId: 'war_hammer'})
+        control.syncForClip({weaponId: 'war_hammer', holdMode: 'two_handed'})
         control.solveGrip()  /* 开关默认关 → 应为无操作 */
         const leftBefore = leftHandPositions(entity)
 

@@ -100,6 +100,7 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
             host.clipWeaponSource.set(imported.name, {
                 weaponId: entry.weaponId,
                 segmentId: entry.segmentId,
+                holdMode: entry.holdMode,
                 weaponHeld: entry.weaponHeld,
             })
         }

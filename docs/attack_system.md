@@ -181,14 +181,14 @@ export interface WeaponAttacks {
 
 **文件**：`src/character/weapon/melee_attacks.ts`（模板） + `src/character/weapon/melee_weapon.ts`（预设装配）
 
-近战段由 `buildMeleeAttacks(weaponId, options)` 装配，段 id = `{weaponId}_{模板键}`，模板键为 `light_1` / `light_2` / `heavy_1` / `heavy_2`。**下表是短剑示例**（数值目前是近战全局常量：轻 = 动作 0.267s + 恢复 0.266s、重 = 动作 0.4s + 恢复 0.267s、重段伤害倍率 ×1.6；为原节奏的 0.75 倍速）：
+近战段由 `buildMeleeAttacks(classId, holdMode, options)` 装配，段 id = `{classId}_{holdMode}_{模板键}`（如 `long_sword_two_handed_light_1`），模板键为 `light_1` / `light_2` / `light_3` / `heavy_1` / `heavy_2`。**下表是单持链示例**（数值目前是近战全局常量：轻 = 动作 0.267s + 恢复 0.266s、重 = 动作 0.4s + 恢复 0.267s、重段伤害倍率 ×1.6；为原节奏的 0.75 倍速）：
 
 | 段 id | 攻击键 | 动作 | strike 时长 | recovery | 伤害倍率 | next |
 |---|---|---|---|---|---|---|
-| `{weapon}_light_1` | light | 上至下竖劈 | 0.267s | 0.266s | 1 | `{weapon}_light_2` |
-| `{weapon}_light_2` | light | 探身直刺 | 0.267s | 0.266s | 1 | `{weapon}_light_1` |
-| `{weapon}_heavy_1` | heavy | 横向挥砍 | 0.4s | 0.267s | 1.6 | `{weapon}_heavy_2` |
-| `{weapon}_heavy_2` | heavy | 斜向挥砍 | 0.4s | 0.267s | 1.6 | `{weapon}_heavy_1` |
+| `{classId}_{mode}_light_1` | light | 上至下竖劈 | 0.267s | 0.266s | 1 | `..._light_2` |
+| `{classId}_{mode}_light_2` | light | 探身直刺 | 0.267s | 0.266s | 1 | `..._light_1` |
+| `{classId}_{mode}_heavy_1` | heavy | 横向挥砍 | 0.4s | 0.267s | 1.6 | `..._heavy_2` |
+| `{classId}_{mode}_heavy_2` | heavy | 斜向挥砍 | 0.4s | 0.267s | 1.6 | `..._heavy_1` |
 
 - **起手**：轻击键 → `light_1`、重击键 → `heavy_1`（均为无守卫的单一候选，普通攻击恒定可起手）。
 - **连段**：`light_1 ↔ light_2`、`heavy_1 ↔ heavy_2` 各自成循环链（持续输入无限循环），全部由段的 `next` 声明；`next` 无守卫，因此同键按住即循环。
@@ -455,8 +455,8 @@ entity/character/appearance/
 - **动画键**：基础状态 `${state}:${weaponHeld?'w':'n'}`；attacking 用当前段 id（`attacking:${segment.id}`），链段切换即触发快照混合。
 - **快照加权混合**：状态/键切换瞬间抓取全部关节快照，新 clip 采样输出 × w + 快照 × (1−w)（w 三次 ease-out，`STATE_BLEND_DURATION`）。
 - **桥接**：模型关节经 `createCharacterSkeletonBridge`（Group 层级自动建连）绑定为骨架，播放器 `applyPose` 写骨架 → 桥接写回 Group（场景图级联）。
-- **三种持握模式**：单持（左手反摆）/ 双手共持（attacking 且 `holdMode === 'two_handed'` 且无副手武器时，左肩 IK 根 → 左手链每帧 `solveCcd` 追模型指定的 `supportGripOffset`，模型原点已校正到主握点，applyPose 先写、IK 后写，带肘极向约束）/ 双持（武器含 `offhandMesh`：左手握持自身武器，不走共享 IK，左右手分别由关键帧驱动）。
-- **双持命中窗口按槽分组**：攻击 clip 事件带 `params.weapon: 'main' | 'offhand'`，`melee_executor.setHitWindow(active, weapon?)` 分别开关左右命中箱，两只手都结算伤害（每段每目标仍只结算一次）。
+- **三种持握模式**：单持（左手反摆；副手武器握在左手）/ 双手共持（attacking 且 `holdMode === 'two_handed'` 时，左肩 IK 根 → 左手链每帧 `solveCcd` 追模型指定的 `supportGripOffset`；副手武器挂背）/ 双持（主/副手为同类近战：左手握持自身武器，不走共享 IK，左右手分别由关键帧驱动）。
+- **双持命中窗口按槽分组**：攻击 clip 事件带 `params.weapon: 'main' | 'offhand'`，`melee_executor.setHitWindow(active, weapon?)` 分别开关左右命中箱；副手命中按**副手武器**的伤害 / 击退 / 攻击类别结算（每段每目标仍只结算一次）。
 
 ### 6.3 攻击动画数据（attack_clip_data.ts / attack_pose_edits.ts）
 
@@ -479,7 +479,7 @@ export const getAttackClipById = (clipId: string): BoneAnimationClip => {}
 |------|------|------|
 | `stateTime` | `number` | 当前状态已用时间（秒） |
 | `horizontalSpeed` | `number` | 水平速度（m/s）：行走步频变速、falling 腿张档位 |
-| `twoHanded` | `boolean` | 当前武器是否双手持握（攻击态时左手链 IK 贴合主手武器） |
+| `holdMode` | `HoldMode` | 当前持握模式（单持 / 双手共持 / 双持；决定上半身姿态组合与双手/双持 IK 分支） |
 | `attackSegment` | `AttackSegment \| undefined` | 当前攻击段（仅 attacking 有效）—— 动画键（段 id）的来源 |
 | `attackPhase` | `AttackPhaseName \| undefined` | 当前攻击阶段名 |
 | `attackPhaseProgress` | `number` | 当前阶段进度 0-1（`phaseTimer / phaseDurationOf(...)`） |
@@ -549,11 +549,11 @@ const phaseKey = c.phaseIndex < phases.length
 | 某段动作时长/恢复/伤害倍率 | `melee_attacks.ts` 的段模板（`SEGMENT_META`：轻/重决定时长与伤害倍率） |
 | 某段动作形态（挥砍/直刺幅度、双手、倾斜角…） | `character/weapon/attack_pose_edits.ts` 的逐段关键姿势；需要增删关键时刻时再编辑 `attack_clip_data.ts` |
 | 某段阶段序列（strike/recovery 之外的新阶段、`moveSpeedMultiplier`、`cancellable`） | `melee_attacks.ts` 的 `segmentPhases()`（影响所有近战模板段）；单独一个段用 `extraSegments` 自带 `phases` |
-| 链长度/顺序/是否循环 | `melee_weapon.ts` 里该武器 `meleePreset(base, attackOptions)` 的 `attackOptions.chains`（缺省 = `melee_attacks.ts` 的 `MELEE_CHAIN_SPECS`：轻/重各 2 段循环） |
-| 起手条件（长按/方向变体/特殊技） | `attackOptions.extraSegments` + `attackOptions.entries`（守卫变体在前、兜底在后） |
+| 链长度/顺序/是否循环 | `melee_weapon.ts` 里该武器类 `meleeClass(base, modeChains)` 的对应模式编排 `chains`（缺省 = `melee_attacks.ts` 的 `MELEE_CHAIN_SPECS`：轻/重各 2 段循环） |
+| 起手条件（长按/方向变体/特殊技） | 该模式的 `extraSegments` + `entries`（守卫变体在前、兜底在后） |
 | 段间条件续段 | 该段的 `next` 候选数组（守卫候选在前、兜底在后） |
 
-武器间差异（动作幅度、双手持握等）直接体现在各武器段 id 的骨骼关键帧数据中（`attack_clip_data.ts`）；双手持握由武器数据的 `twoHanded` 声明。
+武器间差异（动作幅度、双手持握等）直接体现在各类各模式段 id 的骨骼关键帧数据中（`attack_clip_data.ts`）；持握模式由武器类 `holdModes` 声明，双持另需副手同类近战。
 
 ### 8.2 完整流程 A：把巨剑轻链改成三段（轻 1 → 轻 2 → 轻 3）
 
@@ -563,18 +563,20 @@ const phaseKey = c.phaseIndex < phases.length
    - `MELEE_SEGMENT_KEYS` 追加 `'light_3'`；
    - `SEGMENT_META` 追加 `light_3: {key: 'light', step: 3, heavy: false}`；
    - 该模板键对**所有**近战武器可用，但只有把它写进某武器链编排的武器才会生成对应段（`buildMeleeAttacks` 只创建编排里用到的模板段）；
-   - 新段的**动作形态**在骨骼动画编辑器中作者化，导出后并入 `attack_clip_data.ts`（键 = `{weaponId}_light_3`）。
-2. **改该武器的链编排**（`melee_weapon.ts`）
+   - 新段的**动作形态**在骨骼动画编辑器中作者化，导出后并入 `attack_clip_data.ts`（键 = `{classId}_{holdMode}_light_3`）。
+2. **改该武器类的链编排**（`melee_weapon.ts`）
    ```ts
-   heavy_sword: meleePreset({...预设字段...}, {
-       chains: {light: {steps: ['light_1', 'light_2', 'light_3'], loop: true}},
+   heavy_sword: meleeClass({...类固有字段...}, {
+       one_handed: {},
+       two_handed: {chains: {light: {steps: ['light_1', 'light_2', 'light_3'], loop: true}}},
+       dual_wield: {},
    }),
    ```
    `next` 由编排自动生成（轻 1 → 轻 2 → 轻 3 → 轻 1），无需手写；`loop: false` 则末段 `next: []`（播完收招）。
 3. **验证**（本仓库已落地的断言）
    - 单测 `weapon/attack_chain.test.ts`：巨剑 `chains.light.steps` 为 3 段、`orderedSegments` 顺序为 轻1/轻2/轻3/重1/重2、`segmentDisplayName` 为「轻击三段」、段转换依编排推进；
-   - 单测 `state_machine/machine.test.ts`：按住轻击键依次得到 `heavy_sword_light_1 → light_2 → light_3 → light_1`；
-    - 单测 `modes/bone_edit/builtin_clips.test.ts` 与 e2e `bone_edit.spec.ts`：内置动作库每武器段数/标签顺序（巨剑 5 条、近战合计 26 条、总条目 44）与 `data-builtin-clip-count` 同步更新（新增段需同步 `attack_clip_data.ts`）；
+   - 单测 `state_machine/machine.test.ts`：按住轻击键依次得到 `heavy_sword_two_handed_light_1 → light_2 → light_3 → light_1`；
+    - 单测 `modes/bone_edit/builtin_clips.test.ts` 与 e2e `bone_edit.spec.ts`：内置动作库每武器段数/标签顺序（巨剑双手 5 条、近战合计 74 条、总条目 92）与 `data-builtin-clip-count` 同步更新（新增段需同步 `attack_clip_data.ts`）；
    - 无需改动：状态机、存档、AI、HUD、展示模式脚本（`orderedSegments` 自动带上新段；链间停顿位置由「第一个重击段之前」派生）。
 
 ### 8.3 完整流程 B：给长枪加蓄力突刺变体（长按轻击键触发）
@@ -584,41 +586,46 @@ const phaseKey = c.phaseIndex < phases.length
 1. **写变体段**（`weapon/melee_special_moves.ts`）
    ```ts
    export const SPEAR_CHARGE_HOLD = 0.5
-   export const SPEAR_CHARGE_THRUST: AttackSegment = {
-       id: 'spear_charge_thrust', key: 'light', step: 1, label: '蓄力突刺',
-       duration: 0.45, recovery: 0.3,
+   export const spearChargeThrust = (classId: string, holdMode: HoldMode): AttackSegment => ({
+       id: spearChargeThrustId(classId, holdMode), key: 'light', step: 1, label: '蓄力突刺',
+       duration: 0.6, recovery: 0.4,
        phases: [/* strike（moveSpeedMultiplier 0.2）+ recovery（仅时序） */],
        damageMultiplier: 1.8, cooldown: 0.8, next: [],
-   }
+   })
    ```
    要点：`label` 让清单/HUD/展示显示中文名而非「轻击一段」；`next: []` = 单发；`cooldown` 只挡起手、冷却中自动回退兜底候选。
-2. **接进该武器**（`melee_weapon.ts`）
+2. **接进该武器类**（`melee_weapon.ts`）
    ```ts
-   spear: meleePreset({...预设字段...}, {
-       extraSegments: [SPEAR_CHARGE_THRUST],
-       entries: {light: [
-           {segmentId: SPEAR_CHARGE_THRUST.id, guard: holdAtLeast(SPEAR_CHARGE_HOLD)},
-           {segmentId: 'spear_light_1'},   // 兜底：无守卫、放最后
-       ]},
+   spear: meleeClass({...类固有字段...}, {
+       one_handed: {},
+       two_handed: {
+           extraSegments: [spearChargeThrust('spear', 'two_handed')],
+           entries: {light: [
+               {segmentId: spearChargeThrustId('spear', 'two_handed'), guard: holdAtLeast(SPEAR_CHARGE_HOLD)},
+               {segmentId: 'spear_two_handed_light_1'},   // 兜底：无守卫、放最后
+           ]},
+       },
+       dual_wield: {},
    }),
    ```
    **不要**把变体段写进 `chains.light.steps`——它不是主干段，不进「同链 1..n 顺序」；`orderedSegments` 会把它补在所属攻击键末尾（清单显示为 长枪 · 轻击一段 / 轻击二段 / 蓄力突刺 / 重击一段 / 重击二段）。
 3. **输入链路（已具备，无需改动）**：`modes/play/camera.ts` 在攻击键 mouseup 时算出按住时长 → `characterSystem.setPlayerAttack('light', held)` → `world.ts` 写入单帧脉冲 → `setInput(..., attackKey, attackHoldDuration)` → 起手守卫 `holdAtLeast` 求值。AI 侧固定 `holdDuration: 0`，因此永远命中兜底段。
 4. **验证**（本仓库已落地的断言）
    - 单测 `weapon/attack_chain.test.ts`：长按命中变体、点按回落轻 1、冷却中回退轻 1、`orderedSegments` 顺序、变体段 `next` 为空且带冷却；
-   - 单测 `state_machine/machine.test.ts`：真实状态机长按 → `activeSegment === 'spear_charge_thrust'` 且挂上段冷却；段中途按住不推进；松手后收招回 idle；冷却期内长按回退 `spear_light_1`；
-   - e2e：骨骼动画内置动作库出现 `spear_charge_thrust` 条目与「长枪 · 蓄力突刺」标签（可用它直接可视化调动作）。
+   - 单测 `state_machine/machine.test.ts`：真实状态机长按 → `activeSegment === 'spear_two_handed_charge_thrust'` 且挂上段冷却；段中途按住不推进；松手后收招回 idle；冷却期内长按回退 `spear_two_handed_light_1`；
+   - e2e：骨骼动画内置动作库出现 `spear_two_handed_charge_thrust` 条目与「长枪 · 蓄力突刺」标签（可用它直接可视化调动作）。
 
 ### 8.4 新增近战武器
 
-1. 在 `src/character/weapon/melee_weapon.ts` 的 `MELEE_WEAPON_PRESETS` 中用 `meleePreset({...})` 添加预设，**必须填写 `name` 字段（武器中文名）**——它同时驱动角色属性面板的武器下拉、展示场景的头顶标签与骨骼动画内置动作库的分组名。
-2. 填写 `holdModes: readonly HoldMode[]`（可支持的单持 / 双手共持 / 双持，**首个为默认模式**）；`offhandMesh` 仅为双持模式的副手网格。
-3. 攻击链由 `meleePreset` 自动调用 `buildMeleeAttacks(base.id, attackOptions)` 注入到 `attacks[holdModes[0]]`（`attacks` 为「持握模式 → 攻击链」map）；该武器若需要特殊链长/变体，把 `attackOptions` 作为第二个参数传入（见 8.2 / 8.3）。多持握模式武器可为各模式在 map 中分别提供连段，未声明的模式由 `weaponAttacksOf` 回退默认模式。
+1. 在 `src/character/weapon/melee_weapon.ts` 的 `MELEE_WEAPON_CLASSES` 中用 `meleeClass({...}, modeChains)` 添加武器类，并在 `MELEE_WEAPON_MODELS` 添加其默认模型（`{id, classId, name, mesh}`；`name` 为武器中文名）——它同时驱动角色属性面板的武器下拉、展示场景的头顶标签与骨骼动画内置动作库的分组名。
+2. 填写 `holdModes: readonly HoldMode[]`（可支持的单持 / 双手共持 / 双持，**首个为默认模式**；生产近战默认单持）与各模式链编排 `modeChains`（未声明的模式由 `weaponAttacksOf` 回退默认模式）。
+3. 攻击链由 `meleeClass` 自动调用 `buildMeleeAttacks(classId, holdMode, options)` 注入到 `attacks[holdMode]`（`attacks` 为「持握模式 → 攻击链」map，段 id 自动带 `{classId}_{holdMode}_` 前缀）；该模式若需要特殊链长/变体，把对应 `options` 传入（见 8.2 / 8.3）。
 
 ## 9. 持握模式与段动作组合（HoldMode / SegmentPoseLayer）
 
-1. **持握模式**：三态常量 `HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`（`character/weapon/hold_mode.ts`）。角色实体持久化 `holdMode`（`CharacterEntity.holdMode`，存档字段 `CharacterSaveConfig.holdMode?`，非法值安全回退）；武器用 `holdModes` 声明可支持模式，`attacks: HoldModeAttacks`（`Partial<Record<HoldMode, WeaponAttacks>>`）提供各模式连段。切换入口 `CharacterEntitySystem.setHoldMode(id, mode)`：武器不支持时回退默认模式并返回 `false`，切换后按新模式重解析 `attacks` 并清空段冷却 / 当前段。
-2. **动画上下文**：`AnimationContext.holdMode`（替代原 `twoHanded` 布尔）；双手共持 IK 判定改为 `holdMode === 'two_handed'`，双持仍由 `model.offhandWeaponGroup !== null` 判定。
+1. **持握模式**：三态常量 `HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`（`character/weapon/hold_mode.ts`）。角色实体持久化 `holdMode`（`CharacterEntity.holdMode`，存档字段 `CharacterSaveConfig.holdMode?`，非法值安全回退）；武器**类**用 `holdModes` 声明可支持模式，`attacks: HoldModeAttacks`（`Partial<Record<HoldMode, WeaponAttacks>>`）提供各模式连段，段 id 统一 `{classId}_{holdMode}_{模板键}`。切换入口 `CharacterEntitySystem.setHoldMode(id, mode)`：可用性 = `catalog.ts` 的 `availableHoldModes(weapon, offhand)`（武器声明 ∩ 双持需副手同类近战），不可用时回退默认模式并返回 `false`；切换后按新模式重解析 `attacks`、清空段冷却 / 当前段，并同步外观（副手在双手共持时挂背、其余模式回手）。
+2. **副手装备槽**：`CombatComponent.offhand?: WeaponRuntime`（存档 `CharacterSaveConfig.offhand?`，未知武器 id 安全丢弃）。单持 / 双持握在左手、双手共持挂背（`backWeaponMount` + `CharacterModel.setOffhandStowed`，只换父节点不重建几何）。双持时 `melee_executor` 按槽取武器结算（副手命中用副手武器的伤害 / 击退 / 攻击类别）。play 模式 `Ctrl` 环切可用模式（输入动作 `cycle_hold_mode`，被 Ctrl+S / Ctrl+O 最长组合遮蔽）；edit 面板可显式选择副手与持握。
+3. **动画上下文**：`AnimationContext.holdMode`（替代原 `twoHanded` 布尔）；双手共持 IK 判定 = `holdMode === 'two_handed'`（与是否装备副手无关，副手挂背不影响贴合）；双持不走共享 IK，左臂由关键帧驱动。
 3. **段的动作组合**：`AttackSegment.poses: readonly SegmentPoseLayer[]`（`{poseId, weight, progressOffset?}`）。pose 资产以 `attack_clip_data.ts` 的基础关键帧为底，合并 `attack_pose_edits.ts` 的逐段姿势修订；播放器 `createComposedAnimationPlayer` 按主进度采样各层，再经 `composePoses` 按**关节归一化加权平均**合成。
 4. `detectBox`（AI 出招检测箱）与 `mesh`（程序化模型）必须填写，其余数值（`damage` / `knockbackForce` / `knockbackY` / `detectionRange`）按武器定位给定。
 5. 该武器各攻击段的**动画关键帧**由 `attack_clip_data.ts` 的基础资产与 `attack_pose_edits.ts` 的逐段姿势修订共同提供。
@@ -657,7 +664,7 @@ const phaseKey = c.phaseIndex < phases.length
 | `weapon/melee_weapon.test.ts` | 武器预设数量（6 把近战）与字段完整性 |
 | `combat/attack_phases.test.ts` | 遍历各武器实际段检查阶段比例/类型合法性（不写死段数，一般无需改） |
 | `state_machine/machine.test.ts` | 连段推进与起手解析的端到端断言（改链长/加变体时补对应用例） |
-| `modes/bone_edit/builtin_clips.test.ts` + `e2e/bone_edit.spec.ts` | 内置动作库条目总数（当前 9 + 26 + 9 = 44）、每武器标签顺序、`data-builtin-clip-count` |
+| `modes/bone_edit/builtin_clips.test.ts` + `e2e/bone_edit.spec.ts` | 内置动作库条目总数（当前 9 + 74 + 9 = 92）、每武器 × 模式标签顺序、`data-builtin-clip-count` |
 | `entity/character/appearance/clips/attack_clips.ts` | 攻击 clip 解析 `getAttackClipById`（合并基础关键帧与逐段姿势修订；惰性缓存） |
 | `docs/showcase.md` / `docs/bone_animation_system.md` | 展示清单与内置动作库的段数/顺序描述 |
 
@@ -670,9 +677,9 @@ const phaseKey = c.phaseIndex < phases.length
 | 文件 | 内容 |
 |------|------|
 | `attack_chain.ts` | 攻击链领域模型：`ATTACK_KEYS` / `AttackKey`、`AttackSegment`、`AttackTransition`、`AttackEntry`、`WeaponAttackChain`、`WeaponAttacks`；守卫原语（`always`/`pressedKey`/`pressedOtherKey`/`holdAtLeast`/`holdLessThan`/`hasMoveInput`/`noMoveInput`/`cooldownReady`/`allOf`/`anyOf`/`not`）；解析与查询（`findSegment`/`chainOf`/`resolveEntrySegment`/`resolveNextSegment`/`orderedSegments`/`segmentDisplayName`/`segmentTotalDuration`） |
-| `melee_attacks.ts` | 近战段模板与链编排：`MELEE_SEGMENT_KEYS`（light_1/2/3、heavy_1/2）、`SEGMENT_META`（键组/序号/是否重段）、段时长常量（轻 0.267+0.266 / 重 0.4+0.267，0.75 倍速）、重段倍率 1.6、`MELEE_CHAIN_SPECS`（缺省链编排）、`meleeSegmentId`、`buildMeleeAttacks(weaponId, options)` |
+| `melee_attacks.ts` | 近战段模板与链编排：`MELEE_SEGMENT_KEYS`（light_1/2/3、heavy_1/2）、`SEGMENT_META`（键组/序号/是否重段）、段时长常量（轻 0.267+0.266 / 重 0.4+0.267，0.75 倍速）、重段倍率 1.6、`MELEE_CHAIN_SPECS`（缺省链编排）、`meleeSegmentId(classId, holdMode, key)`、`buildMeleeAttacks(classId, holdMode, options)` |
 | `attack_clip_data.ts` / `attack_pose_edits.ts` | 攻击动画基础稀疏关键帧与逐段局部姿势修订（`getAttackClipById` 合并解析） |
-| `melee_special_moves.ts` | 近战条件变体段（非模板主干段）：长枪「蓄力突刺」`SPEAR_CHARGE_HOLD` / `SPEAR_CHARGE_THRUST` |
+| `melee_special_moves.ts` | 近战条件变体段（非模板主干段）：长枪「蓄力突刺」`SPEAR_CHARGE_HOLD` / `spearChargeThrust(classId, holdMode)` / `spearChargeThrustId` |
 | `ranged_attacks.ts` | 远程段规格（9 把武器，单段）：`RANGED_ATTACK_SPECS`、`rangedSegmentIdOf`、`buildRangedAttacks` |
 | `catalog.ts` | 武器目录统一查询：`WeaponConfig` / `WeaponType`、`DEFAULT_WEAPON_ID`、`ALL_WEAPON_PRESETS`、`findWeaponPreset`、`weaponPresetOrDefault`、额外预设注册 `registerWeaponPreset`（测试武器） |
 | `weapon_runtime.ts` | `createWeaponRuntime(weaponId, overrides)` → `{weapon, attacks}`：伤害覆写、起手段冷却覆写（`isEntrySegment` 判定）、远程弹道覆写；动作/时长/阶段不可覆写；`isKnownWeaponId` |
@@ -702,14 +709,14 @@ const phaseKey = c.phaseIndex < phases.length
 | `src/character/state_machine/states/rolling.ts` | 翻滚状态 handler：锁定方向位移 + 中段无敌帧写入 `invincibleTimer`（exit 清零），结束转 walking/idle/falling |
 | `src/character/state_machine/states/flinching.ts` | 受击硬直状态 handler（enter 清 `bufferedSegment` 与阶段计时，exit 挂免疫窗口） |
 | `src/character/archetypes.ts` | 存档 / 面板的攻击配置：`AttackConfig = {weaponId, damage?, cooldown?, ranged?}`（只有武器与数值覆写）、`ATTACK_PRESETS` |
-| `src/save_load/types.ts` | `CharacterSaveConfig.attack: AttackConfig`（v3 起；当前 `SAVE_FORMAT_VERSION = 5`，原 `attackSlot` 已删除） |
+| `src/save_load/types.ts` | `CharacterSaveConfig.attack: AttackConfig` + `offhand?: AttackConfig` + `holdMode?`（当前 `SAVE_FORMAT_VERSION = 6`，原 `attackSlot` 已删除） |
 
 ### 9.4 实体表现与调试
 
 | 文件 | 内容 |
 |------|------|
-| `src/entity/character/appearance/types.ts` | `CharacterModel`（`weaponGroup` / `weaponHitBox` / `weaponGripY`）；`AnimationContext`（`stateTime` / `horizontalSpeed` / `twoHanded` / `attackSegment` / `attackPhase` / `attackPhaseProgress` / `attackTotalProgress` / `attackPhaseIndex` / `weaponHeld`） |
-| `src/entity/character/appearance/system.ts` | clip 调度器：动画键（attacking 用 `attacking:{segment.id}`）→ 取 clip + 快照加权混合；双手武器左腕 IK（`ctx.twoHanded`） |
+| `src/entity/character/appearance/types.ts` | `CharacterModel`（`weaponGroup` / `weaponHitBox` / `weaponGripY` / `offhandWeaponGroup` / `setOffhandStowed` / `backWeaponMount`）；`AnimationContext`（`stateTime` / `horizontalSpeed` / `holdMode` / `attackSegment` / `attackPhase` / `attackPhaseProgress` / `attackTotalProgress` / `attackPhaseIndex` / `weaponHeld`） |
+| `src/entity/character/appearance/system.ts` | clip 调度器：动画键（attacking 用 `attacking:{segment.id}`）→ 取 clip + 快照加权混合；双手共持左腕 IK（`ctx.holdMode === 'two_handed'`，副手挂背不影响） |
 | `src/entity/character/appearance/clips/attack_clips.ts` | 攻击 clip 解析：`getAttackClipById(段 id)`（`attack_clip_data.ts` → `clipFromJSON`，惰性缓存） |
 | `src/entity/character/appearance/clips/base_clips.ts` | 基础状态 clip 生成器（`getBaseClip` / `fallingSpeedTier` / `CHARACTER_JOINT_IDS`） |
 | `src/entity/character/appearance/weapon_mesh.ts` | 武器本地命中箱 `WeaponLocalHitBox`（近战武器显式打击部位盒） |
@@ -820,7 +827,7 @@ OBB 构造与 15 轴 SAT 相交；`targetHitBoxHalves` 随 scale 缩放；武器
 
 ### 11.8 内置动作库 — `modes/bone_edit/builtin_clips.test.ts`
 
-覆盖全部基础状态与全部武器攻击段（9 + 24 + 9 条）；分组按展示顺序；近战按武器分组、每武器内 轻1 → 轻2 → 重1 → 重2 连续排列；id / 显示名 / clip 名全库唯一；轨迹时间升序且末帧落在时长处；攻击条目带 `hitbox_on` / `hitbox_off` 事件轨（`long_sword_light_1` 时间点 = 0.02 / 0.17）；首帧静止位置与预设骨架一致；惰性构建并缓存。
+覆盖全部基础状态与全部武器攻击段（9 + 24 + 9 条）；分组按展示顺序；近战按武器分组、每武器内 轻1 → 轻2 → 重1 → 重2 连续排列；id / 显示名 / clip 名全库唯一；轨迹时间升序且末帧落在时长处；攻击条目带 `hitbox_on` / `hitbox_off` 事件轨（`long_sword_one_handed_light_1` 时间点 = 0.02 / 0.17）；首帧静止位置与预设骨架一致；惰性构建并缓存。
 
 ### 11.9 地面检测 — `character/state_machine/ground.test.ts`
 

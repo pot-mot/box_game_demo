@@ -105,4 +105,35 @@ test.describe('角色装备与属性面板', () => {
         await panel.locator('button', {hasText: 'Apply'}).click()
         await expect(page.locator('#element-list-panel [data-id]', {hasText: 'spd:3.35'})).toHaveCount(1)
     })
+
+    test('持握模式与副手：同类近战副手启用双持，切换副手类别后回退单持', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        const offhandSelect = panel.locator('#offhand-weapon-select')
+        const holdSelect = panel.locator('#hold-mode-select')
+
+        /* 默认长剑、无副手：只有单持 / 双手共持 */
+        await expect(offhandSelect).toHaveValue('')
+        await expect(holdSelect.locator('option')).toHaveText(['单持', '双手共持'])
+
+        /* 副手装备同类近战（长剑）→ 双持可用 */
+        await offhandSelect.selectOption('long_sword')
+        await expect(holdSelect.locator('option')).toHaveText(['单持', '双手共持', '双持'])
+
+        /* 选择双持并 Apply → 面板回显双持与副手武器 */
+        await holdSelect.selectOption('dual_wield')
+        await panel.locator('button', {hasText: 'Apply'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel #hold-mode-select')).toHaveValue('dual_wield')
+        await expect(page.locator('#character-panel #offhand-weapon-select')).toHaveValue('long_sword')
+
+        /* 换成不同类别的副手（短剑）→ 双持不可用，持握回退单持 */
+        await page.locator('#character-panel #offhand-weapon-select').selectOption('short_sword')
+        await expect(page.locator('#character-panel #hold-mode-select')).toHaveValue('one_handed')
+        await page.locator('#character-panel button', {hasText: 'Apply'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel #hold-mode-select')).toHaveValue('one_handed')
+        await expect(page.locator('#character-panel #offhand-weapon-select')).toHaveValue('short_sword')
+    })
 })

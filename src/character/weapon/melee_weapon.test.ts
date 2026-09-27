@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest'
-import {MELEE_WEAPON_PRESETS, type MeleeWeaponConfig} from './melee_weapon.ts'
+import {MELEE_WEAPON_CLASSES, MELEE_WEAPON_MODELS, MELEE_WEAPON_PRESETS, resolveMeleeWeapon, type MeleeWeaponConfig} from './melee_weapon.ts'
 
 const presets = Object.entries(MELEE_WEAPON_PRESETS) as [string, MeleeWeaponConfig][]
 const presetIds = presets.map(([key]) => key)
@@ -77,16 +77,24 @@ describe('MELEE_WEAPON_PRESETS', () => {
         expect(new Set(ids).size).toBe(ids.length)
     })
 
-    it('双斧为双持：主手单刃斧 + 副手（斧刃几何矢状面对称，与主手同网格）', () => {
-        const dualAxe = MELEE_WEAPON_PRESETS.dual_axe
-        expect(dualAxe.offhandMesh).toBeDefined()
-        expect(dualAxe.offhandMesh).toMatchObject({id: 'dual_axe'})
+    it('武器类 / 模型分层：每个类恰好一个默认模型，解析结果合并类玩法与模型外观', () => {
+        const classIds = Object.keys(MELEE_WEAPON_CLASSES)
+        expect(classIds).toHaveLength(6)
+        for (const classId of classIds) {
+            const models = Object.values(MELEE_WEAPON_MODELS).filter(model => model.classId === classId)
+            expect(models, classId).toHaveLength(1)
+            const resolved = resolveMeleeWeapon(models[0])
+            expect(resolved.id, classId).toBe(models[0].id)
+            expect(resolved.name, classId).toBe(models[0].name)
+            expect(resolved.mesh, classId).toBe(models[0].mesh)
+            expect(resolved.damage, classId).toBe(MELEE_WEAPON_CLASSES[classId].damage)
+            expect(resolved.attacks, classId).toBe(MELEE_WEAPON_CLASSES[classId].attacks)
+        }
     })
 
-    it('非双持近战武器不含副手网格（单持 / 双手共持）', () => {
-        for (const [, w] of presets) {
-            if (w.id === 'dual_axe') continue
-            expect(w.offhandMesh).toBeUndefined()
+    it('全部近战类声明三持握模式且默认单持', () => {
+        for (const classId of Object.keys(MELEE_WEAPON_CLASSES)) {
+            expect(MELEE_WEAPON_CLASSES[classId].holdModes, classId).toEqual(['one_handed', 'two_handed', 'dual_wield'])
         }
     })
 })

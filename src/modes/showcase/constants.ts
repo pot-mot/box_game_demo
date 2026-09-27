@@ -1,23 +1,28 @@
+import type {HoldMode} from '../../character/weapon/hold_mode.ts'
+
 // ── 展示清单 ──
 
-/** 展示角色清单条目：一律按武器 id 指定（近战/远程只决定摆放行与链形态） */
+/** 展示角色清单条目：按武器 id + 持握模式指定（近战三模式分开展示；远程用默认模式） */
 export interface ShowcaseRosterEntry {
     /** 武器 id（`WeaponConfig.id`，近战与远程统一；经 `weaponPresetOrDefault` 取模组） */
     readonly skillId: string
     readonly kind: 'melee' | 'ranged'
+    /** 近战持握模式（单持 / 双手共持 / 双持）；远程缺省 = 武器默认模式 */
+    readonly holdMode?: HoldMode
 }
 
+const MELEE_IDS = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer'] as const
+
 /**
- * 全部展示武器的清单（6 近战 + 9 远程，条目 skillId 为武器 id）。
- * 近战每武器一个角色播完整双链（轻1 → 轻2 → 停顿 → 重1→重2），远程播单段开火。
+ * 全部展示武器的清单：
+ * - 近战 6 武器 × 3 持握模式 = 18 角色（按模式分三排：单持 / 双手共持 / 双持），
+ *   每角色按该模式连段循环播放（轻链 → 停顿 → 重链）；
+ * - 远程 9 武器（单段开火动作）。
  */
 export const SHOWCASE_ROSTER: readonly ShowcaseRosterEntry[] = [
-    {skillId: 'short_sword', kind: 'melee'},
-    {skillId: 'long_sword', kind: 'melee'},
-    {skillId: 'heavy_sword', kind: 'melee'},
-    {skillId: 'spear', kind: 'melee'},
-    {skillId: 'dual_axe', kind: 'melee'},
-    {skillId: 'war_hammer', kind: 'melee'},
+    ...MELEE_IDS.map(skillId => ({skillId, kind: 'melee', holdMode: 'one_handed'} as const)),
+    ...MELEE_IDS.map(skillId => ({skillId, kind: 'melee', holdMode: 'two_handed'} as const)),
+    ...MELEE_IDS.map(skillId => ({skillId, kind: 'melee', holdMode: 'dual_wield'} as const)),
     {skillId: 'longbow', kind: 'ranged'},
     {skillId: 'crossbow', kind: 'ranged'},
     {skillId: 'shotgun', kind: 'ranged'},
@@ -42,14 +47,17 @@ export const CHAIN_PAUSE_IDLE = 0.6
 
 // ── 角色布局 ──
 
-/** 近战行 Z 坐标（前排，靠近默认相机） */
+/** 近战单持排 Z 坐标（前排，靠近默认相机） */
 export const MELEE_ROW_Z = 0
+
+/** 近战排间距（m）：单持 → 双手共持 → 双持依次向后 */
+export const MELEE_ROW_SPACING = 3.4
 
 /** 近战行角色间距（m，需容纳挥砍半径） */
 export const MELEE_SPACING = 3.0
 
-/** 远程行 Z 坐标（后排） */
-export const RANGED_ROW_Z = -4.5
+/** 远程行 Z 坐标（最后一排） */
+export const RANGED_ROW_Z = MELEE_ROW_Z - MELEE_ROW_SPACING * 3
 
 /** 远程行角色间距（m） */
 export const RANGED_SPACING = 2.4
@@ -68,9 +76,9 @@ export const CAMERA_NEAR = 0.1
 export const CAMERA_FAR = 500
 
 export const ORBIT_DEFAULT_TARGET_Y = 0.7
-export const ORBIT_DEFAULT_TARGET_Z = -1.4
-export const ORBIT_DEFAULT_DISTANCE = 13
-export const ORBIT_DEFAULT_PITCH = 0.42
+export const ORBIT_DEFAULT_TARGET_Z = -4.6
+export const ORBIT_DEFAULT_DISTANCE = 17
+export const ORBIT_DEFAULT_PITCH = 0.46
 export const ORBIT_DEFAULT_YAW = 0
 export const ORBIT_MIN_DISTANCE = 1.5
 export const ORBIT_MAX_DISTANCE = 45
