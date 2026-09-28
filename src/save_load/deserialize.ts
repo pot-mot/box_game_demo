@@ -3,7 +3,7 @@ import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {EntityType} from '../entity/constants.ts'
-import type {SaveData, FragmentDataJSON, EntitySourceMap} from './types.ts'
+import type {SaveData, FragmentDataJSON, EntitySourceMap, SavableEntity} from './types.ts'
 import {CHARACTER_BASE_SIZE} from '../entity/character/constants.ts'
 
 /** JSON-safe 格式 → FragmentData */
@@ -58,10 +58,40 @@ export const loadWorldFromData = (
     const water = getSource('area/water')
     const frag = getSource('fragment/common')
     const building = getSource('building_generator')
+    const interactable = getSource('interactable')
+    const itemEntities = getSource('item')
     const character = getSource('character')
     const terrain = terrainSources[0]
     /* v1 旧档：character 位置为身体中心，需下移半高迁移到脚底原点语义（v2 起即为脚底原点，不再迁移） */
     const legacyCharacterPos = (data.version ?? 1) < 2
+
+    /* 交互物按批重建（loadSave 会先清空既有交互物） */
+    if (interactable !== undefined) {
+        interactable.loadSave(data.entities
+            .filter((e): e is Extract<SavableEntity, {type: 'interactable'}> => e.type === 'interactable')
+            .map(e => ({
+                config: e.config,
+                position: e.position,
+                yawQuarter: e.yawQuarter,
+                progress: e.progress,
+                target: e.target,
+                on: e.on,
+                container: e.container,
+                health: e.health,
+            })))
+    }
+
+    /* 掉落物按批重建（loadSave 会先清空既有掉落物） */
+    if (itemEntities !== undefined) {
+        itemEntities.loadSave(data.entities
+            .filter((e): e is Extract<SavableEntity, {type: 'item'}> => e.type === 'item')
+            .map(e => ({
+                defId: e.config.defId,
+                count: e.config.count,
+                position: e.position,
+                quaternion: e.quaternion,
+            })))
+    }
 
     for (const entity of data.entities) {
         /* building_generator 无独立变换字段（origin 在 worlds 内），此处回退零值占位 */

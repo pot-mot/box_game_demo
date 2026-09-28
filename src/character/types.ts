@@ -71,6 +71,12 @@ export interface CharacterEntity {
      */
     lockPoints: readonly LockPointConfig[]
 
+    /** 本帧是否存在可交互目标（由 world.ts 按玩家交互脉冲写入，供交互转换守卫使用） */
+    interactTargetActive?: boolean
+    /** 交互目标世界坐标（交互时转身朝向用；无目标时保持上次值） */
+    interactTargetX?: number
+    interactTargetZ?: number
+
     stateMachine: CharacterStateMachine
 }
 

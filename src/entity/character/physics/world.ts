@@ -50,6 +50,8 @@ import {computeSeparation, separationSlopeDy} from './separation.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {getSkillExecutor, registerSkillExecutor} from '../../../character/combat/executor.ts'
 import {attackDetectOBB, createMeleeExecutor, targetHitBoxHalves, testAttackDetect} from '../combat/melee_executor.ts'
+import type {WorldDamageTarget, WorldDamageTargetProvider} from '../../../character/combat/world_targets.ts'
+import {ROLL_WORLD_DAMAGE} from '../../../character/combat/constants.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createMaterialEffects} from '../combat_vfx/material_effects.ts'
@@ -157,6 +159,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     unmarkPlayer: () => void
     setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean) => void
     setPlayerAttack: (attackKey?: AttackKey, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
+    /** 玩家交互脉冲：本帧按下交互键且存在目标时传 true，并给出目标世界坐标（用于转身朝向） */
+    setPlayerInteract: (pending: boolean, targetX: number, targetZ: number) => void
     getPlayerCharacter: () => CharacterEntity | undefined
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
@@ -196,6 +200,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setNavEnabled: (id: number, enabled: boolean) => void
     /** 设置近战命中冲击监听器（参数为命中点世界坐标，null 清除） */
     setOnMeleeImpact: (listener: ((x: number, y: number, z: number) => void) | null) => void
+    /** 注册世界受击目标提供者（可破坏场景道具），近战 / 远程 / 爆炸 / 翻滚命中路径据此结算 */
+    registerWorldDamageTargets: (provider: WorldDamageTargetProvider) => void
     /** 清除执行期产生的全部子弹（子弹是战斗期临时对象、不进存档，世界还原/载入时必须显式清理） */
     clearBullets: () => void
 }
@@ -238,6 +244,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let playerRoll = false
     let playerForwardX = 0
     let playerForwardZ = 1
+    /** 玩家交互脉冲与目标坐标（帧末与攻击脉冲一同归零；目标坐标供 interacting 朝向使用） */
+    let playerInteractPending = false
+    let playerInteractTargetX = 0
+    let playerInteractTargetZ = 0
 
     const events = createEmitter<{ delete: [id: number, wasSelected: boolean]; select: [id: number | undefined] }>()
     const panelInfos: EntityPanelInfo[] = []
@@ -253,16 +263,40 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let hitstopTimer = 0
     /** 近战命中冲击监听器（相机震动等打击感系统注入） */
     let meleeImpactListener: ((x: number, y: number, z: number) => void) | null = null
+    /** 世界受击目标提供者（可破坏场景道具等实体系统注入） */
+    let worldDamageTargets: WorldDamageTargetProvider | null = null
 
     const setOnMeleeImpact = (listener: ((x: number, y: number, z: number) => void) | null): void => {
         meleeImpactListener = listener
     }
 
+    const registerWorldDamageTargets = (provider: WorldDamageTargetProvider): void => {
+        worldDamageTargets = provider
+    }
+
+    /** 翻滚命中可破坏世界目标：无敌帧窗口内按胶囊水平近接判定，按来源类别 roll 结算 */
+    const applyRollWorldDamage = (entity: CharacterEntity, targets: readonly WorldDamageTarget[]): void => {
+        const pos = entity.body.translation()
+        const radius = (CHARACTER_BASE_SIZE.width / 2) * entity.config.scale + 0.25
+        const halfHeight = (CHARACTER_BASE_SIZE.height / 2) * entity.config.scale
+        for (const wt of targets) {
+            if (wt.dead) continue
+            if (Math.abs(wt.x - pos.x) > wt.hx + radius) continue
+            if (Math.abs(wt.z - pos.z) > wt.hz + radius) continue
+            if (wt.y + wt.hy < pos.y - halfHeight || wt.y - wt.hy > pos.y + halfHeight) continue
+            let dx = wt.x - pos.x
+            let dz = wt.z - pos.z
+            const len = Math.hypot(dx, dz)
+            if (len > 0.0001) { dx /= len; dz /= len } else { dx = 0; dz = 1 }
+            wt.onAttacked('roll', 'physical', ROLL_WORLD_DAMAGE, dx, dz)
+        }
+    }
+
     const meleeExecutor = createMeleeExecutor(getAllCharacters, getModel, (id) => facingAngles.get(id) ?? 0, (x, y, z) => {
         hitstopTimer = HITSTOP_DURATION
         meleeImpactListener?.(x, y, z)
-    })
-    const rangedExecutor = createRangedExecutor(shared, scene)
+    }, () => worldDamageTargets?.() ?? [])
+    const rangedExecutor = createRangedExecutor(shared, scene, () => worldDamageTargets?.() ?? [])
     registerSkillExecutor('melee', meleeExecutor)
     registerSkillExecutor('ranged', rangedExecutor)
 
@@ -426,6 +460,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             combat,
             holdMode: defaultHoldMode(runtime.weapon),
             lockPoints: [],
+            interactTargetActive: false,
+            interactTargetX: 0,
+            interactTargetZ: 0,
             stateMachine,
         }
 
@@ -672,9 +709,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         return 'ok'
     }
 
+    const setPlayerInteract = (pending: boolean, targetX: number, targetZ: number): void => {
+        playerInteractPending = pending
+        if (pending) {
+            playerInteractTargetX = targetX
+            playerInteractTargetZ = targetZ
+        }
+    }
+
     const getPlayerCharacter = (): CharacterEntity | undefined =>
         characters.find(c => c.isPlayer && !c.combat.isDead)
-
     const getHostileTo = (faction: number): CharacterEntity[] =>
         characters.filter(c => c.combat.attackTendency(c.combat.faction, faction) && !c.combat.isDead)
 
@@ -775,7 +819,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 })
             } else if (entity.isPlayer) {
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration)
+                /* 交互目标活跃：本帧按下交互键，或正处于 interacting（供转换守卫与转身朝向使用） */
+                entity.interactTargetActive = playerInteractPending || entity.stateMachine.currentState === 'interacting'
+                if (playerInteractPending) {
+                    entity.interactTargetX = playerInteractTargetX
+                    entity.interactTargetZ = playerInteractTargetZ
+                }
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerInteractPending)
                 /* 攻击期间（含待起手帧）瞄准方向持续取相机前方：角色随之转向瞄准方向，
                  * 射击弹道再由武器实际朝向（muzzleDir）决定，避免背身射向目标 */
                 if (playerAttackPending || entity.combat.attackActive) {
@@ -785,6 +835,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
 
             entity.stateMachine.update(dt, entity)
+            /* 翻滚无敌帧窗口内命中可破坏世界目标（按来源 roll 结算） */
+            if (entity.isPlayer && entity.stateMachine.currentState === 'rolling'
+                && entity.combat.invincibleTimer > 0 && worldDamageTargets !== null) {
+                applyRollWorldDamage(entity, worldDamageTargets())
+            }
             /* 翻滚无敌帧视觉：材质统一效果层切换为半透明白（与受击闪红共用快照/还原） */
             materialEffects.get(entity.id)?.setInvincible(entity.combat.invincibleTimer > 0)
 
@@ -841,6 +896,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     if (isRolling) {
                         /* 翻滚期间朝向锁定翻滚方向：输入转向不改变朝向，避免边滚边原地打转 */
                         targetAngle = Math.atan2(entity.combat.rollSkill.dirX, entity.combat.rollSkill.dirZ)
+                    } else if (entity.stateMachine.currentState === 'interacting' && entity.interactTargetActive) {
+                        /* 交互期间朝向锁定交互目标 */
+                        const myPos = entity.body.translation()
+                        const tdx = (entity.interactTargetX ?? myPos.x) - myPos.x
+                        const tdz = (entity.interactTargetZ ?? myPos.z) - myPos.z
+                        targetAngle = Math.hypot(tdx, tdz) > VELOCITY_DIR_THRESHOLD
+                            ? Math.atan2(tdx, tdz)
+                            : currentAngle
                     } else if (rangedWeapon && inAttacking) {
                         /* 玩家远程攻击：转向瞄准方向（相机前方），draw/aim 阶段完成转向后武器才对准目标 */
                         const aimLen = Math.hypot(entity.combat.attackDirX, entity.combat.attackDirZ)
@@ -1104,6 +1167,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         playerAttackHoldDuration = 0
         playerJump = false
         playerRoll = false
+        playerInteractPending = false
 
         rangedExecutor.updateBullets(dt, characters)
 
@@ -1469,6 +1533,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         unmarkPlayer,
         setPlayerMove,
         setPlayerAttack,
+        setPlayerInteract,
         getPlayerCharacter,
         getHostileTo,
         getCharacterByBody,
@@ -1491,6 +1556,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setupAI,
         setNavEnabled,
         setOnMeleeImpact,
+        registerWorldDamageTargets,
         clearBullets,
     }
 

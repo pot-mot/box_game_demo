@@ -19,6 +19,7 @@ import {CHARACTER_CONFIG_DEFAULTS} from '../entity/character/constants.ts'
 import {HOLD_MODES} from '../character/weapon/hold_mode.ts'
 import {SURFACE_MATERIAL_IDS} from '../render/materials/ids.ts'
 import {BUILDING_PROP_KINDS} from '../entity/building_generator/props/kinds.ts'
+import {BREAKABLE_SOURCES} from '../entity/interactable/kinds.ts'
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0])
 const Quat = z.tuple([z.number(), z.number(), z.number(), z.number()]).default([0, 0, 0, 1])
@@ -140,6 +141,76 @@ const SavableBuildingGenerator = z.object({
     worlds: z.array(BuildingWorldSave).catch([]).default([]),
 })
 
+/* 交互物：判别式配置；非法 kind / 字段整体回退为安全默认，未知物品 id 由运行时丢弃，不抛错 */
+const INTERACTABLE_BASE_SHAPE = {
+    material: z.enum(SURFACE_MATERIAL_IDS).catch('wood'),
+    size: z.tuple([z.number(), z.number(), z.number()]).default([0.5, 0.5, 0.5]),
+    channel: z.string().default(''),
+}
+const InteractableConfigSchema = z.discriminatedUnion('kind', [
+    z.object({kind: z.literal('save_point'), ...INTERACTABLE_BASE_SHAPE, name: z.string().default('篝火')}),
+    z.object({kind: z.literal('teleport'), ...INTERACTABLE_BASE_SHAPE, name: z.string().default('传送点')}),
+    z.object({kind: z.literal('switch'), ...INTERACTABLE_BASE_SHAPE, mode: z.enum(['toggle', 'momentary']).catch('toggle')}),
+    z.object({kind: z.literal('push_door_single'), ...INTERACTABLE_BASE_SHAPE, hingeQuarter: z.number().int().min(0).max(3).default(0)}),
+    z.object({kind: z.literal('push_door_double'), ...INTERACTABLE_BASE_SHAPE, hingeQuarter: z.number().int().min(0).max(3).default(0)}),
+    z.object({kind: z.literal('gate'), ...INTERACTABLE_BASE_SHAPE, travel: z.number().default(2.4), speed: z.number().default(2)}),
+    z.object({kind: z.literal('chest'), ...INTERACTABLE_BASE_SHAPE, capacity: z.number().int().default(12)}),
+    z.object({kind: z.literal('elevator'), ...INTERACTABLE_BASE_SHAPE, travel: z.number().default(4), speed: z.number().default(1.2)}),
+    z.object({
+        kind: z.literal('breakable'),
+        ...INTERACTABLE_BASE_SHAPE,
+        health: z.number().default(30),
+        breakableBy: z.array(z.enum(BREAKABLE_SOURCES)).catch(['melee', 'roll']).default(['melee', 'roll']),
+    }),
+]).catch({
+    kind: 'breakable',
+    material: 'brick',
+    size: [0.8, 0.8, 0.8] as [number, number, number],
+    channel: '',
+    health: 30,
+    breakableBy: ['melee', 'roll'] as Array<'melee' | 'roll'>,
+})
+
+/* 背包 / 容器：整体非法回退 undefined（运行时空背包）；未知 defId / 非法格位由运行时安全丢弃 */
+const InventorySaveSchema = z.object({
+    width: z.number().default(8),
+    height: z.number().default(6),
+    items: z.array(z.object({
+        instanceId: z.string().default(''),
+        defId: z.string().default(''),
+        count: z.number().default(1),
+        grid: z.object({
+            x: z.number().default(0),
+            y: z.number().default(0),
+            rot: z.number().int().min(0).max(3).default(0),
+        }).optional(),
+    })).catch([]).default([]),
+    equipment: z.record(z.string(), z.string()).catch({}).default({}),
+}).optional().catch(undefined)
+
+const SavableInteractable = z.object({
+    type: z.literal('interactable'),
+    config: InteractableConfigSchema,
+    position: Vec3,
+    yawQuarter: z.number().int().min(0).max(3).default(0),
+    progress: z.number().min(0).max(1).catch(0).default(0),
+    target: z.number().min(0).max(1).catch(0).default(0),
+    on: z.boolean().default(false),
+    container: InventorySaveSchema,
+    health: z.number().default(1),
+})
+
+/* 掉落物：未知 defId 由运行时丢弃，数量非法回退 1，不抛错 */
+const SavableItem = z.object({
+    type: z.literal('item'),
+    config: z.object({
+        defId: z.string().default(''),
+        count: z.number().positive().catch(1).default(1),
+    }).default({defId: '', count: 1}),
+    position: Vec3,
+    quaternion: Quat,
+})
+
 /* 攻击配置：装备武器 id + 数值覆写；动作/时长/动画由武器模组的攻击链决定，不在此描述。
    宽松校验（武器 id 不做白名单硬校验）：未知武器 id 由运行时回退默认武器，旧档缺字段则安全回退默认配置 */
 const RangedOverrideSchema = z.object({
@@ -242,6 +313,8 @@ const SavableEntity = z.discriminatedUnion('type', [
     SavableTerrain,
     SavableFragment,
     SavableBuildingGenerator,
+    SavableInteractable,
+    SavableItem,
     SavableCharacter,
 ])
 
@@ -254,6 +327,10 @@ const ModeInfo = z.object({
     edit: z.object({cameraInfo: CameraInfo}).optional(),
     play: z.object({
         cameraInfo: CameraInfo.optional(),
+        /* 背包：整体非法回退 undefined（运行时空背包） */
+        inventory: InventorySaveSchema,
+        /* 已解锁传送点键 */
+        teleports: z.array(z.string()).optional().catch(undefined),
     }).optional(),
     boneEdit: z.object({
         cameraInfo: CameraInfo.optional(),

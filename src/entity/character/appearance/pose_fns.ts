@@ -13,6 +13,7 @@ import {
 } from './constants.ts'
 import {FLINCH_DURATION} from '../../../character/combat/attack_phases.ts'
 import {ROLL_DURATION} from '../../../character/combat/roll_skill.ts'
+import {INTERACTION_DURATION} from '../../../character/interaction/types.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 
 /** 关节欧拉姿态 */
@@ -281,8 +282,41 @@ const flinchingPose = (t: number): PoseState => {
 
 export type PoseSampler = (t: number, ctx: PoseContext) => PoseState
 
+/* ── 交互姿态：伸手（0→REACH_END）→ 发力后收回（REACH_END→INTERACTION_DURATION） ── */
+const INTERACTION_REACH_END = 0.45
+const INTERACTION_ARM_SHOULDER = 1.05
+const INTERACTION_ARM_ELBOW = 0.45
+const INTERACTION_LEAN = 0.12
+
+const interactingPose = (t: number): PoseState => {
+    const total = INTERACTION_DURATION
+    const reach = t < INTERACTION_REACH_END
+        ? clamp01(t / INTERACTION_REACH_END)
+        : 1 - clamp01((t - INTERACTION_REACH_END) / Math.max(total - INTERACTION_REACH_END, 0.0001))
+    const e = reach
+    return {
+        rightArmShoulder: {rx: -INTERACTION_ARM_SHOULDER * e, ry: 0, rz: 0},
+        rightArmElbow: {rx: -(INTERACTION_ARM_ELBOW * e + 0.08), ry: 0, rz: 0},
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: ZERO,
+        leftArmShoulder: {rx: -0.06 * e, ry: 0, rz: 0},
+        leftArmElbow: {rx: -0.08, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: ZERO,
+        rightLegHip: ZERO,
+        rightLegKnee: ZERO,
+        leftLegHip: ZERO,
+        leftLegKnee: ZERO,
+        headNeck: {rx: 0.10 * e, ry: 0, rz: 0},
+        spine: {rotation: {rx: INTERACTION_LEAN * e, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
+
 /** 基础状态 → 姿态采样器（公式与旧 animators 一一对应；falling 腿张开随速度，行走步频由播放器变速） */
-export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching', PoseSampler> = {
+export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'interacting', PoseSampler> = {
     idle: (t, ctx) => idlePose(t, ctx),
     walking: (t, ctx) => walkingPose(t * WALK_CYCLE_FREQ, ctx),
     jumping: (t) => jumpingPose(t),
@@ -290,6 +324,7 @@ export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'fallin
     dying: (t) => dyingPose(t),
     rolling: (t, ctx) => rollingPose(t, ctx),
     flinching: (t) => flinchingPose(t),
+    interacting: (t) => interactingPose(t),
 }
 
 /**
@@ -325,4 +360,5 @@ export const BASE_CLIP_META: Record<keyof typeof BASE_POSE_SAMPLERS, {duration: 
     dying: {duration: FALL_END, loop: false},
     rolling: {duration: ROLL_DURATION, loop: false},
     flinching: {duration: FLINCH_DURATION, loop: false},
+    interacting: {duration: INTERACTION_DURATION, loop: false},
 }

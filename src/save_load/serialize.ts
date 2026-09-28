@@ -178,6 +178,37 @@ export const collectWorldState = (
         }
     }
 
+    // 交互物（显式配置 + 运行态）
+    const interactable = getSource('interactable')
+    if (interactable?.getAll) {
+        for (const entry of interactable.getSave()) {
+            entities.push({
+                type: 'interactable',
+                config: entry.config,
+                position: entry.position,
+                yawQuarter: entry.yawQuarter,
+                progress: entry.progress,
+                target: entry.target,
+                on: entry.on,
+                container: entry.container,
+                health: entry.health,
+            })
+        }
+    }
+
+    // 掉落物
+    const itemEntities = getSource('item')
+    if (itemEntities?.getAll) {
+        for (const entry of itemEntities.getSave()) {
+            entities.push({
+                type: 'item',
+                config: {defId: entry.defId, count: entry.count},
+                position: entry.position,
+                quaternion: entry.quaternion,
+            })
+        }
+    }
+
     // 角色
     const character = getSource('character')
     if (character?.getAll) {

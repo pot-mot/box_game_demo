@@ -1,7 +1,7 @@
 import type {CharacterEntity} from '../types.ts'
 import type {AttackKey} from '../weapon/attack_chain.ts'
 
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying', 'rolling', 'flinching'] as const
+export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying', 'rolling', 'flinching', 'interacting'] as const
 export type CharacterState = typeof CHARACTER_STATES[number]
 
 export interface CharacterInput {
@@ -15,6 +15,8 @@ export interface CharacterInput {
     roll: boolean
     /** 攻击键按住时长（秒，仅 attack 为真的脉冲帧有意义）：连段守卫用它区分点按/长按（蓄力） */
     attackHoldDuration: number
+    /** 交互触发（本帧按下交互键，且存在可交互目标） */
+    interact: boolean
 }
 
 export interface MachineContext {
@@ -42,7 +44,7 @@ export interface CharacterStateMachine {
     readonly stateTime: number
     onStateChange: ((from: CharacterState, to: CharacterState) => void) | null
 
-    setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number): void
+    setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number, interact?: boolean): void
     update(dt: number, entity: CharacterEntity): void
     reset(): void
 }

@@ -22,6 +22,10 @@ import {setupMagnetBoxes} from './entity/box/magnet/physics/world.ts'
 import {setupElasticBoxes} from './entity/box/elasticity/physics/world.ts'
 import {setupTerrain} from './entity/terrain/common/physics/world.ts'
 import {setupBuildingGenerator} from './entity/building_generator/world.ts'
+import {setupInteractables} from './entity/interactable/index.ts'
+import {setupItemEntities} from './entity/item/index.ts'
+import {setupHakoniwa} from './modes/play/hakoniwa.ts'
+import type {PlaySaveData} from './modes/play/save.ts'
 import {setupCharacterEntities} from './entity/character/physics/world.ts'
 import type {CharacterEntitySystem} from './entity/character/physics/world.ts'
 import type {CharacterEntity} from './character/types.ts'
@@ -91,6 +95,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const terrainSource = setupTerrain(scene, shared, () => physicsEnv.getAllBodies())
     const allTerrainSources: TerrainContext[] = [terrainSource]
     const building = setupBuildingGenerator(scene, shared)
+    const interactables = setupInteractables(scene, shared)
+    const itemEntities = setupItemEntities(scene, shared)
     const characterSystem: CharacterEntitySystem = setupCharacterEntities(scene, shared)
     const common = setupCommonBoxes(scene, shared)
     const destruction = setupDestructibleBoxes(scene, shared, fragments, velocitySnapshots)
@@ -109,10 +115,12 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         () => magnet.getAll().map(e => e.body),
         () => elastic.getAll().map(e => e.body),
         () => terrainSource.getAll().map(e => e.body),
+        () => interactables.getAll().map(e => e.body),
+        () => itemEntities.getAll().map(e => e.body),
     )
 
     // 按 type 索引
-    const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, characterSystem as EntitySystem, terrainSource, building]
+    const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem]
     const systemsByType = new Map<string, EntityInfoSource>(
         systems.map(s => [s.type, s]),
     )
@@ -170,10 +178,18 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
 
     // --- 从缓存/导入文件加载实体（必须在 mode setup 之前，确保角色存在后再激活 AI）---
     let loadResult: LoadWorldResult | undefined
+    /* play 模式的背包 / 传送点等数据存于 modeInfo.play */
+    let savedPlay: PlaySaveData | undefined
     /* 展示/骨骼动画模式为独立干净场景，不加载存档元素 */
     if (mode === 'edit' || mode === 'play') {
         const dataToLoad = saveData ?? loadCachedSaveData()
         if (dataToLoad) {
+            if (mode === 'play' && dataToLoad.modeInfo?.play !== undefined) {
+                savedPlay = {
+                    inventory: dataToLoad.modeInfo.play.inventory,
+                    knownTeleports: dataToLoad.modeInfo.play.teleports,
+                }
+            }
             clearWorld()
             loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources)
         }
@@ -206,6 +222,49 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     } else {
         /* 骨骼动画编辑模式：复用主场景，物理冻结，仅编辑骨骼节点/段与动画轨道 */
         boneEditMode = setupBoneEditMode(camera, renderer, scene, excludeFromBackground)
+    }
+
+    /* ── 交互物接线：玩家访问 / 存档回调 / 可破坏命中目标注册 ── */
+    const hakoniwa = mode === 'play' ? setupHakoniwa(characterSystem, itemEntities, interactables, building, savedPlay) : undefined
+    interactables.setPlayerAccess({
+        readPosition: () => {
+            const player = characterSystem.getPlayerCharacter()
+            if (player === undefined) return undefined
+            const t = player.body.translation()
+            return {x: t.x, y: t.y, z: t.z}
+        },
+        isGrounded: () => characterSystem.getPlayerCharacter()?.isOnGround ?? false,
+        translate: (dx, dy, dz) => {
+            const player = characterSystem.getPlayerCharacter()
+            if (player === undefined) return
+            const t = player.body.translation()
+            player.body.setTranslation({x: t.x + dx, y: t.y + dy, z: t.z + dz}, true)
+        },
+    })
+    interactables.setHooks({
+        onSavePoint: () => {
+            const state = collectWorldState(systemsByType, allTerrainSources, mode, camera.position, camera.rotation)
+            if (mode === 'play' && hakoniwa !== undefined) {
+                state.modeInfo = {...(state.modeInfo ?? {}), play: {...(state.modeInfo?.play ?? {}), ...hakoniwa.getSaveData()}}
+            }
+            cacheSaveData(state)
+        },
+        onOpenChest: (e) => hakoniwa?.openChest(e),
+        onTeleport: (e) => hakoniwa?.onTeleport(e),
+    })
+    characterSystem.registerWorldDamageTargets(interactables.collectBreakableTargets)
+    itemEntities.setPickupHandler((defId, count) => hakoniwa?.tryPickup(defId, count) ?? false)
+
+    if (mode === 'edit') {
+        /* edit 模式主动触发当前选中的交互物 */
+        input.onActionDown('interact', () => {
+            const id = interactables.getSelectedId()
+            if (id !== undefined) interactables.activate(id)
+        })
+    }
+    if (mode === 'play') {
+        playMode?.registerInteractionProvider(interactables)
+        playMode?.registerInteractionProvider(itemEntities)
     }
 
     /* ── 编辑模式：执行 / 步进状态 ── */
@@ -302,6 +361,10 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             camera.rotation,
             cached?.modeInfo,
         )
+        /* play 模式的背包 / 传送点数据并入 modeInfo.play */
+        if (mode === 'play' && hakoniwa !== undefined) {
+            state.modeInfo = {...(state.modeInfo ?? {}), play: {...(state.modeInfo?.play ?? {}), ...hakoniwa.getSaveData()}}
+        }
         cacheSaveData(state)
         saveWorldToFile(state)
     })
@@ -332,6 +395,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     setupSettingsPanel(
         () => openOperationsPanel(mode),
         mode === 'showcase' ? () => showcaseMode?.exit() : undefined,
+        mode === 'play' ? () => hakoniwa?.teleportToNearestSavePoint() : undefined,
     )
 
     // --- 单 RAF 循环 ---
@@ -397,6 +461,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 boneEditMode?.updater(delta)
             } else {
                 playMode?.updater(delta)
+                hakoniwa?.updater(delta)
             }
 
             if (mode !== 'showcase') {

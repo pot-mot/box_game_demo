@@ -16,6 +16,8 @@ const enterEditAndSpawnBuilding = async (page: Page): Promise<{x: number; y: num
     const x = box.x + box.width / 2
     const y = box.y + box.height / 2
     await page.mouse.click(x, y, {button: 'right'})
+    /* 建筑分块网格逐帧摊还构建（每帧最多数个 chunk），等待其可见后再返回，避免选择时射线无命中 */
+    await page.waitForTimeout(900)
     return {x, y}
 }
 
@@ -28,7 +30,7 @@ const saveAndRead = async (page: Page): Promise<string> => {
 }
 
 test.describe('建筑生成器', () => {
-    test('编辑模式生成建筑并写入存档 v7 + 笔刷控件', async ({page}) => {
+    test('编辑模式生成建筑并写入存档 v8 + 笔刷控件', async ({page}) => {
         const {x, y} = await enterEditAndSpawnBuilding(page)
 
         /* 左键点击建筑应选中并打开建筑面板（chunk 网格经父 Group 匹配实体） */

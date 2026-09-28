@@ -17,6 +17,11 @@ export const DEFAULT_BINDINGS: BindingsMap = {
     cycle_spawn_down: [['ArrowDown']],
     delete_entity: [['Delete']],
     close_panel: [['Escape']],
+    /* 箱庭：F 交互 / B 背包 / E 装备 / M 地图 */
+    interact: [['KeyF']],
+    open_inventory: [['KeyB']],
+    open_equipment: [['KeyE']],
+    open_map: [['KeyM']],
     save_world: [['ControlLeft', 'KeyS'], ['MetaLeft', 'KeyS']],
     load_world: [['ControlLeft', 'KeyO'], ['MetaLeft', 'KeyO']],
     /* 鼠标视角：左键拖拽旋转 / 右键拖拽平移（展示模式），均可在操作设置中修改 */

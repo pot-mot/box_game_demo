@@ -23,3 +23,9 @@ export const TERRAIN_COLLISION_GROUP = 4
 export const TERRAIN_COLLISION_MASK = 1 | 2
 export const BUILDING_COLLISION_GROUP = 8
 export const BUILDING_COLLISION_MASK = 1 | 2
+// 组 16 — 交互物（门 / 闸门 / 升降梯等）：与场景 / 建筑 / 角色碰撞
+export const INTERACTABLE_COLLISION_GROUP = 16
+export const INTERACTABLE_COLLISION_MASK = 1 | 2 | 8
+// 组 32 — 掉落物：sensor（mask 0），不参与物理碰撞，仅靠邻近判定拾取
+export const ITEM_COLLISION_GROUP = 32
+export const ITEM_COLLISION_MASK = 0

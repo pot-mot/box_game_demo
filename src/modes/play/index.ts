@@ -14,10 +14,14 @@ import {createDeathScreen} from './death_screen.ts'
 import {orderedSegments, segmentDisplayName} from '../../character/weapon/attack_chain.ts'
 import {HOLD_MODE_LABELS} from '../../character/weapon/hold_mode.ts'
 import {segmentCooldownRemaining} from '../../character/combat/attack_runtime.ts'
+import type {InteractionProvider} from '../../character/interaction/types.ts'
+import {setupPlayInteraction} from './interaction/index.ts'
 import {HIT_SHAKE_DURATION, HIT_SHAKE_AMPLITUDE} from './constants.ts'
 
 export interface PlayModeController {
     updater: (dt: number) => void
+    /** 注册交互目标提供者（交互物 / 掉落物等系统） */
+    registerInteractionProvider: (provider: InteractionProvider) => void
 }
 
 export const setupPlayMode = (
@@ -34,6 +38,7 @@ export const setupPlayMode = (
     characterSystem.registerBoxSpawner(boxSpawner)
 
     const playerInput = setupPlayerKeyboard(camera, characterSystem)
+    const interaction = setupPlayInteraction(camera, characterSystem)
     /* 相机跟随目标取身体中心（mesh 原点在脚底，直接用 mesh.position 会导致相机压低） */
     const cameraTarget = new Vector3()
     const lockOn = createPlayerLockOn(characterSystem, camera)
@@ -85,6 +90,8 @@ export const setupPlayMode = (
 
     const updater = (dt: number): void => {
         playerInput()
+        /* 交互脉冲须早于角色状态机更新，保证同帧生效 */
+        interaction.update(dt)
         characterSystem.update(dt)
         playCameraUpdate(dt)
         lockMarkerUpdate(lockOn.getAimPoint())
@@ -167,5 +174,8 @@ export const setupPlayMode = (
         }
     }
 
-    return {updater}
+    return {
+        updater,
+        registerInteractionProvider: interaction.registerProvider,
+    }
 }

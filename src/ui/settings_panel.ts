@@ -1,12 +1,14 @@
 /**
  * 设置面板（右上角齿轮按钮）。
- * 提供回到主页面、打开操作设置的入口。
+ * 提供回到主页面、打开操作设置的入口；play 模式额外提供「传送至最近存档点」（脱困）。
  * @param openOperations 打开操作设置面板（键盘 + 鼠标绑定）
  * @param onReturnHome 可选，覆盖“返回主页面”的默认 reload 行为（展示模式需优雅退出）
+ * @param onTeleportToSave 可选，play 模式「传送至最近存档点」回调（脱困）
  */
 export const setupSettingsPanel = (
     openOperations: () => void,
     onReturnHome?: () => void,
+    onTeleportToSave?: () => void,
 ): void => {
     const btn = document.createElement('button')
     btn.id = 'settings-btn'
@@ -61,6 +63,13 @@ export const setupSettingsPanel = (
         close()
         openOperations()
     }))
+
+    if (onTeleportToSave !== undefined) {
+        menu.appendChild(createItem('🪄 传送至最近存档点', () => {
+            close()
+            onTeleportToSave()
+        }))
+    }
 
     const close = (): void => {
         open = false

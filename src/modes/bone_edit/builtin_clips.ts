@@ -86,10 +86,11 @@ const BASE_STATE_LABELS: Record<BaseState, string> = {
     dying: '死亡',
     rolling: '翻滚',
     flinching: '受击硬直',
+    interacting: '交互',
 }
 
 /** 基础状态展示顺序（待机 → 移动 → 受击/倒地） */
-const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'rolling', 'flinching', 'dying']
+const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'rolling', 'flinching', 'dying', 'interacting']
 
 /** 姿态公式区分持械/空手的状态（其余状态两种变体姿态相同，只列出一份） */
 const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']

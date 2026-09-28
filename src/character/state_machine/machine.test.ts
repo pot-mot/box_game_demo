@@ -8,6 +8,7 @@ import {ROLL_COOLDOWN} from '../combat/roll_skill.ts'
 import {createTestWeaponRuntime, TEST_WEAPON_CHARGE_HOLD} from '../combat/test_weapon.ts'
 import {SPEAR_CHARGE_HOLD, spearChargeThrustId} from '../weapon/melee_special_moves.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
+import {INTERACTION_DURATION} from '../interaction/types.ts'
 import type {CharacterEntity} from '../types.ts'
 
 const DT = 1 / 60
@@ -610,5 +611,28 @@ describe('受击硬直与保护窗口', () => {
         expect(e.stateMachine.currentState).toBe('idle')
         /* 退出时挂免硬直窗口（状态机不递减，由 world 主循环递减），防无限连段锁死 */
         expect(e.combat.flinchImmunityTimer).toBeCloseTo(FLINCH_IMMUNITY_DURATION)
+    })
+})
+
+describe('交互状态（interacting）', () => {
+    it('交互脉冲 + 目标活跃时进入 interacting，动作时长后回到 idle', () => {
+        const e = makeMock()
+        e.interactTargetActive = true
+        e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('interacting')
+        /* 逐帧推进直到超过 INTERACTION_DURATION（限帧防死循环） */
+        for (let i = 0; i < Math.ceil(INTERACTION_DURATION / DT) + 4 && e.stateMachine.currentState === 'interacting'; i++) {
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.stateMachine.currentState).toBe('idle')
+    })
+
+    it('无交互目标时交互键不进入 interacting', () => {
+        const e = makeMock()
+        e.interactTargetActive = false
+        e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('idle')
     })
 })

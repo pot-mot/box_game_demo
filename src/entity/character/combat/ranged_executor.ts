@@ -10,6 +10,7 @@ import type {DamageType} from '../../../character/combat/damage_type.ts'
 import {applyDamage, isDamageImmune} from '../../../character/combat/damage.ts'
 import {applyExplosionDamage} from '../../../character/combat/explosion.ts'
 import {resolvePhases} from '../../../character/combat/attack_phases.ts'
+import type {WorldDamageTarget} from '../../../character/combat/world_targets.ts'
 import {DEFAULT_BULLET_PASS_THROUGH_CATEGORIES, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import {
     collisionCategoryMask,
@@ -86,6 +87,7 @@ const blocksBullet = (collider: RAPIER.Collider, passThroughMask: number): boole
 export const createRangedExecutor = (
     shared: SharedWorld,
     scene: Scene,
+    getWorldTargets?: () => readonly WorldDamageTarget[],
 ): SkillExecutor & {
     updateBullets: (dt: number, allCharacters: readonly CharacterEntity[]) => void
     getBulletCount: () => number
@@ -245,7 +247,7 @@ export const createRangedExecutor = (
         applyExplosionDamage(
             x, y, z,
             bullet.explosionRadius, bullet.damage, bullet.damageType, bullet.knockbackForce,
-            owner, allCharacters,
+            owner, allCharacters, getWorldTargets?.() ?? [],
         )
     }
 
@@ -367,7 +369,33 @@ export const createRangedExecutor = (
                 }
             }
 
-            /* 2) 场景几何命中 —— 扫描「上一帧位置 → 当前位置」整段位移，
+            /* 2) 世界受击目标（可破坏道具）：按来源过滤，返回是否消费由目标决定 */
+            if (!hit) {
+                const worldTargets = getWorldTargets?.()
+                if (worldTargets !== undefined) {
+                    for (const wt of worldTargets) {
+                        if (wt.dead) continue
+                        if (Math.abs(bulletPos.x - wt.x) > wt.hx + BULLET_HIT_RADIUS
+                            || Math.abs(bulletPos.y - wt.y) > wt.hy + BULLET_HIT_RADIUS
+                            || Math.abs(bulletPos.z - wt.z) > wt.hz + BULLET_HIT_RADIUS) continue
+                        v3Set(_tmpVec, wt.x - bulletPos.x, 0, wt.z - bulletPos.z)
+                        const wlen = v3Length(_tmpVec)
+                        const hasDir = wlen > 0.0001
+                        const dirX = hasDir ? _tmpVec.x / wlen : 0
+                        const dirZ = hasDir ? _tmpVec.z / wlen : 0
+                        if (wt.onAttacked('ranged', bullet.damageType, bullet.damage, dirX, dirZ)) {
+                            if (bullet.explosionRadius > 0) {
+                                detonateAt(bullet, bulletPos.x, bulletPos.y, bulletPos.z, allCharacters)
+                            }
+                            removeBullet(i)
+                            hit = true
+                            break
+                        }
+                    }
+                }
+            }
+
+            /* 3) 场景几何命中 —— 扫描「上一帧位置 → 当前位置」整段位移，
              * 高速子弹因此不会穿过薄碰撞体；命中可穿过类别之外的场景几何即消失（爆炸子弹就地引爆） */
             if (!hit) {
                 const dx = bulletPos.x - bullet.prevX

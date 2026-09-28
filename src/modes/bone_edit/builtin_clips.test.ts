@@ -32,8 +32,8 @@ const presetPositions = (): ReadonlyMap<string, Vector3> => {
 describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
     it('覆盖全部基础状态与全部武器的攻击段（含全部持握模式）', () => {
         const library = getBuiltinClips()
-        /* 基础状态 9 + 近战全模式段 + 远程 9 */
-        expect(library.length).toBe(9 + MELEE_SEGMENT_COUNT + 9)
+        /* 基础状态 10 + 近战全模式段 + 远程 9 */
+        expect(library.length).toBe(10 + MELEE_SEGMENT_COUNT + 9)
         const meleeIds = new Set(entriesOf('近战攻击').map(entry => entry.id))
         const rangedIds = new Set(entriesOf('远程攻击').map(entry => entry.id))
         expect(meleeIds).toEqual(segmentIdsOf(Object.values(MELEE_WEAPON_PRESETS)))

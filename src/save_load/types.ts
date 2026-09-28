@@ -6,6 +6,9 @@ import type {ElasticBoxConfig, ElasticEntityContext} from '../entity/box/elastic
 import type {WaterBlockConfig, WaterEntityContext} from '../entity/area/water/types'
 import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/types'
 import type {BuildingGeneratorContext, BuildingWorldSaveData} from '../entity/building_generator/types/index.ts'
+import type {InteractableConfig, InteractableContext} from '../entity/interactable/types.ts'
+import type {ItemEntityContext} from '../entity/item/types.ts'
+import type {InventorySaveData} from '../inventory/types.ts'
 import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/common/types'
 import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
 import type {AttackConfig} from '../character/archetypes.ts'
@@ -18,8 +21,9 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  v4 起 character 增加基础防御 defense 与护甲装备 armor；
  *  v5 起 character 增加额外锁定点 lockPoints；
  *  v6 起 character 增加副手武器 offhand；
- *  v7 起新增 building_generator 实体（显式压缩体素 block 数据，均为可选字段，旧档加载时安全回退默认） */
-export const SAVE_FORMAT_VERSION = 7
+ *  v7 起新增 building_generator 实体（显式压缩体素 block 数据，均为可选字段，旧档加载时安全回退默认）；
+ *  v8 起新增 interactable / item 实体与 play 背包 inventory、传送点 teleports（modeInfo.play），均为可选，旧档安全回退 */
+export const SAVE_FORMAT_VERSION = 8
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -110,9 +114,31 @@ export interface SavableBuildingGenerator {
     worlds: BuildingWorldSaveData[]
 }
 
+/** 交互物：显式配置 + 运行态（进度 / 开关 / 容器内容 / 生命） */
+export interface SavableInteractable {
+    type: 'interactable'
+    config: InteractableConfig
+    position: Vec3JSON
+    yawQuarter: number
+    progress: number
+    target: number
+    on: boolean
+    /** 容器内容（仅 chest；缺省 = 空容器） */
+    container?: InventorySaveData
+    health: number
+}
+
+/** 掉落物：物品定义 id + 数量 + 世界变换 */
+export interface SavableItem {
+    type: 'item'
+    config: {defId: string; count: number}
+    position: Vec3JSON
+    quaternion: QuatJSON
+}
+
 export type SavableEntity = SavableCommonBox | SavableDestructibleBox | SavableBurningBox
     | SavableMagnetBox | SavableElasticBox | SavableWaterBlock | SavableTerrain
-    | SavableFragment | SavableBuildingGenerator | SavableCharacter
+    | SavableFragment | SavableBuildingGenerator | SavableInteractable | SavableItem | SavableCharacter
 
 // ── 角色 ──
 
@@ -173,6 +199,10 @@ export interface ModeInfoJSON {
     }
     play?: {
         cameraInfo?: CameraInfoJSON
+        /** 玩家背包（可选；旧档缺失 = 空背包） */
+        inventory?: InventorySaveData
+        /** 已解锁传送点键（可选；旧档缺失 = 未解锁） */
+        teleports?: string[]
     }
     boneEdit?: {
         cameraInfo?: CameraInfoJSON
@@ -222,4 +252,6 @@ export type EntitySourceMap = {
     'character': CharacterEntitySystem
     'terrain': TerrainContext
     'building_generator': BuildingGeneratorContext
+    'interactable': InteractableContext
+    'item': ItemEntityContext
 }

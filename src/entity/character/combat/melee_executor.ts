@@ -9,6 +9,7 @@ import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from '.
 import type {CharacterModel} from '../appearance/types.ts'
 import type {WeaponLocalHitBox} from '../appearance/weapon_mesh.ts'
 import type {MeleeDetectBox, MeleeWeaponConfig} from '../../../character/weapon/melee_weapon.ts'
+import type {WorldDamageTarget} from '../../../character/combat/world_targets.ts'
 
 const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
 const _tmpVec3 = new Vector3()
@@ -117,6 +118,7 @@ export const createMeleeExecutor = (
     getModel: (id: number) => CharacterModel | undefined,
     getFacingAngle: (id: number) => number,
     onHit?: MeleeHitCallback,
+    getWorldTargets?: () => readonly WorldDamageTarget[],
 ): MeleeExecutor => {
     /** 命中窗口状态（主手 / 副手各一）：由攻击动画事件轨道（hitbox_on/off）开关 */
     let mainWindowActive = false
@@ -213,6 +215,29 @@ export const createMeleeExecutor = (
                         target.body.translation(),
                         true,
                     )
+                }
+            }
+
+            /* 世界受击目标（可破坏道具）：按来源类别过滤，返回是否消费由目标决定 */
+            const worldTargets = getWorldTargets?.()
+            if (worldTargets !== undefined) {
+                for (const wt of worldTargets) {
+                    if (wt.dead) continue
+                    if (combat.attackedTargets.has(wt.key)) continue
+                    if (!obbIntersect(
+                        obbFromTransform(elements, local.center, local.half),
+                        yawOBB(wt.x, wt.y, wt.z, wt.hx, wt.hy, wt.hz, wt.yaw),
+                    )) continue
+
+                    v3Set(_tmpVec, wt.x - wx, 0, wt.z - wz)
+                    const wlen = Math.hypot(_tmpVec.x, _tmpVec.z)
+                    const whasDir = wlen > 0.0001
+                    const wdirX = whasDir ? _tmpVec.x / wlen : 0
+                    const wdirZ = whasDir ? _tmpVec.z / wlen : 0
+                    if (wt.onAttacked('melee', slotWeapon.damageType, damage, wdirX, wdirZ)) {
+                        combat.attackedTargets.add(wt.key)
+                        onHit?.(wx, wy, wz)
+                    }
                 }
             }
         }

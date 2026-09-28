@@ -7,6 +7,7 @@ const SPAWN_MODES: SpawnMode[] = [
     'character',
     'terrain',
     'building_generator',
+    'interactable',
 ]
 
 export const setupSpawnModeManager = (): {
