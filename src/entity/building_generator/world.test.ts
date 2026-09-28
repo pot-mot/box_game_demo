@@ -4,6 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld} from '../../physics/world.ts'
 import {collectWorldState} from '../../save_load/serialize.ts'
 import {loadWorldFromData} from '../../save_load/deserialize.ts'
+import {SAVE_FORMAT_VERSION} from '../../save_load/types.ts'
 import type {EntityInfoSource} from '../box/base/types/entity_info.ts'
 import {getBlock} from './grid/block_world.ts'
 import {setupBuildingGenerator} from './world.ts'
@@ -254,7 +255,7 @@ describe('building_generator 建筑世界', () => {
         ctx.add(HOUSE, 1, 0, 2)
         const systems = new Map<string, EntityInfoSource>([['building_generator', ctx]])
         const data = collectWorldState(systems, [], 'edit')
-        expect(data.version).toBe(7)
+        expect(data.version).toBe(SAVE_FORMAT_VERSION)
         expect(data.entities.length).toBe(1)
 
         const ctx2 = setupBuildingGenerator(new Scene(), createSharedWorld())

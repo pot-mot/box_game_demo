@@ -20,6 +20,8 @@ const TYPE_GROUPS = {
     terrain: 'Terrain',
     'building_generator': 'Building',
     'fragment/common': 'Fragment',
+    'interactable': 'Interactable',
+    item: 'Item',
 } as const satisfies Record<EntityType, string>
 
 const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElement => {

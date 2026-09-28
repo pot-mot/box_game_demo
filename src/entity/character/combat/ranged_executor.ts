@@ -4,6 +4,7 @@ import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
+import type {WorldDamageTarget} from '../../../character/combat/world_targets.ts'
 import {resolvePhases} from '../../../character/combat/attack_phases.ts'
 import {createProjectileSystem} from '../projectile/system.ts'
 
@@ -31,12 +32,13 @@ const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
 export const createRangedExecutor = (
     shared: SharedWorld,
     scene: Scene,
+    getWorldTargets?: () => readonly WorldDamageTarget[],
 ): SkillExecutor & {
     updateBullets: (dt: number, allCharacters: readonly CharacterEntity[]) => void
     getBulletCount: () => number
     clear: () => void
 } => {
-    const projectiles = createProjectileSystem(shared, scene)
+    const projectiles = createProjectileSystem(shared, scene, getWorldTargets)
     const firedThisAttack = new Set<number>()
     const attackDirections = new Map<number, {dx: number; dz: number}>()
 

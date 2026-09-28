@@ -1,6 +1,7 @@
 import {v3Set, v3Length, type RapVector3} from '../../physics/rapier_utils.ts'
 import type {CharacterEntity} from '../types.ts'
 import type {DamageType} from './damage_type.ts'
+import type {WorldDamageTarget} from './world_targets.ts'
 import {applyDamage, isDamageImmune} from './damage.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
@@ -16,6 +17,7 @@ export const applyExplosionDamage = (
     knockbackForce: number,
     sourceEntity: CharacterEntity,
     allCharacters: readonly CharacterEntity[],
+    worldTargets: readonly WorldDamageTarget[] = [],
 ): void => {
     for (const target of allCharacters) {
         if (target.id === sourceEntity.id || target.combat.isDead) continue
@@ -53,5 +55,18 @@ export const applyExplosionDamage = (
             target.body.translation(),
             true,
         )
+    }
+
+    /* 世界受击目标（可破坏道具）：按来源类别过滤结算 */
+    for (const wt of worldTargets) {
+        if (wt.dead) continue
+        v3Set(_dir, wt.x - centerX, wt.y - centerY, wt.z - centerZ)
+        const dist = v3Length(_dir)
+        if (dist > radius || dist < 0.0001) continue
+        const falloff = 1 - dist / radius
+        const dmg = Math.max(1, Math.ceil(damage * falloff))
+        const hLen = Math.hypot(_dir.x, _dir.z)
+        const hasDir = hLen > 0.0001
+        wt.onAttacked('explosion', damageType, dmg, hasDir ? _dir.x / hLen : 0, hasDir ? _dir.z / hLen : 0)
     }
 }

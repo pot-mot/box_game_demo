@@ -17,6 +17,7 @@ import {attackingHandler} from './states/attacking/index.ts'
 import {dyingHandler} from './states/dying.ts'
 import {rollingHandler} from './states/rolling.ts'
 import {flinchingHandler} from './states/flinching.ts'
+import {interactingHandler} from './states/interacting.ts'
 import {updateGroundTimers} from './ground.ts'
 
 const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
@@ -28,6 +29,7 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     dying: dyingHandler,
     rolling: rollingHandler,
     flinching: flinchingHandler,
+    interacting: interactingHandler,
 }
 
 export const createCharacterStateMachine = (): CharacterStateMachine => {
@@ -35,7 +37,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     let previousState: CharacterState | null = null
     let stateTime = 0
     let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
-    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false}
+    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false, interact: false}
 
     const makeContext = (entity?: CharacterEntity): MachineContext => {
         let attackPhase: string | undefined
@@ -55,7 +57,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         }
     }
 
-    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number, attackHeld?: boolean): void => {
+    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean): void => {
         input.dx = dx
         input.dz = dz
         input.jump = jump
@@ -64,6 +66,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.attackKey = attackKey
         input.attackHoldDuration = attackHoldDuration ?? 0
         input.attackHeld = attackHeld ?? false
+        input.interact = interact ?? false
     }
 
     const update = (dt: number, entity: CharacterEntity): void => {
@@ -116,6 +119,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.attackKey = undefined
         input.attackHoldDuration = 0
         input.attackHeld = false
+        input.interact = false
     }
 
     return {

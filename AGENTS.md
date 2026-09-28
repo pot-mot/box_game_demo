@@ -110,8 +110,11 @@
 
 8. **程序化网格构建器** — 武器与护甲的外观模型共用 `entity/character/appearance/mesh_builder.ts` 的 `createMeshBuilder()`：它提供几何 / 材质工厂（`box` / `cylinder` / `sphere` / `cone` / `material`）与组装接口（`add` / `faceBox`），统一登记并 `dispose` 释放，取代原先 `weapon_mesh` 的模块级 `begin()` 共享数组。`weapon_mesh` 与 `armor_mesh` 的每个模型都是**独立参数化 `gen` 函数**（接收 `(builder, 参数)`，各自拼装部件），派发表只做 id → gen 的映射；护甲 gen 的尺寸参数来自 `PRESET_PART_SIZES` 的关节基准部件，武器 gen 的参数来自自身 `WeaponMeshConfig`。**新增/修改武器或护甲外观只改对应 gen**，不要重建通用构建逻辑。
 
-## 项目结构
+9. **交互系统** — `character/interaction/` 为纯类型层（`InteractionTarget` / `InteractionProvider`、时长常量）；`entity/interactable/` 与 `entity/item/` 实现 `InteractionProvider`，由 `modes/play/interaction/` 汇总候选（距离 + 镜头偏角）并在角色进入 `interacting` 状态的动作进度 50%（`INTERACTION_ACTIVATE_TIME`）时激活；`interacting` 状态由 `input.interact`（默认 F）脉冲 + `entity.interactTargetActive` 守卫触发，动画为 `pose_fns` 的程序化姿态。edit 模式经交互物面板按钮 / `interact` 快捷键主动触发。可破坏道具按来源类别（`BreakableSource` = melee/ranged/explosion/roll）过滤：角色系统 `registerWorldDamageTargets` 注册提供者，近战 / 远程 / 爆炸 / 翻滚命中路径投递，行为侧按 `breakableBy` 决定是否扣血。
 
+10. **背包与箱庭子系统** — `inventory/` 为纯领域层（items 目录 + grid 俄罗斯方块布局 + inventory 增删装备），UI 在 `modes/play/inventory_ui/`（环绕式装备槽 + `equipment_ui` 的独立模型预览，惰性创建避免额外 WebGL 上下文），编排在 `modes/play/hakoniwa.ts`（输入事件驱动，不占每帧 updater；地图/传送/脱困同处）。装备应用走 `characterSystem.updateCharacterConfig`（主手/副手武器 + 四槽护甲），与角色战斗数值互通；背包 / 传送点持久化于 `modeInfo.play`（`inventory` / `teleports`），旧档缺失安全回退。
+
+## 项目结构
 ```
 src/
 ├── types/                       # 通用类型定义
@@ -119,10 +122,11 @@ src/
 ├── render/                      # Three.js 渲染（materials/ 为基础表面材质库）
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
+│   ├── interaction/             # 交互领域模型（InteractionTarget/Provider 抽象、交互时长常量）
 │   ├── weapon/                  # 武器模组（武器类/模型分层 weapon_class + 持握模式 hold_mode / 攻击链：attack_chain（含段→pose 组合 SegmentPoseLayer）/ melee_attacks / ranged_attacks / catalog / weapon_runtime / attack_clip_data（基础关键帧）/ attack_pose_edits（逐段姿势修订））
-│   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害/攻击类别与防御、翻滚技能与无敌帧）
+│   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害/攻击类别与防御、翻滚技能与无敌帧、world_targets 世界受击目标）
 │   ├── armor/                   # 护甲 / 肢体领域模型（护甲四槽 head/chest/arms/legs + 肢体四槽 head/arms/body/legs；共享数值与外观机制；预设 armor_pieces / limb_pieces，目录与装备表校验 catalog，类型 types）
-│   └── state_machine/states/    # idle / walking / jumping / falling / attacking（段子状态机）/ dying / rolling（翻滚，中段无敌帧）/ flinching
+│   └── state_machine/states/    # idle / walking / jumping / falling / attacking（段子状态机）/ dying / rolling（翻滚，中段无敌帧）/ flinching / interacting（交互）
 ├── entity/
 │   ├── character/               # 角色实体
 │   │   ├── skeleton/            # 角色骨架定义（人形预设 preset.ts + PRESET_PART_SIZES + preset_appearance.ts，引用 entity/skeleton）
@@ -130,15 +134,23 @@ src/
 │   │   ├── combat/              # 近战执行器 / 开火控制（ranged_executor）
 │   │   └── projectile/          # 弹丸分包（物理·视觉·命中·特效·对象池；独立 build 模块 mesh.ts）
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（小球/菱形、面板、桥接；人形无关，预设由外部注入）
-│   ├── building_generator/      # 建筑生成器（体素网格 / 生成配方 / 分块面剔除渲染 / 距离卸载 / 近处合并 trimesh 物理）
+│   ├── interactable/            # 交互物实体系统（9 类交互物行为 behaviors + 信号联动 + 可破坏战斗集成 + 程序化网格 + 编辑面板）
+│   ├── item/                    # 掉落物实体系统（sensor body 漂浮小立方体，拾取经交互）
+│   ├── building_generator/      # 建筑生成器（体素网格 / 生成配方 structures + 结构原语 architecture / 分块面剔除渲染 / 距离卸载 / 近处合并 trimesh 物理）
 │   ├── box/                     # common / destructed / burning / magnet / elasticity
 │   ├── fragment/common/         # 碎片实体
 │   ├── destroyed/               # Voronoi 断裂算法
 │   ├── area/water/              # 水方块
 │   └── terrain/                 # Trimesh 地形（高度数组生成，heightfield 禁用）
+├── inventory/                   # 背包与物品领域模型（items 目录 / grid 俄罗斯方块布局 / inventory 增删装备 / 存档转换）
 ├── modes/
 │   ├── edit/                    # 编辑模式（轨道相机、键盘、指针交互）
-│   ├── play/                    # 游玩模式（第三人称、状态机驱动、中键镜头锁定）
+│   ├── play/                    # 游玩模式（第三人称、状态机驱动、中键镜头锁定、交互/背包/装备/地图/脱困）
+│   │   ├── interaction/         # 交互目标解析、提示与激活编排
+│   │   ├── inventory_ui/        # 俄罗斯方块背包面板（环绕式装备槽宿主）
+│   │   ├── equipment_ui/        # 装备模型预览（独立小场景，拖拽旋转）
+│   │   ├── map_ui/              # 地图面板（俯视绘制、传送选点）
+│   │   └── hakoniwa.ts          # 箱庭子系统装配（背包/装备/地图/传送/脱困）
 │   ├── showcase/                # 展示模式（攻击动作展示台，复现生产动画时序）
 │   ├── startup_screen.ts
 │   └── free_flight.ts
@@ -179,6 +191,14 @@ src/
 | [`docs/play_mode.md`](docs/play_mode.md) | 游玩模式：第三人称相机、镜头锁定（中键、选取与脱锁规则）、验证方式 |
 | [`docs/projectile_system.md`](docs/projectile_system.md) | 弹丸系统分包：分层与数据流、视觉映射表、降低重力、对象池、范围伤害特效、扩展指南与测试 |
 | [`docs/building_system.md`](docs/building_system.md) | 建筑生成系统：体素 chunk 存储与 RLE 压缩存档、贪心网格合并与粗 LOD 分块渲染、距离卸载、近处合并 trimesh 物理、建造笔刷（体素/道具/区域填充/材质替换/预制体）、自由道具、基础表面材质库 |
+| [`docs/hakoniwa/00_总览.md`](docs/hakoniwa/00_总览.md) | 箱庭游玩模式总览：目标、复用 play 模式的集成策略、模块结构、依赖方向、阶段划分与验收基线 |
+| [`docs/hakoniwa/01_交互系统.md`](docs/hakoniwa/01_交互系统.md) | 交互系统：F 交互输入、`interacting` 状态与骨骼动画、目标解析与提示、edit 主动触发 |
+| [`docs/hakoniwa/02_交互物.md`](docs/hakoniwa/02_交互物.md) | 交互物子系统：9 类交互物行为、信号联动、可破坏道具与战斗来源过滤、存档 |
+| [`docs/hakoniwa/03_背包与物品.md`](docs/hakoniwa/03_背包与物品.md) | 背包与物品：物品目录与俄罗斯方块形状、格子布局、掉落/拾取、背包 UI 与存档 |
+| [`docs/hakoniwa/04_装备系统.md`](docs/hakoniwa/04_装备系统.md) | 装备 UI：模型展示预览与环绕式装备槽、与物品子系统互通 |
+| [`docs/hakoniwa/05_地图与传送与脱困.md`](docs/hakoniwa/05_地图与传送与脱困.md) | 地图面板、传送点解锁与选点、存档点重生、脱困 |
+| [`docs/hakoniwa/06_箱庭生成器.md`](docs/hakoniwa/06_箱庭生成器.md) | 建筑结构原语（楼梯/旋转楼梯/斗拱/斜屋顶/廊桥/支柱）与顶层箱庭配方 |
+| [`docs/hakoniwa/07_存档与兼容.md`](docs/hakoniwa/07_存档与兼容.md) | 箱庭相关存档字段、版本推进与旧档兼容策略 |
 | [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 骨骼动画动作调优规范：坐标系与朝向、关节总表、旋转符号速查（肘前折/膝后折）、阶段与相位、动作→改动位置映射、提示词模版、三持握模式与副手槽、陷阱。同目录逐个动作建档（`武器名-攻击段名.md` / `动作名.md`） |
@@ -199,7 +219,7 @@ src/
 - rapier3d-compat 的休眠 body 无视 velocity 写入，操作 velocity 前必须 `body.wakeUp()`（`setLinvel(vel, true)` 第二参数同样会唤醒，本项目一律传 `true`）
 - 角色 collider 是**竖直胶囊**（半径 = `CHARACTER_BASE_SIZE.width/2`，总高 = `height`），不是 cuboid。平底 cuboid 在 trimesh 地形上坡时会跨网格顶点线被内部棱幽灵水平法线卡死（原地 walking 不动）；rapier3d-compat 0.19/0.20 的 `FIX_INTERNAL_EDGES` 已损坏（开启后 trimesh 完全无碰撞），禁止使用；heightfield 在该版本 wasm 直接崩溃，禁止使用（地形用 `RAPIER.ColliderDesc.trimesh` 生成）
 - 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击**阶段**子状态（`attacking_{segmentId}_{phaseName}`）通过 `states/attacking/index.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为；攻击**段**子状态不在此列——它由武器模组的段定义（含 `next` 转换）驱动，新增/调整段只改 `character/weapon/*_attacks.ts`
-- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 7`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，v5 起增加可选锁定点 `lockPoints`，v6 起增加可选副手武器 `offhand` 与持握模式 `holdMode`，v7 起增加可选肢体组件 `limb`，旧档缺失时安全回退默认；未知副手武器 id 加载时安全丢弃）
+- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 8`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，v5 起增加可选锁定点 `lockPoints`，v6 起增加可选副手武器 `offhand` 与持握模式 `holdMode`，v7 起增加可选肢体组件 `limb`，v7 起新增 `building_generator` 建筑实体，v8 起新增 `interactable` / `item` 实体与 play 背包 `inventory`、传送点 `teleports`（modeInfo.play），旧档缺失时安全回退默认；未知副手武器 id 加载时安全丢弃）
 - 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；`localStorage` 与导入文件中已有动作的绑定不会被新默认值覆盖（需「重置默认」或导入配置），缺失的动作（如版本新增）由 `loadFromStorageInternal` / 导入校验自动以默认值补齐
 - 鼠标动作按模式生效：`MOUSE_ACTIONS_BY_MODE` 决定操作设置面板中各模式可改的指针动作，"平移视角 / 生成物体" 默认同为右键但分属不同模式，改动其中一个需同步核对另一个的默认值
 - 武器挂点为两个零偏移关节 `rightWeaponMount` 与 `leftWeaponMount`（另有背部视觉挂点 `backWeaponMount`）：它们是可动画关节，模型按各自几何握点与固有旋转将主握点校正到挂点原点。自定义骨架缺关节时自动回退同名手腕关节。**手部与武器挂点是不同关节**：手部模型挂在 `rightHandPivot` / `leftHandPivot`，武器模型直接挂在腕下的武器挂点。`CharacterModel.equipWeapon` 对同一网格配置引用跳过重建（换模式只做挂背/回手换父节点），`setOffhandStowed` 不重建几何。
@@ -227,3 +247,9 @@ src/
 - 新增建筑碰撞体必须用 `categoryCollisionGroups(..., 'building')` 标注类别（`collision_category.ts` 新增类别位 `building = 1 << 11`）；碰撞组 `BUILDING_COLLISION_GROUP = 8`、掩码 `1 | 2`，碎片掩码已加入 8 使碎片能落在建筑上——漏标注会被 fail-closed 解析为 ground 并挡下子弹
 - 建筑存档（v7）用**显式 palette + 每 chunk RLE(Base64)**，校验层对 `worlds` / `chunks` / `palette` 非法输入一律 `.catch([])` 回退为空、未知材质 id 解码时回退为空，禁止抛错；生成配方仅为创作期便利，载入以显式体素为准
 - 建筑笔刷启用时必须关闭 `pointer` 的实体选中 / 生成交互（`pointer.setEnabled(false)`），否则左键会同时触发选中 / 生成与体素放置；体素拾取 `pickBlock` 只对**当前可见**的 chunk 网格有效，已距离卸载的 chunk 不可编辑（再次靠近自动重建后即可）
+- 新增输入动作（`interact` / `open_inventory` / `open_equipment` / `open_map`）必须同步 `INPUT_ACTIONS` / `ACTION_LABELS` / `ACTION_GROUPS` / `DEFAULT_BINDINGS` / `registry.test.ts` 的 `EXPECTED_DEFAULTS`（类型穷尽会编译报错）；play 交互脉冲由 `modes/play/interaction/` 每帧读取，且 `interaction.update(dt)` **必须早于 `characterSystem.update(dt)`**，否则交互脉冲晚一帧、目标守卫失效。脱困不设快捷键，走右上角设置菜单「传送至最近存档点」（`setupSettingsPanel` 第三参）
+- 交互物 / 掉落物碰撞体必须 `categoryCollisionGroups(group, mask, 'interactable' | 'item')`（`interactable = 1<<12`、`item = 1<<13`）；掉落物是 `setSensor(true)` + 掩码 0（不参与物理），拾取走邻近交互而非碰撞。交互物可动件（门 / 闸门 / 升降梯）用 `kinematicPositionBased` body，视觉根保持基准、只移动具名子节点并同步 `setNextKinematicTranslation`
+- 交互物外观经 `mesh_builder` 的 `add(geometry, material, ...)` 传入**共享表面材质**（`getSurfaceMaterial`），`meshDispose` 只释放 builder 登记的几何（共享材质不得 dispose）；行为层通过 `group.getObjectByName('door' | 'gate' | 'platform' | 'lid' | ...)` 取可动子节点
+- 背包 / 传送点持久化在 `modeInfo.play`（`inventory` / `teleports`，非 character 存档），保存时由 `main.ts` 合并 `hakoniwa.getSaveData()`；`inventoryFromSave` 对未知 defId / 越界格位 / 未知装备槽安全回退，未知 defId 的掉落物拾取时丢弃。装备应用（`hakoniwa.applyEquipment`）走 `updateCharacterConfig`：主手未装备武器时回退 `DEFAULT_WEAPON_ID`，副手 `null` 卸下，护甲汇总四槽 `ArmorLoadout`；**仅当背包有装备映射时才在启动时应用**，避免覆盖旧档 character 的武器配置
+- 装备模型预览（`modes/play/equipment_ui/preview.ts`）持有独立 `WebGLRenderer`，**必须惰性创建**（首次打开背包时），否则 play 启动即多出一个 `canvas`，且每个模式切换都会累积 WebGL 上下文
+- 箱庭建筑结构（`building_generator/generators/architecture.ts`）只能通过轴对齐 `BlockWriter.set/clear` 写入：旋转 / 镜像一律在结构函数内部做坐标变换（`rotateQuarter`），斜屋顶檐口外扩、楼梯每级高差 1、廊桥自动落支柱至地面；新增顶层配方登记到 `structures.ts` 的 `RECIPES`（未知配方回退 house）

@@ -6,6 +6,7 @@ const MODES: SpawnMode[] = [
     'character',
     'terrain',
     'building_generator',
+    'interactable',
 ]
 const MODE_LABELS: Record<SpawnMode, string> = {
     'box/common': 'Common',
@@ -17,6 +18,7 @@ const MODE_LABELS: Record<SpawnMode, string> = {
     'character': 'Character',
     'terrain': 'Terrain',
     'building_generator': 'Building',
+    'interactable': 'Interactable',
 }
 
 export const setupSpawnModePanel = (getSpawnMode: () => SpawnMode, onSelectMode: (mode: SpawnMode) => void): () => void => {

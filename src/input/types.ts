@@ -17,6 +17,12 @@ export const INPUT_ACTIONS = [
     'cycle_spawn_down',
     'delete_entity',
     'close_panel',
+    /* 交互：对最近的可交互物执行一次交互动作 */
+    'interact',
+    /* 箱庭子系统开关 */
+    'open_inventory',
+    'open_equipment',
+    'open_map',
     'save_world',
     'load_world',
     'mouse_orbit',
@@ -48,6 +54,10 @@ export const ACTION_LABELS: Record<InputAction, string> = {
     cycle_spawn_down: '下一个生成类型',
     delete_entity: '删除实体',
     close_panel: '关闭面板',
+    interact: '交互',
+    open_inventory: '打开背包',
+    open_equipment: '打开装备',
+    open_map: '打开地图',
     save_world: '导出存档',
     load_world: '导入存档',
     mouse_orbit: '旋转视角',
@@ -59,9 +69,9 @@ export const ACTION_LABELS: Record<InputAction, string> = {
 /** 动作分组 */
 export const ACTION_GROUPS: readonly { readonly name: string; readonly actions: readonly InputAction[] }[] = [
     {name: '移动', actions: ['move_forward', 'move_backward', 'move_left', 'move_right', 'move_up', 'move_down']},
-    {name: '角色', actions: ['jump', 'sprint', 'cycle_hold_mode']},
+    {name: '角色', actions: ['jump', 'sprint', 'cycle_hold_mode', 'interact']},
     {name: '编辑工具', actions: ['cycle_spawn_up', 'cycle_spawn_down']},
-    {name: 'UI', actions: ['delete_entity', 'close_panel']},
+    {name: 'UI', actions: ['delete_entity', 'close_panel', 'open_inventory', 'open_equipment', 'open_map']},
     {name: '系统', actions: ['save_world', 'load_world']},
 ]
 

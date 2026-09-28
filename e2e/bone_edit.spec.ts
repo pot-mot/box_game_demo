@@ -69,10 +69,10 @@ test.describe('骨骼动画编辑模式', () => {
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '骨骼动画'}).click()
         await expect(page.locator('#bone-timeline')).toBeVisible()
-        /* 内置条目总数 = 基础状态 9 + 近战 6 武器 × 3 持握模式 × 4 段 + 巨剑双手轻 3 + 远程 9 */
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-builtin-clip-count', '91')
+        /* 内置条目总数 = 基础状态 10（含交互）+ 近战 6 武器 × 3 持握模式 × 4 段 + 巨剑双手轻 3 + 远程 9 */
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-builtin-clip-count', '92')
         const builtinOptions = page.locator('#bone-anim-select option[data-builtin-id]')
-        await expect(builtinOptions).toHaveCount(91)
+        await expect(builtinOptions).toHaveCount(92)
         /* 抽取代表性条目：行走/跳跃/近战链段（含巨剑轻 3 与重击段）/远程技能 */
         for (const id of ['state/walking', 'state/jumping', 'short_sword_one_handed_light_1', 'heavy_sword_two_handed_light_3', 'long_sword_one_handed_heavy_1', 'long_sword_one_handed_heavy_2', 'longbow_shot']) {
             await expect(page.locator(`#bone-anim-select option[data-builtin-id="${id}"]`)).toBeAttached()

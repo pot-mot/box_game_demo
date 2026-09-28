@@ -18,6 +18,10 @@ export const idleHandler: StateHandler = {
     },
     exit: () => {},
     transitions: [
+        {
+            to: 'interacting',
+            guard: (input, entity) => input.interact && entity.interactTargetActive === true,
+        },
         { to: 'walking', guard: (input) => Math.hypot(input.dx, input.dz) > 0.001 },
         {
             to: 'attacking',
