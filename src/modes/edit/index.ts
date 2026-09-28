@@ -1,6 +1,9 @@
 import {type PerspectiveCamera, type Scene, type WebGLRenderer, type Object3D} from 'three'
 import type {EntityInfoSource} from '../../entity/box/base/types/entity_info.ts'
 import type {TerrainContext} from '../../entity/terrain/base/types'
+import type {BuildingGeneratorContext} from '../../entity/building_generator/types/index.ts'
+import {createBuildingBrush} from '../../entity/building_generator/edit/brush.ts'
+import {setupBuildingBrushPanel} from '../../entity/building_generator/ui/brush_panel.ts'
 import type {SpawnMode} from '../../types/spawnMode.ts'
 import {setupMouseOrbit, setupKeyboardCamera} from '../camera_common.ts'
 import {setupSpawnModeManager} from './spawn_mode.ts'
@@ -30,6 +33,7 @@ export const setupEditMode = (
     systems: EntityInfoSource[],
     terrainSources: TerrainContext[],
     _terrainSource: TerrainContext,
+    building: BuildingGeneratorContext,
     excludeFromBackground: (obj: Object3D) => void,
 ): EditModeController => {
     // 编辑控制
@@ -44,6 +48,12 @@ export const setupEditMode = (
     excludeFromBackground(gizmo.group)
 
     const pointer = setupPointerInteraction(camera, renderer, systems, spawnMode.getSpawnMode, terrainSources, gizmo, orbit.setEnabled)
+
+    /* 建造笔刷：启用时关闭实体选中 / 生成交互（相机旋转仍可用，拖拽不触发放置） */
+    const brush = createBuildingBrush(building, camera, renderer.domElement)
+    setupBuildingBrushPanel(brush, (enabled) => {
+        pointer.setEnabled(!enabled)
+    })
 
     keyboardCamera.setEnabled(true)
 

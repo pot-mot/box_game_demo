@@ -57,14 +57,17 @@ export const loadWorldFromData = (
     const elastic = getSource('box/elasticity')
     const water = getSource('area/water')
     const frag = getSource('fragment/common')
+    const building = getSource('building_generator')
     const character = getSource('character')
     const terrain = terrainSources[0]
     /* v1 旧档：character 位置为身体中心，需下移半高迁移到脚底原点语义（v2 起即为脚底原点，不再迁移） */
     const legacyCharacterPos = (data.version ?? 1) < 2
 
     for (const entity of data.entities) {
-        const [x, y, z] = entity.position
-        const quat = entity.quaternion ? {x: entity.quaternion[0], y: entity.quaternion[1], z: entity.quaternion[2], w: entity.quaternion[3]} : undefined
+        /* building_generator 无独立变换字段（origin 在 worlds 内），此处回退零值占位 */
+        const [x, y, z] = 'position' in entity ? entity.position : [0, 0, 0] as [number, number, number]
+        const rawQuat = 'quaternion' in entity ? entity.quaternion : undefined
+        const quat = rawQuat ? {x: rawQuat[0], y: rawQuat[1], z: rawQuat[2], w: rawQuat[3]} : undefined
         switch (entity.type) {
             case 'box/common':
                 common?.add(entity.config, x, y, z, quat)
@@ -101,6 +104,9 @@ export const loadWorldFromData = (
                 }
                 break
             }
+            case 'building_generator':
+                building?.loadSaveWorlds(entity.worlds)
+                break
             case 'fragment/common': {
                 const fd = jsonToFragmentData(entity.data)
                 if (fd.hullVertices.length === 0 || fd.hullFaces.length === 0) break

@@ -116,7 +116,7 @@
 src/
 ├── types/                       # 通用类型定义
 ├── physics/                     # 共享物理世界（rapier3d-compat）
-├── render/                      # Three.js 渲染
+├── render/                      # Three.js 渲染（materials/ 为基础表面材质库）
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
 │   ├── weapon/                  # 武器模组（武器类/模型分层 weapon_class + 持握模式 hold_mode / 攻击链：attack_chain（含段→pose 组合 SegmentPoseLayer）/ melee_attacks / ranged_attacks / catalog / weapon_runtime / attack_clip_data（基础关键帧）/ attack_pose_edits（逐段姿势修订））
@@ -128,6 +128,7 @@ src/
 │   │   ├── skeleton/            # 角色骨架定义（人形预设 preset.ts + PRESET_PART_SIZES + preset_appearance.ts，引用 entity/skeleton）
 │   │   └── appearance/          # 方块人外观（统一模型构建器：预设骨架→Group 层级→部件装配，含手部与护甲 armor_mesh）+ 动画/武器装配
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（小球/菱形、面板、桥接；人形无关，预设由外部注入）
+│   ├── building_generator/      # 建筑生成器（体素网格 / 生成配方 / 分块面剔除渲染 / 距离卸载 / 近处合并 trimesh 物理）
 │   ├── box/                     # common / destructed / burning / magnet / elasticity
 │   ├── fragment/common/         # 碎片实体
 │   ├── destroyed/               # Voronoi 断裂算法
@@ -160,6 +161,8 @@ src/
 
 5. **常量集中** — 各分包的 magic number 必须提取到对应的 `constants.ts`，禁止散落在函数体内。
 
+6. **建筑体素系统** — `entity/building_generator/` 以「建筑世界」为实体、内部承载数万体素 block：数据为稀疏 `Map<chunkKey, Uint8Array>`（0=空，1..7=`render/materials/` 的材质索引），渲染按 `CHUNK_SIZE³` 分块做**贪心网格合并**（同材质矩形面合并，UV 以格展开配合可平铺纹理），每 chunk 一个 `Mesh` + 按材质分组的共享材质单例（draw call = chunk 内材质数，通常 1–3），并做两级绘制（近处全细节、中距离按 `LOD_STRIDE` 降采样为粗 LOD）、超出 `LOD_CHUNK_RADIUS + 滞回` 距离卸载（只释放 GPU 几何、保留体素数据）；近处 chunk 合并为 trimesh collider。静态建筑不参与物理步进，其可见性更新由 `main.ts` 每帧调用 `updateView(camera, dt)`（对「帧内逻辑集中在 preSync」的有意例外）；生成配方仅用于创作期，存档以显式 RLE 体素数据为准。编辑模式提供体素拾取与笔刷工具（放置 / 擦除 / 道具 / 区域填充 / 区域替换 / 预制体，`building_generator/edit/brush.ts`，启用时关闭实体选中 / 生成交互）；区域类工具第一次单击后显示预览线框、选中世界显示包围盒高亮（`render/overlay.ts`），建筑面板提供道具列表编辑与全建筑材质替换；自由道具（门 / 窗 / 栅栏 / 灯笼，`props/kinds.ts` + `render/prop_mesh.ts`）为纯视觉装饰，不建碰撞体、不进 `getMeshes()`。
+
 ## 文档
 
 项目文档统一存放在 `docs/` 目录，修改相关功能前务必先阅读对应文档、修改完成后及时更新。
@@ -172,6 +175,7 @@ src/
 | [`docs/equipment_system.md`](docs/equipment_system.md) | 装备与防御系统：攻击类别（物理/魔法）、护甲槽位与预设、防御固定减伤与存档兼容 |
 | [`docs/melee_hold_modes.md`](docs/melee_hold_modes.md) | 近战三持握模组改造：武器类/模型分层、副手装备槽与挂背、段 id 约定、分阶段实施与验收清单 |
 | [`docs/play_mode.md`](docs/play_mode.md) | 游玩模式：第三人称相机、镜头锁定（中键、选取与脱锁规则）、验证方式 |
+| [`docs/building_system.md`](docs/building_system.md) | 建筑生成系统：体素 chunk 存储与 RLE 压缩存档、贪心网格合并与粗 LOD 分块渲染、距离卸载、近处合并 trimesh 物理、建造笔刷（体素/道具/区域填充/材质替换/预制体）、自由道具、基础表面材质库 |
 | [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 骨骼动画动作调优规范：坐标系与朝向、关节总表、旋转符号速查（肘前折/膝后折）、阶段与相位、动作→改动位置映射、提示词模版、三持握模式与副手槽、陷阱。同目录逐个动作建档（`武器名-攻击段名.md` / `动作名.md`） |
@@ -192,7 +196,7 @@ src/
 - rapier3d-compat 的休眠 body 无视 velocity 写入，操作 velocity 前必须 `body.wakeUp()`（`setLinvel(vel, true)` 第二参数同样会唤醒，本项目一律传 `true`）
 - 角色 collider 是**竖直胶囊**（半径 = `CHARACTER_BASE_SIZE.width/2`，总高 = `height`），不是 cuboid。平底 cuboid 在 trimesh 地形上坡时会跨网格顶点线被内部棱幽灵水平法线卡死（原地 walking 不动）；rapier3d-compat 0.19/0.20 的 `FIX_INTERNAL_EDGES` 已损坏（开启后 trimesh 完全无碰撞），禁止使用；heightfield 在该版本 wasm 直接崩溃，禁止使用（地形用 `RAPIER.ColliderDesc.trimesh` 生成）
 - 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击**阶段**子状态（`attacking_{segmentId}_{phaseName}`）通过 `states/attacking/index.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为；攻击**段**子状态不在此列——它由武器模组的段定义（含 `next` 转换）驱动，新增/调整段只改 `character/weapon/*_attacks.ts`
-- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 6`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，v5 起增加可选锁定点 `lockPoints`，v6 起增加可选副手武器 `offhand` 与持握模式 `holdMode`，旧档缺失时安全回退默认；未知副手武器 id 加载时安全丢弃）
+- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 7`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，v5 起增加可选锁定点 `lockPoints`，v6 起增加可选副手武器 `offhand` 与持握模式 `holdMode`，v7 起新增可选 `building_generator` 建筑实体（显式 RLE 体素数据），旧档缺失时安全回退默认；未知副手武器 id 加载时安全丢弃）
 - 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；`localStorage` 与导入文件中已有动作的绑定不会被新默认值覆盖（需「重置默认」或导入配置），缺失的动作（如版本新增）由 `loadFromStorageInternal` / 导入校验自动以默认值补齐
 - 鼠标动作按模式生效：`MOUSE_ACTIONS_BY_MODE` 决定操作设置面板中各模式可改的指针动作，"平移视角 / 生成物体" 默认同为右键但分属不同模式，改动其中一个需同步核对另一个的默认值
 - 武器挂点为两个零偏移关节 `rightWeaponMount` 与 `leftWeaponMount`（另有背部视觉挂点 `backWeaponMount`）：它们是可动画关节，模型按各自几何握点与固有旋转将主握点校正到挂点原点。自定义骨架缺关节时自动回退同名手腕关节。**手部与武器挂点是不同关节**：手部模型挂在 `rightHandPivot` / `leftHandPivot`，武器模型直接挂在腕下的武器挂点。`CharacterModel.equipWeapon` 对同一网格配置引用跳过重建（换模式只做挂背/回手换父节点），`setOffhandStowed` 不重建几何。
@@ -208,3 +212,9 @@ src/
 - 角色材质表面效果（受击闪红 / 翻滚无敌半透明白）统一走 `entity/character/combat_vfx/material_effects.ts`（惰性快照 → 按优先级覆写 → 全部结束统一还原；闪红优先于闪白，`transparent` 仅在真正变化时置 `needsUpdate`），禁止在别处直接改角色模型材质颜色/透明度或另建快照还原逻辑
 - 角色锁定点（`character/lock_point.ts`）：默认锁定点恒为身体最中心（`body.translation()`，不落数组），额外点 = 关节 id + **关节本地**偏移（`CharacterEntity.lockPoints`，面板「锁定点」区增删改、存档可选字段 `lockPoints`）；play 锁定选取按**锁定点**（而非角色）判定半径/角度，白点标记与相机瞄准点同为命中的数据点（同一 `getAimPoint`）。关节解析先 `updateWorldMatrix(true, false)` 再 `localToWorld`（动画刚写入 Group、`matrixWorld` 可能滞后），找不到关节的点跳过，锁定期间点被移除即自动解除
 - 战斗 AI 的导航避障把「除自身外所有角色」视为墙绕行；短近战武器攻击检测箱前缘（如短剑 ≈0.68m）小于导航前向探测 `DEFAULT_CHECK_DISTANCE = 1.5m`，贴脸前目标会先被判为墙——必须把**当前 combat target** 从导航感知排除，否则 AI 会环绕目标、永不进入 `attack`（两个近战 AI 互相绕圈直到 `chaseTimeout`）。实现：`NavRunContext.ignoredMesh`（`NavSensor.sense` 第 5 参），由 `world.ts` 每帧按 `activeFsm === 'combat' && combatTargetId` 设为目标 mesh；传感器在障碍列表与角色集合两处都跳过它，目标重叠/推挤由接触推挤闸门与强制分离兜底
+- 建筑体素的**跨 chunk 面剔除必须走 `block_world.getBlock`**（统一坐标查询），不能只看当前 chunk 的 `Uint8Array`，否则接缝会出现裂缝或重复面；chunk 网格 `dispose` 只释放 `geometry`，**共享材质单例（`getSurfaceMaterials`）不得 dispose**；贪心合并四边形按格展开 UV，材质必须 `RepeatWrapping` 的可平铺纹理（不可用图集，否则跨格采样错误）
+- 建筑 chunk 网格顶点必须**加上 chunk 的世界局部原点**（`greedyMesh` 的 `origin` 参数 = chunk 坐标 × cells）；漏加会让非零 chunk 的网格被渲染 / 碰撞到原点附近（典型表现：在某面放置方块后新块出现在远处、再次点击命中原面并覆盖同一格）
+- 建筑**距离卸载只释放 GPU 几何、必须保留体素数据**（再次靠近时按脏 chunk 重建，误清数据会丢建筑）；静态建筑不参与物理步进，可见性更新走 `building.updateView(camera, dt)`（`main.ts` 每帧在 `renderFrame` 前调用），**不要塞进 `preSync`**（物理暂停时不执行）
+- 新增建筑碰撞体必须用 `categoryCollisionGroups(..., 'building')` 标注类别（`collision_category.ts` 新增类别位 `building = 1 << 11`）；碰撞组 `BUILDING_COLLISION_GROUP = 8`、掩码 `1 | 2`，碎片掩码已加入 8 使碎片能落在建筑上——漏标注会被 fail-closed 解析为 ground 并挡下子弹
+- 建筑存档（v7）用**显式 palette + 每 chunk RLE(Base64)**，校验层对 `worlds` / `chunks` / `palette` 非法输入一律 `.catch([])` 回退为空、未知材质 id 解码时回退为空，禁止抛错；生成配方仅为创作期便利，载入以显式体素为准
+- 建筑笔刷启用时必须关闭 `pointer` 的实体选中 / 生成交互（`pointer.setEnabled(false)`），否则左键会同时触发选中 / 生成与体素放置；体素拾取 `pickBlock` 只对**当前可见**的 chunk 网格有效，已距离卸载的 chunk 不可编辑（再次靠近自动重建后即可）

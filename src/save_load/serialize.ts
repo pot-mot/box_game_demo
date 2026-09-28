@@ -169,6 +169,15 @@ export const collectWorldState = (
         }
     }
 
+    // 建筑生成器（显式压缩体素数据；无建筑时不写入）
+    const building = getSource('building_generator')
+    if (building?.getAll) {
+        const worlds = building.getSaveWorlds()
+        if (worlds.length > 0) {
+            entities.push({type: 'building_generator', worlds})
+        }
+    }
+
     // 角色
     const character = getSource('character')
     if (character?.getAll) {

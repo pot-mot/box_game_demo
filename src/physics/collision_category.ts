@@ -12,7 +12,7 @@
  */
 
 /** 碰撞类别枚举值列表（顺序即多类别碰撞体的解析优先级） */
-const COLLISION_CATEGORY_VALUES = ['ground', 'box', 'fragment', 'area', 'terrain', 'character'] as const
+const COLLISION_CATEGORY_VALUES = ['ground', 'box', 'fragment', 'area', 'terrain', 'character', 'building'] as const
 type CollisionCategory = typeof COLLISION_CATEGORY_VALUES[number]
 
 /** 类别 → membership 位（第 5 位起，避开既有交互组） */
@@ -23,6 +23,7 @@ const COLLISION_CATEGORY_BIT: Record<CollisionCategory, number> = {
     area: 1 << 8,
     terrain: 1 << 9,
     character: 1 << 10,
+    building: 1 << 11,
 }
 
 /** 从 `collisionGroups` 取 membership（高 16 位） */

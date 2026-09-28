@@ -6,6 +6,7 @@ const SPAWN_MODES: SpawnMode[] = [
     'area/water',
     'character',
     'terrain',
+    'building_generator',
 ]
 
 export const setupSpawnModeManager = (): {

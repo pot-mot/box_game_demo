@@ -18,6 +18,7 @@ const TYPE_GROUPS = {
     'box/elasticity': 'Box',
     'area/water': 'Area',
     terrain: 'Terrain',
+    'building_generator': 'Building',
     'fragment/common': 'Fragment',
 } as const satisfies Record<EntityType, string>
 
@@ -161,7 +162,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
     input.onActionDown('delete_entity', tryDeleteHovered)
 
     /** 需要按顺序渲染的分组 */
-    const GROUP_ORDER = ['Character', 'Box', 'Area', 'Terrain', 'Fragment']
+    const GROUP_ORDER = ['Character', 'Box', 'Area', 'Terrain', 'Building', 'Fragment']
     /** 分组容器 */
     const groupContainers = new Map<string, HTMLElement>()
 

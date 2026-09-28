@@ -17,6 +17,8 @@ import {DEFAULT_TERRAIN_CONFIG} from '../entity/terrain/base/validation.ts'
 import {DEFAULT_FRAGMENT_CONFIG} from '../entity/fragment/common/validation.ts'
 import {CHARACTER_CONFIG_DEFAULTS} from '../entity/character/constants.ts'
 import {HOLD_MODES} from '../character/weapon/hold_mode.ts'
+import {SURFACE_MATERIAL_IDS} from '../render/materials/ids.ts'
+import {BUILDING_PROP_KINDS} from '../entity/building_generator/props/kinds.ts'
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0])
 const Quat = z.tuple([z.number(), z.number(), z.number(), z.number()]).default([0, 0, 0, 1])
@@ -108,6 +110,34 @@ const SavableFragment = z.object({
         massRatio: 1,
         boxSize: [1, 1, 1] as [number, number, number],
     }),
+})
+
+/* 建筑生成器：显式体素数据。
+   非法结构整体回退空（运行时不生成 / 载入空建筑），不抛错；未知材质 id 由运行时安全跳过。 */
+const BuildingChunkSave = z.object({
+    key: z.tuple([z.number().int(), z.number().int(), z.number().int()]),
+    rle: z.string().default(''),
+})
+
+/* 自由道具：非法种类 / 材质回退为安全默认，不抛错 */
+const BuildingPropSave = z.object({
+    kind: z.enum(BUILDING_PROP_KINDS).catch('door'),
+    material: z.enum(SURFACE_MATERIAL_IDS).catch('rock'),
+    position: Vec3,
+    yawQuarter: z.number().int().min(0).max(3).default(0),
+})
+
+const BuildingWorldSave = z.object({
+    origin: Vec3,
+    yawQuarter: z.number().int().min(0).max(3).default(0),
+    palette: z.array(z.enum(SURFACE_MATERIAL_IDS)).catch([]).default([]),
+    chunks: z.array(BuildingChunkSave).catch([]).default([]),
+    props: z.array(BuildingPropSave).catch([]).default([]),
+})
+
+const SavableBuildingGenerator = z.object({
+    type: z.literal('building_generator'),
+    worlds: z.array(BuildingWorldSave).catch([]).default([]),
 })
 
 /* 攻击配置：装备武器 id + 数值覆写；动作/时长/动画由武器模组的攻击链决定，不在此描述。
@@ -211,6 +241,7 @@ const SavableEntity = z.discriminatedUnion('type', [
     SavableWaterBlock,
     SavableTerrain,
     SavableFragment,
+    SavableBuildingGenerator,
     SavableCharacter,
 ])
 

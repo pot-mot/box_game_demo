@@ -21,6 +21,7 @@ import {setupBurningBoxes} from './entity/box/burning/physics/world.ts'
 import {setupMagnetBoxes} from './entity/box/magnet/physics/world.ts'
 import {setupElasticBoxes} from './entity/box/elasticity/physics/world.ts'
 import {setupTerrain} from './entity/terrain/common/physics/world.ts'
+import {setupBuildingGenerator} from './entity/building_generator/world.ts'
 import {setupCharacterEntities} from './entity/character/physics/world.ts'
 import type {CharacterEntitySystem} from './entity/character/physics/world.ts'
 import type {CharacterEntity} from './character/types.ts'
@@ -89,6 +90,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const fragments = setupFragmentEntities(scene, shared)
     const terrainSource = setupTerrain(scene, shared, () => physicsEnv.getAllBodies())
     const allTerrainSources: TerrainContext[] = [terrainSource]
+    const building = setupBuildingGenerator(scene, shared)
     const characterSystem: CharacterEntitySystem = setupCharacterEntities(scene, shared)
     const common = setupCommonBoxes(scene, shared)
     const destruction = setupDestructibleBoxes(scene, shared, fragments, velocitySnapshots)
@@ -110,7 +112,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     )
 
     // 按 type 索引
-    const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, characterSystem as EntitySystem, terrainSource]
+    const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, characterSystem as EntitySystem, terrainSource, building]
     const systemsByType = new Map<string, EntityInfoSource>(
         systems.map(s => [s.type, s]),
     )
@@ -186,7 +188,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     let showcaseExited = false
 
     if (mode === 'edit') {
-        editMode = setupEditMode(camera, renderer, scene, systems, allTerrainSources, terrainSource, excludeFromBackground)
+        editMode = setupEditMode(camera, renderer, scene, systems, allTerrainSources, terrainSource, building, excludeFromBackground)
     } else if (mode === 'play') {
         playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem, boxSpawner)
     } else if (mode === 'showcase') {
@@ -374,7 +376,11 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             ensureAI()
 
             /* 展示场景自带跟随相机的网格，主场景网格无需更新 */
-            if (mode !== 'showcase') gridUpdate()
+            if (mode !== 'showcase') {
+                gridUpdate()
+                /* 静态建筑不参与物理步进，其分块网格 / 距离卸载 / 近处碰撞体每帧独立更新 */
+                building.updateView(camera, delta)
+            }
 
             if (mode === 'edit') {
                 editMode?.updater(delta)
