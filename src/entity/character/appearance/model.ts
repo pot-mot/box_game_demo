@@ -4,7 +4,7 @@ import type {CharacterModel, CharacterColorPalette, WeaponEquipConfig} from './t
 import type {ResolvedArmorLoadout} from '../../../character/armor/types.ts'
 import {ARMOR_SLOTS, type ArmorSlot} from '../../../character/armor/slots.ts'
 import {createWeaponMesh, type WeaponMeshConfig, type WeaponLocalHitBox} from './weapon_mesh.ts'
-import {createArmorMesh} from './armor_mesh.ts'
+import {createArmorMesh, ARMOR_BODY_PART_JOINTS, type ArmorBodyPart} from './armor_mesh.ts'
 import {SELECT_PALETTE} from './constants.ts'
 import {recolorTwoFaceBoxPart, recolorHeadBoxPart, type TrackedBoxPart} from '../../../render/box_parts.ts'
 import {skeletonFromDefinition} from '../../../skeleton/anim/serialization.ts'
@@ -138,6 +138,21 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     /* ── 护甲：纯视觉部件，逐槽挂到对应关节（骨架编辑后缺失的关节安全跳过） ── */
     let mountedArmor: MountedArmorPart[] = []
+    /** 被护甲顶替而隐藏的身体部件 → 原始可见性（换装 / 卸下时统一还原） */
+    let hiddenBodyParts = new Map<TrackedBoxPart, boolean>()
+
+    /** 隐藏某个身体部位的基础模型（护甲顶替而非叠加）；同一部件只记录一次原始可见性 */
+    const hideBodyPart = (bodyPart: ArmorBodyPart): void => {
+        const part = jointParts.get(ARMOR_BODY_PART_JOINTS[bodyPart])
+        if (part === undefined) return
+        if (!hiddenBodyParts.has(part)) hiddenBodyParts.set(part, part.mesh.visible)
+        part.mesh.visible = false
+    }
+
+    const restoreBodyParts = (): void => {
+        for (const [part, visible] of hiddenBodyParts) part.mesh.visible = visible
+        hiddenBodyParts = new Map()
+    }
 
     const removeArmor = (): void => {
         for (const part of mountedArmor) {
@@ -145,6 +160,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
             part.cleanup()
         }
         mountedArmor = []
+        restoreBodyParts()
     }
 
     const equipArmor = (loadout: ResolvedArmorLoadout): void => {
@@ -159,6 +175,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
                 joint.add(result.group)
                 mountedArmor.push({group: result.group, cleanup: result.cleanup})
             }
+            for (const bodyPart of piece.mesh.hideBodyParts ?? []) hideBodyPart(bodyPart)
         }
     }
 

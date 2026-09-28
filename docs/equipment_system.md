@@ -352,10 +352,20 @@ export const createMeshBuilder = (): MeshBuilder
 export const ARMOR_MESH_IDS = ['cap', 'helmet', 'hood', 'vest', 'plate', 'robe', 'bracer', 'greaves', 'legwrap', 'boots'] as const
 export type ArmorMeshId = typeof ARMOR_MESH_IDS[number]
 
+/** 身体部位名（语义标识，与骨架关节 id 解耦，供护甲声明顶替部位） */
+export const ARMOR_BODY_PARTS = ['head', 'torso', 'rightUpperArm', 'rightForearm', 'rightHand',
+    'leftUpperArm', 'leftForearm', 'leftHand', 'rightThigh', 'rightShin', 'leftThigh', 'leftShin'] as const
+export type ArmorBodyPart = typeof ARMOR_BODY_PARTS[number]
+
+/** 身体部位 → 承载该部位基础模型的关节 id（与 assembleCharacterAppearance 挂载目标一致） */
+export const ARMOR_BODY_PART_JOINTS: Readonly<Record<ArmorBodyPart, string>> = { /* … */ }
+
 export interface ArmorMeshConfig {
     readonly id: ArmorMeshId
     readonly color: number
     readonly accentColor?: number
+    /** 装备后隐藏的身体部位（护甲顶替该部位模型而非叠加）；缺省 = 不隐藏 */
+    readonly hideBodyParts?: readonly ArmorBodyPart[]
 }
 
 export interface ArmorMeshResult {
@@ -393,6 +403,8 @@ const ARMOR_SLOT_JOINTS: Record<ArmorSlot, readonly string[]> = {
 ```
 
 每槽记录 `{group, cleanup}`，`equipArmor` 先清理旧部件再逐个关节 `createArmorMesh` 挂载；`dispose` 时清理全部护甲。动画系统零改动：护甲挂在被动画驱动的关节 Group 下，自动跟随姿态（手臂甲随挥击摆动）。
+
+**顶替身体部件（`hideBodyParts`）**：护甲默认是「在身体部件外叠加一层」，近全包件可声明要顶替的部位——`equipArmor` 通过 `ARMOR_BODY_PART_JOINTS` 找到该部位的基础部件并置 `visible = false`，卸下 / 换装时按记录的原始可见性还原（同一部件只备份一次）。身体部件是纯视觉子节点，隐藏不影响胶囊碰撞 / 受击箱 / 视线 / 导航。当前启用：仅靴（疾行靴 / 疾风靴）顶替两小腿；其余护甲均保留身体部件、纯叠加覆盖（视觉更自然），需要时可逐件追加 `hideBodyParts`。
 
 ### 4.3 系统接线（`world.ts`）
 
@@ -534,10 +546,10 @@ armor?: {head?: string; chest?: string; arms?: string; legs?: string}
 | 单测 | `entity/character/combat/melee_executor.test.ts` / `ranged_executor.test.ts` | 物理防御减免近战；魔法防御减免法杖弹丸、物理防御不减免；攻击加成按武器类别匹配计入（不匹配不参与）；爆炸继承类别与加成 |
 | 单测 | `combat/explosion.test.ts` | `damageType` 参数生效、目标防御参与结算 |
 | 单测 | `appearance/mesh_builder.test.ts` | 几何工厂类型、`add` 组装（位置 / 旋转 / 阴影）、`faceBox` 六面材质、`dispose` 清空 group、实例隔离 |
-| 单测 | `appearance/armor_mesh.test.ts` | 各槽位部件挂到正确关节（含臂部 / 靴白名单）、尺寸外扩大于身体部件、脚尖条前伸、`cleanup` 释放几何/材质 |
+| 单测 | `appearance/armor_mesh.test.ts` | 各槽位部件挂到正确关节（含臂部 / 靴白名单）、尺寸外扩大于身体部件、脚尖条前伸、`cleanup` 释放几何/材质；`hideBodyParts` 不影响几何；身体部位 → 关节映射完备（指向预设骨架关节） |
 | 单测 | `state_machine/machine.test.ts` | 装备移速乘数生效：walking 速度 = 基础 × 乘数 |
 | 单测 | `save_load/validation.test.ts` | 旧档缺 `armor`/`defense` 回退默认；非法值回退；armor 含四槽位 roundtrip |
-| 单测 | `physics/panel_info.test.ts` | `add()` 带护甲时防御 / 攻击加成 / 移速乘数正确；未知护甲 id 不抛错；行文本 def 与有效移速格式；换装不残留外观部件 |
+| 单测 | `physics/panel_info.test.ts` | `add()` 带护甲时防御 / 攻击加成 / 移速乘数正确；未知护甲 id 不抛错；行文本 def 与有效移速格式；换装不残留外观部件；`hideBodyParts` 装备隐藏 / 卸下还原（靴只隐藏小腿、大腿保持可见） |
 | e2e | `e2e/character_equipment.spec.ts` | 编辑模式生成角色 → 面板选择护甲 / 基础防御 → 防御、攻击加成与有效移速预览及列表行同步更新 |
 
 ---
@@ -550,6 +562,7 @@ armor?: {head?: string; chest?: string; arms?: string; legs?: string}
 - **防御结算位置**：只在 `applyDamage` 内、修饰器之后执行一次；禁止另建一处减伤（重复减免 / 顺序漂移）。
 - **移速唯一入口**：状态机读取有效移速必须走 `moveSpeedOf(entity)`；面板 `config.speed` 仍是基础值（存档持久化），不要在其中预乘装备系数（换装会漂移）。
 - **护甲纯视觉**：只挂外观 Group，不建碰撞体、不进 `getMeshes()`、不影响受击箱与 AI 感知；`PAD` 外扩不可过大导致穿模。
+- **`hideBodyParts` 顶替**：只隐藏对应部位的基础部件，卸下 / 换装必须还原（`removeArmor` 统一恢复原始可见性，同一部件只备份一次）；部位名用 `ARMOR_BODY_PARTS` 语义名，禁止在护甲领域数据里写死关节 id（映射由 `armor_mesh.ts` 的 `ARMOR_BODY_PART_JOINTS` 持有）；浅覆盖件不要声明，否则会露出底下空缺。
 - **存档容错**：未知护甲 id、槽位与 id 不符、`defense` 非对象都必须回退默认且不抛错；旧档（v3 及更早）加载后等价于零防御空护甲、移速乘数 1。
 - **模型生命周期**：护甲几何 / 材质必须纳入 `model.dispose` 与换装清理，避免泄漏；护甲是关节子节点，不要写入骨骼姿态轨道（动画桥接只写被动画层覆盖的关节，互不冲突）。
 - **面板回显与提交对称**：下拉空值 = 空槽；`refreshFullConfig` 与 `onApply` 的字段集合必须一致，防止只改一项清空其余槽位。

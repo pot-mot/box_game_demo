@@ -1,8 +1,8 @@
 import {describe, it, expect} from 'vitest'
 import {Box3, Mesh, Vector3} from 'three'
-import {ARMOR_MESH_IDS, createArmorMesh, type ArmorMeshResult} from './armor_mesh.ts'
+import {ARMOR_BODY_PARTS, ARMOR_BODY_PART_JOINTS, ARMOR_MESH_IDS, createArmorMesh, type ArmorMeshResult} from './armor_mesh.ts'
 import {ARMOR_PAD} from './constants.ts'
-import {PRESET_PART_SIZES} from '../skeleton/preset.ts'
+import {PRESET_PART_SIZES, buildCharacterSkeletonDefinition} from '../skeleton/preset.ts'
 
 /** 部件数量（仅统计可见网格；空 group = 0） */
 const partCount = (result: ArmorMeshResult): number =>
@@ -119,6 +119,22 @@ describe('createArmorMesh（独立 gen 构建的护甲部件）', () => {
                 result.cleanup()
                 expect(result.group.children).toHaveLength(0)
             }
+        }
+    })
+
+    it('hideBodyParts 仅声明顶替部位，不影响护甲几何产出', () => {
+        const withFlag = createArmorMesh({id: 'helmet', color: 0x888888, hideBodyParts: ['head']}, 'headNeck')
+        const without = createArmorMesh({id: 'helmet', color: 0x888888}, 'headNeck')
+        expect(partCount(withFlag)).toBe(partCount(without))
+        withFlag.cleanup()
+        without.cleanup()
+    })
+
+    it('身体部位 → 关节映射完备：每个部位都指向预设骨架中的关节', () => {
+        const jointIds = new Set(buildCharacterSkeletonDefinition().joints.map(joint => joint.id))
+        for (const bodyPart of ARMOR_BODY_PARTS) {
+            const jointId = ARMOR_BODY_PART_JOINTS[bodyPart]
+            expect(jointIds.has(jointId), `${bodyPart} → ${jointId}`).toBe(true)
         }
     })
 })

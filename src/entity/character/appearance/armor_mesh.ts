@@ -8,11 +8,34 @@ import {createMeshBuilder, type MeshBuilder} from './mesh_builder.ts'
 export const ARMOR_MESH_IDS = ['cap', 'helmet', 'hood', 'vest', 'plate', 'robe', 'bracer', 'greaves', 'legwrap', 'boots'] as const
 export type ArmorMeshId = typeof ARMOR_MESH_IDS[number]
 
-/** 护甲外观配方（领域数据引用：形状 id + 主色 + 可选点缀色） */
+/**
+ * 身体部位名（语义标识，与骨架关节 id 解耦）：护甲通过 `hideBodyParts` 声明要顶替的部位。
+ * 护甲领域数据只使用这些语义名，部位 → 关节的映射由本模块（entity 侧）持有。
+ */
+export const ARMOR_BODY_PARTS = [
+    'head', 'torso',
+    'rightUpperArm', 'rightForearm', 'rightHand',
+    'leftUpperArm', 'leftForearm', 'leftHand',
+    'rightThigh', 'rightShin', 'leftThigh', 'leftShin',
+] as const
+export type ArmorBodyPart = typeof ARMOR_BODY_PARTS[number]
+
+/** 身体部位 → 承载该部位基础模型的关节 id（与 assembleCharacterAppearance 的挂载目标一致） */
+export const ARMOR_BODY_PART_JOINTS: Readonly<Record<ArmorBodyPart, string>> = {
+    head: 'headNeck', torso: 'spine',
+    rightUpperArm: 'rightArmShoulder', rightForearm: 'rightArmElbow', rightHand: 'rightHandPivot',
+    leftUpperArm: 'leftArmShoulder', leftForearm: 'leftArmElbow', leftHand: 'leftHandPivot',
+    rightThigh: 'rightLegHip', rightShin: 'rightLegKnee',
+    leftThigh: 'leftLegHip', leftShin: 'leftLegKnee',
+}
+
+/** 护甲外观配方（领域数据引用：形状 id + 主色 + 可选点缀色 + 可选顶替的身体部位） */
 export interface ArmorMeshConfig {
     readonly id: ArmorMeshId
     readonly color: number
     readonly accentColor?: number
+    /** 装备后隐藏的身体部位（护甲顶替该部位模型而非叠加）；缺省 = 不隐藏 */
+    readonly hideBodyParts?: readonly ArmorBodyPart[]
 }
 
 /** 护甲部件构建结果：group 挂到目标关节，cleanup 释放几何与材质 */

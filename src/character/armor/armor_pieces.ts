@@ -5,6 +5,7 @@ import type {ArmorPieceConfig} from './types.ts'
  * - 防御数值护栏 —— 四件满配逐类别固定减伤 ≤ 9（最小 1 点保底下轻武器仍有削血）；
  * - 攻击加成为稀有属性 —— 单件 ≤ 2，物理系由臂甲提供、法系由兜帽 / 护腕提供；
  * - 移速修正 —— 重甲（铁盔 / 铁胸甲 / 铁胫甲 / 战臂甲 / 鳞甲）减速，疾行靴 / 疾风靴加速，多件相乘。
+ * - 顶替部位 —— 仅靴以 `hideBodyParts` 隐藏小腿（其余护甲保留身体部件、纯叠加覆盖，视觉效果更自然）。
  */
 export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
     /* ── 头盔 ── */
@@ -126,13 +127,13 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         defense: {physical: 0, magic: 0},
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1.15,
-        mesh: {id: 'boots', color: 0x9a7b4f, accentColor: 0xd9c08a},
+        mesh: {id: 'boots', color: 0x9a7b4f, accentColor: 0xd9c08a, hideBodyParts: ['rightShin', 'leftShin']},
     },
     wind_boots: {
         id: 'wind_boots', name: '疾风靴', slot: 'legs',
         defense: {physical: 0, magic: 1},
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1.25,
-        mesh: {id: 'boots', color: 0x3f8f8f, accentColor: 0xcfe8e8},
+        mesh: {id: 'boots', color: 0x3f8f8f, accentColor: 0xcfe8e8, hideBodyParts: ['rightShin', 'leftShin']},
     },
 }

@@ -73,6 +73,15 @@ const countMeshes = (entity: CharacterEntity): number => {
     return count
 }
 
+/** 查找某挂载关节上的基础身体部件（外观装配写入 userData.jointId；护甲网格不写该字段） */
+const findJointPart = (entity: CharacterEntity, jointId: string): Mesh | undefined => {
+    let found: Mesh | undefined
+    entity.appearanceGroup.traverse(obj => {
+        if (found === undefined && obj instanceof Mesh && obj.userData.jointId === jointId) found = obj
+    })
+    return found
+}
+
 describe('角色 panelInfo 同步', () => {
     let system: CharacterEntitySystem
     let warnSpy: ReturnType<typeof vi.spyOn>
@@ -200,6 +209,27 @@ describe('角色 panelInfo 同步', () => {
 
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {armor: {}})
         expect(countMeshes(entity)).toBe(before)
+    })
+
+    it('护甲 hideBodyParts 顶替身体部件：装备后隐藏、卸下后还原', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+
+        /* 疾行靴顶替小腿；铁盔 / 铁胸甲为叠加件，头部与躯干保持可见 */
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            armor: {head: 'iron_helmet', chest: 'iron_plate', legs: 'swift_boots'},
+        })
+        expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
+        expect(findJointPart(entity, 'spine')!.visible).toBe(true)
+        expect(findJointPart(entity, 'rightLegHip')!.visible).toBe(true)
+        expect(findJointPart(entity, 'leftLegHip')!.visible).toBe(true)
+        expect(findJointPart(entity, 'rightLegKnee')!.visible).toBe(false)
+        expect(findJointPart(entity, 'leftLegKnee')!.visible).toBe(false)
+
+        /* 卸下后小腿还原可见 */
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {armor: {}})
+        expect(findJointPart(entity, 'rightLegKnee')!.visible).toBe(true)
+        expect(findJointPart(entity, 'leftLegKnee')!.visible).toBe(true)
     })
 
     it('markPlayer 后 panelInfo 立即反映玩家标记与徽标', () => {
