@@ -201,7 +201,9 @@ export interface WeaponAttacks {
 
 远程武器各持 1 个主干段（`buildRangedAttacks(weaponId)`），段 id 沿用原远程技能 id（如 `longbow_shot`、`throwing_dart_fling`），`key = 'light'`、`recovery = 0`、`next = []`（单发，无连段）；重击链为空链（`entries` / `steps` 均为空数组，起手解析恒失败）。轻击键起手，播完段即收招。
 
-**弹丸在 `release` 阶段开始的那一帧发射**（`ranged_executor.update`：`activePhaseName === 'release'` 且本段未发射；每段只发射一次）：先拉弓 / 举枪 / 后引，动画走到释放帧才出弹，弹道与武器朝向一致。飞镖段只有 `release` 阶段，等价于起手即甩出。
+**弹丸在 `release` 阶段开始的那一帧发射**（`ranged_executor.update`：`activePhaseName === 'release'` 且本段未发射；每段只发射一次）：先拉弓 / 举枪 / 后引，动画走到释放帧才出弹。**弹道初始方向 = 武器实际朝向**——`world.ts` 每帧从武器骨骼（本地 +Y = 枪口/弹道轴）采样世界水平方向写入 `combat.muzzleDirX/Z`，释放帧按该方向发射（无武器朝向数据时回退到段起手的瞄准方向）。因此角色没转身/没举好枪时，子弹会沿枪口指向飞出，而不是凭空飞向目标。飞镖段只有 `release` 阶段，等价于起手即甩出。
+
+**转向 / 瞄准流程**：`combat.attackDirX/Z` 表示**瞄准方向**（玩家 = 相机前方、AI = 战斗目标方向）。远程攻击期间角色朝向锁定该瞄准方向（`world.ts`）：玩家在 `draw` / `aim` 阶段转身，AI 在 `combat` 期间持续面向目标，配合瞄准门控（未对准不出手，见 `ai_system.md` §3.5）保证释放帧枪口对准目标。近战攻击不使用 `muzzleDir`（判定箱跟随武器模型）。
 
 阶段序列按武器语义声明：弓箭为 `draw / aim / release`，弩与枪械为 `aim / release`，投掷类（飞斧 / 手雷 / 燃烧瓶）为 `windup / release`，飞镖为单 `release`。多数阶段 `cancellable: true`（瞄准期可被翻滚打断），释放段不可打断。
 

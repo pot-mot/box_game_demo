@@ -2,6 +2,7 @@ import type {CharacterEntity} from '../../../../character/types.ts'
 import type {CombatSubStrategy, CombatConfig} from '../../../../character/ai_strategy/combat.ts'
 import type {AIContext, AISetInput} from '../types.ts'
 import type {CombatState, CombatStateHandler} from './types.ts'
+import {COMBAT_RETARGET_INTERVAL} from '../constants.ts'
 import {chaseHandler} from './states/chase.ts'
 import {attackHandler} from './states/attack.ts'
 import {approachHandler} from './states/approach.ts'
@@ -43,6 +44,9 @@ export const initCombatContext = (
     ctx.combatDetourTimer = 0
     ctx.combatStrategy = strategy
     ctx.combatConfig = config
+    ctx.combatRetargetTimer = COMBAT_RETARGET_INTERVAL
+    ctx.combatShotTimer = 0
+    ctx.combatAimActive = false
 }
 
 /** 运行战斗 FSM 一帧 */

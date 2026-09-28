@@ -42,6 +42,8 @@ const createCombatStub = (): CombatComponent => {
         attackTimer: 0,
         attackDirX: 0,
         attackDirZ: 1,
+        muzzleDirX: 0,
+        muzzleDirZ: 0,
         attackedTargets: new Set(),
         phaseIndex: 0,
         phaseTimer: 0,

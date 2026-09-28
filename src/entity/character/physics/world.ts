@@ -68,6 +68,10 @@ type CharacterRigidBody = RAPIER.RigidBody
 /** 刀光轨迹刀尖采样复用向量（避免每帧分配） */
 const _trailTipVec = new Vector3()
 
+/** 远程枪口世界朝向采样复用对象（武器骨骼世界四元数 × 本地 +Y，投影到水平面） */
+const _muzzleQuat = new Quaternion()
+const _muzzleVec = new Vector3()
+
 /** 角色朝向提取复用对象（将旋转后的前向量投影到水平面求朝向，避免每帧分配） */
 const _facingForward = new Vector3()
 const _facingQuat = new Quaternion()
@@ -201,6 +205,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const characters: CharacterEntity[] = []
     const aiMap = new Map<number, AIContext>()
     const bodyCharMap = new Map<number, CharacterEntity>()
+    /** 角色 id → 实体（战斗目标 / 瞄准目标查询 O(1)，避免逐帧对 characters 线性扫描） */
+    const charById = new Map<number, CharacterEntity>()
     const aiTargetDirs = new Map<number, {dx: number; dz: number}>()
     const appearanceModels = new Map<number, CharacterModel>()
     const appearanceSystems = new Map<number, AppearanceSystem>()
@@ -424,6 +430,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
 
         bodyCharMap.set(body.handle, entity)
+        charById.set(entity.id, entity)
         characters.push(entity)
         appearanceModels.set(entity.id, model)
         appearanceSystems.set(entity.id, createAppearanceSystem({onAttackEvent}))
@@ -601,6 +608,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         scene.remove(entity.mesh)
         world.removeRigidBody(entity.body)
         bodyCharMap.delete(entity.body.handle)
+        charById.delete(entity.id)
         entity.mesh.geometry.dispose()
         const mat = entity.mesh.material
         if (Array.isArray(mat)) mat.forEach(m => m.dispose())
@@ -715,9 +723,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 /* 战斗中把当前攻击目标排除出导航感知：目标相对走位由战斗 FSM 负责，
                  * 否则贴脸前会被当成墙绕行（两个近战 AI 互相绕圈不打） */
                 const combatTarget = aiCtx.activeFsm === 'combat' && aiCtx.combatTargetId !== undefined
-                    ? characters.find(c => c.id === aiCtx.combatTargetId && !c.combat.isDead)
+                    ? charById.get(aiCtx.combatTargetId)
                     : undefined
-                aiCtx.nav.ignoredMesh = combatTarget?.mesh ?? null
+                aiCtx.nav.ignoredMesh = combatTarget !== undefined && !combatTarget.combat.isDead ? combatTarget.mesh : null
 
                 updateAI(dt, aiCtx, entity, characters, (dx, dz, attack, attackDX, attackDZ) => {
                     /* 若与另一个角色有物理接触，禁止继续向其方向推挤 */
@@ -768,7 +776,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 })
             } else if (entity.isPlayer) {
                 entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration)
-                if (playerAttackPending) {
+                /* 攻击期间（含待起手帧）瞄准方向持续取相机前方：角色随之转向瞄准方向，
+                 * 射击弹道再由武器实际朝向（muzzleDir）决定，避免背身射向目标 */
+                if (playerAttackPending || entity.combat.attackActive) {
                     entity.combat.attackDirX = playerForwardX
                     entity.combat.attackDirZ = playerForwardZ
                 }
@@ -813,16 +823,44 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const isRolling = entity.stateMachine.currentState === 'rolling'
 
                 let targetAngle: number
+                /** 远程武器（近战不受瞄准朝向影响，攻击判定箱随武器模型） */
+                const rangedWeapon = entity.combat.weapon.type === 'ranged'
+                /** 当前战斗目标 id（仅 AI 处于 combat 时有效） */
+                const aiCombatTargetId = aiCtx !== undefined && aiCtx.activeFsm === 'combat'
+                    ? aiCtx.combatTargetId
+                    : undefined
+                const aiCombatTarget = !entity.isPlayer && !entity.isDying && rangedWeapon && aiCombatTargetId !== undefined
+                    ? charById.get(aiCombatTargetId)
+                    : undefined
+                const aiAimTarget = aiCombatTarget !== undefined && !aiCombatTarget.combat.isDead ? aiCombatTarget : undefined
+                /** 仅在「站定转身瞄准 / 射击动作」期间把朝向锁到目标；移动阶段（含逃跑/回撤）朝向跟随移动方向 */
+                const aiFacingTarget = aiAimTarget !== undefined
+                    && (entity.combat.attackActive || (aiCtx !== undefined && aiCtx.combatAimActive))
                 if (entity.isPlayer) {
                     const inputLen = Math.hypot(playerDx, playerDz)
                     if (isRolling) {
                         /* 翻滚期间朝向锁定翻滚方向：输入转向不改变朝向，避免边滚边原地打转 */
                         targetAngle = Math.atan2(entity.combat.rollSkill.dirX, entity.combat.rollSkill.dirZ)
+                    } else if (rangedWeapon && inAttacking) {
+                        /* 玩家远程攻击：转向瞄准方向（相机前方），draw/aim 阶段完成转向后武器才对准目标 */
+                        const aimLen = Math.hypot(entity.combat.attackDirX, entity.combat.attackDirZ)
+                        targetAngle = aimLen > VELOCITY_DIR_THRESHOLD
+                            ? Math.atan2(entity.combat.attackDirX, entity.combat.attackDirZ)
+                            : currentAngle
                     } else if (inputLen > VELOCITY_DIR_THRESHOLD) {
                         targetAngle = Math.atan2(playerDx, playerDz)
                     } else {
                         targetAngle = currentAngle
                     }
+                } else if (aiFacingTarget) {
+                    /* 转向/瞄准流程：站定瞄准或射击动作期间持续对准目标 */
+                    const myPos = entity.body.translation()
+                    const tp = aiAimTarget.body.translation()
+                    const tdx = tp.x - myPos.x
+                    const tdz = tp.z - myPos.z
+                    targetAngle = Math.hypot(tdx, tdz) > VELOCITY_DIR_THRESHOLD
+                        ? Math.atan2(tdx, tdz)
+                        : currentAngle
                 } else {
                     const aiDir = aiTargetDirs.get(entity.id)
                     if (aiDir !== undefined) {
@@ -871,6 +909,19 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 }
                 /* 碰撞箱可视化同步跟随身体朝向 */
                 entity.mesh.rotation.set(0, newAngle, 0)
+
+                /* 远程枪口世界朝向：武器本地 +Y = 枪口/弹道方向；在骨骼姿势与身体朝向写入后采样，
+                 * 供 ranged_executor 在 release 帧作为弹道初始方向（角色朝向 + 出手动画共同决定） */
+                if (rangedWeapon && !entity.isDying && model.weaponGroup !== null) {
+                    model.weaponGroup.updateWorldMatrix(true, false)
+                    model.weaponGroup.getWorldQuaternion(_muzzleQuat)
+                    _muzzleVec.set(0, 1, 0).applyQuaternion(_muzzleQuat)
+                    const muzzleLen = Math.hypot(_muzzleVec.x, _muzzleVec.z)
+                    if (muzzleLen > 0.001) {
+                        entity.combat.muzzleDirX = _muzzleVec.x / muzzleLen
+                        entity.combat.muzzleDirZ = _muzzleVec.z / muzzleLen
+                    }
+                }
 
                 if (entity.isPlayer) {
                     model.headNeck.rotation.y = 0
@@ -959,7 +1010,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         let ty: number | undefined
                         let tz: number | undefined
                         if (aiCtx && aiCtx.activeFsm === 'combat' && aiCtx.combatTargetId !== undefined) {
-                            const target = characters.find(c => c.id === aiCtx.combatTargetId)
+                            const target = charById.get(aiCtx.combatTargetId)
                             if (target && !target.combat.isDead) {
                                 const tp = target.body.translation()
                                 tx = tp.x

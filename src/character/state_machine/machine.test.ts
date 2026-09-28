@@ -342,6 +342,19 @@ describe('falling 行为', () => {
     })
 })
 
+describe('原地站定开火', () => {
+    it('walking 中移动清零并按攻击键，直接进入 attacking（不再先转 idle）', () => {
+        const e = makeMock()
+        e.stateMachine.setInput(1, 0, false, false, false, undefined, 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('walking')
+
+        e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+    })
+})
+
 describe('攻击/翻滚在陡坡结束', () => {
     it('attacking 在陡坡（ny=0.4）攻击结束进入 falling', () => {
         const e = makeMock()

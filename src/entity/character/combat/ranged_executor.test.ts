@@ -35,8 +35,14 @@ const makeWeaponRuntime = (weaponOverrides: Partial<RangedWeaponConfig> = {}, da
     return {weapon, holdMode: defaultHoldMode(weapon), attacks: weaponAttacksOf(weapon)}
 }
 
-/** 在 +Z 方向开火：进入段的 release 阶段后首次 update 生成子弹（武器参数取自 combat.weapon） */
-const fireForward = (executor: RangedExecutor, shooter: CharacterEntity, runtime: WeaponRuntime): void => {
+/** 在 +Z 方向开火：进入段的 release 阶段后首次 update 生成子弹（武器参数取自 combat.weapon）。
+ * `muzzle` 可选：模拟 world 每帧从武器骨骼采样的真实枪口朝向（缺省不设 → 回退到起手方向 +Z）。 */
+const fireForward = (
+    executor: RangedExecutor,
+    shooter: CharacterEntity,
+    runtime: WeaponRuntime,
+    muzzle?: {x: number; z: number},
+): void => {
     shooter.combat.weapon = runtime.weapon
     shooter.combat.attacks = runtime.attacks
     shooter.combat.attackTimer = 0
@@ -46,6 +52,10 @@ const fireForward = (executor: RangedExecutor, shooter: CharacterEntity, runtime
     const releaseIndex = resolvePhases(segment.phases).findIndex(phase => phase.name === 'release')
     shooter.combat.phaseIndex = releaseIndex >= 0 ? releaseIndex : 0
     executor.start(shooter.combat, shooter, {x: 0, y: 0, z: 1}, noopCtx)
+    if (muzzle) {
+        shooter.combat.muzzleDirX = muzzle.x
+        shooter.combat.muzzleDirZ = muzzle.z
+    }
     executor.update(DT, shooter.combat, shooter, noopCtx)
 }
 
@@ -86,6 +96,21 @@ const TARGET_Z = 8
 describe('投掷物可穿过类别', () => {
     beforeAll(async () => {
         await initRapier()
+    })
+
+    it('弹道沿武器实时朝向（muzzleDir）发射，而非起手时记录的瞄准方向', () => {
+        const hw = createHarnessWorld()
+        const executor = createRangedExecutor(hw.shared, new Scene())
+        const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+        /* 起手瞄准方向固定为 +Z，但武器实际朝 +X（角色未转身到位） */
+        const frontTarget = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
+        const sideTarget = makeChar(hw, 3, TARGET_Z, SHOOTER_Y, 0)
+
+        fireForward(executor, shooter, makeWeaponRuntime(), {x: 1, z: 0})
+        runFrames(hw, executor, [shooter, frontTarget, sideTarget], 30)
+
+        expect(sideTarget.combat.health).toBe(sideTarget.combat.maxHealth - 5)
+        expect(frontTarget.combat.health).toBe(frontTarget.combat.maxHealth)
     })
 
     it('默认（仅 area）：命中箱子即消失，箱后目标不受伤害', () => {

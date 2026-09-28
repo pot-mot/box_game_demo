@@ -19,6 +19,8 @@ import {approachHandler} from './combat/states/approach.ts'
 import {volleyHandler} from './combat/states/volley.ts'
 import {kiteHandler} from './combat/states/kite.ts'
 import {fleeHandler} from './combat/states/flee.ts'
+import {aimAndFireAt} from './combat/aim.ts'
+import {COMBAT_SHOT_INTERVAL} from './constants.ts'
 
 /** 构造最低限度 CharacterEntity */
 const makeChar = (
@@ -53,6 +55,8 @@ const makeChar = (
         attackTimer: 0,
         attackDirX: 0,
         attackDirZ: 1,
+        muzzleDirX: 0,
+        muzzleDirZ: 0,
         attackedTargets: new Set(),
         phaseIndex: 0,
         phaseTimer: 0,
@@ -121,6 +125,9 @@ const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: numb
         combatBurstAttackCount: 0,
         combatStrategy,
         combatConfig,
+        combatRetargetTimer: 0,
+        combatShotTimer: 0,
+        combatAimActive: false,
         peaceState: 'patrol',
         peaceStateTime: 0,
         peaceConfig: DEFAULT_PEACE_CONFIGS.patrol,
@@ -490,6 +497,165 @@ describe('AI 攻击检测箱（attackDetectChecker）', () => {
     })
 })
 
+describe('AI 远程瞄准门控', () => {
+    it('背对目标时不出招（先转向瞄准）', () => {
+        const char = makeChar(1, 0, 0, 0, 'ranged')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'attack'
+        /* 朝向 -Z，目标在正后方 +Z */
+        ctx.getFacingAngle = () => Math.PI
+        const enemies = [makeChar(2, 0, 5, 1, 'ranged')]
+        const captured: Array<{dx: number; dz: number; attack: boolean}> = []
+        attackHandler.update(0.016, ctx, char, enemies, (dx, dz, attack) => captured.push({dx, dz, attack}))
+        expect(captured.pop()?.attack).toBe(false)
+    })
+
+    it('已对准目标时可正常出招', () => {
+        const char = makeChar(1, 0, 0, 0, 'ranged')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'attack'
+        /* 朝向 +Z，目标在 +Z */
+        ctx.getFacingAngle = () => 0
+        const enemies = [makeChar(2, 0, 5, 1, 'ranged')]
+        const captured: Array<{dx: number; dz: number; attack: boolean}> = []
+        attackHandler.update(0.016, ctx, char, enemies, (dx, dz, attack) => captured.push({dx, dz, attack}))
+        expect(captured.pop()?.attack).toBe(true)
+    })
+
+    it('近战不受瞄准门控影响（朝向未注入时视为已对准）', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'attack'
+        const enemies = [makeChar(2, 0, 1, 1, 'melee')]
+        const captured: Array<{dx: number; dz: number; attack: boolean}> = []
+        attackHandler.update(0.016, ctx, char, enemies, (dx, dz, attack) => captured.push({dx, dz, attack}))
+        expect(captured.pop()?.attack).toBe(true)
+    })
+})
+
+describe('flee 逃跑 / 回身射击交替', () => {
+    it('按战斗目标（与朝向锁定一致）判定瞄准并回身射击，而非背后最近的敌人', () => {
+        const char = makeChar(1, 0, 0, 0, 'ranged', undefined, 'cowardly')
+        const ctx = makeCtx('cowardly', 2)
+        ctx.activeFsm = 'combat'
+        ctx.combatState = 'flee'
+        ctx.combatStateTime = 1.6
+        /* 朝向 +Z：战斗目标在正前方，另有一个更近的敌人在背后 */
+        ctx.getFacingAngle = () => 0
+        ctx.combatShotTimer = 0
+        const aimTarget = makeChar(2, 0, 4, 1, 'ranged')
+        const nearestBehind = makeChar(3, 0, -1, 1, 'ranged')
+        const all = [char, aimTarget, nearestBehind]
+
+        let captured: {dx: number; dz: number; attack: boolean; attackDX?: number; attackDZ?: number} | undefined
+        fleeHandler.update(0.016, ctx, char, all, (dx, dz, attack, attackDX, attackDZ) => {
+            captured = {dx, dz, attack, attackDX, attackDZ}
+        })
+
+        expect(captured?.attack).toBe(true)
+        /* 射击方向指向战斗目标（+Z），而不是背后最近的敌人（-Z） */
+        expect(captured?.attackDX).toBeCloseTo(0, 5)
+        expect(captured?.attackDZ).toBeCloseTo(1, 5)
+        expect(ctx.combatAimActive).toBe(true)
+        expect(ctx.combatShotTimer).toBeCloseTo(COMBAT_SHOT_INTERVAL, 5)
+    })
+
+    it('射击后进入逃跑相位：开火节流未到点则不开火并输出逃跑移动（面朝移动方向）', () => {
+        const char = makeChar(1, 0, 0, 0, 'ranged', undefined, 'cowardly')
+        const ctx = makeCtx('cowardly', 2)
+        ctx.activeFsm = 'combat'
+        ctx.combatState = 'flee'
+        ctx.combatStateTime = 1.6
+        ctx.getFacingAngle = () => 0
+        /* 上一发刚开火：开火节流未到点 */
+        ctx.combatShotTimer = COMBAT_SHOT_INTERVAL
+        const aimTarget = makeChar(2, 0, 4, 1, 'ranged')
+        const all = [char, aimTarget]
+
+        let captured: {dx: number; dz: number; attack: boolean} | undefined
+        fleeHandler.update(0.016, ctx, char, all, (dx, dz, attack) => {
+            captured = {dx, dz, attack}
+        })
+
+        expect(captured?.attack).toBe(false)
+        /* 逃跑方向 = 远离最近敌人（目标在 +Z → 逃向 -Z） */
+        expect(captured?.dz).toBeLessThan(0)
+        /* 逃跑相位不锁定朝向：面朝移动方向 */
+        expect(ctx.combatAimActive).toBe(false)
+    })
+
+    it('战斗期计时到点后全向重选目标：绕到背后的更近敌人会被重新选中', () => {
+        const char = makeChar(1, 0, 0, 0, 'ranged')
+        const ctx = makeCtx('tactical', 2)
+        ctx.activeFsm = 'combat'
+        ctx.combatState = 'attack'
+        /* 面朝 +Z：战斗目标（前方较远）在视锥内，另一敌人（背后更近）在盲区 */
+        ctx.getFacingAngle = () => 0
+        const front = makeChar(2, 0, 6, 1, 'ranged')
+        const behind = makeChar(3, 0, -2, 1, 'ranged')
+        const all = [char, front, behind]
+
+        ctx.combatRetargetTimer = 0.05
+        updateAI(0.016, ctx, char, all, () => {})
+        expect(ctx.combatTargetId).toBe(2)
+
+        for (let i = 0; i < 5; i++) updateAI(0.016, ctx, char, all, () => {})
+        expect(ctx.combatTargetId).toBe(3)
+    })
+})
+
+describe('远程回身射击流程（站定转身 → 开火）', () => {
+    it('aimAndFireAt：未对准时站定转身（combatAimActive=true），对准后原地开火', () => {
+        const char = makeChar(1, 0, 0, 0, 'ranged')
+        const ctx = makeCtx('tactical', 2)
+        const target = makeChar(2, 0, 5, 1, 'ranged')
+        const captured: Array<{dx: number; dz: number; attack: boolean; attackDX?: number; attackDZ?: number}> = []
+        const setInput: AISetInput = (dx, dz, attack, attackDX, attackDZ) => {
+            captured.push({dx, dz, attack, attackDX, attackDZ})
+        }
+
+        ctx.getFacingAngle = () => Math.PI
+        expect(aimAndFireAt(ctx, char, target, setInput)).toBe('aiming')
+        expect(ctx.combatAimActive).toBe(true)
+        expect(captured.pop()).toMatchObject({dx: 0, dz: 0, attack: false})
+
+        ctx.getFacingAngle = () => 0
+        expect(aimAndFireAt(ctx, char, target, setInput)).toBe('firing')
+        expect(captured.pop()).toMatchObject({dx: 0, dz: 0, attack: true, attackDX: 0, attackDZ: 1})
+    })
+
+    it('kite：开火节流未到点（或目标在射程外）时面朝移动方向后撤，不锁朝向', () => {
+        const char = makeChar(1, 0, 0, 0, 'ranged')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'kite'
+        const target = makeChar(2, 0, 20, 1, 'ranged')
+        let captured: {dx: number; dz: number; attack: boolean} | undefined
+        kiteHandler.update(0.016, ctx, char, [char, target], (dx, dz, attack) => { captured = {dx, dz, attack} })
+        expect(captured?.attack).toBe(false)
+        expect(captured?.dz).toBeLessThan(0)
+        expect(ctx.combatAimActive).toBe(false)
+    })
+
+    it('kite：射程内且节流到点但未对准时站定转身（移动清零、锁朝向），对准后开火', () => {
+        const char = makeChar(1, 0, 0, 0, 'ranged')
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'kite'
+        ctx.combatShotTimer = 0
+        const target = makeChar(2, 0, 5, 1, 'ranged')
+        let captured: {dx: number; dz: number; attack: boolean; attackDZ?: number} | undefined
+        const setInput: AISetInput = (dx, dz, attack, _attackDX, attackDZ) => { captured = {dx, dz, attack, attackDZ} }
+
+        ctx.getFacingAngle = () => Math.PI
+        kiteHandler.update(0.016, ctx, char, [char, target], setInput)
+        expect(captured).toMatchObject({dx: 0, dz: 0, attack: false})
+        expect(ctx.combatAimActive).toBe(true)
+
+        ctx.getFacingAngle = () => 0
+        kiteHandler.update(0.016, ctx, char, [char, target], setInput)
+        expect(captured).toMatchObject({attack: true, attackDZ: 1})
+    })
+})
+
 describe('视线检测 270° 扇形门控（findNearestEnemy）', () => {
     const runDetection = (enemyX: number, enemyZ: number, facing: number): 'combat' | 'peace' => {
         const char = makeChar(1, 0, 0, 0, 'melee')
@@ -532,6 +698,8 @@ describe('视线扇形扫描射线遮挡（castFan）', () => {
         castFan: (_fx, _fy, _fz, _yaw, maxDist, out) => {
             out.fill(hitDist < 0 ? maxDist : Math.min(hitDist, maxDist))
         },
+        collectBlockers: () => {},
+        hasLOSPrepared: () => true,
     })
 
     const runWithLos = (los: LineOfSightChecker, enemyX: number, enemyZ: number): 'combat' | 'peace' => {
@@ -565,6 +733,8 @@ describe('视线扇形扫描射线遮挡（castFan）', () => {
             castFan: (_fx, _fy, _fz, _yaw, maxDist, out) => {
                 for (let i = 0; i < out.length; i++) out[i] = i < out.length / 2 ? 0.5 : maxDist
             },
+            collectBlockers: () => {},
+            hasLOSPrepared: () => true,
         }
         expect(runWithLos(los, 0, 3)).toBe('combat')
         /* 左侧 90° 敌人（方位角 -90° → 射线索引 round(45/10) = 5）落在被挡区 → 不可见 */

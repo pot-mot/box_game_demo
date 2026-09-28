@@ -33,10 +33,11 @@ AI 决策层（entity/character/ai/machine.ts）
 **工作流程**：
 
 1. 调用 `findNearestEnemy()` 检测敌人（三重门控：阵营敌对 + 在侦测半径内 + 身前 270° 扇形内 + 扇形扫描射线无遮挡）
-2. 发现敌人 → 从 `peace` 切换到 `combat`，进入 `chase` 状态（`combatReentryTimer` 重新接敌冷却期内不进入，见 3.5）
+2. 发现敌人 → 从 `peace` 切换到 `combat`，进入 `chase` 状态（`combatReentryTimer` 重新接敌冷却期内不进入，见 3.6）
 3. 无敌人且战斗 FSM 进入 `inactive` → 切换回 `peace`
 4. **怯懦角色**首次发现敌人且剩余 `attackBurstCount` 时，直接进入 `flee` 而非 `chase`
-5. **静止自检**：每帧 FSM 执行后检查"有移动意图但无位移"，超时触发卡死恢复（见 3.5）
+5. **静止自检**：每帧 FSM 执行后检查"有移动意图但无位移"，超时触发卡死恢复（见 3.6）
+6. **定时重选目标**：战斗中每 `COMBAT_RETARGET_INTERVAL`（10s）做一次全向扫描（忽略朝向扇形）重新选择最近敌人，补上"朝向锁定目标导致背后敌人落入盲区"的缺口（见 3.5）
 
 ### 2.2 和平子 FSM
 
@@ -59,11 +60,11 @@ AI 决策层（entity/character/ai/machine.ts）
 | 状态 | 适用武器 | 行为 |
 |------|----------|------|
 | `chase` | 近战/远程 | 直接朝目标移动（水平方向） |
-| `approach` | 仅远程 | 朝目标移动，到达射击范围时开火 |
-| `volley` | 仅远程 | 围绕目标环形移动并射击 |
-| `kite` | 仅远程 | 远离目标，若在射程内则开火 |
-| `attack` | 近战/远程 | 面向目标并攻击 |
-| `flee` | 近战/远程 | 朝远离最近敌人的方向逃跑（逃跑时远程角色会射击） |
+| `approach` | 仅远程 | 朝目标移动，到达射击范围后**站定转向瞄准 → 开火** |
+| `volley` | 仅远程 | 围绕目标环形移动，两次射击之间走位、节流到点后站定瞄准射击 |
+| `kite` | 仅远程 | 面朝移动方向远离目标，节流到点且射程内时回身站定射击 |
+| `attack` | 近战/远程 | 面向目标并攻击（远程站定转向瞄准后开火） |
+| `flee` | 近战/远程 | 面朝移动方向逃跑（远程为「逃跑 / 站定回身射击」交替，见 §3.3） |
 | `inactive` | — | 空操作终止状态，触发返回和平 FSM |
 
 **战斗状态转移图**：
@@ -221,7 +222,7 @@ detectBox.offset   = 估算 offset
 - 在出生点 `patrolRadius * 0.8` 范围内**随机生成路点**
 - 直接朝路点移动（调用 `stateMachine.setInput(dx, 0, dz, false)`），无避障
 - 距路点 0.3 单位内视为到达，等待 `[waitTimeMin, waitTimeMax]` 秒后选择新路点
-- 路点不可达时由静止检测（见 3.5）超时重掷，不会永远朝不可达路点挤
+- 路点不可达时由静止检测（见 3.6）超时重掷，不会永远朝不可达路点挤
 
 ### 3.2 追击移动（`chase.ts` / `approach.ts`）
 
@@ -232,16 +233,25 @@ detectBox.offset   = 估算 offset
 
 ### 3.3 逃跑移动（`flee.ts`）
 
-- 方向 = 远离最近敌人 → 朝出生点
-- 进入时随机偏移 ±30°，每 1.5 秒更换方向
-- 纯方向性逃跑，无避障
+- 逃跑方向 = 远离最近敌人 → 朝出生点；进入时随机偏移 ±30°，每 1.5 秒更换方向；纯方向性逃跑，无避障
+- **逃跑 / 回身射击交替**（远程武器）：射击相位的**瞄准目标 = 当前战斗目标**（`combatTargetId`，与 `world.ts` 朝向锁定一致），避免「面向 A、却按最近的背后敌人 B 判定瞄准」导致静默不开火；进入射击相位需「武器起手就绪（冷却）且远程开火节流 `combatShotTimer` 到点、目标在射程内」，随后走 §3.5 的**站定 → 转身 → 攻击**流程，开火后把节流重置为 `COMBAT_SHOT_INTERVAL`。**逃跑相位不锁定朝向，面朝逃跑（移动）方向**；射击动作进行中原地不动。近战武器无射击相位。
 
 ### 3.4 环形移动（`volley.ts`）
 
 - 每 2 秒随机切换侧向方向（左/右）
-- 在目标周围切向移动并射击
+- 攻击动作期间横向绕走（朝向锁目标）；两次射击之间（`combatShotTimer` > 0）继续绕走，节流到点后站定转身瞄准再开火，形成「绕圈 → 停下瞄射」节奏
 
-### 3.5 卡死检测与自愈（静止检测）
+### 3.5 远程转向与瞄准（`combat/aim.ts`）
+
+远程角色的弹道取自**武器实际朝向**（见 `attack_system.md` §3.3），因此出招前必须先把身体与武器转到目标方向，禁止"背身射出飞向目标的子弹"。规则：
+
+- **朝向策略（移动面朝移动方向 / 瞄准时锁目标）**：远程武器 AI 默认朝向跟随移动方向——**需要逃跑或回撤时面朝移动方向**（不再背对移动方向、面朝目标倒退）。只有当 AI 进入「站定转身瞄准」流程时，`combatAimActive` 置位，`world.ts` 才把朝向锁到当前战斗目标；射击动作期间同样锁目标。`updateAI` 每帧清零 `combatAimActive`，由战斗状态按需重新置位。
+- **回身射击完整流程**（`aimAndFireAt`，`combat/aim.ts`）：**寻找目标**（由状态解析 `combatTargetId`）→ **站定**（移动输入清零）→ **转身**（未对准时保持站定、由朝向系统转向）→ **攻击**（对准后原地开火）。`attack` / `approach` / `volley` / `kite` / `flee` 的远程开火统一走该流程；未对准不发起攻击（`isAimingAtTarget`，`AIM_ALIGN_HALF_ANGLE` ≈ 20°）。近战不受影响（攻击判定箱随武器模型）。
+- **远程开火节流**（`COMBAT_SHOT_INTERVAL`，`combatShotTimer`）：与武器起手就绪（冷却）共同节流。退避类状态（`kite` / `flee`）据此形成「后退逃跑（面朝移动方向）→ 站定转身射击」交替；`volley` / `approach` 据此在两次射击之间恢复走位。
+- **战斗期定时全向重选目标**（`COMBAT_RETARGET_INTERVAL` = 10s）：朝向锁定目标期间背后敌人落入扇形盲区，远超时不会自动换目标。因此战斗中每 10s 用 `findNearestEnemy(..., ignoreFacing)` 做一次**全向**扫描（跳过朝向扇形门控、改用直接视线射线并**排除目标自身网格**，仍受侦测半径约束），把目标换成当前最近敌人（目标未变则不动，换目标时清理旧目标的卡死绕行方向）。进入战斗 / 受击仇恨时重置计时。
+- 与出手动画的 `draw` / `aim` 阶段叠加：阶段本身负责举枪/拉弓，朝向系统负责转身，二者共同保证 `release` 帧枪口已指向目标。
+
+### 3.6 卡死检测与自愈（静止检测）
 
 AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触推挤阻断**（与另一角色物理接触且输入指向对方时清零，`world.ts` setInput 闭包）与 **nav stuck**（前方受阻且两侧无通路）。清零后决策层若不自检，会永远站桩在 `idle|combat:chase`、`falling|peace:patrol` 等状态。静止检测就是决策层的兜底：
 
@@ -277,12 +287,15 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 | `COMBAT_STALL_MAX_RETRIES` | `3` | combat 卡死横向绕行重试上限，达上限才放弃战斗 |
 | `COMBAT_STALL_DETOUR_DURATION` | `1.0` | 卡死重试绕行脉冲时长（秒） |
 | `COMBAT_LOSE_RANGE_FACTOR` | `2` | 脱战距离滞回系数（放弃阈值 = detectionRange × 系数） |
+| `AIM_ALIGN_HALF_ANGLE` | `π/9`（20°） | 远程出招前允许的瞄准角误差；未对准先转向 |
+| `COMBAT_RETARGET_INTERVAL` | `10` | 战斗期全向重选目标的尝试间隔（秒） |
+| `COMBAT_SHOT_INTERVAL` | `1.0` | 远程 AI 两次开火的最小间隔（秒），与武器冷却共同节流 |
 
 **nav stuck 倒退逃逸**（`nav/machine.ts`）：stuck 状态累计超过 `config.stuckTimeout` 后，输出 `STUCK_ESCAPE_DURATION`（0.5s）的"意图反向倒退 + 跳跃"逃逸脉冲尝试物理挣脱（对墙/坑均安全），随后重新评估路径。**逃逸脉冲受预算上限约束**（`STUCK_ESCAPE_MAX_RETRIES`，单次 stuck episode 内 2 次）：耗尽后停止原地重复反向跳，交由决策层静止检测兜底（绕行/重掷/放弃战斗）——否则坑底/墙角会陷入 `idle → jumping → falling → idle` 的无限向后连跳。与决策层静止检测构成两级防线：先倒退挣脱，仍无效才重掷路点/放弃目标。
 
 **静止检测的逃逸位移豁免**：`updateStallDetection` 判定"确认在动"时排除 nav stuck 期间的位移（`ctx.nav.state !== 'stuck'` 才重置锚点与 `combatStallRetries`）。逃逸脉冲的倒退跳跃位移不解决卡死，若计入会持续重置卡死重试计数，导致永不放弃战斗。
 
-**朝向规则**：AI 朝向由意图方向（过滤前）驱动（`world.ts` `aiTargetDirs`），被清零闸门拦住时仍持续转向目标/路点，保证攻击检测箱门控与发射方向可用（若用过滤后方向，被卡住时朝向冻结会与检测箱门控互锁）。
+**朝向规则**：AI 朝向由意图方向（过滤前）驱动（`world.ts` `aiTargetDirs`），被清零闸门拦住时仍持续转向目标/路点，保证攻击检测箱门控与发射方向可用（若用过滤后方向，被卡住时朝向冻结会与检测箱门控互锁）。**例外**：远程 AI 仅在「站定转身瞄准 / 射击动作」期间（`combatAimActive` / `attackActive`）朝向锁到战斗目标；其余战斗移动（含逃跑/回撤）朝移动方向（见 §3.5）。
 
 ---
 
@@ -353,7 +366,7 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 | `fleeDuration` | **0** | **0** | **2.5** | 逃跑持续时间（秒） |
 | `attackBurstCount` | **0** | **0** | **2** | 逃跑后攻击爆发次数 |
 
-> 值为 `0` 表示"永不过期"（如 aggressive 的 chase/approach 永不超时），卡死兜底由静止检测承担（见 3.5）。
+> 值为 `0` 表示"永不过期"（如 aggressive 的 chase/approach 永不超时），卡死兜底由静止检测承担（见 3.6）。
 
 ### 4.4 近战武器 AI 配置
 
@@ -548,7 +561,8 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 | 齐射状态 | `src/entity/character/ai/combat/states/volley.ts` | 环形射击 |
 | 风筝状态 | `src/entity/character/ai/combat/states/kite.ts` | 后撤射击 |
 | 攻击状态 | `src/entity/character/ai/combat/states/attack.ts` | 执行攻击 |
-| 逃跑状态 | `src/entity/character/ai/combat/states/flee.ts` | 方向性逃跑 |
+| 逃跑状态 | `src/entity/character/ai/combat/states/flee.ts` | 逃跑 / 回身射击交替 |
+| 远程瞄准 | `src/entity/character/ai/combat/aim.ts` | `facingAngleTo` / `isAimingAtTarget`（转向瞄准门控） |
 | AI 策略配置 | `src/character/ai_strategy/types.ts` | 策略类型定义 |
 | 和平默认配置 | `src/character/ai_strategy/peace.ts` | 巡逻/建造默认参数 |
 | 战斗默认配置 | `src/character/ai_strategy/combat.ts` | 三种策略默认参数 |

@@ -132,6 +132,8 @@ export const makeChar = (
             attackedTargets: new Set(),
             attackDirX: 0,
             attackDirZ: 0,
+            muzzleDirX: 0,
+            muzzleDirZ: 0,
             phaseIndex: 0, phaseTimer: 0, pendingFlinch: false, flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
         },
         holdMode: runtime.holdMode,

@@ -2,7 +2,8 @@ import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_ut
 import type {CombatStateHandler} from '../types.ts'
 import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
 import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
-import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
+import {COMBAT_LOSE_RANGE_FACTOR, COMBAT_SHOT_INTERVAL} from '../../constants.ts'
+import {aimAndFireAt} from '../aim.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -29,23 +30,23 @@ export const approachHandler: CombatStateHandler = {
 
         /* aggressive 策略：使用攻击距离而非理想距离 */
         const effectiveRange = ctx.combatStrategy === 'aggressive' ? weapon.range : weapon.idealRange
+        const canStart = canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
 
-        if (dist < effectiveRange) {
-            if (!character.combat.attackActive
-                && canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})) {
-                setInput(adx, adz, true)
-            } else {
-                setInput(0, 0, false)
-            }
-        } else {
-            if (!character.combat.attackActive
-                && canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
-                && dist < effectiveRange * 1.1) {
-                setInput(adx, adz, true)
-            } else {
-                setInput(adx, adz, false)
-            }
+        if (character.combat.attackActive) {
+            /* 射击动作期间保持面向目标、原地不动 */
+            ctx.combatAimActive = true
+            setInput(0, 0, false)
+            return
         }
+        if (canStart && ctx.combatShotTimer <= 0 && dist < effectiveRange * 1.1) {
+            /* 进入射击范围且节流到点：站定转身瞄准 → 开火 */
+            if (aimAndFireAt(ctx, character, target, setInput) === 'firing') {
+                ctx.combatShotTimer = COMBAT_SHOT_INTERVAL
+            }
+            return
+        }
+        if (dist < effectiveRange) setInput(0, 0, false)
+        else setInput(adx, adz, false)
     },
     exit: () => {},
     transitions: [

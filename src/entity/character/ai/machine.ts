@@ -5,7 +5,7 @@ import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {AIContext, AISetInput, AttackDetectChecker} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
-import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, CHASE_LEASH_RADIUS, COMBAT_STALL_MAX_RETRIES, COMBAT_STALL_DETOUR_DURATION} from './constants.ts'
+import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, CHASE_LEASH_RADIUS, COMBAT_STALL_MAX_RETRIES, COMBAT_STALL_DETOUR_DURATION, COMBAT_RETARGET_INTERVAL} from './constants.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
@@ -18,11 +18,14 @@ const _fanDists = new Float32Array(VISION_FAN_RAY_COUNT)
 
 /** 检测最近敌人，返回角色 ID 和距离。
  * 三重门控：侦测半径 → 身前 270° 扇形（朝向两侧各 135°，正后方为盲区）
- * → 扇形扫描射线遮挡（每 10° 一条射线覆盖整个扇形，命中点早于目标体表则被遮挡） */
+ * → 扇形扫描射线遮挡（每 10° 一条射线覆盖整个扇形，命中点早于目标体表则被遮挡）。
+ * `ignoreFacing = true` 时跳过朝向扇形门控并改用直接视线射线（战斗期定时全向重选目标用，
+ * 绕过朝向盲区，仍受侦测半径与视线遮挡约束）。 */
 const findNearestEnemy = (
     ctx: AIContext,
     character: CharacterEntity,
     allCharacters: readonly CharacterEntity[],
+    ignoreFacing = false,
 ): {id: number; dist: number} | undefined => {
     const pos = character.body.translation()
     /* 侦测半径取自装备武器（武器恒存在，无槽位概念） */
@@ -35,6 +38,8 @@ const findNearestEnemy = (
     let bestDist = Infinity
     let bestId: number | undefined
     let fanCast = false
+    /* 全向模式的遮挡网格懒收集（一次扫描只收集一次，逐候选复用） */
+    let blockersReady = false
 
     for (const other of allCharacters) {
         if (other.id === character.id || other.combat.isDead) continue
@@ -51,20 +56,27 @@ const findNearestEnemy = (
         if (d > 0.001) {
             diff = Math.atan2(dx, dz) - facing
             diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
-            if (Math.abs(diff) > VISION_FAN_HALF_ANGLE) continue
+            if (!ignoreFacing && Math.abs(diff) > VISION_FAN_HALF_ANGLE) continue
         }
 
-        /* 扇形射线遮挡：取最接近目标方位角的扫描射线（懒发射：有候选才扫描一次）。
-         * 射线会命中目标自身体表（约 d - 胶囊半径），命中点比体表更近才判遮挡 */
+        /* 视线遮挡：默认复用扇形扫描射线；全向模式改走直接视线射线（排除目标自身网格） */
         if (los && d > 0.001) {
-            if (!fanCast) {
-                los.castFan(pos.x, eyeY, pos.z, facing, detRange, _fanDists)
-                fanCast = true
+            if (ignoreFacing) {
+                if (!blockersReady) { los.collectBlockers(); blockersReady = true }
+                const targetY = op.y + CHARACTER_BASE_SIZE.height * other.config.scale * 0.4
+                if (!los.hasLOSPrepared(pos.x, eyeY, pos.z, op.x, targetY, op.z, other.mesh)) continue
+            } else {
+                /* 扇形射线遮挡：取最接近目标方位角的扫描射线（懒发射：有候选才扫描一次）。
+                 * 射线会命中目标自身体表（约 d - 胶囊半径），命中点比体表更近才判遮挡 */
+                if (!fanCast) {
+                    los.castFan(pos.x, eyeY, pos.z, facing, detRange, _fanDists)
+                    fanCast = true
+                }
+                const idx = Math.round((diff + VISION_FAN_HALF_ANGLE) / VISION_FAN_RAY_STEP)
+                const clamped = Math.max(0, Math.min(VISION_FAN_RAY_COUNT - 1, idx))
+                const bodyRadius = CHARACTER_BASE_SIZE.width * other.config.scale / 2
+                if (_fanDists[clamped] < d - bodyRadius - 0.05) continue
             }
-            const idx = Math.round((diff + VISION_FAN_HALF_ANGLE) / VISION_FAN_RAY_STEP)
-            const clamped = Math.max(0, Math.min(VISION_FAN_RAY_COUNT - 1, idx))
-            const bodyRadius = CHARACTER_BASE_SIZE.width * other.config.scale / 2
-            if (_fanDists[clamped] < d - bodyRadius - 0.05) continue
         }
 
         bestDist = d
@@ -113,6 +125,9 @@ export const createAIMachine = (
         combatBurstAttackCount: 0,
         combatStrategy,
         combatConfig: DEFAULT_COMBAT_CONFIGS[combatStrategy],
+        combatRetargetTimer: 0,
+        combatShotTimer: 0,
+        combatAimActive: false,
 
         /* 和平 FSM 字段 */
         peaceState: 'patrol',
@@ -270,6 +285,7 @@ export const notifyAIDamaged = (
     /* 新一场战斗：重置卡死重试计数与残留绕行 */
     ctx.combatStallRetries = 0
     ctx.combatDetourTimer = 0
+    ctx.combatRetargetTimer = COMBAT_RETARGET_INTERVAL
 }
 
 export const updateAI = (
@@ -280,6 +296,11 @@ export const updateAI = (
     setInput: AISetInput,
 ): void => {
     if (character.combat.isDead) return
+
+    /* 每帧重置「站定瞄准」标记：战斗状态在瞄准/开火时重新置位，其余时刻朝向跟随移动方向 */
+    ctx.combatAimActive = false
+    /* 远程开火节流计时递减（与武器冷却共同节流） */
+    ctx.combatShotTimer = Math.max(0, ctx.combatShotTimer - dt)
 
     /* 卡死放弃战斗后的重新接敌冷却递减 */
     ctx.combatReentryTimer = Math.max(0, ctx.combatReentryTimer - dt)
@@ -297,6 +318,7 @@ export const updateAI = (
             /* 新一场战斗：重置卡死重试计数与残留绕行 */
             ctx.combatStallRetries = 0
             ctx.combatDetourTimer = 0
+            ctx.combatRetargetTimer = COMBAT_RETARGET_INTERVAL
         }
     } else if (ctx.activeFsm === 'combat') {
         /* 无敌人且战斗态 → 检查是否可退出 */
@@ -304,6 +326,21 @@ export const updateAI = (
             ctx.activeFsm = 'peace'
             ctx.peaceState = 'patrol'
             ctx.peaceStateTime = 0
+        }
+    }
+
+    /* 战斗期定时**全向**重选目标：远程 AI 朝向锁定战斗目标后，背后敌人落入视锥盲区，
+     * 因此独立于朝向门控周期性扫描最近敌人（仍受侦测半径与视线遮挡约束），避免被绕后。 */
+    if (ctx.activeFsm === 'combat') {
+        ctx.combatRetargetTimer = Math.max(0, ctx.combatRetargetTimer - dt)
+        if (ctx.combatRetargetTimer <= 0) {
+            ctx.combatRetargetTimer = COMBAT_RETARGET_INTERVAL
+            const retarget = findNearestEnemy(ctx, character, allCharacters, true)
+            if (retarget !== undefined && retarget.id !== ctx.combatTargetId) {
+                ctx.combatTargetId = retarget.id
+                /* 换目标：清理旧目标的卡死绕行方向，避免沿用失效路线 */
+                ctx.combatDetourTimer = 0
+            }
         }
     }
 

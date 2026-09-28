@@ -28,10 +28,10 @@ export const walkingHandler: StateHandler = {
     },
     exit: () => {},
     transitions: [
-        { to: 'idle', guard: (input) => Math.hypot(input.dx, input.dz) < 0.001 },
         {
             to: 'attacking',
-            /* 起手解析：攻击键的起手候选按守卫（蓄力/方向组合键）与冷却求值，存在候选才进入 */
+            /* 起手解析：攻击键的起手候选按守卫（蓄力/方向组合键）与冷却求值，存在候选才进入。
+             * 置于 idle 之前：原地站定开火（移动输入为 0）时攻击优先于「停下」，否则会转入 idle 而漏掉攻击 */
             guard: (input, entity) => input.attack
                 && canStartAttack(entity.combat, {
                     dx: input.dx,
@@ -40,6 +40,7 @@ export const walkingHandler: StateHandler = {
                     attackKey: input.attackKey,
                 }),
         },
+        { to: 'idle', guard: (input) => Math.hypot(input.dx, input.dz) < 0.001 },
         {
             to: 'jumping',
             guard: (input, entity) =>

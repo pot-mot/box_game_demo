@@ -3,6 +3,7 @@ import type {CombatStateHandler} from '../types.ts'
 import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
 import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
+import {aimAndFireAt} from '../aim.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -30,10 +31,23 @@ export const attackHandler: CombatStateHandler = {
         const len = dist > 0.001 ? dist : 1
         const adx = _dir.x / len
         const adz = _dir.z / len
+        const canStart = canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
 
-        /* 攻击中持续按住 attack → 缓冲自动续链；未攻击时起手段就绪才起链 */
-        if (character.combat.attackActive
-            || canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})) {
+        if (weapon.type === 'ranged') {
+            /* 远程：站定转身瞄准 → 开火（射击动作期间保持面向目标、原地不动） */
+            if (character.combat.attackActive) {
+                ctx.combatAimActive = true
+                setInput(0, 0, false)
+            } else if (canStart) {
+                aimAndFireAt(ctx, character, target, setInput)
+            } else {
+                setInput(0, 0, false)
+            }
+            return
+        }
+
+        /* 近战：攻击中持续按住 attack → 缓冲自动续链；未攻击时起手段就绪才起链 */
+        if (character.combat.attackActive || canStart) {
             setInput(adx, adz, true)
         } else {
             setInput(0, 0, false)

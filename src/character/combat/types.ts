@@ -43,9 +43,18 @@ export interface CombatComponent {
     attackActive: boolean
     /** 当前段累计时间（动作 + 恢复全程，秒） */
     attackTimer: number
-    /** 当前段攻击方向（起手时由输入方向快照） */
+    /**
+     * 当前段的**瞄准方向**（期望朝向，世界水平向量）：
+     * 玩家 = 相机前方、AI = 战斗目标方向；远程攻击期间角色据此转向，弹道则取自真实武器朝向（`muzzleDir`）。
+     */
     attackDirX: number
     attackDirZ: number
+    /**
+     * 远程武器枪口当前**世界朝向**（水平单位向量）：由 `world.ts` 每帧从武器骨骼（本地 +Y）采样，
+     * 发射时作为弹道初始方向。零向量表示无武器朝向数据（回退到瞄准方向）。
+     */
+    muzzleDirX: number
+    muzzleDirZ: number
     attackedTargets: Set<number>
 
     /** 当前段阶段索引（0-based），attacking meta-state 推进 */
@@ -142,6 +151,8 @@ export const createCombatComponent = (
     attackTimer: 0,
     attackDirX: 0,
     attackDirZ: 1,
+    muzzleDirX: 0,
+    muzzleDirZ: 0,
     attackedTargets: new Set(),
     phaseIndex: 0,
     phaseTimer: 0,

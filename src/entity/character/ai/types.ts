@@ -70,6 +70,15 @@ export interface AIContext {
     combatBurstAttackCount: number
     combatStrategy: CombatSubStrategy
     combatConfig: CombatConfig
+    /** 距离下一次「战斗期重新选择目标」尝试的剩余时间（秒）：定时全向扫描，补上朝向盲区 */
+    combatRetargetTimer: number
+    /** 距离下一次远程开火的剩余时间（秒）：与武器冷却共同节流（`COMBAT_SHOT_INTERVAL`） */
+    combatShotTimer: number
+    /**
+     * 本帧是否处于「站定转身瞄准」流程（由战斗状态在瞄准/开火时置位，`updateAI` 每帧清零）：
+     * world.ts 据此把朝向锁到战斗目标；为 false 时朝向跟随移动方向（逃跑时面朝逃跑方向）。
+     */
+    combatAimActive: boolean
 
     /* ── 和平 FSM 状态 ── */
     peaceState: PeaceState

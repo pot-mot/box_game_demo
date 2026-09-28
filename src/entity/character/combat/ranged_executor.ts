@@ -180,9 +180,13 @@ export const createRangedExecutor = (
         if (firedThisAttack.has(entity.id) || activePhaseName(combat) !== 'release') return
         firedThisAttack.add(entity.id)
 
+        /* 弹道初始方向 = 武器实际朝向（world 每帧从武器骨骼采样的 muzzleDir），
+         * 而非起手时记录的瞄准方向——角色未转身时枪口朝哪就朝哪，不会凭空射向目标。
+         * 无武器朝向数据（无外观模型 / 测试）时回退到段起手记录的瞄准方向。 */
         const dir = attackDirections.get(entity.id)
-        const ndx = dir?.dx ?? combat.attackDirX
-        const ndz = dir?.dz ?? combat.attackDirZ
+        const muzzleReady = Math.hypot(combat.muzzleDirX, combat.muzzleDirZ) > 0.001
+        const ndx = muzzleReady ? combat.muzzleDirX : (dir?.dx ?? combat.attackDirX)
+        const ndz = muzzleReady ? combat.muzzleDirZ : (dir?.dz ?? combat.attackDirZ)
         const dirLen = Math.hypot(ndx, ndz)
         const fixedDx = dirLen < 0.001 ? 0 : ndx / dirLen
         const fixedDz = dirLen < 0.001 ? 1 : ndz / dirLen

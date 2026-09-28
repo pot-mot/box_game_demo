@@ -25,3 +25,15 @@ export const COMBAT_STALL_DETOUR_DURATION = 1.0
 /** 脱战距离滞回系数：放弃战斗的距离阈值 = detectionRange × 系数（进入用 detectionRange），
  * 防止边界抖动/受击仇恨目标超距时 combat 一闪即灭 */
 export const COMBAT_LOSE_RANGE_FACTOR = 2
+
+/** 远程出招前允许的瞄准角误差（rad，约 20°）：未对准目标时先转向瞄准，不背身开火 */
+export const AIM_ALIGN_HALF_ANGLE = Math.PI / 9
+
+/** 战斗期间重新选择目标的尝试间隔（秒）：远程 AI 朝向锁定目标后，背后敌人落入视锥盲区，
+ * 靠该定时的**全向**扫描（忽略朝向扇形，仍受侦测半径与视线遮挡约束）周期性重新选目标 */
+export const COMBAT_RETARGET_INTERVAL = 10
+
+/** 远程 AI 两次开火之间的最小间隔（秒）：与武器起手就绪（冷却）共同节流。
+ * 退避类状态（kite / flee）据此形成「后退逃跑（面朝移动方向）→ 站定转身射击」交替；
+ * 环绕/逼近类状态（volley / approach）据此在两次射击之间恢复走位 */
+export const COMBAT_SHOT_INTERVAL = 1.0

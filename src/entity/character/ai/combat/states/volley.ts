@@ -1,7 +1,8 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
-import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
+import {COMBAT_LOSE_RANGE_FACTOR, COMBAT_SHOT_INTERVAL} from '../../constants.ts'
+import {aimAndFireAt} from '../aim.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -33,12 +34,19 @@ export const volleyHandler: CombatStateHandler = {
             ctx.combatStrafeTimer = 1.5
         }
 
-        if (!character.combat.attackActive
-            && canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})) {
-            setInput(adx, adz, true)
+        const canStart = canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
+        const strafeX = -adz * ctx.combatStrafeDir
+        const strafeZ = adx * ctx.combatStrafeDir
+        if (character.combat.attackActive) {
+            /* 环形射击身份：攻击动作期间保持横向绕走，朝向锁到目标 */
+            ctx.combatAimActive = true
+            setInput(strafeX * 0.7 + adx * 0.15, strafeZ * 0.7 + adz * 0.15, false)
+        } else if (canStart && ctx.combatShotTimer <= 0) {
+            /* 节流到点：站定转身瞄准 → 开火；其余时间继续环形走位 */
+            if (aimAndFireAt(ctx, character, target, setInput) === 'firing') {
+                ctx.combatShotTimer = COMBAT_SHOT_INTERVAL
+            }
         } else {
-            const strafeX = -adz * ctx.combatStrafeDir
-            const strafeZ = adx * ctx.combatStrafeDir
             setInput(strafeX * 0.7 + adx * 0.15, strafeZ * 0.7 + adz * 0.15, false)
         }
 

@@ -6,11 +6,16 @@ const _targetDir = new Vector3()
 const _raycaster = new Raycaster()
 const _meshes: Object3D[] = []
 
+/** 视线检查：`ignoreMesh` 用于排除目标自身的网格（射线终点落在目标体内时不算遮挡） */
 export interface LineOfSightChecker {
-    hasLOS: (fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number) => boolean
+    hasLOS: (fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number, ignoreMesh?: Object3D) => boolean
     /** 扇形扫描：从 (fromX, fromY, fromZ) 向 yaw ±半角内发射 VISION_FAN_RAY_COUNT 条水平射线（每 10° 一条），
      * 把每条射线最近遮挡物距离写入 out（无遮挡写 maxDist）；out 长度须 ≥ VISION_FAN_RAY_COUNT */
     castFan: (fromX: number, fromY: number, fromZ: number, yaw: number, maxDist: number, out: Float32Array) => void
+    /** 收集遮挡网格（批量视线查询前调用一次），随后用 `hasLOSPrepared` 复用该列表，避免逐候选重建 */
+    collectBlockers: () => void
+    /** 复用最近一次 `collectBlockers` 收集的遮挡网格做视线判断（不重新收集） */
+    hasLOSPrepared: (fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number, ignoreMesh?: Object3D) => boolean
 }
 
 export const createLineOfSightChecker = (
@@ -22,7 +27,12 @@ export const createLineOfSightChecker = (
         for (let i = 0; i < src.length; i++) _meshes[i] = src[i]
     }
 
-    const hasLOS = (fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number): boolean => {
+    /** 用当前 `_meshes` 做一次视线射线；命中距离早于目标体表则判遮挡，`ignoreMesh` 的自网格被排除 */
+    const raycastLOS = (
+        fromX: number, fromY: number, fromZ: number,
+        toX: number, toY: number, toZ: number,
+        ignoreMesh?: Object3D,
+    ): boolean => {
         _origin.set(fromX, fromY, fromZ)
         _targetDir.set(toX - fromX, toY - fromY, toZ - fromZ)
         const dist = _targetDir.length()
@@ -30,13 +40,30 @@ export const createLineOfSightChecker = (
         _targetDir.normalize()
         _raycaster.set(_origin, _targetDir)
         _raycaster.far = dist
-        collectMeshes()
         const hits = _raycaster.intersectObjects(_meshes, false)
         for (const hit of hits) {
+            if (hit.object === ignoreMesh) continue
             if (hit.distance < dist - 0.05) return false
         }
         return true
     }
+
+    const collectBlockers = (): void => { collectMeshes() }
+
+    const hasLOS = (
+        fromX: number, fromY: number, fromZ: number,
+        toX: number, toY: number, toZ: number,
+        ignoreMesh?: Object3D,
+    ): boolean => {
+        collectMeshes()
+        return raycastLOS(fromX, fromY, fromZ, toX, toY, toZ, ignoreMesh)
+    }
+
+    const hasLOSPrepared = (
+        fromX: number, fromY: number, fromZ: number,
+        toX: number, toY: number, toZ: number,
+        ignoreMesh?: Object3D,
+    ): boolean => raycastLOS(fromX, fromY, fromZ, toX, toY, toZ, ignoreMesh)
 
     const castFan = (fromX: number, fromY: number, fromZ: number, yaw: number, maxDist: number, out: Float32Array): void => {
         _origin.set(fromX, fromY, fromZ)
@@ -52,5 +79,5 @@ export const createLineOfSightChecker = (
         }
     }
 
-    return {hasLOS, castFan}
+    return {hasLOS, castFan, collectBlockers, hasLOSPrepared}
 }
