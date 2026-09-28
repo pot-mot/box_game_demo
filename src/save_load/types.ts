@@ -5,6 +5,7 @@ import type {MagnetBoxConfig, MagnetEntityContext} from '../entity/box/magnet/ty
 import type {ElasticBoxConfig, ElasticEntityContext} from '../entity/box/elasticity/types'
 import type {WaterBlockConfig, WaterEntityContext} from '../entity/area/water/types'
 import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/types'
+import type {BuildingGeneratorContext, BuildingWorldSaveData} from '../entity/building_generator/types/index.ts'
 import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/common/types'
 import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
 import type {AttackConfig} from '../character/archetypes.ts'
@@ -17,7 +18,8 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  v4 起 character 增加基础防御 defense 与护甲装备 armor；
  *  v5 起 character 增加额外锁定点 lockPoints；
  *  v6 起 character 增加副手武器 offhand；
- *  v7 起 character 增加肢体组件装备 limb（均为可选字段，旧档加载时安全回退默认） */
+ *  v7 起 character 增加肢体组件装备 limb（均为可选字段，旧档加载时安全回退默认）；
+ *  v7 起新增 building_generator 实体（显式压缩体素 block 数据，均为可选字段，旧档加载时安全回退默认） */
 export const SAVE_FORMAT_VERSION = 7
 
 /** JSON-safe 坐标三元组 */
@@ -103,9 +105,15 @@ export interface SavableFragment {
     data: FragmentDataJSON
 }
 
+/** 建筑生成器：显式体素数据（palette + 每 chunk Base64 RLE），与生成器代码版本解耦 */
+export interface SavableBuildingGenerator {
+    type: 'building_generator'
+    worlds: BuildingWorldSaveData[]
+}
+
 export type SavableEntity = SavableCommonBox | SavableDestructibleBox | SavableBurningBox
     | SavableMagnetBox | SavableElasticBox | SavableWaterBlock | SavableTerrain
-    | SavableFragment | SavableCharacter
+    | SavableFragment | SavableBuildingGenerator | SavableCharacter
 
 // ── 角色 ──
 
@@ -216,4 +224,5 @@ export type EntitySourceMap = {
     'fragment/common': FragmentEntityContext
     'character': CharacterEntitySystem
     'terrain': TerrainContext
+    'building_generator': BuildingGeneratorContext
 }

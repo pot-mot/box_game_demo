@@ -1,4 +1,4 @@
-import {Raycaster, Vector2, Vector3, Euler, type PerspectiveCamera, type WebGLRenderer, type Mesh} from 'three'
+import {Raycaster, Vector2, Vector3, Euler, type PerspectiveCamera, type WebGLRenderer, type Mesh, type Object3D} from 'three'
 import type {SpawnMode} from '../../types/spawnMode.ts'
 import type {EntityInfoSource} from '../../entity/box/base/types/entity_info.ts'
 import type {TerrainContext} from '../../entity/terrain/base/types'
@@ -6,6 +6,18 @@ import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 import {getInputRegistry} from '../../input/registry.ts'
 import {focusPanel} from '../../ui/entity_control_panel.ts'
 import type {TransformGizmo, DragState, GizmoPartType} from './transform_gizmo.ts'
+
+/** 命中对象 → 实体：直接匹配，或沿父节点向上匹配（建筑 chunk 网格的实体是父 Group） */
+const findEntityByHit = (source: EntityInfoSource, hitObject: Object3D): {id: number} | undefined => {
+    const list = source.getEntityList()
+    let node: Object3D | null = hitObject
+    while (node !== null) {
+        const found = list.find(entry => entry.mesh === node)
+        if (found) return found
+        node = node.parent
+    }
+    return undefined
+}
 
 /**
  * 指针交互（左键选中 + 「生成物体」绑定生成 + 滚轮雕刻）。
@@ -136,9 +148,9 @@ export const setupPointerInteraction = (
 
         const hits = raycaster.intersectObjects(allMeshes, false)
         if (hits.length > 0) {
-            const hitMesh = hits[0].object as Mesh
+            const hitObject = hits[0].object
             for (const source of sources) {
-                const entity = source.getEntityList().find(e => e.mesh === hitMesh)
+                const entity = findEntityByHit(source, hitObject)
                 if (entity) {
                     sources.forEach(s => s.select(undefined))
                     source.select(entity.id)

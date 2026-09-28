@@ -8,6 +8,7 @@ const ENTITY_TYPE_VALUES = [
     'area/water',
     CHARACTER_ENTITY_TYPE,
     'terrain',
+    'building_generator',
 ] as const
 type EntityType = typeof ENTITY_TYPE_VALUES[number]
 

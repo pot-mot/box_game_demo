@@ -1,4 +1,4 @@
-import type {Mesh} from 'three'
+import type {Mesh, Object3D} from 'three'
 import type {EntityType} from '../../../constants'
 import type {PanelContext} from '../ui'
 import type {SourceEmitter} from './event_emitter'
@@ -21,7 +21,7 @@ interface EntityInfoSource {
     select: (id: number | undefined) => void
     remove: (id: number) => void
     getMeshes: () => Mesh[]
-    getEntityList: () => Array<{id: number; mesh: Mesh}>
+    getEntityList: () => Array<{id: number; mesh: Object3D}>
     spawnAt: (x: number, y: number, z: number) => void
     syncPositions: () => void
     /** 设置实体位置与旋转（度）；角色等不支持旋转的系统可忽略 rotDeg */
