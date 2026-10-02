@@ -43,10 +43,12 @@ const restoreCanvas2d = (): void => {
     })
 }
 
-/** 世界内 sensor 碰撞体数量：子弹是唯一带 sensor 碰撞体的刚体 */
+/** 世界内「在飞」sensor 碰撞体数量：弹丸是唯一带 sensor 碰撞体的刚体；
+ * 池化的空闲刚体被禁用（`setEnabled(false)`），不计入在飞数量 */
 const countSensorColliders = (shared: SharedWorld): number => {
     let count = 0
     shared.world.bodies.forEach((body) => {
+        if (!body.isEnabled()) return
         for (let i = 0; i < body.numColliders(); i++) {
             if (body.collider(i).isSensor()) count += 1
         }

@@ -19,7 +19,7 @@ import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../..
 import {availableHoldModes, defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
-import type {AttackKey} from '../../../character/weapon/attack_chain.ts'
+import {segmentTotalDuration, isChargeableKey, type AttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext, SpawnBoxCallback} from '../ai/types.ts'
@@ -96,6 +96,7 @@ const weaponRuntimeOf = (attack: AttackConfig, holdMode?: HoldMode): WeaponRunti
     return createWeaponRuntime(attack.weaponId, {
         damage: attack.damage,
         cooldown: attack.cooldown,
+        charge: attack.charge,
         ranged: attack.ranged,
     }, holdMode)
 }
@@ -157,6 +158,20 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     unmarkPlayer: () => void
     setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean) => void
     setPlayerAttack: (attackKey?: AttackKey, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
+    /**
+     * 玩家按下攻击键：可蓄力的远程武器进入蓄力（按住期间冻结在蓄力锚点阶段并累积力度），
+     * 非蓄力武器该次按下忽略（仍走松开触发的既有路径）。AI 不使用。
+     */
+    beginPlayerAttackHold: (attackKey?: AttackKey) => void
+    /**
+     * 玩家松开攻击键：若处于蓄力中则结束蓄力（段继续推进并出手）；否则按原有语义触发攻击
+     * （携带按住时长供蓄力变体守卫区分点按/长按）。
+     */
+    endPlayerAttackHold: (attackKey: AttackKey, holdDuration: number) => void
+    /**
+     * 玩家取消蓄力（如按下后拖拽旋转视角）：清空按住状态并中止当前攻击段（不发射）。
+     */
+    cancelPlayerAttackHold: () => void
     getPlayerCharacter: () => CharacterEntity | undefined
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
@@ -289,6 +304,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let playerAttackKey: AttackKey | undefined = undefined
     /** 玩家攻击脉冲携带的按键按住时长（秒），帧末与脉冲一同归零 */
     let playerAttackHoldDuration = 0
+    /** 玩家是否正按住可蓄力远程武器的攻击键（持续状态；按住期间冻结蓄力段并累积力度） */
+    let playerAttackHeld = false
 
     /** 列表行当前状态文本：角色 FSM 状态；AI 激活时追加 AI 双层 FSM（和平/战斗层:子状态）；死亡显示 dead */
     const stateLabelOf = (ch: CharacterEntity): string => {
@@ -672,6 +689,49 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         return 'ok'
     }
 
+    /** 玩家按下攻击键：可蓄力攻击（远程弓/投掷、近战重击）进入蓄力（按住期间冻结并累积力度）；其余忽略（仍走松开触发） */
+    const beginPlayerAttackHold = (attackKey?: AttackKey): void => {
+        const player = getPlayerCharacter()
+        if (!player || player.combat.isDead) return
+        const key = attackKey ?? 'light'
+        /* 该攻击键的起手段声明了 chargeFullTime 才进入蓄力；否则忽略（松开时按原有语义出招） */
+        if (!isChargeableKey(player.combat.attacks, key)) return
+        playerAttackHeld = true
+        if (!player.combat.attackActive) {
+            if (!canStartAttack(player.combat, {dx: playerDx, dz: playerDz, holdDuration: 0, attackKey: key})) {
+                playerAttackHeld = false
+                return
+            }
+            playerAttackPending = true
+            playerAttackKey = key
+            playerAttackHoldDuration = 0
+        }
+    }
+
+    /** 玩家松开攻击键：蓄力中 → 结束蓄力（段继续推进并在 release 帧出手）；否则按原有语义触发攻击 */
+    const endPlayerAttackHold = (attackKey: AttackKey, holdDuration: number): void => {
+        if (playerAttackHeld) {
+            playerAttackHeld = false
+            return
+        }
+        setPlayerAttack(attackKey, holdDuration)
+    }
+
+    /** 玩家取消蓄力（按下后拖拽旋转视角等）：清空按住状态并中止当前攻击段，不发射 */
+    const cancelPlayerAttackHold = (): void => {
+        if (!playerAttackHeld) return
+        playerAttackHeld = false
+        const player = getPlayerCharacter()
+        if (!player || !player.combat.attackActive) return
+        const segment = player.combat.activeSegment
+        if (segment === undefined) return
+        /* 直接把段标记为「已播完」：下一次状态机更新即退出 attacking（不发射，不推进缓冲） */
+        player.combat.phaseIndex = resolvePhases(segment.phases).length
+        player.combat.attackTimer = segmentTotalDuration(segment)
+        player.combat.attackHolding = false
+        player.combat.bufferedSegment = undefined
+    }
+
     const getPlayerCharacter = (): CharacterEntity | undefined =>
         characters.find(c => c.isPlayer && !c.combat.isDead)
 
@@ -775,7 +835,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 })
             } else if (entity.isPlayer) {
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration)
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerAttackHeld)
                 /* 攻击期间（含待起手帧）瞄准方向持续取相机前方：角色随之转向瞄准方向，
                  * 射击弹道再由武器实际朝向（muzzleDir）决定，避免背身射向目标 */
                 if (playerAttackPending || entity.combat.attackActive) {
@@ -814,6 +874,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
                     attackTotalProgress: inAttacking && totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
                     attackPhaseIndex: entity.combat.phaseIndex,
+                    attackCharge: entity.combat.attackCharge,
+                    attackHolding: entity.combat.attackHolding,
                     weaponHeld: model.weaponMesh !== null,
                 })
 
@@ -1469,6 +1531,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         unmarkPlayer,
         setPlayerMove,
         setPlayerAttack,
+        beginPlayerAttackHold,
+        endPlayerAttackHold,
+        cancelPlayerAttackHold,
         getPlayerCharacter,
         getHostileTo,
         getCharacterByBody,

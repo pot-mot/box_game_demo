@@ -158,8 +158,11 @@ export const createMeleeExecutor = (
          */
         const strikeWith = (group: Group | null, local: WeaponLocalHitBox | null, slotWeapon: MeleeWeaponConfig): void => {
             if (group === null || local === null) return
+            const segment = combat.activeSegment
+            /* 蓄力重击：命中时按蓄力值连续放大伤害（chargeDamageBonus 为满蓄力加成，普通段为 0） */
             const damage = (slotWeapon.damage + combat.attackBonus[slotWeapon.damageType])
-                * (combat.activeSegment?.damageMultiplier ?? 1)
+                * (segment?.damageMultiplier ?? 1)
+                * (1 + combat.attackCharge * (segment?.chargeDamageBonus ?? 0))
             /* matrixWorld 在渲染器绘制前可能滞后，先强制刷新武器子树变换 */
             group.updateMatrixWorld()
             const elements = group.matrixWorld.elements

@@ -4,7 +4,7 @@ import type {CharacterModel, AnimationContext} from './types.ts'
 import {createComposedAnimationPlayer, type ComposedAnimationPlayer, type ComposedPlayerLayer} from '../../../skeleton/anim/composed_player.ts'
 import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
 import {getBaseClipForHoldMode, fallingSpeedTier} from './clips/base_clips.ts'
-import {getAttackClipById} from './clips/attack_clips.ts'
+import {getAttackClipById, getChargeClipById} from './clips/attack_clips.ts'
 import {createCharacterSkeletonBridge} from './skeleton_bridge.ts'
 import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
 import {solveTwoHandedGrip} from './two_handed_ik.ts'
@@ -50,6 +50,9 @@ export interface AppearanceSystem {
     update: (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext) => void
 }
 
+/** 无专用蓄力 clip 时，蓄力进度映射到攻击 clip 前段的比例上限（0.5 ≈ 动作中段/满蓄力位） */
+const CHARGE_SEEK_FRACTION = 0.5
+
 export const createAppearanceSystem = (options?: AppearanceSystemOptions): AppearanceSystem => {
     const onAttackEvent = options?.onAttackEvent
     let currentState: CharacterState | null = null
@@ -62,11 +65,16 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     /* 组合动画播放器（全部状态）/ 桥接骨架（以场景为真源） */
     let bridge: SkeletonSceneBridge | undefined
     let player: ComposedAnimationPlayer | undefined
+    /* 当前是否在播放「蓄力姿势」（按住蓄力）：为真时播放器不自由推进，而按蓄力值定位进度 */
+    let chargingPose = false
+    /* 蓄力进度缩放：专用蓄力 clip（0→1）取 1；无专用 clip 时定位到攻击 clip 前段 */
+    let chargingSeekScale = 1
 
     const teardownClip = (): void => {
         player?.pause()
         player = undefined
         bridge = undefined
+        chargingPose = false
     }
 
     /** 攻击段动作组合 → 播放器层（段引用的 pose 资产 + 权重 + 时间进度偏移） */
@@ -90,13 +98,24 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             if (leftShoulder !== undefined) leftShoulder.ikRootLevel = 0
         }
         if (state === 'attacking') {
-            /* 攻击段动作组合：段引用的 pose 层（含 hitbox 事件轨），按权重合成 */
-            const layers = attackLayersOf(ctx)
-            if (layers.length === 0) return
-            player = createComposedAnimationPlayer(bridge, layers)
+            /* 攻击段动作组合：段引用的 pose 层（含 hitbox 事件轨），按权重合成；按住蓄力时按蓄力值定位姿势 */
+            const segment = ctx.attackSegment
+            chargingPose = ctx.attackHolding && segment !== undefined
+            if (chargingPose && segment !== undefined && segment.chargePoseId !== undefined) {
+                /* 专用蓄力姿势 clip：设计为 0（起始位）→ 1（满蓄力位），进度直接取蓄力值 */
+                chargingSeekScale = 1
+                player = createComposedAnimationPlayer(bridge, [{clip: getChargeClipById(segment.chargePoseId), weight: 1}])
+            } else {
+                /* 无专用蓄力 clip：定位到攻击 clip 前段（拉弓 / 后引 / 后摆），同样随蓄力参数化 */
+                chargingSeekScale = CHARGE_SEEK_FRACTION
+                const layers = attackLayersOf(ctx)
+                if (layers.length === 0) return
+                player = createComposedAnimationPlayer(bridge, layers)
+            }
             player.onEvent = (record) => onAttackEvent?.(record)
             player.play()
         } else {
+            chargingPose = false
             /* 基础状态：持握模式感知的完整 clip（下半身 + 上半身已离线预组合，运行时不产生组合开销） */
             const clip = getBaseClipForHoldMode(state, ctx.weaponHeld, ctx.holdMode, ctx.horizontalSpeed)
             player = createComposedAnimationPlayer(bridge, [{clip, weight: 1}])
@@ -149,7 +168,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         /* 动画键：attacking 用当前段 id（段切换触发混合）；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
         const weaponKey = ctx.weaponHeld ? `:${ctx.holdMode}` : ':n'
         const animKey = state === 'attacking' && ctx.attackSegment !== undefined
-            ? `attacking:${ctx.attackSegment.id}`
+            ? `attacking:${ctx.attackSegment.id}${ctx.attackHolding ? ':charging' : ''}`
             : state === 'falling'
                 ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${weaponKey}`
                 : `${state}${weaponKey}`
@@ -160,10 +179,15 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
 
         /* 统一 clip 路径：播放器推进 → applyPose 写骨架 → 桥接写回 Group（场景图级联） */
         if (player !== undefined) {
-            player.updater(dt)
-            /* 行走：步频随水平速度变速 */
-            if (state === 'walking') {
-                player.setSpeed(walkSpeedScale(ctx.horizontalSpeed))
+            if (chargingPose) {
+                /* 蓄力姿势：按蓄力值定位到 clip 对应进度（0 = 起始位，1 = 满蓄力位），不自由推进 */
+                player.seekProgress(ctx.attackCharge * chargingSeekScale)
+            } else {
+                player.updater(dt)
+                /* 行走：步频随水平速度变速 */
+                if (state === 'walking') {
+                    player.setSpeed(walkSpeedScale(ctx.horizontalSpeed))
+                }
             }
             /* 双手武器 IK（applyPose 后、混合前：IK 覆盖左臂链，评审分层顺序） */
             if (state === 'attacking') {

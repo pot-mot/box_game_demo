@@ -162,9 +162,11 @@ describe('投掷物可穿过类别', () => {
         const executor = createRangedExecutor(hw.shared, new Scene())
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
 
-        fireForward(executor, shooter, makeWeaponRuntime())
-        /* 初速 y=0，仅受重力：约 0.4s 落地；未修复时子弹会穿过地面直到 y<-10（约 1.5s） */
-        runFrames(hw, executor, [shooter], 40)
+        /* 固定全额重力以便确定帧数：本用例只验证「地面阻挡」，与生产默认重力缩放解耦。
+         * 约 24 帧落地；取 60 帧（< 未阻挡时坠出世界 y<-10 的约 89 帧），
+         * 因此若地面扫描失效，子弹仍在飞、计数非 0，可被检出 */
+        fireForward(executor, shooter, makeWeaponRuntime({projectileGravityScale: 1}))
+        runFrames(hw, executor, [shooter], 60)
 
         expect(executor.getBulletCount()).toBe(0)
     })
@@ -318,17 +320,53 @@ describe('投掷物可穿过类别', () => {
     })
 
     it('魔法爆炸伤害计入装备攻击加成（与武器类别匹配，物理加成不参与）', () => {
-        const hw = createHarnessWorld()
-        const executor = createRangedExecutor(hw.shared, new Scene())
-        const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
-        const target = makeChar(hw, 2, 0, SHOOTER_Y, 3.0)
-        shooter.combat.attackBonus = {physical: 9, magic: 1}
-        /* 箱面 z=1.75，目标 z=3.0：衰减系数约 0.37 → ceil((5+1)×0.37)=3 */
-        makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
+        /* 断言性质而非固定数值：同一场景分别注入不同加成，比较爆炸伤害。
+         * 避免依赖爆炸衰减恰好跨过取整边界的脆弱硬编码值。 */
+        const explosionDamage = (physicalBonus: number, magicBonus: number): number => {
+            const hw = createHarnessWorld()
+            const executor = createRangedExecutor(hw.shared, new Scene())
+            const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+            const target = makeChar(hw, 2, 0, SHOOTER_Y, 3.0)
+            shooter.combat.attackBonus = {physical: physicalBonus, magic: magicBonus}
+            makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
 
-        fireForward(executor, shooter, makeWeaponRuntime({damageType: 'magic', explosionRadius: 2}))
-        runFrames(hw, executor, [shooter, target], 10)
+            fireForward(executor, shooter, makeWeaponRuntime({damageType: 'magic', explosionRadius: 3}))
+            runFrames(hw, executor, [shooter, target], 10)
 
-        expect(target.combat.health).toBe(target.combat.maxHealth - 3)
+            return target.combat.maxHealth - target.combat.health
+        }
+
+        const noBonus = explosionDamage(0, 0)
+        const magicBonus = explosionDamage(0, 1)
+        const physicalBonus = explosionDamage(9, 0)
+
+        expect(noBonus).toBeGreaterThan(0)
+        /* 魔法加成计入：+1 点魔法攻击提高爆炸伤害 */
+        expect(magicBonus).toBeGreaterThan(noBonus)
+        /* 物理加成不参与魔法爆炸：仅物理加成与无加成结果一致 */
+        expect(physicalBonus).toBe(noBonus)
+    })
+
+    it('蓄力缩放弹速：玩家按 charge 曲线，AI 忽略蓄力（用预设值）', () => {
+        const speedOf = (isPlayer: boolean, charge: number): number => {
+            const hw = createHarnessWorld()
+            const executor = createRangedExecutor(hw.shared, new Scene())
+            const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
+            shooter.isPlayer = isPlayer
+            shooter.combat.attackCharge = charge
+            fireForward(executor, shooter, makeWeaponRuntime())
+            let body: import('@dimforge/rapier3d-compat').RigidBody | undefined
+            hw.shared.world.bodies.forEach((b) => {
+                if (!b.isEnabled()) return
+                for (let k = 0; k < b.numColliders(); k++) if (b.collider(k).isSensor()) body = b
+            })
+            const lv = body!.linvel()
+            return Math.hypot(lv.x, lv.z)
+        }
+        const bow = RANGED_WEAPON_PRESETS.longbow
+        expect(speedOf(true, 1)).toBeCloseTo(bow.projectileSpeed * bow.charge!.maxSpeedScale, 3)
+        expect(speedOf(true, 0)).toBeCloseTo(bow.projectileSpeed * bow.charge!.minSpeedScale, 3)
+        /* AI（非玩家）不套用蓄力曲线 */
+        expect(speedOf(false, 1)).toBeCloseTo(bow.projectileSpeed, 3)
     })
 })

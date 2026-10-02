@@ -1,10 +1,12 @@
 import type {WeaponAttacks, AttackSegment, HoldModeAttacks} from './attack_chain.ts'
-import {ATTACK_KEYS} from './attack_chain.ts'
+import {ATTACK_KEYS, withChargeTuningMap} from './attack_chain.ts'
 import type {WeaponConfig} from './catalog.ts'
 import {defaultHoldMode, findWeaponPreset, weaponAttacksOf, weaponPresetOrDefault} from './catalog.ts'
 import {HOLD_MODES, type HoldMode} from './hold_mode.ts'
 import type {MeleeWeaponConfig} from './melee_weapon.ts'
+import {DEFAULT_HEAVY_CHARGE} from './melee_attacks.ts'
 import type {RangedWeaponConfig} from './ranged_weapon.ts'
+import type {ChargeTuning} from './charge_tuning.ts'
 
 /**
  * 武器运行时 = 武器预设 + 当前持握模式 + 角色/存档数值覆写（伤害、起手段冷却、远程弹道参数）。
@@ -22,6 +24,8 @@ export interface WeaponOverrides {
     readonly damage?: number
     /** 起手段冷却覆写（秒）：作用于该武器全部起手段，链中段保持预设（普通攻击为 0） */
     readonly cooldown?: number
+    /** 蓄力调参覆写（满蓄力倍率 % / 最长蓄力时间 s）：仅对可蓄力武器生效，缺省取武器预设 */
+    readonly charge?: Partial<ChargeTuning>
     readonly ranged?: {
         readonly range: number
         readonly bulletSpeed: number
@@ -56,22 +60,42 @@ const withCooldownOverrideMap = (attacks: HoldModeAttacks, cooldown: number | un
 }
 
 /** 近战武器数值覆写（全部字段缺省 = 取预设；冷却覆写烘焙进各持握模式的攻击链） */
-const applyMeleeOverrides = (preset: MeleeWeaponConfig, overrides: WeaponOverrides): MeleeWeaponConfig => ({
-    ...preset,
-    damage: overrides.damage ?? preset.damage,
-    attacks: withCooldownOverrideMap(preset.attacks, overrides.cooldown),
-})
+const applyMeleeOverrides = (preset: MeleeWeaponConfig, overrides: WeaponOverrides): MeleeWeaponConfig => {
+    const heavyCharge = overrides.charge === undefined
+        ? preset.heavyCharge
+        : {...(preset.heavyCharge ?? DEFAULT_HEAVY_CHARGE), ...overrides.charge}
+    const attacks = withCooldownOverrideMap(preset.attacks, overrides.cooldown)
+    return {
+        ...preset,
+        damage: overrides.damage ?? preset.damage,
+        heavyCharge,
+        /* 仅当有蓄力覆写时才重烘焙（否则沿用（可能已含冷却覆写的）共享数据，保持引用稳定） */
+        attacks: overrides.charge === undefined || heavyCharge === undefined
+            ? attacks
+            : withChargeTuningMap(attacks, heavyCharge),
+    }
+}
 
-/** 远程武器数值覆写（伤害 + 弹道参数；缺省 = 取预设；冷却覆写烘焙进各持握模式的攻击链） */
-const applyRangedOverrides = (preset: RangedWeaponConfig, overrides: WeaponOverrides): RangedWeaponConfig => ({
-    ...preset,
-    damage: overrides.damage ?? preset.damage,
-    attacks: withCooldownOverrideMap(preset.attacks, overrides.cooldown),
-    range: overrides.ranged?.range ?? preset.range,
-    projectileSpeed: overrides.ranged?.bulletSpeed ?? preset.projectileSpeed,
-    knockbackForce: overrides.ranged?.bulletKnockback ?? preset.knockbackForce,
-    projectileLifetime: overrides.ranged?.bulletLifetime ?? preset.projectileLifetime,
-})
+/** 远程武器数值覆写（伤害 + 弹道参数 + 蓄力调参；缺省 = 取预设；冷却覆写烘焙进攻击链） */
+const applyRangedOverrides = (preset: RangedWeaponConfig, overrides: WeaponOverrides): RangedWeaponConfig => {
+    const charge = overrides.charge === undefined || preset.charge === undefined
+        ? preset.charge
+        : {...preset.charge, ...overrides.charge}
+    const attacks = withCooldownOverrideMap(preset.attacks, overrides.cooldown)
+    return {
+        ...preset,
+        damage: overrides.damage ?? preset.damage,
+        charge,
+        /* 仅当有蓄力覆写时才重烘焙 */
+        attacks: overrides.charge === undefined || charge === undefined
+            ? attacks
+            : withChargeTuningMap(attacks, charge),
+        range: overrides.ranged?.range ?? preset.range,
+        projectileSpeed: overrides.ranged?.bulletSpeed ?? preset.projectileSpeed,
+        knockbackForce: overrides.ranged?.bulletKnockback ?? preset.knockbackForce,
+        projectileLifetime: overrides.ranged?.bulletLifetime ?? preset.projectileLifetime,
+    }
+}
 
 /** 创建武器运行时：未知武器 id 回退默认武器（存档容错），解析指定/默认持握模式的攻击链，再应用数值覆写 */
 export const createWeaponRuntime = (

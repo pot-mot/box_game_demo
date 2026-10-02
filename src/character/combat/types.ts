@@ -62,6 +62,14 @@ export interface CombatComponent {
     /** 当前阶段已用时间（秒） */
     phaseTimer: number
 
+    /**
+     * 玩家蓄力值（0~1）：按住蓄力键期间按段 `chargeFullTime` 累积，段入场清零；
+     * 发射时按武器的 `charge` 曲线缩放弹道与伤害。AI 不蓄力，恒 0。
+     */
+    attackCharge: number
+    /** 本帧是否停在蓄力锚点阶段（冻结姿态）：为 true 时远程执行器不发射 */
+    attackHolding: boolean
+
     /** 是否被标记为受击硬直 */
     pendingFlinch: boolean
     /** 受击保护剩余时间（秒）：flinching 退出后的免硬直窗口，防止无限连段把目标永久锁在受击状态；伤害不受影响 */
@@ -156,6 +164,8 @@ export const createCombatComponent = (
     attackedTargets: new Set(),
     phaseIndex: 0,
     phaseTimer: 0,
+    attackCharge: 0,
+    attackHolding: false,
     pendingFlinch: false,
     flinchImmunityTimer: 0,
     lastHitDirX: 0,

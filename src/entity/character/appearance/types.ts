@@ -135,6 +135,10 @@ export interface AnimationContext {
     readonly attackTotalProgress: number
     /** 当前阶段索引（与 attackSegment.phases 配套，越界表示全部阶段已完成） */
     readonly attackPhaseIndex: number
+    /** 当前蓄力值 0-1（近战重击 / 远程蓄力；未蓄力 = 0） */
+    readonly attackCharge: number
+    /** 是否正冻结在蓄力锚点阶段（按住中）：为真时动画改为按蓄力值定位专用蓄力姿势 */
+    readonly attackHolding: boolean
     /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
     readonly weaponHeld: boolean
 }

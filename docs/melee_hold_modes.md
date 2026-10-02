@@ -13,7 +13,7 @@
 - **play 切换**：输入动作 `cycle_hold_mode`（默认 Ctrl，被 Ctrl+S / Ctrl+O 最长组合遮蔽）；`CharacterEntitySystem.cyclePlayerHoldMode` 按可用模式环切；HUD 显示当前武器与持握。
 - **edit 面板**：装备区新增副手武器下拉与持握模式下拉（按可用性生成选项）；Apply 后显式 `setHoldMode`。
 - **展示模式**：近战按模式分三排（6 武器 × 3 模式 = 18）+ 远程 9 = 27 角色；面板行带持握模式列；单持行不装备副手、双持行左手握同类武器、双手行副手挂背。
-- **动画来源**：每条链按武器选择动作原型（下劈 / 前刺 / 上挑 / 横扫 / 斜劈 / 枪刺 / 锤砸 / 斧劈）并以 per-weapon patch 精修右臂幅度、武器骨骼朝向与躯干拧转；左手按模式分别生成（单持平衡 / 双手副手支撑 / 双持滞后镜像 + 逐武器握向），显式关键帧入库。命中窗口 on ≈ 0.5×动作、off ≈ 0.95×动作，双持副手窗口延后 0.133s；重兵器单持/双持采用**外侧挥砍**（肩外展、手臂不横穿躯干），长枪三模式与蓄力突刺采用**侧身枪架**（根关节侧转 + 下肢错步）消除穿模；逐武器动作轨迹见 `docs/bone_animation/持握模式动作.md`。
+- **动画来源**：每条链按武器选择动作原型（下劈 / 前刺 / 上挑 / 横扫 / 斜劈 / 枪刺 / 锤砸 / 斧劈）并以 per-weapon patch 精修右臂幅度、武器骨骼朝向与躯干拧转；左手按模式分别生成（单持平衡 / 双手副手支撑 / 双持滞后镜像 + 逐武器握向），显式关键帧入库。命中窗口 on ≈ 0.5×动作、off ≈ 0.95×动作，双持副手窗口延后 0.133s；重兵器单持/双持采用**外侧挥砍**（肩外展、手臂不横穿躯干），长枪三模式采用**侧身枪架**（根关节侧转 + 下肢错步）消除穿模；逐武器动作轨迹见 `docs/bone_animation/持握模式动作.md`。
 - **验收**：`pnpm test`（1090 用例）、`pnpm test:e2e`（36 用例）、`pnpm build` 全绿。
 
 ## 1. 背景与目标
@@ -83,7 +83,7 @@ interface WeaponModelConfig {
 ### 4.2 段 id 与链编排
 
 - `buildMeleeAttacks(classId, holdMode, options)`，段 id 统一 `{classId}_{holdMode}_{key}`（现有 26 段做一次批量迁移重命名）。
-- `meleePreset` 接受 `Record<HoldMode, BuildMeleeAttacksOptions>`；每模式独立链编排（轻 2~3 段 + 重 2 段；长枪蓄力变体仅保留在双手链）。
+- `meleeClass` 接受 `Record<HoldMode, BuildMeleeAttacksOptions>`；每模式独立链编排（轻 2~3 段 + 重 2 段）；各模式**重击段统一声明为可蓄力**（`heavyCharge` → `chargeFullTime` / `chargePoseId` 等，见 `docs/attack_system.md` §8.3）。
 - `HoldModeAttacks` 三键齐全后才把该武器 `holdModes[0]` 切为 `one_handed`。
 
 ### 4.3 副手与挂背
@@ -168,7 +168,7 @@ interface WeaponModelConfig {
 |---|---|
 | 武器类 / 模型 / 目录 | `src/character/weapon/weapon_class.ts`、`catalog.ts`、`melee_weapon.ts`、`ranged_weapon.ts` |
 | 动作文档 | `docs/bone_animation/持握模式动作.md`（三模式连段总表）、`docs/bone_animation/动作设计规范.md` §7 |
-| 攻击链 | `src/character/weapon/attack_chain.ts`、`melee_attacks.ts`、`melee_special_moves.ts`、`weapon_runtime.ts` |
+| 攻击链 | `src/character/weapon/attack_chain.ts`、`melee_attacks.ts`、`weapon_runtime.ts` |
 | 攻击动画数据 | `src/character/weapon/attack_clip_data.ts`、`attack_pose_edits.ts` |
 | 角色实体 / 战斗 | `src/character/types.ts`、`src/character/combat/types.ts` |
 | 外观 / 骨架 | `src/entity/character/appearance/model.ts`、`types.ts`、`system.ts`、`skeleton/preset.ts` |

@@ -1,10 +1,12 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
 import type {AttackSegment, WeaponAttacks} from './attack_chain.ts'
+import type {ChargeTuning} from './charge_tuning.ts'
 
 /**
  * 远程武器攻击段（武器模组固有数据）：
  * 每把远程武器拥有 1 个主干段（轻击键触发），只声明**玩法时序**（阶段名/时长/移速/可中断）；
  * 动画是段 id 对应的显式骨骼关键帧（`attack_clip_data.ts` 基础轨道 + `attack_pose_edits.ts` 逐段修订），不再有抽象动画参数。
+ * **是否可蓄力与蓄力时长由武器类的 `charge`（最大倍率/最长时间）决定**，本文件只提供攻击时序。
  */
 
 interface RangedAttackSpec {
@@ -25,7 +27,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         cooldown: 0,
         phases: [
             {name: 'draw', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
-            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true},
+            /* 蓄力锚点：按住时冻结在拉弓末（aim 起始帧），松开才放箭 */
+            {name: 'aim', durationRatio: 0.3, moveSpeedMultiplier: 0.2, cancellable: true, chargeable: true},
             {name: 'release', durationRatio: 0.4, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
@@ -70,7 +73,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.5,
         cooldown: 0,
         phases: [
-            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: false},
+            /* 蓄力锚点：按住时冻结在后引末，松开才甩出 */
+            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: false, chargeable: true},
             {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
@@ -79,7 +83,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.8,
         cooldown: 0,
         phases: [
-            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
+            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false, chargeable: true},
             {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
@@ -88,7 +92,7 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.8,
         cooldown: 0,
         phases: [
-            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false},
+            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.3, cancellable: false, chargeable: true},
             {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
@@ -97,7 +101,8 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         duration: 0.2,
         cooldown: 0,
         phases: [
-            {name: 'release', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false},
+            /* 单阶段：按住时冻结在甩出起始帧（不发射），松开才甩出 */
+            {name: 'release', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false, chargeable: true},
         ],
     },
 }
@@ -109,8 +114,9 @@ export const rangedSegmentIdOf = (weaponId: string): string =>
 /**
  * 构建远程武器攻击链（单段 = 一次开火动作）：
  * 轻击键 → 该段起手；段无 next（单发，无连段），冷却为 0（节奏由动作时间自然形成）。
+ * `charge` 提供时该段声明 `chargeFullTime`（可蓄力），时长取武器类的最长蓄力时间。
  */
-export const buildRangedAttacks = (weaponId: string): WeaponAttacks => {
+export const buildRangedAttacks = (weaponId: string, charge?: ChargeTuning): WeaponAttacks => {
     const spec = RANGED_ATTACK_SPECS[weaponId]
     if (spec === undefined) {
         throw new Error(`远程武器攻击段未定义：${weaponId}`)
@@ -126,6 +132,7 @@ export const buildRangedAttacks = (weaponId: string): WeaponAttacks => {
         poses: [{poseId: spec.segmentId, weight: 1}],
         damageMultiplier: 1,
         cooldown: spec.cooldown,
+        ...(charge !== undefined ? {chargeFullTime: charge.maxChargeTime} : {}),
         next: [],
     }
     return {

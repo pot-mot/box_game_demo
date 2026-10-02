@@ -19,6 +19,12 @@ export interface AttackPhase {
     readonly moveSpeedMultiplier: number
     /** 是否可被翻滚 / 跳跃打断（combo 输入走段末缓冲，不受此限制） */
     readonly cancellable: boolean
+    /**
+     * 蓄力保持锚点（可选）：玩家按住攻击键时，本阶段停在**起始帧**（姿态冻结）
+     * 并累积段蓄力值，松开后才继续推进——用于远程蓄力（弓拉弓 / 投掷后引 / 飞镖后摆）。
+     * 段需同时声明 `chargeFullTime` 才具备蓄力；锚点应对应「射出前」的姿态阶段。
+     */
+    readonly chargeable?: boolean
 }
 
 /** 受击硬直持续时间（秒） */

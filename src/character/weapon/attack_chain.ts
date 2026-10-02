@@ -1,5 +1,6 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
-import type {HoldMode} from './hold_mode.ts'
+import {HOLD_MODES, type HoldMode} from './hold_mode.ts'
+import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
 
 /**
  * 攻击链领域模型（武器模组拥有）：
@@ -82,6 +83,22 @@ export interface AttackSegment {
     readonly damageMultiplier: number
     /** 冷却（秒，0 = 无冷却；非 0 时从段触发时刻开始计时，只挡起手） */
     readonly cooldown: number
+    /**
+     * 蓄力满值所需按住时长（秒，可选）：声明后本段支持「按住蓄力」
+     * （玩家按住攻击键 → 冻结在 `chargeable` 阶段起始帧并累积蓄力，松开才出手）。
+     * 缺省 = 不可蓄力。AI 不蓄力（`attackHeld` 恒 false）。
+     */
+    readonly chargeFullTime?: number
+    /** 满蓄力时的伤害加成（1 = +100%）：命中时按 `combat.attackCharge` 连续缩放（近战由 `melee_executor` 读取） */
+    readonly chargeDamageBonus?: number
+    /** 蓄力重击冷却（秒）：仅当松开时蓄力值 > 0 才挂到本段（短按普通攻击不触发） */
+    readonly chargeCooldown?: number
+    /**
+     * 专用蓄力姿势 clip id（进度 0 = 蓄力起始位 → 1 = 满蓄力位）：
+     * 按住期间动画改为按 `combat.attackCharge` 定位到该 clip 的对应进度，
+     * 使「后摆 / 拉弓 / 举械」幅度随蓄力连续增长；松开后切回本段攻击动画。
+     */
+    readonly chargePoseId?: string
     /** 段播完（含恢复段）后的下一状态候选；空数组 = 链终止 */
     readonly next: readonly AttackTransition[]
     /** 显示名覆写（条件变体段用，如「蓄力重劈」）；缺省按 轻击/重击 + 序号 推导 */
@@ -169,6 +186,40 @@ export const findSegment = (attacks: WeaponAttacks, segmentId: string): AttackSe
 /** 攻击键的链 */
 export const chainOf = (attacks: WeaponAttacks, key: AttackKey): WeaponAttackChain =>
     attacks.chains[key]
+
+/** 某攻击键的起手段是否支持蓄力（段声明 `chargeFullTime`）——输入侧据此决定「按下即蓄力」还是「松开即出招」 */
+export const isChargeableKey = (attacks: WeaponAttacks, key: AttackKey): boolean =>
+    chainOf(attacks, key).entries.some(entry => attacks.segments[entry.segmentId]?.chargeFullTime !== undefined)
+
+/**
+ * 用给定蓄力调参覆写攻击链中全部可蓄力段的 `chargeFullTime` / `chargeDamageBonus`
+ * （单武器覆盖 / 角色面板覆写用；克隆段，不改武器共享数据）。
+ */
+export const withChargeTuning = (attacks: WeaponAttacks, tuning: ChargeTuning): WeaponAttacks => {
+    const segments: Record<string, AttackSegment> = {}
+    for (const [id, segment] of Object.entries(attacks.segments)) {
+        if (segment.chargeFullTime === undefined) {
+            segments[id] = segment
+            continue
+        }
+        segments[id] = {
+            ...segment,
+            chargeFullTime: tuning.maxChargeTime,
+            ...(segment.chargeDamageBonus !== undefined ? {chargeDamageBonus: chargeDamageBonusOf(tuning)} : {}),
+        }
+    }
+    return {...attacks, segments}
+}
+
+/** 对持握模式 map 的每个模式应用蓄力调参覆写（换持握模式不丢失；克隆段不改共享数据） */
+export const withChargeTuningMap = (attacks: HoldModeAttacks, tuning: ChargeTuning): HoldModeAttacks => {
+    const out: Partial<Record<HoldMode, WeaponAttacks>> = {}
+    for (const mode of HOLD_MODES) {
+        const set = attacks[mode]
+        if (set !== undefined) out[mode] = withChargeTuning(set, tuning)
+    }
+    return out
+}
 
 const evalGuard = (guard: AttackTransitionGuard | undefined, ctx: AttackTransitionContext): boolean =>
     guard === undefined || guard(ctx)

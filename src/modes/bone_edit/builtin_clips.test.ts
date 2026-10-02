@@ -87,7 +87,7 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
             expect(entry.holdMode).toBeUndefined()
         }
         expect(findBuiltinClip('heavy_sword_two_handed_light_3')?.weaponId).toBe('heavy_sword')
-        expect(findBuiltinClip('spear_two_handed_charge_thrust')?.segmentId).toBe('spear_two_handed_charge_thrust')
+        expect(findBuiltinClip('long_sword_one_handed_heavy_1')?.segmentId).toBe('long_sword_one_handed_heavy_1')
         expect(findBuiltinClip('longbow_shot')?.weaponId).toBe('longbow')
         expect(findBuiltinClip('long_sword_dual_wield_light_1')?.holdMode).toBe('dual_wield')
     })

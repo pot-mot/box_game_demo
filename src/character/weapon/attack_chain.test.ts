@@ -9,6 +9,7 @@ import {
     hasMoveInput,
     holdAtLeast,
     holdLessThan,
+    isChargeableKey,
     noMoveInput,
     not,
     orderedSegments,
@@ -26,7 +27,6 @@ import {MELEE_WEAPON_CLASSES, MELEE_WEAPON_PRESETS} from './melee_weapon.ts'
 import {buildMeleeAttacks} from './melee_attacks.ts'
 import {RANGED_WEAPON_PRESETS} from './ranged_weapon.ts'
 import {createWeaponRuntime} from './weapon_runtime.ts'
-import {SPEAR_CHARGE_HOLD, spearChargeThrustId} from './melee_special_moves.ts'
 import {
     TEST_WEAPON_CHARGE_HOLD,
     createTestWeaponRuntime,
@@ -72,7 +72,7 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
         expect(chainOf(attacks, 'heavy').steps).toEqual(expected.heavy.map(step => segmentIdOf(weaponId, mode, step)))
     })
 
-    it.each(MELEE_WEAPON_IDS)('%s：轻重键起手候选分别为轻 1 / 重 1', (weaponId) => {
+    it.each(MELEE_WEAPON_IDS)('%s：轻重键起手候选分别为 轻 1 / 重 1（蓄力由段内 chargeFullTime 表达，不再用起手变体）', (weaponId) => {
         const weapon = MELEE_WEAPON_PRESETS[weaponId]
         const mode = defaultHoldMode(weapon)
         const attacks = weaponAttacksOf(weapon)
@@ -125,27 +125,23 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
         expect(segmentDisplayName(findSegment(attacks, 'heavy_sword_two_handed_light_3')!)).toBe('轻击三段')
     })
 
-    it('长枪双手蓄力突刺变体：长按起手、单发无连段、带冷却，且只出现在轻击键清单末尾', () => {
-        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.spear, 'two_handed')
-        const chargeId = spearChargeThrustId('spear', 'two_handed')
-        const charge = findSegment(attacks, chargeId)!
-        expect(charge.label).toBe('蓄力突刺')
-        expect(charge.next).toEqual([])
-        expect(charge.cooldown).toBeGreaterThan(0)
-        expect(charge.damageMultiplier).toBeGreaterThan(1)
-        /* 起手：长按命中蓄力变体，点按落回轻 1 段 */
-        expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: SPEAR_CHARGE_HOLD}))?.id).toBe(chargeId)
-        expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: SPEAR_CHARGE_HOLD - 0.01}))?.id).toBe('spear_two_handed_light_1')
-        /* 冷却中就绪性回退到兜底候选 */
-        const cooling = ctxOf({
-            holdDuration: SPEAR_CHARGE_HOLD,
-            cooldownRemaining: (id) => id === chargeId ? 0.5 : 0,
-        })
-        expect(resolveEntrySegment(attacks, 'light', cooling)?.id).toBe('spear_two_handed_light_1')
-        /* 清单顺序：主干段在前，变体段接在所属攻击键末尾 */
-        expect(orderedSegments(attacks).map(segment => segment.id)).toEqual([
-            'spear_two_handed_light_1', 'spear_two_handed_light_2', chargeId, 'spear_two_handed_heavy_1', 'spear_two_handed_heavy_2',
-        ])
+    it('通用重击蓄力：所有近战武器每种模式的重击段均可蓄力（时长/姿势/伤害加成/冷却），轻击段不可', () => {
+        for (const weaponId of MELEE_WEAPON_IDS) {
+            for (const mode of MELEE_WEAPON_CLASSES[weaponId].holdModes) {
+                const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
+                const heavy1 = findSegment(attacks, `${weaponId}_${mode}_heavy_1`)!
+                expect(heavy1.chargeFullTime, `${weaponId}/${mode}`).toBe(1)
+                expect(heavy1.chargeDamageBonus).toBe(1)
+                expect(heavy1.chargeCooldown).toBeGreaterThan(0)
+                expect(heavy1.chargePoseId).toBe(`charge_melee_${mode}`)
+                /* 重击 strike 阶段为蓄力锚点（按住冻结在起手帧） */
+                expect(heavy1.phases.some(phase => phase.chargeable === true)).toBe(true)
+                /* 轻击段不可蓄力 */
+                expect(findSegment(attacks, `${weaponId}_${mode}_light_1`)!.chargeFullTime).toBeUndefined()
+                expect(isChargeableKey(attacks, 'heavy')).toBe(true)
+                expect(isChargeableKey(attacks, 'light')).toBe(false)
+            }
+        }
     })
 
     it('全部近战武器类：三种持握模式各自声明独立连段（段 id 带模式命名空间）', () => {

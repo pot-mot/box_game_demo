@@ -34,6 +34,8 @@ const makeCtx = (overrides: Partial<AnimationContext> = {}): AnimationContext =>
     attackPhaseProgress: 0,
     attackTotalProgress: 0,
     attackPhaseIndex: 0,
+    attackCharge: 0,
+    attackHolding: false,
     weaponHeld: false,
     ...overrides,
 })

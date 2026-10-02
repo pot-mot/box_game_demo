@@ -378,8 +378,10 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
             setText(refs.hit, st.mode === 'idle'
                 ? '待机'
-                : `${st.isMelee ? `击${st.hitNumber}/${st.totalHits}` : '射击'}`)
-            const phaseText = st.phaseName === 'idle' ? 'idle' : st.phaseName === 'done' ? 'done' : st.phaseName
+                : st.mode === 'charging'
+                    ? '蓄力'
+                    : `${st.isMelee ? `击${st.hitNumber}/${st.totalHits}` : '射击'}`)
+            const phaseText = st.phaseName === 'idle' ? 'idle' : st.phaseName === 'done' ? 'done' : st.phaseName === 'charging' ? '蓄力' : st.phaseName
             setText(refs.phase, ` ${phaseText}`)
             const doneClass = st.phaseName === 'done' || st.phaseName === 'idle'
             if (refs.phase.classList.contains('done') !== doneClass) {
@@ -398,11 +400,15 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
             setText(detailTitle, `${st.weaponName} · ${st.holdModeLabel}`)
             setText(detailHit, st.mode === 'idle'
                 ? '状态：待机'
-                : `${st.isMelee ? `连段第 ${st.hitNumber}/${st.totalHits} 击` : '远程射击序列'}`)
+                : st.mode === 'charging'
+                    ? '状态：满蓄力前置'
+                    : `${st.isMelee ? `连段第 ${st.hitNumber}/${st.totalHits} 击` : '远程射击序列'}`)
             setText(detailPhase, st.mode === 'idle'
                 ? '阶段：—'
-                : `阶段：${st.phaseName === 'done' ? '收势(全部阶段完成)' : st.phaseName} · ${(st.phaseProgress * 100).toFixed(0)}%`)
-            setText(detailLink, st.mode === 'idle' ? '衔接：—' : `衔接：${st.link}`)
+                : st.mode === 'charging'
+                    ? '阶段：满蓄力姿势定格'
+                    : `阶段：${st.phaseName === 'done' ? '收势(全部阶段完成)' : st.phaseName} · ${(st.phaseProgress * 100).toFixed(0)}%`)
+            setText(detailLink, st.mode === 'idle' ? '衔接：—' : st.mode === 'charging' ? '衔接：蓄力 → 出招' : `衔接：${st.link}`)
             setBar(totalFill, st.attackProgress)
 
             /* 技能三计时器：与 play HUD 同规则逐格刷新 */

@@ -1,3 +1,5 @@
+import type {ChargeTuning} from './weapon/charge_tuning.ts'
+
 /**
  * 角色攻击配置（存档 / 属性面板）：
  * 只描述**装备的武器**与**数值覆写**；攻击动作（段 / 时长 / 动画）由武器模组的攻击链决定，
@@ -12,6 +14,8 @@ export interface AttackConfig {
     readonly damage?: number
     /** 起手段冷却覆写（秒，undefined = 取段预设冷却） */
     readonly cooldown?: number
+    /** 蓄力调参覆写（满蓄力倍率 % / 最长蓄力时间 s；undefined = 取武器模板默认） */
+    readonly charge?: Partial<ChargeTuning>
     /** 远程武器弹道数值覆写（仅远程武器需要） */
     readonly ranged?: {
         readonly range: number

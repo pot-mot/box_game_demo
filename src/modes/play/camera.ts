@@ -8,10 +8,18 @@ import {wrapAngle} from './lock_on.ts'
 const CLICK_DRAG_THRESHOLD = 5
 
 export interface MouseAttackCallbacks {
+    /** 左键按下：可蓄力攻击（远程弓/投掷、近战重击）进入蓄力（按住期间冻结并累积力度） */
+    onLightAttackStart?: () => void
     /** 轻击（左键松开且未拖拽），参数 = 按住时长（秒，用于蓄力守卫） */
     onLightAttack: (holdSeconds: number) => void
+    /** 左键按下后拖拽旋转视角（或失焦）：取消蓄力，不触发攻击 */
+    onLightAttackCancel?: () => void
+    /** 右键按下：可蓄力的重击（近战重击）进入蓄力 */
+    onHeavyAttackStart?: () => void
     /** 重击（右键松开），参数 = 按住时长（秒，用于蓄力守卫） */
     onHeavyAttack: (holdSeconds: number) => void
+    /** 右键蓄力被取消（失焦等）：不触发攻击 */
+    onHeavyAttackCancel?: () => void
 }
 
 /** 镜头锁定回调：中键切换目标、逐帧提供瞄准点、手动旋转视角时解除 */
@@ -71,22 +79,27 @@ export const setupPlayCamera = (
         }
         if (e.button === 0) {
             leftDownAt = performance.now()
+            /* 左键按下即开始蓄力（可蓄力远程武器；非蓄力武器为空操作）。拖拽会取消。 */
+            mouseAttack?.onLightAttackStart?.()
         }
         if (e.button === 2) {
             e.preventDefault()
             rightDownAt = performance.now()
+            /* 右键按下即开始重击蓄力（近战重击；非蓄力武器为空操作）。失焦会取消。 */
+            mouseAttack?.onHeavyAttackStart?.()
         }
     })
     element.addEventListener('contextmenu', (e: Event) => {
+        /* 仅阻止浏览器右键菜单：不清空攻击键计时、不取消蓄力——
+         * 部分平台 contextmenu 先于 mouseup 触发，若在此取消会中断右键重击 / 左键远程蓄力 */
         e.preventDefault()
-        orbitButton = undefined
-        leftDownAt = undefined
-        rightDownAt = undefined
     })
     window.addEventListener('blur', () => {
         orbitButton = undefined
         leftDownAt = undefined
         rightDownAt = undefined
+        mouseAttack?.onLightAttackCancel?.()
+        mouseAttack?.onHeavyAttackCancel?.()
     })
     window.addEventListener('mouseup', (e: MouseEvent) => {
         /* 本次拖拽是否达到点击阈值之外的位移（拖拽视角不触攻击） */
@@ -95,13 +108,19 @@ export const setupPlayCamera = (
         if (e.button === 0) {
             if (!dragged && leftDownAt !== undefined) {
                 mouseAttack?.onLightAttack((performance.now() - leftDownAt) / 1000)
+            } else {
+                /* 拖拽/失焦：取消蓄力（若已进入蓄力），不发射 */
+                mouseAttack?.onLightAttackCancel?.()
             }
             leftDownAt = undefined
         }
         if (e.button === 2 && !dragged && rightDownAt !== undefined) {
-            /* 重击改在松开时触发：携带按住时长，支持右键蓄力 */
+            /* 重击在松开时触发：携带按住时长（可蓄力重击已由 start 进入蓄力，松开走 end 结束） */
             mouseAttack?.onHeavyAttack((performance.now() - rightDownAt) / 1000)
             rightDownAt = undefined
+        } else if (e.button === 2) {
+            /* 右键拖拽（若改绑）或异常：取消重击蓄力 */
+            mouseAttack?.onHeavyAttackCancel?.()
         }
     })
     window.addEventListener('mousemove', (e: MouseEvent) => {

@@ -15,6 +15,11 @@ export interface CharacterInput {
     roll: boolean
     /** 攻击键按住时长（秒，仅 attack 为真的脉冲帧有意义）：连段守卫用它区分点按/长按（蓄力） */
     attackHoldDuration: number
+    /**
+     * 攻击键当前是否处于按住状态（持续为真，非脉冲）：远程蓄力段用它冻结在 `chargeable`
+     * 阶段起始帧并累积蓄力，松开后继续推进。AI 恒 false。
+     */
+    attackHeld: boolean
 }
 
 export interface MachineContext {
@@ -42,7 +47,7 @@ export interface CharacterStateMachine {
     readonly stateTime: number
     onStateChange: ((from: CharacterState, to: CharacterState) => void) | null
 
-    setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number): void
+    setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number, attackHeld?: boolean): void
     update(dt: number, entity: CharacterEntity): void
     reset(): void
 }

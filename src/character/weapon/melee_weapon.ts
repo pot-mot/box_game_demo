@@ -2,9 +2,8 @@ import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_
 import type { DamageType } from '../combat/damage_type.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
-import { holdAtLeast } from './attack_chain.ts'
-import { buildMeleeAttacks, meleeSegmentId, type BuildMeleeAttacksOptions } from './melee_attacks.ts'
-import { SPEAR_CHARGE_HOLD, spearChargeThrust, spearChargeThrustId } from './melee_special_moves.ts'
+import { withChargeTuningMap } from './attack_chain.ts'
+import { buildMeleeAttacks, DEFAULT_HEAVY_CHARGE, type BuildMeleeAttacksOptions, type HeavyChargeConfig } from './melee_attacks.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
 
 /**
@@ -40,6 +39,11 @@ export interface MeleeWeaponClassConfig {
     readonly holdModes: readonly HoldMode[]
     /** 持握模式 → 攻击链 map（键 = `holdModes` 中受支持的模式；动画为段引用的 pose 组合） */
     readonly attacks: HoldModeAttacks
+    /**
+     * 重击蓄力配置（可选；缺省 = `DEFAULT_HEAVY_CHARGE`：满蓄力 1s、+100% 伤害、冷却 0.8s）。
+     * 所有模式的攻击链都会生成对应的「蓄力重击」变体段。
+     */
+    readonly heavyCharge?: HeavyChargeConfig
 }
 
 /** 解析后的近战武器 = 武器类固有属性 + 所属模型（模型 id / 名称 / 网格） */
@@ -61,12 +65,13 @@ const meleeClass = (
     modeChains: MeleeModeChains,
 ): MeleeWeaponClassConfig => {
     const attacks: Partial<Record<HoldMode, WeaponAttacks>> = {}
+    const heavyCharge = base.heavyCharge ?? DEFAULT_HEAVY_CHARGE
     for (const mode of base.holdModes) {
         const options = modeChains[mode]
         if (options === undefined) continue
-        attacks[mode] = buildMeleeAttacks(base.id, mode, options)
+        attacks[mode] = buildMeleeAttacks(base.id, mode, {...options, heavyCharge})
     }
-    return {...base, attacks}
+    return {...base, heavyCharge, attacks}
 }
 
 /**
@@ -117,7 +122,7 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         two_handed: {chains: {light: {steps: ['light_1', 'light_2', 'light_3'], loop: true}}},
         dual_wield: {},
     }),
-    /* 长枪：双手链轻击键增加蓄力突刺变体（长按 >= SPEAR_CHARGE_HOLD 松开触发；冷却中自动回退到轻 1 段） */
+    /* 长枪：轻击链为标准两段（蓄力统一由「重击蓄力」承担，见 melee_attacks.ts 的 heavyCharge） */
     spear: meleeClass({
         id: 'spear', type: 'melee',
         damageType: 'physical',
@@ -129,16 +134,7 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         detectBox: { size: { x: 0.5, y: 1.15, z: 1.486 }, offset: { x: 0, y: 0, z: 0.618 } },
     }, {
         one_handed: {},
-        two_handed: {
-            /* 起手候选顺序 = 优先级：守卫变体（蓄力）在前、无守卫兜底（轻 1）在后 */
-            extraSegments: [spearChargeThrust('spear', 'two_handed')],
-            entries: {
-                light: [
-                    {segmentId: spearChargeThrustId('spear', 'two_handed'), guard: holdAtLeast(SPEAR_CHARGE_HOLD)},
-                    {segmentId: meleeSegmentId('spear', 'two_handed', 'light_1')},
-                ],
-            },
-        },
+        two_handed: {},
         dual_wield: {},
     }),
     /* 双斧：同为单刃斧（斧刃几何关于矢状面对称），双持时左右手各一把同类武器，副手相位错开半程（交替挥砍） */
@@ -206,7 +202,22 @@ export const resolveMeleeWeapon = (model: WeaponModelConfig): MeleeWeaponConfig 
     if (weaponClass === undefined) {
         throw new Error(`近战武器模型 ${model.id} 引用了未知武器类 ${model.classId}`)
     }
-    return {...weaponClass, classId: model.classId, id: model.id, name: model.name, mesh: model.mesh}
+    /* 蓄力调参：武器模板默认，单武器（模型）可覆盖；覆写后同步重烘焙攻击链中可蓄力段的字段 */
+    const heavyCharge: HeavyChargeConfig = model.charge === undefined
+        ? (weaponClass.heavyCharge ?? DEFAULT_HEAVY_CHARGE)
+        : {...(weaponClass.heavyCharge ?? DEFAULT_HEAVY_CHARGE), ...model.charge}
+    return {
+        ...weaponClass,
+        heavyCharge,
+        /* 仅在单武器有蓄力覆写时重烘焙攻击链（否则沿用类共享数据） */
+        attacks: model.charge === undefined
+            ? weaponClass.attacks
+            : withChargeTuningMap(weaponClass.attacks, heavyCharge),
+        classId: model.classId,
+        id: model.id,
+        name: model.name,
+        mesh: model.mesh,
+    }
 }
 
 /** 生产近战武器预设（当前 = 各类的默认模型解析结果；键 = 模型 id） */

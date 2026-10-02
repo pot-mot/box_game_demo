@@ -6,14 +6,11 @@ import {createWeaponRuntime, type WeaponRuntime} from '../weapon/weapon_runtime.
 import {createCombatComponent} from '../combat/types.ts'
 import {ROLL_COOLDOWN} from '../combat/roll_skill.ts'
 import {createTestWeaponRuntime, TEST_WEAPON_CHARGE_HOLD} from '../combat/test_weapon.ts'
-import {SPEAR_CHARGE_HOLD, spearChargeThrustId} from '../weapon/melee_special_moves.ts'
+import {orderedSegments} from '../weapon/attack_chain.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
 import type {CharacterEntity} from '../types.ts'
 
 const DT = 1 / 60
-
-/** 长枪双手蓄力突刺段 id（段 id 带持握模式命名空间） */
-const SPEAR_CHARGE_THRUST_ID = spearChargeThrustId('spear', 'two_handed')
 
 /** 状态机路径用到的 mock body 子集（真实 Rapier RigidBody 的最小替身，速度/位置按值联动） */
 type MockBody = {
@@ -102,37 +99,50 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         expect(e.combat.activeSegment?.id).toBe('test_weapon_heavy_1')
     })
 
-    it('长枪蓄力突刺（生产武器变体）：长按命中变体段并挂段冷却；单发不推进；冷却期内长按回退轻 1 段', () => {
-        /* 长按：起手 = 蓄力突刺（守卫变体优先；蓄力变体仅存在于双手链） */
-        const e = makeMock(createWeaponRuntime('spear', {}, 'two_handed'))
-        e.stateMachine.setInput(0, 0, false, true, false, 'light', SPEAR_CHARGE_HOLD)
-        e.stateMachine.update(DT, e)
-        expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe(SPEAR_CHARGE_THRUST_ID)
-        /* 段触发即挂自身冷却（变体段自带 0.8s 冷却） */
-        expect(e.combat.segmentCooldowns.get(SPEAR_CHARGE_THRUST_ID)).toBeGreaterThan(0)
+    it('重击蓄力：按下冻结在重击起手并累积蓄力，松开后挂蓄力冷却（短按无冷却）', () => {
+        const weapon = createWeaponRuntime('long_sword')
 
-        /* 单发无连段：按住轻击键也不会在段中途推进（next 为空） */
-        run(e.stateMachine, e, 20)
-        expect(e.combat.activeSegment?.id).toBe(SPEAR_CHARGE_THRUST_ID)
-        expect(e.stateMachine.currentState).toBe('attacking')
-
-        /* 松开攻击键：段完整播完后收招回 idle */
-        e.stateMachine.setInput(0, 0, false, false, false, undefined, 0)
-        run(e.stateMachine, e, 60)
-        expect(e.stateMachine.currentState).toBe('idle')
-
-        /* 冷却期内再长按：蓄力变体被段冷却挡住 → 起手解析回退到兜底候选（轻 1 段） */
-        e.stateMachine.setInput(0, 0, false, true, false, 'light', SPEAR_CHARGE_HOLD)
-        e.stateMachine.update(DT, e)
-        expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('spear_two_handed_light_1')
-
-        /* 点按（hold < 阈值）：直接走轻 1 段 */
-        const tapped = makeMock(createWeaponRuntime('spear', {}, 'two_handed'))
-        tapped.stateMachine.setInput(0, 0, false, true, false, 'light', SPEAR_CHARGE_HOLD - 0.01)
+        /* 短按：普通重击一段、无蓄力、无冷却 */
+        const tapped = makeMock(weapon)
+        tapped.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0)
         tapped.stateMachine.update(DT, tapped)
-        expect(tapped.combat.activeSegment?.id).toBe('spear_two_handed_light_1')
+        expect(tapped.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
+        expect(tapped.combat.attackHolding).toBe(false)
+        expect(tapped.combat.attackCharge).toBe(0)
+        expect(tapped.combat.segmentCooldowns.has('long_sword_one_handed_heavy_1')).toBe(false)
+
+        /* 按住：冻结在重击 strike 起始帧并累积蓄力 */
+        const e = makeMock(weapon)
+        e.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
+        /* 第二帧进入 attacking handler：冻结（attackHolding）并开始累积 */
+        e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.combat.attackHolding).toBe(true)
+        const frozenTimer = e.combat.attackTimer
+        for (let i = 0; i < 59; i++) {
+            e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.combat.attackHolding).toBe(true)
+        expect(e.combat.attackTimer).toBeCloseTo(frozenTimer, 5)
+        expect(e.combat.attackCharge).toBeGreaterThan(0.8)
+
+        /* 松开：退出保持、挂蓄力冷却，段继续推进 */
+        e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, false)
+        e.stateMachine.update(DT, e)
+        expect(e.combat.attackHolding).toBe(false)
+        expect(e.combat.segmentCooldowns.get('long_sword_one_handed_heavy_1')).toBeGreaterThan(0)
+    })
+
+    it('长枪蓄力统一到重击：重击段可蓄力，轻击键不再有旧蓄力突刺段', () => {
+        const spear = createWeaponRuntime('spear', {}, 'two_handed')
+        const heavy = spear.attacks.segments['spear_two_handed_heavy_1']
+        expect(heavy.chargeFullTime).toBe(1)
+        expect(heavy.chargePoseId).toBe('charge_melee_two_handed')
+        expect(orderedSegments(spear.attacks).some(seg => seg.id === 'spear_two_handed_charge_thrust')).toBe(false)
     })
 
     it('巨剑三段轻链（双手链）：按住轻击键依次 轻1 → 轻2 → 轻3 → 轻1', () => {
@@ -610,5 +620,59 @@ describe('受击硬直与保护窗口', () => {
         expect(e.stateMachine.currentState).toBe('idle')
         /* 退出时挂免硬直窗口（状态机不递减，由 world 主循环递减），防无限连段锁死 */
         expect(e.combat.flinchImmunityTimer).toBeCloseTo(FLINCH_IMMUNITY_DURATION)
+    })
+})
+
+describe('远程蓄力（按住冻结 + 累积 + 松开推进）', () => {
+    /** 逐帧驱动按住状态：attack 脉冲仅首帧由调用方给出，attackHeld 持续传入 */
+    const hold = (e: CharacterEntity, frames: number, held = true): void => {
+        for (let i = 0; i < frames; i++) {
+            e.stateMachine.setInput(0, 0, false, false, false, 'light', 0, held)
+            e.stateMachine.update(DT, e)
+        }
+    }
+
+    it('按住攻击键：冻结在 chargeable 阶段起始帧并累积蓄力', () => {
+        const e = makeMock(createWeaponRuntime('longbow'))
+        e.stateMachine.setInput(0, 0, false, true, false, 'light', 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        expect(e.combat.activeSegment?.id).toBe('longbow_shot')
+
+        /* 推进到 aim 阶段（draw 0.12s）后应冻结 */
+        hold(e, 12)
+        expect(e.combat.attackHolding).toBe(true)
+        const frozenTimer = e.combat.attackTimer
+        const frozenPhase = e.combat.phaseIndex
+
+        /* 继续按住 30 帧：时间线不变，蓄力持续增长 */
+        hold(e, 30)
+        expect(e.combat.attackHolding).toBe(true)
+        expect(e.combat.attackTimer).toBeCloseTo(frozenTimer, 5)
+        expect(e.combat.phaseIndex).toBe(frozenPhase)
+        expect(e.combat.attackCharge).toBeGreaterThan(0.5)
+    })
+
+    it('松开攻击键：退出保持并恢复推进；蓄力保留', () => {
+        const e = makeMock(createWeaponRuntime('longbow'))
+        e.stateMachine.setInput(0, 0, false, true, false, 'light', 0, true)
+        e.stateMachine.update(DT, e)
+        hold(e, 40)
+        const charge = e.combat.attackCharge
+        expect(charge).toBeGreaterThan(0.5)
+
+        hold(e, 8, false)
+        expect(e.combat.attackHolding).toBe(false)
+        expect(e.combat.attackCharge).toBeCloseTo(charge, 5)
+        expect(e.combat.phaseIndex).toBeGreaterThanOrEqual(1)
+    })
+
+    it('AI（attackHeld 恒 false）：不冻结、不蓄力', () => {
+        const e = makeMock(createWeaponRuntime('longbow'))
+        e.stateMachine.setInput(0, 0, false, true, false, 'light', 0, false)
+        e.stateMachine.update(DT, e)
+        hold(e, 20, false)
+        expect(e.combat.attackHolding).toBe(false)
+        expect(e.combat.attackCharge).toBe(0)
     })
 })

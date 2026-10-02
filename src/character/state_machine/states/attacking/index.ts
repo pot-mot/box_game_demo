@@ -58,8 +58,18 @@ export const attackingHandler: StateHandler = {
         const segment = c.activeSegment
         if (segment === undefined) return
 
-        /* 段子状态推进：阶段时间线 + 段计时 */
-        const phasesDone = advanceSegmentPhases(c, dt)
+        /* 蓄力累积：按住蓄力键且段声明 chargeFullTime 时按 dt 累积（AI 不蓄力） */
+        if (input.attackHeld && segment.chargeFullTime !== undefined && segment.chargeFullTime > 0) {
+            c.attackCharge = Math.min(1, c.attackCharge + dt / segment.chargeFullTime)
+        }
+
+        /* 段子状态推进：阶段时间线 + 段计时（按住时冻结在 chargeable 阶段起始帧） */
+        const wasHolding = c.attackHolding
+        const phasesDone = advanceSegmentPhases(c, dt, input.attackHeld)
+        /* 蓄力释放：蓄力值 > 0 时按段配置挂冷却（短按普通攻击不挂） */
+        if (wasHolding && !c.attackHolding && c.attackCharge > 0 && segment.chargeCooldown !== undefined) {
+            c.segmentCooldowns.set(segment.id, segment.chargeCooldown)
+        }
 
         /* 缓冲写入：AI 侧按住 attack 持续写入；玩家侧由 setPlayerAttack 写单帧脉冲。
          * 逐帧按最新输入（方向/按住时长/攻击键）重新求值段转换，新输入可覆写旧缓冲（中途改键/改方向 = 切链/换变体） */
@@ -124,6 +134,8 @@ export const attackingHandler: StateHandler = {
         const c = entity.combat
         c.attackActive = false
         c.bufferedSegment = undefined
+        c.attackCharge = 0
+        c.attackHolding = false
         /* 冷却已在段触发时挂上，exit 不再补挂 */
     },
     transitions: [

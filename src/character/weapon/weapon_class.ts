@@ -1,4 +1,5 @@
 import type {WeaponMeshConfig} from '../../entity/character/appearance/weapon_mesh.ts'
+import type {ChargeTuning} from './charge_tuning.ts'
 
 /**
  * 武器类 / 武器模型分层：
@@ -19,4 +20,9 @@ export interface WeaponModelConfig {
     readonly name: string
     /** 程序化武器模型（主手 / 右手） */
     readonly mesh: WeaponMeshConfig
+    /**
+     * 蓄力调参覆盖（可选）：单武器（模型）覆盖所属武器模板的默认 `maxChargeMultiplier` / `maxChargeTime`；
+     * 未声明的字段沿用模板默认。
+     */
+    readonly charge?: Partial<ChargeTuning>
 }

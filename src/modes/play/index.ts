@@ -45,8 +45,12 @@ export const setupPlayMode = (
         return cameraTarget
     },
     {
-        onLightAttack: (held) => characterSystem.setPlayerAttack('light', held),
-        onHeavyAttack: (held) => characterSystem.setPlayerAttack('heavy', held),
+        onLightAttackStart: () => characterSystem.beginPlayerAttackHold('light'),
+        onLightAttack: (held) => characterSystem.endPlayerAttackHold('light', held),
+        onLightAttackCancel: () => characterSystem.cancelPlayerAttackHold(),
+        onHeavyAttackStart: () => characterSystem.beginPlayerAttackHold('heavy'),
+        onHeavyAttack: (held) => characterSystem.endPlayerAttackHold('heavy', held),
+        onHeavyAttackCancel: () => characterSystem.cancelPlayerAttackHold(),
     },
     {
         onToggle: lockOn.toggle,
@@ -157,6 +161,8 @@ export const setupPlayMode = (
                 skillTimers,
                 weaponLabel: player.combat.weapon.name,
                 holdModeLabel: HOLD_MODE_LABELS[player.holdMode],
+                charge: player.combat.attackCharge,
+                charging: player.combat.attackHolding || player.combat.attackCharge > 0,
             })
         } else {
             hud.setVisible(false)

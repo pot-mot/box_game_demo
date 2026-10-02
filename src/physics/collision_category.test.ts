@@ -19,7 +19,8 @@ import {
     TERRAIN_COLLISION_MASK,
 } from './constants.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../entity/character/constants.ts'
-import {BULLET_COLLISION_GROUP, BULLET_COLLISION_MASK, WEAPON_COLLISION_GROUP, WEAPON_COLLISION_MASK} from '../entity/character/combat/constants.ts'
+import {WEAPON_COLLISION_GROUP, WEAPON_COLLISION_MASK} from '../entity/character/combat/constants.ts'
+import {PROJECTILE_COLLISION_GROUP, PROJECTILE_COLLISION_MASK} from '../entity/character/projectile/constants.ts'
 
 describe('collision_category 打包与解析', () => {
     it('类别位并入 membership，交互掩码原样保留', () => {
@@ -47,7 +48,7 @@ describe('collision_category 打包与解析', () => {
 
     it('未标注类别的碰撞体（武器 / 投掷物）解析为 undefined', () => {
         expect(collisionCategoryOf((WEAPON_COLLISION_GROUP << 16) | (WEAPON_COLLISION_MASK & 0xFFFF))).toBeUndefined()
-        expect(collisionCategoryOf((BULLET_COLLISION_GROUP << 16) | (BULLET_COLLISION_MASK & 0xFFFF))).toBeUndefined()
+        expect(collisionCategoryOf((PROJECTILE_COLLISION_GROUP << 16) | (PROJECTILE_COLLISION_MASK & 0xFFFF))).toBeUndefined()
     })
 
     it('未显式声明碰撞组的碰撞体按 fail-closed 处理（默认 membership 全 1 = 已标注类别，会阻挡投掷物）', () => {
@@ -83,7 +84,7 @@ describe('isBlockingGeometry（形状扫描的阻挡候选）', () => {
 
     it('角色与未标注类别的碰撞体不参与形状扫描', () => {
         expect(isBlockingGeometry(categoryCollisionGroups(CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, 'character'))).toBe(false)
-        expect(isBlockingGeometry((BULLET_COLLISION_GROUP << 16) | (BULLET_COLLISION_MASK & 0xFFFF))).toBe(false)
+        expect(isBlockingGeometry((PROJECTILE_COLLISION_GROUP << 16) | (PROJECTILE_COLLISION_MASK & 0xFFFF))).toBe(false)
         expect(isBlockingGeometry((WEAPON_COLLISION_GROUP << 16) | (WEAPON_COLLISION_MASK & 0xFFFF))).toBe(false)
     })
 })

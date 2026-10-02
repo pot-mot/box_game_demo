@@ -42,6 +42,10 @@ export interface PlayerHUDData {
     weaponLabel: string
     /** 当前持握模式中文名（单持 / 双手共持 / 双持） */
     holdModeLabel: string
+    /** 远程蓄力值（0~1） */
+    charge: number
+    /** 是否正在蓄力（显示蓄力条） */
+    charging: boolean
 }
 
 export interface PlayerHUD {
@@ -100,6 +104,21 @@ export const createPlayerHUD = (): PlayerHUD => {
     const hpText = document.createElement('div')
     hpText.style.cssText = 'text-align:right;font-size:12px;margin-bottom:6px'
     el.appendChild(hpText)
+
+    /* 蓄力条（仅蓄力时显示）：远程弓 / 投掷物的按住蓄力进度 */
+    const chargeRow = document.createElement('div')
+    chargeRow.style.cssText = 'display:none;margin-bottom:6px'
+    const chargeLabel = document.createElement('div')
+    chargeLabel.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:2px'
+    chargeLabel.textContent = 'CHARGE'
+    const chargeBar = document.createElement('div')
+    chargeBar.style.cssText = 'height:6px;background:rgba(255,255,255,.15);border-radius:3px;overflow:hidden'
+    const chargeFill = document.createElement('div')
+    chargeFill.style.cssText = 'height:100%;width:0%;background:#ffcc44;border-radius:3px'
+    chargeBar.appendChild(chargeFill)
+    chargeRow.appendChild(chargeLabel)
+    chargeRow.appendChild(chargeBar)
+    el.appendChild(chargeRow)
 
     const separator = document.createElement('div')
     separator.style.cssText = 'border-top:1px solid rgba(255,255,255,.15);margin:4px 0'
@@ -233,6 +252,14 @@ export const createPlayerHUD = (): PlayerHUD => {
 
         stateEl.textContent = `ST: ${data.stateName}  ${data.stateTime.toFixed(2)}s`
         loadoutEl.textContent = `${data.weaponLabel} · ${data.holdModeLabel}（Ctrl 切换）`
+
+        chargeRow.style.display = data.charging ? '' : 'none'
+        if (data.charging) {
+            const ratio = Math.max(0, Math.min(1, data.charge))
+            chargeFill.style.width = `${ratio * 100}%`
+            chargeFill.style.background = ratio >= 1 ? '#ff4444' : '#ffcc44'
+            chargeLabel.textContent = `CHARGE ${Math.round(ratio * 100)}%`
+        }
 
         const count = data.timers.length
         ensureTimerRows(count)

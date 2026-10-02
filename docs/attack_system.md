@@ -201,9 +201,16 @@ export interface WeaponAttacks {
 
 远程武器各持 1 个主干段（`buildRangedAttacks(weaponId)`），段 id 沿用原远程技能 id（如 `longbow_shot`、`throwing_dart_fling`），`key = 'light'`、`recovery = 0`、`next = []`（单发，无连段）；重击链为空链（`entries` / `steps` 均为空数组，起手解析恒失败）。轻击键起手，播完段即收招。
 
-**弹丸在 `release` 阶段开始的那一帧发射**（`ranged_executor.update`：`activePhaseName === 'release'` 且本段未发射；每段只发射一次）：先拉弓 / 举枪 / 后引，动画走到释放帧才出弹。**弹道初始方向 = 武器实际朝向**——`world.ts` 每帧从武器骨骼（本地 +Y = 枪口/弹道轴）采样世界水平方向写入 `combat.muzzleDirX/Z`，释放帧按该方向发射（无武器朝向数据时回退到段起手的瞄准方向）。因此角色没转身/没举好枪时，子弹会沿枪口指向飞出，而不是凭空飞向目标。飞镖段只有 `release` 阶段，等价于起手即甩出。
+**弹丸在 `release` 阶段开始的那一帧发射**（`ranged_executor.update`：`activePhaseName === 'release'` 且本段未发射；每段只发射一次）：先拉弓 / 举枪 / 后引，动画走到释放帧才出弹。**弹道水平方向**：**玩家 = 瞄准方向**（`combat.attackDirX/Z` = 相机前方）——玩家以准心瞄准，武器骨骼姿态偏差（各武器释放帧可达 ~10°~25°）与一帧采样延迟不进入弹道；**非玩家（AI）= 武器实际朝向**——`world.ts` 每帧从武器骨骼（本地 +Y = 枪口/弹道轴）采样世界水平方向写入 `combat.muzzleDirX/Z`，保留「背身开火按枪口」的既有行为。无相应数据时回退到段起手的瞄准方向。飞镖段只有 `release` 阶段，等价于起手即甩出。
 
-**转向 / 瞄准流程**：`combat.attackDirX/Z` 表示**瞄准方向**（玩家 = 相机前方、AI = 战斗目标方向）。远程攻击期间角色朝向锁定该瞄准方向（`world.ts`）：玩家在 `draw` / `aim` 阶段转身，AI 在 `combat` 期间持续面向目标，配合瞄准门控（未对准不出手，见 `ai_system.md` §3.5）保证释放帧枪口对准目标。近战攻击不使用 `muzzleDir`（判定箱跟随武器模型）。
+**转向 / 瞄准流程**：`combat.attackDirX/Z` 表示**瞄准方向**（玩家 = 相机前方、AI = 战斗目标方向）。远程攻击期间角色朝向锁定该瞄准方向（`world.ts`）：玩家在 `draw` / `aim` 阶段转身，AI 在 `combat` 期间持续面向目标，配合瞄准门控（未对准不出手，见 `ai_system.md` §3.5）。**玩家弹道即取该瞄准方向**（准心命中），AI 弹道取武器实际朝向（`muzzleDir`）。近战攻击不使用 `muzzleDir`（判定箱跟随武器模型）。
+
+**远程蓄力（按住蓄力、松开出手）**：弓（`longbow`）与投掷类（`throwing_axe` / `throwing_dart` / `grenade` / `molotov`）支持蓄力，连弩 / 霰弹枪 / 法杖 / 魔杖不支持。
+
+- **输入链路**：左键**按下**即起手——`modes/play/camera.ts` 的 `onLightAttackStart` → `world.ts beginPlayerAttackHold`（`attack_chain.ts` 的 `isChargeableKey` 判定该攻击键起手段是否可蓄力，即武器类声明了 `charge`；其余武器仍走松开触发的既有路径）。按住状态 `playerAttackHeld` 每帧经 `setInput` 第 8 参传入 `CharacterInput.attackHeld`（持续量，非脉冲）；松开时 `endPlayerAttackHold` 清空（若未处于蓄力则回退到原有 `setPlayerAttack`）。按下后拖拽旋转视角 / 失焦 → `cancelPlayerAttackHold`：清空按住状态并把当前段标记为已播完（不发射）。
+- **冻结与累积**：段推进到声明 `chargeable` 的阶段时（弓 = `aim`、投掷 = `windup`、飞镖 = 唯一 `release`），若 `attackHeld` 为真则**冻结在该阶段起始帧**（`combat.attackHolding = true`，时间线不推进），并按段 `chargeFullTime`（= 武器类 `charge.maxChargeTime`）逐帧累积 `combat.attackCharge`（0~1，封顶）；松开后恢复推进，`release` 阶段发射。
+- **强度映射**：发射时玩家把 `charge` 交给弹丸分包——伤害按 `maxChargeMultiplier` 一次函数缩放（0 → 100%，满蓄力 → `maxChargeMultiplier%`），初速 / 生命期按 `charge` 的 min/max 缩放区间（控制投掷远近）。**AI 不蓄力**（`attackHeld` 恒 false，不传 `charge`），按武器预设值发射，行为与数值不变。
+- **HUD**：`CHARGE` 进度条在蓄力期间显示当前力度。
 
 阶段序列按武器语义声明：弓箭为 `draw / aim / release`，弩与枪械为 `aim / release`，投掷类（飞斧 / 手雷 / 燃烧瓶）为 `windup / release`，飞镖为单 `release`。多数阶段 `cancellable: true`（瞄准期可被翻滚打断），释放段不可打断。
 
@@ -247,6 +254,8 @@ not(guard)                    /* 取反 */
 1. `modes/play/camera.ts`：攻击键 mousedown 记录 `performance.now()`，mouseup 时算出按住秒数随回调传出（右键重击同为松开触发；blur/contextmenu 取消）；
 2. `world.ts setPlayerAttack(attackKey, holdDuration)`：把按住时长存入脉冲，经 `setInput` 第 6/7 参喂入 `CharacterInput.attackKey` / `attackHoldDuration`，帧末与脉冲一同归零；
 3. 起手候选声明顺序 = 优先级：`holdAtLeast(阈值)` 的蓄力段在前、无守卫的兜底段在后；守卫不通过或蓄力段冷却中时自动落到兜底段。
+
+> **两套蓄力机制**：① **近战重击蓄力**——所有近战武器**按下重击键即进入蓄力**（冻结在重击 strike 起始帧并逐帧累积 `combat.attackCharge`），松开出手；`melee_executor` 命中时按 `1 + attackCharge × chargeDamageBonus` 放大伤害，蓄力值 > 0 时挂 `chargeCooldown`，详见 §8.3；② **远程蓄力**——弓与投掷类**按下攻击键即进入蓄力**（冻结在 `chargeable` 阶段并累积 `combat.attackCharge`），松开后 `release` 阶段发射并按武器 `charge` 曲线缩放弹道，详见 §3.3。两者共用 `CharacterInput.attackHeld` / `CombatComponent.attackCharge` / `advanceSegmentPhases` 的冻结逻辑，无独立计时器。
 
 **测试武器 `test_weapon`**（`src/character/combat/test_weapon.ts`，仅供单元测试，不进 `MELEE_WEAPON_PRESETS`；经 `catalog.ts` 的 `registerWeaponPreset` 注册为额外预设）：6 段覆盖蓄力起手（`charge`，起手守卫 `holdAtLeast(TEST_WEAPON_CHARGE_HOLD = 0.5)`）、点按兜底（`tap`，同键无守卫候选）、键组分离（`heavy_1` / `heavy_2` 独立重击链）、方向变体（`tap` 的 `next` = [`thrust`（守卫 `hasMoveInput`）, `light_2`（兜底）]）、循环链（`tap ↔ light_2`、`heavy_1 ↔ heavy_2`）与无链单发（`charge.next = []`）。**冷却保留非 0 值作为冷却机制验证夹具**（charge 1.2s / tap 0.3s / heavy_1 0.6s；普通攻击预设冷却均为 0）。装配入口：`world.ts` `weaponRuntimeOf` 对 `weaponId === TEST_WEAPON_ID` 特判 `createTestWeaponRuntime()`。
 
@@ -401,7 +410,7 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 
 ### 5.4 投掷物（子弹）碰撞与可穿过类别
 
-**文件**：`src/entity/character/combat/ranged_executor.ts`
+**文件**：开火控制 `src/entity/character/combat/ranged_executor.ts`；弹丸物理 / 视觉 / 特效在独立分包 `src/entity/character/projectile/`（详见 [`projectile_system.md`](projectile_system.md)）
 
 子弹自身是 `mask 0` 的 sensor（不与任何物体产生物理交互），命中判定完全由每帧的显式检测完成，因此「命中什么会消失」由数据驱动：
 
@@ -409,10 +418,12 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 - **类别系统**：`src/physics/collision_category.ts`。类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）以 membership 位（第 5 位起，避开交互组 1/2/4/8/16）并入碰撞体的 `collisionGroups`，经 `categoryCollisionGroups(group, mask, category)` 打包；类别位不参与交互（其它碰撞体的 filter 均不含这些位），仅用于查询侧识别。
 - **数值编译**：命中判定用位掩码，`passThroughCategories` 在开火时编译为 `passThroughMask`（逐帧 O(1)）。
 - **场景几何（箱子 / 碎片 / 地形 / 世界地面）**：每帧用 `world.castShape` 扫描「上一帧位置 → 当前位置」整段位移（`maxToi = 1`、初始穿模即判定），因此高速子弹不会穿过薄碰撞体。扫描用 `filterPredicate` 放行可穿过类别，其余已标注类别的碰撞体一律阻挡；爆炸子弹（`explosionRadius > 0`）在**命中点**就地引爆后消失。
-- **角色**：沿用宽容半径判定（`BULLET_HIT_RADIUS`，覆盖受击箱 + 一帧位移），不参与形状扫描。命中角色即消失；仅 `attackTendency` 判定为敌对时结算伤害 / 击退 / 爆炸——**非敌对角色同样会挡下子弹（不结算伤害）**。把 `character` 加入 `passThroughCategories` 则该武器对所有角色完全透明（穿过且不结算伤害，即「幽灵弹」；带伤害的贯穿弹属未实现能力）。
-- **兜底路径**：生命期耗尽、坠出世界（`y < -10`）、爆炸子弹掉到地面以下（`y < 0`，正常已被地面扫描拦下）、命中后速度 < 1，均沿用原有消失逻辑。
+- **角色**：沿用宽容半径判定（`PROJECTILE_HIT_RADIUS`，覆盖受击箱 + 一帧位移），不参与形状扫描。命中角色即消失；仅 `attackTendency` 判定为敌对时结算伤害 / 击退 / 爆炸——**非敌对角色同样会挡下子弹（不结算伤害）**。把 `character` 加入 `passThroughCategories` 则该武器对所有角色完全透明（穿过且不结算伤害，即「幽灵弹」；带伤害的贯穿弹属未实现能力）。
+- **重力**：弹丸用 Rapier 的 `RigidBodyDesc.setGravityScale`（`RangedWeaponConfig.projectileGravityScale` 可选，缺省 `DEFAULT_PROJECTILE_GRAVITY_SCALE = 0.15`，`character/weapon/ranged_weapon.ts`）**逐弹降低重力**，不改世界重力：直线弹（弓 / 弩 / 枪 / 魔法，≈0～0.08）近乎水平，投掷物（0.2～0.55）保留可读弧线。不可被存档 / 面板覆写。
+- **视觉与范围伤害特效**：由 `projectile` 视觉规格驱动（箭矢 / 弩矢 / 弹头 / 复用武器模型 / 魔法球 + 轨迹）；范围伤害在命中点生成火光 / 碎片 / 魔法爆散特效（`impact_effect.ts`）。见 [`projectile_system.md`](projectile_system.md)。
+- **兜底路径**：生命期耗尽、坠出世界（`y < PROJECTILE_KILL_Y`）、爆炸子弹掉到地面以下（`y < 0`，正常已被地面扫描拦下）、命中后速度 < `PROJECTILE_MIN_SPEED`，均沿用原有消失逻辑。
 - **未标注类别的碰撞体**（武器、其它子弹）不阻挡子弹；未显式声明碰撞组者 membership 全 1，按声明顺序解析为 `ground` → 阻挡（fail-closed）。
-- **世界级清理**：子弹是战斗期临时对象，既不是实体系统的实体也不进存档。编辑模式 Reset 还原世界、`Ctrl+O` 载入存档时，由 `main.ts` 的 `clearWorld()` 调用 `CharacterEntitySystem.clearBullets()`（→ `rangedExecutor.clear()`）连同物理刚体与场景 mesh 一并清除，避免旧子弹残留到还原后的世界里继续飞行。
+- **世界级清理**：子弹是战斗期临时对象，既不是实体系统的实体也不进存档。编辑模式 Reset 还原世界、`Ctrl+O` 载入存档时，由 `main.ts` 的 `clearWorld()` 调用 `CharacterEntitySystem.clearBullets()`（→ `rangedExecutor.clear()` → `projectileSystem.clear()`）连同物理刚体、视觉与特效一并清除（对象归还池化栈），避免旧子弹残留到还原后的世界里继续飞行。
 
 ### 5.5 死亡倒下（方向由最后受击决定）
 
@@ -578,44 +589,27 @@ const phaseKey = c.phaseIndex < phases.length
 3. **验证**（本仓库已落地的断言）
    - 单测 `weapon/attack_chain.test.ts`：巨剑 `chains.light.steps` 为 3 段、`orderedSegments` 顺序为 轻1/轻2/轻3/重1/重2、`segmentDisplayName` 为「轻击三段」、段转换依编排推进；
    - 单测 `state_machine/machine.test.ts`：按住轻击键依次得到 `heavy_sword_two_handed_light_1 → light_2 → light_3 → light_1`；
-    - 单测 `modes/bone_edit/builtin_clips.test.ts` 与 e2e `bone_edit.spec.ts`：内置动作库每武器段数/标签顺序（巨剑双手 5 条、近战合计 74 条、总条目 92）与 `data-builtin-clip-count` 同步更新（新增段需同步 `attack_clip_data.ts`）；
+    - 单测 `modes/bone_edit/builtin_clips.test.ts` 与 e2e `bone_edit.spec.ts`：内置动作库每武器段数/标签顺序（近战合计 73 条、总条目 91）与 `data-builtin-clip-count` 同步更新；
    - 无需改动：状态机、存档、AI、HUD、展示模式脚本（`orderedSegments` 自动带上新段；链间停顿位置由「第一个重击段之前」派生）。
 
-### 8.3 完整流程 B：给长枪加蓄力突刺变体（长按轻击键触发）
+### 8.3 内置：近战重击蓄力（所有近战武器通用）
 
-**目标**：轻击键长按 ≥ 0.5s 松开触发「蓄力突刺」（高伤害、带冷却、单发无连段），点按仍是轻 1 段，冷却期内长按回落轻 1 段；AI 不蓄力因此行为不变。
+**目标**：所有近战武器的**重击**支持蓄力——短按即出普通重击；**按住重击键即进入蓄力**（角色定格在重击起手，且后摆 / 举械幅度随蓄力增大），松开出手；伤害随蓄力连续缩放，满蓄力（默认 1s）**+100%**。
 
-1. **写变体段**（`weapon/melee_special_moves.ts`）
-   ```ts
-   export const SPEAR_CHARGE_HOLD = 0.5
-   export const spearChargeThrust = (classId: string, holdMode: HoldMode): AttackSegment => ({
-       id: spearChargeThrustId(classId, holdMode), key: 'light', step: 1, label: '蓄力突刺',
-       duration: 0.6, recovery: 0.4,
-       phases: [/* strike（moveSpeedMultiplier 0.2）+ recovery（仅时序） */],
-       damageMultiplier: 1.8, cooldown: 0.8, next: [],
-   })
-   ```
-   要点：`label` 让清单/HUD/展示显示中文名而非「轻击一段」；`next: []` = 单发；`cooldown` 只挡起手、冷却中自动回退兜底候选。
-2. **接进该武器类**（`melee_weapon.ts`）
-   ```ts
-   spear: meleeClass({...类固有字段...}, {
-       one_handed: {},
-       two_handed: {
-           extraSegments: [spearChargeThrust('spear', 'two_handed')],
-           entries: {light: [
-               {segmentId: spearChargeThrustId('spear', 'two_handed'), guard: holdAtLeast(SPEAR_CHARGE_HOLD)},
-               {segmentId: 'spear_two_handed_light_1'},   // 兜底：无守卫、放最后
-           ]},
-       },
-       dual_wield: {},
-   }),
-   ```
-   **不要**把变体段写进 `chains.light.steps`——它不是主干段，不进「同链 1..n 顺序」；`orderedSegments` 会把它补在所属攻击键末尾（清单显示为 长枪 · 轻击一段 / 轻击二段 / 蓄力突刺 / 重击一段 / 重击二段）。
-3. **输入链路（已具备，无需改动）**：`modes/play/camera.ts` 在攻击键 mouseup 时算出按住时长 → `characterSystem.setPlayerAttack('light', held)` → `world.ts` 写入单帧脉冲 → `setInput(..., attackKey, attackHoldDuration)` → 起手守卫 `holdAtLeast` 求值。AI 侧固定 `holdDuration: 0`，因此永远命中兜底段。
-4. **验证**（本仓库已落地的断言）
-   - 单测 `weapon/attack_chain.test.ts`：长按命中变体、点按回落轻 1、冷却中回退轻 1、`orderedSegments` 顺序、变体段 `next` 为空且带冷却；
-   - 单测 `state_machine/machine.test.ts`：真实状态机长按 → `activeSegment === 'spear_two_handed_charge_thrust'` 且挂上段冷却；段中途按住不推进；松手后收招回 idle；冷却期内长按回退 `spear_two_handed_light_1`；
-   - e2e：骨骼动画内置动作库出现 `spear_two_handed_charge_thrust` 条目与「长枪 · 蓄力突刺」标签（可用它直接可视化调动作）。
+实现为**通用数据机制**，新增近战武器自动获得，无需逐武器接：
+
+1. **武器类配置**（`melee_weapon.ts` 的 `MeleeWeaponClassConfig.heavyCharge?`）：`{maxChargeMultiplier, maxChargeTime, cooldown, chargePoseId?}`（`HeavyChargeConfig extends ChargeTuning`），缺省 `DEFAULT_HEAVY_CHARGE = {maxChargeMultiplier: 200, maxChargeTime: 1, cooldown: 0.8}`（`melee_attacks.ts`）。`meleeClass` 把它注入每个模式的 `BuildMeleeAttacksOptions.heavyCharge`，并把解析后的 `heavyCharge` 暴露在武器配置上；**单武器（模型）可经 `WeaponModelConfig.charge` 覆盖，角色面板可经 `AttackConfig.charge` 覆盖**（`charge_tuning.ts` 的 `ChargeTuning` / `chargeDamageScale`）。
+2. **重击段声明可蓄力**（`melee_attacks.ts` 的 `buildMeleeAttacks`）：每个重击段设 `chargeFullTime = maxChargeTime`、strike 阶段 `chargeable`、`chargeDamageBonus = maxChargeMultiplier/100 − 1`、`chargeCooldown = cooldown`、`chargePoseId = heavyCharge.chargePoseId ?? meleeChargePoseId(holdMode)`。单武器 / 面板覆写后由 `withChargeTuningMap` 重烘焙这些字段。
+3. **输入**：`modes/play/camera.ts` 右键按下 → `world.beginPlayerAttackHold('heavy')`（`attack_chain.ts` 的 `isChargeableKey` 判定该键起手段是否可蓄力）→ 进入 attacking 并冻结在 strike 起始帧；右键松开 → `endPlayerAttackHold('heavy', held)`（蓄力中则结束蓄力、进入出招）。失焦 / 拖拽 → `cancelPlayerAttackHold`。
+4. **伤害与冷却**：`melee_executor` 命中时 `damage = (基础伤害 + 加成) × damageMultiplier × (1 + attackCharge × chargeDamageBonus)`；蓄力值 > 0 时在 `attacking/index.ts` 释放瞬间按 `chargeCooldown` 挂冷却（短按不挂）。
+5. **蓄力姿势（参数化）**：`AnimationContext` 携带 `attackCharge` / `attackHolding`；`appearance/system.ts` 在按住时改用段 `chargePoseId` 的**专用蓄力姿势 clip**（`charge_clip_data.ts` + `charge_pose_edits.ts`，进度 0 = 持械戒备位 → 1 = 满蓄力后引位），并按 `attackCharge` 定位其进度；无专用 clip 的武器（远程）则定位到攻击 clip 前段。`animKey` 带 `:charging`，松开时触发状态混合，消除姿势跳变。
+6. **AI 不受影响**：AI 只用轻击键（`attackKey: 'light'`）且 `holdDuration` 恒 0，永不蓄力。
+7. **展示模式镜像**：`modes/showcase/actor.ts` 在每个近战重击段播放前插入 `charging` 前置（定格满蓄力姿势 `CHARGE_HOLD_DURATION`，面板显示「蓄力 / 满蓄力前置」），随后进入该段 attacking，复现「蓄力 → 出招」的完整表现。
+
+**验证**（本仓库已落地的断言）
+- 单测 `weapon/attack_chain.test.ts`：所有武器 × 模式的重击段 `chargeFullTime / chargeDamageBonus / chargeCooldown / chargePoseId` 正确、strike 阶段可蓄力、轻击段不可蓄力、`isChargeableKey` 判定正确。
+- 单测 `state_machine/machine.test.ts`：短按重击无保持 / 无冷却；按住重击冻结且 `attackCharge` 增长；松开挂蓄力冷却。
+- 单测 `combat/melee_executor.test.ts` / `projectile/system.test.ts` / `physics/ranged_aim.test.ts`：蓄力值对近战伤害与远程弹道的连续缩放。
 
 ### 8.4 新增近战武器
 
@@ -666,7 +660,7 @@ const phaseKey = c.phaseIndex < phases.length
 | `weapon/melee_weapon.test.ts` | 武器预设数量（6 把近战）与字段完整性 |
 | `combat/attack_phases.test.ts` | 遍历各武器实际段检查阶段比例/类型合法性（不写死段数，一般无需改） |
 | `state_machine/machine.test.ts` | 连段推进与起手解析的端到端断言（改链长/加变体时补对应用例） |
-| `modes/bone_edit/builtin_clips.test.ts` + `e2e/bone_edit.spec.ts` | 内置动作库条目总数（当前 9 + 74 + 9 = 92）、每武器 × 模式标签顺序、`data-builtin-clip-count` |
+| `modes/bone_edit/builtin_clips.test.ts` + `e2e/bone_edit.spec.ts` | 内置动作库条目总数（当前 9 + 73 + 9 = 91）、每武器 × 模式标签顺序、`data-builtin-clip-count` |
 | `entity/character/appearance/clips/attack_clips.ts` | 攻击 clip 解析 `getAttackClipById`（合并基础关键帧与逐段姿势修订；惰性缓存） |
 | `docs/showcase.md` / `docs/bone_animation_system.md` | 展示清单与内置动作库的段数/顺序描述 |
 
@@ -678,15 +672,16 @@ const phaseKey = c.phaseIndex < phases.length
 
 | 文件 | 内容 |
 |------|------|
-| `attack_chain.ts` | 攻击链领域模型：`ATTACK_KEYS` / `AttackKey`、`AttackSegment`、`AttackTransition`、`AttackEntry`、`WeaponAttackChain`、`WeaponAttacks`；守卫原语（`always`/`pressedKey`/`pressedOtherKey`/`holdAtLeast`/`holdLessThan`/`hasMoveInput`/`noMoveInput`/`cooldownReady`/`allOf`/`anyOf`/`not`）；解析与查询（`findSegment`/`chainOf`/`resolveEntrySegment`/`resolveNextSegment`/`orderedSegments`/`segmentDisplayName`/`segmentTotalDuration`） |
-| `melee_attacks.ts` | 近战段模板与链编排：`MELEE_SEGMENT_KEYS`（light_1/2/3、heavy_1/2）、`SEGMENT_META`（键组/序号/是否重段）、段时长常量（轻 0.267+0.266 / 重 0.4+0.267，0.75 倍速）、重段倍率 1.6、`MELEE_CHAIN_SPECS`（缺省链编排）、`meleeSegmentId(classId, holdMode, key)`、`buildMeleeAttacks(classId, holdMode, options)` |
+| `attack_chain.ts` | 攻击链领域模型：`ATTACK_KEYS` / `AttackKey`、`AttackSegment`（含 `chargeFullTime` / `chargeDamageBonus` / `chargeCooldown` / `chargePoseId`）、`AttackTransition`、`AttackEntry`、`WeaponAttackChain`、`WeaponAttacks`；守卫原语（`always`/`pressedKey`/`pressedOtherKey`/`holdAtLeast`/`holdLessThan`/`hasMoveInput`/`noMoveInput`/`cooldownReady`/`allOf`/`anyOf`/`not`）；`isChargeableKey`；解析与查询（`findSegment`/`chainOf`/`resolveEntrySegment`/`resolveNextSegment`/`orderedSegments`/`segmentDisplayName`/`segmentTotalDuration`） |
+| `charge_tuning.ts` | 蓄力调参 `ChargeTuning`（`maxChargeMultiplier` % / `maxChargeTime` s）+ `chargeDamageScale`（一次函数 0→100%）+ `chargeDamageBonusOf`；`DEFAULT_CHARGE_TUNING` |
+| `melee_attacks.ts` | 近战段模板与链编排：`MELEE_SEGMENT_KEYS`（light_1/2/3、heavy_1/2）、`SEGMENT_META`（键组/序号/是否重段）、段时长常量（轻 0.267+0.266 / 重 0.4+0.267，0.75 倍速）、重段倍率 1.6、`MELEE_CHAIN_SPECS`（缺省链编排）、`meleeSegmentId(classId, holdMode, key)`、`meleeChargePoseId(holdMode)`、重击蓄力配置 `HeavyChargeConfig extends ChargeTuning` / `DEFAULT_HEAVY_CHARGE`、`buildMeleeAttacks(classId, holdMode, options)`（重击段声明蓄力字段） |
+| `charge_clip_data.ts` / `charge_pose_edits.ts` | 近战专用蓄力姿势 clip（进度 0 = 持械戒备 → 1 = 满蓄力后引）与其欧拉修订；由 `appearance/clips/attack_clips.ts` 的 `getChargeClipById` 合并解析 |
 | `attack_clip_data.ts` / `attack_pose_edits.ts` | 攻击动画基础稀疏关键帧与逐段局部姿势修订（`getAttackClipById` 合并解析） |
-| `melee_special_moves.ts` | 近战条件变体段（非模板主干段）：长枪「蓄力突刺」`SPEAR_CHARGE_HOLD` / `spearChargeThrust(classId, holdMode)` / `spearChargeThrustId` |
-| `ranged_attacks.ts` | 远程段规格（9 把武器，单段）：`RANGED_ATTACK_SPECS`、`rangedSegmentIdOf`、`buildRangedAttacks` |
+| `ranged_attacks.ts` | 远程段规格（9 把武器，单段）：`RANGED_ATTACK_SPECS`、`rangedSegmentIdOf`、`buildRangedAttacks(weaponId, charge?)`（charge 提供时注入段 `chargeFullTime`） |
 | `catalog.ts` | 武器目录统一查询：`WeaponConfig` / `WeaponType`、`DEFAULT_WEAPON_ID`、`ALL_WEAPON_PRESETS`、`findWeaponPreset`、`weaponPresetOrDefault`、额外预设注册 `registerWeaponPreset`（测试武器） |
-| `weapon_runtime.ts` | `createWeaponRuntime(weaponId, overrides)` → `{weapon, attacks}`：伤害覆写、起手段冷却覆写（`isEntrySegment` 判定）、远程弹道覆写；动作/时长/阶段不可覆写；`isKnownWeaponId` |
-| `melee_weapon.ts` | `MeleeWeaponConfig`（含 `detectBox` 与 `attacks`）与 6 个近战预设（`meleePreset` 自动注入攻击链） |
-| `ranged_weapon.ts` | `RangedWeaponConfig`（含 `passThroughCategories` 与 `attacks`）与 9 个远程预设；`DEFAULT_BULLET_PASS_THROUGH_CATEGORIES = ['area']` |
+| `weapon_runtime.ts` | `createWeaponRuntime(weaponId, overrides)` → `{weapon, attacks}`：伤害覆写、起手段冷却覆写（`isEntrySegment` 判定）、远程弹道覆写、蓄力调参覆写（`charge` → `withChargeTuningMap` 重烘焙段字段）；动作/时长/阶段不可覆写；`isKnownWeaponId` |
+| `melee_weapon.ts` | `MeleeWeaponConfig`（含 `detectBox` / `heavyCharge` 调参 / `attacks`）与 6 个近战预设；`meleeClass` 注入攻击链与默认 `heavyCharge`，`resolveMeleeWeapon` 合并 `WeaponModelConfig.charge` 单武器覆写 |
+| `ranged_weapon.ts` | `RangedWeaponConfig`（含 `passThroughCategories` / `projectile` 视觉规格 / `projectileGravityScale` / `charge`（`ProjectileChargeCurve extends ChargeTuning` + 初速/生命期缩放）与 `attacks`）与 9 个远程预设；`DEFAULT_BULLET_PASS_THROUGH_CATEGORIES = ['area']`；`projectile_visual.ts` 定义 `ProjectileVisualSpec` / `ExplosionStyle` |
 
 ### 9.2 战斗运行时（`src/character/combat/`）
 
@@ -724,7 +719,8 @@ const phaseKey = c.phaseIndex < phases.length
 | `src/entity/character/appearance/weapon_mesh.ts` | 武器本地命中箱 `WeaponLocalHitBox`（近战武器显式打击部位盒） |
 | `src/entity/character/combat/melee_executor.ts` | 伤害判定：武器命中箱 OBB × 受击箱 OBB（`testMeleeHit`）；伤害 = `weapon.damage × activeSegment.damageMultiplier`；攻击检测箱 `attackDetectOBB` / `testAttackDetect` |
 | `src/entity/character/combat/obb.ts` | OBB 类型 + `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
-| `src/entity/character/combat/ranged_executor.ts` | 子弹生命周期与可穿过类别判定（`castShape` 位移扫描 + 角色宽容半径判定） |
+| `src/entity/character/combat/ranged_executor.ts` | 远程开火控制：`release` 阶段门控 / 散布方向解析，委托弹丸分包 |
+| `src/entity/character/projectile/` | 弹丸分包：`system.ts`（生成 / 生命期 / 命中 / 引爆）、`mesh.ts`（独立视觉 build）、`trail.ts`、`impact_effect.ts`、`pool.ts`、`constants.ts`、`types.ts`（见 [`projectile_system.md`](projectile_system.md)） |
 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/ 受击箱（青）/ 检测箱（橙）/ 射程圆环（橙，远程）/ 视线扇形（蓝）debug 可视化 |
 | `src/entity/character/physics/world.ts` | `weaponRuntimeOf(attack)`（test_weapon 特判）；`setPlayerAttack(attackKey, holdDuration)` 起手解析与攻击中写脉冲；每帧段冷却/翻滚冷却/无敌计时递减与 `AnimationContext` 装配；翻滚期间朝向锁定 + `rollSpinProgress` 根自转与绕身体中心位置补偿；换装 `setCombatWeapon` + 清空段冷却/当前段 |
 | `src/entity/character/combat_vfx/material_effects.ts` | 材质表面效果统一封装：受击闪红（`DAMAGE_FLASH_*`）与翻滚无敌闪白半透明（`INVINCIBLE_FLASH_*`）共用惰性快照 / 优先级覆写 / 统一还原 |
@@ -794,6 +790,7 @@ const phaseKey = c.phaseIndex < phases.length
 | 武器中文名 | `name` 非空、纯中文、与 `id` 不同、同类内互不重复 |
 | 近战数值约束 | 伤害 / 击退 / `knockbackY` 为正；`war_hammer` 伤害最高；`detectBox` 尺寸分量为正且前缘在身体前方；`spear` 检测箱前缘最远（逐武器范围见 `detect_box.test.ts`，公式见 `docs/ai_system.md` 2.5.1） |
 | 远程数值约束 | 弹道参数为正；`crossbow` 弹速最快；`shotgun` 有 `spreadCount` / `spreadAngle`；`staff` 有 `explosionRadius`；`magic_wand` 有 `homingStrength`；`grenade` 有 `throwAngle` 与 `explosionRadius`；远程侦测范围大于近战 |
+| 弹丸视觉与重力 | 每个预设声明 `projectile.kind`；弓 / 弩 / 枪 = 箭矢 / 弩矢 / 弹头，法杖 / 魔杖 = 魔法球，投掷物 = 复用武器模型；范围伤害声明 `explosionStyle`；`projectileGravityScale ∈ [0, 1)`，直线弹 < 0.1、投掷物 > 0.3 |
 | 子弹可穿过类别 | `DEFAULT_BULLET_PASS_THROUGH_CATEGORIES` 默认为 `['area']` |
 
 ### 11.3 段阶段模型（attack_phases）

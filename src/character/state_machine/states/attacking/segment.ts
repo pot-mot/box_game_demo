@@ -29,20 +29,35 @@ export const enterAttackSegment = (c: CombatComponent, segment: AttackSegment, e
     c.attackTimer = 0
     c.phaseIndex = 0
     c.phaseTimer = 0
+    c.attackCharge = 0
+    c.attackHolding = false
     c.attackedTargets.clear()
     /* 冷却从触发时刻开始计时（链中段冷却为 0，不受影响） */
     armSegmentCooldown(c, segment)
     entity.body.wakeUp()
 }
 
-/** 阶段时间线推进（含段计时累加）；返回是否已播完全部阶段（含恢复段） */
-export const advanceSegmentPhases = (c: CombatComponent, dt: number): boolean => {
+/**
+ * 阶段时间线推进（含段计时累加）；返回是否已播完全部阶段（含恢复段）。
+ *
+ * 蓄力保持：`attackHeld` 为真且当前阶段声明 `chargeable` 时，**冻结在该阶段起始帧**
+ * （不推进时间线、`attackHolding = true`，远程执行器据此不发射），松开后恢复推进。
+ */
+export const advanceSegmentPhases = (c: CombatComponent, dt: number, attackHeld = false): boolean => {
     const segment = c.activeSegment
     if (segment === undefined) return true
+
+    const phases = resolvePhases(segment.phases)
+    const holding = attackHeld
+        && segment.chargeFullTime !== undefined
+        && c.phaseIndex < phases.length
+        && phases[c.phaseIndex].chargeable === true
+    c.attackHolding = holding
+    if (holding) return false
+
     c.attackTimer += dt
     c.phaseTimer += dt
 
-    const phases = resolvePhases(segment.phases)
     if (c.phaseIndex < phases.length) {
         const phase = phases[c.phaseIndex]
         const phaseDuration = phaseDurationOf(phase, segment.duration, segment.recovery)

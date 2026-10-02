@@ -59,6 +59,8 @@ const makeChar = (
         muzzleDirZ: 0,
         attackedTargets: new Set(),
         phaseIndex: 0,
+        attackCharge: 0,
+        attackHolding: false,
         phaseTimer: 0,
         pendingFlinch: false,
         flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,

@@ -119,10 +119,17 @@ const RangedOverrideSchema = z.object({
     bulletLifetime: z.number(),
 })
 
+/* 蓄力调参覆写（满蓄力倍率 % / 最长蓄力时间 s）：非法结构由运行时安全回退武器预设，不抛错 */
+const ChargeOverrideSchema = z.object({
+    maxChargeMultiplier: z.number().optional(),
+    maxChargeTime: z.number().optional(),
+}).optional().catch(undefined)
+
 const AttackConfigSchema = z.object({
     weaponId: z.string(),
     damage: z.number().optional(),
     cooldown: z.number().optional(),
+    charge: ChargeOverrideSchema,
     ranged: RangedOverrideSchema.optional(),
 })
 

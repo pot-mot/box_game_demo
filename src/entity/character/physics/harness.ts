@@ -135,6 +135,7 @@ export const makeChar = (
             muzzleDirX: 0,
             muzzleDirZ: 0,
             phaseIndex: 0, phaseTimer: 0, pendingFlinch: false, flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
+            attackCharge: 0, attackHolding: false,
         },
         holdMode: runtime.holdMode,
         stateMachine: createCharacterStateMachine(),

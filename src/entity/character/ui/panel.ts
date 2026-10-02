@@ -10,6 +10,7 @@ import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.t
 import {ALL_WEAPON_PRESETS, availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, isHoldMode} from '../../../character/weapon/hold_mode.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {ARMOR_SLOTS, ARMOR_SLOT_LABELS, type ArmorSlot} from '../../../character/armor/slots.ts'
 import {armorPiecesOfSlot, findArmorPreset, resolveArmorLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf} from '../../../character/armor/catalog.ts'
@@ -103,6 +104,8 @@ interface AttackFields {
     readonly atkRange: HTMLInputElement
     readonly atkDmg: HTMLInputElement
     readonly atkCD: HTMLInputElement
+    readonly atkChargeMult: HTMLInputElement
+    readonly atkChargeTime: HTMLInputElement
     readonly bulletSpeed: HTMLInputElement
     readonly bulletKB: HTMLInputElement
     readonly bulletLife: HTMLInputElement
@@ -142,12 +145,19 @@ const rangedModeTags = (weapon: RangedWeaponConfig): readonly string[] => {
     return tags
 }
 
+/** 武器有效蓄力调参（近战 heavyCharge / 远程 charge；无 = 不可蓄力） */
+const chargeTuningOfWeapon = (weapon: WeaponConfig): ChargeTuning | undefined =>
+    weapon.type === 'melee' ? weapon.heavyCharge : weapon.charge
+
 /** 换武器时按武器预设预填数值覆写字段（冷却取起手段预设冷却；远程弹道仅在远程武器时展示） */
 const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
     const weapon = findWeaponPreset(weaponId)
     if (weapon === undefined) return
     fields.atkDmg.value = formatNumber(weapon.damage)
     fields.atkCD.value = formatNumber(entryCooldownOf(weapon))
+    const charge = chargeTuningOfWeapon(weapon)
+    fields.atkChargeMult.value = formatNumber(charge?.maxChargeMultiplier ?? 100)
+    fields.atkChargeTime.value = formatNumber(charge?.maxChargeTime ?? 1)
     const damageTypeLabel = `  ·  ${DAMAGE_TYPE_LABELS[weapon.damageType]}`
     if (weapon.type === 'ranged') {
         fields.weaponTag.textContent = [weapon.name, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
@@ -171,15 +181,18 @@ const readSelectedAttack = (sel: CharacterEntity): {
     readonly weaponId: string
     readonly damage: number
     readonly cooldown: number
+    readonly charge?: ChargeTuning
     readonly ranged?: {readonly range: number; readonly bulletSpeed: number; readonly bulletKnockback: number; readonly bulletLifetime: number}
 } => {
     const weapon = sel.combat.weapon
     const cooldown = entryCooldownOfAttacks(sel.combat.attacks)
+    const charge = chargeTuningOfWeapon(weapon)
     if (weapon.type === 'ranged') {
         return {
             weaponId: weapon.id,
             damage: weapon.damage,
             cooldown,
+            ...(charge !== undefined ? {charge} : {}),
             ranged: {
                 range: weapon.range,
                 bulletSpeed: weapon.projectileSpeed,
@@ -188,7 +201,7 @@ const readSelectedAttack = (sel: CharacterEntity): {
             },
         }
     }
-    return {weaponId: weapon.id, damage: weapon.damage, cooldown}
+    return {weaponId: weapon.id, damage: weapon.damage, cooldown, ...(charge !== undefined ? {charge} : {})}
 }
 
 export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>): PanelContext => {
@@ -320,13 +333,16 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const atkRange = createLabeledNumberInput(el, 'Range', {min: '0.1', step: '0.1', value: '10'})
     const atkDmg = createLabeledNumberInput(el, 'Damage', {min: '0.1', step: '0.1', value: '3'})
     const atkCD = createLabeledNumberInput(el, 'Cooldown', {min: '0.1', step: '0.1', value: '0.5'})
+    /* 蓄力调参：最大蓄力倍率（%，100 = 无加成）+ 最长蓄力时间（秒）；对可蓄力武器生效 */
+    const atkChargeMult = createLabeledNumberInput(el, 'ChgPwr%', {min: '100', step: '10', value: '200'})
+    const atkChargeTime = createLabeledNumberInput(el, 'ChgTime', {min: '0.1', step: '0.1', value: '1'})
     el.appendChild(document.createElement('br'))
     const bulletSpeed = createLabeledNumberInput(el, 'BulSpd', {min: '1', step: '1', value: '20'})
     const bulletKB = createLabeledNumberInput(el, 'BulKnock', {min: '0', step: '0.5', value: '3'})
     const bulletLife = createLabeledNumberInput(el, 'BulLife', {min: '0.5', step: '0.5', value: '3'})
 
     /* 攻击区字段集合（预填与回显共用） */
-    const attackFields: AttackFields = {atkRange, atkDmg, atkCD, bulletSpeed, bulletKB, bulletLife, weaponTag}
+    const attackFields: AttackFields = {atkRange, atkDmg, atkCD, atkChargeMult, atkChargeTime, bulletSpeed, bulletKB, bulletLife, weaponTag}
 
     /* 护甲下拉：首项「无」= 空槽；选项文案列出该件的防御 / 攻击加成 / 移速影响（非零项才列出） */
     const armorSelects: Record<ArmorSlot, HTMLSelectElement> = {head: document.createElement('select'), chest: document.createElement('select'), arms: document.createElement('select'), legs: document.createElement('select')}
@@ -573,9 +589,19 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         })
     }
 
+    /** 蓄力数值仅在所选武器可蓄力时显示（近战重击 / 弓与投掷类；不可蓄力武器不写 charge） */
+    const showCharge = (): void => {
+        const weapon = selectedWeaponOf(weaponSelect)
+        const chargeable = weapon !== undefined && chargeTuningOfWeapon(weapon) !== undefined
+        ;[atkChargeMult, atkChargeTime].forEach(input => {
+            input.parentElement!.style.display = chargeable ? '' : 'none'
+        })
+    }
+
     weaponSelect.onchange = () => {
         if (weaponSelect.value.length > 0) autoFillFromWeapon(weaponSelect.value, attackFields)
         showRanged()
+        showCharge()
         updateOffhandAvailability()
         rebuildHoldModeOptions()
     }
@@ -734,6 +760,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         weaponSelect.value = attack.weaponId
         atkDmg.value = formatNumber(attack.damage)
         atkCD.value = formatNumber(attack.cooldown)
+        if (attack.charge !== undefined) {
+            atkChargeMult.value = formatNumber(attack.charge.maxChargeMultiplier)
+            atkChargeTime.value = formatNumber(attack.charge.maxChargeTime)
+        }
         if (attack.ranged !== undefined) {
             atkRange.value = formatNumber(attack.ranged.range)
             bulletSpeed.value = formatNumber(attack.ranged.bulletSpeed)
@@ -788,6 +818,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         navRow.style.display = sel.isPlayer ? 'none' : ''
         buildSection.style.display = (!sel.isPlayer && sel.peaceStrategy === 'build') ? '' : 'none'
         showRanged()
+        showCharge()
     }
 
     return {
@@ -862,10 +893,18 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 const selectedWeapon = selectedWeaponOf(weaponSelect)
                 const attackDamage = parseFloat(atkDmg.value)
                 const attackCooldown = parseFloat(atkCD.value)
+                const chargeMult = parseFloat(atkChargeMult.value)
+                const chargeTime = parseFloat(atkChargeTime.value)
+                /* 蓄力调参仅对可蓄力武器写入（不可蓄力武器忽略该字段，避免写无意义存档） */
+                const chargeable = selectedWeapon !== undefined && chargeTuningOfWeapon(selectedWeapon) !== undefined
                 const newAttack: AttackConfig = {
                     weaponId: selectedWeapon?.id ?? weaponSelect.value,
                     ...(isNaN(attackDamage) ? {} : {damage: attackDamage}),
                     ...(isNaN(attackCooldown) ? {} : {cooldown: attackCooldown}),
+                    ...(chargeable && !(isNaN(chargeMult) && isNaN(chargeTime)) ? {charge: {
+                        ...(isNaN(chargeMult) ? {} : {maxChargeMultiplier: chargeMult}),
+                        ...(isNaN(chargeTime) ? {} : {maxChargeTime: chargeTime}),
+                    }} : {}),
                     /* 远程弹道数值仅远程武器写入 */
                     ...(selectedWeapon !== undefined && selectedWeapon.type === 'ranged'
                         ? {ranged: {

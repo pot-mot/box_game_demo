@@ -45,6 +45,9 @@ export const IDLE_TRAIL = 1.2
 /** 轻链与重链之间的停顿时长（模拟玩家松开攻击键） */
 export const CHAIN_PAUSE_IDLE = 0.6
 
+/** 近战重击前的「满蓄力前置表现」保持时长（秒）：先定格满蓄力姿势再出招，便于观察蓄力动作 */
+export const CHARGE_HOLD_DURATION = 1.0
+
 // ── 角色布局 ──
 
 /** 近战单持排 Z 坐标（前排，靠近默认相机） */

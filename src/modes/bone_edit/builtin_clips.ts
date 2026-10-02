@@ -119,8 +119,10 @@ const buildBaseEntries = (): BuiltinClipEntry[] => {
 
 /* ── 攻击动作（全部武器 × 其武器模组声明的攻击段） ── */
 
-/** 攻击 clip：取段 id 对应的显式骨骼关键帧数据（与生产装配 `appearance/system.ts` 同源） */
-const buildAttackSource = (segment: AttackSegment): BoneAnimationClip => getAttackClipById(segment.id)
+/** 攻击 clip：取段**首个 pose** 的显式骨骼关键帧数据（与运行时装配 `appearance/system.ts` 同源）。
+ *  蓄力重击等变体段复用普通重击的 pose，因此按 poseId 取而非段 id。 */
+const buildAttackSource = (segment: AttackSegment): BoneAnimationClip =>
+    getAttackClipById(segment.poses[0]?.poseId ?? segment.id)
 
 /**
  * 攻击条目：逐武器枚举其**全部持握模式**的攻击段（顺序 = `orderedSegments`：轻1 → 轻2 → 重1 → 重2，

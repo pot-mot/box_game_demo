@@ -69,12 +69,12 @@ test.describe('骨骼动画编辑模式', () => {
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '骨骼动画'}).click()
         await expect(page.locator('#bone-timeline')).toBeVisible()
-        /* 内置条目总数 = 基础状态 9 + 近战 6 武器 × 3 持握模式（巨剑/长枪双手链各多 1 段）+ 远程 9 */
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-builtin-clip-count', '92')
+        /* 内置条目总数 = 基础状态 9 + 近战 6 武器 × 3 持握模式 × 4 段 + 巨剑双手轻 3 + 远程 9 */
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-builtin-clip-count', '91')
         const builtinOptions = page.locator('#bone-anim-select option[data-builtin-id]')
-        await expect(builtinOptions).toHaveCount(92)
-        /* 抽取代表性条目：行走/跳跃/近战链段（含巨剑轻 3 与长枪蓄力变体）/远程技能 */
-        for (const id of ['state/walking', 'state/jumping', 'short_sword_one_handed_light_1', 'heavy_sword_two_handed_light_3', 'spear_two_handed_charge_thrust', 'long_sword_one_handed_heavy_2', 'longbow_shot']) {
+        await expect(builtinOptions).toHaveCount(91)
+        /* 抽取代表性条目：行走/跳跃/近战链段（含巨剑轻 3 与重击段）/远程技能 */
+        for (const id of ['state/walking', 'state/jumping', 'short_sword_one_handed_light_1', 'heavy_sword_two_handed_light_3', 'long_sword_one_handed_heavy_1', 'long_sword_one_handed_heavy_2', 'longbow_shot']) {
             await expect(page.locator(`#bone-anim-select option[data-builtin-id="${id}"]`)).toBeAttached()
         }
     })
@@ -100,21 +100,21 @@ test.describe('骨骼动画编辑模式', () => {
         expect(t2).toBeGreaterThan(t1)
     })
 
-    test('内置近战动作按武器 + 持握模式分组、链段顺序连续排列（巨剑双手轻链 3 段、长枪含蓄力变体）', async ({page}) => {
+    test('内置近战动作按武器 + 持握模式分组、链段顺序连续排列（巨剑双手轻链 3 段、各武器重击蓄力段）', async ({page}) => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '骨骼动画'}).click()
         await expect(page.locator('#bone-timeline')).toBeVisible()
         const labels = await page.locator('#bone-anim-select optgroup[label^="近战攻击"] option').allTextContents()
-        /* 近战 6 武器 × 3 模式 × 4 段 + 巨剑双手多 1 段 + 长枪双手蓄力变体 1 段 = 74 */
-        expect(labels).toHaveLength(74)
+        /* 近战 6 武器 × 3 模式 × 4 段 + 巨剑双手多 1 段 = 73 */
+        expect(labels).toHaveLength(73)
         /* 代表性命中：三种模式分列，同模式内链段顺序正确 */
         for (const label of [
             '短剑 · 单持 · 轻击一段',
             '短剑 · 双手共持 · 轻击一段',
             '短剑 · 双持 · 重击二段',
             '巨剑 · 双手共持 · 轻击三段',
-            '长枪 · 双手共持 · 蓄力突刺',
+            '长枪 · 双手共持 · 重击一段',
             '战锤 · 单持 · 重击一段',
         ]) {
             expect(labels, label).toContain(label)

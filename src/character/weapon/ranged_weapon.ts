@@ -3,14 +3,37 @@ import type { DamageType } from '../combat/damage_type.ts'
 import type { CollisionCategory } from '../../physics/collision_category.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
+import { withChargeTuningMap } from './attack_chain.ts'
 import { buildRangedAttacks } from './ranged_attacks.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
+import type { ProjectileVisualSpec } from './projectile_visual.ts'
+import type { ChargeTuning } from './charge_tuning.ts'
 
 /**
  * 投掷物默认可穿过的碰撞类别 —— 仅水域（area）：
  * 其余类别（角色 / 箱子 / 碎片 / 地形 / 世界地面）命中即消失，见 `entity/character/combat/ranged_executor.ts`。
  */
 export const DEFAULT_BULLET_PASS_THROUGH_CATEGORIES: readonly CollisionCategory[] = ['area']
+
+/**
+ * 弹丸默认重力缩放（`RangedWeaponConfig.projectileGravityScale` 缺省时由弹丸系统取用）。
+ * 定义在武器域，与「可选字段 + 运行时缺省」的契约同源，供武器数据与测试共用。
+ */
+export const DEFAULT_PROJECTILE_GRAVITY_SCALE = 0.15
+
+/**
+ * 弹丸蓄力曲线（弓与投掷类声明）：在通用蓄力调参 `ChargeTuning`（最大倍率 / 最长时间）
+ * 之上，额外声明初速与生命期的缩放区间（控制投掷远近）。伤害倍率由 `maxChargeMultiplier` 决定。
+ * 玩家按住蓄力键控制力度；AI 不蓄力（按预设值发射，不套用该曲线）。
+ */
+export interface ProjectileChargeCurve extends ChargeTuning {
+    /** 最小 / 最大初速倍率（控制射程与投掷远近） */
+    readonly minSpeedScale: number
+    readonly maxSpeedScale: number
+    /** 最小 / 最大生命期倍率（与初速共同决定最大射程） */
+    readonly minLifetimeScale: number
+    readonly maxLifetimeScale: number
+}
 
 /**
  * 远程武器类（weapon class）— 同类全部模型共享的固有属性。
@@ -29,6 +52,20 @@ export interface RangedWeaponClassConfig {
     readonly knockbackForce: number
     readonly projectileSpeed: number
     readonly projectileLifetime: number
+    /**
+     * 弹丸重力缩放（1 = 世界重力全额，0 = 完全不受重力）。
+     * 缺省取同文件的 `DEFAULT_PROJECTILE_GRAVITY_SCALE`：
+     * 直线弹（弓 / 弩 / 枪 / 魔法）接近 0，投掷物保留可读弧线。
+     * 与伤害类别一样是武器类固有属性，不可被存档 / 面板覆写。
+     */
+    readonly projectileGravityScale?: number
+    /** 弹丸视觉规格（箭矢 / 弩矢 / 弹头 / 复用武器模型 / 魔法球 + 轨迹） */
+    readonly projectile: ProjectileVisualSpec
+    /**
+     * 蓄力曲线（仅弓与投掷类声明）：玩家按住蓄力键、松开出手，力度按 0→1 缩放弹道与伤害。
+     * 声明后需保证该武器类对应的段声明了 `chargeFullTime` 与 `chargeable` 阶段（见 `ranged_attacks.ts`）。
+     */
+    readonly charge?: ProjectileChargeCurve
     /** AI 侦测范围 */
     readonly detectionRange: number
     /** 最佳战斗距离 */
@@ -66,7 +103,7 @@ export interface RangedWeaponConfig extends RangedWeaponClassConfig {
 /** 远程武器类装配：按默认持握模式注入固有开火动作链 */
 const rangedClass = (base: Omit<RangedWeaponClassConfig, 'attacks'>): RangedWeaponClassConfig => {
     const attacks: Partial<Record<HoldMode, WeaponAttacks>> = {}
-    attacks[base.holdModes[0]] = buildRangedAttacks(base.id)
+    attacks[base.holdModes[0]] = buildRangedAttacks(base.id, base.charge)
     return {...base, attacks}
 }
 
@@ -79,6 +116,9 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         damage: 2, range: 10,
         knockbackForce: 3, projectileSpeed: 20, projectileLifetime: 3,
         detectionRange: 20, idealRange: 7, retreatRange: 4,
+        projectile: {kind: 'arrow'}, projectileGravityScale: 0.08,
+        /* 蓄力：低蓄力近射低伤，满蓄力远射高伤 */
+        charge: {maxChargeMultiplier: 180, maxChargeTime: 1, minSpeedScale: 0.55, maxSpeedScale: 1.6, minLifetimeScale: 0.8, maxLifetimeScale: 1.3},
     }),
     crossbow: rangedClass({
         id: 'crossbow', type: 'ranged',
@@ -87,6 +127,7 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         damage: 5, range: 8,
         knockbackForce: 4, projectileSpeed: 45, projectileLifetime: 1.5,
         detectionRange: 15, idealRange: 5, retreatRange: 3,
+        projectile: {kind: 'bolt'}, projectileGravityScale: 0.02,
     }),
     shotgun: rangedClass({
         id: 'shotgun', type: 'ranged',
@@ -96,6 +137,7 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         knockbackForce: 6, projectileSpeed: 15, projectileLifetime: 1.5,
         detectionRange: 10, idealRange: 3, retreatRange: 2,
         spreadCount: 6, spreadAngle: Math.PI * 0.08,
+        projectile: {kind: 'bullet'}, projectileGravityScale: 0.04,
     }),
     staff: rangedClass({
         id: 'staff', type: 'ranged',
@@ -105,6 +147,7 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         knockbackForce: 4, projectileSpeed: 10, projectileLifetime: 5,
         detectionRange: 18, idealRange: 5, retreatRange: 3,
         explosionRadius: 1.2,
+        projectile: {kind: 'magic_orb', explosionStyle: 'magic'}, projectileGravityScale: 0.05,
     }),
     magic_wand: rangedClass({
         id: 'magic_wand', type: 'ranged',
@@ -114,6 +157,7 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         knockbackForce: 2, projectileSpeed: 8, projectileLifetime: 4,
         detectionRange: 16, idealRange: 6, retreatRange: 4,
         homingStrength: 0.3,
+        projectile: {kind: 'magic_orb'}, projectileGravityScale: 0,
     }),
     throwing_axe: rangedClass({
         id: 'throwing_axe', type: 'ranged',
@@ -123,6 +167,9 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         knockbackForce: 5, projectileSpeed: 15, projectileLifetime: 3,
         detectionRange: 12, idealRange: 6, retreatRange: 3,
         throwAngle: Math.PI / 8,
+        projectile: {kind: 'thrown_weapon', spin: true}, projectileGravityScale: 0.45,
+        /* 蓄力：控制投掷远近 + 伤害 */
+        charge: {maxChargeMultiplier: 140, maxChargeTime: 0.9, minSpeedScale: 0.45, maxSpeedScale: 1.7, minLifetimeScale: 0.8, maxLifetimeScale: 1.2},
     }),
     grenade: rangedClass({
         id: 'grenade', type: 'ranged',
@@ -132,6 +179,8 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         knockbackForce: 8, projectileSpeed: 10, projectileLifetime: 4,
         detectionRange: 14, idealRange: 6, retreatRange: 3,
         throwAngle: Math.PI / 5, explosionRadius: 2.0,
+        projectile: {kind: 'thrown_weapon', spin: true, explosionStyle: 'frag'}, projectileGravityScale: 0.55,
+        charge: {maxChargeMultiplier: 135, maxChargeTime: 0.9, minSpeedScale: 0.5, maxSpeedScale: 1.6, minLifetimeScale: 0.8, maxLifetimeScale: 1.2},
     }),
     molotov: rangedClass({
         id: 'molotov', type: 'ranged',
@@ -140,7 +189,9 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         damage: 2, range: 10,
         knockbackForce: 5, projectileSpeed: 10, projectileLifetime: 4,
         detectionRange: 12, idealRange: 6, retreatRange: 3,
-        explosionRadius: 1.5,
+        throwAngle: Math.PI / 9, explosionRadius: 1.5,
+        projectile: {kind: 'thrown_weapon', spin: true, explosionStyle: 'fire'}, projectileGravityScale: 0.5,
+        charge: {maxChargeMultiplier: 135, maxChargeTime: 0.9, minSpeedScale: 0.5, maxSpeedScale: 1.6, minLifetimeScale: 0.8, maxLifetimeScale: 1.2},
     }),
     throwing_dart: rangedClass({
         id: 'throwing_dart', type: 'ranged',
@@ -150,6 +201,8 @@ export const RANGED_WEAPON_CLASSES: Record<string, RangedWeaponClassConfig> = {
         knockbackForce: 1, projectileSpeed: 30, projectileLifetime: 2,
         detectionRange: 16, idealRange: 8, retreatRange: 4,
         throwAngle: 0,
+        projectile: {kind: 'thrown_weapon'}, projectileGravityScale: 0.2,
+        charge: {maxChargeMultiplier: 140, maxChargeTime: 0.7, minSpeedScale: 0.5, maxSpeedScale: 1.6, minLifetimeScale: 0.8, maxLifetimeScale: 1.2},
     }),
 }
 
@@ -199,7 +252,24 @@ export const resolveRangedWeapon = (model: WeaponModelConfig): RangedWeaponConfi
     if (weaponClass === undefined) {
         throw new Error(`远程武器模型 ${model.id} 引用了未知武器类 ${model.classId}`)
     }
-    return {...weaponClass, classId: model.classId, id: model.id, name: model.name, mesh: model.mesh}
+    /* 蓄力调参：武器模板默认，单武器（模型）可覆盖；覆写后同步重烘焙攻击链中可蓄力段的字段 */
+    const charge: ProjectileChargeCurve | undefined = weaponClass.charge === undefined
+        ? undefined
+        : model.charge === undefined
+            ? weaponClass.charge
+            : {...weaponClass.charge, ...model.charge}
+    return {
+        ...weaponClass,
+        charge,
+        /* 仅在单武器有蓄力覆写时重烘焙攻击链（否则沿用类共享数据） */
+        attacks: model.charge !== undefined && weaponClass.charge !== undefined && charge !== undefined
+            ? withChargeTuningMap(weaponClass.attacks, charge)
+            : weaponClass.attacks,
+        classId: model.classId,
+        id: model.id,
+        name: model.name,
+        mesh: model.mesh,
+    }
 }
 
 /** 生产远程武器预设（当前 = 各类的默认模型解析结果；键 = 模型 id） */

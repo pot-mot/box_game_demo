@@ -231,6 +231,8 @@ describe('郊狼过程动画与摄像机平滑', () => {
                     attackPhaseProgress: 0,
                     attackTotalProgress: 0,
                     attackPhaseIndex: 0,
+                    attackCharge: 0,
+                    attackHolding: false,
                     weaponHeld: false,
                 })
                 if (state !== prevState) prevState = state

@@ -41,10 +41,16 @@ const entryCooldownOf = (attacks: WeaponAttacks): number => {
 const attackConfigOf = (weapon: WeaponConfig, attacks: WeaponAttacks): AttackConfig => {
     /* 起手段冷却为 0（普通攻击默认无冷却）时省略字段 */
     const cooldown = entryCooldownOf(attacks)
+    /* 蓄力调参：写入当前武器的有效值（近战 heavyCharge / 远程 charge），加载时作为覆写回填 */
+    const chargeTuning = weapon.type === 'melee' ? weapon.heavyCharge : weapon.charge
+    const charge = chargeTuning === undefined
+        ? undefined
+        : {maxChargeMultiplier: chargeTuning.maxChargeMultiplier, maxChargeTime: chargeTuning.maxChargeTime}
     return {
         weaponId: weapon.id,
         damage: weapon.damage,
         ...(cooldown !== 0 ? {cooldown} : {}),
+        ...(charge !== undefined ? {charge} : {}),
         ...(weapon.type === 'ranged'
             ? {ranged: {
                 range: weapon.range,
