@@ -61,6 +61,7 @@ const createCombatStub = (): CombatComponent => {
         isDead: false,
         baseDefense: {physical: 0, magic: 0},
         armor: {},
+        limb: {},
         defense: {physical: 0, magic: 0},
         attackBonus: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,

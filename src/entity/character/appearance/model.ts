@@ -1,10 +1,10 @@
 import type {Group, Mesh} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import type {CharacterModel, CharacterColorPalette, WeaponEquipConfig} from './types.ts'
-import type {ResolvedArmorLoadout} from '../../../character/armor/types.ts'
-import {ARMOR_SLOTS, type ArmorSlot} from '../../../character/armor/slots.ts'
+import type {ResolvedArmorLoadout, ResolvedLimbLoadout} from '../../../character/armor/types.ts'
+import {ARMOR_SLOTS, LIMB_SLOTS, type ArmorSlot, type LimbSlot} from '../../../character/armor/slots.ts'
 import {createWeaponMesh, type WeaponMeshConfig, type WeaponLocalHitBox} from './weapon_mesh.ts'
-import {createArmorMesh, ARMOR_BODY_PART_JOINTS, type ArmorBodyPart} from './armor_mesh.ts'
+import {createArmorMesh, createLimbMesh, ARMOR_BODY_PART_JOINTS, type ArmorBodyPart} from './armor_mesh.ts'
 import {SELECT_PALETTE} from './constants.ts'
 import {recolorTwoFaceBoxPart, recolorHeadBoxPart, type TrackedBoxPart} from '../../../render/box_parts.ts'
 import {skeletonFromDefinition} from '../../../skeleton/anim/serialization.ts'
@@ -49,6 +49,22 @@ const ARMOR_SLOT_JOINTS: Readonly<Record<ArmorSlot, readonly string[]>> = {
     legs: ['leftLegHip', 'rightLegHip', 'leftLegKnee', 'rightLegKnee'],
 }
 
+/** 肢体槽位 → 挂载关节：整段替换对应人类肢体（上/前臂、手、髋/膝、头、躯干） */
+const LIMB_SLOT_JOINTS: Readonly<Record<LimbSlot, readonly string[]>> = {
+    head: ['headNeck'],
+    arms: ['rightArmShoulder', 'rightArmElbow', 'rightHandPivot', 'leftArmShoulder', 'leftArmElbow', 'leftHandPivot'],
+    body: ['spine'],
+    legs: ['leftLegHip', 'rightLegHip', 'leftLegKnee', 'rightLegKnee'],
+}
+
+/** 肢体槽位 → 顶替（隐藏）的人类身体部位：装备肢体即 replace，缺省保留人类肢体 */
+const LIMB_SLOT_HIDDEN_PARTS: Readonly<Record<LimbSlot, readonly ArmorBodyPart[]>> = {
+    head: ['head'],
+    arms: ['rightUpperArm', 'rightForearm', 'rightHand', 'leftUpperArm', 'leftForearm', 'leftHand'],
+    body: ['torso'],
+    legs: ['rightThigh', 'rightShin', 'leftThigh', 'leftShin'],
+}
+
 /** 已装配的护甲部件（换装/释放时统一清理） */
 interface MountedArmorPart {
     readonly group: Group
@@ -62,7 +78,8 @@ interface MountedArmorPart {
  * 主手武器挂右腕，副手武器平时握左手、双手共持时挂背（`setOffhandStowed`）。
  */
 export const createCharacterModel = (config: CharacterConfig, faction: number): CharacterModel => {
-    const palette = SELECT_PALETTE(faction)
+    /* 当前调色板（换阵营时更新）：肢体颜色随阵营调色板重建；阵营色统一走 `factionColorOf` */
+    let currentPalette = SELECT_PALETTE(faction)
 
     /* 关节 Group 层级 = 预设骨架定义的唯一映射（含手部 rightHandPivot/leftHandPivot 与武器挂点） */
     const scaffold = skeletonFromDefinition(buildCharacterSkeletonDefinition())
@@ -72,7 +89,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     group.scale.set(config.scale, config.scale, config.scale)
 
     /* 模型层：方块人外观部件（与骨骼编辑器同一构建器），手部部件挂手部关节 */
-    const appearance = assembleCharacterAppearance(groups, palette)
+    const appearance = assembleCharacterAppearance(groups, currentPalette)
     const jointParts = appearance.jointParts
 
     const rightWeaponMount = requireGroup(groups, 'rightWeaponMount')
@@ -136,12 +153,16 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         setOffhandStowed(equipConfig.offhandStowed === true)
     }
 
-    /* ── 护甲：纯视觉部件，逐槽挂到对应关节（骨架编辑后缺失的关节安全跳过） ── */
+    /* ── 护甲 / 肢体：纯视觉部件，逐槽挂到对应关节（骨架编辑后缺失的关节安全跳过） ── */
     let mountedArmor: MountedArmorPart[] = []
-    /** 被护甲顶替而隐藏的身体部件 → 原始可见性（换装 / 卸下时统一还原） */
+    let mountedLimbs: MountedArmorPart[] = []
+    /** 当前护甲 / 肢体装备表（换阵营重建肢体、重算顶替部位时读取） */
+    let currentArmor: ResolvedArmorLoadout = {}
+    let currentLimb: ResolvedLimbLoadout = {}
+    /** 被护甲 / 肢体顶替而隐藏的身体部件 → 原始可见性（换装 / 卸下时统一还原） */
     let hiddenBodyParts = new Map<TrackedBoxPart, boolean>()
 
-    /** 隐藏某个身体部位的基础模型（护甲顶替而非叠加）；同一部件只记录一次原始可见性 */
+    /** 隐藏某个身体部位的基础模型（护甲 / 肢体顶替而非叠加）；同一部件只记录一次原始可见性 */
     const hideBodyPart = (bodyPart: ArmorBodyPart): void => {
         const part = jointParts.get(ARMOR_BODY_PART_JOINTS[bodyPart])
         if (part === undefined) return
@@ -149,22 +170,39 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         part.mesh.visible = false
     }
 
-    const restoreBodyParts = (): void => {
+    /** 按「当前护甲 + 当前肢体」重算被顶替的身体部位（先整体还原再统一隐藏，两套装备互不干扰） */
+    const refreshHiddenBodyParts = (): void => {
         for (const [part, visible] of hiddenBodyParts) part.mesh.visible = visible
         hiddenBodyParts = new Map()
+        for (const slot of ARMOR_SLOTS) {
+            const piece = currentArmor[slot]
+            if (piece === undefined) continue
+            for (const bodyPart of piece.mesh.hideBodyParts ?? []) hideBodyPart(bodyPart)
+        }
+        for (const slot of LIMB_SLOTS) {
+            if (currentLimb[slot] === undefined) continue
+            for (const bodyPart of LIMB_SLOT_HIDDEN_PARTS[slot]) hideBodyPart(bodyPart)
+        }
     }
 
-    const removeArmor = (): void => {
-        for (const part of mountedArmor) {
+    /** 清理并移除一组已装配部件（几何 / 材质一并释放） */
+    const clearMounted = (parts: MountedArmorPart[]): void => {
+        for (const part of parts) {
             part.group.removeFromParent()
             part.cleanup()
         }
-        mountedArmor = []
-        restoreBodyParts()
+        parts.length = 0
+    }
+
+    const removeArmor = (): void => {
+        clearMounted(mountedArmor)
+        currentArmor = {}
+        refreshHiddenBodyParts()
     }
 
     const equipArmor = (loadout: ResolvedArmorLoadout): void => {
-        removeArmor()
+        clearMounted(mountedArmor)
+        currentArmor = loadout
         for (const slot of ARMOR_SLOTS) {
             const piece = loadout[slot]
             if (piece === undefined) continue
@@ -175,8 +213,31 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
                 joint.add(result.group)
                 mountedArmor.push({group: result.group, cleanup: result.cleanup})
             }
-            for (const bodyPart of piece.mesh.hideBodyParts ?? []) hideBodyPart(bodyPart)
         }
+        refreshHiddenBodyParts()
+    }
+
+    const removeLimbs = (): void => {
+        clearMounted(mountedLimbs)
+        currentLimb = {}
+        refreshHiddenBodyParts()
+    }
+
+    const equipLimbs = (loadout: ResolvedLimbLoadout): void => {
+        clearMounted(mountedLimbs)
+        currentLimb = loadout
+        for (const slot of LIMB_SLOTS) {
+            const piece = loadout[slot]
+            if (piece === undefined) continue
+            for (const jointId of LIMB_SLOT_JOINTS[slot]) {
+                const joint = groups.get(jointId)
+                if (joint === undefined) continue
+                const result = createLimbMesh(piece.mesh, jointId, currentPalette)
+                joint.add(result.group)
+                mountedLimbs.push({group: result.group, cleanup: result.cleanup})
+            }
+        }
+        refreshHiddenBodyParts()
     }
 
     /* 部件 mesh 引用（recolor 用；躯干/头/手为无骨骼段绑定部件，故从 jointParts 取） */
@@ -193,8 +254,9 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     const leftThighMesh = requirePart(jointParts, 'leftLegHip')
     const leftShinMesh = requirePart(jointParts, 'leftLegKnee')
 
-    /** 根据新调色板原地更新所有部位材质颜色（不重建几何体） */
+    /** 根据新调色板原地更新所有部位材质颜色（不重建几何体）；已装备肢体随阵营重建外观 */
     const recolor = (newPalette: CharacterColorPalette): void => {
+        currentPalette = newPalette
         for (const mesh of [
             bodyMesh, rightUpperArmMesh, rightForearmMesh,
             leftUpperArmMesh, leftForearmMesh,
@@ -208,11 +270,14 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
             recolorTwoFaceBoxPart(mesh, newPalette.legColor)
         }
         recolorHeadBoxPart(headMesh, newPalette)
+        /* 肢体外观的颜色随阵营调色板：仅换阵营时重建（非每帧） */
+        if (Object.keys(currentLimb).length > 0) equipLimbs(currentLimb)
     }
 
     const dispose = (): void => {
         removeWeapon()
         removeArmor()
+        removeLimbs()
         appearance.cleanup()
         hierarchy.cleanup()
     }
@@ -251,6 +316,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         removeWeapon,
         equipArmor,
         removeArmor,
+        equipLimbs,
+        removeLimbs,
         recolor,
         get weaponMesh() { return rightSlot.hitCenter },
         get weaponTip() { return rightSlot.tip },

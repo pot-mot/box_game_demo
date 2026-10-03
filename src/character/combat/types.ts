@@ -2,8 +2,8 @@ import type { Faction, AttackTendency, TendencyConfig } from '../faction.ts'
 import type { AttackSegment, WeaponAttacks } from '../weapon/attack_chain.ts'
 import type { WeaponConfig } from '../weapon/catalog.ts'
 import type { WeaponRuntime } from '../weapon/weapon_runtime.ts'
-import type { ArmorLoadout } from '../armor/types.ts'
-import { resolveArmorLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf } from '../armor/catalog.ts'
+import type { ArmorLoadout, LimbLoadout } from '../armor/types.ts'
+import { resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf } from '../armor/catalog.ts'
 import { createRollSkillRuntime, type RollSkillRuntime } from './roll_skill.ts'
 import type { DamageEvent, DamageModifier } from './damage.ts'
 import { ZERO_PROFILE, type DefenseProfile } from './defense.ts'
@@ -102,7 +102,9 @@ export interface CombatComponent {
     baseDefense: DefenseProfile
     /** 装备的护甲（槽位 → 护甲 id；缺省 = 空槽） */
     armor: ArmorLoadout
-    /** 有效防御 = 基础防御 + 各护甲之和；`setCombatEquipment` 统一重算，applyDamage 按伤害事件类别取用 */
+    /** 装备的肢体组件（槽位 → 肢体 id；缺省 = 默认人类肢体，纯外观 + 数值） */
+    limb: LimbLoadout
+    /** 有效防御 = 基础防御 + 各护甲与肢体之和；`setCombatEquipment` 统一重算，applyDamage 按伤害事件类别取用 */
     defense: DefenseProfile
     /** 装备提供的攻击加成（逐类别；攻击时与武器类别匹配才计入伤害） */
     attackBonus: DamageTypeProfile
@@ -127,18 +129,24 @@ export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | un
     c.offhand = runtime
 }
 
-/** 变更基础防御 / 护甲：校验装备表并重算有效防御、攻击加成与移速乘数（未知护甲 id 安全回退空槽，不抛错） */
+/**
+ * 变更基础防御 / 护甲 / 肢体：校验装备表并重算有效防御、攻击加成与移速乘数
+ * （未知 id 安全回退空槽，不抛错）。肢体缺省（undefined）表示保持原肢体不变。
+ */
 export const setCombatEquipment = (
     c: CombatComponent,
     baseDefense: DefenseProfile,
     armor: ArmorLoadout,
+    limb?: LimbLoadout,
 ): void => {
     c.baseDefense = baseDefense
     c.armor = armor
-    const resolved = resolveArmorLoadout(armor)
-    c.defense = totalDefenseOf(baseDefense, resolved)
-    c.attackBonus = totalAttackOf(resolved)
-    c.moveSpeedMultiplier = totalMoveSpeedOf(resolved)
+    if (limb !== undefined) c.limb = limb
+    const resolvedArmor = resolveArmorLoadout(c.armor)
+    const resolvedLimb = resolveLimbLoadout(c.limb)
+    c.defense = totalDefenseOf(baseDefense, resolvedArmor, resolvedLimb)
+    c.attackBonus = totalAttackOf(resolvedArmor, resolvedLimb)
+    c.moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
 }
 
 /** 创建初始化的战斗组件（武器运行时 + 阵营/倾向/血量） */
@@ -180,6 +188,7 @@ export const createCombatComponent = (
     isDead: false,
     baseDefense: ZERO_PROFILE,
     armor: {},
+    limb: {},
     defense: ZERO_PROFILE,
     attackBonus: ZERO_PROFILE,
     moveSpeedMultiplier: 1,

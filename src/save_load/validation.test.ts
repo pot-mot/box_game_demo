@@ -219,6 +219,39 @@ describe('validateSaveData', () => {
         }
     })
 
+    it('character 肢体组件 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    attack: {weaponId: 'long_sword', damage: 3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        /* 四槽位 roundtrip；未知肢体 id 属于运行时容错范畴（校验层保留字符串） */
+        const valid = validateSaveData(characterConfig({
+            limb: {head: 'orc_head', arms: 'skeleton_arms', body: 'elf_body', legs: 'orc_legs'},
+        }))
+        const e0 = valid.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.config.limb).toEqual({head: 'orc_head', arms: 'skeleton_arms', body: 'elf_body', legs: 'orc_legs'})
+        }
+
+        /* 非对象 / 值类型错误：整体回退 undefined，不抛错 */
+        expect(() => validateSaveData(characterConfig({limb: {head: 42}}))).not.toThrow()
+        const invalid = validateSaveData(characterConfig({limb: {head: 42}}))
+        const e1 = invalid.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.limb).toBeUndefined()
+        }
+    })
+
     it('character 锁定点 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
         const characterConfig = (extra: Record<string, unknown>) => ({
             entities: [{

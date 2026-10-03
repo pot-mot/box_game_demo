@@ -20,6 +20,10 @@ const canvasCtxStub = (): Record<string, unknown> => {
         stroke: () => {},
         arc: () => {},
         ellipse: () => {},
+        moveTo: () => {},
+        lineTo: () => {},
+        closePath: () => {},
+        quadraticCurveTo: () => {},
     }
     return ctx
 }
@@ -230,6 +234,53 @@ describe('角色 panelInfo 同步', () => {
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {armor: {}})
         expect(findJointPart(entity, 'rightLegKnee')!.visible).toBe(true)
         expect(findJointPart(entity, 'leftLegKnee')!.visible).toBe(true)
+    })
+
+    it('肢体组件：装备后顶替人类部位并计入数值，卸下后还原', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+        const before = countMeshes(entity)
+        expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
+        expect(findJointPart(entity, 'spine')!.visible).toBe(true)
+
+        /* 兽人头颅（物防2）+ 骷髅躯干（物防1/魔防1）→ 有效防御 物3 魔1；头与躯干被顶替 */
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            limb: {head: 'orc_head', body: 'skeleton_body'},
+        })
+        expect(countMeshes(entity)).toBeGreaterThan(before)
+        expect(findJointPart(entity, 'headNeck')!.visible).toBe(false)
+        expect(findJointPart(entity, 'spine')!.visible).toBe(false)
+        expect(entity.combat.defense).toEqual({physical: 3, magic: 1})
+        expect(entity.combat.limb).toEqual({head: 'orc_head', body: 'skeleton_body'})
+
+        /* 卸下肢体 → 数值回落、人类部位还原、外观部件不残留 */
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {limb: {}})
+        expect(countMeshes(entity)).toBe(before)
+        expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
+        expect(findJointPart(entity, 'spine')!.visible).toBe(true)
+        expect(entity.combat.defense).toEqual({physical: 0, magic: 0})
+    })
+
+    it('护甲与肢体并存：两者顶替部位互不干扰，卸下护甲不还原肢体顶替的部位', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+
+        /* 疾行靴顶替小腿（护甲） + 兽人头颅顶替头部（肢体） */
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            armor: {legs: 'swift_boots'},
+            limb: {head: 'orc_head'},
+        })
+        expect(findJointPart(entity, 'headNeck')!.visible).toBe(false)
+        expect(findJointPart(entity, 'rightLegKnee')!.visible).toBe(false)
+
+        /* 仅卸下护甲：小腿还原，头部仍被肢体顶替 */
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {armor: {}})
+        expect(findJointPart(entity, 'rightLegKnee')!.visible).toBe(true)
+        expect(findJointPart(entity, 'headNeck')!.visible).toBe(false)
+
+        /* 卸下肢体：头部还原 */
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {limb: {}})
+        expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
     })
 
     it('markPlayer 后 panelInfo 立即反映玩家标记与徽标', () => {

@@ -79,6 +79,21 @@ export const LEG_X_GAP = 0.04
 /** 模型材质粗糙度 */
 export const MODEL_ROUGHNESS = 0.6
 
+/** 骨牙象牙白（种族肢体：骷髅骨 / 兽人獠牙共用；脸部贴图与几何装饰同源，避免两处调色漂移） */
+export const BONE_IVORY_COLOR = 0xf0ead0
+
+/** 日式精灵金发（精灵种族专属发色，不随阵营调色板变化） */
+export const ELF_GOLDEN_HAIR_COLOR = 0xf2cf6b
+
+/** 骷髅骨腔阴影色（眼窝 / 鼻腔 / 胸腔内部镂空的暗部） */
+export const SKELETON_HOLLOW_COLOR = 0x2b2822
+
+/** 骷髅眼窝内的凶光红点（幽红，强化凶相） */
+export const SKELETON_EYE_COLOR = 0xd12b1e
+
+/** 精灵腮红 / 樱唇色（面部柔美化点缀） */
+export const ELF_BLUSH_COLOR = 0xe89aa0
+
 /** 背面 / 侧面颜色暗化比例 */
 export const BACK_DARKEN_RATIO = 0.55
 export const SIDE_DARKEN_RATIO = 0.85

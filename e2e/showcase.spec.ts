@@ -6,16 +6,23 @@ test.describe('攻击动作展示模式', () => {
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '展示模式'}).click()
         await expect(page.locator('.sch-panel')).toBeVisible()
-        /* 近战 6 武器 × 3 持握模式 = 18 + 远程 9 = 27 个展示角色 */
-        await expect(page.locator('.sch-panel .sch-row')).toHaveCount(27)
-        /* 每行带持握模式列；前 18 行为近战（按单持 → 双手共持 → 双持分排） */
-        await expect(page.locator('.sch-panel .sch-hold')).toHaveCount(27)
+        /* 近战 6 × 3 模式 = 18 + 远程 9 = 27，加种族/套装展示 6（三族 + 三套）= 33 个展示角色 */
+        await expect(page.locator('.sch-panel .sch-row')).toHaveCount(33)
+        /* 每行带副名列；前 18 行为近战（按单持 → 双手共持 → 双持分排） */
+        await expect(page.locator('.sch-panel .sch-hold')).toHaveCount(33)
         await expect(page.locator('.sch-panel .sch-hold').first()).toHaveText('单持')
         await expect(page.locator('.sch-panel .sch-hold').nth(6)).toHaveText('双手共持')
         await expect(page.locator('.sch-panel .sch-hold').nth(12)).toHaveText('双持')
         /* 远程行也显示其默认持握模式（长弓双手 / 飞镖单持） */
         await expect(page.locator('.sch-panel .sch-hold').nth(18)).toHaveText('双手共持')
         await expect(page.locator('.sch-panel .sch-hold').nth(26)).toHaveText('单持')
+        /* 最后一排（种族/套装）：骷髅 / 兽人 / 精灵 + 铁甲套装 / 法袍套装 / 疾风皮甲 */
+        await expect(page.locator('.sch-panel .sch-skill').nth(27)).toHaveText('骷髅')
+        await expect(page.locator('.sch-panel .sch-skill').nth(28)).toHaveText('兽人')
+        await expect(page.locator('.sch-panel .sch-skill').nth(29)).toHaveText('精灵')
+        await expect(page.locator('.sch-panel .sch-skill').nth(30)).toHaveText('铁甲套装')
+        await expect(page.locator('.sch-panel .sch-hold').nth(30)).toHaveText('护甲套装')
+        await expect(page.locator('.sch-panel .sch-hold').nth(27)).toHaveText('种族肢体')
     })
 
     test('聚焦近战角色：段计时行按先轻后重顺序排列（轻击一段 轻击二段 重击一段 重击二段）', async ({page}) => {

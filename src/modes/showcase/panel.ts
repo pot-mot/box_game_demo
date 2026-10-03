@@ -365,15 +365,27 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         const selectValue = focusedId === null ? '' : String(focusedId)
         if (focusSelect.value !== selectValue) focusSelect.value = selectValue
 
+        /* 非攻击角色（种族 / 套装展示）无状态快照：行显示「—」，聚焦时仅高亮不展开计时详情 */
+        const statusById = new Map(statuses.map(st => [st.id, st]))
+
         let focusedStatus: ActorStatus | undefined
-        for (const st of statuses) {
-            const refs = rows.get(st.id)
+        for (const info of infos) {
+            const refs = rows.get(info.id)
             if (refs === undefined) continue
 
-            const focused = st.id === focusedId
+            const focused = info.id === focusedId
             if (refs.root.classList.contains('focused') !== focused) {
                 refs.root.classList.toggle('focused', focused)
             }
+
+            const st = statusById.get(info.id)
+            if (st === undefined) {
+                setText(refs.hit, '站立/行走')
+                setText(refs.phase, '')
+                setBar(refs.fill, 0)
+                continue
+            }
+
             if (focused) focusedStatus = st
 
             setText(refs.hit, st.mode === 'idle'

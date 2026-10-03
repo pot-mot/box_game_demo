@@ -106,6 +106,26 @@ test.describe('角色装备与属性面板', () => {
         await expect(page.locator('#element-list-panel [data-id]', {hasText: 'spd:3.35'})).toHaveCount(1)
     })
 
+    test('肢体组件：一行两列，选择兽人头颅后数值预览与列表行同步更新', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        /* 装备区每行两列（左护甲右肢体），肢体下拉标签为「肢体·<槽位中文名>」；首个 = 头部 */
+        const headLimb = panel.locator('label', {hasText: '肢体'}).first().locator('select')
+        await expect(headLimb).toHaveValue('')
+
+        /* 兽人头颅：物防 2、移速 ×0.98；基础移速 3 → 2.94 */
+        await headLimb.selectOption('orc_head')
+        await expect(panel).toContainText('有效防御：物 2 / 魔 0')
+        await expect(panel).toContainText('有效移速：2.94')
+        await panel.locator('button', {hasText: 'Apply'}).click()
+        await expect(page.locator('#element-list-panel [data-id]', {hasText: 'def:物2/魔0'})).toHaveCount(1)
+
+        /* 重新聚焦面板后回显肢体选择 */
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel label', {hasText: '肢体'}).first().locator('select')).toHaveValue('orc_head')
+    })
+
     test('持握模式与副手：同类近战副手启用双持，切换副手类别后回退单持', async ({page}) => {
         await openCharacterPanel(page)
 

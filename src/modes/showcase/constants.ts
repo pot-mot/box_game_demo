@@ -1,4 +1,6 @@
 import type {HoldMode} from '../../character/weapon/hold_mode.ts'
+import type {LimbSlot} from '../../character/armor/slots.ts'
+import type {ArmorSlot} from '../../character/armor/slots.ts'
 
 // ── 展示清单 ──
 
@@ -64,6 +66,85 @@ export const RANGED_ROW_Z = MELEE_ROW_Z - MELEE_ROW_SPACING * 3
 
 /** 远程行角色间距（m） */
 export const RANGED_SPACING = 2.4
+
+// ── 种族 / 套装展示清单 ──
+
+/**
+ * 种族展示条目：装备四槽同种族肢体（默认 replace，完整替换为骷髅 / 兽人 / 精灵），
+ * 站立行走各 2s 交替循环。
+ */
+export interface RaceShowcaseEntry {
+    kind: 'race'
+    /** 肢体槽位 → 肢体 id（`LIMB_PRESETS`） */
+    limb: Readonly<Partial<Record<LimbSlot, string>>>
+    /** 护甲槽位 → 护甲 id；缺省 = 不穿护甲 */
+    armor?: Readonly<Partial<Record<ArmorSlot, string>>>
+    /** 展示名（面板 / 头顶标签） */
+    name: string
+    faction: number
+}
+
+/** 套装展示条目：装备成套护甲 + 人类肢体，站立行走各 2s 交替循环 */
+export interface ArmorSetShowcaseEntry {
+    kind: 'armor_set'
+    /** 护甲槽位 → 护甲 id（`ARMOR_PRESETS`） */
+    armor: Readonly<Partial<Record<ArmorSlot, string>>>
+    /** 肢体槽位 → 肢体 id；缺省 = 人类肢体（套装展示用） */
+    limb?: Readonly<Partial<Record<LimbSlot, string>>>
+    name: string
+    faction: number
+}
+
+export type ShowcaseExtraEntry = RaceShowcaseEntry | ArmorSetShowcaseEntry
+
+/**
+ * 种族 / 套装展示清单（独立于武器攻击清单的额外一排）：
+ * - 三族各自装备四槽同种族肢体（骷髅 / 兽人 / 精灵），并各自使用独立阵营（颜色随阵营调色板变化）；
+ * - 三套护甲套装（铁甲 / 法袍 / 疾风皮甲）装备人类肢体，展示成套装束。
+ * - 阵营号与人类行使用**同一映射**（`factionColorOf`）：0 红 / 1 蓝 / 2 绿 / 3 黄 / 4 粉 / 5 灰，
+ *   因此同号阵营的种族与人类上色完全一致。
+ */
+export const RACE_SHOWCASE_ROSTER: readonly ShowcaseExtraEntry[] = [
+    {
+        kind: 'race', name: '骷髅',
+        limb: {head: 'skeleton_head', arms: 'skeleton_arms', body: 'skeleton_body', legs: 'skeleton_legs'},
+        faction: 0,
+    },
+    {
+        kind: 'race', name: '兽人',
+        limb: {head: 'orc_head', arms: 'orc_arms', body: 'orc_body', legs: 'orc_legs'},
+        faction: 1,
+    },
+    {
+        kind: 'race', name: '精灵',
+        limb: {head: 'elf_head', arms: 'elf_arms', body: 'elf_body', legs: 'elf_legs'},
+        faction: 2,
+    },
+    {
+        kind: 'armor_set', name: '铁甲套装',
+        armor: {head: 'iron_helmet', chest: 'iron_plate', arms: 'iron_bracers', legs: 'iron_greaves'},
+        faction: 3,
+    },
+    {
+        kind: 'armor_set', name: '法袍套装',
+        armor: {head: 'mage_hood', chest: 'mage_robe', arms: 'mage_wraps', legs: 'mage_leggings'},
+        faction: 4,
+    },
+    {
+        kind: 'armor_set', name: '疾风皮甲',
+        armor: {head: 'cloth_cap', chest: 'leather_armor', arms: 'cloth_bracers', legs: 'wind_boots'},
+        faction: 5,
+    },
+]
+
+/** 种族 / 套装展示行 Z 坐标（远程行之后，为最后一排） */
+export const RACE_SHOWCASE_ROW_Z = RANGED_ROW_Z - 3.4
+
+/** 种族 / 套装展示行角色间距（m） */
+export const RACE_SHOWCASE_SPACING = 3.0
+
+/** 站立 / 行走各持续时长（秒）：到达即切换到另一姿态并循环 */
+export const RACE_SHOWCASE_HOLD_SECONDS = 2.0
 
 /** 展示角色模型缩放（放大便于观察关节细节） */
 export const ACTOR_SCALE = 1.3

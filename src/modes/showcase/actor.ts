@@ -4,6 +4,7 @@ import {createCharacterModel} from '../../entity/character/appearance/model.ts'
 import {createAppearanceSystem} from '../../entity/character/appearance/system.ts'
 import type {AnimationContext, CharacterModel} from '../../entity/character/appearance/types.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/system.ts'
+import type {ShowcaseActorHandle} from './actor_handle.ts'
 import type {WeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import type {NameLabel} from './label.ts'
@@ -79,20 +80,9 @@ export interface ActorStatus {
     readonly slotTimers: readonly SkillTimerStatus[]
 }
 
-export interface ShowcaseActor {
-    readonly id: number
-    readonly anchor: Group
-    readonly weaponName: string
-    /** 当前持握模式中文名（面板行/详情用） */
-    readonly holdModeLabel: string
-    /** 推进一帧：调度时间线 + 注入动画上下文 + 更新刀光 */
-    update: (dt: number) => void
+/** 武器攻击展示驱动器：在通用展示角色接口之上额外提供攻击状态快照 */
+export interface ShowcaseActor extends ShowcaseActorHandle {
     status: () => ActorStatus
-    /** 挂载头顶名称标签（label 资源句柄由本驱动器持有，随 dispose 统一回收） */
-    attachLabel: (label: NameLabel) => void
-    /** 聚焦模式下变暗/恢复（遍历材质透明度，含武器、标签与刀光） */
-    setDimmed: (on: boolean) => void
-    dispose: () => void
 }
 
 export interface ShowcaseActorInit {
@@ -459,5 +449,5 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         scene.remove(anchor)
     }
 
-    return {id, anchor, weaponName, holdModeLabel: HOLD_MODE_LABELS[holdMode], update, status, attachLabel, setDimmed, dispose}
+    return {id, anchor, weaponName, holdModeLabel: HOLD_MODE_LABELS[holdMode], factionColor: faction, update, status, attachLabel, setDimmed, dispose}
 }

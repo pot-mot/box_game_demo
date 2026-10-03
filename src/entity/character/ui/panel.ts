@@ -12,9 +12,9 @@ import {HOLD_MODE_LABELS, isHoldMode} from '../../../character/weapon/hold_mode.
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
-import {ARMOR_SLOTS, ARMOR_SLOT_LABELS, type ArmorSlot} from '../../../character/armor/slots.ts'
-import {armorPiecesOfSlot, findArmorPreset, resolveArmorLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf} from '../../../character/armor/catalog.ts'
-import type {ArmorLoadout, ArmorPieceConfig} from '../../../character/armor/types.ts'
+import {ARMOR_SLOTS, ARMOR_SLOT_LABELS, LIMB_SLOTS, LIMB_SLOT_LABELS, type ArmorSlot, type LimbSlot} from '../../../character/armor/slots.ts'
+import {armorPiecesOfSlot, findArmorPreset, findLimbPreset, limbPiecesOfSlot, resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf} from '../../../character/armor/catalog.ts'
+import type {ArmorLoadout, ArmorPieceConfig, LimbLoadout, LimbPieceConfig} from '../../../character/armor/types.ts'
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
 import {DAMAGE_TYPE_LABELS} from '../../../character/combat/damage_type.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
@@ -115,8 +115,8 @@ interface AttackFields {
 /** 数字转输入框文本（避免 3.0000000000000004 之类的浮点尾巴） */
 const formatNumber = (value: number): string => String(Number(value.toFixed(4)))
 
-/** 护甲预设 → 下拉项文案：列出非零的防御 / 攻击加成与移速修正（无任何修正时只显示名称） */
-const describeArmorPiece = (piece: ArmorPieceConfig): string => {
+/** 装备（护甲 / 肢体）预设 → 下拉项文案：列出非零的防御 / 攻击加成与移速修正（无修正时只显示名称） */
+const describeArmorPiece = (piece: ArmorPieceConfig | LimbPieceConfig): string => {
     const tags: string[] = []
     if (piece.defense.physical > 0) tags.push(`物防${piece.defense.physical}`)
     if (piece.defense.magic > 0) tags.push(`魔防${piece.defense.magic}`)
@@ -125,6 +125,17 @@ const describeArmorPiece = (piece: ArmorPieceConfig): string => {
     if (piece.moveSpeedMultiplier !== 1) tags.push(`移速×${formatNumber(piece.moveSpeedMultiplier)}`)
     return tags.length > 0 ? `${piece.name}（${tags.join(' ')}）` : piece.name
 }
+
+/**
+ * 面板装备区行映射：一行两列（左护甲 / 右肢体），按用户语义顺序 头部 → 手臂 → 身体 → 腿部。
+ * 「身体」肢体对应胸甲槽位（同一身体区域）。两套槽位独立，缺省均为空。
+ */
+const EQUIP_ROWS: ReadonlyArray<{readonly armor: ArmorSlot; readonly limb: LimbSlot}> = [
+    {armor: 'head', limb: 'head'},
+    {armor: 'arms', limb: 'arms'},
+    {armor: 'chest', limb: 'body'},
+    {armor: 'legs', limb: 'legs'},
+]
 
 /** 起手段冷却：取轻击链首段（角色的冷却覆写落在段定义上） */
 const entryCooldownOfAttacks = (attacks: WeaponAttacks): number => {
@@ -344,27 +355,43 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     /* 攻击区字段集合（预填与回显共用） */
     const attackFields: AttackFields = {atkRange, atkDmg, atkCD, atkChargeMult, atkChargeTime, bulletSpeed, bulletKB, bulletLife, weaponTag}
 
-    /* 护甲下拉：首项「无」= 空槽；选项文案列出该件的防御 / 攻击加成 / 移速影响（非零项才列出） */
+    /* 装备下拉（一行两列：左护甲 / 右肢体）：首项「无」= 空槽；选项文案列出数值影响（非零项才列出） */
     const armorSelects: Record<ArmorSlot, HTMLSelectElement> = {head: document.createElement('select'), chest: document.createElement('select'), arms: document.createElement('select'), legs: document.createElement('select')}
-    for (const slot of ARMOR_SLOTS) {
-        const row = document.createElement('div')
-        row.style.cssText = 'display:flex;gap:8px;align-items:center'
-        const label = document.createElement('label')
-        label.textContent = `${ARMOR_SLOT_LABELS[slot]} `
-        const select = armorSelects[slot]
-        select.style.cssText = 'max-width:230px'
+    const limbSelects: Record<LimbSlot, HTMLSelectElement> = {head: document.createElement('select'), arms: document.createElement('select'), body: document.createElement('select'), legs: document.createElement('select')}
+
+    /** 填充装备下拉（首项「无」+ 该槽位全部预设；护甲 / 肢体共用） */
+    const fillEquipSelect = (select: HTMLSelectElement, pieces: readonly (ArmorPieceConfig | LimbPieceConfig)[]): void => {
         const noneOption = document.createElement('option')
         noneOption.value = ''
         noneOption.textContent = '无'
         select.appendChild(noneOption)
-        for (const piece of armorPiecesOfSlot(slot)) {
+        for (const piece of pieces) {
             const option = document.createElement('option')
             option.value = piece.id
             option.textContent = describeArmorPiece(piece)
             select.appendChild(option)
         }
-        label.appendChild(select)
-        row.appendChild(label)
+    }
+
+    for (const {armor, limb} of EQUIP_ROWS) {
+        const row = document.createElement('div')
+        row.style.cssText = 'display:flex;gap:8px;align-items:center'
+
+        const armorLabel = document.createElement('label')
+        armorLabel.textContent = `${ARMOR_SLOT_LABELS[armor]} `
+        armorSelects[armor].style.cssText = 'max-width:180px'
+        fillEquipSelect(armorSelects[armor], armorPiecesOfSlot(armor))
+        armorLabel.appendChild(armorSelects[armor])
+        row.appendChild(armorLabel)
+
+        const limbLabel = document.createElement('label')
+        limbLabel.textContent = `肢体·${LIMB_SLOT_LABELS[limb]} `
+        limbLabel.title = '肢体组件（骷髅 / 兽人 / 精灵）：装备后默认顶替该部位的人类肢体，颜色随阵营变化；空 = 默认人类肢体'
+        limbSelects[limb].style.cssText = 'max-width:180px'
+        fillEquipSelect(limbSelects[limb], limbPiecesOfSlot(limb))
+        limbLabel.appendChild(limbSelects[limb])
+        row.appendChild(limbLabel)
+
         el.appendChild(row)
     }
 
@@ -388,6 +415,16 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         return loadout
     }
 
+    /** 读取当前肢体选择（空 value = 默认人类肢体） */
+    const readLimbLoadout = (): LimbLoadout => {
+        const loadout: Partial<Record<LimbSlot, string>> = {}
+        for (const slot of LIMB_SLOTS) {
+            const value = limbSelects[slot].value
+            if (value.length > 0) loadout[slot] = value
+        }
+        return loadout
+    }
+
     /** 读取基础防御（负值/空值安全回退 0） */
     const readBaseDefense = (): DefenseProfile => ({
         physical: Math.max(0, parseFloat(baseDefPhys.value) || 0),
@@ -396,10 +433,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /** 装备数值预览：复用目录汇总函数（与运行时 setCombatEquipment 同一口径）：有效防御 / 攻击加成 / 有效移速 */
     const updateEquipmentPreview = (): void => {
-        const resolved = resolveArmorLoadout(readArmorLoadout())
-        const defense = totalDefenseOf(readBaseDefense(), resolved)
-        const attack = totalAttackOf(resolved)
-        const moveSpeedMultiplier = totalMoveSpeedOf(resolved)
+        const resolvedArmor = resolveArmorLoadout(readArmorLoadout())
+        const resolvedLimb = resolveLimbLoadout(readLimbLoadout())
+        const defense = totalDefenseOf(readBaseDefense(), resolvedArmor, resolvedLimb)
+        const attack = totalAttackOf(resolvedArmor, resolvedLimb)
+        const moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
         const baseSpeed = parseFloat(speed.value) || 0
         equipmentPreviewTag.textContent = [
             `有效防御：物 ${formatNumber(defense.physical)} / 魔 ${formatNumber(defense.magic)}`,
@@ -408,6 +446,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         ].join('\n')
     }
     for (const slot of ARMOR_SLOTS) armorSelects[slot].onchange = updateEquipmentPreview
+    for (const slot of LIMB_SLOTS) limbSelects[slot].onchange = updateEquipmentPreview
     baseDefPhys.oninput = updateEquipmentPreview
     baseDefMagic.oninput = updateEquipmentPreview
     speed.oninput = updateEquipmentPreview
@@ -792,10 +831,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         rebuildHoldModeOptions()
         holdModeSelect.value = sel.holdMode
 
-        /* 护甲与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
+        /* 护甲 / 肢体与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
         for (const slot of ARMOR_SLOTS) {
             const piece = findArmorPreset(sel.combat.armor[slot])
             armorSelects[slot].value = piece !== undefined && piece.slot === slot ? piece.id : ''
+        }
+        for (const slot of LIMB_SLOTS) {
+            const piece = findLimbPreset(sel.combat.limb[slot])
+            limbSelects[slot].value = piece !== undefined && piece.slot === slot ? piece.id : ''
         }
         baseDefPhys.value = formatNumber(sel.combat.baseDefense.physical)
         baseDefMagic.value = formatNumber(sel.combat.baseDefense.magic)
@@ -925,6 +968,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
                     baseDefense: readBaseDefense(),
                     armor: readArmorLoadout(),
+                    limb: readLimbLoadout(),
                 }, newOffhand)
                 /* 持握模式：换装重置为默认后再按面板选择显式设置（不可用时 setHoldMode 回退默认模式） */
                 const holdValue = holdModeSelect.value

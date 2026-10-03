@@ -1,6 +1,6 @@
-import {describe, it, expect} from 'vitest'
+import {describe, it, expect, vi} from 'vitest'
 import {
-    BoxGeometry, ConeGeometry, CylinderGeometry, Mesh, MeshStandardMaterial, SphereGeometry,
+    BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Mesh, MeshStandardMaterial, SphereGeometry,
 } from 'three'
 import {createMeshBuilder} from './mesh_builder.ts'
 
@@ -47,6 +47,19 @@ describe('createMeshBuilder（共享网格构建器）', () => {
         b.dispose()
         expect(b.group.children).toHaveLength(0)
         expect(() => b.dispose()).not.toThrow()
+    })
+
+    it('trackMaterial / trackTexture 登记外部资源，dispose 时一并释放', () => {
+        const b = createMeshBuilder()
+        const material = new MeshStandardMaterial({color: 0xffffff})
+        const texture = new CanvasTexture(document.createElement('canvas'))
+        b.trackMaterial(material)
+        b.trackTexture(texture)
+        const materialDispose = vi.spyOn(material, 'dispose')
+        const textureDispose = vi.spyOn(texture, 'dispose')
+        b.dispose()
+        expect(materialDispose).toHaveBeenCalledTimes(1)
+        expect(textureDispose).toHaveBeenCalledTimes(1)
     })
 
     it('每个构建器实例独立（无模块级共享状态）', () => {

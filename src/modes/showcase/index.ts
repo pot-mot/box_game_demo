@@ -4,13 +4,14 @@ import {setupShowcaseScene} from './scene.ts'
 import type {ShowcaseScene} from './scene.ts'
 import {setupKeyboardCamera} from './keyboard.ts'
 import {createShowcaseActor} from './actor.ts'
-import type {ShowcaseActor} from './actor.ts'
+import {createRaceActor} from './race_actor.ts'
+import type {ShowcaseActorHandle} from './actor_handle.ts'
 import {createNameLabel} from './label.ts'
 import {createPanel} from './panel.ts'
 import type {PanelRowInfo} from './panel.ts'
 import {defaultHoldMode, weaponPresetOrDefault} from '../../character/weapon/catalog.ts'
 import {HOLD_MODES, HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
-import {SELECT_PALETTE} from '../../entity/character/appearance/constants.ts'
+import {factionColorOf} from '../../entity/character/appearance/constants.ts'
 import {
     CLICK_SLOP_PX,
     FOCUS_RING_COLOR,
@@ -20,6 +21,9 @@ import {
     MELEE_ROW_Z,
     MELEE_ROW_SPACING,
     MELEE_SPACING,
+    RACE_SHOWCASE_ROSTER,
+    RACE_SHOWCASE_ROW_Z,
+    RACE_SHOWCASE_SPACING,
     RANGED_ROW_Z,
     RANGED_SPACING,
     SHOWCASE_ROSTER,
@@ -57,9 +61,11 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
     /* —— 键盘相机移动（对标 edit 模式的 setupKeyboardCamera） —— */
     const keyboardCamera = setupKeyboardCamera(sceneCtx.orbit)
 
-    /* —— 按清单创建展示角色：近战按持握模式三排（单持 → 双手共持 → 双持）+ 远程一排，全部面向 +Z —— */
-    const actors: ShowcaseActor[] = []
-    const anchorToActor = new Map<Object3D, ShowcaseActor>()
+    /* —— 按清单创建展示角色：近战按持握模式三排（单持 → 双手共持 → 双持）+ 远程一排 + 种族/套装一排，全部面向 +Z —— */
+    const actors: ShowcaseActorHandle[] = []
+    /** 面板静态信息（武器攻击角色用 ActorStatus；种族/套装角色用固定标签） */
+    const panelInfos: PanelRowInfo[] = []
+    const anchorToActor = new Map<Object3D, ShowcaseActorHandle>()
     let nextFaction = 0
 
     const placeRow = (kind: 'melee' | 'ranged', holdMode: HoldMode | undefined, rowZ: number, spacing: number): void => {
@@ -85,12 +91,47 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
             actor.attachLabel(createNameLabel(weaponName, weapon.type === 'melee' ? `近战 · ${HOLD_MODE_LABELS[mode]}` : '远程武器'))
             actors.push(actor)
             anchorToActor.set(actor.anchor, actor)
+            panelInfos.push({
+                id: actor.id,
+                skillName: actor.weaponName,
+                weaponName: actor.weaponName,
+                holdModeLabel: actor.holdModeLabel,
+                colorHex: `#${factionColorOf(actor.factionColor).toString(16).padStart(6, '0')}`,
+            })
         }
     }
     for (const [index, mode] of HOLD_MODES.entries()) {
         placeRow('melee', mode, MELEE_ROW_Z - index * MELEE_ROW_SPACING, MELEE_SPACING)
     }
     placeRow('ranged', undefined, RANGED_ROW_Z, RANGED_SPACING)
+
+    /* —— 种族 / 套装展示排（最后一排）：骷髅 / 兽人 / 精灵 三族 + 三套护甲，站立行走各 2s 交替 —— */
+    for (let i = 0; i < RACE_SHOWCASE_ROSTER.length; i++) {
+        const entry = RACE_SHOWCASE_ROSTER[i]
+        if (entry === undefined) continue
+        const subtitle = entry.kind === 'race' ? '种族肢体' : '护甲套装'
+        const actor = createRaceActor({
+            id: actors.length,
+            scene: sceneCtx.scene,
+            x: (i - (RACE_SHOWCASE_ROSTER.length - 1) / 2) * RACE_SHOWCASE_SPACING,
+            z: RACE_SHOWCASE_ROW_Z,
+            name: entry.name,
+            subtitle,
+            faction: entry.faction,
+            limb: entry.limb ?? {},
+            armor: entry.armor ?? {},
+        })
+        actor.attachLabel(createNameLabel(entry.name, subtitle))
+        actors.push(actor)
+        anchorToActor.set(actor.anchor, actor)
+        panelInfos.push({
+            id: actor.id,
+            skillName: entry.name,
+            weaponName: entry.name,
+            holdModeLabel: subtitle,
+            colorHex: `#${factionColorOf(entry.faction).toString(16).padStart(6, '0')}`,
+        })
+    }
 
     /* —— 聚焦高亮环（脚下呼吸光环） —— */
     const ringGeometry = new RingGeometry(FOCUS_RING_INNER, FOCUS_RING_OUTER, 48)
@@ -109,10 +150,10 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
     let playing = true
     let speed: number = SPEED_OPTIONS[SPEED_OPTIONS.length - 1]
     let stepQueued = false
-    let focusActor: ShowcaseActor | null = null
+    let focusActor: ShowcaseActorHandle | null = null
 
     const focusVec = new Vector3()
-    const setFocus = (next: ShowcaseActor | null): void => {
+    const setFocus = (next: ShowcaseActorHandle | null): void => {
         if (focusActor === next) return
         focusActor = next
         for (const actor of actors) {
@@ -130,15 +171,7 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
         keyboardCamera.setEnabled(next === null)
     }
 
-    /* —— 信息面板 —— */
-    const panelInfos: PanelRowInfo[] = actors.map(actor => ({
-        id: actor.id,
-        /* 技能名与武器名同为武器中文名（面板内部对相同值去重显示）；持握模式单独成列 */
-        skillName: actor.weaponName,
-        weaponName: actor.weaponName,
-        holdModeLabel: actor.holdModeLabel,
-        colorHex: `#${SELECT_PALETTE(actors.indexOf(actor)).bodyColor.toString(16).padStart(6, '0')}`,
-    }))
+    /* —— 信息面板（panelInfos 已在创建角色时同步收集） —— */
     const panel = createPanel(panelInfos, {
         onTogglePause: () => {
             playing = !playing
@@ -236,7 +269,13 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
         }
 
         renderer.render(sceneCtx.scene, sceneCtx.camera)
-        panel.refresh(actors.map(actor => actor.status()), playing, speed, focusActor?.id ?? null)
+        panel.refresh(
+            /* 仅武器攻击角色提供攻击状态；种族/套装角色无攻击面板数据（面板据此显示「—」） */
+            actors.flatMap(actor => actor.status === undefined ? [] : [actor.status()]),
+            playing,
+            speed,
+            focusActor?.id ?? null,
+        )
     }
 
     /** 返回启动屏：先停事件防再入，再释放全部资源，最后交回宿主 */

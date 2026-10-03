@@ -10,14 +10,15 @@ import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
 import type {AttackConfig} from '../character/archetypes.ts'
 import type {HoldMode} from '../character/weapon/hold_mode.ts'
 import type {DefenseProfile} from '../character/combat/defense.ts'
-import type {ArmorLoadout} from '../character/armor/types.ts'
+import type {ArmorLoadout, LimbLoadout} from '../character/armor/types.ts'
 import type {LockPointConfig} from '../character/lock_point.ts'
 
 /** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」；
  *  v4 起 character 增加基础防御 defense 与护甲装备 armor；
  *  v5 起 character 增加额外锁定点 lockPoints；
- *  v6 起 character 增加副手武器 offhand（均为可选字段，旧档加载时安全回退默认） */
-export const SAVE_FORMAT_VERSION = 6
+ *  v6 起 character 增加副手武器 offhand；
+ *  v7 起 character 增加肢体组件装备 limb（均为可选字段，旧档加载时安全回退默认） */
+export const SAVE_FORMAT_VERSION = 7
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -136,6 +137,8 @@ export interface CharacterSaveConfig {
     defense?: DefenseProfile
     /** 护甲装备（槽位 → 护甲 id；缺省 / 未知 id = 空槽，不抛错） */
     armor?: ArmorLoadout
+    /** 肢体组件装备（槽位 → 肢体 id；缺省 / 未知 id = 默认人类肢体，不抛错） */
+    limb?: LimbLoadout
     /** 额外锁定点（关节 id + 关节本地偏移；缺省 = 仅默认身体中心点，非法条目加载时安全剔除） */
     lockPoints?: LockPointConfig[]
     isPlayer: boolean

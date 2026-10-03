@@ -1,6 +1,6 @@
 import {
     BoxGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial,
-    SphereGeometry, type BufferGeometry,
+    SphereGeometry, type BufferGeometry, type Texture,
 } from 'three'
 import {createTwoFaceBoxPart} from '../../../render/box_parts.ts'
 
@@ -37,7 +37,11 @@ export interface MeshBuilder {
     ) => Mesh
     /** 六面明暗方块部件（与方块人身体同一风格），直接挂到 group 并登记 */
     readonly faceBox: (w: number, h: number, d: number, color: number, x: number, y: number, z: number) => Mesh
-    /** 释放全部登记的几何 / 材质并清空 group */
+    /** 登记外部创建的材质（如带 map 的脸部材质）：`dispose` 时与内部材质一并释放 */
+    readonly trackMaterial: (material: MeshStandardMaterial) => void
+    /** 登记外部创建的纹理（如 CanvasTexture 脸部贴图）：`dispose` 时释放 */
+    readonly trackTexture: (texture: Texture) => void
+    /** 释放全部登记的几何 / 材质 / 纹理并清空 group */
     readonly dispose: () => void
 }
 
@@ -46,6 +50,7 @@ export const createMeshBuilder = (): MeshBuilder => {
     const group = new Group()
     const geometries: BufferGeometry[] = []
     const materials: MeshStandardMaterial[] = []
+    const textures: Texture[] = []
 
     const material = (color: number, roughness = 0.5, metalness = 0.2): MeshStandardMaterial => {
         const m = new MeshStandardMaterial({color, roughness, metalness})
@@ -104,13 +109,23 @@ export const createMeshBuilder = (): MeshBuilder => {
         return part.mesh
     }
 
+    const trackMaterial = (m: MeshStandardMaterial): void => {
+        materials.push(m)
+    }
+
+    const trackTexture = (t: Texture): void => {
+        textures.push(t)
+    }
+
     const dispose = (): void => {
         group.clear()
         for (const g of geometries) g.dispose()
         for (const m of materials) m.dispose()
+        for (const t of textures) t.dispose()
         geometries.length = 0
         materials.length = 0
+        textures.length = 0
     }
 
-    return {group, material, box, cylinder, sphere, cone, add, faceBox, dispose}
+    return {group, material, box, cylinder, sphere, cone, add, faceBox, trackMaterial, trackTexture, dispose}
 }

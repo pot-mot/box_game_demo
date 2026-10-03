@@ -201,9 +201,10 @@ export const collectWorldState = (
                     tendency: e.combat.tendencyConfig,
                     faction: e.combat.faction,
                     maxHealth: e.combat.maxHealth,
-                    /* 基础防御 + 护甲装备（旧代码读到缺字段安全回退零防御空护甲） */
+                    /* 基础防御 + 护甲 + 肢体装备（旧代码读到缺字段安全回退零防御空装备） */
                     defense: e.combat.baseDefense,
                     armor: e.combat.armor,
+                    limb: e.combat.limb,
                     /* 额外锁定点（拷贝为 JSON-safe 元组；缺省 = 仅默认身体中心点） */
                     lockPoints: e.lockPoints.map((point): LockPointConfig => ({
                         jointId: point.jointId,

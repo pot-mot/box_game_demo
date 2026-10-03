@@ -11,8 +11,8 @@ import {resolveTendency} from '../../../character/faction.ts'
 import type {AttackResult} from '../../../character/combat/types.ts'
 import {createCombatComponent, setCombatEquipment, setCombatOffhand, setCombatWeapon} from '../../../character/combat/types.ts'
 import {ZERO_PROFILE, type DefenseProfile} from '../../../character/combat/defense.ts'
-import type {ArmorLoadout} from '../../../character/armor/types.ts'
-import {resolveArmorLoadout} from '../../../character/armor/catalog.ts'
+import type {ArmorLoadout, LimbLoadout} from '../../../character/armor/types.ts'
+import {resolveArmorLoadout, resolveLimbLoadout} from '../../../character/armor/catalog.ts'
 import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/attack_runtime.ts'
 import {createTestWeaponRuntime, TEST_WEAPON_ID} from '../../../character/combat/test_weapon.ts'
 import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
@@ -181,7 +181,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
     getAll: () => readonly CharacterEntity[]
     setTransform: (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}) => void
-    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout}, newOffhand?: AttackConfig | null) => void
+    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null) => void
     /** 设置单个角色的和平策略 */
     setPeaceStrategy: (id: number, strategy: PeaceSubStrategy) => void
     /** 设置单个角色的和平策略配置 */
@@ -1270,12 +1270,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const entity = spawnEntity(cfg, saveConfig.attack, offhandAttack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
         /* 持握模式：存档支持时应用，武器不支持时 setHoldMode 回退默认模式（不抛错） */
         if (saveConfig.holdMode !== undefined) setHoldMode(entity.id, saveConfig.holdMode)
-        /* 防御与护甲：旧档缺字段回退零防御空护甲；未知护甲 id 由 resolveArmorLoadout 安全剔除 */
-        setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {})
+        /* 防御 / 护甲 / 肢体：旧档缺字段回退零防御空装备；未知 id 由 resolve*Loadout 安全剔除 */
+        setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {}, saveConfig.limb ?? {})
         /* 额外锁定点：旧档缺字段回退仅默认身体中心点；非法条目由 sanitizeLockPoints 安全剔除 */
         entity.lockPoints = sanitizeLockPoints(saveConfig.lockPoints)
         const model = appearanceModels.get(entity.id)
-        if (model) model.equipArmor(resolveArmorLoadout(entity.combat.armor))
+        if (model) {
+            model.equipArmor(resolveArmorLoadout(entity.combat.armor))
+            model.equipLimbs(resolveLimbLoadout(entity.combat.limb))
+        }
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
@@ -1374,7 +1377,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.lockPoints = sanitizeLockPoints(points)
     }
 
-    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout}, newOffhand?: AttackConfig | null): void => {
+    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
         if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
@@ -1450,14 +1453,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.combat.tendencyConfig = newTendencyConfig
         }
         if (newEquipment) {
-            /* 基础防御 / 护甲变更：重算防御、攻击加成与移速并同步护甲外观（未传项保持原值） */
+            /* 基础防御 / 护甲 / 肢体变更：重算防御、攻击加成与移速并同步外观（未传项保持原值） */
             setCombatEquipment(
                 entity.combat,
                 newEquipment.baseDefense ?? entity.combat.baseDefense,
                 newEquipment.armor ?? entity.combat.armor,
+                newEquipment.limb,
             )
             const model = appearanceModels.get(entity.id)
-            if (model) model.equipArmor(resolveArmorLoadout(entity.combat.armor))
+            if (model) {
+                if (newEquipment.armor !== undefined) model.equipArmor(resolveArmorLoadout(entity.combat.armor))
+                if (newEquipment.limb !== undefined) model.equipLimbs(resolveLimbLoadout(entity.combat.limb))
+            }
         }
         refreshPlayerLabel()
     }

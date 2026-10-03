@@ -155,6 +155,14 @@ const ArmorLoadoutSchema = z.object({
     legs: z.string().optional(),
 }).optional().catch(undefined)
 
+/* 肢体装备表：槽位 → 肢体 id；非法结构整体回退 undefined（运行时默认人类肢体），未知 id 由运行时回退空槽 */
+const LimbLoadoutSchema = z.object({
+    head: z.string().optional(),
+    arms: z.string().optional(),
+    body: z.string().optional(),
+    legs: z.string().optional(),
+}).optional().catch(undefined)
+
 /* 额外锁定点：关节 id + 关节本地偏移；非法结构整体回退 undefined（运行时仅保留默认身体中心点），不抛错 */
 const LockPointSchema = z.object({
     jointId: z.string().min(1),
@@ -181,6 +189,7 @@ const CharacterConfigInner = z.object({
     maxHealth: z.number().positive().default(100),
     defense: DefenseProfileSchema,
     armor: ArmorLoadoutSchema,
+    limb: LimbLoadoutSchema,
     lockPoints: LockPointsSchema,
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),

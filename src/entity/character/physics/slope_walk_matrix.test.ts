@@ -103,6 +103,8 @@ const makeModelMock = (): CharacterModel => ({
     removeWeapon: () => {},
     equipArmor: () => {},
     removeArmor: () => {},
+    equipLimbs: () => {},
+    removeLimbs: () => {},
     weaponMesh: null,
     weaponTip: null,
     weaponGroup: null,

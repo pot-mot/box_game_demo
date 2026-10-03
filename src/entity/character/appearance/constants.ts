@@ -11,26 +11,43 @@ const BASE_PALETTES: readonly CharacterColorPalette[] = [
     {skinColor: 0xf0c8a0, hairColor: 0x2a2a2a, bodyColor: 0x808080, legColor: 0x404040},
 ]
 
-/** 根据 faction 选取调色板，faction > 5 时在基础色上微调明暗 */
+/**
+ * **阵营 → 主色的唯一入口**：人类身体 / 肢体披挂 / 面板色点 / 展示台全部复用本函数。
+ * 基础色按 `faction % 6` 取（0 红 / 1 蓝 / 2 绿 / 3 黄 / 4 粉 / 5 灰），
+ * 每右移一圈（tier）按「暗 / 亮 / 原」循环微调明暗，保证同一阵营数字处处得到完全一致的颜色。
+ */
+export const factionColorOf = (faction: number): number => {
+    const idx = faction % BASE_PALETTES.length
+    const tier = Math.floor(faction / BASE_PALETTES.length)
+    const base = BASE_PALETTES[idx].bodyColor
+    if (tier === 0) return base
+    const mod = tier % 3
+    if (mod === 1) return darkenColor(base, 0.7)
+    if (mod === 2) return lightenColor(base, 1.25)
+    return base
+}
+
+/** 根据 faction 选取调色板：肤色固定，发色 / 腿色按 tier 微调，主色统一取 `factionColorOf` */
 export const SELECT_PALETTE = (faction: number): CharacterColorPalette => {
     const idx = faction % BASE_PALETTES.length
     const tier = Math.floor(faction / BASE_PALETTES.length)
     const base = BASE_PALETTES[idx]
+    const bodyColor = factionColorOf(faction)
     if (tier === 0) return {...base}
     const mod = tier % 3
     if (mod === 1) return {
         ...base,
-        bodyColor: darkenColor(base.bodyColor, 0.7),
+        bodyColor,
         legColor: darkenColor(base.legColor, 0.7),
         hairColor: darkenColor(base.hairColor, 0.85),
     }
     if (mod === 2) return {
         ...base,
-        bodyColor: lightenColor(base.bodyColor, 1.25),
+        bodyColor,
         legColor: lightenColor(base.legColor, 1.15),
         hairColor: lightenColor(base.hairColor, 1.1),
     }
-    return {...base}
+    return {...base, bodyColor}
 }
 
 /** 髋部 pivot 基准高度（模型本地 Y），由 render 层共享常量提供 */
