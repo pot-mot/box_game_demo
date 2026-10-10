@@ -675,6 +675,7 @@ describe('远程蓄力（按住冻结 + 累积 + 松开推进）', () => {
         hold(e, 20, false)
         expect(e.combat.attackHolding).toBe(false)
         expect(e.combat.attackCharge).toBe(0)
+    })
 })
 
 describe('交互状态（interacting）', () => {
