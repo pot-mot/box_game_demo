@@ -51,7 +51,7 @@ export const setupEditMode = (
 
     /* 建造笔刷：启用时关闭实体选中 / 生成交互（相机旋转仍可用，拖拽不触发放置） */
     const brush = createBuildingBrush(building, camera, renderer.domElement)
-    setupBuildingBrushPanel(brush, (enabled) => {
+    setupBuildingBrushPanel(brush, building, (enabled) => {
         pointer.setEnabled(!enabled)
     })
 

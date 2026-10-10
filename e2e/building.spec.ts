@@ -33,6 +33,10 @@ test.describe('建筑生成器', () => {
     test('编辑模式生成建筑并写入存档 v8 + 笔刷控件', async ({page}) => {
         const {x, y} = await enterEditAndSpawnBuilding(page)
 
+        /* 未选中建筑时笔刷面板隐藏 */
+        const brushPanel = page.locator('#building-brush-panel')
+        await expect(brushPanel).toBeHidden()
+
         /* 左键点击建筑应选中并打开建筑面板（chunk 网格经父 Group 匹配实体） */
         await page.mouse.click(x, y - 60)
         await expect(page.locator('#building-generator-panel')).toBeVisible()
@@ -41,8 +45,7 @@ test.describe('建筑生成器', () => {
         await expect(page.getByRole('button', {name: '应用', exact: true})).toBeVisible()
         await expect(page.getByRole('button', {name: '删除', exact: true})).toBeVisible()
 
-        /* 建筑笔刷面板常驻；六种工具可切换 */
-        const brushPanel = page.locator('#building-brush-panel')
+        /* 选中建筑后笔刷面板显示；六种工具可切换 */
         await expect(brushPanel).toBeVisible()
         await expect(page.locator('#brush-tool option')).toHaveCount(6)
         await page.locator('#brush-tool').selectOption('prop')

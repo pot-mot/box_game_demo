@@ -95,7 +95,7 @@
 
 - `pickBlock(raycaster)`：对所有建筑世界的**可见** chunk 网格做射线检测，取最近命中；把命中点经 `group.worldToLocal` 转到局部坐标，沿面法线内推半格取样得到实心体素，返回 `{worldId, block, normal}`。
 - `createBuildingBrush`：左键**单击**（拖拽仍用于旋转视角，阈值 `BRUSH_CLICK_THRESHOLD`）执行放置（`block + normal`）或擦除（`block`），材质由面板选择。
-- 面板常驻左下角：工具 / 材质 / 道具种类 / 预制体参数 / 启用开关；启用时通过回调关闭实体选中与生成交互（`pointer.setEnabled(false)`），相机旋转保持可用。
+- 面板默认隐藏于左下角，**仅当选中某个建筑世界时显示**（订阅建筑源 `select` 事件，id 非空即显示）；取消选中会隐藏并强制关闭笔刷（复位启用开关、恢复实体选中）。面板含工具 / 材质 / 道具种类 / 预制体参数 / 启用开关；启用时通过回调关闭实体选中与生成交互（`pointer.setEnabled(false)`），相机旋转保持可用。
 - 写入经 `setBlock` → 标记脏 chunk → 渲染器 / 碰撞体在下一帧自动重建。
 
 ### 自由道具与编排工具

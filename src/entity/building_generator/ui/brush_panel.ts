@@ -5,6 +5,10 @@ import {DEFAULT_BUILDING_CONFIG} from '../validation.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSelect, findIn, materialOptions, propOptions} from './labels.ts'
 import type {BuildingBrush, BuildingBrushTool} from '../edit/brush.ts'
+import type {BuildingGeneratorContext} from '../types/index.ts'
+
+/** 面板只依赖建筑源的选中事件与当前选中 id */
+type BuildingSelectionSource = Pick<BuildingGeneratorContext, 'events' | 'getSelectedId'>
 
 const BRUSH_TOOLS = ['place', 'erase', 'prop', 'fill', 'replace', 'stamp'] as const
 
@@ -18,17 +22,21 @@ const TOOL_LABELS: Record<BuildingBrushTool, string> = {
 }
 
 /**
- * 建造笔刷面板（编辑模式常驻）：工具 / 材质 / 道具种类 / 预制体参数 + 启用开关。
+ * 建造笔刷面板（编辑模式）：工具 / 材质 / 道具种类 / 预制体参数 + 启用开关。
+ * 默认隐藏，仅当建筑源选中某个建筑（`select` 事件 id 非空）时显示；
+ * 取消选中时隐藏并强制关闭笔刷（避免无 UI 可操作却仍拦截指针）。
  * 启用时通过 `onToggle` 通知编辑模式关闭实体选中 / 生成交互。
  */
 export const setupBuildingBrushPanel = (
     brush: BuildingBrush,
+    building: BuildingSelectionSource,
     onToggle: (enabled: boolean) => void,
 ): (() => void) => {
     const container = document.createElement('div')
     container.id = 'building-brush-panel'
     container.style.cssText = [
         'position: fixed; bottom: 24px; left: 16px;',
+        'display: none;',
         'background: rgba(0,0,0,.75); color: #fff;',
         'font: 13px/1.6 monospace; padding: 10px 14px;',
         'border-radius: 8px; min-width: 200px;',
@@ -132,9 +140,25 @@ export const setupBuildingBrushPanel = (
     }
     updateVisibility()
 
+    /* 仅在选中建筑时显示；隐藏时强制关闭笔刷并恢复实体选中 */
+    const setVisible = (visible: boolean): void => {
+        container.style.display = visible ? '' : 'none'
+        if (visible) return
+        enableCheckbox.checked = false
+        if (brush.isEnabled()) {
+            brush.setEnabled(false)
+            onToggle(false)
+        }
+    }
+    const unsubscribe = building.events.on('select', (id) => {
+        setVisible(id !== undefined)
+    })
+
     document.body.appendChild(container)
+    setVisible(building.getSelectedId() !== undefined)
 
     return () => {
-        /* 面板为静态控件，无需逐帧刷新 */
+        unsubscribe()
+        container.remove()
     }
 }
