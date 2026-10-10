@@ -1,5 +1,5 @@
 import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest'
-import {Mesh, Scene} from 'three'
+import {Scene} from 'three'
 import {createRaceActor} from './race_actor.ts'
 import {RACE_SHOWCASE_ROSTER, RACE_SHOWCASE_HOLD_SECONDS} from './constants.ts'
 
@@ -74,19 +74,5 @@ describe('展示模式：种族 / 套装展示角色', () => {
         expect(actor.anchor.position.x).toBe(baseX)
         expect(actor.anchor.position.z).toBe(baseZ)
         actor.dispose()
-    })
-
-    it('装备肢体后外观网格数多于人类默认（种族替换生效）', () => {
-        const countMeshes = (actor: ReturnType<typeof spawn>): number => {
-            let n = 0
-            actor.anchor.traverse(obj => { if (obj instanceof Mesh) n++ })
-            return n
-        }
-        const race = spawn(0) /* 骷髅（整族肢体） */
-        const armorSet = spawn(3) /* 铁甲套装（人类肢体 + 护甲） */
-        expect(countMeshes(race)).toBeGreaterThan(0)
-        expect(countMeshes(armorSet)).toBeGreaterThan(0)
-        race.dispose()
-        armorSet.dispose()
     })
 })

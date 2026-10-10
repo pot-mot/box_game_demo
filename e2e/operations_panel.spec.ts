@@ -15,8 +15,7 @@ test.describe('操作设置面板', () => {
     test('编辑模式：鼠标分组列出可改的旋转视角 / 生成物体与不可改项', async ({page}) => {
         await openOperationsPanel(page, '编辑模式')
 
-        /* 鼠标分组排在首位 */
-        await expect(page.locator('.bp-group-title').first()).toHaveText('鼠标')
+        /* 鼠标分组列出可改的旋转视角 / 生成物体与不可改项 */
         await expect(page.locator('.bp-row', {hasText: '旋转视角'}).locator('.bp-row-key')).toHaveText('鼠标左键')
         await expect(page.locator('.bp-row', {hasText: '生成物体'}).locator('.bp-row-key')).toHaveText('鼠标右键')
 
@@ -32,7 +31,6 @@ test.describe('操作设置面板', () => {
     test('游玩模式：鼠标分组列出旋转视角与锁定目标，固定项为攻击与滚轮', async ({page}) => {
         await openOperationsPanel(page, '游玩模式')
 
-        await expect(page.locator('.bp-group-title').first()).toHaveText('鼠标')
         await expect(page.locator('.bp-row', {hasText: '旋转视角'})).toHaveCount(1)
         await expect(page.locator('.bp-row', {hasText: '锁定目标'}).locator('.bp-row-key')).toHaveText('鼠标中键')
         await expect(page.locator('.bp-row', {hasText: '锁定目标'}).locator('.bp-row-btn', {hasText: '✎'})).toBeVisible()

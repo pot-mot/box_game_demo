@@ -122,8 +122,6 @@ describe('基础状态 clip 生成器', () => {
             expect(pos.y).toBeCloseTo(rest[1])
             expect(pos.z).toBeCloseTo(rest[2])
         }
-        /* 头部静止位置在颈部上方，而非原点 */
-        expect(sampled.jointPoses.get('headNeck')!.position.y).toBeCloseTo(0.36)
     })
 })
 

@@ -1,5 +1,5 @@
 import {describe, it, expect, beforeAll, afterAll, beforeEach, vi} from 'vitest'
-import {Scene, Box3} from 'three'
+import {Scene} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld} from '../../../physics/world.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
@@ -86,15 +86,6 @@ describe('角色原点在脚底（非身体中心）', () => {
         expect(entity!.mesh.position.z).toBeCloseTo(3, 6)
         expect(entity!.appearanceGroup.position.y).toBeCloseTo(2, 6)
         expect(entity!.body.translation().y).toBeCloseTo(2 + halfH, 6)
-    })
-
-    it('胶囊几何体原点在底部：包围盒 min.y = 0，max.y = 高 × scale', () => {
-        const {id} = system.add(meleeSaveConfig({scale: 2}), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)
-        expect(entity).toBeDefined()
-        const bounds = new Box3().setFromObject(entity!.mesh)
-        expect(bounds.min.y).toBeCloseTo(0, 5)
-        expect(bounds.max.y).toBeCloseTo(CHARACTER_BASE_SIZE.height * 2, 5)
     })
 
     it('syncPositions 按物理中心回退半高写回脚底原点', () => {

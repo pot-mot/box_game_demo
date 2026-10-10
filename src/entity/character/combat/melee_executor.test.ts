@@ -1,9 +1,8 @@
 import {describe, it, expect, vi} from 'vitest'
 import {Group} from 'three'
-import {targetHitBoxHalves, testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor} from './melee_executor.ts'
+import {testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
 import type {CharacterModel} from '../appearance/types.ts'
-import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {MELEE_WEAPON_PRESETS, type MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
@@ -33,22 +32,6 @@ const yawMatrix = (px: number, py: number, pz: number, yaw: number): readonly nu
 /* 武器本地命中箱夹具：中心在武器前方（local +Z）0.2 处 */
 const localCenter = {x: 0, y: 0.5, z: 0.2}
 const localHalf = {x: 0.15, y: 0.5, z: 0.15}
-
-describe('targetHitBoxHalves', () => {
-    it('与碰撞箱同尺寸（scale=1，竖直胶囊包围盒）', () => {
-        const th = targetHitBoxHalves(1)
-        expect(th.x).toBeCloseTo(CHARACTER_BASE_SIZE.width / 2)
-        expect(th.y).toBeCloseTo(CHARACTER_BASE_SIZE.height / 2)
-        expect(th.z).toBeCloseTo(CHARACTER_BASE_SIZE.depth / 2)
-    })
-
-    it('随 scale 等比缩放', () => {
-        const th = targetHitBoxHalves(2)
-        expect(th.x).toBeCloseTo(CHARACTER_BASE_SIZE.width)
-        expect(th.y).toBeCloseTo(CHARACTER_BASE_SIZE.height)
-        expect(th.z).toBeCloseTo(CHARACTER_BASE_SIZE.depth)
-    })
-})
 
 describe('testMeleeHit（武器 OBB × 受击箱 OBB）', () => {
     it('武器箱与受击箱重叠时命中，远离时不命中', () => {

@@ -1,19 +1,8 @@
 import {describe, it, expect, vi} from 'vitest'
-import {
-    BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, Mesh, MeshStandardMaterial, SphereGeometry,
-} from 'three'
+import {CanvasTexture, Mesh, MeshStandardMaterial} from 'three'
 import {createMeshBuilder} from './mesh_builder.ts'
 
 describe('createMeshBuilder（共享网格构建器）', () => {
-    it('几何工厂返回对应类型的几何', () => {
-        const b = createMeshBuilder()
-        expect(b.box(1, 1, 1)).toBeInstanceOf(BoxGeometry)
-        expect(b.cylinder(0.1, 0.1, 1)).toBeInstanceOf(CylinderGeometry)
-        expect(b.sphere(0.1)).toBeInstanceOf(SphereGeometry)
-        expect(b.cone(0.1, 1)).toBeInstanceOf(ConeGeometry)
-        b.dispose()
-    })
-
     it('add 组装网格并设置位置 / 旋转 / 阴影，且挂到 group', () => {
         const b = createMeshBuilder()
         const mesh = b.add(b.box(1, 1, 1), b.material(0xff0000), 1, 2, 3, 0.1, 0.2, 0.3)

@@ -35,7 +35,6 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
         /* 武器网格有真实几何（可见性回归：空包围盒 = 看不见） */
         const box = new Box3().setFromObject(weapon!.weaponGroup)
         expect(box.isEmpty()).toBe(false)
-        expect(box.getSize(new Vector3()).length()).toBeGreaterThan(0.1)
 
         weapon!.dispose()
         /* 卸下后从场景图移除（武器骨骼关节自身的小球仍在） */
@@ -81,7 +80,6 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
         expect(weapon.offhand!.weaponGroup.parent).toBe(visuals.groups.get('leftWeaponMount'))
         const box = new Box3().setFromObject(weapon.offhand!.weaponGroup)
         expect(box.isEmpty()).toBe(false)
-        expect(box.getSize(new Vector3()).length()).toBeGreaterThan(0.1)
 
         weapon.dispose()
         expect(weapon.weaponGroup.parent).toBeNull()

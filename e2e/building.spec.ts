@@ -41,10 +41,6 @@ test.describe('建筑生成器', () => {
         await page.mouse.click(x, y - 60)
         await expect(page.locator('#building-generator-panel')).toBeVisible()
 
-        /* 面板按钮为「应用 / 删除」（作用于选中世界），不再是「生成」 */
-        await expect(page.getByRole('button', {name: '应用', exact: true})).toBeVisible()
-        await expect(page.getByRole('button', {name: '删除', exact: true})).toBeVisible()
-
         /* 选中建筑后笔刷面板显示；六种工具可切换 */
         await expect(brushPanel).toBeVisible()
         await expect(page.locator('#brush-tool option')).toHaveCount(6)

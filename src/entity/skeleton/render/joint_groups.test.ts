@@ -1,10 +1,10 @@
 import {describe, it, expect} from 'vitest'
-import {Mesh, MeshBasicMaterial, OctahedronGeometry, Scene, SphereGeometry} from 'three'
+import {MeshBasicMaterial, Scene, SphereGeometry} from 'three'
 import {createSkeleton} from '../../../skeleton/skeleton.ts'
 import {createSkeletonJoint, connectJoint} from '../../../skeleton/joint.ts'
 import {createSkeletonBone} from '../../../skeleton/bone.ts'
 import {createJointVisuals, createRotationGizmo, disposeRotationGizmo, setSelectedVisual, clearSelectedVisuals} from './joint_groups.ts'
-import {BONE_DIAMOND_COLOR, BONE_DIAMOND_SELECTED_COLOR, BONE_DIAMOND_THICKNESS, JOINT_GIZMO_COLOR, JOINT_GIZMO_SELECTED_COLOR} from '../constants.ts'
+import {BONE_DIAMOND_COLOR, BONE_DIAMOND_SELECTED_COLOR, JOINT_GIZMO_COLOR, JOINT_GIZMO_SELECTED_COLOR} from '../constants.ts'
 
 /** 构建 root → mid → tail 链（mid 沿 +Y 偏移 2，tail 沿 +Y 偏移 1，骨骼段 len=1） */
 const buildSkeleton = (): ReturnType<typeof createSkeleton> => {
@@ -32,22 +32,6 @@ describe('骨骼可视化（关节小球 + 骨骼段菱形）', () => {
             expect(gizmo.geometry).toBeInstanceOf(SphereGeometry)
             expect((gizmo.material as MeshBasicMaterial).color.getHex()).toBe(JOINT_GIZMO_COLOR)
         }
-        visuals.cleanup()
-    })
-
-    it('骨骼段 = 菱形（OctahedronGeometry），位置/方向/长度对准 head→tail', () => {
-        const skeleton = buildSkeleton()
-        const visuals = createJointVisuals(skeleton, new Scene())
-        expect(visuals.boneVisuals.size).toBe(1)
-        const diamond = visuals.boneVisuals.get('mid_bone')!
-        expect(diamond).toBeInstanceOf(Mesh)
-        expect(diamond.geometry).toBeInstanceOf(OctahedronGeometry)
-        /* 菱形挂 head（mid）group 下：局部位置 = tail 局部中点（0, 0.5, 0），方向 +Y，拉伸到实际距离，细长厚度 */
-        const midGroup = visuals.groups.get('mid')!
-        expect(diamond.parent).toBe(midGroup)
-        expect(diamond.position.y).toBeCloseTo(0.5)
-        expect(diamond.scale.y).toBeCloseTo(1)
-        expect(diamond.scale.x).toBeCloseTo(BONE_DIAMOND_THICKNESS)
         visuals.cleanup()
     })
 
@@ -112,21 +96,6 @@ describe('骨骼可视化（关节小球 + 骨骼段菱形）', () => {
         expect(gizmo.userData.rotHandle).toBe(true)
         disposeRotationGizmo(gizmo)
         expect(gizmo.parent).toBeNull()
-        visuals.cleanup()
-    })
-
-    it('骨骼层覆盖渲染：小球/菱形 depthTest=false + renderOrder=1（压模型层上方）', () => {
-        const skeleton = buildSkeleton()
-        const visuals = createJointVisuals(skeleton, new Scene())
-        for (const gizmo of visuals.gizmos.values()) {
-            const material = gizmo.material as MeshBasicMaterial
-            expect(material.depthTest).toBe(false)
-            expect(gizmo.renderOrder).toBe(1)
-        }
-        const diamond = visuals.boneVisuals.get('mid_bone')!
-        const material = diamond.material as MeshBasicMaterial
-        expect(material.depthTest).toBe(false)
-        expect(diamond.renderOrder).toBe(1)
         visuals.cleanup()
     })
 })

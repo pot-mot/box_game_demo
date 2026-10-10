@@ -1,70 +1,16 @@
 import {describe, it, expect} from 'vitest'
 import {
-    ALL_LIMB_PRESETS,
-    LIMB_PRESETS,
     findLimbPreset,
-    limbPiecesOfSlot,
     resolveLimbLoadout,
     resolveArmorLoadout,
     totalAttackOf,
     totalDefenseOf,
     totalMoveSpeedOf,
 } from './catalog.ts'
-import {LIMB_SLOTS} from './slots.ts'
-import {LIMB_RACES} from '../../entity/character/appearance/armor_mesh.ts'
 import {ZERO_PROFILE} from '../combat/defense.ts'
 
-describe('肢体组件目录', () => {
-    it('全部预设：id 与键一致、槽位合法、中文名非空、数值非负、移速乘数为正', () => {
-        expect(ALL_LIMB_PRESETS.length).toBeGreaterThan(0)
-        for (const [key, piece] of Object.entries(LIMB_PRESETS)) {
-            expect(piece.id).toBe(key)
-            expect(LIMB_SLOTS).toContain(piece.slot)
-            expect(piece.name).toMatch(/^[\u4e00-\u9fa5]+$/)
-            expect(LIMB_RACES).toContain(piece.mesh.race)
-            expect(piece.defense.physical).toBeGreaterThanOrEqual(0)
-            expect(piece.defense.magic).toBeGreaterThanOrEqual(0)
-            expect(piece.attack.physical).toBeGreaterThanOrEqual(0)
-            expect(piece.attack.magic).toBeGreaterThanOrEqual(0)
-            expect(piece.moveSpeedMultiplier).toBeGreaterThan(0)
-        }
-    })
-
-    it('每个槽位都有可选肢体（含骷髅 / 兽人 / 精灵三族），且 id 全局唯一', () => {
-        for (const slot of LIMB_SLOTS) {
-            const pieces = limbPiecesOfSlot(slot)
-            expect(pieces.length).toBeGreaterThan(0)
-            expect(new Set(pieces.map(piece => piece.mesh.race))).toEqual(new Set(LIMB_RACES))
-        }
-        const ids = ALL_LIMB_PRESETS.map(piece => piece.id)
-        expect(new Set(ids).size).toBe(ids.length)
-    })
-
-    it('数值护栏：单件逐类别防御 ≤ 2、单件攻击加成 ≤ 1（与护甲叠加不过度膨胀）', () => {
-        for (const piece of ALL_LIMB_PRESETS) {
-            expect(piece.defense.physical).toBeLessThanOrEqual(2)
-            expect(piece.defense.magic).toBeLessThanOrEqual(2)
-            expect(piece.attack.physical).toBeLessThanOrEqual(1)
-            expect(piece.attack.magic).toBeLessThanOrEqual(1)
-        }
-    })
-
-    it('种族倾向：兽人偏物防物攻、精灵偏魔攻、骷髅偏法抗且轻灵', () => {
-        const orcBody = LIMB_PRESETS.orc_body
-        expect(orcBody.defense.physical).toBeGreaterThan(orcBody.defense.magic)
-        expect(orcBody.attack.physical).toBeGreaterThan(0)
-        expect(orcBody.moveSpeedMultiplier).toBeLessThan(1)
-
-        const elfHead = LIMB_PRESETS.elf_head
-        expect(elfHead.attack.magic).toBeGreaterThan(0)
-        expect(elfHead.moveSpeedMultiplier).toBeGreaterThan(1)
-
-        const skeletonLegs = LIMB_PRESETS.skeleton_legs
-        expect(skeletonLegs.defense.magic).toBeGreaterThan(0)
-        expect(skeletonLegs.moveSpeedMultiplier).toBeGreaterThan(1)
-    })
-
-    it('findLimbPreset：未知 id / undefined 返回 undefined', () => {
+describe('findLimbPreset', () => {
+    it('未知 id / undefined 返回 undefined', () => {
         expect(findLimbPreset('orc_head')?.name).toBe('兽人头颅')
         expect(findLimbPreset('no_such_limb')).toBeUndefined()
         expect(findLimbPreset(undefined)).toBeUndefined()

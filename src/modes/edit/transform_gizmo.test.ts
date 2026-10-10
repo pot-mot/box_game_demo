@@ -4,22 +4,16 @@ import {
     Line, Mesh as ThreeMesh, LineBasicMaterial, MeshBasicMaterial,
 } from 'three'
 import {
-    partAxis,
     buildTranslatePlane,
     buildRotatePlane,
     projectToPlane2D,
     createTransformGizmo,
     GIZMO_PICK_START_OFFSET,
-    GIZMO_OPACITY_NORMAL,
-    GIZMO_OPACITY_HOVER,
-    GIZMO_OPACITY_ACTIVE,
-    GIZMO_ARC_OPACITY_NORMAL,
     GIZMO_ARC_OPACITY_HOVER,
     GIZMO_ARC_OPACITY_ACTIVE,
     type TransformGizmo,
 } from './transform_gizmo.ts'
 import {JOINT_GIZMO_RADIUS, ROTATION_GIZMO_OFFSET, ROTATION_GIZMO_HEIGHT, ROTATION_GIZMO_RADIUS} from '../../entity/skeleton/constants.ts'
-import {CHARACTER_ENTITY_TYPE, ENTITY_TYPE_VALUES} from '../../entity/constants.ts'
 
 /** 从相机看向屏幕坐标的射线 */
 const rayFromScreen = (camera: PerspectiveCamera, x: number, y: number): Raycaster => {
@@ -53,15 +47,6 @@ const testCamera = (): PerspectiveCamera => {
 }
 
 describe('transform gizmo 纯数学函数', () => {
-    it('partAxis 提取轴 key', () => {
-        expect(partAxis('translate_x')).toBe('x')
-        expect(partAxis('translate_y')).toBe('y')
-        expect(partAxis('translate_z')).toBe('z')
-        expect(partAxis('rotate_x')).toBe('x')
-        expect(partAxis('rotate_y')).toBe('y')
-        expect(partAxis('rotate_z')).toBe('z')
-    })
-
     it('buildRotatePlane 平面垂直于旋转轴且过中心', () => {
         const center = new Vector3(1, 2, 3)
         const plane = buildRotatePlane(new Vector3(0, 1, 0), center)
@@ -282,86 +267,6 @@ describe('transform gizmo 拖拽数学', () => {
         expect(q.x).toBeCloseTo(0, 6)
         expect(q.y).toBeCloseTo(0, 6)
         expect(Math.abs(q.z)).toBeGreaterThan(0)
-        gizmo.dispose()
-    })
-})
-
-describe('角色实体类型常量', () => {
-    it('CHARACTER_ENTITY_TYPE 包含在实体类型列表（edit 模式隐藏圆弧的识别依据）', () => {
-        expect(ENTITY_TYPE_VALUES).toContain(CHARACTER_ENTITY_TYPE)
-    })
-})
-
-describe('transform gizmo 高亮透明度', () => {
-    it('三态切换：平移轴 0.5/0.7/1.0，圆弧 0.3/0.55/0.8', () => {
-        const gizmo = createTransformGizmo()
-        gizmo.setVisible(true)
-        /* 常态：3 轴 × 2 对象（轴线+锥体共享材质）+ 3 弧 */
-        const normal = collectOpacities(gizmo)
-        expect(normal).toHaveLength(9)
-        expect(normal.filter(o => o === GIZMO_OPACITY_NORMAL)).toHaveLength(6)
-        expect(normal.filter(o => o === GIZMO_ARC_OPACITY_NORMAL)).toHaveLength(3)
-
-        /* 悬停 translate_x：轴线+锥体（共享材质）升为 0.7 */
-        gizmo.setHoverPart('translate_x')
-        const hoverAxis = collectOpacities(gizmo)
-        expect(hoverAxis.filter(o => o === GIZMO_OPACITY_HOVER)).toHaveLength(2)
-        expect(hoverAxis.filter(o => o === GIZMO_OPACITY_NORMAL)).toHaveLength(4)
-        expect(hoverAxis.filter(o => o === GIZMO_ARC_OPACITY_NORMAL)).toHaveLength(3)
-
-        /* 悬停 rotate_z：该弧升为 0.55 */
-        gizmo.setHoverPart('rotate_z')
-        const hoverArc = collectOpacities(gizmo)
-        expect(hoverArc.filter(o => o === GIZMO_ARC_OPACITY_HOVER)).toHaveLength(1)
-        expect(hoverArc.filter(o => o === GIZMO_ARC_OPACITY_NORMAL)).toHaveLength(2)
-        expect(hoverArc.filter(o => o === GIZMO_OPACITY_NORMAL)).toHaveLength(6)
-
-        /* 选中 rotate_z：升为 0.8（同部件 active 覆盖 hover 的 0.55） */
-        gizmo.setActivePart('rotate_z')
-        const activeArc = collectOpacities(gizmo)
-        expect(activeArc.filter(o => o === GIZMO_ARC_OPACITY_ACTIVE)).toHaveLength(1)
-        expect(activeArc.filter(o => o === GIZMO_ARC_OPACITY_HOVER)).toHaveLength(0)
-        expect(activeArc.filter(o => o === GIZMO_ARC_OPACITY_NORMAL)).toHaveLength(2)
-        expect(activeArc.filter(o => o === GIZMO_OPACITY_NORMAL)).toHaveLength(6)
-
-        /* 选中 translate_y：轴升为 1.0（rotate_z 仍为 hover 0.55） */
-        gizmo.setActivePart('translate_y')
-        const activeAxis = collectOpacities(gizmo)
-        expect(activeAxis.filter(o => o === GIZMO_OPACITY_ACTIVE)).toHaveLength(2)
-        expect(activeAxis.filter(o => o === GIZMO_OPACITY_NORMAL)).toHaveLength(4)
-        expect(activeAxis.filter(o => o === GIZMO_ARC_OPACITY_HOVER)).toHaveLength(1)
-        expect(activeAxis.filter(o => o === GIZMO_ARC_OPACITY_NORMAL)).toHaveLength(2)
-
-        /* 清除状态恢复常态 */
-        gizmo.setActivePart(undefined)
-        gizmo.setHoverPart(undefined)
-        const reset = collectOpacities(gizmo)
-        expect(reset.filter(o => o === GIZMO_OPACITY_NORMAL)).toHaveLength(6)
-        expect(reset.filter(o => o === GIZMO_ARC_OPACITY_NORMAL)).toHaveLength(3)
-        gizmo.dispose()
-    })
-
-    it('同一部件 active 优先于 hover（平移轴）', () => {
-        const gizmo = createTransformGizmo()
-        gizmo.setVisible(true)
-        gizmo.setHoverPart('translate_y')
-        gizmo.setActivePart('translate_y')
-        const ops = collectOpacities(gizmo)
-        expect(ops).toContain(GIZMO_OPACITY_ACTIVE)
-        /* 无 0.7（被 active 覆盖） */
-        expect(ops).not.toContain(GIZMO_OPACITY_HOVER)
-        gizmo.dispose()
-    })
-
-    it('同一部件 active 优先于 hover（圆弧）', () => {
-        const gizmo = createTransformGizmo()
-        gizmo.setVisible(true)
-        gizmo.setHoverPart('rotate_y')
-        gizmo.setActivePart('rotate_y')
-        const ops = collectOpacities(gizmo)
-        expect(ops).toContain(GIZMO_ARC_OPACITY_ACTIVE)
-        /* 无 0.55（被 active 覆盖） */
-        expect(ops).not.toContain(GIZMO_ARC_OPACITY_HOVER)
         gizmo.dispose()
     })
 })

@@ -40,11 +40,9 @@ describe('createEmitter', () => {
         expect(b).toBe(1)
     })
 
-    it('does not throw when emitting unsubscribed event', () => {
+    it('emitting an event with no listeners does not throw', () => {
         const emitter = createEmitter<{test: []}>()
-        emitter.on('test', () => {})
-        emitter.emit('test')
-        expect(true).toBe(true)
+        expect(() => emitter.emit('test')).not.toThrow()
     })
 
     it('does not affect other events when unsubscribing', () => {

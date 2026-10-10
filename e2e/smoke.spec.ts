@@ -14,11 +14,7 @@ test.describe('页面加载', () => {
         await editBtn.click()
         await page.waitForTimeout(500)
         // 在支持 WebGL 的浏览器中 canvas 应该存在
-        const canvas = page.locator('canvas')
-        if (await canvas.count() > 0) {
-            await expect(canvas).toBeVisible()
-        }
-        // 无 canvas 也通过（headless 环境可能没有 WebGL）
+        await expect(page.locator('canvas')).toBeVisible()
     })
 
     test('启动画面可见', async ({page}) => {
@@ -66,31 +62,32 @@ test.describe('设置面板', () => {
 
         // 点击设置按钮
         const settingsBtn = page.locator('#settings-btn')
-        if (await settingsBtn.isVisible().catch(() => false)) {
-            await settingsBtn.click()
-            await expect(page.locator('#settings-menu')).toBeVisible()
-            // 再次点击关闭
-            await settingsBtn.click()
-            await expect(page.locator('#settings-menu')).not.toBeVisible()
-        }
+        await settingsBtn.click()
+        await expect(page.locator('#settings-menu')).toBeVisible()
+        // 再次点击关闭
+        await settingsBtn.click()
+        await expect(page.locator('#settings-menu')).not.toBeVisible()
     })
 })
 
 test.describe('快捷键存档', () => {
-    test('Ctrl+S 不触发浏览器保存对话框（存档下载）', async ({page}) => {
+    test('Ctrl+S 触发应用存档下载（.json）', async ({page}) => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         const editBtn = page.locator('button', {hasText: '编辑模式'})
         await editBtn.click()
         await page.waitForTimeout(500)
 
-        // 模拟 Ctrl+S，应该被 preventDefault 阻止
-        const downloadPromise = page.waitForEvent('download', {timeout: 3000}).catch(() => null)
+        // 生成一个实体，保证存档非空
+        await page.mouse.move(600, 400)
+        await page.mouse.down({button: 'right'})
+        await page.mouse.up({button: 'right'})
+        await expect(page.locator('#element-list-panel [data-id]')).toHaveCount(1)
+
+        // Ctrl+S 由应用接管：触发存档下载而非浏览器原生保存对话框
+        const downloadPromise = page.waitForEvent('download', {timeout: 5000})
         await page.keyboard.press('Control+S')
         const download = await downloadPromise
-        // 如果有实体则应有下载，否则可能没有
-        if (download) {
-            expect(download.suggestedFilename()).toContain('.json')
-        }
+        expect(download.suggestedFilename()).toContain('.json')
     })
 })

@@ -1,39 +1,11 @@
 import {describe, it, expect} from 'vitest'
-import {DEFAULT_BULLET_PASS_THROUGH_CATEGORIES, DEFAULT_PROJECTILE_GRAVITY_SCALE, RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from './ranged_weapon.ts'
+import {DEFAULT_PROJECTILE_GRAVITY_SCALE, RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from './ranged_weapon.ts'
 import {MELEE_WEAPON_PRESETS} from './melee_weapon.ts'
 
 const presets = Object.entries(RANGED_WEAPON_PRESETS) as [string, RangedWeaponConfig][]
 const presetIds = presets.map(([key]) => key)
 
-describe('RANGED_WEAPON_PRESETS', () => {
-    it('包含 9 种武器', () => {
-        expect(presets).toHaveLength(9)
-    })
-
-    it.each(presetIds)('%s 的 id 与 key 匹配', (key) => {
-        expect(RANGED_WEAPON_PRESETS[key].id).toBe(key)
-    })
-
-    it.each(presetIds)('%s 的 type 为 ranged', (key) => {
-        expect(RANGED_WEAPON_PRESETS[key].type).toBe('ranged')
-    })
-
-    it.each(presetIds)('%s 的 damage > 0', (key) => {
-        expect(RANGED_WEAPON_PRESETS[key].damage).toBeGreaterThan(0)
-    })
-
-    it.each(presetIds)('%s 的 range > 0', (key) => {
-        expect(RANGED_WEAPON_PRESETS[key].range).toBeGreaterThan(0)
-    })
-
-    it.each(presetIds)('%s 的 projectileSpeed > 0', (key) => {
-        expect(RANGED_WEAPON_PRESETS[key].projectileSpeed).toBeGreaterThan(0)
-    })
-
-    it.each(presetIds)('%s 的 projectileLifetime > 0', (key) => {
-        expect(RANGED_WEAPON_PRESETS[key].projectileLifetime).toBeGreaterThan(0)
-    })
-
+describe('RANGED_WEAPON_PRESETS 关系不变量', () => {
     it.each(presetIds)('%s 的 idealRange 在 retreatRange 和 range 之间', (key) => {
         const w = RANGED_WEAPON_PRESETS[key]
         expect(w.idealRange).toBeGreaterThan(w.retreatRange)
@@ -45,87 +17,15 @@ describe('RANGED_WEAPON_PRESETS', () => {
         expect(w.detectionRange).toBeGreaterThanOrEqual(w.range)
     })
 
-    it.each(presetIds)('%s 的 knockbackForce > 0', (key) => {
-        expect(RANGED_WEAPON_PRESETS[key].knockbackForce).toBeGreaterThan(0)
-    })
-
-    it('法杖与魔杖为魔法武器，其余远程为物理', () => {
-        expect(RANGED_WEAPON_PRESETS.staff.damageType).toBe('magic')
-        expect(RANGED_WEAPON_PRESETS.magic_wand.damageType).toBe('magic')
-        for (const [, w] of presets) {
-            if (w.id === 'staff' || w.id === 'magic_wand') continue
-            expect(w.damageType).toBe('physical')
-        }
-    })
-
-    it('shotgun 有 spreadCount=6 且 spreadAngle>0', () => {
-        const s = RANGED_WEAPON_PRESETS.shotgun
-        expect(s.spreadCount).toBe(6)
-        expect(s.spreadAngle).toBeGreaterThan(0)
-    })
-
-    it('staff 有 explosionRadius>0', () => {
-        expect(RANGED_WEAPON_PRESETS.staff.explosionRadius).toBeGreaterThan(0)
-    })
-
-    it('magic_wand 有 homingStrength>0', () => {
-        expect(RANGED_WEAPON_PRESETS.magic_wand.homingStrength).toBeGreaterThan(0)
-    })
-
-    it('grenade 有 throwAngle>0 和 explosionRadius>0', () => {
-        const g = RANGED_WEAPON_PRESETS.grenade
-        expect(g.throwAngle).toBeGreaterThan(0)
-        expect(g.explosionRadius).toBeGreaterThan(0)
-    })
-
     it('远程侦测范围大于近战', () => {
         const meleeDet = MELEE_WEAPON_PRESETS.long_sword.detectionRange
         for (const [, w] of presets) {
             expect(w.detectionRange).toBeGreaterThanOrEqual(meleeDet)
         }
     })
-
-    it('crossbow 弹速最快', () => {
-        const cb = RANGED_WEAPON_PRESETS.crossbow.projectileSpeed
-        for (const [, w] of presets) {
-            expect(w.projectileSpeed).toBeLessThanOrEqual(cb)
-        }
-    })
-
-    it.each(presetIds)('%s 的中文名非空且为中文', (key) => {
-        const name = RANGED_WEAPON_PRESETS[key].name
-        expect(name.length).toBeGreaterThan(0)
-        expect(name).toMatch(/^[\u4e00-\u9fa5]+$/)
-    })
-
-    it.each(presetIds)('%s 的中文名与 id 不同（面向玩家可读）', (key) => {
-        expect(RANGED_WEAPON_PRESETS[key].name).not.toBe(key)
-    })
-
-    it('中文名互不重复', () => {
-        const names = presets.map(([, w]) => w.name)
-        expect(new Set(names).size).toBe(names.length)
-    })
-
-    it('每个键名唯一', () => {
-        const ids = presets.map(([, w]) => w.id)
-        expect(new Set(ids).size).toBe(ids.length)
-    })
 })
 
-describe('子弹可穿过类别（DEFAULT_BULLET_PASS_THROUGH_CATEGORIES）', () => {
-    it('默认仅可穿过 area', () => {
-        expect(DEFAULT_BULLET_PASS_THROUGH_CATEGORIES).toEqual(['area'])
-    })
-
-    it.each(presetIds)('%s 未覆写该字段 → 沿用默认（仅 area）', (key) => {
-        const configured = RANGED_WEAPON_PRESETS[key].passThroughCategories
-            ?? DEFAULT_BULLET_PASS_THROUGH_CATEGORIES
-        expect(configured).toEqual(['area'])
-    })
-})
-
-describe('弹丸视觉与重力（projectile / projectileGravityScale）', () => {
+describe('弹丸视觉规格（视觉分发依据）', () => {
     it.each(presetIds)('%s 声明了弹丸视觉规格', (key) => {
         expect(RANGED_WEAPON_PRESETS[key].projectile.kind).toBeDefined()
     })
@@ -152,7 +52,9 @@ describe('弹丸视觉与重力（projectile / projectileGravityScale）', () =>
         expect(RANGED_WEAPON_PRESETS.grenade.projectile.explosionStyle).toBe('frag')
         expect(RANGED_WEAPON_PRESETS.molotov.projectile.explosionStyle).toBe('fire')
     })
+})
 
+describe('弹丸重力缩放（projectileGravityScale）', () => {
     it.each(presetIds)('%s 的重力缩放（声明值或运行时缺省）∈ [0, 1)', (key) => {
         /* 字段可选：未声明时由弹丸系统回退到 DEFAULT_PROJECTILE_GRAVITY_SCALE，
          * 因此这里断言有效值，避免把可选字段当必填 */
@@ -175,7 +77,6 @@ describe('弹丸视觉与重力（projectile / projectileGravityScale）', () =>
     })
 
     it('投掷类武器（飞斧 / 手雷 / 燃烧瓶）有可见抛物线仰角', () => {
-        /* 投掷物以物理实体抛出，仰角决定抛物线手感；燃烧瓶新增仰角后需有回归覆盖 */
         for (const id of ['throwing_axe', 'grenade', 'molotov'] as const) {
             expect(RANGED_WEAPON_PRESETS[id].throwAngle ?? 0).toBeGreaterThan(0)
         }

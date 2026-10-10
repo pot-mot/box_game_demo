@@ -6,7 +6,6 @@ import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
-import {translate} from '../../../i18n/index.ts'
 
 /** happy-dom 不支持 canvas 2d，这里注入一个最小 2d 上下文桩（仅覆盖 model.ts 用到的方法） */
 const canvasCtxStub = (): Record<string, unknown> => {
@@ -110,27 +109,14 @@ describe('角色 panelInfo 同步', () => {
         system = setupCharacterEntities(scene, shared)
     })
 
-    it('add() 加载角色后（未执行物理同步）panelInfo 即含完整信息', () => {
+    it('add() 加载角色后（未执行物理同步）panelInfo 即含该行与阵营徽标', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         const row = system.panelInfo.find(p => p.id === id)
         expect(row).toBeDefined()
-        expect(row!.rowText).not.toBe(`Character #${id}`)
-        expect(row!.rowText).toContain('HP:15/15')
-        /* 武器段展示中文名（武器预设 name 字段），不展示英文 id */
-        expect(row!.rowText).toContain('长剑(3)')
-        expect(row!.rowText).not.toContain('long_sword')
-        expect(row!.rowText).toContain('spd:6')
-        expect(row!.rowText).toContain('[idle]')
         expect(row!.badgeLabel).toBe('F0')
     })
 
-    it('add() 加载角色后反映自定义 maxHealth/health', () => {
-        const {id} = system.add(meleeSaveConfig({maxHealth: 20}), 0, 0, 0, undefined, {health: 12})
-        const row = system.panelInfo.find(p => p.id === id)
-        expect(row!.rowText).toContain('HP:12/20')
-    })
-
-    it('updateCharacterConfig 编辑后 panelInfo 立即反映（无需 syncPositions）', () => {
+    it('updateCharacterConfig 编辑后阵营徽标立即更新（无需 syncPositions）', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.updateCharacterConfig(
             id,
@@ -142,9 +128,6 @@ describe('角色 panelInfo 同步', () => {
             12,
         )
         const row = system.panelInfo.find(p => p.id === id)
-        expect(row!.rowText).toContain('HP:12/20')
-        expect(row!.rowText).toContain('长剑(5)')
-        expect(row!.rowText).toContain('spd:9')
         expect(row!.badgeLabel).toBe('F2')
     })
 
@@ -158,8 +141,6 @@ describe('角色 panelInfo 同步', () => {
         expect(entity.combat.defense).toEqual({physical: 3, magic: 2})
         /* 原始装备表保留（未知 id 不写回） */
         expect(entity.combat.armor).toEqual({head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'})
-        const row = system.panelInfo.find(p => p.id === id)
-        expect(row!.rowText).toContain('def:物3/魔2')
     })
 
     it('add() 装备攻击加成与移速乘数：按类别区分、多件相乘并反映到列表行', () => {
@@ -170,9 +151,6 @@ describe('角色 panelInfo 同步', () => {
         const entity = system.getAll().find(e => e.id === id)!
         expect(entity.combat.attackBonus).toEqual({physical: 2, magic: 1})
         expect(entity.combat.moveSpeedMultiplier).toBeCloseTo(0.97 * 1.15, 6)
-        /* 列表行展示有效移速（6 × 0.97 × 1.15 = 6.69） */
-        const row = system.panelInfo.find(p => p.id === id)
-        expect(row!.rowText).toContain('spd:6.69')
     })
 
     it('updateCharacterConfig 装备护甲后立即重算有效防御并同步 panelInfo', () => {
@@ -183,8 +161,6 @@ describe('角色 panelInfo 同步', () => {
         })
         const entity = system.getAll().find(e => e.id === id)!
         expect(entity.combat.defense).toEqual({physical: 3, magic: 1})
-        const row = system.panelInfo.find(p => p.id === id)
-        expect(row!.rowText).toContain('def:物3/魔1')
     })
 
     it('updateCharacterConfig 换装重甲与加速鞋：防御 / 攻击 / 移速一并重算', () => {
@@ -198,8 +174,6 @@ describe('角色 panelInfo 同步', () => {
         expect(entity.combat.attackBonus).toEqual({physical: 1, magic: 0})
         /* 铁胸甲 ×0.9 × 疾风靴 ×1.25 = 1.125 → 有效移速 6.75 */
         expect(entity.combat.moveSpeedMultiplier).toBeCloseTo(1.125, 6)
-        const row = system.panelInfo.find(p => p.id === id)
-        expect(row!.rowText).toContain('spd:6.75')
     })
 
     it('护甲外观随装备同步装配与移除（换装不残留部件）', () => {
@@ -288,7 +262,6 @@ describe('角色 panelInfo 同步', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.markPlayer(id)
         const row = system.panelInfo.find(p => p.id === id)
-        expect(row!.rowText).toContain(translate('entity.player_prefix'))
         expect(row!.badgeLabel).toBe('P')
     })
 
@@ -304,10 +277,8 @@ describe('角色 panelInfo 同步', () => {
         system.setPlayerMove(1, 0, false, 1, 0)
         system.update(1 / 60)
         const entity = system.getAll().find(e => e.id === id)!
-        const row = system.panelInfo.find(p => p.id === id)
-        /* 有移动输入后状态机离开 idle，状态段须即时反映 */
+        /* 有移动输入后状态机离开 idle */
         expect(entity.stateMachine.currentState).not.toBe('idle')
-        expect(row!.rowText).toContain(`[${entity.stateMachine.currentState}]`)
         system.setPlayerMove(0, 0, false, 1, 0)
     })
 

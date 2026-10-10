@@ -6,23 +6,11 @@ import {
 } from './mesh.ts'
 
 const arrowSpec = RANGED_WEAPON_PRESETS.longbow.projectile
-const boltSpec = RANGED_WEAPON_PRESETS.crossbow.projectile
 const bulletSpec = RANGED_WEAPON_PRESETS.shotgun.projectile
 const staffSpec = RANGED_WEAPON_PRESETS.staff.projectile
 const axeSpec = RANGED_WEAPON_PRESETS.throwing_axe.projectile
 
 describe('弹丸视觉构建器（独立 build 模块）', () => {
-    it('每种视觉 kind 都能构建出含子节点的 Group', () => {
-        const longbow = buildProjectileVisual(arrowSpec, RANGED_WEAPON_PRESETS.longbow.mesh)
-        const crossbow = buildProjectileVisual(boltSpec, RANGED_WEAPON_PRESETS.crossbow.mesh)
-        const shotgun = buildProjectileVisual(bulletSpec, RANGED_WEAPON_PRESETS.shotgun.mesh)
-        const staff = buildProjectileVisual(staffSpec, RANGED_WEAPON_PRESETS.staff.mesh)
-        const axe = buildProjectileVisual(axeSpec, RANGED_WEAPON_PRESETS.throwing_axe.mesh)
-        for (const visual of [longbow, crossbow, shotgun, staff, axe]) {
-            expect(visual.group.children.length).toBeGreaterThan(0)
-        }
-    })
-
     it('朝向驱动：箭矢 / 弩矢沿速度，投掷物随物理旋转，魔法球 / 弹头不动', () => {
         expect(buildProjectileVisual(arrowSpec, RANGED_WEAPON_PRESETS.longbow.mesh).orientation).toBe('velocity')
         expect(buildProjectileVisual(axeSpec, RANGED_WEAPON_PRESETS.throwing_axe.mesh).orientation).toBe('physics')

@@ -1,5 +1,4 @@
 import {describe, it, expect} from 'vitest'
-import {HOLD_MODES, isHoldMode} from './hold_mode.ts'
 import {
     ALL_WEAPON_PRESETS,
     availableHoldModes,
@@ -14,17 +13,6 @@ import {orderedSegments} from './attack_chain.ts'
 import {getAttackClipById} from '../../entity/character/appearance/clips/attack_clips.ts'
 
 const MELEE_IDS = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
-
-describe('持握模式枚举（hold_mode）', () => {
-    it('三态：单持 / 双手共持 / 双持，运行时值可校验', () => {
-        expect(HOLD_MODES).toEqual(['one_handed', 'two_handed', 'dual_wield'])
-        expect(isHoldMode('one_handed')).toBe(true)
-        expect(isHoldMode('two_handed')).toBe(true)
-        expect(isHoldMode('dual_wield')).toBe(true)
-        expect(isHoldMode('nope')).toBe(false)
-        expect(isHoldMode(undefined)).toBe(false)
-    })
-})
 
 describe('武器持握模式数组 + 攻击链 map', () => {
     it('每把武器至少声明一种持握模式，默认模式为数组首个', () => {

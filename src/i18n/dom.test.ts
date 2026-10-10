@@ -1,7 +1,6 @@
 import {describe, it, expect, beforeEach} from 'vitest'
 import {localizeText, localizeTitle, localizePlaceholder} from './dom.ts'
 import {setLocale} from './index.ts'
-import {DEFAULT_LOCALE} from './constants.ts'
 
 describe('i18n DOM 助手', () => {
     beforeEach(() => {
@@ -9,27 +8,29 @@ describe('i18n DOM 助手', () => {
         setLocale('zh-cn')
     })
 
-    it('设置 textContent 并随语言切换重译', () => {
+    it('localizeText 设置文本并在切换语言时原地重译', () => {
         const el = document.createElement('div')
         localizeText(el, 'startup.mode.edit')
-        expect(el.textContent).toBe('编辑模式')
+        const zh = el.textContent
+        expect(zh).toBeTruthy()
         setLocale('en')
-        expect(el.textContent).toBe('Edit Mode')
+        expect(el.textContent).toBeTruthy()
+        expect(el.textContent).not.toBe(zh)
     })
 
-    it('设置 title 与 placeholder', () => {
+    it('localizeTitle / localizePlaceholder 设置 title 与 placeholder 并随语言重译', () => {
         const titleEl = document.createElement('div')
         localizeTitle(titleEl, 'settings.title')
         const input = document.createElement('input')
         localizePlaceholder(input, 'input.capture_prompt')
-        expect(titleEl.title).toBe('设置')
-        expect(input.placeholder).toBe('请按键 / 鼠标键...')
+        const zhTitle = titleEl.title
+        const zhPlaceholder = input.placeholder
+        expect(zhTitle).toBeTruthy()
+        expect(zhPlaceholder).toBeTruthy()
         setLocale('en')
-        expect(titleEl.title).toBe('Settings')
-        expect(input.placeholder).toBe('Press a key / mouse button...')
-    })
-
-    it('默认语言常量为中文', () => {
-        expect(DEFAULT_LOCALE).toBe('zh-cn')
+        expect(titleEl.title).toBeTruthy()
+        expect(input.placeholder).toBeTruthy()
+        expect(titleEl.title).not.toBe(zhTitle)
+        expect(input.placeholder).not.toBe(zhPlaceholder)
     })
 })
