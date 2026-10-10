@@ -10,7 +10,8 @@ import type {EntityType} from '../../constants.ts'
 import {getSurfaceMaterial} from '../../../render/materials/index.ts'
 import type {InteractionTarget} from '../../../character/interaction/types.ts'
 import {INTERACTION_MAX_DISTANCE} from '../../../character/interaction/types.ts'
-import {findItemDef, isKnownItemId} from '../../../inventory/items.ts'
+import {findItemDef, isKnownItemId, itemDisplayName} from '../../../inventory/items.ts'
+import {translate} from '../../../i18n/index.ts'
 import type {DroppedItemEntity, ItemEntityContext, SavableItemEntry} from '../types.ts'
 import {createItemPanel} from '../ui/panel.ts'
 
@@ -32,7 +33,18 @@ export const setupItemEntities = (scene: Scene, shared: SharedWorld): ItemEntity
     const rebuildPanelInfo = (): void => {
         panelInfo.length = 0
         for (const e of items) {
-            panelInfo.push({id: e.id, type: TYPE, badgeLabel: BADGE_LABEL, badgeColor: BADGE_COLOR, rowText: e.rowText})
+            panelInfo.push({
+                id: e.id,
+                type: TYPE,
+                badgeLabel: BADGE_LABEL,
+                badgeColor: BADGE_COLOR,
+                rowText: e.rowText,
+                /* 行文本含本地化物品名：语言切换后由 element_list 按需重算 */
+                rowTextOf: () => {
+                    const def = findItemDef(e.defId)
+                    return `#${e.id} ${def === undefined ? e.defId : itemDisplayName(def)} ×${e.count}`
+                },
+            })
         }
     }
 
@@ -57,7 +69,7 @@ export const setupItemEntities = (scene: Scene, shared: SharedWorld): ItemEntity
             count,
             mesh,
             body,
-            rowText: `#${id} ${def?.name ?? defId} ×${count}`,
+            rowText: `#${id} ${def === undefined ? defId : itemDisplayName(def)} ×${count}`,
         }
         items.push(e)
         byId.set(id, e)
@@ -122,7 +134,7 @@ export const setupItemEntities = (scene: Scene, shared: SharedWorld): ItemEntity
             out.push({
                 key: `item:${e.id}`,
                 kind: 'item',
-                prompt: `拾取 ${def?.name ?? e.defId}`,
+                prompt: translate({key: 'interact.prompt.pickup', args: [def === undefined ? e.defId : itemDisplayName(def)]}),
                 x: t.x,
                 y: t.y,
                 z: t.z,

@@ -1,14 +1,16 @@
+import type {StringLocaleKey} from '../i18n/index.ts'
+
 /** 背包装备槽位 */
 export const EQUIP_SLOTS = ['main_hand', 'off_hand', 'head', 'chest', 'arms', 'legs'] as const
 export type EquipSlot = typeof EQUIP_SLOTS[number]
 
-export const EQUIP_SLOT_LABELS: Record<EquipSlot, string> = {
-    main_hand: '主手',
-    off_hand: '副手',
-    head: '头部',
-    chest: '躯干',
-    arms: '手臂',
-    legs: '腿部',
+export const EQUIP_SLOT_LABELS: Record<EquipSlot, StringLocaleKey> = {
+    main_hand: 'equip_slot.main_hand',
+    off_hand: 'equip_slot.off_hand',
+    head: 'equip_slot.head',
+    chest: 'equip_slot.chest',
+    arms: 'equip_slot.arms',
+    legs: 'equip_slot.legs',
 }
 
 /** 形状旋转（0..3，顺时针 90°） */

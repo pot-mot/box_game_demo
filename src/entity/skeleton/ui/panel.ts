@@ -7,6 +7,8 @@ import {setSelectedVisual, clearSelectedVisuals} from '../render/joint_groups.ts
 import type {SkeletonSelection, SkeletonEntity} from '../world.ts'
 import {createLabeledNumberInput, createNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
+import {localizeText, localizePlaceholder, appendLocalizedText} from '../../../i18n/dom.ts'
+import {translate} from '../../../i18n/index.ts'
 import {CASCADE_DEPTH_MAX} from '../constants.ts'
 
 /** 面板所需的实体上下文（由 world 装配，两阶段初始化） */
@@ -39,30 +41,30 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
 
     const title = document.createElement('div')
     title.style.cssText = 'font-weight:600;margin-bottom:4px'
-    title.textContent = `关节：${joint.name}（${joint.id}）`
+    title.textContent = translate({key: 'skeleton.joint_title', args: [joint.name, joint.id]})
     container.appendChild(title)
 
     /* 位置 */
-    container.appendChild(createSection('位置'))
+    container.appendChild(createSection('skeleton.pos'))
     const posRow = document.createElement('div')
     posRow.style.cssText = 'display:flex;gap:4px'
-    const posX = createLabeledNumberInput(posRow, 'X', {value: String(joint.position.x)})
-    const posY = createLabeledNumberInput(posRow, 'Y', {value: String(joint.position.y)})
-    const posZ = createLabeledNumberInput(posRow, 'Z', {value: String(joint.position.z)})
+    const posX = createLabeledNumberInput(posRow, 'panel.x', {value: String(joint.position.x)})
+    const posY = createLabeledNumberInput(posRow, 'panel.y', {value: String(joint.position.y)})
+    const posZ = createLabeledNumberInput(posRow, 'panel.z', {value: String(joint.position.z)})
     container.appendChild(posRow)
 
     /* 旋转（欧拉，XYZ 顺序） */
-    container.appendChild(createSection('旋转（欧拉）'))
+    container.appendChild(createSection('skeleton.rot_euler'))
     const rotRow = document.createElement('div')
     rotRow.style.cssText = 'display:flex;gap:4px'
     const euler = new Euler().setFromQuaternion(joint.rotation, EULER_ORDER)
-    const rotX = createLabeledNumberInput(rotRow, 'X', {value: String(euler.x)})
-    const rotY = createLabeledNumberInput(rotRow, 'Y', {value: String(euler.y)})
-    const rotZ = createLabeledNumberInput(rotRow, 'Z', {value: String(euler.z)})
+    const rotX = createLabeledNumberInput(rotRow, 'panel.x', {value: String(euler.x)})
+    const rotY = createLabeledNumberInput(rotRow, 'panel.y', {value: String(euler.y)})
+    const rotZ = createLabeledNumberInput(rotRow, 'panel.z', {value: String(euler.z)})
     container.appendChild(rotRow)
 
     /* 级联编辑（拖拽平移/旋转时子节点跟随策略） */
-    container.appendChild(createSection('级联编辑'))
+    container.appendChild(createSection('skeleton.cascade'))
     const settings = ctx.getCascadeSettings()
     const cascadeRow = document.createElement('div')
     cascadeRow.style.cssText = 'display:flex;align-items:center;gap:8px'
@@ -70,7 +72,9 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     cascadeCheck.type = 'checkbox'
     cascadeCheck.checked = settings.enabled
     const cascadeLabelEl = document.createElement('label')
-    cascadeLabelEl.textContent = '级联子节点'
+    const cascadeText = document.createElement('span')
+    localizeText(cascadeText, 'skeleton.cascade_children')
+    cascadeLabelEl.appendChild(cascadeText)
     cascadeLabelEl.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer'
     cascadeLabelEl.appendChild(cascadeCheck)
     const depthInput = createNumberInput({
@@ -81,7 +85,10 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
         style: 'width:48px',
     })
     const depthLabelEl = document.createElement('label')
-    depthLabelEl.textContent = '层数 '
+    const depthText = document.createElement('span')
+    localizeText(depthText, 'skeleton.depth')
+    depthLabelEl.appendChild(depthText)
+    depthLabelEl.appendChild(document.createTextNode(' '))
     depthLabelEl.style.cssText = 'display:flex;align-items:center;gap:4px'
     depthLabelEl.appendChild(depthInput)
     cascadeRow.appendChild(cascadeLabelEl)
@@ -89,7 +96,7 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     container.appendChild(cascadeRow)
     const cascadeHint = document.createElement('div')
     cascadeHint.style.cssText = 'color:#889;font-size:10px;margin-top:2px'
-    cascadeHint.textContent = '开：子节点（≤层数）跟随调整，层数外后代保持原位；关：仅本节点变化'
+    localizeText(cascadeHint, 'skeleton.cascade_hint')
     container.appendChild(cascadeHint)
 
     cascadeCheck.addEventListener('change', () => {
@@ -105,11 +112,11 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     })
 
     /* IK 根级别 */
-    container.appendChild(createSection('IK 根级别'))
+    container.appendChild(createSection('skeleton.ik_root'))
     const levelSelect = document.createElement('select')
     const levelOptions = [
-        {value: '', label: '无（普通关节）'},
-        {value: '0', label: '0（最高级根）'},
+        {value: '', label: translate('skeleton.ik_none')},
+        {value: '0', label: translate('skeleton.ik_level0')},
         {value: '1', label: '1'},
         {value: '2', label: '2'},
     ] as const
@@ -123,11 +130,11 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     container.appendChild(levelSelect)
 
     /* 父关节重连 */
-    container.appendChild(createSection('父关节'))
+    container.appendChild(createSection('skeleton.parent'))
     const parentSelect = document.createElement('select')
     const noneOption = document.createElement('option')
     noneOption.value = ''
-    noneOption.textContent = '（无 - 独立根）'
+    noneOption.textContent = translate('skeleton.parent_none')
     parentSelect.appendChild(noneOption)
     for (const other of skeleton.joints.values()) {
         if (other.id === joint.id) continue
@@ -140,13 +147,13 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     container.appendChild(parentSelect)
 
     /* 添加子关节 */
-    container.appendChild(createSection('添加子关节'))
+    container.appendChild(createSection('skeleton.add_child'))
     const childRow = document.createElement('div')
     childRow.style.cssText = 'display:flex;gap:4px'
     const childName = document.createElement('input')
-    childName.placeholder = '新关节名'
+    localizePlaceholder(childName, 'skeleton.new_joint_name')
     const addChildBtn = document.createElement('button')
-    addChildBtn.textContent = '添加'
+    localizeText(addChildBtn, 'common.add')
     childRow.appendChild(childName)
     childRow.appendChild(addChildBtn)
     container.appendChild(childRow)
@@ -154,10 +161,10 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     /* 按钮行 */
     const applyBtn = document.createElement('button')
     applyBtn.style.cssText = 'flex:1;margin-top:8px'
-    applyBtn.textContent = 'Apply'
+    localizeText(applyBtn, 'common.apply')
     const deleteBtn = document.createElement('button')
     deleteBtn.style.cssText = 'flex:1;margin-top:8px'
-    deleteBtn.textContent = 'Delete'
+    localizeText(deleteBtn, 'common.delete')
     const btnRow = document.createElement('div')
     btnRow.style.cssText = 'display:flex;gap:8px'
     btnRow.appendChild(applyBtn)
@@ -221,21 +228,21 @@ const renderBonePanel = (ctx: SkeletonPanelContext, container: HTMLElement): (()
 
     const title = document.createElement('div')
     title.style.cssText = 'font-weight:600;margin-bottom:4px'
-    title.textContent = `骨骼：${bone.name}（${bone.id}）`
+    title.textContent = translate({key: 'skeleton.bone_title', args: [bone.name, bone.id]})
     container.appendChild(title)
 
-    container.appendChild(createSection('长度'))
-    const lengthInput = createLabeledNumberInput(container, 'L', {value: String(bone.length)})
+    container.appendChild(createSection('skeleton.length'))
+    const lengthInput = createLabeledNumberInput(container, 'skeleton.l', {value: String(bone.length)})
 
-    container.appendChild(createSection('绕轴扭转 roll'))
-    const rollInput = createLabeledNumberInput(container, 'R', {value: String(bone.roll)})
+    container.appendChild(createSection('skeleton.roll'))
+    const rollInput = createLabeledNumberInput(container, 'skeleton.r', {value: String(bone.roll)})
 
     const applyBtn = document.createElement('button')
     applyBtn.style.cssText = 'flex:1;margin-top:8px'
-    applyBtn.textContent = 'Apply'
+    localizeText(applyBtn, 'common.apply')
     const deleteBtn = document.createElement('button')
     deleteBtn.style.cssText = 'flex:1;margin-top:8px'
-    deleteBtn.textContent = 'Delete'
+    localizeText(deleteBtn, 'common.delete')
     const btnRow = document.createElement('div')
     btnRow.style.cssText = 'display:flex;gap:8px'
     btnRow.appendChild(applyBtn)
@@ -272,12 +279,12 @@ export const createSkeletonPanel = (ctx: SkeletonPanelContext): PanelContext => 
         refreshValues = undefined
         const entity = ctx.getFocus()
         if (entity === undefined) {
-            container.textContent = '未创建骨架实体'
+            appendLocalizedText(container, 'skeleton.no_entity')
             return
         }
         const selection = ctx.getSelection()
         if (selection === undefined) {
-            container.textContent = '未选中关节或骨骼'
+            appendLocalizedText(container, 'skeleton.no_selection')
             return
         }
         if (selection.kind === 'joint') {

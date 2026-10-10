@@ -1,6 +1,7 @@
 import type {HoldMode} from '../../character/weapon/hold_mode.ts'
 import type {LimbSlot} from '../../character/armor/slots.ts'
 import type {ArmorSlot} from '../../character/armor/slots.ts'
+import type {StringLocaleKey} from '../../i18n/index.ts'
 
 // ── 展示清单 ──
 
@@ -79,8 +80,8 @@ export interface RaceShowcaseEntry {
     limb: Readonly<Partial<Record<LimbSlot, string>>>
     /** 护甲槽位 → 护甲 id；缺省 = 不穿护甲 */
     armor?: Readonly<Partial<Record<ArmorSlot, string>>>
-    /** 展示名（面板 / 头顶标签） */
-    name: string
+    /** 展示名文案键（面板 / 头顶标签，经 `translate` 解析） */
+    name: StringLocaleKey
     faction: number
 }
 
@@ -91,7 +92,8 @@ export interface ArmorSetShowcaseEntry {
     armor: Readonly<Partial<Record<ArmorSlot, string>>>
     /** 肢体槽位 → 肢体 id；缺省 = 人类肢体（套装展示用） */
     limb?: Readonly<Partial<Record<LimbSlot, string>>>
-    name: string
+    /** 展示名文案键（面板 / 头顶标签，经 `translate` 解析） */
+    name: StringLocaleKey
     faction: number
 }
 
@@ -106,32 +108,32 @@ export type ShowcaseExtraEntry = RaceShowcaseEntry | ArmorSetShowcaseEntry
  */
 export const RACE_SHOWCASE_ROSTER: readonly ShowcaseExtraEntry[] = [
     {
-        kind: 'race', name: '骷髅',
+        kind: 'race', name: 'showcase.race.skeleton',
         limb: {head: 'skeleton_head', arms: 'skeleton_arms', body: 'skeleton_body', legs: 'skeleton_legs'},
         faction: 0,
     },
     {
-        kind: 'race', name: '兽人',
+        kind: 'race', name: 'showcase.race.orc',
         limb: {head: 'orc_head', arms: 'orc_arms', body: 'orc_body', legs: 'orc_legs'},
         faction: 1,
     },
     {
-        kind: 'race', name: '精灵',
+        kind: 'race', name: 'showcase.race.elf',
         limb: {head: 'elf_head', arms: 'elf_arms', body: 'elf_body', legs: 'elf_legs'},
         faction: 2,
     },
     {
-        kind: 'armor_set', name: '铁甲套装',
+        kind: 'armor_set', name: 'showcase.armor_set.iron',
         armor: {head: 'iron_helmet', chest: 'iron_plate', arms: 'iron_bracers', legs: 'iron_greaves'},
         faction: 3,
     },
     {
-        kind: 'armor_set', name: '法袍套装',
+        kind: 'armor_set', name: 'showcase.armor_set.mage',
         armor: {head: 'mage_hood', chest: 'mage_robe', arms: 'mage_wraps', legs: 'mage_leggings'},
         faction: 4,
     },
     {
-        kind: 'armor_set', name: '疾风皮甲',
+        kind: 'armor_set', name: 'showcase.armor_set.wind',
         armor: {head: 'cloth_cap', chest: 'leather_armor', arms: 'cloth_bracers', legs: 'wind_boots'},
         faction: 5,
     },

@@ -1,5 +1,6 @@
-import {describe, it, expect, beforeEach} from 'vitest'
+﻿import {describe, it, expect, beforeEach} from 'vitest'
 import {setupExecutePanel, type ExecutePanel} from './execute_panel.ts'
+import {translate} from '../../i18n/index.ts'
 
 /** 重新挂载一个新面板（清空 body，避免多个同 id 容器互相干扰） */
 const createPanel = (): ExecutePanel => {
@@ -36,9 +37,9 @@ describe('执行面板：交互状态', () => {
         expect(panel.pendingSteps()).toBe(0)
         const buttons = getButtons()
         expect(buttons).toHaveLength(4)
-        expect(buttons[0].textContent).toBe('Execute')
-        expect(buttons[1].textContent).toBe('Step')
-        expect(buttons[3].textContent).toBe('Reset')
+        expect(buttons[0].textContent).toBe(translate('edit.execute'))
+        expect(buttons[1].textContent).toBe(translate('edit.step'))
+        expect(buttons[3].textContent).toBe(translate('edit.reset'))
     })
 
     it('Execute 切到执行态，再次点击（Stop）切回暂停态', () => {
@@ -50,13 +51,13 @@ describe('执行面板：交互状态', () => {
         expect(panel.isExecuting()).toBe(true)
         expect(probe.toggles).toEqual([true])
         panel.update()
-        expect(getButtons()[0].textContent).toBe('Stop')
+        expect(getButtons()[0].textContent).toBe(translate('edit.stop'))
 
         click(executeBtn)
         expect(panel.isExecuting()).toBe(false)
         expect(probe.toggles).toEqual([true, false])
         panel.update()
-        expect(getButtons()[0].textContent).toBe('Execute')
+        expect(getButtons()[0].textContent).toBe(translate('edit.execute'))
     })
 
     it('Stop 只派发 onToggle(false)，不派发 onReset（还原唯一入口是 Reset）', () => {
@@ -86,7 +87,7 @@ describe('执行面板：交互状态', () => {
         expect(probe.toggles).toEqual([true])
         expect(panel.isExecuting()).toBe(false)
         panel.update()
-        expect(getButtons()[0].textContent).toBe('Execute')
+        expect(getButtons()[0].textContent).toBe(translate('edit.execute'))
     })
 
     it('Reset 清空排队步进', () => {
@@ -112,7 +113,7 @@ describe('执行面板：交互状态', () => {
         expect(probe.toggles).toEqual([])
         expect(panel.isExecuting()).toBe(false)
         panel.update()
-        expect(getButtons()[0].textContent).toBe('Execute')
+        expect(getButtons()[0].textContent).toBe(translate('edit.execute'))
     })
 
     it('执行中 Step / Run 点击无效', () => {

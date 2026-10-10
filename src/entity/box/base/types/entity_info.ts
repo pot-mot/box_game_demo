@@ -10,6 +10,8 @@ interface EntityPanelInfo {
     badgeLabel: string
     badgeColor: string
     rowText: string
+    /** 可选：按需重算行文本（用于含本地化文案的行，语言切换后下一帧即刷新）；缺省回退 `rowText` */
+    rowTextOf?: () => string
 }
 
 interface EntityInfoSource {

@@ -7,6 +7,7 @@ import {createJointVisuals, createRotationGizmo, disposeRotationGizmo, type Join
 import type {SkeletonAppearance, SkeletonPreset} from './appearance.ts'
 import {createSkeletonPanel} from './ui/panel.ts'
 import {focusPanel} from '../../ui/entity_control_panel.ts'
+import {translate} from '../../i18n/index.ts'
 import {DEFAULT_CASCADE_DEPTH, DEFAULT_CASCADE_ENABLED} from './constants.ts'
 
 /** 骨架实体选中项 */
@@ -86,7 +87,7 @@ export const setupSkeletonEntities = (scene: Scene, preset: SkeletonPreset): Ske
         const appearance = preset.mountAppearance(visuals.groups)
         const entity: SkeletonEntity = {
             id: nextId,
-            name: name ?? `骨架${nextId}`,
+            name: name ?? translate({key: 'entity.skeleton_name', args: [String(nextId)]}),
             skeleton: visuals.bridge,
             visuals,
             appearance,

@@ -3,6 +3,7 @@ import type {WaterEntityContext, WaterBlock} from '../types'
 import {createLabeledNumberInput} from '../../../../ui/components/number_input.ts'
 import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'
+import {localizeText} from '../../../../i18n/dom.ts'
 
 export const formatRowText = (box: WaterBlock): string =>
     `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  d:${box.config.density}`
@@ -20,26 +21,26 @@ export const createWaterPanel = (ctx: Omit<WaterEntityContext, 'panel'>): PanelC
 
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px;color:#48f'
-    header.textContent = 'Water Area Control'
+    localizeText(header, 'entity.water_area')
     el.appendChild(header)
 
-    el.appendChild(createSection('Pos'))
-    const posX = createLabeledNumberInput(el, 'X', {step: '0.01'})
-    const posY = createLabeledNumberInput(el, 'Y', {step: '0.01'})
-    const posZ = createLabeledNumberInput(el, 'Z', {step: '0.01'})
+    el.appendChild(createSection('panel.pos'))
+    const posX = createLabeledNumberInput(el, 'panel.x', {step: '0.01'})
+    const posY = createLabeledNumberInput(el, 'panel.y', {step: '0.01'})
+    const posZ = createLabeledNumberInput(el, 'panel.z', {step: '0.01'})
 
-    el.appendChild(createSection('Rot (°)'))
-    const rotX = createLabeledNumberInput(el, 'X', {min: '-360', max: '360', step: '0.1'})
-    const rotY = createLabeledNumberInput(el, 'Y', {min: '-360', max: '360', step: '0.1'})
-    const rotZ = createLabeledNumberInput(el, 'Z', {min: '-360', max: '360', step: '0.1'})
+    el.appendChild(createSection('panel.rot'))
+    const rotX = createLabeledNumberInput(el, 'panel.x', {min: '-360', max: '360', step: '0.1'})
+    const rotY = createLabeledNumberInput(el, 'panel.y', {min: '-360', max: '360', step: '0.1'})
+    const rotZ = createLabeledNumberInput(el, 'panel.z', {min: '-360', max: '360', step: '0.1'})
 
-    el.appendChild(createSection('Size'))
-    const sizeX = createLabeledNumberInput(el, 'X', {min: '0.1', max: '100', step: '0.1', value: '2'})
-    const sizeY = createLabeledNumberInput(el, 'Y', {min: '0.1', max: '100', step: '0.1', value: '2'})
-    const sizeZ = createLabeledNumberInput(el, 'Z', {min: '0.1', max: '100', step: '0.1', value: '2'})
+    el.appendChild(createSection('panel.size'))
+    const sizeX = createLabeledNumberInput(el, 'panel.x', {min: '0.1', max: '100', step: '0.1', value: '2'})
+    const sizeY = createLabeledNumberInput(el, 'panel.y', {min: '0.1', max: '100', step: '0.1', value: '2'})
+    const sizeZ = createLabeledNumberInput(el, 'panel.z', {min: '0.1', max: '100', step: '0.1', value: '2'})
 
-    el.appendChild(createSection('Buoyancy'))
-    const density = createLabeledNumberInput(el, 'Density', {min: '0', max: '100', step: '0.1', value: '2'})
+    el.appendChild(createSection('panel.buoyancy'))
+    const density = createLabeledNumberInput(el, 'panel.density', {min: '0', max: '100', step: '0.1', value: '2'})
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)

@@ -40,7 +40,7 @@
 
 1. 每个武器只注入「首个模式」一条链（`meleePreset` 只写 `attacks[holdModes[0]]`），除长剑外无多模式武器；长剑双手也只是回退单持链。
 2. 无「武器类 / 模型」分层：双持同类型无法表达，未来同模组模型变体无位置。
-3. 无副手装备槽（`offhandMesh` 只是双斧固有网格）、无背挂点与挂背逻辑。
+3. 无副手装备槽（`offhandMesh` 只是战斧固有网格）、无背挂点与挂背逻辑。
 4. play 无持握切换输入；edit 面板无持握 / 副手控件；展示模式无模式维度；存档无副手字段。
 
 ## 3. 已确认决策
@@ -78,7 +78,7 @@ interface WeaponModelConfig {
 
 - 15 个现有武器 id 原样成为各自 class 的默认模型 id（段 id / 存档 id 兼容）。
 - `catalog.ts`：新增 `weaponClassOf(id)`、`sameWeaponClass(a, b)`、`availableHoldModes(class, offhand?)`；`weaponAttacksOf` 按 class 解析；`weaponPresetOrDefault` 保留为「模型 id → 合并 class 玩法 + model 外观」的解析（返回值增加 `classId`）。
-- `offhandMesh` 字段删除（双斧改用副手槽 + 同类默认模型）。
+- `offhandMesh` 字段删除（战斧改用副手槽 + 同类默认模型）。
 
 ### 4.2 段 id 与链编排
 
@@ -139,7 +139,7 @@ interface WeaponModelConfig {
 
 ### 阶段 6 · 批量补齐其余 5 武器（逐武器交付）
 
-顺序：短剑 → 战锤 → 双斧 → 巨剑 → 长枪。每把：链编排、新段动画数据、文档、对应测试；落地即把该武器默认切为单持。每批收尾只跑相关单测。
+顺序：短剑 → 战锤 → 战斧 → 巨剑 → 长枪。每把：链编排、新段动画数据、文档、对应测试；落地即把该武器默认切为单持。每批收尾只跑相关单测。
 
 ### 阶段 7 · 收尾
 

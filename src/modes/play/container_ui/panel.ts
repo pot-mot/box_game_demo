@@ -2,6 +2,7 @@ import type {InventoryState, Placement} from '../../../inventory/types.ts'
 import {INVENTORY_CELL_PX as CELL} from '../../../inventory/types.ts'
 import {findItemDef, findStack, moveStack, transferStack} from '../../../inventory/index.ts'
 import {renderInventoryGrid} from '../inventory_ui/grid_render.ts'
+import {translate} from '../../../i18n/index.ts'
 
 export interface ContainerPanelCallbacks {
     getPlayerInventory: () => InventoryState
@@ -37,7 +38,7 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
 
     const title = document.createElement('div')
     title.style.cssText = 'font-size:15px;font-weight:700;margin-bottom:10px;color:#e9c46a'
-    title.textContent = '箱子'
+    title.textContent = translate('play.container.title')
     root.appendChild(title)
 
     const body = document.createElement('div')
@@ -46,9 +47,9 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
 
     const playerColumn = document.createElement('div')
     const chestColumn = document.createElement('div')
-    for (const [col, label] of [[playerColumn, '背包'], [chestColumn, '箱子']] as const) {
+    for (const [col, labelKey] of [[playerColumn, 'play.container.player'], [chestColumn, 'play.container.chest']] as const) {
         const head = document.createElement('div')
-        head.textContent = label
+        head.textContent = translate(labelKey)
         head.style.cssText = 'margin-bottom:6px;color:#8ecae6;font-weight:700'
         col.appendChild(head)
         col.style.cssText = 'display:flex;flex-direction:column'
@@ -63,11 +64,11 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
 
     const hint = document.createElement('div')
     hint.style.cssText = 'border-top:1px solid #333;margin-top:10px;padding-top:8px;color:#aaa;min-height:18px'
-    hint.textContent = '拖拽物品在背包与箱子间存取；双击快速转移；拖拽中按 R 旋转'
+    hint.textContent = translate('play.container.hint')
     root.appendChild(hint)
 
     const closeBtn = document.createElement('button')
-    closeBtn.textContent = '关闭'
+    closeBtn.textContent = translate('play.container.close')
     closeBtn.style.cssText = 'position:absolute;top:10px;right:12px;cursor:pointer'
     closeBtn.onclick = () => close()
     root.appendChild(closeBtn)
@@ -204,7 +205,7 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
     return {
         open: (container, titleText) => {
             chest = container
-            title.textContent = titleText ?? '箱子'
+            title.textContent = titleText ?? translate('play.container.title')
             visible = true
             root.style.display = 'block'
             render()

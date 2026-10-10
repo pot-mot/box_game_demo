@@ -1,5 +1,5 @@
 import type {Skeleton} from '../../skeleton/skeleton.ts'
-import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, supportsHoldMode, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, supportsHoldMode, weaponDisplayName, type WeaponConfig} from '../../character/weapon/catalog.ts'
 import type {HoldMode} from '../../character/weapon/hold_mode.ts'
 import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
 import {clearTwoHandGripRoot, solveTwoHandedGrip} from '../../entity/character/appearance/two_handed_ik.ts'
@@ -10,14 +10,12 @@ import {
     type SkeletonWeaponSpec,
 } from './weapon_equip.ts'
 import type {SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
+import {translate, type StringLocaleKey} from '../../i18n/index.ts'
+import {localizeText, localizeTitle, localizeApply} from '../../i18n/dom.ts'
 import {
     ANIM_OPTION_WEAPON_AUTO,
     ANIM_OPTION_WEAPON_NONE,
     GRIP_TOGGLE_ID,
-    WEAPON_AUTO_LABEL,
-    WEAPON_GROUP_LABEL_MELEE,
-    WEAPON_GROUP_LABEL_RANGED,
-    WEAPON_NONE_LABEL,
     WEAPON_SELECT_ID,
 } from './constants.ts'
 
@@ -109,16 +107,16 @@ export interface BoneEditWeaponControl {
 export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): BoneEditWeaponControl => {
     const select = document.createElement('select')
     select.id = WEAPON_SELECT_ID
-    select.title = '编辑器武器（自动 = 跟随当前动画所属武器）'
+    localizeTitle(select, 'bone_edit.weapon.select_title')
     select.style.cssText = 'max-width:150px'
 
     const autoOption = document.createElement('option')
     autoOption.value = ANIM_OPTION_WEAPON_AUTO
-    autoOption.textContent = WEAPON_AUTO_LABEL
+    localizeText(autoOption, 'bone_edit.weapon.auto')
     select.appendChild(autoOption)
     const noneOption = document.createElement('option')
     noneOption.value = ANIM_OPTION_WEAPON_NONE
-    noneOption.textContent = WEAPON_NONE_LABEL
+    localizeText(noneOption, 'bone_edit.weapon.none')
     select.appendChild(noneOption)
 
     /* 左手贴合开关（默认关：编辑器里两只手独立，避免「拖武器牵扯另一只手」） */
@@ -126,19 +124,21 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
     gripToggle.id = GRIP_TOGGLE_ID
     gripToggle.style.cssText = 'padding:2px 8px;cursor:pointer;background:#2a2a33;color:#ddd;border:1px solid #444;border-radius:3px'
 
-    /* 手动指定武器：近战 / 远程分组 */
-    const groupOf = (label: string): HTMLOptGroupElement => {
+    /* 手动指定武器：近战 / 远程分组（optgroup 用 label 属性，不能走 localizeText 以免清空子选项） */
+    const groupOf = (labelKey: StringLocaleKey): HTMLOptGroupElement => {
         const group = document.createElement('optgroup')
-        group.label = label
+        localizeApply(group, el => {
+            if (el instanceof HTMLOptGroupElement) el.label = translate(labelKey)
+        })
         select.appendChild(group)
         return group
     }
-    const meleeGroup = groupOf(WEAPON_GROUP_LABEL_MELEE)
-    const rangedGroup = groupOf(WEAPON_GROUP_LABEL_RANGED)
+    const meleeGroup = groupOf('bone_edit.weapon.group_melee')
+    const rangedGroup = groupOf('bone_edit.weapon.group_ranged')
     for (const preset of ALL_WEAPON_PRESETS) {
         const option = document.createElement('option')
         option.value = preset.id
-        option.textContent = preset.name
+        localizeApply(option, el => { el.textContent = weaponDisplayName(preset.id, preset.name) })
         option.dataset.weaponType = preset.type
         ;(preset.type === 'melee' ? meleeGroup : rangedGroup).appendChild(option)
     }
@@ -219,11 +219,11 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
     }
 
     const refreshGripToggleLabel = (): void => {
-        gripToggle.textContent = gripAssist ? '左手贴合：开' : '左手贴合：关'
-        gripToggle.title = gripAssist
-            ? '播放预览时把左手链求解到武器副握点（关闭后两只手互不牵扯）'
-            : '左手贴合已关闭：编辑与预览时两只手完全独立'
+        gripToggle.textContent = translate(gripAssist ? 'bone_edit.grip.on' : 'bone_edit.grip.off')
+        gripToggle.title = translate(gripAssist ? 'bone_edit.grip.on_title' : 'bone_edit.grip.off_title')
     }
+    /* 初始文案（默认关） */
+    refreshGripToggleLabel()
 
     const setGripAssist = (on: boolean): void => {
         gripAssist = on

@@ -16,7 +16,8 @@ import {resolveArmorLoadout, resolveLimbLoadout} from '../../../character/armor/
 import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/attack_runtime.ts'
 import {createTestWeaponRuntime, TEST_WEAPON_ID} from '../../../character/combat/test_weapon.ts'
 import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
-import {availableHoldModes, defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
+import {availableHoldModes, defaultHoldMode, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
+import {translate} from '../../../i18n/index.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
 import {segmentTotalDuration, isChargeableKey, type AttackKey} from '../../../character/weapon/attack_chain.ts'
@@ -351,20 +352,24 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             : `${ch.stateMachine.currentState}|peace:${ai.peaceState}`
     }
 
+    /** 单条角色列表行文本（含本地化武器名 / 攻击类别短名；语言切换后由 element_list 按需重算） */
+    const characterRowText = (ch: CharacterEntity): string => {
+        const playerPrefix = ch.isPlayer ? translate('entity.player_prefix') : ''
+        const weapon = ch.combat.weapon
+        const weaponName = weaponDisplayName(weapon.id, weapon.name)
+        const def = ch.combat.defense
+        /* 有效移速 = 基础移速 × 装备移速乘数；保留两位小数避免浮点尾巴，整数不显示小数点 */
+        const speed = Number(moveSpeedOf(ch).toFixed(2))
+        return `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weapon.damage})  def:${translate('entity.def_phys_short')}${def.physical}/${translate('entity.def_magic_short')}${def.magic}  spd:${speed}  [${stateLabelOf(ch)}]`
+    }
+
     const refreshPlayerLabel = (): void => {
         const infoById = new Map(panelInfos.map(pi => [pi.id, pi]))
         for (const ch of characters) {
             const pi = infoById.get(ch.id)
             if (!pi) continue
-            const playerPrefix = ch.isPlayer ? '▶ Player: ' : ''
-            const weapon = ch.combat.weapon
-            /* 列表侧栏（`ui/element_list_panel.ts`）展示武器中文名，与角色面板武器下拉同源（武器预设 `name` 字段） */
-            const weaponName = weapon.name
-            const weaponDmg = weapon.damage
-            const def = ch.combat.defense
-            /* 有效移速 = 基础移速 × 装备移速乘数；保留两位小数避免浮点尾巴，整数不显示小数点 */
-            const speed = Number(moveSpeedOf(ch).toFixed(2))
-            pi.rowText = `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weaponDmg})  def:物${def.physical}/魔${def.magic}  spd:${speed}  [${stateLabelOf(ch)}]`
+            pi.rowText = characterRowText(ch)
+            pi.rowTextOf = () => characterRowText(ch)
             pi.badgeLabel = ch.isPlayer ? 'P' : `F${ch.combat.faction}`
             pi.badgeColor = factionBadgeColor(ch.combat.faction, ch.isPlayer)
         }
@@ -464,7 +469,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             groundKeepTimer: 0,
             airborneTime: 0,
             groundedTime: 0,
-            rowText: `Character #${id}`,
+            rowText: '',
             isPlayer: isPlayer ?? false,
             navEnabled,
             peaceStrategy,
@@ -516,9 +521,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
         }
 
-        const rowText = isPlayer ? `▶ Player: Character #${id}` : `Character #${id}`
+        /* 行文本占位：紧接的 refreshPlayerLabel() 会写入本地化文本并提供按需重算的 rowTextOf */
         const badgeLabel = isPlayer ? 'P' : `F${faction}`
-        panelInfos.push({id, type: 'character', badgeLabel, badgeColor: factionBadgeColor(faction, isPlayer ?? false), rowText})
+        panelInfos.push({id, type: 'character', badgeLabel, badgeColor: factionBadgeColor(faction, isPlayer ?? false), rowText: ''})
         refreshPlayerLabel()
 
         return entity

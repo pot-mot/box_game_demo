@@ -12,6 +12,7 @@ import {resolvePhases, phaseDurationOf} from '../../character/combat/attack_phas
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
 import {weaponAttacksOf} from '../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
+import {translate} from '../../i18n/index.ts'
 import type {WeaponConfig} from '../../character/weapon/catalog.ts'
 import {
     orderedSegments,
@@ -30,9 +31,20 @@ import {
     IDLE_TRAIL,
 } from './constants.ts'
 
-/** 本击衔接方式标签（供人工审查连段推进路径） */
-export const LINK_LABELS = ['首次起手', '段内推进', '重新起手', '—'] as const
+/** 本击衔接方式（供人工审查连段推进路径）：值为文案键，展示时经 `translate` 解析 */
+export const LINK_LABELS = [
+    'showcase.link.first',
+    'showcase.link.advance',
+    'showcase.link.restart',
+    'showcase.link.none',
+] as const
 export type LinkLabel = typeof LINK_LABELS[number]
+
+/** 具名衔接方式键（可读性优于下标） */
+export const LINK_FIRST: LinkLabel = 'showcase.link.first'
+export const LINK_ADVANCE: LinkLabel = 'showcase.link.advance'
+export const LINK_RESTART: LinkLabel = 'showcase.link.restart'
+export const LINK_NONE: LinkLabel = 'showcase.link.none'
 
 /** 面板展示用的单个攻击段计时快照（与 play HUD 三计时器同语义） */
 export interface SkillTimerStatus {
@@ -188,8 +200,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     /** 当前脚本位置（0 起；段末推进/重新起链时移动） */
     let scriptPos = 0
     /** 本段衔接方式（进入攻击时取 pendingLink，段末推进直接覆盖） */
-    let link: LinkLabel = '—'
-    let pendingLink: LinkLabel = isMelee ? '首次起手' : '—'
+    let link: LinkLabel = LINK_NONE
+    let pendingLink: LinkLabel = isMelee ? LINK_FIRST : LINK_NONE
     /** 全链播完，收尾待机结束后重置循环（scriptPos 归零重新起手） */
     let resetPending = false
     /** 每段冷却剩余时间（镜像生产：段触发即挂自身冷却，逐帧递减；仅展示不挡推进） */
@@ -269,12 +281,12 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
                 mode = 'idle'
                 stateTime = 0
                 idleDuration = CHAIN_PAUSE_IDLE
-                pendingLink = '重新起手'
+                pendingLink = LINK_RESTART
                 scriptPos++
                 return
             }
             /* 同链段末推进：下一段若为重击蓄力段则先播满蓄力前置（stateTime 保留） */
-            beginSegment(scriptPos + 1, '段内推进', true)
+            beginSegment(scriptPos + 1, LINK_ADVANCE, true)
             return
         }
 
@@ -294,7 +306,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             if (resetPending) {
                 scriptPos = 0
                 resetPending = false
-                pendingLink = isMelee ? '首次起手' : '—'
+                pendingLink = isMelee ? LINK_FIRST : LINK_NONE
             }
             beginSegment(scriptPos, pendingLink, false)
         }
@@ -372,7 +384,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             skillId: segment.id,
             skillName: weaponName,
             weaponName,
-            holdModeLabel: HOLD_MODE_LABELS[holdMode],
+            holdModeLabel: translate(HOLD_MODE_LABELS[holdMode]),
             isMelee,
             mode,
             hitNumber: scriptPos + 1,
@@ -388,7 +400,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
                     ? Math.min(Math.max(chargeHoldTimer / chargeHoldDuration, 0), 1)
                     : Math.min(Math.max(phaseIndex < phases.length ? phaseTimer / phaseDurationOf(phases[phaseIndex], segment.duration, segment.recovery) : 1, 0), 1),
             attackProgress: mode === 'attacking' ? Math.min(Math.max(attackTimer / segmentTotalDuration(segment), 0), 1) : 0,
-            link: mode === 'attacking' ? link : '—',
+            link: mode === 'attacking' ? link : LINK_NONE,
             /* 每段三计时器快照：当前段按 attackTimer 切分动作/恢复两格，冷却取递减值 */
             slotTimers: segments.map(seg => {
                 const active = mode === 'attacking' && seg.id === segment.id
@@ -449,5 +461,5 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         scene.remove(anchor)
     }
 
-    return {id, anchor, weaponName, holdModeLabel: HOLD_MODE_LABELS[holdMode], factionColor: faction, update, status, attachLabel, setDimmed, dispose}
+    return {id, anchor, weaponName, holdModeLabel: translate(HOLD_MODE_LABELS[holdMode]), factionColor: faction, update, status, attachLabel, setDimmed, dispose}
 }

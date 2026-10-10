@@ -1,3 +1,5 @@
+import {localizeText, type LocalKeyParam} from '../../i18n/dom.ts'
+
 const DEFAULT_STEP = '0.01'
 
 export const createNumberInput = (attrs: Record<string, string>): HTMLInputElement => {
@@ -17,10 +19,13 @@ export const createNumberInput = (attrs: Record<string, string>): HTMLInputEleme
     return input
 }
 
-export const createLabeledNumberInput = (parent: HTMLElement, label: string, attrs: Record<string, string> = {}): HTMLInputElement => {
+export const createLabeledNumberInput = (parent: HTMLElement, label: LocalKeyParam, attrs: Record<string, string> = {}): HTMLInputElement => {
     const input = createNumberInput(attrs)
     const labelEl = document.createElement('label')
-    labelEl.textContent = label + ' '
+    const textSpan = document.createElement('span')
+    localizeText(textSpan, label)
+    labelEl.appendChild(textSpan)
+    labelEl.appendChild(document.createTextNode(' '))
     labelEl.appendChild(input)
     parent.appendChild(labelEl)
     return input

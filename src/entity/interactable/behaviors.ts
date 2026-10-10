@@ -2,6 +2,7 @@ import type {Object3D} from 'three'
 import type {InteractableConfig, InteractableEntity, InteractableRuntimeContext} from './types.ts'
 import type {BreakableSource} from './kinds.ts'
 import {DOOR_OPEN_SPEED, GATE_DEFAULT_SPEED, ROLL_BREAK_DAMAGE, SWITCH_MOMENTARY_HOLD} from './constants.ts'
+import {translate} from '../../i18n/index.ts'
 
 export interface InteractableBehavior {
     /** 是否可被玩家交互（默认 true） */
@@ -34,7 +35,7 @@ const animNode = (e: InteractableEntity, name: string): Object3D | undefined => 
 /* ── 存档点 ── */
 const savePointBehavior: InteractableBehavior = {
     interactable: true,
-    prompt: (e) => e.config.kind === 'save_point' && e.on ? '篝火（已点燃）' : '点燃篝火',
+    prompt: (e) => e.config.kind === 'save_point' && e.on ? translate('interact.prompt.save_point_lit') : translate('interact.prompt.save_point_light'),
     interact: (e, ctx) => {
         e.on = true
         ctx.hooks.onSavePoint?.(e)
@@ -54,7 +55,7 @@ const savePointBehavior: InteractableBehavior = {
 /* ── 传送点 ── */
 const teleportBehavior: InteractableBehavior = {
     interactable: true,
-    prompt: () => '传送',
+    prompt: () => translate('interact.prompt.teleport'),
     interact: (e, ctx) => {
         e.on = true
         ctx.hooks.onTeleport?.(e)
@@ -68,7 +69,7 @@ const teleportBehavior: InteractableBehavior = {
 /* ── 开关 ── */
 const switchBehavior: InteractableBehavior = {
     interactable: true,
-    prompt: (e) => e.on ? '关闭' : '开启',
+    prompt: (e) => e.on ? translate('interact.prompt.switch_off') : translate('interact.prompt.switch_on'),
     interact: (e, ctx) => {
         if (e.config.kind !== 'switch') return
         e.on = !e.on
@@ -111,7 +112,7 @@ const setCollidersEnabled = (e: InteractableEntity, enabled: boolean): void => {
 /* ── 推门 ── */
 const pushDoorBehavior: InteractableBehavior = {
     interactable: true,
-    prompt: (e) => e.progress > 0.5 ? '关门' : '开门',
+    prompt: (e) => e.progress > 0.5 ? translate('interact.prompt.door_close') : translate('interact.prompt.door_open'),
     interact: (e) => {
         e.target = e.target > 0.5 ? 0 : 1
     },
@@ -138,7 +139,7 @@ const pushDoorBehavior: InteractableBehavior = {
 /* ── 升降闸门 ── */
 const gateBehavior: InteractableBehavior = {
     interactable: true,
-    prompt: (e) => e.progress > 0.5 ? '关闭闸门' : '开启闸门',
+    prompt: (e) => e.progress > 0.5 ? translate('interact.prompt.gate_close') : translate('interact.prompt.gate_open'),
     interact: (e) => {
         e.target = e.target > 0.5 ? 0 : 1
     },
@@ -163,7 +164,7 @@ const gateBehavior: InteractableBehavior = {
 /* ── 箱子 ── */
 const chestBehavior: InteractableBehavior = {
     interactable: true,
-    prompt: () => '打开箱子',
+    prompt: () => translate('interact.prompt.chest_open'),
     interact: (e, ctx) => {
         ctx.hooks.onOpenChest?.(e)
     },
@@ -179,7 +180,7 @@ const chestBehavior: InteractableBehavior = {
 /* ── 升降梯 ── */
 const elevatorBehavior: InteractableBehavior = {
     interactable: true,
-    prompt: (e) => e.progress > 0.5 ? '下降' : '上升',
+    prompt: (e) => e.progress > 0.5 ? translate('interact.prompt.elevator_down') : translate('interact.prompt.elevator_up'),
     interact: (e) => {
         e.target = e.target > 0.5 ? 0 : 1
     },

@@ -3,6 +3,7 @@ import type {FragmentEntityContext, Fragment} from '../types'
 import {createNumberInput, createLabeledNumberInput} from '../../../../ui/components/number_input.ts'
 import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'
+import {localizeText} from '../../../../i18n/dom.ts'
 
 export const formatRowText = (f: Fragment): string =>
     `${f.label}  (${f.mesh.position.x.toFixed(1)}, ${f.mesh.position.y.toFixed(1)}, ${f.mesh.position.z.toFixed(1)})  m:${f.config.mass.toFixed(2)}  ttl:${f.config.lifetime.toFixed(1)}`
@@ -20,28 +21,31 @@ export const createFragmentPanel = (ctx: Omit<FragmentEntityContext, 'panel'>): 
 
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px;color:#888'
-    header.textContent = 'Fragment'
+    localizeText(header, 'entity.fragment')
     el.appendChild(header)
 
-    el.appendChild(createSection('Lifetime'))
-    const lifetimeInput = createLabeledNumberInput(el, 'Remaining', {min: '0', step: '0.1', value: '5', style: 'width:70px'})
-    const maxLifetimeInput = createLabeledNumberInput(el, 'Max', {min: '0.1', step: '0.1', value: '5', style: 'width:70px'})
+    el.appendChild(createSection('panel.lifetime'))
+    const lifetimeInput = createLabeledNumberInput(el, 'entity.remaining', {min: '0', step: '0.1', value: '5', style: 'width:70px'})
+    const maxLifetimeInput = createLabeledNumberInput(el, 'panel.max', {min: '0.1', step: '0.1', value: '5', style: 'width:70px'})
 
-    el.appendChild(createSection('Rot (°)'))
-    const rotX = createLabeledNumberInput(el, 'X', {min: '-360', max: '360', step: '0.1'})
-    const rotY = createLabeledNumberInput(el, 'Y', {min: '-360', max: '360', step: '0.1'})
-    const rotZ = createLabeledNumberInput(el, 'Z', {min: '-360', max: '360', step: '0.1'})
+    el.appendChild(createSection('panel.rot'))
+    const rotX = createLabeledNumberInput(el, 'panel.x', {min: '-360', max: '360', step: '0.1'})
+    const rotY = createLabeledNumberInput(el, 'panel.y', {min: '-360', max: '360', step: '0.1'})
+    const rotZ = createLabeledNumberInput(el, 'panel.z', {min: '-360', max: '360', step: '0.1'})
 
     const massSection = document.createElement('div')
     massSection.style.cssText = 'border-top:1px solid #555;padding:4px 0'
     const massLabel = document.createElement('label')
-    massLabel.textContent = 'Mass '
+    const massText = document.createElement('span')
+    localizeText(massText, 'entity.mass')
+    massLabel.appendChild(massText)
+    massLabel.appendChild(document.createTextNode(' '))
     const mass = createNumberInput({min: '0', step: '0.1', value: '0', style: 'width:80px'})
     massLabel.appendChild(mass)
     massSection.appendChild(massLabel)
     el.appendChild(massSection)
 
-    const friction = createLabeledNumberInput(el, 'Friction', {min: '0', max: '1', step: '0.01', value: '0.3', style: 'width:80px'})
+    const friction = createLabeledNumberInput(el, 'panel.friction', {min: '0', max: '1', step: '0.01', value: '0.3', style: 'width:80px'})
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)

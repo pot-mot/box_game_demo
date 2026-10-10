@@ -1,7 +1,8 @@
 import type {PanelContext} from '../../box/base/ui/index.ts'
 import type {ItemEntityContext} from '../types.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
-import {findItemDef} from '../../../inventory/items.ts'
+import {findItemDef, itemDisplayName, itemDisplayDescription} from '../../../inventory/items.ts'
+import {localizeText} from '../../../i18n/dom.ts'
 
 /** 掉落物编辑面板：只读展示 + 删除（掉落内容由拾取 / 世界逻辑驱动） */
 export const createItemPanel = (ctx: Omit<ItemEntityContext, 'panel'>): PanelContext => {
@@ -15,7 +16,7 @@ export const createItemPanel = (ctx: Omit<ItemEntityContext, 'panel'>): PanelCon
     ].join(';')
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px;color:#e9c46a'
-    header.textContent = '掉落物'
+    localizeText(header, 'entity.item_title')
     el.appendChild(header)
     const info = document.createElement('div')
     el.appendChild(info)
@@ -27,7 +28,7 @@ export const createItemPanel = (ctx: Omit<ItemEntityContext, 'panel'>): PanelCon
         const e = id === undefined ? undefined : ctx.getById(id)
         if (e === undefined) return
         const def = findItemDef(e.defId)
-        info.textContent = `${def?.name ?? e.defId} ×${e.count}\n${def?.description ?? ''}`
+        info.textContent = `${def === undefined ? e.defId : itemDisplayName(def)} ×${e.count}\n${def === undefined ? '' : itemDisplayDescription(def)}`
         info.style.whiteSpace = 'pre-line'
     }
 

@@ -19,6 +19,8 @@ import {
     TIMELINE_PX_PER_SEC,
     TIMELINE_LABEL,
 } from './constants.ts'
+import {translate} from '../../i18n/index.ts'
+import {localizeApply} from '../../i18n/dom.ts'
 
 export type {KeyframeSelection} from './timeline_ops.ts'
 
@@ -123,6 +125,14 @@ export const setupTimelinePanel = (
         history,
     })
     const onion = setupOnionSkin(world, store, () => playhead)
+
+    /* 洋葱皮 / IK 为开合切换按钮：登记计算型本地化，语言切换时按当前开关状态重译（不覆盖开合态） */
+    localizeApply(controls.onionBtn, el => {
+        el.textContent = translate(onion.isEnabled() ? 'bone_edit.timeline.onion_on' : 'bone_edit.timeline.onion_off')
+    })
+    localizeApply(controls.ikBtn, el => {
+        el.textContent = translate(ikEnabled ? 'bone_edit.timeline.ik_on' : 'bone_edit.timeline.ik_off')
+    })
 
     /* ── 动画库（下拉 / 导入导出 / undo 恢复）── */
     const library = setupTimelineLibrary({
@@ -409,7 +419,7 @@ export const setupTimelinePanel = (
     })
     controls.newAnimBtn.addEventListener('click', () => {
         history.startEdit()
-        store.createEmpty('动画')
+        store.createEmpty(translate('bone_edit.timeline.default_clip_name'))
         rebuildPlayer()
         history.endEdit()
         refreshControls()
@@ -419,7 +429,7 @@ export const setupTimelinePanel = (
     controls.renameAnimBtn.addEventListener('click', () => {
         const name = store.currentName
         if (name === undefined) return
-        const next = window.prompt('新动画名：', name)
+        const next = window.prompt(translate('bone_edit.timeline.rename_prompt'), name)
         if (next === null || next.trim() === '' || next === name) return
         history.startEdit()
         const renameTo = next.trim()
@@ -453,11 +463,11 @@ export const setupTimelinePanel = (
     controls.pasteBtn.addEventListener('click', pasteClipboard)
     controls.onionBtn.addEventListener('click', () => {
         onion.toggle()
-        controls.onionBtn.textContent = onion.isEnabled() ? '洋葱皮开' : '洋葱皮'
+        controls.onionBtn.textContent = translate(onion.isEnabled() ? 'bone_edit.timeline.onion_on' : 'bone_edit.timeline.onion_off')
     })
     controls.ikBtn.addEventListener('click', () => {
         ikEnabled = !ikEnabled
-        controls.ikBtn.textContent = ikEnabled ? 'IK 开' : 'IK 关'
+        controls.ikBtn.textContent = translate(ikEnabled ? 'bone_edit.timeline.ik_on' : 'bone_edit.timeline.ik_off')
     })
     controls.undoBtn.addEventListener('click', () => history.undo())
     controls.redoBtn.addEventListener('click', () => history.redo())
@@ -538,7 +548,7 @@ export const setupTimelinePanel = (
 
     /* 初始化：默认动画 */
     if (store.current === undefined) {
-        store.createEmpty('动画')
+        store.createEmpty(translate('bone_edit.timeline.default_clip_name'))
     }
     rebuildPlayer()
     refreshControls()

@@ -1,4 +1,5 @@
 import {ATTACK_SOURCE_KINDS, type AttackSourceKind} from '../../character/combat/world_targets.ts'
+import type {StringLocaleKey} from '../../i18n/index.ts'
 
 /** 交互物类型 */
 export const INTERACTABLE_KINDS = [    'save_point',
@@ -14,17 +15,17 @@ export const INTERACTABLE_KINDS = [    'save_point',
 
 export type InteractableKind = typeof INTERACTABLE_KINDS[number]
 
-/** 中文标签（面板 / 列表） */
-export const INTERACTABLE_LABELS: Record<InteractableKind, string> = {
-    save_point: '存档点',
-    teleport: '传送点',
-    switch: '开关',
-    push_door_single: '单推门',
-    push_door_double: '双推门',
-    gate: '升降闸门',
-    chest: '箱子',
-    elevator: '升降梯',
-    breakable: '可破坏道具',
+/** 本地化标签键（面板 / 列表） */
+export const INTERACTABLE_LABELS: Record<InteractableKind, StringLocaleKey> = {
+    save_point: 'interactable.save_point',
+    teleport: 'interactable.teleport',
+    switch: 'interactable.switch',
+    push_door_single: 'interactable.push_door_single',
+    push_door_double: 'interactable.push_door_double',
+    gate: 'interactable.gate',
+    chest: 'interactable.chest',
+    elevator: 'interactable.elevator',
+    breakable: 'interactable.breakable',
 }
 
 export const isInteractableKind = (value: string): value is InteractableKind =>
@@ -34,11 +35,11 @@ export const isInteractableKind = (value: string): value is InteractableKind =>
 export const BREAKABLE_SOURCES = ATTACK_SOURCE_KINDS
 export type BreakableSource = AttackSourceKind
 
-export const BREAKABLE_SOURCE_LABELS: Record<BreakableSource, string> = {
-    melee: '近战',
-    ranged: '远程',
-    explosion: '爆炸',
-    roll: '翻滚',
+export const BREAKABLE_SOURCE_LABELS: Record<BreakableSource, StringLocaleKey> = {
+    melee: 'breakable_source.melee',
+    ranged: 'breakable_source.ranged',
+    explosion: 'breakable_source.explosion',
+    roll: 'breakable_source.roll',
 }
 
 export const isBreakableSource = (value: string): value is BreakableSource =>

@@ -1,6 +1,7 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
 import {HOLD_MODES, type HoldMode} from './hold_mode.ts'
 import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
+import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
 /**
  * 攻击链领域模型（武器模组拥有）：
@@ -17,10 +18,10 @@ import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
 export const ATTACK_KEYS = ['light', 'heavy'] as const
 export type AttackKey = typeof ATTACK_KEYS[number]
 
-/** 攻击键中文名（HUD/面板/展示标签用） */
-export const ATTACK_KEY_LABELS: Record<AttackKey, string> = {
-    light: '轻击',
-    heavy: '重击',
+/** 攻击键本地化名键（HUD/面板/展示标签用） */
+export const ATTACK_KEY_LABELS: Record<AttackKey, StringLocaleKey> = {
+    light: 'attack_key.light',
+    heavy: 'attack_key.heavy',
 }
 
 /**
@@ -285,12 +286,12 @@ export const orderedSegments = (attacks: WeaponAttacks): readonly AttackSegment[
     return out
 }
 
-/** 段序号中文（链内序号 1-based，超出范围回退阿拉伯数字） */
-const STEP_LABELS = ['一', '二', '三', '四', '五', '六'] as const
-
 /** 段的展示名（缺省 轻击/重击 + 序号；条件变体段由武器模组给 label） */
 export const segmentDisplayName = (segment: AttackSegment): string =>
-    segment.label ?? `${ATTACK_KEY_LABELS[segment.key]}${STEP_LABELS[segment.step - 1] ?? segment.step}段`
+    segment.label ?? translate({
+        key: 'character.segment_name',
+        args: [translate(ATTACK_KEY_LABELS[segment.key]), String(segment.step)],
+    })
 
 /** 段总时长（动作 + 恢复） */
 export const segmentTotalDuration = (segment: AttackSegment): number =>

@@ -5,6 +5,8 @@ import type {AnimationStore} from './animation_store.ts'
 import type {BoneEditHistory} from './history.ts'
 import {setupTimelineCanvas, type TimelineCanvasTrack} from './timeline_canvas.ts'
 import type {KeyframeSelection, TimelineRuntime} from './timeline_ops.ts'
+import type {StringLocaleKey} from '../../i18n/index.ts'
+import {localizeText} from '../../i18n/dom.ts'
 import {TIMELINE_MAX_PX_PER_SEC, TIMELINE_MIN_PX_PER_SEC, TRACK_LIST_WIDTH, TRACK_ROW_HEIGHT} from './constants.ts'
 
 /** 轨道视图依赖（DOM 容器 + 时间轴状态读写 + 运行期回调槽） */
@@ -109,17 +111,17 @@ export const setupTrackView = (host: TrackViewHost): TrackView => {
             if (track.kind !== 'event' && clip !== undefined) {
                 const interp = document.createElement('select')
                 interp.style.cssText = 'width:84px;font-size:10px'
-                const options: readonly (readonly [string, string])[] = [
-                    ['linear_none', '线性'],
-                    ['bezier_none', '线性(贝)'],
-                    ['bezier_ease_in', '先慢后快'],
-                    ['bezier_ease_out', '先快后慢'],
-                    ['bezier_strike_peak', '末端加速'],
+                const options: readonly (readonly [string, StringLocaleKey])[] = [
+                    ['linear_none', 'bone_edit.interp.linear'],
+                    ['bezier_none', 'bone_edit.interp.linear_bezier'],
+                    ['bezier_ease_in', 'bone_edit.interp.ease_in'],
+                    ['bezier_ease_out', 'bone_edit.interp.ease_out'],
+                    ['bezier_strike_peak', 'bone_edit.interp.strike_peak'],
                 ]
-                for (const [value, labelText] of options) {
+                for (const [value, labelKey] of options) {
                     const opt = document.createElement('option')
                     opt.value = value
-                    opt.textContent = labelText
+                    localizeText(opt, labelKey)
                     interp.appendChild(opt)
                 }
                 const jointTrack = track.kind === 'joint' ? clip.jointTracks.find(t => t.targetId === track.targetId) : undefined

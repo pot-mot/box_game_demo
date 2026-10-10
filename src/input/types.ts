@@ -1,4 +1,5 @@
 import type {DeepReadonly} from '../types/readonly.ts'
+import type {StringLocaleKey} from '../i18n/index.ts'
 
 /** 所有可重绑的输入动作 */
 export const INPUT_ACTIONS = [
@@ -39,48 +40,48 @@ export type KeyCombo = readonly string[]
 /** 动作到键组合列表的映射 */
 export type BindingsMap = Record<InputAction, KeyCombo[]>
 
-/** 每个动作的中文标签 */
-export const ACTION_LABELS: Record<InputAction, string> = {
-    move_forward: '向前移动',
-    move_backward: '向后移动',
-    move_left: '向左移动',
-    move_right: '向右移动',
-    move_up: '上升',
-    move_down: '下降',
-    jump: '跳跃',
-    sprint: '翻滚',
-    cycle_hold_mode: '切换持握模式',
-    cycle_spawn_up: '上一个生成类型',
-    cycle_spawn_down: '下一个生成类型',
-    delete_entity: '删除实体',
-    close_panel: '关闭面板',
-    interact: '交互',
-    open_inventory: '打开背包',
-    open_equipment: '打开装备',
-    open_map: '打开地图',
-    save_world: '导出存档',
-    load_world: '导入存档',
-    mouse_orbit: '旋转视角',
-    mouse_pan: '平移视角',
-    spawn_entity: '生成物体',
-    lock_target: '锁定目标',
+/** 每个动作的本地化标签键 */
+export const ACTION_LABELS: Record<InputAction, StringLocaleKey> = {
+    move_forward: 'input.action.move_forward',
+    move_backward: 'input.action.move_backward',
+    move_left: 'input.action.move_left',
+    move_right: 'input.action.move_right',
+    move_up: 'input.action.move_up',
+    move_down: 'input.action.move_down',
+    jump: 'input.action.jump',
+    sprint: 'input.action.sprint',
+    cycle_hold_mode: 'input.action.cycle_hold_mode',
+    cycle_spawn_up: 'input.action.cycle_spawn_up',
+    cycle_spawn_down: 'input.action.cycle_spawn_down',
+    delete_entity: 'input.action.delete_entity',
+    close_panel: 'input.action.close_panel',
+    interact: 'input.action.interact',
+    open_inventory: 'input.action.open_inventory',
+    open_equipment: 'input.action.open_equipment',
+    open_map: 'input.action.open_map',
+    save_world: 'input.action.save_world',
+    load_world: 'input.action.load_world',
+    mouse_orbit: 'input.action.mouse_orbit',
+    mouse_pan: 'input.action.mouse_pan',
+    spawn_entity: 'input.action.spawn_entity',
+    lock_target: 'input.action.lock_target',
 }
 
 /** 动作分组 */
-export const ACTION_GROUPS: readonly { readonly name: string; readonly actions: readonly InputAction[] }[] = [
-    {name: '移动', actions: ['move_forward', 'move_backward', 'move_left', 'move_right', 'move_up', 'move_down']},
-    {name: '角色', actions: ['jump', 'sprint', 'cycle_hold_mode', 'interact']},
-    {name: '编辑工具', actions: ['cycle_spawn_up', 'cycle_spawn_down']},
-    {name: 'UI', actions: ['delete_entity', 'close_panel', 'open_inventory', 'open_equipment', 'open_map']},
-    {name: '系统', actions: ['save_world', 'load_world']},
+export const ACTION_GROUPS: readonly { readonly name: StringLocaleKey; readonly actions: readonly InputAction[] }[] = [
+    {name: 'input.group.move', actions: ['move_forward', 'move_backward', 'move_left', 'move_right', 'move_up', 'move_down']},
+    {name: 'input.group.character', actions: ['jump', 'sprint', 'cycle_hold_mode', 'interact']},
+    {name: 'input.group.edit_tools', actions: ['cycle_spawn_up', 'cycle_spawn_down']},
+    {name: 'input.group.ui', actions: ['delete_entity', 'close_panel', 'open_inventory', 'open_equipment', 'open_map']},
+    {name: 'input.group.system', actions: ['save_world', 'load_world']},
 ]
 
 /** 不可修改的鼠标操作展示项 */
 export interface FixedMouseOperation {
     /** 键位列显示的固定文本（如“滚轮”“拖拽关节”） */
-    readonly keys: string
+    readonly keys: StringLocaleKey
     /** 操作名称 */
-    readonly label: string
+    readonly label: StringLocaleKey
 }
 
 /** 固定鼠标操作表覆盖的模式（与 modes 的 GAME_MODE_VALUES 保持一致，新增模式时此处会编译报错） */
@@ -101,24 +102,24 @@ export const MOUSE_ACTIONS_BY_MODE: Record<MouseOperationsMode, readonly InputAc
 /** 各模式下不可修改的鼠标操作（操作说明面板移除后，这部分信息在操作设置面板中保留） */
 export const FIXED_MOUSE_OPERATIONS: Record<MouseOperationsMode, readonly FixedMouseOperation[]> = {
     edit: [
-        {keys: '左键点击', label: '选中物体'},
-        {keys: '滚轮', label: '雕刻地形'},
+        {keys: 'input.fixed.key.click_left', label: 'input.fixed.label.edit_select'},
+        {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.edit_sculpt'},
     ],
     play: [
-        {keys: '左键松开', label: '轻攻击'},
-        {keys: '右键松开', label: '重攻击'},
-        {keys: '滚轮', label: '视角缩放'},
+        {keys: 'input.fixed.key.release_left', label: 'input.fixed.label.play_light'},
+        {keys: 'input.fixed.key.release_right', label: 'input.fixed.label.play_heavy'},
+        {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.zoom_camera'},
     ],
     showcase: [
-        {keys: '左键点击', label: '聚焦角色'},
-        {keys: '滚轮', label: '视角缩放'},
+        {keys: 'input.fixed.key.click_left', label: 'input.fixed.label.showcase_focus'},
+        {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.zoom_camera'},
     ],
     bone_edit: [
-        {keys: '左键点击', label: '选中关节 / 骨骼'},
-        {keys: '拖拽关节', label: '移动（IK 模式牵引）'},
-        {keys: '拖拽骨骼段', label: '旋转 tail 子树'},
-        {keys: '双击时间轴', label: '添加关键帧'},
-        {keys: 'Ctrl + 滚轮', label: '时间轴缩放'},
+        {keys: 'input.fixed.key.click_left', label: 'input.fixed.label.bone_select'},
+        {keys: 'input.fixed.key.drag_joint', label: 'input.fixed.label.bone_move_ik'},
+        {keys: 'input.fixed.key.drag_bone', label: 'input.fixed.label.bone_rotate_tail'},
+        {keys: 'input.fixed.key.dbl_timeline', label: 'input.fixed.label.bone_add_key'},
+        {keys: 'input.fixed.key.ctrl_wheel', label: 'input.fixed.label.bone_zoom_timeline'},
     ],
 }
 

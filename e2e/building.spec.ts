@@ -8,7 +8,7 @@ const enterEditAndSpawnBuilding = async (page: Page): Promise<{x: number; y: num
     await page.waitForSelector('#spawn-mode-panel', {timeout: 5000})
 
     await page.locator('#spawn-mode-panel > div').first().click()
-    await page.locator('#spawn-mode-panel').getByText('Building', {exact: true}).click()
+    await page.locator('#spawn-mode-panel').getByText('建筑', {exact: true}).click()
 
     const canvas = page.locator('canvas')
     const box = await canvas.boundingBox()

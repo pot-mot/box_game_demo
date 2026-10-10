@@ -20,6 +20,7 @@ import {
     type InteractableSaveEntry,
 } from '../types.ts'
 import {INTERACTABLE_LABELS} from '../kinds.ts'
+import {translate} from '../../../i18n/index.ts'
 import {BEHAVIORS, rollBreakDamage} from '../behaviors.ts'
 import {CHEST_GRID_HEIGHT, CHEST_GRID_WIDTH, MIN_COLLIDER_THICKNESS} from '../constants.ts'
 import {createInteractableMesh} from '../mesh.ts'
@@ -63,6 +64,8 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
                 badgeLabel: BADGE_LABEL,
                 badgeColor: BADGE_COLOR,
                 rowText: e.rowText,
+                /* 行文本含本地化类型名：语言切换后由 element_list 按需重算 */
+                rowTextOf: () => `#${e.id} ${translate(INTERACTABLE_LABELS[e.config.kind])}`,
             })
         }
     }
@@ -128,7 +131,7 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
             meshDispose: created.dispose,
             rowText: '',
         }
-        e.rowText = `#${id} ${INTERACTABLE_LABELS[config.kind]}`
+        e.rowText = `#${id} ${translate(INTERACTABLE_LABELS[config.kind])}`
         /* 箱子默认放入少量物资（载入存档会以显式 container 覆盖） */
         if (config.kind === 'chest') {
             addItem(e.container, 'consumable_flask', 1)

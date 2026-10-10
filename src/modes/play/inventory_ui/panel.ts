@@ -1,8 +1,10 @@
 import type {EquipSlot, InventoryState} from '../../../inventory/types.ts'
 import {EQUIP_SLOTS, EQUIP_SLOT_LABELS, INVENTORY_CELL_PX} from '../../../inventory/types.ts'
-import {findItemDef} from '../../../inventory/items.ts'
+import {findItemDef, itemDisplayName, itemDisplayDescription} from '../../../inventory/items.ts'
 import {findStack} from '../../../inventory/inventory.ts'
 import type {Placement} from '../../../inventory/types.ts'
+import {translate} from '../../../i18n/index.ts'
+import {localizeText} from '../../../i18n/dom.ts'
 
 export interface InventoryPanelCallbacks {
     getInventory: () => InventoryState
@@ -40,7 +42,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
 
     const title = document.createElement('div')
     title.style.cssText = 'font-size:15px;font-weight:700;margin-bottom:10px;color:#e9c46a'
-    title.textContent = '背包 / 装备'
+    localizeText(title, 'play.inventory.title')
     root.appendChild(title)
 
     const body = document.createElement('div')
@@ -94,9 +96,9 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
             el.dataset.instanceId = stack.instanceId
             el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${def.shape[0].length * INVENTORY_CELL_PX}px;height:${def.shape.length * INVENTORY_CELL_PX}px;cursor:grab`
             if (selectedId === stack.instanceId) el.style.outline = '2px solid #e9c46a'
-            el.title = `${def.name} ×${stack.count}`
+            el.title = `${itemDisplayName(def)} ×${stack.count}`
             const label = document.createElement('div')
-            label.textContent = def.name
+            label.textContent = itemDisplayName(def)
             label.style.cssText = 'position:absolute;left:2px;top:2px;font-size:10px;color:#fff;text-shadow:0 1px 2px #000;pointer-events:none'
             el.appendChild(label)
             el.addEventListener('pointerdown', (ev) => {
@@ -134,8 +136,10 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
                 'background:rgba(0,0,0,0.6)', 'font-size:11px', 'text-align:center', 'overflow:hidden',
                 'text-overflow:ellipsis', 'white-space:nowrap',
             ].join(';')
-            el.textContent = `${EQUIP_SLOT_LABELS[slot]}: ${def?.name ?? '—'}`
-            el.title = `${EQUIP_SLOT_LABELS[slot]}: ${def?.name ?? '—'}`
+            const slotLabel = translate(EQUIP_SLOT_LABELS[slot])
+            const itemLabel = def === undefined ? '—' : itemDisplayName(def)
+            el.textContent = `${slotLabel}: ${itemLabel}`
+            el.title = `${slotLabel}: ${itemLabel}`
             el.dataset.slot = slot
             el.addEventListener('click', () => {
                 if (id !== undefined && cb.onUnequip(slot)) {
@@ -162,22 +166,22 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         const stack = selectedId !== undefined ? findStack(inv, selectedId) : undefined
         const def = stack !== undefined ? findItemDef(stack.defId) : undefined
         if (stack === undefined || def === undefined) {
-            detail.textContent = '点击物品查看详情'
+            detail.textContent = translate('play.inventory.detail_hint')
             return
         }
         const name = document.createElement('div')
         name.style.cssText = 'font-weight:700'
-        name.textContent = `${def.name} ×${stack.count}`
+        name.textContent = `${itemDisplayName(def)} ×${stack.count}`
         detail.appendChild(name)
         const desc = document.createElement('div')
         desc.style.cssText = 'color:#aaa'
-        desc.textContent = def.description
+        desc.textContent = itemDisplayDescription(def)
         detail.appendChild(desc)
         const buttons = document.createElement('div')
         buttons.style.cssText = 'display:flex;gap:8px;margin-top:6px'
         const equipBtn = document.createElement('button')
         const equipped = Object.values(inv.equipment).includes(stack.instanceId)
-        equipBtn.textContent = equipped ? '已装备' : '装备'
+        equipBtn.textContent = equipped ? translate('play.inventory.equipped') : translate('play.inventory.equip')
         equipBtn.disabled = equipped
         equipBtn.onclick = () => {
             const slot = def.equipSlot === 'head' || def.equipSlot === 'chest' || def.equipSlot === 'arms' || def.equipSlot === 'legs'
@@ -189,7 +193,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
             }
         }
         const dropBtn = document.createElement('button')
-        dropBtn.textContent = '丢弃'
+        dropBtn.textContent = translate('play.inventory.drop')
         dropBtn.onclick = () => {
             cb.onDrop(stack.instanceId)
             selectedId = undefined

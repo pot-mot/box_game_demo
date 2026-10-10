@@ -4,8 +4,10 @@ import type {TerrainContext} from '../types'
 import {createLabeledNumberInput} from '../../../../ui/components/number_input.ts'
 import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'
+import {localizeText} from '../../../../i18n/dom.ts'
+import type {StringLocaleKey} from '../../../../i18n/index.ts'
 
-export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generatorOptions: {id: string; label: string}[]): PanelContext => {
+export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generatorOptions: {id: string; labelKey: StringLocaleKey}[]): PanelContext => {
     const el = document.createElement('div')
     el.id = 'terrain-panel'
     el.style.cssText = [
@@ -18,36 +20,36 @@ export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generator
 
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px;color:#684'
-    header.textContent = 'Terrain Control'
+    localizeText(header, 'entity.terrain_control')
     el.appendChild(header)
 
-    el.appendChild(createSection('Pos'))
-    const posX = createLabeledNumberInput(el, 'X', {step: '0.01'})
-    const posZ = createLabeledNumberInput(el, 'Z', {step: '0.01'})
+    el.appendChild(createSection('panel.pos'))
+    const posX = createLabeledNumberInput(el, 'panel.x', {step: '0.01'})
+    const posZ = createLabeledNumberInput(el, 'panel.z', {step: '0.01'})
 
-    el.appendChild(createSection('Rot (°)'))
-    const rotX = createLabeledNumberInput(el, 'X', {min: '-360', max: '360', step: '0.1'})
-    const rotY = createLabeledNumberInput(el, 'Y', {min: '-360', max: '360', step: '0.1'})
-    const rotZ = createLabeledNumberInput(el, 'Z', {min: '-360', max: '360', step: '0.1'})
+    el.appendChild(createSection('panel.rot'))
+    const rotX = createLabeledNumberInput(el, 'panel.x', {min: '-360', max: '360', step: '0.1'})
+    const rotY = createLabeledNumberInput(el, 'panel.y', {min: '-360', max: '360', step: '0.1'})
+    const rotZ = createLabeledNumberInput(el, 'panel.z', {min: '-360', max: '360', step: '0.1'})
 
-    el.appendChild(createSection('Generator'))
+    el.appendChild(createSection('panel.generator'))
     const genSelect = document.createElement('select')
     genSelect.style.cssText = 'width:100%;padding:4px;margin:4px 0;font:inherit'
     for (const g of generatorOptions) {
         const opt = document.createElement('option')
         opt.value = g.id
-        opt.textContent = g.label
+        localizeText(opt, g.labelKey)
         genSelect.appendChild(opt)
     }
     el.appendChild(genSelect)
 
-    el.appendChild(createSection('Height'))
-    const minH = createLabeledNumberInput(el, 'Min', {step: '0.1'})
-    const maxH = createLabeledNumberInput(el, 'Max', {step: '0.1'})
+    el.appendChild(createSection('panel.height'))
+    const minH = createLabeledNumberInput(el, 'panel.min', {step: '0.1'})
+    const maxH = createLabeledNumberInput(el, 'panel.max', {step: '0.1'})
 
-    el.appendChild(createSection('Size'))
-    const gridSize = createLabeledNumberInput(el, 'Grid', {min: '4', max: '64', step: '1'})
-    const cellSize = createLabeledNumberInput(el, 'Cell', {min: '0.1', step: '0.1'})
+    el.appendChild(createSection('panel.size'))
+    const gridSize = createLabeledNumberInput(el, 'panel.grid', {min: '4', max: '64', step: '1'})
+    const cellSize = createLabeledNumberInput(el, 'panel.cell', {min: '0.1', step: '0.1'})
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)

@@ -104,7 +104,7 @@ describe('程序化武器模型（weapon_mesh）', () => {
         }
     })
 
-    it('双斧刃几何关于本地矢状面（X=0）对称：左手武器即右手的镜像', () => {
+    it('战斧刃几何关于本地矢状面（X=0）对称：左手武器即右手的镜像', () => {
         const result = createWeaponMesh({id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322})
         result.group.rotation.set(0, 0, 0)
         result.group.position.set(0, 0, 0)

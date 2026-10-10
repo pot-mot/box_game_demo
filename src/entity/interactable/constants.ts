@@ -28,7 +28,10 @@ export const INTERACTABLE_DEFAULT_MATERIAL: Record<InteractableKind, SurfaceMate
     breakable: 'brick',
 }
 
-/** 默认配置工厂（编辑期生成 / 存档回退用） */
+/** 默认配置工厂（编辑期生成 / 存档回退用）。
+ *  注意：存档点 / 传送点的 `name` 是**稳定、非本地化的数据标识**——
+ *  它既是玩家可改的显示名，也是 `modeInfo.play.teleports` 中传送点身份的键，
+ *  故不随语言切换（避免存档身份随 locale 漂移）。*/
 export const defaultInteractableConfig = (kind: InteractableKind): InteractableConfig => {
     const base = {material: INTERACTABLE_DEFAULT_MATERIAL[kind], size: [...INTERACTABLE_DEFAULT_SIZE[kind]] as [number, number, number], channel: ''}
     switch (kind) {

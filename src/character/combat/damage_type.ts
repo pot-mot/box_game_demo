@@ -3,13 +3,15 @@
  * 武器固有属性（`MeleeWeaponConfig.damageType` / `RangedWeaponConfig.damageType`），
  * 随伤害事件（`DamageEvent.damageType`）流经整条伤害链路，决定按哪一类防御结算固定减伤。
  */
+import type {StringLocaleKey} from '../../i18n/index.ts'
+
 export const DAMAGE_TYPES = ['physical', 'magic'] as const
 export type DamageType = typeof DAMAGE_TYPES[number]
 
-/** 攻击类别中文名（面板 / HUD / 文档） */
-export const DAMAGE_TYPE_LABELS: Record<DamageType, string> = {
-    physical: '物理',
-    magic: '魔法',
+/** 攻击类别本地化名键（面板 / HUD / 文档） */
+export const DAMAGE_TYPE_LABELS: Record<DamageType, StringLocaleKey> = {
+    physical: 'damage.physical',
+    magic: 'damage.magic',
 }
 
 /** 逐攻击类别的数值档案（防御 / 攻击加成等共用） */

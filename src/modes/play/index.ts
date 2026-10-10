@@ -13,6 +13,8 @@ import {createPlayerHUD} from './player_hud.ts'
 import {createDeathScreen} from './death_screen.ts'
 import {orderedSegments, segmentDisplayName} from '../../character/weapon/attack_chain.ts'
 import {HOLD_MODE_LABELS} from '../../character/weapon/hold_mode.ts'
+import {weaponDisplayName} from '../../character/weapon/catalog.ts'
+import {translate} from '../../i18n/index.ts'
 import {segmentCooldownRemaining} from '../../character/combat/attack_runtime.ts'
 import type {InteractionProvider} from '../../character/interaction/types.ts'
 import {setupPlayInteraction} from './interaction/index.ts'
@@ -128,7 +130,7 @@ export const setupPlayMode = (
             const rollCfg = roll.config
             const rolling = player.stateMachine.currentState === 'rolling'
             skillTimers.push({
-                label: '翻滚',
+                label: translate('play.hotbar.roll'),
                 action: rolling
                     ? {fillRatio: Math.min(1, player.stateMachine.stateTime / rollCfg.duration), fillColor: '#ffaa00', text: `${player.stateMachine.stateTime.toFixed(2)}s`}
                     : emptyCell(`${rollCfg.duration.toFixed(2)}s`),
@@ -166,8 +168,8 @@ export const setupPlayMode = (
                 stateTime: player.stateMachine.stateTime,
                 timers,
                 skillTimers,
-                weaponLabel: player.combat.weapon.name,
-                holdModeLabel: HOLD_MODE_LABELS[player.holdMode],
+                weaponLabel: weaponDisplayName(player.combat.weapon.id, player.combat.weapon.name),
+                holdModeLabel: translate(HOLD_MODE_LABELS[player.holdMode]),
                 charge: player.combat.attackCharge,
                 charging: player.combat.attackHolding || player.combat.attackCharge > 0,
             })

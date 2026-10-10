@@ -1,12 +1,15 @@
 import type {GameMode} from './constants.ts'
 import type {SaveData} from '../save_load/types.ts'
 import {cacheSaveData, loadCachedSaveData, clearCachedSaveData} from '../save_load/cache.ts'
+import {getLocale, getLocales, setLocale, translate, type LocalKeyParam} from '../i18n/index.ts'
+import {LOCALE_DISPLAY_NAMES, isLocale} from '../i18n/constants.ts'
+import {localizeText, localizeApply} from '../i18n/dom.ts'
 
 export interface StartupHandlers {
     onStart: (mode: GameMode, saveData?: SaveData) => void
 }
 
-/** 创建启动界面：标题 + 三模式按钮 + 导入存档 */
+/** 创建启动界面：标题 + 模式按钮 + 导入存档 + 语言切换 */
 export const setupStartupScreen = (handlers: StartupHandlers): void => {
     const overlay = document.createElement('div')
     overlay.id = 'startup-overlay'
@@ -19,22 +22,22 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     const title = document.createElement('h1')
     title.style.cssText = 'font:600 56px/1.2 system-ui,sans-serif;color:#fff;letter-spacing:4px'
-    title.textContent = 'Box Demo'
+    localizeText(title, 'startup.title')
     box.appendChild(title)
 
     const subtitle = document.createElement('p')
     subtitle.style.cssText = 'font:18px/1.6 system-ui,sans-serif;color:#888;margin-top:8px;margin-bottom:32px'
-    subtitle.textContent = '3D 物理沙盒'
+    localizeText(subtitle, 'startup.subtitle')
     box.appendChild(subtitle)
 
     const btnRow = document.createElement('div')
     btnRow.style.cssText = 'display:flex;gap:16px;justify-content:center;margin-bottom:24px'
     box.appendChild(btnRow)
 
-    const makeBtn = (text: string, extraCss?: string): HTMLButtonElement => {
+    const makeBtn = (text: LocalKeyParam, extraCss?: string): HTMLButtonElement => {
         const b = document.createElement('button')
         b.style.cssText = `padding:14px 48px;font:500 18px system-ui,sans-serif;border:1px solid #555;cursor:pointer;background:#222;color:#fff${extraCss ?? ''}`
-        b.textContent = text
+        localizeText(b, text)
         b.addEventListener('mouseenter', () => {
             b.style.background = extraCss ? '#2a4a7c' : '#333'
         })
@@ -44,31 +47,69 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
         return b
     }
 
-    const editBtn = makeBtn('编辑模式')
+    const editBtn = makeBtn('startup.mode.edit')
     btnRow.appendChild(editBtn)
 
-    const playBtn = makeBtn('游玩模式', ';background:#1a3a5c;border-color:#2a6a9c')
+    const playBtn = makeBtn('startup.mode.play', ';background:#1a3a5c;border-color:#2a6a9c')
     btnRow.appendChild(playBtn)
 
-    const showcaseBtn = makeBtn('展示模式')
+    const showcaseBtn = makeBtn('startup.mode.showcase')
     btnRow.appendChild(showcaseBtn)
 
-    const boneEditBtn = makeBtn('骨骼动画', ';background:#1a3a2c;border-color:#2a6a4c')
+    const boneEditBtn = makeBtn('startup.mode.bone_edit', ';background:#1a3a2c;border-color:#2a6a4c')
     btnRow.appendChild(boneEditBtn)
 
-    // 导入存档
+    // 语言切换
+    const langRow = document.createElement('div')
+    langRow.style.cssText = 'font:14px system-ui,sans-serif;color:#888;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px'
+    box.appendChild(langRow)
+
+    const langLabel = document.createElement('span')
+    localizeText(langLabel, 'settings.language')
+    langRow.appendChild(langLabel)
+
+    const langSelect = document.createElement('select')
+    langSelect.id = 'startup-language'
+    langSelect.style.cssText = 'font:inherit;background:#222;color:#fff;border:1px solid #555;padding:2px 6px'
+    for (const locale of getLocales()) {
+        const opt = document.createElement('option')
+        opt.value = locale
+        opt.textContent = LOCALE_DISPLAY_NAMES[locale]
+        langSelect.appendChild(opt)
+    }
+    langSelect.value = getLocale()
+    langSelect.addEventListener('change', () => {
+        if (isLocale(langSelect.value)) setLocale(langSelect.value)
+    })
+    langRow.appendChild(langSelect)
+
+    // 导入存档（自绘文件选择：原生 input 的「选择文件 / 未选择文件」由浏览器提供，无法本地化）
     const importRow = document.createElement('div')
     importRow.style.cssText = 'font:14px system-ui,sans-serif;color:#888;display:flex;align-items:center;justify-content:center;gap:8px'
     box.appendChild(importRow)
 
     const importLabel = document.createElement('span')
-    importLabel.textContent = '导入存档：'
+    localizeText(importLabel, 'startup.import_label')
     importRow.appendChild(importLabel)
 
     const fileInput = document.createElement('input')
     fileInput.type = 'file'
     fileInput.accept = '.json'
-    fileInput.style.cssText = 'color:#fff;font:inherit'
+    fileInput.style.display = 'none'
+
+    const chooseFileBtn = document.createElement('button')
+    chooseFileBtn.type = 'button'
+    chooseFileBtn.style.cssText = 'font:inherit;background:#222;color:#fff;border:1px solid #555;padding:2px 10px;cursor:pointer'
+    localizeText(chooseFileBtn, 'startup.choose_file')
+    chooseFileBtn.addEventListener('click', () => fileInput.click())
+    importRow.appendChild(chooseFileBtn)
+
+    let chosenFileName: string | undefined
+    const chosenNameEl = document.createElement('span')
+    localizeApply(chosenNameEl, el => {
+        el.textContent = chosenFileName ?? translate('startup.no_file')
+    })
+    importRow.appendChild(chosenNameEl)
     importRow.appendChild(fileInput)
 
     // ── 缓存存档指示 ──
@@ -77,17 +118,17 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
     box.appendChild(cacheRow)
 
     const cacheLabel = document.createElement('span')
+    localizeText(cacheLabel, 'startup.has_cache')
     cacheRow.appendChild(cacheLabel)
 
     const clearCacheBtn = document.createElement('a')
     clearCacheBtn.style.cssText = 'color:#f88;cursor:pointer;margin-left:12px;text-decoration:underline'
-    clearCacheBtn.textContent = '清除'
+    localizeText(clearCacheBtn, 'startup.clear')
     cacheRow.appendChild(clearCacheBtn)
 
     const showCache = (): void => {
         const cached = loadCachedSaveData()
         if (cached) {
-            cacheLabel.textContent = '存在上次的存档'
             cacheRow.style.display = ''
             cachedData = cached
         } else {
@@ -109,6 +150,8 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
     fileInput.addEventListener('change', () => {
         const file = fileInput.files?.[0]
         if (!file) return
+        chosenFileName = file.name
+        chosenNameEl.textContent = file.name
         const reader = new FileReader()
         reader.onload = () => {
             try {
@@ -120,15 +163,15 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
                         importedData = validated
                         cacheSaveData(validated)
                         cacheRow.style.display = 'none'
-                        importLabel.textContent = `已导入：${file.name}`
+                        importLabel.textContent = translate({key: 'startup.imported', args: [file.name]})
                         importLabel.style.color = '#8f8'
                     } catch {
-                        importLabel.textContent = '存档格式无效！'
+                        importLabel.textContent = translate('startup.invalid_save')
                         importLabel.style.color = '#f88'
                     }
                 })
             } catch {
-                importLabel.textContent = '文件解析失败！'
+                importLabel.textContent = translate('startup.parse_failed')
                 importLabel.style.color = '#f88'
             }
         }

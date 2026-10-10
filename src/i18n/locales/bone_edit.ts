@@ -1,0 +1,228 @@
+/**
+ * 骨骼动画编辑器文案域（时间轴控制条 / 轨道列表 / 内置动作库 / 武器控制 / 导入导出）。
+ * 由 `src/i18n/index.ts` 聚合进 `MainLocale`；中文表 `boneEditZh`、英文表 `boneEditEn` 必须结构一致。
+ */
+export type BoneEditLocale = {
+    /* ── 时间轴控制条 ── */
+    'bone_edit.timeline.drag_height': string
+    'bone_edit.timeline.play_pause': string
+    'bone_edit.timeline.stop': string
+    'bone_edit.timeline.loop': string
+    'bone_edit.timeline.anim_list_title': string
+    'bone_edit.timeline.new_anim': string
+    'bone_edit.timeline.del_anim': string
+    'bone_edit.timeline.rename_anim': string
+    'bone_edit.timeline.add_key': string
+    'bone_edit.timeline.add_key_title': string
+    'bone_edit.timeline.add_event': string
+    'bone_edit.timeline.add_event_title': string
+    'bone_edit.timeline.del_key': string
+    'bone_edit.timeline.del_key_title': string
+    'bone_edit.timeline.copy': string
+    'bone_edit.timeline.paste': string
+    'bone_edit.timeline.onion_off': string
+    'bone_edit.timeline.onion_on': string
+    'bone_edit.timeline.ik_off': string
+    'bone_edit.timeline.ik_on': string
+    'bone_edit.timeline.ik_title': string
+    'bone_edit.timeline.undo': string
+    'bone_edit.timeline.redo': string
+    'bone_edit.timeline.export': string
+    'bone_edit.timeline.import': string
+    'bone_edit.timeline.duration': string
+    'bone_edit.timeline.speed': string
+    'bone_edit.timeline.skeleton': string
+    'bone_edit.timeline.rename_prompt': string
+    'bone_edit.timeline.default_clip_name': string
+
+    /* ── 轨道插值方式 ── */
+    'bone_edit.interp.linear': string
+    'bone_edit.interp.linear_bezier': string
+    'bone_edit.interp.ease_in': string
+    'bone_edit.interp.ease_out': string
+    'bone_edit.interp.strike_peak': string
+
+    /* ── 武器控制 ── */
+    'bone_edit.weapon.select_title': string
+    'bone_edit.weapon.auto': string
+    'bone_edit.weapon.none': string
+    'bone_edit.weapon.group_melee': string
+    'bone_edit.weapon.group_ranged': string
+    'bone_edit.grip.on': string
+    'bone_edit.grip.off': string
+    'bone_edit.grip.on_title': string
+    'bone_edit.grip.off_title': string
+
+    /* ── 动画库 / 导入导出 ── */
+    'bone_edit.anim.edited_group': string
+    'bone_edit.anim.builtin_suffix': string
+    'bone_edit.library.import_skeleton': (n: number) => string
+    'bone_edit.library.invalid_asset': string
+
+    /* ── 内置动作分组 ── */
+    'bone_edit.group.base': string
+    'bone_edit.group.melee': string
+    'bone_edit.group.ranged': string
+
+    /* ── 内置动作：基础状态 ── */
+    'bone_edit.state.idle': string
+    'bone_edit.state.walking': string
+    'bone_edit.state.jumping': string
+    'bone_edit.state.falling': string
+    'bone_edit.state.dying': string
+    'bone_edit.state.rolling': string
+    'bone_edit.state.flinching': string
+    'bone_edit.state.interacting': string
+    'bone_edit.state.variant_bare': string
+    'bone_edit.state.variant_held': string
+}
+
+export const boneEditZh: BoneEditLocale = {
+    /* ── 时间轴控制条 ── */
+    'bone_edit.timeline.drag_height': '拖拽调节高度',
+    'bone_edit.timeline.play_pause': '播放/暂停',
+    'bone_edit.timeline.stop': '停止',
+    'bone_edit.timeline.loop': '循环 ',
+    'bone_edit.timeline.anim_list_title': '动画列表：编辑动画 + 内置动作（攻击/行走/跳跃等，选中载入可编辑副本）',
+    'bone_edit.timeline.new_anim': '+动画',
+    'bone_edit.timeline.del_anim': '−动画',
+    'bone_edit.timeline.rename_anim': '改名',
+    'bone_edit.timeline.add_key': '+关键帧',
+    'bone_edit.timeline.add_key_title': '把当前姿态记录到播放头时间（选中目标或全部）',
+    'bone_edit.timeline.add_event': '+事件',
+    'bone_edit.timeline.add_event_title': '在播放头时间插入事件（默认 hitbox_on）',
+    'bone_edit.timeline.del_key': '−关键帧',
+    'bone_edit.timeline.del_key_title': '删除选中关键帧',
+    'bone_edit.timeline.copy': '复制',
+    'bone_edit.timeline.paste': '粘贴',
+    'bone_edit.timeline.onion_off': '洋葱皮',
+    'bone_edit.timeline.onion_on': '洋葱皮开',
+    'bone_edit.timeline.ik_off': 'IK 关',
+    'bone_edit.timeline.ik_on': 'IK 开',
+    'bone_edit.timeline.ik_title': 'IK 牵引模式切换',
+    'bone_edit.timeline.undo': '撤销',
+    'bone_edit.timeline.redo': '重做',
+    'bone_edit.timeline.export': '导出',
+    'bone_edit.timeline.import': '导入',
+    'bone_edit.timeline.duration': '时长',
+    'bone_edit.timeline.speed': '速度',
+    'bone_edit.timeline.skeleton': '骨架',
+    'bone_edit.timeline.rename_prompt': '新动画名：',
+    'bone_edit.timeline.default_clip_name': '动画',
+
+    /* ── 轨道插值方式 ── */
+    'bone_edit.interp.linear': '线性',
+    'bone_edit.interp.linear_bezier': '线性(贝)',
+    'bone_edit.interp.ease_in': '先慢后快',
+    'bone_edit.interp.ease_out': '先快后慢',
+    'bone_edit.interp.strike_peak': '末端加速',
+
+    /* ── 武器控制 ── */
+    'bone_edit.weapon.select_title': '编辑器武器（自动 = 跟随当前动画所属武器）',
+    'bone_edit.weapon.auto': '武器：自动',
+    'bone_edit.weapon.none': '武器：无',
+    'bone_edit.weapon.group_melee': '近战武器',
+    'bone_edit.weapon.group_ranged': '远程武器',
+    'bone_edit.grip.on': '左手贴合：开',
+    'bone_edit.grip.off': '左手贴合：关',
+    'bone_edit.grip.on_title': '播放预览时把左手链求解到武器副握点（关闭后两只手互不牵扯）',
+    'bone_edit.grip.off_title': '左手贴合已关闭：编辑与预览时两只手完全独立',
+
+    /* ── 动画库 / 导入导出 ── */
+    'bone_edit.anim.edited_group': '编辑动画',
+    'bone_edit.anim.builtin_suffix': '（选中载入副本）',
+    'bone_edit.library.import_skeleton': (n) => `导入骨架${n}`,
+    'bone_edit.library.invalid_asset': '资产文件格式无效！',
+
+    /* ── 内置动作分组 ── */
+    'bone_edit.group.base': '基础状态',
+    'bone_edit.group.melee': '近战攻击',
+    'bone_edit.group.ranged': '远程攻击',
+
+    /* ── 内置动作：基础状态 ── */
+    'bone_edit.state.idle': '待机',
+    'bone_edit.state.walking': '行走',
+    'bone_edit.state.jumping': '跳跃',
+    'bone_edit.state.falling': '下落',
+    'bone_edit.state.dying': '死亡',
+    'bone_edit.state.rolling': '翻滚',
+    'bone_edit.state.flinching': '受击硬直',
+    'bone_edit.state.interacting': '交互',
+    'bone_edit.state.variant_bare': '（空手）',
+    'bone_edit.state.variant_held': '（持械）',
+}
+
+export const boneEditEn: BoneEditLocale = {
+    /* ── Timeline controls ── */
+    'bone_edit.timeline.drag_height': 'Drag to resize',
+    'bone_edit.timeline.play_pause': 'Play / Pause',
+    'bone_edit.timeline.stop': 'Stop',
+    'bone_edit.timeline.loop': 'Loop ',
+    'bone_edit.timeline.anim_list_title': 'Animation list: edited animations + built-in actions (attacks / walk / jump, etc.; selecting loads an editable copy)',
+    'bone_edit.timeline.new_anim': '+Anim',
+    'bone_edit.timeline.del_anim': '−Anim',
+    'bone_edit.timeline.rename_anim': 'Rename',
+    'bone_edit.timeline.add_key': '+Key',
+    'bone_edit.timeline.add_key_title': 'Record current pose at the playhead (selected targets or all)',
+    'bone_edit.timeline.add_event': '+Event',
+    'bone_edit.timeline.add_event_title': 'Insert an event at the playhead (default hitbox_on)',
+    'bone_edit.timeline.del_key': '−Key',
+    'bone_edit.timeline.del_key_title': 'Delete selected keyframes',
+    'bone_edit.timeline.copy': 'Copy',
+    'bone_edit.timeline.paste': 'Paste',
+    'bone_edit.timeline.onion_off': 'Onion Skin',
+    'bone_edit.timeline.onion_on': 'Onion Skin On',
+    'bone_edit.timeline.ik_off': 'IK Off',
+    'bone_edit.timeline.ik_on': 'IK On',
+    'bone_edit.timeline.ik_title': 'Toggle IK drag mode',
+    'bone_edit.timeline.undo': 'Undo',
+    'bone_edit.timeline.redo': 'Redo',
+    'bone_edit.timeline.export': 'Export',
+    'bone_edit.timeline.import': 'Import',
+    'bone_edit.timeline.duration': 'Duration',
+    'bone_edit.timeline.speed': 'Speed',
+    'bone_edit.timeline.skeleton': 'Skeleton',
+    'bone_edit.timeline.rename_prompt': 'New animation name:',
+    'bone_edit.timeline.default_clip_name': 'Animation',
+
+    /* ── Track interpolation ── */
+    'bone_edit.interp.linear': 'Linear',
+    'bone_edit.interp.linear_bezier': 'Linear (Bézier)',
+    'bone_edit.interp.ease_in': 'Ease In',
+    'bone_edit.interp.ease_out': 'Ease Out',
+    'bone_edit.interp.strike_peak': 'Strike Peak',
+
+    /* ── Weapon control ── */
+    'bone_edit.weapon.select_title': 'Editor weapon (Auto = follow the current animation weapon)',
+    'bone_edit.weapon.auto': 'Weapon: Auto',
+    'bone_edit.weapon.none': 'Weapon: None',
+    'bone_edit.weapon.group_melee': 'Melee',
+    'bone_edit.weapon.group_ranged': 'Ranged',
+    'bone_edit.grip.on': 'Left Grip: On',
+    'bone_edit.grip.off': 'Left Grip: Off',
+    'bone_edit.grip.on_title': 'Solve the left arm chain to the weapon support grip during preview playback (off = hands stay independent)',
+    'bone_edit.grip.off_title': 'Left grip off: hands are fully independent while editing and previewing',
+
+    /* ── Animation library / import-export ── */
+    'bone_edit.anim.edited_group': 'Edited Animations',
+    'bone_edit.anim.builtin_suffix': ' (select to load a copy)',
+    'bone_edit.library.import_skeleton': (n) => `Imported Skeleton ${n}`,
+    'bone_edit.library.invalid_asset': 'Invalid asset file format!',
+
+    /* ── Built-in action groups ── */
+    'bone_edit.group.base': 'Base States',
+    'bone_edit.group.melee': 'Melee Attacks',
+    'bone_edit.group.ranged': 'Ranged Attacks',
+
+    /* ── Built-in actions: base states ── */
+    'bone_edit.state.idle': 'Idle',
+    'bone_edit.state.walking': 'Walk',
+    'bone_edit.state.jumping': 'Jump',
+    'bone_edit.state.falling': 'Fall',
+    'bone_edit.state.dying': 'Death',
+    'bone_edit.state.rolling': 'Roll',
+    'bone_edit.state.flinching': 'Flinch',
+    'bone_edit.state.interacting': 'Interact',
+    'bone_edit.state.variant_bare': ' (Unarmed)',
+    'bone_edit.state.variant_held': ' (Armed)',
+}

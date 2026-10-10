@@ -6,7 +6,9 @@ import {DEFAULT_BUILDING_CONFIG} from '../validation.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
-import {createSelect, findIn, materialOptions, PROP_LABELS} from './labels.ts'
+import {localizeText, appendLocalizedText} from '../../../i18n/dom.ts'
+import {translate} from '../../../i18n/index.ts'
+import {createSelect, findIn, materialOptions, recipeOptions, PROP_LABELS} from './labels.ts'
 
 export const formatRowText = (world: BuildingWorld): string =>
     `#${world.id}  ${world.config.recipe}  seed:${world.config.seed}  chunks:${world.chunks.size}`
@@ -26,49 +28,48 @@ export const createBuildingPanel = (ctx: Omit<BuildingGeneratorContext, 'panel'>
 
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px'
-    header.textContent = 'Building Generator'
+    localizeText(header, 'entity.building_generator')
     el.appendChild(header)
 
-    el.appendChild(createSection('Recipe'))
+    el.appendChild(createSection('panel.recipe'))
     const recipeRow = document.createElement('label')
-    recipeRow.textContent = 'Recipe '
+    appendLocalizedText(recipeRow, 'panel.recipe')
+    recipeRow.appendChild(document.createTextNode(' '))
     const recipe = createSelect(
-        BUILDING_RECIPE_IDS.map(id => ({value: id, label: id})),
+        recipeOptions(BUILDING_RECIPE_IDS),
         DEFAULT_BUILDING_CONFIG.recipe,
     )
     recipe.id = 'building-recipe'
     recipeRow.appendChild(recipe)
     el.appendChild(recipeRow)
 
-    const seed = createLabeledNumberInput(el, 'Seed', {step: '1', value: String(DEFAULT_BUILDING_CONFIG.seed)})
+    const seed = createLabeledNumberInput(el, 'panel.seed', {step: '1', value: String(DEFAULT_BUILDING_CONFIG.seed)})
 
-    el.appendChild(createSection('Size (体素)'))
-    const sizeX = createLabeledNumberInput(el, 'X', {min: '1', max: '64', step: '1', value: String(DEFAULT_BUILDING_CONFIG.sizeX)})
-    const sizeY = createLabeledNumberInput(el, 'Y', {min: '1', max: '64', step: '1', value: String(DEFAULT_BUILDING_CONFIG.sizeY)})
-    const sizeZ = createLabeledNumberInput(el, 'Z', {min: '1', max: '64', step: '1', value: String(DEFAULT_BUILDING_CONFIG.sizeZ)})
+    el.appendChild(createSection('panel.size_voxel'))
+    const sizeX = createLabeledNumberInput(el, 'panel.x', {min: '1', max: '64', step: '1', value: String(DEFAULT_BUILDING_CONFIG.sizeX)})
+    const sizeY = createLabeledNumberInput(el, 'panel.y', {min: '1', max: '64', step: '1', value: String(DEFAULT_BUILDING_CONFIG.sizeY)})
+    const sizeZ = createLabeledNumberInput(el, 'panel.z', {min: '1', max: '64', step: '1', value: String(DEFAULT_BUILDING_CONFIG.sizeZ)})
 
-    el.appendChild(createSection('Position'))
-    const posX = createLabeledNumberInput(el, 'X', {step: '0.5', value: '0'})
-    const posY = createLabeledNumberInput(el, 'Y', {step: '0.5', value: '0'})
-    const posZ = createLabeledNumberInput(el, 'Z', {step: '0.5', value: '0'})
+    el.appendChild(createSection('panel.position'))
+    const posX = createLabeledNumberInput(el, 'panel.x', {step: '0.5', value: '0'})
+    const posY = createLabeledNumberInput(el, 'panel.y', {step: '0.5', value: '0'})
+    const posZ = createLabeledNumberInput(el, 'panel.z', {step: '0.5', value: '0'})
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
-    applyBtn.textContent = '应用'
-    deleteBtn.textContent = '删除'
     el.appendChild(btnRow)
 
     /* ── 自由道具列表（编辑 / 删除）── */
-    el.appendChild(createSection('道具'))
+    el.appendChild(createSection('panel.props'))
     const propList = document.createElement('div')
     propList.style.cssText = 'display:flex;flex-direction:column;gap:2px'
     el.appendChild(propList)
     const propEmpty = document.createElement('div')
     propEmpty.style.cssText = 'color:#888;padding:2px 0'
-    propEmpty.textContent = '（无道具）'
+    localizeText(propEmpty, 'entity.no_props')
     propList.appendChild(propEmpty)
 
     /* ── 全建筑材质替换 ── */
-    el.appendChild(createSection('材质替换（全建筑）'))
+    el.appendChild(createSection('panel.material_replace'))
     const replaceFrom = createSelect(materialOptions(), 'brick')
     replaceFrom.id = 'building-replace-from'
     const replaceTo = createSelect(materialOptions(), 'wood')
@@ -78,7 +79,7 @@ export const createBuildingPanel = (ctx: Omit<BuildingGeneratorContext, 'panel'>
     replaceFrom.style.flex = '1'
     replaceTo.style.flex = '1'
     const replaceBtn = document.createElement('button')
-    replaceBtn.textContent = '替换'
+    localizeText(replaceBtn, 'entity.replace')
     replaceRow.appendChild(replaceFrom)
     replaceRow.appendChild(document.createTextNode('→'))
     replaceRow.appendChild(replaceTo)
@@ -150,7 +151,7 @@ export const createBuildingPanel = (ctx: Omit<BuildingGeneratorContext, 'panel'>
             row.style.cssText = 'display:flex;gap:4px;align-items:center'
             const label = document.createElement('span')
             label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
-            label.textContent = `#${index} ${PROP_LABELS[prop.kind]} (${prop.position[0].toFixed(1)},${prop.position[1].toFixed(1)},${prop.position[2].toFixed(1)})`
+            label.textContent = `#${index} ${translate(PROP_LABELS[prop.kind])} (${prop.position[0].toFixed(1)},${prop.position[1].toFixed(1)},${prop.position[2].toFixed(1)})`
             row.appendChild(label)
 
             const materialSelect = createSelect(materialOptions(), prop.material)

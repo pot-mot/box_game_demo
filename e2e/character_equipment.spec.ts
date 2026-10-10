@@ -43,7 +43,7 @@ test.describe('角色装备与属性面板', () => {
         /* 铁盔（物 2）+ 基础物防 2 → 有效物理 4；魔法 1 */
         await expect(panel).toContainText('有效防御：物 4 / 魔 1')
 
-        await panel.locator('button', {hasText: 'Apply'}).click()
+        await panel.locator('button', {hasText: '应用'}).click()
         await expect(page.locator('#element-list-panel [data-id]', {hasText: 'def:物4/魔1'})).toHaveCount(1)
     })
 
@@ -55,13 +55,13 @@ test.describe('角色装备与属性面板', () => {
 
         await chestSelect.selectOption('iron_plate')
         await expect(panel).toContainText('有效防御：物 3 / 魔 0')
-        await panel.locator('button', {hasText: 'Apply'}).click()
+        await panel.locator('button', {hasText: '应用'}).click()
         await expect(page.locator('#element-list-panel [data-id]', {hasText: 'def:物3/魔0'})).toHaveCount(1)
 
         /* 选回「无」→ 预览与列表行回到零防御 */
         await chestSelect.selectOption('')
         await expect(panel).toContainText('有效防御：物 0 / 魔 0')
-        await panel.locator('button', {hasText: 'Apply'}).click()
+        await panel.locator('button', {hasText: '应用'}).click()
         await expect(page.locator('#element-list-panel [data-id]', {hasText: 'def:物0/魔0'})).toHaveCount(1)
     })
 
@@ -78,7 +78,7 @@ test.describe('角色装备与属性面板', () => {
         /* 第二个偏移输入 = Y */
         await row.locator('.lock-point-offset').nth(1).fill('0.3')
 
-        await panel.locator('button', {hasText: 'Apply'}).click()
+        await panel.locator('button', {hasText: '应用'}).click()
 
         /* 重新聚焦面板（点击角色行）后回显已 Apply 的锁定点 */
         await page.locator('#element-list-panel [data-id][data-type="character"]').click()
@@ -102,7 +102,7 @@ test.describe('角色装备与属性面板', () => {
         /* 再叠疾行靴 ×1.15 → 3 × 0.97 × 1.15 = 3.3465，列表行保留两位小数 */
         await legsSelect.selectOption('swift_boots')
         await expect(panel).toContainText('有效移速：3.3465')
-        await panel.locator('button', {hasText: 'Apply'}).click()
+        await panel.locator('button', {hasText: '应用'}).click()
         await expect(page.locator('#element-list-panel [data-id]', {hasText: 'spd:3.35'})).toHaveCount(1)
     })
 
@@ -118,7 +118,7 @@ test.describe('角色装备与属性面板', () => {
         await headLimb.selectOption('orc_head')
         await expect(panel).toContainText('有效防御：物 2 / 魔 0')
         await expect(panel).toContainText('有效移速：2.94')
-        await panel.locator('button', {hasText: 'Apply'}).click()
+        await panel.locator('button', {hasText: '应用'}).click()
         await expect(page.locator('#element-list-panel [data-id]', {hasText: 'def:物2/魔0'})).toHaveCount(1)
 
         /* 重新聚焦面板后回显肢体选择 */
@@ -143,7 +143,7 @@ test.describe('角色装备与属性面板', () => {
 
         /* 选择双持并 Apply → 面板回显双持与副手武器 */
         await holdSelect.selectOption('dual_wield')
-        await panel.locator('button', {hasText: 'Apply'}).click()
+        await panel.locator('button', {hasText: '应用'}).click()
         await page.locator('#element-list-panel [data-id][data-type="character"]').click()
         await expect(page.locator('#character-panel #hold-mode-select')).toHaveValue('dual_wield')
         await expect(page.locator('#character-panel #offhand-weapon-select')).toHaveValue('long_sword')
@@ -151,7 +151,7 @@ test.describe('角色装备与属性面板', () => {
         /* 换成不同类别的副手（短剑）→ 双持不可用，持握回退单持 */
         await page.locator('#character-panel #offhand-weapon-select').selectOption('short_sword')
         await expect(page.locator('#character-panel #hold-mode-select')).toHaveValue('one_handed')
-        await page.locator('#character-panel button', {hasText: 'Apply'}).click()
+        await page.locator('#character-panel button', {hasText: '应用'}).click()
         await page.locator('#element-list-panel [data-id][data-type="character"]').click()
         await expect(page.locator('#character-panel #hold-mode-select')).toHaveValue('one_handed')
         await expect(page.locator('#character-panel #offhand-weapon-select')).toHaveValue('short_sword')

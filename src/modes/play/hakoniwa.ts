@@ -1,4 +1,5 @@
 import type {CharacterEntitySystem} from '../../entity/character/physics/world.ts'
+import {translate} from '../../i18n/index.ts'
 import type {ItemEntityContext} from '../../entity/item/types.ts'
 import type {InteractableContext, InteractableEntity} from '../../entity/interactable/types.ts'
 import type {BuildingGeneratorContext} from '../../entity/building_generator/types/index.ts'
@@ -157,7 +158,7 @@ export const setupHakoniwa = (
         onChanged: () => panel.refresh(),
     })
     const openChest = (e: InteractableEntity): void => {
-        containerPanel.open(e.container, `箱子 #${e.id}`)
+        containerPanel.open(e.container, translate({key: 'play.container.named', args: [String(e.id)]}))
     }
 
     const openInventory = (): void => {

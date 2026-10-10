@@ -6,6 +6,7 @@ import type {HoldMode} from './hold_mode.ts'
 import {HOLD_MODES} from './hold_mode.ts'
 import type {WeaponAttacks} from './attack_chain.ts'
 import {attacksForHoldMode} from './attack_chain.ts'
+import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
 /**
  * 武器目录：近战 + 远程统一查询入口。
@@ -17,6 +18,32 @@ export type WeaponType = WeaponConfig['type']
 
 /** 默认武器（存档/面板给出未知 id 时的回退，保持既有行为） */
 export const DEFAULT_WEAPON_ID = 'long_sword'
+
+/** 武器 id → 本地化名称键（未知 id 回退模型数据 `name`） */
+const WEAPON_NAME_KEYS: Record<string, StringLocaleKey> = {
+    short_sword: 'weapon.short_sword',
+    long_sword: 'weapon.long_sword',
+    heavy_sword: 'weapon.heavy_sword',
+    spear: 'weapon.spear',
+    dual_axe: 'weapon.dual_axe',
+    war_hammer: 'weapon.war_hammer',
+    longbow: 'weapon.longbow',
+    crossbow: 'weapon.crossbow',
+    shotgun: 'weapon.shotgun',
+    staff: 'weapon.staff',
+    magic_wand: 'weapon.magic_wand',
+    throwing_axe: 'weapon.throwing_axe',
+    grenade: 'weapon.grenade',
+    molotov: 'weapon.molotov',
+    throwing_dart: 'weapon.throwing_dart',
+    test_weapon: 'weapon.test_weapon',
+}
+
+/** 武器本地化显示名（未知 id 回退传入的模型名） */
+export const weaponDisplayName = (id: string, fallback: string): string => {
+    const key = WEAPON_NAME_KEYS[id]
+    return key === undefined ? fallback : translate(key)
+}
 
 /**
  * 额外武器注册表（测试专用武器用，如 test_weapon）：

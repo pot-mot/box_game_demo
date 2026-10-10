@@ -137,7 +137,7 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         two_handed: {},
         dual_wield: {},
     }),
-    /* 双斧：同为单刃斧（斧刃几何关于矢状面对称），双持时左右手各一把同类武器，副手相位错开半程（交替挥砍） */
+    /* 战斧：同为单刃斧（斧刃几何关于矢状面对称），双持时左右手各一把同类武器，副手相位错开半程（交替挥砍） */
     dual_axe: meleeClass({
         id: 'dual_axe', type: 'melee',
         damageType: 'physical',
@@ -187,7 +187,7 @@ export const MELEE_WEAPON_MODELS: Record<string, WeaponModelConfig> = {
         mesh: { id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa },
     },
     dual_axe: {
-        id: 'dual_axe', classId: 'dual_axe', name: '双斧',
+        id: 'dual_axe', classId: 'dual_axe', name: '战斧',
         mesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322 },
     },
     war_hammer: {

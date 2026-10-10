@@ -2,27 +2,45 @@ import type {EntityInfoSource, EntityPanelInfo} from '../entity/box/base/types/e
 import type {EntityType} from '../entity/constants.ts'
 import {focusPanel} from './entity_control_panel.ts'
 import {getInputRegistry} from '../input/registry.ts'
+import {localizeText, localizeTitle} from '../i18n/dom.ts'
+import type {StringLocaleKey} from '../i18n/index.ts'
 
 const ROW_STYLE = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer'
 const INFO_STYLE = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
 const DEL_STYLE = 'background:none;border:none;color:#f66;cursor:pointer;font:14px/1 monospace;padding:0 4px'
 const GROUP_HEADER_STYLE = 'font-size:11px;font-weight:700;color:#aaa;padding:4px 4px 0 4px;margin-top:4px;border-top:1px solid #333'
 
+/** 实体列表分组标识（与展示名解耦，展示名走本地化） */
+const ENTITY_GROUPS = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'other'] as const
+type EntityGroup = typeof ENTITY_GROUPS[number]
+
 /** 实体类型 → 列表分组的映射 */
-const TYPE_GROUPS = {
-    character: 'Character',
-    'box/common': 'Box',
-    'box/destruction': 'Box',
-    'box/burning': 'Box',
-    'box/magnet': 'Box',
-    'box/elasticity': 'Box',
-    'area/water': 'Area',
-    terrain: 'Terrain',
-    'building_generator': 'Building',
-    'fragment/common': 'Fragment',
-    'interactable': 'Interactable',
-    item: 'Item',
-} as const satisfies Record<EntityType, string>
+const TYPE_GROUPS: Record<EntityType, EntityGroup> = {
+    character: 'character',
+    'box/common': 'box',
+    'box/destruction': 'box',
+    'box/burning': 'box',
+    'box/magnet': 'box',
+    'box/elasticity': 'box',
+    'area/water': 'area',
+    terrain: 'terrain',
+    'building_generator': 'building',
+    'fragment/common': 'fragment',
+    'interactable': 'interactable',
+    item: 'item',
+}
+
+const GROUP_LABELS: Record<EntityGroup, StringLocaleKey> = {
+    character: 'element.group.character',
+    box: 'element.group.box',
+    area: 'element.group.area',
+    terrain: 'element.group.terrain',
+    building: 'element.group.building',
+    fragment: 'element.group.fragment',
+    interactable: 'element.group.interactable',
+    item: 'element.group.item',
+    other: 'element.group.other',
+}
 
 const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElement => {
     const row = document.createElement('div')
@@ -54,19 +72,19 @@ const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElem
     const btn = document.createElement('button')
     btn.className = 'ep-del'
     btn.style.cssText = DEL_STYLE
-    btn.title = 'Delete'
+    localizeTitle(btn, 'element.delete')
     btn.textContent = '×'
     row.appendChild(btn)
 
     return row
 }
 
-const createGroupContainer = (label: string): HTMLElement => {
+const createGroupContainer = (group: EntityGroup): HTMLElement => {
     const c = document.createElement('div')
     c.style.cssText = 'display:flex;flex-direction:column;gap:2px'
     const h = document.createElement('div')
     h.style.cssText = GROUP_HEADER_STYLE
-    h.textContent = label
+    localizeText(h, GROUP_LABELS[group])
     c.appendChild(h)
     return c
 }
@@ -94,7 +112,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
 
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:4px;font-size:14px'
-    header.textContent = 'Elements'
+    localizeText(header, 'element.title')
     el.appendChild(header)
 
     const list = document.createElement('div')
@@ -164,9 +182,9 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
     input.onActionDown('delete_entity', tryDeleteHovered)
 
     /** 需要按顺序渲染的分组 */
-    const GROUP_ORDER = ['Character', 'Box', 'Area', 'Terrain', 'Building', 'Fragment']
+    const GROUP_ORDER: EntityGroup[] = ['character', 'box', 'area', 'terrain', 'building', 'fragment']
     /** 分组容器 */
-    const groupContainers = new Map<string, HTMLElement>()
+    const groupContainers = new Map<EntityGroup, HTMLElement>()
 
     // 初始化分组容器
     for (const gn of GROUP_ORDER) {
@@ -179,9 +197,9 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
         const allItems: EntityPanelInfo[] = sources.flatMap(s => s.panelInfo)
 
         // 按键分组
-        const itemsByGroup = new Map<string, EntityPanelInfo[]>()
+        const itemsByGroup = new Map<EntityGroup, EntityPanelInfo[]>()
         for (const item of allItems) {
-            const groupName = TYPE_GROUPS[item.type] ?? 'Other'
+            const groupName = TYPE_GROUPS[item.type] ?? 'other'
             let arr = itemsByGroup.get(groupName)
             if (!arr) { arr = []; itemsByGroup.set(groupName, arr) }
             arr.push(item)
@@ -214,7 +232,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
                 }
 
                 const span = row.children[1] as HTMLElement
-                span.textContent = entry.rowText
+                span.textContent = entry.rowTextOf !== undefined ? entry.rowTextOf() : entry.rowText
 
                 const source = findSource(entry)
                 const selId = source?.getSelectedId()
@@ -226,7 +244,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
             if (!emptyEl) {
                 emptyEl = document.createElement('div')
                 emptyEl.style.cssText = 'color:#888;padding:4px 0'
-                emptyEl.textContent = 'No elements'
+                localizeText(emptyEl, 'element.empty')
                 list.appendChild(emptyEl)
             }
         } else if (emptyEl) {

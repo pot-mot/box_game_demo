@@ -1,4 +1,6 @@
 import type {SpawnMode} from '../types/spawnMode.ts'
+import {translate, type StringLocaleKey} from '../i18n/index.ts'
+import {localizeText} from '../i18n/dom.ts'
 
 const MODES: SpawnMode[] = [
     'box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity',
@@ -8,17 +10,17 @@ const MODES: SpawnMode[] = [
     'building_generator',
     'interactable',
 ]
-const MODE_LABELS: Record<SpawnMode, string> = {
-    'box/common': 'Common',
-    'box/destruction': 'Destruction',
-    'box/burning': 'Burning',
-    'box/magnet': 'Magnet',
-    'box/elasticity': 'Elastic',
-    'area/water': 'Water',
-    'character': 'Character',
-    'terrain': 'Terrain',
-    'building_generator': 'Building',
-    'interactable': 'Interactable',
+const MODE_LABELS: Record<SpawnMode, StringLocaleKey> = {
+    'box/common': 'spawn.box_common',
+    'box/destruction': 'spawn.box_destruction',
+    'box/burning': 'spawn.box_burning',
+    'box/magnet': 'spawn.box_magnet',
+    'box/elasticity': 'spawn.box_elasticity',
+    'area/water': 'spawn.area_water',
+    'character': 'spawn.character',
+    'terrain': 'spawn.terrain',
+    'building_generator': 'spawn.building',
+    'interactable': 'spawn.interactable',
 }
 
 export const setupSpawnModePanel = (getSpawnMode: () => SpawnMode, onSelectMode: (mode: SpawnMode) => void): () => void => {
@@ -50,7 +52,7 @@ export const setupSpawnModePanel = (getSpawnMode: () => SpawnMode, onSelectMode:
 
     const items: HTMLDivElement[] = MODES.map(mode => {
         const item = document.createElement('div')
-        item.textContent = MODE_LABELS[mode]
+        localizeText(item, MODE_LABELS[mode])
         item.style.cssText = [
             'padding: 6px 16px; cursor: pointer;',
             'transition: background .15s;',
@@ -101,7 +103,7 @@ export const setupSpawnModePanel = (getSpawnMode: () => SpawnMode, onSelectMode:
 
     return () => {
         const mode = getSpawnMode()
-        header.textContent = `▼ ${MODE_LABELS[mode]}`
+        header.textContent = `▼ ${translate(MODE_LABELS[mode])}`
         if (open) {
             items.forEach((item, i) => {
                 item.style.background = MODES[i] === mode ? 'rgba(136,204,255,.3)' : ''

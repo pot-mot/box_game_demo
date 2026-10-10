@@ -5,12 +5,14 @@ import {defaultInteractableConfig} from '../constants.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
+import {localizeText, type LocalKeyParam} from '../../../i18n/dom.ts'
+import type {StringLocaleKey} from '../../../i18n/index.ts'
 
-const row = (label: string, control: HTMLElement): HTMLElement => {
+const row = (label: LocalKeyParam, control: HTMLElement): HTMLElement => {
     const wrap = document.createElement('label')
     wrap.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin:2px 0'
     const span = document.createElement('span')
-    span.textContent = label
+    localizeText(span, label)
     wrap.appendChild(span)
     wrap.appendChild(control)
     return wrap
@@ -24,12 +26,14 @@ const textInput = (value: string, width = '120px'): HTMLInputElement => {
     return input
 }
 
-const selectOf = (values: readonly string[], labels: Record<string, string>, current: string): HTMLSelectElement => {
+const selectOf = (values: readonly string[], labels: Record<string, StringLocaleKey>, current: string): HTMLSelectElement => {
     const select = document.createElement('select')
     for (const v of values) {
         const option = document.createElement('option')
         option.value = v
-        option.textContent = labels[v] ?? v
+        const key = labels[v]
+        if (key === undefined) option.textContent = v
+        else localizeText(option, key)
         if (v === current) option.selected = true
         select.appendChild(option)
     }
@@ -49,34 +53,34 @@ export const createInteractablePanel = (ctx: Omit<InteractableContext, 'panel'>)
 
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px;color:#2a9d8f'
-    header.textContent = '交互物'
+    localizeText(header, 'entity.interactable_title')
     el.appendChild(header)
 
     const kindSelect = selectOf(INTERACTABLE_KINDS, INTERACTABLE_LABELS, 'save_point')
-    el.appendChild(row('类型', kindSelect))
+    el.appendChild(row('entity.kind', kindSelect))
     const nameInput = textInput('')
-    el.appendChild(row('名称', nameInput))
+    el.appendChild(row('entity.name', nameInput))
     const channelInput = textInput('')
-    el.appendChild(row('通道', channelInput))
+    el.appendChild(row('entity.channel', channelInput))
 
-    el.appendChild(createSection('位置 / 朝向'))
-    const posX = createLabeledNumberInput(el, 'X', {step: '0.1'})
-    const posY = createLabeledNumberInput(el, 'Y', {step: '0.1'})
-    const posZ = createLabeledNumberInput(el, 'Z', {step: '0.1'})
-    const yaw = createLabeledNumberInput(el, '偏航(°)', {min: '-360', max: '360', step: '90'})
+    el.appendChild(createSection('entity.pos_yaw'))
+    const posX = createLabeledNumberInput(el, 'panel.x', {step: '0.1'})
+    const posY = createLabeledNumberInput(el, 'panel.y', {step: '0.1'})
+    const posZ = createLabeledNumberInput(el, 'panel.z', {step: '0.1'})
+    const yaw = createLabeledNumberInput(el, 'entity.yaw', {min: '-360', max: '360', step: '90'})
 
-    el.appendChild(createSection('尺寸'))
-    const sizeX = createLabeledNumberInput(el, 'X', {min: '0.1', step: '0.1'})
-    const sizeY = createLabeledNumberInput(el, 'Y', {min: '0.1', step: '0.1'})
-    const sizeZ = createLabeledNumberInput(el, 'Z', {min: '0.1', step: '0.1'})
+    el.appendChild(createSection('panel.size'))
+    const sizeX = createLabeledNumberInput(el, 'panel.x', {min: '0.1', step: '0.1'})
+    const sizeY = createLabeledNumberInput(el, 'panel.y', {min: '0.1', step: '0.1'})
+    const sizeZ = createLabeledNumberInput(el, 'panel.z', {min: '0.1', step: '0.1'})
 
-    const paramSection = createSection('参数')
+    const paramSection = createSection('entity.params')
     el.appendChild(paramSection)
-    const travel = createLabeledNumberInput(el, '行程', {min: '0', step: '0.1'})
-    const speed = createLabeledNumberInput(el, '速度', {min: '0', step: '0.1'})
-    const health = createLabeledNumberInput(el, '生命', {min: '1', step: '1'})
-    const switchMode = selectOf(['toggle', 'momentary'], {toggle: '切换', momentary: '瞬时'}, 'toggle')
-    el.appendChild(row('开关模式', switchMode))
+    const travel = createLabeledNumberInput(el, 'entity.travel', {min: '0', step: '0.1'})
+    const speed = createLabeledNumberInput(el, 'entity.speed', {min: '0', step: '0.1'})
+    const health = createLabeledNumberInput(el, 'panel.health', {min: '1', step: '1'})
+    const switchMode = selectOf(['toggle', 'momentary'], {toggle: 'entity.mode.toggle', momentary: 'entity.mode.momentary'}, 'toggle')
+    el.appendChild(row('entity.switch_mode', switchMode))
     const breakableWrap = document.createElement('div')
     const breakableBoxes = new Map<BreakableSource, HTMLInputElement>()
     for (const source of BREAKABLE_SOURCES) {
@@ -85,16 +89,18 @@ export const createInteractablePanel = (ctx: Omit<InteractableContext, 'panel'>)
         const box = document.createElement('input')
         box.type = 'checkbox'
         label.appendChild(box)
-        label.appendChild(document.createTextNode(BREAKABLE_SOURCE_LABELS[source]))
+        const text = document.createElement('span')
+        localizeText(text, BREAKABLE_SOURCE_LABELS[source])
+        label.appendChild(text)
         breakableWrap.appendChild(label)
         breakableBoxes.set(source, box)
     }
-    el.appendChild(row('可破坏来源', breakableWrap))
+    el.appendChild(row('entity.breakable_by', breakableWrap))
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
     const triggerBtn = document.createElement('button')
-    triggerBtn.textContent = '触发交互'
+    localizeText(triggerBtn, 'entity.trigger')
     triggerBtn.style.cssText = 'margin-top:6px;width:100%'
     el.appendChild(triggerBtn)
 

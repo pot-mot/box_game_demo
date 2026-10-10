@@ -6,6 +6,7 @@ import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
+import {translate} from '../../../i18n/index.ts'
 
 /** happy-dom 不支持 canvas 2d，这里注入一个最小 2d 上下文桩（仅覆盖 model.ts 用到的方法） */
 const canvasCtxStub = (): Record<string, unknown> => {
@@ -287,7 +288,7 @@ describe('角色 panelInfo 同步', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.markPlayer(id)
         const row = system.panelInfo.find(p => p.id === id)
-        expect(row!.rowText).toContain('▶ Player:')
+        expect(row!.rowText).toContain(translate('entity.player_prefix'))
         expect(row!.badgeLabel).toBe('P')
     })
 

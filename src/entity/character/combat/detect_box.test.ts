@@ -56,7 +56,7 @@ describe('近战 detectBox = 武器动作模组估算攻击范围盒 + 0.05', ()
         }
     })
 
-    it('长枪前缘最远；双斧 / 战锤均远于短剑', () => {
+    it('长枪前缘最远；战斧 / 战锤均远于短剑', () => {
         const spear = frontEdge(MELEE_WEAPON_PRESETS.spear.detectBox)
         for (const [, weapon] of presets) {
             expect(frontEdge(weapon.detectBox)).toBeLessThanOrEqual(spear)

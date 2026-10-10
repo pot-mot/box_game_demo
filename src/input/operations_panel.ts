@@ -4,6 +4,8 @@ import {INPUT_ACTIONS, ACTION_LABELS, ACTION_GROUPS, MOUSE_ACTIONS_BY_MODE, FIXE
 import {DEFAULT_BINDINGS, findConflicts} from './constants.ts'
 import {keyComboToDisplay} from './display.ts'
 import type {DeepReadonly} from '../types/readonly.ts'
+import {translate, type LocalKeyParam} from '../i18n/index.ts'
+import {localizeText, localizeTitle} from '../i18n/dom.ts'
 
 /** 注入面板自管样式 */
 const injectStyles = (): void => {
@@ -68,7 +70,7 @@ const createConflictDialog = (message: string): { el: HTMLElement; confirm: Prom
 
     const title = document.createElement('div')
     title.className = 'bp-conflict-title'
-    title.textContent = '输入冲突'
+    localizeText(title, 'input.conflict_title')
     box.appendChild(title)
 
     const msg = document.createElement('div')
@@ -82,12 +84,12 @@ const createConflictDialog = (message: string): { el: HTMLElement; confirm: Prom
 
     const cancelBtn = document.createElement('button')
     cancelBtn.className = 'bp-btn bp-btn-cancel'
-    cancelBtn.textContent = '取消'
+    localizeText(cancelBtn, 'common.cancel')
     actions.appendChild(cancelBtn)
 
     const confirmBtn = document.createElement('button')
     confirmBtn.className = 'bp-btn bp-btn-confirm'
-    confirmBtn.textContent = '覆盖'
+    localizeText(confirmBtn, 'common.overwrite')
     actions.appendChild(confirmBtn)
 
     document.body.appendChild(overlay)
@@ -140,7 +142,7 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
 
     const title = document.createElement('span')
     title.className = 'bp-title'
-    title.textContent = '操作设置'
+    localizeText(title, 'input.operations_title')
     header.appendChild(title)
 
     const closeBtn = document.createElement('button')
@@ -161,17 +163,17 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
 
     const resetBtn = document.createElement('button')
     resetBtn.className = 'bp-btn'
-    resetBtn.textContent = '重置默认'
+    localizeText(resetBtn, 'input.reset_defaults')
     footer.appendChild(resetBtn)
 
     const importBtn = document.createElement('button')
     importBtn.className = 'bp-btn'
-    importBtn.textContent = '导入配置'
+    localizeText(importBtn, 'input.import_config')
     footer.appendChild(importBtn)
 
     const exportBtn = document.createElement('button')
     exportBtn.className = 'bp-btn'
-    exportBtn.textContent = '导出配置'
+    localizeText(exportBtn, 'input.export_config')
     footer.appendChild(exportBtn)
 
     /* ---- 构建行 ---- */
@@ -183,7 +185,7 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
 
         const label = document.createElement('span')
         label.className = 'bp-row-label'
-        label.textContent = ACTION_LABELS[action]
+        localizeText(label, ACTION_LABELS[action])
         row.appendChild(label)
 
         for (let i = 0; i < combos.length; i++) {
@@ -198,7 +200,7 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
             const editBtn = document.createElement('button')
             editBtn.className = 'bp-row-btn'
             editBtn.textContent = '✎'
-            editBtn.title = '替换绑定'
+            localizeTitle(editBtn, 'input.replace_binding')
             editBtn.addEventListener('click', (e) => {
                 e.stopPropagation()
                 startCapture(action, i, row)
@@ -209,7 +211,7 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
             const delBtn = document.createElement('button')
             delBtn.className = 'bp-row-btn bp-row-btn-del'
             delBtn.textContent = '×'
-            delBtn.title = '删除绑定'
+            localizeTitle(delBtn, 'input.delete_binding')
             if (combos.length <= 1) {
                 delBtn.disabled = true
                 delBtn.style.opacity = '0.3'
@@ -232,7 +234,7 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
             const addBtn = document.createElement('button')
             addBtn.className = 'bp-row-btn'
             addBtn.textContent = '+'
-            addBtn.title = '添加替代绑定'
+            localizeTitle(addBtn, 'input.add_alt_binding')
             addBtn.addEventListener('click', (e) => {
                 e.stopPropagation()
                 startCapture(action, undefined, row)
@@ -250,26 +252,26 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
 
         const label = document.createElement('span')
         label.className = 'bp-row-label'
-        label.textContent = op.label
+        localizeText(label, op.label)
         row.appendChild(label)
 
         const keyChip = document.createElement('span')
         keyChip.className = 'bp-row-key bp-row-key-fixed'
-        keyChip.textContent = op.keys
+        localizeText(keyChip, op.keys)
         row.appendChild(keyChip)
 
         const hint = document.createElement('span')
         hint.className = 'bp-row-hint'
-        hint.textContent = '不可修改'
+        localizeText(hint, 'input.fixed')
         row.appendChild(hint)
 
         return row
     }
 
-    const appendGroupTitle = (name: string): void => {
+    const appendGroupTitle = (name: LocalKeyParam): void => {
         const groupTitle = document.createElement('div')
         groupTitle.className = 'bp-group-title'
-        groupTitle.textContent = name
+        localizeText(groupTitle, name)
         content.appendChild(groupTitle)
     }
 
@@ -278,7 +280,7 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
         const currentBindings = input.getBindings()
 
         /* —— 鼠标：当前模式下可修改的指针动作 + 不可修改的鼠标操作 —— */
-        appendGroupTitle('鼠标')
+        appendGroupTitle('input.mouse_group')
         for (const action of MOUSE_ACTIONS_BY_MODE[mode]) {
             content.appendChild(createActionRow(action, currentBindings[action]))
         }
@@ -304,7 +306,7 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
         /* 标记捕获行 */
         const capturingChip = document.createElement('span')
         capturingChip.className = 'bp-row-key bp-row-key-capturing'
-        capturingChip.textContent = '请按键 / 鼠标键...'
+        localizeText(capturingChip, 'input.capture_prompt')
         row.appendChild(capturingChip)
         row.classList.add('bp-row-capturing')
 
@@ -352,8 +354,8 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
             }
 
             if (conflictActions.length > 0) {
-                const names = conflictActions.map(a => `「${ACTION_LABELS[a]}」`).join('、')
-                createConflictDialog(`此输入已被 ${names} 占用，是否覆盖原有绑定？`).confirm.then((confirmed: boolean) => {
+                const names = conflictActions.map(a => `「${translate(ACTION_LABELS[a])}」`).join('、')
+                createConflictDialog(translate({key: 'input.conflict_message', args: [names]})).confirm.then((confirmed: boolean) => {
                     if (confirmed) applyBinding()
                     else buildContent()
                 })
@@ -394,7 +396,7 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
                     const raw = reader.result as string
                     const parsed = JSON.parse(raw) as unknown
                     if (parsed === null || typeof parsed !== 'object') {
-                        showToast('文件格式无效：根元素必须是对象')
+                        showToast(translate('input.toast.invalid_root'))
                         return
                     }
                     const obj = parsed as Record<string, unknown>
@@ -406,17 +408,17 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
                     }
                     for (const action of INPUT_ACTIONS) {
                         if (!Array.isArray(obj[action])) {
-                            showToast(`文件格式无效：缺少动作 "${action}"`)
+                            showToast(translate({key: 'input.toast.missing_action', args: [action]}))
                             return
                         }
                         const combos = obj[action] as unknown[]
                         if (combos.length === 0) {
-                            showToast(`文件格式无效："${ACTION_LABELS[action]}" 没有绑定`)
+                            showToast(translate({key: 'input.toast.no_binding', args: [translate(ACTION_LABELS[action])]}))
                             return
                         }
                         for (const combo of combos) {
                             if (!Array.isArray(combo) || combo.some((c: unknown) => typeof c !== 'string')) {
-                                showToast(`文件格式无效："${ACTION_LABELS[action]}" 绑定格式错误`)
+                                showToast(translate({key: 'input.toast.bad_combo', args: [translate(ACTION_LABELS[action])]}))
                                 return
                             }
                         }
@@ -425,9 +427,9 @@ export const openOperationsPanel = (mode: MouseOperationsMode): void => {
                     input.setBindings(bindings)
                     input.saveToStorage()
                     buildContent()
-                    showToast('操作设置已导入')
+                    showToast(translate('input.toast.import_success'))
                 } catch {
-                    showToast('文件格式无效：无法解析 JSON')
+                    showToast(translate('input.toast.parse_error'))
                 }
             }
             reader.readAsText(file)

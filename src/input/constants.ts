@@ -1,5 +1,6 @@
 import type {BindingsMap, KeyCombo, InputAction} from './types.ts'
 import {INPUT_ACTIONS} from './types.ts'
+import type {StringLocaleKey} from '../i18n/index.ts'
 
 /** 默认按键绑定 */
 export const DEFAULT_BINDINGS: BindingsMap = {
@@ -77,9 +78,15 @@ export const CODE_LABELS: Record<string, string> = {
     Backslash: '\\', Semicolon: ';', Quote: '\'',
     Comma: ',', Period: '.', Slash: '/',
     Backquote: '`',
-    // 鼠标按键
-    Mouse0: '鼠标左键', Mouse1: '鼠标中键', Mouse2: '鼠标右键',
-    Mouse3: '鼠标侧键1', Mouse4: '鼠标侧键2',
+}
+
+/** 鼠标按键码 → 本地化标签键（与 CODE_LABELS 分开，因为鼠标按键名需要翻译） */
+export const MOUSE_CODE_LABELS: Record<string, StringLocaleKey> = {
+    Mouse0: 'input.code.mouse_left',
+    Mouse1: 'input.code.mouse_middle',
+    Mouse2: 'input.code.mouse_right',
+    Mouse3: 'input.code.mouse_side1',
+    Mouse4: 'input.code.mouse_side2',
 }
 
 /**

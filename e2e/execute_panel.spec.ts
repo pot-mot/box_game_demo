@@ -31,7 +31,7 @@ const enterEditMode = async (page: Page): Promise<void> => {
     await page.goto('/')
     await page.waitForSelector('#startup-overlay', {timeout: 5000})
     await page.locator('button', {hasText: '编辑模式'}).click()
-    await expect(executeBtn(page)).toHaveText('Execute')
+    await expect(executeBtn(page)).toHaveText('执行')
 }
 
 test.describe('编辑模式执行面板', () => {
@@ -47,12 +47,12 @@ test.describe('编辑模式执行面板', () => {
 
         /* Execute：世界开始步进，箱子在重力下离开生成点 */
         await executeBtn(page).click()
-        await expect(executeBtn(page)).toHaveText('Stop')
+        await expect(executeBtn(page)).toHaveText('停止')
         await page.waitForTimeout(900)
 
         /* Stop：只停止步进，世界保持当前状态并冻结（旧逻辑会立刻还原到生成点） */
         await executeBtn(page).click()
-        await expect(executeBtn(page)).toHaveText('Execute')
+        await expect(executeBtn(page)).toHaveText('执行')
         const stopY = await readFirstRowY(page)
         expect(Math.abs(stopY - spawnY)).toBeGreaterThan(0.2)
         await page.waitForTimeout(300)
@@ -60,14 +60,14 @@ test.describe('编辑模式执行面板', () => {
 
         /* 停止后可再次 Execute 从当前状态继续 */
         await executeBtn(page).click()
-        await expect(executeBtn(page)).toHaveText('Stop')
+        await expect(executeBtn(page)).toHaveText('停止')
         await executeBtn(page).click()
-        await expect(executeBtn(page)).toHaveText('Execute')
+        await expect(executeBtn(page)).toHaveText('执行')
 
         /* Reset：停止步进并把世界还原到初始状态 */
         await resetBtn(page).click()
         await expect.poll(async () => readFirstRowY(page)).toBeCloseTo(spawnY, 1)
-        await expect(executeBtn(page)).toHaveText('Execute')
+        await expect(executeBtn(page)).toHaveText('执行')
     })
 
     test('执行面板控件齐备且 Reset 可从执行态直接还原', async ({page}) => {
@@ -75,7 +75,7 @@ test.describe('编辑模式执行面板', () => {
 
         const buttons = page.locator('#execute-panel button')
         await expect(buttons).toHaveCount(4)
-        await expect(buttons.nth(1)).toHaveText('Step')
+        await expect(buttons.nth(1)).toHaveText('单步')
 
         await page.mouse.move(600, 400)
         await page.mouse.down({button: 'right'})
@@ -85,11 +85,11 @@ test.describe('编辑模式执行面板', () => {
 
         /* 执行中直接 Reset：停止步进并还原 */
         await executeBtn(page).click()
-        await expect(executeBtn(page)).toHaveText('Stop')
+        await expect(executeBtn(page)).toHaveText('停止')
         await page.waitForTimeout(500)
         await resetBtn(page).click()
 
-        await expect(executeBtn(page)).toHaveText('Execute')
+        await expect(executeBtn(page)).toHaveText('执行')
         await expect.poll(async () => readFirstRowY(page)).toBeCloseTo(spawnY, 1)
 
         /* 还原后世界保持冻结：坐标不再自行变化 */

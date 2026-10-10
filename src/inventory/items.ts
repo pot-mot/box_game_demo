@@ -1,14 +1,15 @@
 import type {EquipSlot} from './types.ts'
+import {translate, type StringLocaleKey} from '../i18n/index.ts'
 
 export const ITEM_CATEGORIES = ['weapon', 'armor', 'consumable', 'material', 'key'] as const
 export type ItemCategory = typeof ITEM_CATEGORIES[number]
 
-export const ITEM_CATEGORY_LABELS: Record<ItemCategory, string> = {
-    weapon: '武器',
-    armor: '护甲',
-    consumable: '消耗品',
-    material: '材料',
-    key: '关键物品',
+export const ITEM_CATEGORY_LABELS: Record<ItemCategory, StringLocaleKey> = {
+    weapon: 'item_category.weapon',
+    armor: 'item_category.armor',
+    consumable: 'item_category.consumable',
+    material: 'item_category.material',
+    key: 'item_category.key',
 }
 
 /**
@@ -60,7 +61,7 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     weapon('weapon_heavy_sword', '巨剑', ['##', '##', '##'], 'heavy_sword', '沉重双手剑'),
     weapon('weapon_spear', '长枪', ['#', '#', '#', '#', '#'], 'spear', '突刺长柄'),
     weapon('weapon_war_hammer', '战锤', ['##', '##', '.#'], 'war_hammer', '破甲重锤'),
-    weapon('weapon_dual_axe', '双斧', ['##', '##'], 'dual_axe', '可双持战斧'),
+    weapon('weapon_dual_axe', '战斧', ['##', '##'], 'dual_axe', '可双持'),
     weapon('weapon_longbow', '长弓', ['#.', '##', '.#'], 'longbow', '远程弓箭'),
     weapon('weapon_crossbow', '弩', ['##', '.#'], 'crossbow', '远程弩矢'),
     weapon('weapon_staff', '法杖', ['#', '#', '#'], 'staff', '施放魔法'),
@@ -92,3 +93,63 @@ export const findItemDef = (id: string | undefined): ItemDef | undefined =>
     id === undefined ? undefined : ITEM_DEFS.find(def => def.id === id)
 
 export const isKnownItemId = (id: string): boolean => findItemDef(id) !== undefined
+
+/** 物品 id → 本地化名称键（未知 id 回退数据 `name`） */
+const ITEM_NAME_KEYS: Record<string, StringLocaleKey> = {
+    weapon_short_sword: 'item.weapon_short_sword.name',
+    weapon_long_sword: 'item.weapon_long_sword.name',
+    weapon_heavy_sword: 'item.weapon_heavy_sword.name',
+    weapon_spear: 'item.weapon_spear.name',
+    weapon_war_hammer: 'item.weapon_war_hammer.name',
+    weapon_dual_axe: 'item.weapon_dual_axe.name',
+    weapon_longbow: 'item.weapon_longbow.name',
+    weapon_crossbow: 'item.weapon_crossbow.name',
+    weapon_staff: 'item.weapon_staff.name',
+    armor_cloth_cap: 'item.armor_cloth_cap.name',
+    armor_iron_helmet: 'item.armor_iron_helmet.name',
+    armor_cloth_vest: 'item.armor_cloth_vest.name',
+    armor_iron_plate: 'item.armor_iron_plate.name',
+    armor_leather_armor: 'item.armor_leather_armor.name',
+    armor_iron_bracers: 'item.armor_iron_bracers.name',
+    armor_cloth_pants: 'item.armor_cloth_pants.name',
+    armor_iron_greaves: 'item.armor_iron_greaves.name',
+    consumable_flask: 'item.consumable_flask.name',
+    material_stone: 'item.material_stone.name',
+    key_rusted: 'item.key_rusted.name',
+}
+
+/** 物品 id → 本地化描述键（未知 id 回退数据 `description`） */
+const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
+    weapon_short_sword: 'item.weapon_short_sword.desc',
+    weapon_long_sword: 'item.weapon_long_sword.desc',
+    weapon_heavy_sword: 'item.weapon_heavy_sword.desc',
+    weapon_spear: 'item.weapon_spear.desc',
+    weapon_war_hammer: 'item.weapon_war_hammer.desc',
+    weapon_dual_axe: 'item.weapon_dual_axe.desc',
+    weapon_longbow: 'item.weapon_longbow.desc',
+    weapon_crossbow: 'item.weapon_crossbow.desc',
+    weapon_staff: 'item.weapon_staff.desc',
+    armor_cloth_cap: 'item.armor_cloth_cap.desc',
+    armor_iron_helmet: 'item.armor_iron_helmet.desc',
+    armor_cloth_vest: 'item.armor_cloth_vest.desc',
+    armor_iron_plate: 'item.armor_iron_plate.desc',
+    armor_leather_armor: 'item.armor_leather_armor.desc',
+    armor_iron_bracers: 'item.armor_iron_bracers.desc',
+    armor_cloth_pants: 'item.armor_cloth_pants.desc',
+    armor_iron_greaves: 'item.armor_iron_greaves.desc',
+    consumable_flask: 'item.consumable_flask.desc',
+    material_stone: 'item.material_stone.desc',
+    key_rusted: 'item.key_rusted.desc',
+}
+
+/** 物品本地化显示名（未知 id 回退数据 `name`，未知 def 回退 id 文本由调用方处理） */
+export const itemDisplayName = (def: ItemDef): string => {
+    const key = ITEM_NAME_KEYS[def.id]
+    return key === undefined ? def.name : translate(key)
+}
+
+/** 物品本地化描述（未知 id 回退数据 `description`） */
+export const itemDisplayDescription = (def: ItemDef): string => {
+    const key = ITEM_DESC_KEYS[def.id]
+    return key === undefined ? def.description : translate(key)
+}

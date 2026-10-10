@@ -7,29 +7,31 @@ import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
 import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.ts'
-import {ALL_WEAPON_PRESETS, availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
+import {ALL_WEAPON_PRESETS, availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, isHoldMode} from '../../../character/weapon/hold_mode.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {ARMOR_SLOTS, ARMOR_SLOT_LABELS, LIMB_SLOTS, LIMB_SLOT_LABELS, type ArmorSlot, type LimbSlot} from '../../../character/armor/slots.ts'
-import {armorPiecesOfSlot, findArmorPreset, findLimbPreset, limbPiecesOfSlot, resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf} from '../../../character/armor/catalog.ts'
+import {armorPiecesOfSlot, armorPieceDisplayName, findArmorPreset, findLimbPreset, limbPiecesOfSlot, resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf} from '../../../character/armor/catalog.ts'
 import type {ArmorLoadout, ArmorPieceConfig, LimbLoadout, LimbPieceConfig} from '../../../character/armor/types.ts'
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
 import {DAMAGE_TYPE_LABELS} from '../../../character/combat/damage_type.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
 import type {LockPointConfig} from '../../../character/lock_point.ts'
 import {CHARACTER_JOINT_IDS} from '../appearance/clips/base_clips.ts'
-import {buildCharacterSkeletonDefinition} from '../skeleton/preset.ts'
+import {buildCharacterSkeletonDefinition, humanoidJointDisplayName} from '../skeleton/preset.ts'
+import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
+import {localizeText, localizeTitle, appendLocalizedText, localizeApply} from '../../../i18n/dom.ts'
 
-/** 锁定点下拉关节选项：骨架定义中文名 + 关节 id */
-const JOINT_LOCK_POINT_OPTIONS: ReadonlyArray<{readonly id: string; readonly label: string}> = (() => {
+/** 锁定点下拉关节选项：骨架定义关节名 + 关节 id（名称随语言切换重译） */
+const JOINT_LOCK_POINT_OPTIONS: ReadonlyArray<{readonly id: string; readonly name: string}> = (() => {
     const names = new Map(buildCharacterSkeletonDefinition().joints.map(joint => [joint.id, joint.name]))
-    return CHARACTER_JOINT_IDS.map(id => ({id, label: `${names.get(id) ?? id} (${id})`}))
+    return CHARACTER_JOINT_IDS.map(id => ({id, name: names.get(id) ?? id}))
 })()
 
 /** 锁定点偏移输入标签（X / Y / Z） */
-const OFFSET_AXIS_LABELS = ['X', 'Y', 'Z'] as const
+const OFFSET_AXIS_LABELS: readonly StringLocaleKey[] = ['panel.x', 'panel.y', 'panel.z']
 /** 新增锁定点的默认关节（髋部：接近身体中心，便于调整） */
 const LOCK_POINT_DEFAULT_JOINT = 'spine'
 
@@ -43,23 +45,24 @@ interface LockPointEditRow {
 interface WeaponOption {
     readonly id: string
     readonly type: WeaponType
-    readonly label: string
+    readonly preset: WeaponConfig
 }
 
-/** 近战武器中文名（optgroup 标签） */
-const WEAPON_GROUP_LABEL_MELEE = '近战武器'
-/** 远程武器中文名（optgroup 标签） */
-const WEAPON_GROUP_LABEL_RANGED = '远程武器'
+/** 近战武器名（optgroup 标签） */
+const WEAPON_GROUP_LABEL_MELEE: StringLocaleKey = 'character.weapon_group_melee'
+/** 远程武器名（optgroup 标签） */
+const WEAPON_GROUP_LABEL_RANGED: StringLocaleKey = 'character.weapon_group_ranged'
 
 /** 武器预设 → 下拉项文案（远程附带模式标记，便于区分特殊弹道） */
 const describeWeapon = (w: WeaponConfig): string => {
-    if (w.type === 'melee') return `${w.name} (dmg:${w.damage})`
+    const name = weaponDisplayName(w.id, w.name)
+    if (w.type === 'melee') return `${name} (dmg:${w.damage})`
     const tags: string[] = []
-    if (w.spreadCount !== undefined) tags.push(`散射×${w.spreadCount}`)
-    if (w.explosionRadius !== undefined) tags.push(`爆炸 R:${w.explosionRadius}`)
-    if (w.homingStrength !== undefined) tags.push(`追踪 S:${w.homingStrength}`)
-    if (w.throwAngle !== undefined) tags.push(`抛物线:${(w.throwAngle * 180 / Math.PI).toFixed(0)}°`)
-    return `${w.name} (dmg:${w.damage} rng:${w.range})${tags.length > 0 ? ` [${tags.join(' ')}]` : ''}`
+    if (w.spreadCount !== undefined) tags.push(translate({key: 'character.tag.spread', args: [String(w.spreadCount)]}))
+    if (w.explosionRadius !== undefined) tags.push(translate({key: 'character.tag.explosion', args: [String(w.explosionRadius)]}))
+    if (w.homingStrength !== undefined) tags.push(translate({key: 'character.tag.homing', args: [String(w.homingStrength)]}))
+    if (w.throwAngle !== undefined) tags.push(translate({key: 'character.tag.throw_arc', args: [(w.throwAngle * 180 / Math.PI).toFixed(0)]}))
+    return `${name} (dmg:${w.damage} rng:${w.range})${tags.length > 0 ? ` [${tags.join(' ')}]` : ''}`
 }
 
 /** 武器下拉按近战/远程分组（类型由所选武器决定，因此不再有独立「攻击类型」选择器） */
@@ -67,7 +70,7 @@ const buildWeaponOptions = (): {melee: readonly WeaponOption[]; ranged: readonly
     const melee: WeaponOption[] = []
     const ranged: WeaponOption[] = []
     for (const preset of ALL_WEAPON_PRESETS) {
-        const option: WeaponOption = {id: preset.id, type: preset.type, label: describeWeapon(preset)}
+        const option: WeaponOption = {id: preset.id, type: preset.type, preset}
         if (preset.type === 'melee') melee.push(option)
         else ranged.push(option)
     }
@@ -77,22 +80,24 @@ const buildWeaponOptions = (): {melee: readonly WeaponOption[]; ranged: readonly
 /** 武器下拉数据（模块级构建一次：预设为静态数据） */
 const WEAPON_OPTIONS = buildWeaponOptions()
 
-/** 填充武器下拉：近战 / 远程分组（withNone = 追加「无」空项，供副手选择） */
+/** 填充武器下拉：近战 / 远程分组（withNone = 追加「无」空项，供副手选择）；选项文案随语言切换重译 */
 const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean): void => {
     if (withNone) {
         const none = document.createElement('option')
         none.value = ''
-        none.textContent = '无'
+        localizeText(none, 'common.none')
         select.appendChild(none)
     }
-    for (const group of [{label: WEAPON_GROUP_LABEL_MELEE, options: WEAPON_OPTIONS.melee}, {label: WEAPON_GROUP_LABEL_RANGED, options: WEAPON_OPTIONS.ranged}]) {
+    for (const group of [{labelKey: WEAPON_GROUP_LABEL_MELEE, options: WEAPON_OPTIONS.melee}, {labelKey: WEAPON_GROUP_LABEL_RANGED, options: WEAPON_OPTIONS.ranged}]) {
         const optGroup = document.createElement('optgroup')
-        optGroup.label = group.label
+        localizeApply(optGroup, el => {
+            if (el instanceof HTMLOptGroupElement) el.label = translate(group.labelKey)
+        })
         for (const opt of group.options) {
             const o = document.createElement('option')
             o.value = opt.id
             o.dataset.weaponType = opt.type
-            o.textContent = opt.label
+            localizeApply(o, el => { el.textContent = describeWeapon(opt.preset) })
             optGroup.appendChild(o)
         }
         select.appendChild(optGroup)
@@ -118,12 +123,13 @@ const formatNumber = (value: number): string => String(Number(value.toFixed(4)))
 /** 装备（护甲 / 肢体）预设 → 下拉项文案：列出非零的防御 / 攻击加成与移速修正（无修正时只显示名称） */
 const describeArmorPiece = (piece: ArmorPieceConfig | LimbPieceConfig): string => {
     const tags: string[] = []
-    if (piece.defense.physical > 0) tags.push(`物防${piece.defense.physical}`)
-    if (piece.defense.magic > 0) tags.push(`魔防${piece.defense.magic}`)
-    if (piece.attack.physical > 0) tags.push(`物攻+${piece.attack.physical}`)
-    if (piece.attack.magic > 0) tags.push(`魔攻+${piece.attack.magic}`)
-    if (piece.moveSpeedMultiplier !== 1) tags.push(`移速×${formatNumber(piece.moveSpeedMultiplier)}`)
-    return tags.length > 0 ? `${piece.name}（${tags.join(' ')}）` : piece.name
+    if (piece.defense.physical > 0) tags.push(translate({key: 'character.tag.def_phys', args: [String(piece.defense.physical)]}))
+    if (piece.defense.magic > 0) tags.push(translate({key: 'character.tag.def_magic', args: [String(piece.defense.magic)]}))
+    if (piece.attack.physical > 0) tags.push(translate({key: 'character.tag.atk_phys', args: [String(piece.attack.physical)]}))
+    if (piece.attack.magic > 0) tags.push(translate({key: 'character.tag.atk_magic', args: [String(piece.attack.magic)]}))
+    if (piece.moveSpeedMultiplier !== 1) tags.push(translate({key: 'character.tag.move_speed', args: [formatNumber(piece.moveSpeedMultiplier)]}))
+    const name = armorPieceDisplayName(piece)
+    return tags.length > 0 ? translate({key: 'character.armor_desc', args: [name, tags.join(' ')]}) : name
 }
 
 /**
@@ -149,10 +155,10 @@ const entryCooldownOf = (weapon: WeaponConfig): number => entryCooldownOfAttacks
 /** 远程武器特殊模式文案（散射 / 爆炸 / 追踪 / 抛物线） */
 const rangedModeTags = (weapon: RangedWeaponConfig): readonly string[] => {
     const tags: string[] = []
-    if (weapon.spreadCount !== undefined) tags.push(`散射 ×${weapon.spreadCount}`)
-    if (weapon.explosionRadius !== undefined) tags.push(`爆炸 R:${weapon.explosionRadius}`)
-    if (weapon.homingStrength !== undefined) tags.push(`追踪 S:${weapon.homingStrength}`)
-    if (weapon.throwAngle !== undefined) tags.push(`抛物线:${(weapon.throwAngle * 180 / Math.PI).toFixed(0)}°`)
+    if (weapon.spreadCount !== undefined) tags.push(translate({key: 'character.tag.spread', args: [String(weapon.spreadCount)]}))
+    if (weapon.explosionRadius !== undefined) tags.push(translate({key: 'character.tag.explosion', args: [String(weapon.explosionRadius)]}))
+    if (weapon.homingStrength !== undefined) tags.push(translate({key: 'character.tag.homing', args: [String(weapon.homingStrength)]}))
+    if (weapon.throwAngle !== undefined) tags.push(translate({key: 'character.tag.throw_arc', args: [(weapon.throwAngle * 180 / Math.PI).toFixed(0)]}))
     return tags
 }
 
@@ -169,15 +175,16 @@ const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
     const charge = chargeTuningOfWeapon(weapon)
     fields.atkChargeMult.value = formatNumber(charge?.maxChargeMultiplier ?? 100)
     fields.atkChargeTime.value = formatNumber(charge?.maxChargeTime ?? 1)
-    const damageTypeLabel = `  ·  ${DAMAGE_TYPE_LABELS[weapon.damageType]}`
+    const damageTypeLabel = `  ·  ${translate(DAMAGE_TYPE_LABELS[weapon.damageType])}`
+    const weaponName = weaponDisplayName(weapon.id, weapon.name)
     if (weapon.type === 'ranged') {
-        fields.weaponTag.textContent = [weapon.name, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
+        fields.weaponTag.textContent = [weaponName, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
         fields.atkRange.value = formatNumber(weapon.range)
         fields.bulletSpeed.value = formatNumber(weapon.projectileSpeed)
         fields.bulletKB.value = formatNumber(weapon.knockbackForce)
         fields.bulletLife.value = formatNumber(weapon.projectileLifetime)
     } else {
-        fields.weaponTag.textContent = weapon.name + damageTypeLabel
+        fields.weaponTag.textContent = weaponName + damageTypeLabel
     }
 }
 
@@ -228,42 +235,45 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     const header = document.createElement('div')
     header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px'
-    header.textContent = 'Character Control'
+    localizeText(header, 'character.title')
     el.appendChild(header)
 
-    el.appendChild(createSection('Position'))
-    const posX = createLabeledNumberInput(el, 'X', {step: '0.01'})
-    const posY = createLabeledNumberInput(el, 'Y', {step: '0.01'})
-    const posZ = createLabeledNumberInput(el, 'Z', {step: '0.01'})
-    const facingDeg = createLabeledNumberInput(el, 'Facing°', {min: '0', max: '360', step: '1', value: '0'})
+    el.appendChild(createSection('panel.position'))
+    const posX = createLabeledNumberInput(el, 'panel.x', {step: '0.01'})
+    const posY = createLabeledNumberInput(el, 'panel.y', {step: '0.01'})
+    const posZ = createLabeledNumberInput(el, 'panel.z', {step: '0.01'})
+    const facingDeg = createLabeledNumberInput(el, 'character.facing', {min: '0', max: '360', step: '1', value: '0'})
 
-    el.appendChild(createSection('Config'))
-    const speed = createLabeledNumberInput(el, 'Speed', {min: '0.1', step: '0.1', value: '6'})
-    const jumpH = createLabeledNumberInput(el, 'JumpH', {min: '0.1', step: '0.1', value: '2'})
-    const scale = createLabeledNumberInput(el, 'Scale', {min: '0.1', step: '0.1', value: '1'})
+    el.appendChild(createSection('panel.config'))
+    const speed = createLabeledNumberInput(el, 'character.speed', {min: '0.1', step: '0.1', value: '6'})
+    const jumpH = createLabeledNumberInput(el, 'character.jump_height', {min: '0.1', step: '0.1', value: '2'})
+    const scale = createLabeledNumberInput(el, 'character.scale', {min: '0.1', step: '0.1', value: '1'})
 
-    el.appendChild(createSection('Faction'))
-    const faction = createLabeledNumberInput(el, 'Faction', {min: '0', step: '1', value: '0'})
+    el.appendChild(createSection('panel.faction'))
+    const faction = createLabeledNumberInput(el, 'character.faction', {min: '0', step: '1', value: '0'})
     const tendencyLabel = document.createElement('label')
-    tendencyLabel.textContent = 'Tendency '
+    appendLocalizedText(tendencyLabel, 'character.tendency')
+    tendencyLabel.appendChild(document.createTextNode(' '))
     const tendSelect = document.createElement('select')
-    const TENDENCY_OPTIONS: ReadonlyArray<{value: TendencyId; label: string}> = [
-        {value: 'hostileAll', label: 'Hostile All'},
-        {value: 'hostileExceptSelf', label: 'Hostile Except Self'},
-        {value: 'hostileTo', label: 'Hostile To...'},
-        {value: 'hostileExcept', label: 'Hostile Except...'},
-        {value: 'pacifist', label: 'Pacifist'},
+    const TENDENCY_OPTIONS: ReadonlyArray<{value: TendencyId; labelKey: StringLocaleKey}> = [
+        {value: 'hostileAll', labelKey: 'character.tendency.hostile_all'},
+        {value: 'hostileExceptSelf', labelKey: 'character.tendency.hostile_except_self'},
+        {value: 'hostileTo', labelKey: 'character.tendency.hostile_to'},
+        {value: 'hostileExcept', labelKey: 'character.tendency.hostile_except'},
+        {value: 'pacifist', labelKey: 'character.tendency.pacifist'},
     ]
     for (const opt of TENDENCY_OPTIONS) {
         const o = document.createElement('option')
-        o.value = opt.value; o.textContent = opt.label
+        o.value = opt.value
+        localizeText(o, opt.labelKey)
         tendSelect.appendChild(o)
     }
     tendencyLabel.appendChild(tendSelect)
     el.appendChild(tendencyLabel)
 
     const targetFactionsLabel = document.createElement('label')
-    targetFactionsLabel.textContent = 'TargetFactions '
+    appendLocalizedText(targetFactionsLabel, 'character.target_factions')
+    targetFactionsLabel.appendChild(document.createTextNode(' '))
     targetFactionsLabel.style.cssText = 'display:none'
     const targetFactionsInput = document.createElement('input')
     targetFactionsInput.type = 'text'
@@ -292,11 +302,12 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     }
 
     /* 装备模块：武器（下拉 + 数值覆写）与护甲（四槽下拉）统一放置 */
-    el.appendChild(createSection('装备'))
+    el.appendChild(createSection('character.section.equip'))
     const atkRow = document.createElement('div')
     atkRow.style.cssText = 'display:flex;gap:8px;align-items:center'
     const weaponSelectLabel = document.createElement('label')
-    weaponSelectLabel.textContent = 'Wpn '
+    appendLocalizedText(weaponSelectLabel, 'character.weapon')
+    weaponSelectLabel.appendChild(document.createTextNode(' '))
     const weaponSelect = document.createElement('select')
     weaponSelect.style.cssText = 'max-width:180px'
     weaponSelectLabel.appendChild(weaponSelect)
@@ -315,8 +326,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const offhandRow = document.createElement('div')
     offhandRow.style.cssText = 'display:flex;gap:8px;align-items:center'
     const offhandLabel = document.createElement('label')
-    offhandLabel.textContent = 'Off '
-    offhandLabel.title = '副手武器：单持时左手持握、双手共持时挂背；与主手同类近战可双持'
+    appendLocalizedText(offhandLabel, 'character.offhand')
+    offhandLabel.appendChild(document.createTextNode(' '))
+    localizeTitle(offhandLabel, 'character.offhand_tip')
     const offhandSelect = document.createElement('select')
     offhandSelect.id = 'offhand-weapon-select'
     offhandSelect.style.cssText = 'max-width:180px'
@@ -329,8 +341,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const holdRow = document.createElement('div')
     holdRow.style.cssText = 'display:flex;gap:8px;align-items:center'
     const holdLabel = document.createElement('label')
-    holdLabel.textContent = 'Hold '
-    holdLabel.title = '持握模式：单持 / 双手共持 / 双持（双持需副手装备同类近战武器）'
+    appendLocalizedText(holdLabel, 'character.hold')
+    holdLabel.appendChild(document.createTextNode(' '))
+    localizeTitle(holdLabel, 'character.hold_tip')
     const holdModeSelect = document.createElement('select')
     holdModeSelect.id = 'hold-mode-select'
     holdLabel.appendChild(holdModeSelect)
@@ -338,19 +351,19 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     el.appendChild(holdRow)
     const holdModeHint = document.createElement('div')
     holdModeHint.style.cssText = 'font-size:11px;color:#aa8844;margin-bottom:4px;display:none'
-    holdModeHint.textContent = '双持需副手装备同类近战武器'
+    localizeText(holdModeHint, 'character.hold_mode_hint')
     el.appendChild(holdModeHint)
 
-    const atkRange = createLabeledNumberInput(el, 'Range', {min: '0.1', step: '0.1', value: '10'})
-    const atkDmg = createLabeledNumberInput(el, 'Damage', {min: '0.1', step: '0.1', value: '3'})
-    const atkCD = createLabeledNumberInput(el, 'Cooldown', {min: '0.1', step: '0.1', value: '0.5'})
+    const atkRange = createLabeledNumberInput(el, 'character.range', {min: '0.1', step: '0.1', value: '10'})
+    const atkDmg = createLabeledNumberInput(el, 'character.damage', {min: '0.1', step: '0.1', value: '3'})
+    const atkCD = createLabeledNumberInput(el, 'character.cooldown', {min: '0.1', step: '0.1', value: '0.5'})
     /* 蓄力调参：最大蓄力倍率（%，100 = 无加成）+ 最长蓄力时间（秒）；对可蓄力武器生效 */
-    const atkChargeMult = createLabeledNumberInput(el, 'ChgPwr%', {min: '100', step: '10', value: '200'})
-    const atkChargeTime = createLabeledNumberInput(el, 'ChgTime', {min: '0.1', step: '0.1', value: '1'})
+    const atkChargeMult = createLabeledNumberInput(el, 'character.charge_power', {min: '100', step: '10', value: '200'})
+    const atkChargeTime = createLabeledNumberInput(el, 'character.charge_time', {min: '0.1', step: '0.1', value: '1'})
     el.appendChild(document.createElement('br'))
-    const bulletSpeed = createLabeledNumberInput(el, 'BulSpd', {min: '1', step: '1', value: '20'})
-    const bulletKB = createLabeledNumberInput(el, 'BulKnock', {min: '0', step: '0.5', value: '3'})
-    const bulletLife = createLabeledNumberInput(el, 'BulLife', {min: '0.5', step: '0.5', value: '3'})
+    const bulletSpeed = createLabeledNumberInput(el, 'character.bullet_speed', {min: '1', step: '1', value: '20'})
+    const bulletKB = createLabeledNumberInput(el, 'character.bullet_knockback', {min: '0', step: '0.5', value: '3'})
+    const bulletLife = createLabeledNumberInput(el, 'character.bullet_life', {min: '0.5', step: '0.5', value: '3'})
 
     /* 攻击区字段集合（预填与回显共用） */
     const attackFields: AttackFields = {atkRange, atkDmg, atkCD, atkChargeMult, atkChargeTime, bulletSpeed, bulletKB, bulletLife, weaponTag}
@@ -363,12 +376,12 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const fillEquipSelect = (select: HTMLSelectElement, pieces: readonly (ArmorPieceConfig | LimbPieceConfig)[]): void => {
         const noneOption = document.createElement('option')
         noneOption.value = ''
-        noneOption.textContent = '无'
+        noneOption.textContent = translate('common.none')
         select.appendChild(noneOption)
         for (const piece of pieces) {
             const option = document.createElement('option')
             option.value = piece.id
-            option.textContent = describeArmorPiece(piece)
+            localizeApply(option, el => { el.textContent = describeArmorPiece(piece) })
             select.appendChild(option)
         }
     }
@@ -378,15 +391,18 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         row.style.cssText = 'display:flex;gap:8px;align-items:center'
 
         const armorLabel = document.createElement('label')
-        armorLabel.textContent = `${ARMOR_SLOT_LABELS[armor]} `
+        appendLocalizedText(armorLabel, ARMOR_SLOT_LABELS[armor])
+        armorLabel.appendChild(document.createTextNode(' '))
         armorSelects[armor].style.cssText = 'max-width:180px'
         fillEquipSelect(armorSelects[armor], armorPiecesOfSlot(armor))
         armorLabel.appendChild(armorSelects[armor])
         row.appendChild(armorLabel)
 
         const limbLabel = document.createElement('label')
-        limbLabel.textContent = `肢体·${LIMB_SLOT_LABELS[limb]} `
-        limbLabel.title = '肢体组件（骷髅 / 兽人 / 精灵）：装备后默认顶替该部位的人类肢体，颜色随阵营变化；空 = 默认人类肢体'
+        appendLocalizedText(limbLabel, 'character.limb_prefix')
+        appendLocalizedText(limbLabel, LIMB_SLOT_LABELS[limb])
+        limbLabel.appendChild(document.createTextNode(' '))
+        localizeTitle(limbLabel, 'character.limb_tip')
         limbSelects[limb].style.cssText = 'max-width:180px'
         fillEquipSelect(limbSelects[limb], limbPiecesOfSlot(limb))
         limbLabel.appendChild(limbSelects[limb])
@@ -396,11 +412,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     }
 
     /* 属性模块：生命、基础防御与装备数值预览（有效防御 / 攻击加成 / 有效移速） */
-    el.appendChild(createSection('属性'))
-    const maxHP = createLabeledNumberInput(el, 'MaxHP', {min: '1', step: '1', value: '15'})
-    const curHP = createLabeledNumberInput(el, 'CurHP', {min: '0', step: '1', value: '15'})
-    const baseDefPhys = createLabeledNumberInput(el, '基础物防', {min: '0', step: '1', value: '0'})
-    const baseDefMagic = createLabeledNumberInput(el, '基础魔防', {min: '0', step: '1', value: '0'})
+    el.appendChild(createSection('character.section.attributes'))
+    const maxHP = createLabeledNumberInput(el, 'character.max_hp', {min: '1', step: '1', value: '15'})
+    const curHP = createLabeledNumberInput(el, 'character.cur_hp', {min: '0', step: '1', value: '15'})
+    const baseDefPhys = createLabeledNumberInput(el, 'character.base_def_phys', {min: '0', step: '1', value: '0'})
+    const baseDefMagic = createLabeledNumberInput(el, 'character.base_def_magic', {min: '0', step: '1', value: '0'})
     const equipmentPreviewTag = document.createElement('div')
     equipmentPreviewTag.style.cssText = 'font-size:11px;color:#aaa;margin-bottom:4px;white-space:pre-line'
     el.appendChild(equipmentPreviewTag)
@@ -432,19 +448,24 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     })
 
     /** 装备数值预览：复用目录汇总函数（与运行时 setCombatEquipment 同一口径）：有效防御 / 攻击加成 / 有效移速 */
-    const updateEquipmentPreview = (): void => {
+    const buildEquipmentPreview = (): string => {
         const resolvedArmor = resolveArmorLoadout(readArmorLoadout())
         const resolvedLimb = resolveLimbLoadout(readLimbLoadout())
         const defense = totalDefenseOf(readBaseDefense(), resolvedArmor, resolvedLimb)
         const attack = totalAttackOf(resolvedArmor, resolvedLimb)
         const moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
         const baseSpeed = parseFloat(speed.value) || 0
-        equipmentPreviewTag.textContent = [
-            `有效防御：物 ${formatNumber(defense.physical)} / 魔 ${formatNumber(defense.magic)}`,
-            `攻击加成：物 ${formatNumber(attack.physical)} / 魔 ${formatNumber(attack.magic)}`,
-            `有效移速：${formatNumber(baseSpeed * moveSpeedMultiplier)}（基础 ${formatNumber(baseSpeed)} × 装备 ${formatNumber(moveSpeedMultiplier)}）`,
+        return [
+            translate({key: 'character.preview_defense', args: [formatNumber(defense.physical), formatNumber(defense.magic)]}),
+            translate({key: 'character.preview_attack', args: [formatNumber(attack.physical), formatNumber(attack.magic)]}),
+            translate({key: 'character.preview_move', args: [formatNumber(baseSpeed * moveSpeedMultiplier), formatNumber(baseSpeed), formatNumber(moveSpeedMultiplier)]}),
         ].join('\n')
     }
+    const updateEquipmentPreview = (): void => {
+        equipmentPreviewTag.textContent = buildEquipmentPreview()
+    }
+    /* 预览文本随语言切换重译（复用同一计算口径） */
+    localizeApply(equipmentPreviewTag, el => { el.textContent = buildEquipmentPreview() })
     for (const slot of ARMOR_SLOTS) armorSelects[slot].onchange = updateEquipmentPreview
     for (const slot of LIMB_SLOTS) limbSelects[slot].onchange = updateEquipmentPreview
     baseDefPhys.oninput = updateEquipmentPreview
@@ -452,10 +473,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     speed.oninput = updateEquipmentPreview
 
     /* 锁定点区：默认身体中心点（不可编辑）+ 可增删改的关节锁定点（关节 id + 关节本地偏移） */
-    el.appendChild(createSection('锁定点'))
+    el.appendChild(createSection('character.section.lock_points'))
     const defaultLockPointTag = document.createElement('div')
     defaultLockPointTag.style.cssText = 'font-size:11px;color:#888;margin-bottom:2px'
-    defaultLockPointTag.textContent = '默认：身体中心（不可删除）'
+    localizeText(defaultLockPointTag, 'character.default_lock_point')
     el.appendChild(defaultLockPointTag)
 
     const lockPointsContainer = document.createElement('div')
@@ -463,7 +484,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     el.appendChild(lockPointsContainer)
 
     const addLockPointBtn = document.createElement('button')
-    addLockPointBtn.textContent = '+ 添加锁定点'
+    localizeText(addLockPointBtn, 'character.add_lock_point')
     addLockPointBtn.style.cssText = 'font-size:12px'
     el.appendChild(addLockPointBtn)
 
@@ -482,7 +503,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             for (const option of JOINT_LOCK_POINT_OPTIONS) {
                 const o = document.createElement('option')
                 o.value = option.id
-                o.textContent = option.label
+                localizeApply(o, el => { el.textContent = `${humanoidJointDisplayName(option.id, option.name)} (${option.id})` })
                 jointSelect.appendChild(o)
             }
             jointSelect.value = point.jointId
@@ -508,7 +529,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         refreshLockPointList()
     }
 
-    el.appendChild(createSection('Player'))
+    el.appendChild(createSection('character.section.player'))
     const playerRow = document.createElement('div')
     playerRow.style.cssText = 'display:flex;gap:8px;align-items:center'
     const playerCheck = document.createElement('input')
@@ -516,25 +537,27 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     playerCheck.id = 'chk-player'
     const playerLabel = document.createElement('label')
     playerLabel.htmlFor = 'chk-player'
-    playerLabel.textContent = ' Mark as Player'
+    localizeText(playerLabel, 'character.mark_player')
     playerLabel.style.cssText = 'cursor:pointer'
     playerRow.appendChild(playerCheck)
     playerRow.appendChild(playerLabel)
     el.appendChild(playerRow)
 
     /* AI 策略区（仅非玩家角色可见） */
-    const aiSection = createSection('AI Strategy')
+    const aiSection = createSection('character.section.ai')
     el.appendChild(aiSection)
 
     /* 和平策略下拉框 */
     const peaceRow = document.createElement('div')
     peaceRow.style.cssText = 'display:flex;gap:8px;align-items:center'
     const peaceLabel = document.createElement('label')
-    peaceLabel.textContent = 'Peace '
+    appendLocalizedText(peaceLabel, 'character.peace_label')
+    peaceLabel.appendChild(document.createTextNode(' '))
     const peaceSelect = document.createElement('select')
     for (const s of PEACE_SUB_STRATEGIES) {
         const o = document.createElement('option')
-        o.value = s; o.textContent = s === 'patrol' ? 'Patrol' : 'Build'
+        o.value = s
+        localizeText(o, s === 'patrol' ? 'character.peace.patrol' : 'character.peace.build')
         peaceSelect.appendChild(o)
     }
     peaceLabel.appendChild(peaceSelect)
@@ -545,16 +568,18 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const combatRow = document.createElement('div')
     combatRow.style.cssText = 'display:flex;gap:8px;align-items:center'
     const combatLabel = document.createElement('label')
-    combatLabel.textContent = 'Combat '
+    appendLocalizedText(combatLabel, 'character.combat_label')
+    combatLabel.appendChild(document.createTextNode(' '))
     const combatSelect = document.createElement('select')
-    const COMBAT_OPTIONS: ReadonlyArray<{value: string; label: string}> = [
-        {value: 'tactical', label: 'Tactical (default)'},
-        {value: 'aggressive', label: 'Aggressive'},
-        {value: 'cowardly', label: 'Cowardly'},
+    const COMBAT_OPTIONS: ReadonlyArray<{value: string; labelKey: StringLocaleKey}> = [
+        {value: 'tactical', labelKey: 'character.combat.tactical'},
+        {value: 'aggressive', labelKey: 'character.combat.aggressive'},
+        {value: 'cowardly', labelKey: 'character.combat.cowardly'},
     ]
     for (const opt of COMBAT_OPTIONS) {
         const o = document.createElement('option')
-        o.value = opt.value; o.textContent = opt.label
+        o.value = opt.value
+        localizeText(o, opt.labelKey)
         combatSelect.appendChild(o)
     }
     combatLabel.appendChild(combatSelect)
@@ -569,18 +594,18 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     navCheck.id = 'chk-nav'
     const navLabel = document.createElement('label')
     navLabel.htmlFor = 'chk-nav'
-    navLabel.textContent = ' Enable Nav Sensing'
+    localizeText(navLabel, 'character.enable_nav')
     navLabel.style.cssText = 'cursor:pointer'
     navRow.appendChild(navCheck)
     navRow.appendChild(navLabel)
     el.appendChild(navRow)
 
     /* 建造配置区（仅 build 策略可见） */
-    const buildSection = createSection('Build Config')
+    const buildSection = createSection('character.section.build')
     el.appendChild(buildSection)
-    const buildIntervalInput = createLabeledNumberInput(el, 'Interval(s)', {min: '0.5', step: '0.1', value: '3'})
+    const buildIntervalInput = createLabeledNumberInput(el, 'character.build_interval', {min: '0.5', step: '0.1', value: '3'})
     const buildBoxTypesLabel = document.createElement('label')
-    buildBoxTypesLabel.textContent = 'Box Types '
+    localizeText(buildBoxTypesLabel, 'character.box_types')
     buildBoxTypesLabel.style.cssText = 'font-size:12px;color:#aaa'
     el.appendChild(buildBoxTypesLabel)
     el.appendChild(document.createElement('br'))
@@ -592,7 +617,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /* 添加箱型按钮 */
     const addBoxTypeBtn = document.createElement('button')
-    addBoxTypeBtn.textContent = '+ Add Box Type'
+    localizeText(addBoxTypeBtn, 'character.add_box_type')
     addBoxTypeBtn.style.cssText = 'font-size:12px;margin-top:4px'
     el.appendChild(addBoxTypeBtn)
     el.appendChild(document.createElement('br'))
@@ -653,6 +678,31 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         return ctx.getAll().find(c => c.id === id)
     }
 
+    /** 武器标签文本（当前选中武器 + 伤害类型；随语言切换重译） */
+    const renderWeaponTag = (): string => {
+        const sel = getSelected()
+        if (sel === undefined) return ''
+        const weapon = sel.combat.weapon
+        const damageTypeLabel = `  ·  ${translate(DAMAGE_TYPE_LABELS[weapon.damageType])}`
+        const name = weaponDisplayName(weapon.id, weapon.name)
+        return weapon.type === 'ranged'
+            ? [name, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
+            : name + damageTypeLabel
+    }
+
+    /** 当前攻击段标签文本（武器名 · 段名 / 待机；随语言切换重译） */
+    const renderAttackSegmentTag = (): string => {
+        const sel = getSelected()
+        if (sel === undefined) return ''
+        const name = weaponDisplayName(sel.combat.weapon.id, sel.combat.weapon.name)
+        const activeSegment = sel.combat.activeSegment
+        return activeSegment === undefined
+            ? `${name} · ${translate('character.idle')}`
+            : `${name} · ${segmentDisplayName(activeSegment)}`
+    }
+    localizeApply(weaponTag, el => { el.textContent = renderWeaponTag() })
+    localizeApply(attackSegmentTag, el => { el.textContent = renderAttackSegmentTag() })
+
     /** 当前副手选择（空 value = 无副手） */
     const selectedOffhandWeapon = (): WeaponConfig | undefined => selectedWeaponOf(offhandSelect)
 
@@ -671,7 +721,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         for (const mode of modes) {
             const option = document.createElement('option')
             option.value = mode
-            option.textContent = HOLD_MODE_LABELS[mode]
+            localizeApply(option, el => { el.textContent = translate(HOLD_MODE_LABELS[mode]) })
             holdModeSelect.appendChild(option)
         }
         holdModeSelect.value = modes.some(mode => mode === previous) ? previous : (modes[0] ?? '')
@@ -700,7 +750,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             const row = document.createElement('div')
             row.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:11px;padding:2px 0;cursor:pointer'
             row.textContent = `${bt.entityType} (${bt.probability}) ${bt.minWidth}-${bt.maxWidth}×${bt.minHeight}-${bt.maxHeight}×${bt.minDepth}-${bt.maxDepth}`
-            row.title = '点击编辑详细参数'
+            row.title = translate('character.detail_hint')
             const delBtn = document.createElement('button')
             delBtn.textContent = '×'
             delBtn.style.cssText = 'font-size:10px;padding:0 3px;margin-left:auto'
@@ -714,13 +764,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const showDetail = (idx: number): void => {
         if (idx < 0 || idx >= cachedBoxTypes.length) { detailPanel.style.display = 'none'; return }
         const bt = cachedBoxTypes[idx]
-        detailTitle.textContent = `Edit: ${bt.entityType}`
+        detailTitle.textContent = translate({key: 'character.detail_edit_title', args: [bt.entityType]})
         detailFields.innerHTML = ''
-        const addField = (label: string, key: keyof typeof bt): void => {
+        const addField = (labelKey: StringLocaleKey, key: keyof typeof bt): void => {
             const div = document.createElement('div')
             div.style.cssText = 'display:flex;gap:4px;align-items:center;margin:2px 0'
             const lbl = document.createElement('span')
-            lbl.textContent = label; lbl.style.cssText = 'font-size:11px;width:100px'
+            lbl.textContent = translate(labelKey)
+            lbl.style.cssText = 'font-size:11px;width:100px'
             const inp = document.createElement('input')
             inp.type = 'text'; inp.style.cssText = 'width:60px;font-size:11px'
             inp.value = String(bt[key] ?? '')
@@ -728,27 +779,27 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             div.appendChild(lbl); div.appendChild(inp)
             detailFields.appendChild(div)
         }
-        addField('EntityType', 'entityType')
-        addField('Probability', 'probability')
-        addField('Min W', 'minWidth'); addField('Max W', 'maxWidth')
-        addField('Min H', 'minHeight'); addField('Max H', 'maxHeight')
-        addField('Min D', 'minDepth'); addField('Max D', 'maxDepth')
-        addField('Mass', 'mass')
-        addField('Friction', 'friction')
+        addField('character.field.entity_type', 'entityType')
+        addField('character.field.probability', 'probability')
+        addField('character.field.min_w', 'minWidth'); addField('character.field.max_w', 'maxWidth')
+        addField('character.field.min_h', 'minHeight'); addField('character.field.max_h', 'maxHeight')
+        addField('character.field.min_d', 'minDepth'); addField('character.field.max_d', 'maxDepth')
+        addField('character.field.mass', 'mass')
+        addField('character.field.friction', 'friction')
         if (bt.entityType === 'box/destruction' || bt.entityType === 'box/burning') {
-            addField('MaxHealth', 'maxHealth')
+            addField('character.field.max_health', 'maxHealth')
         }
         if (bt.entityType === 'box/magnet') {
-            addField('AttrRadius', 'attractionRadius')
-            addField('AttrStrength', 'attractionStrength')
+            addField('character.field.attr_radius', 'attractionRadius')
+            addField('character.field.attr_strength', 'attractionStrength')
         }
         if (bt.entityType === 'box/elasticity') {
-            addField('Stiffness', 'stiffness')
-            addField('DampingRatio', 'dampingRatio')
-            addField('MaxDeformFr', 'maxDeformFraction')
+            addField('character.field.stiffness', 'stiffness')
+            addField('character.field.damping_ratio', 'dampingRatio')
+            addField('character.field.max_deform', 'maxDeformFraction')
         }
         const closeBtn = document.createElement('button')
-        closeBtn.textContent = 'Done'
+        closeBtn.textContent = translate('character.done')
         closeBtn.style.cssText = 'font-size:11px;margin-top:4px'
         closeBtn.onclick = () => { detailPanel.style.display = 'none' }
         detailFields.appendChild(closeBtn)
@@ -809,18 +860,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             bulletKB.value = formatNumber(attack.ranged.bulletKnockback)
             bulletLife.value = formatNumber(attack.ranged.bulletLifetime)
         }
-        const weaponPreset = findWeaponPreset(attack.weaponId)
-        const damageTypeLabel = weaponPreset === undefined ? '' : `  ·  ${DAMAGE_TYPE_LABELS[weaponPreset.damageType]}`
-        weaponTag.textContent = weaponPreset === undefined
-            ? ''
-            : weaponPreset.type === 'ranged'
-                ? [weaponPreset.name, ...rangedModeTags(weaponPreset)].join('  ') + damageTypeLabel
-                : weaponPreset.name + damageTypeLabel
-        /* 当前攻击段 / 连段信息（不再有槽位与连段索引） */
-        const activeSegment = sel.combat.activeSegment
-        attackSegmentTag.textContent = activeSegment === undefined
-            ? `${sel.combat.weapon.name} · 待机`
-            : `${sel.combat.weapon.name} · ${segmentDisplayName(activeSegment)}`
+        weaponTag.textContent = renderWeaponTag()
+        attackSegmentTag.textContent = renderAttackSegmentTag()
 
         /* 副手武器与持握模式回显（未知 / 已移除的副手武器视为无） */
         const offhandWeapon = sel.combat.offhand?.weapon

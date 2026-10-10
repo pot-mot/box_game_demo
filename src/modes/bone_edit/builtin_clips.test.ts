@@ -8,6 +8,8 @@ import {RANGED_WEAPON_PRESETS} from '../../character/weapon/ranged_weapon.ts'
 import {orderedSegments} from '../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, type WeaponConfig} from '../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS} from '../../character/weapon/hold_mode.ts'
+import {translate} from '../../i18n/index.ts'
+import {weaponDisplayName} from '../../character/weapon/catalog.ts'
 import type {BuiltinClipEntry} from './builtin_clips.ts'
 
 const entriesOf = (group: string): readonly BuiltinClipEntry[] =>
@@ -67,7 +69,7 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
                 const segments = orderedSegments(weaponAttacksOf(weapon, mode))
                 for (const segment of segments) {
                     const display = segment.label ?? `${segment.key === 'light' ? '轻击' : '重击'}${['一', '二', '三'][segment.step - 1] ?? segment.step}段`
-                    expected.push(`${weapon.name} · ${HOLD_MODE_LABELS[mode]} · ${display}`)
+                    expected.push(`${weaponDisplayName(weapon.id, weapon.name)} · ${translate(HOLD_MODE_LABELS[mode])} · ${display}`)
                 }
             }
         }

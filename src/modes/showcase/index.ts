@@ -9,9 +9,10 @@ import type {ShowcaseActorHandle} from './actor_handle.ts'
 import {createNameLabel} from './label.ts'
 import {createPanel} from './panel.ts'
 import type {PanelRowInfo} from './panel.ts'
-import {defaultHoldMode, weaponPresetOrDefault} from '../../character/weapon/catalog.ts'
+import {defaultHoldMode, weaponPresetOrDefault, weaponDisplayName} from '../../character/weapon/catalog.ts'
 import {HOLD_MODES, HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 import {factionColorOf} from '../../entity/character/appearance/constants.ts'
+import {translate} from '../../i18n/index.ts'
 import {
     CLICK_SLOP_PX,
     FOCUS_RING_COLOR,
@@ -76,7 +77,7 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
             /* 清单条目 skillId 即武器 id：攻击链（段/时长/阶段/冷却）与模型全部取自武器模组 */
             const weapon = weaponPresetOrDefault(entry.skillId)
             const mode = entry.holdMode ?? defaultHoldMode(weapon)
-            const weaponName = weapon.name
+            const weaponName = weaponDisplayName(weapon.id, weapon.name)
             const actor = createShowcaseActor({
                 id: actors.length,
                 scene: sceneCtx.scene,
@@ -88,14 +89,18 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
                 weaponName,
             })
             /* 头顶名称标签（武器名 + 类型/持握模式）—— 句柄交给 actor，随其 dispose 统一回收 */
-            actor.attachLabel(createNameLabel(weaponName, weapon.type === 'melee' ? `近战 · ${HOLD_MODE_LABELS[mode]}` : '远程武器'))
+            actor.attachLabel(createNameLabel(() => ({
+                title: weaponDisplayName(weapon.id, weapon.name),
+                subtitle: weapon.type === 'melee'
+                    ? translate({key: 'showcase.weapon.melee_subtitle', args: [translate(HOLD_MODE_LABELS[mode])]})
+                    : translate('showcase.weapon.ranged'),
+            })))
             actors.push(actor)
             anchorToActor.set(actor.anchor, actor)
             panelInfos.push({
                 id: actor.id,
-                skillName: actor.weaponName,
-                weaponName: actor.weaponName,
-                holdModeLabel: actor.holdModeLabel,
+                nameOf: () => weaponDisplayName(weapon.id, weapon.name),
+                subOf: () => translate(HOLD_MODE_LABELS[mode]),
                 colorHex: `#${factionColorOf(actor.factionColor).toString(16).padStart(6, '0')}`,
             })
         }
@@ -109,26 +114,29 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
     for (let i = 0; i < RACE_SHOWCASE_ROSTER.length; i++) {
         const entry = RACE_SHOWCASE_ROSTER[i]
         if (entry === undefined) continue
-        const subtitle = entry.kind === 'race' ? '种族肢体' : '护甲套装'
+        const name = translate(entry.name)
+        const subtitle = entry.kind === 'race' ? translate('showcase.extra.race_limb') : translate('showcase.extra.armor_set')
         const actor = createRaceActor({
             id: actors.length,
             scene: sceneCtx.scene,
             x: (i - (RACE_SHOWCASE_ROSTER.length - 1) / 2) * RACE_SHOWCASE_SPACING,
             z: RACE_SHOWCASE_ROW_Z,
-            name: entry.name,
+            name,
             subtitle,
             faction: entry.faction,
             limb: entry.limb ?? {},
             armor: entry.armor ?? {},
         })
-        actor.attachLabel(createNameLabel(entry.name, subtitle))
+        actor.attachLabel(createNameLabel(() => ({
+            title: translate(entry.name),
+            subtitle: entry.kind === 'race' ? translate('showcase.extra.race_limb') : translate('showcase.extra.armor_set'),
+        })))
         actors.push(actor)
         anchorToActor.set(actor.anchor, actor)
         panelInfos.push({
             id: actor.id,
-            skillName: entry.name,
-            weaponName: entry.name,
-            holdModeLabel: subtitle,
+            nameOf: () => translate(entry.name),
+            subOf: () => entry.kind === 'race' ? translate('showcase.extra.race_limb') : translate('showcase.extra.armor_set'),
             colorHex: `#${factionColorOf(entry.faction).toString(16).padStart(6, '0')}`,
         })
     }

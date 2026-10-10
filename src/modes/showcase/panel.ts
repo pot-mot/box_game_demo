@@ -1,5 +1,7 @@
 import type {ActorStatus, SkillTimerStatus} from './actor.ts'
 import {SPEED_OPTIONS} from './constants.ts'
+import {translate} from '../../i18n/index.ts'
+import {localizeText, localizeApply} from '../../i18n/dom.ts'
 
 /** 面板控件的回调（由模式装配注入实际控制逻辑） */
 export interface PanelCallbacks {
@@ -12,11 +14,10 @@ export interface PanelCallbacks {
 /** 建行所需的静态信息 */
 export interface PanelRowInfo {
     readonly id: number
-    /** 名称行（重构后为武器中文名，与 weaponName 同值） */
-    readonly skillName: string
-    readonly weaponName: string
-    /** 持握模式中文名（单持 / 双手共持 / 双持） */
-    readonly holdModeLabel: string
+    /** 名称渲染（随语言切换重算：武器本地化名 / 种族名） */
+    readonly nameOf: () => string
+    /** 副名渲染（持握模式 / 种族肢体 / 护甲套装；可能为空串） */
+    readonly subOf: () => string
     /** 阵营主色（css 颜色字符串） */
     readonly colorHex: string
 }
@@ -121,6 +122,7 @@ interface RowRefs {
 }
 
 export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCallbacks): ShowcasePanel => {
+    const infoById = new Map(infos.map(info => [info.id, info]))
     const style = injectStyles()
 
     /* —— 主面板（左上） —— */
@@ -129,12 +131,12 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
     const title = document.createElement('div')
     title.className = 'sch-title'
-    title.textContent = '攻击动作展示台'
+    localizeText(title, 'showcase.title')
     panel.appendChild(title)
 
     const sub = document.createElement('div')
     sub.className = 'sch-sub'
-    sub.textContent = '全武器攻击阶段动画 · 连段衔接时序复现'
+    localizeText(sub, 'showcase.subtitle')
     panel.appendChild(sub)
 
     /* 控件行 */
@@ -143,7 +145,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
     const pauseBtn = document.createElement('button')
     pauseBtn.className = 'sch-btn'
-    pauseBtn.textContent = '⏸ 暂停'
+    pauseBtn.textContent = translate('showcase.pause')
     pauseBtn.addEventListener('click', () => {
         callbacks.onTogglePause()
         pauseBtn.blur()
@@ -152,7 +154,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
     const stepBtn = document.createElement('button')
     stepBtn.className = 'sch-btn'
-    stepBtn.textContent = '⏭ 单步'
+    localizeText(stepBtn, 'showcase.step')
     stepBtn.addEventListener('click', () => {
         callbacks.onStep()
         stepBtn.blur()
@@ -175,12 +177,16 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     focusSelect.className = 'sch-select'
     const noneOption = document.createElement('option')
     noneOption.value = ''
-    noneOption.textContent = '聚焦：无'
+    localizeText(noneOption, 'showcase.focus_none')
     focusSelect.appendChild(noneOption)
     for (const info of infos) {
         const opt = document.createElement('option')
         opt.value = String(info.id)
-        opt.textContent = info.holdModeLabel.length > 0 ? `${info.skillName} · ${info.holdModeLabel}` : info.skillName
+        localizeApply(opt, el => {
+            const name = info.nameOf()
+            const sub = info.subOf()
+            el.textContent = sub.length > 0 ? `${name} · ${sub}` : name
+        })
         focusSelect.appendChild(opt)
     }
     focusSelect.addEventListener('change', () => {
@@ -208,14 +214,12 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         names.className = 'sch-names'
         const skillSpan = document.createElement('span')
         skillSpan.className = 'sch-skill'
-        skillSpan.textContent = info.skillName
+        localizeApply(skillSpan, el => { el.textContent = info.nameOf() })
         const weaponSpan = document.createElement('span')
         weaponSpan.className = 'sch-weapon'
-        /* 副名与名称行同值时留空（重构后二者同为武器中文名） */
-        weaponSpan.textContent = info.weaponName === info.skillName ? '' : info.weaponName
         const holdSpan = document.createElement('span')
         holdSpan.className = 'sch-hold'
-        holdSpan.textContent = info.holdModeLabel
+        localizeApply(holdSpan, el => { el.textContent = info.subOf() })
         names.appendChild(skillSpan)
         names.appendChild(weaponSpan)
         names.appendChild(holdSpan)
@@ -251,7 +255,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     const detailHit = document.createElement('div')
     const detailPhase = document.createElement('div')
     const detailTotal = document.createElement('div')
-    detailTotal.textContent = '攻击总进度'
+    localizeText(detailTotal, 'showcase.total_progress')
     const totalBar = document.createElement('div')
     totalBar.className = 'sch-totalbar'
     const totalFill = document.createElement('div')
@@ -265,16 +269,17 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     const headSpacer = document.createElement('span')
     headSpacer.className = 'sch-skillspacer'
     skillsHeader.appendChild(headSpacer)
-    for (const h of ['动作', '恢复', '冷却']) {
+    const timerHeaderKeys = ['showcase.timer.action', 'showcase.timer.recovery', 'showcase.timer.cooldown'] as const
+    for (const key of timerHeaderKeys) {
         const span = document.createElement('span')
-        span.textContent = h
+        localizeText(span, key)
         skillsHeader.appendChild(span)
     }
     const skillsList = document.createElement('div')
 
     const unfocusBtn = document.createElement('button')
     unfocusBtn.className = 'sch-btn'
-    unfocusBtn.textContent = '取消聚焦'
+    localizeText(unfocusBtn, 'showcase.unfocus')
     unfocusBtn.addEventListener('click', () => callbacks.onFocus(null))
     detail.appendChild(detailTitle)
     detail.appendChild(detailHit)
@@ -355,7 +360,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         speed: number,
         focusedId: number | null,
     ): void => {
-        setText(pauseBtn, playing ? '⏸ 暂停' : '▶ 继续')
+        setText(pauseBtn, translate(playing ? 'showcase.pause' : 'showcase.resume'))
 
         for (const {option, btn} of speedBtns) {
             const active = option === speed
@@ -380,7 +385,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
             const st = statusById.get(info.id)
             if (st === undefined) {
-                setText(refs.hit, '站立/行走')
+                setText(refs.hit, translate('showcase.status.stand_walk'))
                 setText(refs.phase, '')
                 setBar(refs.fill, 0)
                 continue
@@ -389,11 +394,13 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
             if (focused) focusedStatus = st
 
             setText(refs.hit, st.mode === 'idle'
-                ? '待机'
+                ? translate('showcase.status.idle')
                 : st.mode === 'charging'
-                    ? '蓄力'
-                    : `${st.isMelee ? `击${st.hitNumber}/${st.totalHits}` : '射击'}`)
-            const phaseText = st.phaseName === 'idle' ? 'idle' : st.phaseName === 'done' ? 'done' : st.phaseName === 'charging' ? '蓄力' : st.phaseName
+                    ? translate('showcase.status.charging')
+                    : st.isMelee
+                        ? translate({key: 'showcase.status.hit', args: [st.hitNumber, st.totalHits]})
+                        : translate('showcase.status.shooting'))
+            const phaseText = st.phaseName === 'idle' ? 'idle' : st.phaseName === 'done' ? 'done' : st.phaseName === 'charging' ? translate('showcase.status.charging') : st.phaseName
             setText(refs.phase, ` ${phaseText}`)
             const doneClass = st.phaseName === 'done' || st.phaseName === 'idle'
             if (refs.phase.classList.contains('done') !== doneClass) {
@@ -409,18 +416,30 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         }
         if (focusedStatus !== undefined) {
             const st = focusedStatus
-            setText(detailTitle, `${st.weaponName} · ${st.holdModeLabel}`)
+            const info = infoById.get(st.id)
+            setText(detailTitle, info === undefined
+                ? `${st.weaponName} · ${st.holdModeLabel}`
+                : `${info.nameOf()} · ${info.subOf()}`)
             setText(detailHit, st.mode === 'idle'
-                ? '状态：待机'
+                ? translate('showcase.detail.status_idle')
                 : st.mode === 'charging'
-                    ? '状态：满蓄力前置'
-                    : `${st.isMelee ? `连段第 ${st.hitNumber}/${st.totalHits} 击` : '远程射击序列'}`)
+                    ? translate('showcase.detail.status_charging')
+                    : st.isMelee
+                        ? translate({key: 'showcase.detail.combo', args: [st.hitNumber, st.totalHits]})
+                        : translate('showcase.detail.ranged'))
+            const detailPercent = (st.phaseProgress * 100).toFixed(0)
             setText(detailPhase, st.mode === 'idle'
-                ? '阶段：—'
+                ? translate('showcase.detail.phase_none')
                 : st.mode === 'charging'
-                    ? '阶段：满蓄力姿势定格'
-                    : `阶段：${st.phaseName === 'done' ? '收势(全部阶段完成)' : st.phaseName} · ${(st.phaseProgress * 100).toFixed(0)}%`)
-            setText(detailLink, st.mode === 'idle' ? '衔接：—' : st.mode === 'charging' ? '衔接：蓄力 → 出招' : `衔接：${st.link}`)
+                    ? translate('showcase.detail.phase_charging')
+                    : st.phaseName === 'done'
+                        ? translate({key: 'showcase.detail.phase_done', args: [detailPercent]})
+                        : translate({key: 'showcase.detail.phase_running', args: [st.phaseName, detailPercent]}))
+            setText(detailLink, st.mode === 'idle'
+                ? translate('showcase.detail.link_none')
+                : st.mode === 'charging'
+                    ? translate('showcase.detail.link_charging')
+                    : translate({key: 'showcase.detail.link', args: [translate(st.link)]}))
             setBar(totalFill, st.attackProgress)
 
             /* 技能三计时器：与 play HUD 同规则逐格刷新 */

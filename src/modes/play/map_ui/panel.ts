@@ -1,4 +1,6 @@
 import type {BuildingGeneratorContext} from '../../../entity/building_generator/types/index.ts'
+import {translate} from '../../../i18n/index.ts'
+import {localizeText} from '../../../i18n/dom.ts'
 
 const MAP_W = 480
 const MAP_H = 360
@@ -35,7 +37,7 @@ export const createMapPanel = (
     ].join(';')
     const title = document.createElement('div')
     title.style.cssText = 'font-weight:700;margin-bottom:8px;color:#8ecae6'
-    title.textContent = '地图'
+    localizeText(title, 'play.map.title')
     root.appendChild(title)
     const canvas = document.createElement('canvas')
     canvas.width = MAP_W
@@ -193,7 +195,7 @@ export const createMapPanel = (
         beginTeleportSelect: (pick) => {
             pickMode = true
             onPick = pick
-            hint.textContent = '点击已解锁的传送点进行传送'
+            hint.textContent = translate('play.map.hint')
             setVisible(true)
         },
         update: (x, z, yaw) => {

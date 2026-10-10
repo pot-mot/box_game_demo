@@ -5,13 +5,10 @@ import type {AnimationStore} from './animation_store.ts'
 import type {BoneEditHistory} from './history.ts'
 import type {ClipWeaponSource} from './weapon_control.ts'
 import type {TimelineRuntime} from './timeline_ops.ts'
-import {BUILTIN_CLIP_GROUP_ORDER, findBuiltinClip, getBuiltinClips} from './builtin_clips.ts'
-import {
-    ANIM_OPTION_BUILTIN_PREFIX,
-    ANIM_OPTION_EDITED_PREFIX,
-    ANIM_SELECT_BUILTIN_GROUP_SUFFIX,
-    ANIM_SELECT_EDITED_GROUP,
-} from './constants.ts'
+import {BUILTIN_CLIP_GROUP_ORDER, builtinGroupLabelKey, findBuiltinClip, getBuiltinClips} from './builtin_clips.ts'
+import {translate} from '../../i18n/index.ts'
+import {localizeApply} from '../../i18n/dom.ts'
+import {ANIM_OPTION_BUILTIN_PREFIX, ANIM_OPTION_EDITED_PREFIX} from './constants.ts'
 
 /** 武器状态（DOM 可测试面刷新用） */
 export interface WeaponData {
@@ -51,7 +48,9 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
         host.animSelect.innerHTML = ''
 
         const editedGroup = document.createElement('optgroup')
-        editedGroup.label = ANIM_SELECT_EDITED_GROUP
+        localizeApply(editedGroup, el => {
+            if (el instanceof HTMLOptGroupElement) el.label = translate('bone_edit.anim.edited_group')
+        })
         for (const name of store.clips.keys()) {
             const opt = document.createElement('option')
             opt.value = `${ANIM_OPTION_EDITED_PREFIX}${name}`
@@ -64,11 +63,13 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
             const entries = getBuiltinClips().filter(entry => entry.group === group)
             if (entries.length === 0) continue
             const optgroup = document.createElement('optgroup')
-            optgroup.label = `${group}${ANIM_SELECT_BUILTIN_GROUP_SUFFIX}`
+            localizeApply(optgroup, el => {
+                if (el instanceof HTMLOptGroupElement) el.label = `${translate(builtinGroupLabelKey(group))}${translate('bone_edit.anim.builtin_suffix')}`
+            })
             for (const entry of entries) {
                 const opt = document.createElement('option')
                 opt.value = `${ANIM_OPTION_BUILTIN_PREFIX}${entry.id}`
-                opt.textContent = entry.label
+                localizeApply(opt, el => { el.textContent = entry.labelOf() })
                 opt.dataset.builtinId = entry.id
                 optgroup.appendChild(opt)
             }
@@ -137,7 +138,7 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
                     if (typeof reader.result !== 'string') return
                     const raw = JSON.parse(reader.result) as unknown
                     const asset = parseAsset(JSON.stringify(raw))
-                    const entity = world.addFromDefinition(asset.skeleton, `导入骨架${world.getEntityList().length + 1}`)
+                    const entity = world.addFromDefinition(asset.skeleton, translate({key: 'bone_edit.library.import_skeleton', args: [world.getEntityList().length + 1]}))
                     world.focus(entity.id)
                     history.startEdit()
                     store.replaceAll(asset.animations, asset.animations[0]?.name)
@@ -150,7 +151,7 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
                     runtime.renderList()
                     runtime.renderCanvas()
                 } catch {
-                    window.alert('资产文件格式无效！')
+                    window.alert(translate('bone_edit.library.invalid_asset'))
                 }
             }
             reader.readAsText(file)

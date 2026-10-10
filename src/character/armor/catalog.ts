@@ -4,6 +4,7 @@ import type {DefenseProfile} from '../combat/defense.ts'
 import {ARMOR_PRESETS} from './armor_pieces.ts'
 import {LIMB_PRESETS} from './limb_pieces.ts'
 import {ARMOR_SLOTS, LIMB_SLOTS, type ArmorSlot, type LimbSlot} from './slots.ts'
+import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import type {
     ArmorLoadout,
     ArmorPieceConfig,
@@ -20,6 +21,45 @@ import type {
 
 export {ARMOR_PRESETS} from './armor_pieces.ts'
 export {LIMB_PRESETS} from './limb_pieces.ts'
+
+/** 护甲 / 肢体预设 id → 本地化名称键（未知 id 回退预设数据 `name`） */
+const ARMOR_NAME_KEYS: Record<string, StringLocaleKey> = {
+    cloth_cap: 'armor.cloth_cap',
+    iron_helmet: 'armor.iron_helmet',
+    mage_hood: 'armor.mage_hood',
+    cloth_vest: 'armor.cloth_vest',
+    leather_armor: 'armor.leather_armor',
+    iron_plate: 'armor.iron_plate',
+    mage_robe: 'armor.mage_robe',
+    scale_mail: 'armor.scale_mail',
+    cloth_bracers: 'armor.cloth_bracers',
+    iron_bracers: 'armor.iron_bracers',
+    battle_bracers: 'armor.battle_bracers',
+    mage_wraps: 'armor.mage_wraps',
+    cloth_pants: 'armor.cloth_pants',
+    iron_greaves: 'armor.iron_greaves',
+    mage_leggings: 'armor.mage_leggings',
+    swift_boots: 'armor.swift_boots',
+    wind_boots: 'armor.wind_boots',
+    skeleton_head: 'limb.skeleton_head',
+    skeleton_arms: 'limb.skeleton_arms',
+    skeleton_body: 'limb.skeleton_body',
+    skeleton_legs: 'limb.skeleton_legs',
+    orc_head: 'limb.orc_head',
+    orc_arms: 'limb.orc_arms',
+    orc_body: 'limb.orc_body',
+    orc_legs: 'limb.orc_legs',
+    elf_head: 'limb.elf_head',
+    elf_arms: 'limb.elf_arms',
+    elf_body: 'limb.elf_body',
+    elf_legs: 'limb.elf_legs',
+}
+
+/** 护甲 / 肢体预设本地化显示名（未知 id 回退预设数据 `name`） */
+export const armorPieceDisplayName = (piece: ArmorPieceConfig | LimbPieceConfig): string => {
+    const key = ARMOR_NAME_KEYS[piece.id]
+    return key === undefined ? piece.name : translate(key)
+}
 
 /** 全部护甲预设（面板下拉与测试枚举用） */
 export const ALL_ARMOR_PRESETS: readonly ArmorPieceConfig[] = Object.values(ARMOR_PRESETS)

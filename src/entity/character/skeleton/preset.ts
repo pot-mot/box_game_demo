@@ -1,4 +1,5 @@
 import type {SkeletonDefinition} from '../../../skeleton/anim/serialization.ts'
+import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import {
     MODEL_BASE_HEIGHT,
     MODEL_BASE_WIDTH,
@@ -79,6 +80,37 @@ export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
             {id: 'leftShin', name: '左小腿', headJointId: 'leftLegKnee', tailJointId: 'leftFoot', length: shinH, roll: 0},
         ],
     }
+}
+
+/** 人形预设关节 id → 本地化名称键（自定义关节回退原始名） */
+const HUMANOID_JOINT_NAME_KEYS: Record<string, StringLocaleKey> = {
+    root: 'skeleton.joint.root',
+    spine: 'skeleton.joint.spine',
+    headNeck: 'skeleton.joint.headNeck',
+    headTop: 'skeleton.joint.headTop',
+    rightArmShoulder: 'skeleton.joint.rightArmShoulder',
+    rightArmElbow: 'skeleton.joint.rightArmElbow',
+    rightHandPivot: 'skeleton.joint.rightHandPivot',
+    rightWristPivot: 'skeleton.joint.rightWristPivot',
+    rightWeaponMount: 'skeleton.joint.rightWeaponMount',
+    leftArmShoulder: 'skeleton.joint.leftArmShoulder',
+    leftArmElbow: 'skeleton.joint.leftArmElbow',
+    leftHandPivot: 'skeleton.joint.leftHandPivot',
+    leftWristPivot: 'skeleton.joint.leftWristPivot',
+    leftWeaponMount: 'skeleton.joint.leftWeaponMount',
+    backWeaponMount: 'skeleton.joint.backWeaponMount',
+    rightLegHip: 'skeleton.joint.rightLegHip',
+    rightLegKnee: 'skeleton.joint.rightLegKnee',
+    rightFoot: 'skeleton.joint.rightFoot',
+    leftLegHip: 'skeleton.joint.leftLegHip',
+    leftLegKnee: 'skeleton.joint.leftLegKnee',
+    leftFoot: 'skeleton.joint.leftFoot',
+}
+
+/** 人形关节本地化显示名（未知 id 回退原始名） */
+export const humanoidJointDisplayName = (id: string, fallback: string): string => {
+    const key = HUMANOID_JOINT_NAME_KEYS[id]
+    return key === undefined ? fallback : translate(key)
 }
 
 /** 预设部件尺寸（与骨架定义同构，供外观装配使用） */

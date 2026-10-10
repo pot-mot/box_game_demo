@@ -9,6 +9,8 @@
  * 面板自身置停时不再派发 onToggle(false)，由 onReset 订阅者统一处理执行态复位。
  */
 
+import {translate} from '../../i18n/index.ts'
+
 type ToggleCallback = (entering: boolean) => void
 type ResetCallback = () => void
 
@@ -62,8 +64,8 @@ export const setupExecutePanel = (): ExecutePanel => {
 
     /* ── 执行 / 停止按钮 ── */
     const executeBtn = document.createElement('button')
-    executeBtn.textContent = 'Execute'
-    executeBtn.title = '开始步进世界（世界未步进时以当前编辑内容为还原点）'
+    executeBtn.textContent = translate('edit.execute')
+    executeBtn.title = translate('edit.title.execute_start')
     executeBtn.style.cssText = STYLES.btn(false)
     executeBtn.addEventListener('mouseenter', () => {
         executeBtn.style.background = STYLES.btnHover(isExecuting)
@@ -74,14 +76,14 @@ export const setupExecutePanel = (): ExecutePanel => {
     executeBtn.addEventListener('click', () => {
         if (pendingSteps > 0) return
         isExecuting = !isExecuting
-        executeBtn.textContent = isExecuting ? 'Stop' : 'Execute'
+        executeBtn.textContent = isExecuting ? translate('edit.stop') : translate('edit.execute')
         for (const cb of toggleCallbacks) cb(isExecuting)
     })
 
     /* ── 单步步进按钮 ── */
     const stepBtn = document.createElement('button')
-    stepBtn.textContent = 'Step'
-    stepBtn.title = "单击推进一步 (1/60s)"
+    stepBtn.textContent = translate('edit.step')
+    stepBtn.title = translate('edit.title.step')
     stepBtn.style.cssText = STYLES.btn(false)
     stepBtn.addEventListener('mouseenter', () => {
         if (!isExecuting) stepBtn.style.background = STYLES.btnHover(false)
@@ -100,7 +102,7 @@ export const setupExecutePanel = (): ExecutePanel => {
     stepInput.type = 'text'
     stepInput.value = '60'
     stepInput.style.cssText = STYLES.input
-    stepInput.title = '输入步数后点击右侧按钮执行'
+    stepInput.title = translate('edit.title.input')
     stepInput.addEventListener('input', () => {
         stepInput.value = stepInput.value.replace(/\D/g, '')
         if (stepInput.value === '') stepInput.value = '1'
@@ -115,8 +117,8 @@ export const setupExecutePanel = (): ExecutePanel => {
 
     /* ── 执行 N 步按钮 ── */
     const runStepsBtn = document.createElement('button')
-    runStepsBtn.textContent = 'Run'
-    runStepsBtn.title = '按输入步数逐帧执行'
+    runStepsBtn.textContent = translate('edit.run')
+    runStepsBtn.title = translate('edit.title.run')
     runStepsBtn.style.cssText = STYLES.btn(false)
     runStepsBtn.addEventListener('mouseenter', () => {
         if (!isExecuting) runStepsBtn.style.background = STYLES.btnHover(false)
@@ -133,8 +135,8 @@ export const setupExecutePanel = (): ExecutePanel => {
 
     /* ── 重置按钮 ── */
     const resetBtn = document.createElement('button')
-    resetBtn.textContent = 'Reset'
-    resetBtn.title = '停止步进并还原到初始状态（最近一次 Execute 开始前）'
+    resetBtn.textContent = translate('edit.reset')
+    resetBtn.title = translate('edit.title.reset')
     resetBtn.style.cssText = STYLES.btn(false)
     const triggerReset = (): void => {
         if (isExecuting) {
@@ -165,28 +167,28 @@ export const setupExecutePanel = (): ExecutePanel => {
             runStepsBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
             runStepsBtn.style.background = ''
             executeBtn.style.cssText = STYLES.btn(true)
-            executeBtn.textContent = 'Stop'
-            executeBtn.title = '停止世界步进（保留当前状态，再次 Execute 从当前状态继续）'
+            executeBtn.textContent = translate('edit.stop')
+            executeBtn.title = translate('edit.title.execute_stop')
         } else if (pendingSteps > 0) {
             executeBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
             executeBtn.style.background = ''
-            executeBtn.textContent = 'Execute'
-            executeBtn.title = '步进排队中，暂不可切换执行'
+            executeBtn.textContent = translate('edit.execute')
+            executeBtn.title = translate('edit.title.execute_pending')
             stepBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
             stepBtn.style.background = ''
             runStepsBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
             runStepsBtn.style.background = ''
         } else {
-            executeBtn.textContent = 'Execute'
-            executeBtn.title = '开始步进世界（世界未步进时以当前编辑内容为还原点）'
+            executeBtn.textContent = translate('edit.execute')
+            executeBtn.title = translate('edit.title.execute_start')
             executeBtn.style.cssText = STYLES.btn(false)
             stepBtn.style.cssText = STYLES.btn(false)
             runStepsBtn.style.cssText = STYLES.btn(false)
         }
         if (pendingSteps > 0) {
-            runStepsBtn.textContent = `Run (${pendingSteps})`
+            runStepsBtn.textContent = translate({key: 'edit.run_n', args: [String(pendingSteps)]})
         } else {
-            runStepsBtn.textContent = 'Run'
+            runStepsBtn.textContent = translate('edit.run')
         }
     }
 

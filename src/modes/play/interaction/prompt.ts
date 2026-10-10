@@ -1,4 +1,5 @@
 import type {InteractionTarget} from '../../../character/interaction/types.ts'
+import {translate} from '../../../i18n/index.ts'
 
 /** 屏幕中下方交互提示条（固定 DOM + 脏检查刷新） */
 export interface InteractionPrompt {
@@ -37,7 +38,7 @@ export const createInteractionPrompt = (): InteractionPrompt => {
             }
             return
         }
-        const text = `[F] ${target.prompt}`
+        const text = translate({key: 'play.prompt.interact', args: [target.prompt]})
         if (text === lastText) return
         el.textContent = text
         el.style.display = ''

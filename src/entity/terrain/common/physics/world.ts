@@ -9,6 +9,7 @@ import flatGenerator from '../../base/generators/flat.ts'
 import sineGenerator from '../../base/generators/sine.ts'
 import stepsGenerator from '../../base/generators/steps.ts'
 import {createTerrainPanel} from '../../base/ui/panel.ts'
+import type {StringLocaleKey} from '../../../../i18n/index.ts'
 
 const TYPE = 'terrain' as const
 const BADGE_LABEL = 'TR'
@@ -21,11 +22,11 @@ export const GENERATORS = {
     steps: stepsGenerator,
 } as const
 
-export const GENERATOR_OPTIONS: {id: string; label: string}[] = [
-    {id: 'fbm', label: 'FBM 噪声'},
-    {id: 'flat', label: '平坦'},
-    {id: 'sine', label: '正弦波'},
-    {id: 'steps', label: '阶梯'},
+export const GENERATOR_OPTIONS: {id: string; labelKey: StringLocaleKey}[] = [
+    {id: 'fbm', labelKey: 'terrain_gen.fbm'},
+    {id: 'flat', labelKey: 'terrain_gen.flat'},
+    {id: 'sine', labelKey: 'terrain_gen.sine'},
+    {id: 'steps', labelKey: 'terrain_gen.steps'},
 ]
 
 export const setupTerrain = (

@@ -1,13 +1,15 @@
+import type {StringLocaleKey} from '../../i18n/index.ts'
+
 /** 护甲槽位（头盔 / 胸甲 / 臂甲 / 护腿） */
 export const ARMOR_SLOTS = ['head', 'chest', 'arms', 'legs'] as const
 export type ArmorSlot = typeof ARMOR_SLOTS[number]
 
-/** 槽位中文名（面板 / 提示） */
-export const ARMOR_SLOT_LABELS: Record<ArmorSlot, string> = {
-    head: '头盔',
-    chest: '胸甲',
-    arms: '臂甲',
-    legs: '护腿',
+/** 槽位本地化名键（面板 / 提示） */
+export const ARMOR_SLOT_LABELS: Record<ArmorSlot, StringLocaleKey> = {
+    head: 'armor_slot.head',
+    chest: 'armor_slot.chest',
+    arms: 'armor_slot.arms',
+    legs: 'armor_slot.legs',
 }
 
 /**
@@ -18,10 +20,10 @@ export const ARMOR_SLOT_LABELS: Record<ArmorSlot, string> = {
 export const LIMB_SLOTS = ['head', 'arms', 'body', 'legs'] as const
 export type LimbSlot = typeof LIMB_SLOTS[number]
 
-/** 肢体槽位中文名（面板 / 提示） */
-export const LIMB_SLOT_LABELS: Record<LimbSlot, string> = {
-    head: '头部',
-    arms: '手臂',
-    body: '身体',
-    legs: '腿部',
+/** 肢体槽位本地化名键（面板 / 提示） */
+export const LIMB_SLOT_LABELS: Record<LimbSlot, StringLocaleKey> = {
+    head: 'limb_slot.head',
+    arms: 'limb_slot.arms',
+    body: 'limb_slot.body',
+    legs: 'limb_slot.legs',
 }

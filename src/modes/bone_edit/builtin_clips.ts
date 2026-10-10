@@ -1,8 +1,9 @@
 import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
 import {getAttackClipById, getBaseClip} from '../../entity/character/appearance/builtin_catalog.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
-import {ALL_WEAPON_PRESETS, weaponAttacksOf} from '../../character/weapon/catalog.ts'
+import {ALL_WEAPON_PRESETS, weaponAttacksOf, weaponDisplayName} from '../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
+import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
 /** 基础状态键（与姿态采样器状态一致） */
 type BaseState = Parameters<typeof getBaseClip>[0]
@@ -17,8 +18,10 @@ export interface BuiltinClipEntry {
     readonly id: string
     /** 分组名（动画下拉 optgroup） */
     readonly group: string
-    /** 中文显示名，同时作为载入动画库后的 clip 名（全库唯一） */
+    /** 显示名（基础状态随语言本地化；攻击段沿用武器/段名），同时作为载入动画库后的 clip 名（全库唯一） */
     readonly label: string
+    /** 按当前语言重算显示名（语言切换时刷新下拉文案；不影响 `label` / `clip.name` 标识） */
+    readonly labelOf: () => string
     readonly clip: BoneAnimationClip
     /** 攻击条目所属武器 id（编辑器据此自动装备武器；基础状态条目为 undefined） */
     readonly weaponId?: string
@@ -43,12 +46,24 @@ interface EntryOrigin {
 
 /* ── 分组（顺序即下拉 optgroup 顺序） ── */
 
+/* 分组 id 为稳定标识（用于分组过滤与测试），展示文案在 timeline_library 中经键本地化 */
 const GROUP_BASE = '基础状态'
 const GROUP_MELEE = '近战攻击'
 const GROUP_RANGED = '远程攻击'
 
 /** 内置动作全部分组（按展示顺序） */
 export const BUILTIN_CLIP_GROUP_ORDER: readonly string[] = [GROUP_BASE, GROUP_MELEE, GROUP_RANGED]
+
+/** 分组 id → 展示文案键 */
+const GROUP_LABEL_KEYS: Record<string, StringLocaleKey> = {
+    [GROUP_BASE]: 'bone_edit.group.base',
+    [GROUP_MELEE]: 'bone_edit.group.melee',
+    [GROUP_RANGED]: 'bone_edit.group.ranged',
+}
+
+/** 取内置动作分组展示文案键（未知分组回退基础状态） */
+export const builtinGroupLabelKey = (group: string): StringLocaleKey =>
+    GROUP_LABEL_KEYS[group] ?? 'bone_edit.group.base'
 
 /* ── 关节 id ── */
 
@@ -65,10 +80,12 @@ const entryOf = (
     label: string,
     source: BoneAnimationClip,
     origin: EntryOrigin = {},
+    labelOf?: () => string,
 ): BuiltinClipEntry => ({
     id,
     group,
     label,
+    labelOf: labelOf ?? (() => label),
     clip: {...source, name: label},
     weaponId: origin.weaponId,
     segmentId: origin.segmentId,
@@ -78,15 +95,15 @@ const entryOf = (
 
 /* ── 基础状态（待机/行走/跳跃/下落/死亡/翻滚/受击） ── */
 
-const BASE_STATE_LABELS: Record<BaseState, string> = {
-    idle: '待机',
-    walking: '行走',
-    jumping: '跳跃',
-    falling: '下落',
-    dying: '死亡',
-    rolling: '翻滚',
-    flinching: '受击硬直',
-    interacting: '交互',
+const BASE_STATE_LABELS: Record<BaseState, StringLocaleKey> = {
+    idle: 'bone_edit.state.idle',
+    walking: 'bone_edit.state.walking',
+    jumping: 'bone_edit.state.jumping',
+    falling: 'bone_edit.state.falling',
+    dying: 'bone_edit.state.dying',
+    rolling: 'bone_edit.state.rolling',
+    flinching: 'bone_edit.state.flinching',
+    interacting: 'bone_edit.state.interacting',
 }
 
 /** 基础状态展示顺序（待机 → 移动 → 受击/倒地） */
@@ -99,19 +116,24 @@ const buildBaseEntries = (): BuiltinClipEntry[] => {
     const entries: BuiltinClipEntry[] = []
     for (const state of BASE_STATE_ORDER) {
         const hasWeaponVariants = WEAPON_VARIANT_STATES.includes(state)
-        const variants = hasWeaponVariants
-            ? [{held: false, suffix: '（空手）'}, {held: true, suffix: '（持械）'}]
-            : [{held: false, suffix: ''}]
-        for (const {held, suffix} of variants) {
+        const variants: readonly {held: boolean; suffixKey?: StringLocaleKey}[] = hasWeaponVariants
+            ? [
+                {held: false, suffixKey: 'bone_edit.state.variant_bare'},
+                {held: true, suffixKey: 'bone_edit.state.variant_held'},
+            ]
+            : [{held: false}]
+        for (const {held, suffixKey} of variants) {
             /** 下落取水平速度 0 档（腿张开量的基准姿态），其余状态与速度无关 */
+            const labelOf = (): string => `${translate(BASE_STATE_LABELS[state])}${suffixKey !== undefined ? translate(suffixKey) : ''}`
             entries.push(entryOf(
                 `state/${state}${held ? '_held' : ''}`,
                 GROUP_BASE,
-                `${BASE_STATE_LABELS[state]}${suffix}`,
+                labelOf(),
                 getBaseClip(state, held, 0),
                 /* 仅持械/空手变体带标记：空手变体在编辑器里卸下武器，持械变体保留当前武器；
                  * 其余基础状态（跳跃/下落/死亡/翻滚/受击）无持械语义 → 保留当前武器 */
                 hasWeaponVariants ? {weaponHeld: held} : {},
+                labelOf,
             ))
         }
     }
@@ -135,15 +157,19 @@ const buildAttackEntries = (): BuiltinClipEntry[] =>
         const multiMode = weapon.holdModes.length > 1
         return weapon.holdModes.flatMap(holdMode => {
             const segments = orderedSegments(weaponAttacksOf(weapon, holdMode))
-            return segments.map(segment => entryOf(
-                segment.id,
-                weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,
-                segments.length > 1
-                    ? `${weapon.name} · ${multiMode ? `${HOLD_MODE_LABELS[holdMode]} · ` : ''}${segmentDisplayName(segment)}`
-                    : weapon.name,
-                buildAttackSource(segment),
-                {weaponId: weapon.id, segmentId: segment.id, holdMode},
-            ))
+            return segments.map(segment => {
+                const labelOf = (): string => segments.length > 1
+                    ? `${weaponDisplayName(weapon.id, weapon.name)} · ${multiMode ? `${translate(HOLD_MODE_LABELS[holdMode])} · ` : ''}${segmentDisplayName(segment)}`
+                    : weaponDisplayName(weapon.id, weapon.name)
+                return entryOf(
+                    segment.id,
+                    weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,
+                    labelOf(),
+                    buildAttackSource(segment),
+                    {weaponId: weapon.id, segmentId: segment.id, holdMode},
+                    labelOf,
+                )
+            })
         })
     })
 

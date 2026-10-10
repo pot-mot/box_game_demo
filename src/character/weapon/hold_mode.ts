@@ -10,14 +10,16 @@
  * 并以持握模式为键的 map 提供各模式对应的攻击连段（见 `attack_chain.ts` 的 `HoldModeAttacks`）。
  */
 
+import type {StringLocaleKey} from '../../i18n/index.ts'
+
 export const HOLD_MODES = ['one_handed', 'two_handed', 'dual_wield'] as const
 export type HoldMode = typeof HOLD_MODES[number]
 
-/** 持握模式中文名（面向玩家的面板 / 展示标签） */
-export const HOLD_MODE_LABELS: Readonly<Record<HoldMode, string>> = {
-    one_handed: '单持',
-    two_handed: '双手共持',
-    dual_wield: '双持',
+/** 持握模式本地化名键（面向玩家的面板 / 展示标签） */
+export const HOLD_MODE_LABELS: Readonly<Record<HoldMode, StringLocaleKey>> = {
+    one_handed: 'hold_mode.one_handed',
+    two_handed: 'hold_mode.two_handed',
+    dual_wield: 'hold_mode.dual_wield',
 }
 
 /** 运行时/存档校验：任意值是否可窄化为持握模式（旧存档安全回退用） */

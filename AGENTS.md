@@ -32,7 +32,7 @@
 2. **改动完整** — 功能改动必须同时补齐类型、测试（按改动性质选单测或 e2e）、相关 `docs/` 文档，以及 AGENTS.md 中受影响的结构/约定描述。
 3. **兼容性** — 存档格式（`save_load/`）与本地存储（如键位绑定 `localStorage`）变更必须考虑旧数据：校验层需安全回退到默认值，不得抛错崩溃。
 4. **性能** — 帧内逻辑避免无谓分配（复用向量与临时对象），更新路径中禁止创建 DOM；纹理、材质、几何体按需单例复用。
-5. **玩家可读性** — 面向玩家的 UI 文案、代码注释与文档一律中文；标识符沿用既有英文命名习惯。
+5. **玩家可读性** — 面向玩家的 UI 文案、代码注释与文档一律中文；标识符沿用既有英文命名习惯。**UI 文案禁止硬编码**：一律经 `src/i18n/` 的 `translate` / `localizeText` / `localizeTitle` / `localizePlaceholder` 取用（详见 [`docs/i18n.md`](docs/i18n.md)）；数据名称经 `weaponDisplayName` / `armorPieceDisplayName` / `itemDisplayName` 等映射，序列化字段（如骨架关节名）不改数据、仅显示层翻译。
 
 ## 规范
 
@@ -121,6 +121,7 @@ src/
 ├── physics/                     # 共享物理世界（rapier3d-compat）
 ├── render/                      # Three.js 渲染（materials/ 为基础表面材质库）
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
+├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/、translate/localize* API、语言持久化与原地重译）
 ├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
 │   ├── interaction/             # 交互领域模型（InteractionTarget/Provider 抽象、交互时长常量）
 │   ├── weapon/                  # 武器模组（武器类/模型分层 weapon_class + 持握模式 hold_mode / 攻击链：attack_chain（含段→pose 组合 SegmentPoseLayer）/ melee_attacks / ranged_attacks / catalog / weapon_runtime / attack_clip_data（基础关键帧）/ attack_pose_edits（逐段姿势修订））
@@ -165,7 +166,7 @@ src/
 
 ## 架构规则
 
-1. **分包原则** — 代码按 `character/`（角色领域模型）、`entity/`（实体实现）、`modes/`（游戏模式）、`physics/`（共享物理）、`render/`（渲染管线）、`input/`（输入注册表）、`ui/`（面板）、`save_load/`（存档）分包。禁止循环依赖。
+1. **分包原则** — 代码按 `character/`（角色领域模型）、`entity/`（实体实现）、`modes/`（游戏模式）、`physics/`（共享物理）、`render/`（渲染管线）、`input/`（输入注册表）、`i18n/`（国际化，叶子包，不依赖其它 `src/` 包）、`ui/`（面板）、`save_load/`（存档）分包。禁止循环依赖。
 
 2. **依赖方向** — `character/` 是独立领域层，不依赖 `entity/`。`entity/character/` 依赖 `character/`。各 entity 之间不相互引用（**唯一例外**：`entity/character/skeleton/` 可引用通用骨架层 `entity/skeleton/`；`entity/skeleton/` 保持与人形无关，人形定义与外观装配由 `entity/character/` 提供并经 `SkeletonPreset` 注入，不得反向引用 `entity/character/`）。
 
@@ -200,6 +201,7 @@ src/
 | [`docs/hakoniwa/06_箱庭生成器.md`](docs/hakoniwa/06_箱庭生成器.md) | 建筑结构原语（楼梯/旋转楼梯/斗拱/斜屋顶/廊桥/支柱）与顶层箱庭配方 |
 | [`docs/hakoniwa/07_存档与兼容.md`](docs/hakoniwa/07_存档与兼容.md) | 箱庭相关存档字段、版本推进与旧档兼容策略 |
 | [`docs/showcase.md`](docs/showcase.md) | 攻击动作展示场景：入口、技能清单、面板与控制、与生产代码的镜像关系及刻意差异 |
+| [`docs/i18n.md`](docs/i18n.md) | 国际化系统：`src/i18n/` 强类型文案表与领域片段、`translate`/`localize*` API、语言持久化与原地实时重译、新增文案/语言流程、数据名称与序列化字段处理 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 骨骼动画动作调优规范：坐标系与朝向、关节总表、旋转符号速查（肘前折/膝后折）、阶段与相位、动作→改动位置映射、提示词模版、三持握模式与副手槽、陷阱。同目录逐个动作建档（`武器名-攻击段名.md` / `动作名.md`） |
 | [`docs/bone_animation/持握模式动作.md`](docs/bone_animation/持握模式动作.md) | 近战三持握模式动作总表：段 id 约定、模式语义、各武器连段与动画来源 |

@@ -1,6 +1,8 @@
 /**
  * 玩家 HUD — 左上角显示生命值、状态计时器、通用计时器行
  */
+import {translate} from '../../i18n/index.ts'
+import {localizeText} from '../../i18n/dom.ts'
 
 /** 通用计时器行数据 */
 export interface TimerRowData {
@@ -90,7 +92,7 @@ export const createPlayerHUD = (): PlayerHUD => {
 
     const label = document.createElement('div')
     label.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:2px'
-    label.textContent = 'PLAYER HP'
+    localizeText(label, 'play.hud.hp')
     el.appendChild(label)
 
     const barOuter = document.createElement('div')
@@ -110,7 +112,7 @@ export const createPlayerHUD = (): PlayerHUD => {
     chargeRow.style.cssText = 'display:none;margin-bottom:6px'
     const chargeLabel = document.createElement('div')
     chargeLabel.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:2px'
-    chargeLabel.textContent = 'CHARGE'
+    chargeLabel.textContent = translate('play.hud.charge')
     const chargeBar = document.createElement('div')
     chargeBar.style.cssText = 'height:6px;background:rgba(255,255,255,.15);border-radius:3px;overflow:hidden'
     const chargeFill = document.createElement('div')
@@ -135,7 +137,7 @@ export const createPlayerHUD = (): PlayerHUD => {
 
     const timersTitle = document.createElement('div')
     timersTitle.style.cssText = 'font-size:11px;opacity:.7;margin-top:4px'
-    timersTitle.textContent = 'TIMERS'
+    localizeText(timersTitle, 'play.hud.timers')
     el.appendChild(timersTitle)
 
     const timersList = document.createElement('div')
@@ -144,7 +146,7 @@ export const createPlayerHUD = (): PlayerHUD => {
 
     const skillsTitle = document.createElement('div')
     skillsTitle.style.cssText = 'font-size:11px;opacity:.7;margin-top:6px'
-    skillsTitle.textContent = 'SKILLS'
+    localizeText(skillsTitle, 'play.hud.skills')
     el.appendChild(skillsTitle)
 
     /* 列头：动作 / 恢复 / 冷却 */
@@ -153,10 +155,10 @@ export const createPlayerHUD = (): PlayerHUD => {
     const headerSpacer = document.createElement('span')
     headerSpacer.style.cssText = 'min-width:56px'
     skillsHeader.appendChild(headerSpacer)
-    for (const h of ['动作', '恢复', '冷却']) {
+    for (const key of ['play.hud.col.action', 'play.hud.col.recovery', 'play.hud.col.cooldown'] as const) {
         const span = document.createElement('span')
         span.style.cssText = 'flex:1;text-align:center'
-        span.textContent = h
+        localizeText(span, key)
         skillsHeader.appendChild(span)
     }
     el.appendChild(skillsHeader)
@@ -250,15 +252,15 @@ export const createPlayerHUD = (): PlayerHUD => {
         else barInner.style.background = '#ff4444'
         hpText.textContent = `${data.health} / ${data.maxHealth}`
 
-        stateEl.textContent = `ST: ${data.stateName}  ${data.stateTime.toFixed(2)}s`
-        loadoutEl.textContent = `${data.weaponLabel} · ${data.holdModeLabel}（Ctrl 切换）`
+        stateEl.textContent = translate({key: 'play.hud.state', args: [data.stateName, data.stateTime.toFixed(2)]})
+        loadoutEl.textContent = translate({key: 'play.hud.loadout', args: [data.weaponLabel, data.holdModeLabel]})
 
         chargeRow.style.display = data.charging ? '' : 'none'
         if (data.charging) {
             const ratio = Math.max(0, Math.min(1, data.charge))
             chargeFill.style.width = `${ratio * 100}%`
             chargeFill.style.background = ratio >= 1 ? '#ff4444' : '#ffcc44'
-            chargeLabel.textContent = `CHARGE ${Math.round(ratio * 100)}%`
+            chargeLabel.textContent = translate({key: 'play.hud.charge_pct', args: [String(Math.round(ratio * 100))]})
         }
 
         const count = data.timers.length
