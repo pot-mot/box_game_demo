@@ -26,8 +26,11 @@ const EXPECTED_DEFAULTS: Record<InputAction, readonly (readonly string[])[]> = {
     load_world: [['ControlLeft', 'KeyO'], ['MetaLeft', 'KeyO']],
     mouse_orbit: [['Mouse0']],
     mouse_pan: [['Mouse2']],
-    spawn_entity: [['Mouse2']],
+    spawn_entity: [['ControlLeft', 'Mouse0'], ['ControlRight', 'Mouse0']],
     lock_target: [['Mouse1']],
+    attack_light: [['Mouse0']],
+    attack_heavy: [['Mouse2']],
+    showcase_focus: [['Mouse0']],
 }
 
 /** 克隆默认绑定为可变映射（测试内构造绑定用例） */
@@ -99,8 +102,10 @@ describe('输入注册表：鼠标绑定', () => {
         expect(input.matchesMouseButton('mouse_orbit', 0)).toBe(true)
         expect(input.matchesMouseButton('mouse_orbit', 2)).toBe(false)
         expect(input.matchesMouseButton('mouse_pan', 2)).toBe(true)
-        expect(input.matchesMouseButton('spawn_entity', 2)).toBe(true)
         expect(input.matchesMouseButton('spawn_entity', 0)).toBe(false)
+        window.dispatchEvent(new KeyboardEvent('keydown', {code: 'ControlLeft'}))
+        expect(input.matchesMouseButton('spawn_entity', 0)).toBe(true)
+        expect(input.matchesMouseButton('spawn_entity', 2)).toBe(false)
         expect(input.matchesMouseButton('lock_target', 1)).toBe(true)
         expect(input.matchesMouseButton('lock_target', 0)).toBe(false)
     })
@@ -138,4 +143,5 @@ describe('输入注册表：鼠标绑定', () => {
         window.dispatchEvent(new KeyboardEvent('keydown', {code: 'AltLeft'}))
         expect(input.matchesMouseButton('mouse_orbit', 2)).toBe(true)
     })
+
 })

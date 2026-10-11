@@ -13,6 +13,7 @@ import {setupElementListPanel} from '../../ui/element_list_panel.ts'
 import {setupExecutePanel, type ExecutePanel} from './execute_panel.ts'
 import {createTransformGizmo} from './transform_gizmo.ts'
 import {getCurrentPanel} from '../../ui/entity_control_panel.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {GIZMO_SCALE_FACTOR} from './constants.ts'
 import {CHARACTER_ENTITY_TYPE} from '../../entity/constants.ts'
 
@@ -37,7 +38,7 @@ export const setupEditMode = (
     excludeFromBackground: (obj: Object3D) => void,
 ): EditModeController => {
     // 编辑控制
-    const orbit = setupMouseOrbit(camera, renderer.domElement)
+    const orbit = setupMouseOrbit(camera, renderer.domElement, MOUSE_ACTIONS_BY_MODE.edit)
     const keyboardCamera = setupKeyboardCamera(camera)
     const spawnMode = setupSpawnModeManager()
 

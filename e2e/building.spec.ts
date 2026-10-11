@@ -15,7 +15,9 @@ const enterEditAndSpawnBuilding = async (page: Page): Promise<{x: number; y: num
     if (!box) throw new Error('canvas missing')
     const x = box.x + box.width / 2
     const y = box.y + box.height / 2
-    await page.mouse.click(x, y, {button: 'right'})
+    await page.keyboard.down('Control')
+    await page.mouse.click(x, y)
+    await page.keyboard.up('Control')
     /* 建筑分块网格逐帧摊还构建（每帧最多数个 chunk），等待其可见后再返回，避免选择时射线无命中 */
     await page.waitForTimeout(900)
     return {x, y}

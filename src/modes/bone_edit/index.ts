@@ -12,6 +12,7 @@ import {createTransformGizmo} from '../edit/transform_gizmo.ts'
 import {GIZMO_SCALE_FACTOR, VIEW_ELEVATION, VIEW_FIT_MARGIN, VIEW_MIN_DISTANCE, VIEW_MIN_VISIBLE_RATIO, VIEW_YAW} from './constants.ts'
 import {skeletonToDefinition, clipToJSON, type SkeletonDefinition, type ClipJSON} from '../../skeleton/anim/serialization.ts'
 import {focusPanel, getCurrentPanel} from '../../ui/entity_control_panel.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 
 /** 骨骼动画编辑模式控制器 */
 export interface BoneEditModeController {
@@ -46,7 +47,7 @@ export const setupBoneEditMode = (
     const store: AnimationStore = createAnimationStore()
 
     /* 相机（共享模块：modes/camera_common.ts） */
-    const orbit = setupMouseOrbit(camera, renderer.domElement)
+    const orbit = setupMouseOrbit(camera, renderer.domElement, MOUSE_ACTIONS_BY_MODE.bone_edit)
     const keyboardCamera = setupKeyboardCamera(camera)
     keyboardCamera.setEnabled(true)
 

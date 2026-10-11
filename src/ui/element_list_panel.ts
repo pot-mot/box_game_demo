@@ -117,6 +117,18 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
         }
     }
 
+    /** Delete：优先删除当前选中的元素；无选中时回退到指针悬停的列表项 */
+    const tryDeleteSelected = (): void => {
+        for (const source of sources) {
+            const selectedId = source.getSelectedId()
+            if (selectedId !== undefined) {
+                source.remove(selectedId)
+                return
+            }
+        }
+        tryDeleteHovered()
+    }
+
     list.addEventListener('click', (e: MouseEvent) => {
         const target = e.target as HTMLElement
         const row = target.closest<HTMLElement>('[data-id]')
@@ -157,7 +169,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
     })
 
     const input = getInputRegistry()
-    input.onActionDown('delete_entity', tryDeleteHovered)
+    input.onActionDown('delete_entity', tryDeleteSelected)
 
     /** 需要按顺序渲染的分组 */
     const GROUP_ORDER: EntityGroup[] = ['character', 'box', 'area', 'terrain', 'building', 'fragment']

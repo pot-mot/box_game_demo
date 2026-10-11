@@ -2,6 +2,7 @@ import {Scene, PerspectiveCamera, AmbientLight, DirectionalLight, Color, Vector3
 import type {WebGLRenderer} from 'three'
 import {setupInfiniteGrid} from '../../render/grid.ts'
 import {getInputRegistry} from '../../input/registry.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {MOVE_STEP} from '../constants.ts'
 import {
     CAMERA_FAR,
@@ -164,10 +165,14 @@ export const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLEle
 
     /* —— 指针事件：旋转 / 平移 / 滚轮缩放（前两者由操作设置绑定，全部随模式退出释放） —— */
     const input = getInputRegistry()
+    const showcaseActions = MOUSE_ACTIONS_BY_MODE.showcase
     let dragging: 'orbit' | 'pan' | null = null
     domElement.addEventListener('mousedown', (e: MouseEvent) => {
-        if (input.matchesMouseButton('mouse_orbit', e.button)) dragging = 'orbit'
-        else if (input.matchesMouseButton('mouse_pan', e.button)) dragging = 'pan'
+        /* 按键被本模式「修饰键+鼠标」的其它动作覆盖时让位（如聚焦键加了修饰键组合） */
+        if (input.matchesMouseButton('mouse_orbit', e.button)
+            && !input.isMouseButtonOverridden(e.button, showcaseActions, 'mouse_orbit')) dragging = 'orbit'
+        else if (input.matchesMouseButton('mouse_pan', e.button)
+            && !input.isMouseButtonOverridden(e.button, showcaseActions, 'mouse_pan')) dragging = 'pan'
     }, {signal})
     window.addEventListener('mouseup', () => {
         dragging = null

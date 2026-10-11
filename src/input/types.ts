@@ -30,6 +30,11 @@ export const INPUT_ACTIONS = [
     'mouse_pan',
     'spawn_entity',
     'lock_target',
+    /* 游玩模式攻击：轻击（默认左键松开）/ 重击（默认右键松开），可重绑 */
+    'attack_light',
+    'attack_heavy',
+    /* 展示模式聚焦（默认左键点击），可重绑 */
+    'showcase_focus',
 ] as const
 
 export type InputAction = typeof INPUT_ACTIONS[number]
@@ -65,6 +70,9 @@ export const ACTION_LABELS: Record<InputAction, StringLocaleKey> = {
     mouse_pan: 'input.action.mouse_pan',
     spawn_entity: 'input.action.spawn_entity',
     lock_target: 'input.action.lock_target',
+    attack_light: 'input.action.attack_light',
+    attack_heavy: 'input.action.attack_heavy',
+    showcase_focus: 'input.action.showcase_focus',
 }
 
 /** 动作分组 */
@@ -90,12 +98,12 @@ export type MouseOperationsMode = typeof MOUSE_OPERATION_MODES[number]
 
 /**
  * 各模式下绑定到指针的**可修改**动作（在操作设置面板的“鼠标”分组中列出）。
- * 同一动作在不同模式下的含义不同（如右键在编辑模式生成物体、在展示模式平移视角），故按模式列出。
+ * 同一动作在不同模式下的含义不同（如右键在展示模式平移视角、Ctrl+左键在编辑模式生成物体），故按模式列出。
  */
 export const MOUSE_ACTIONS_BY_MODE: Record<MouseOperationsMode, readonly InputAction[]> = {
     edit: ['mouse_orbit', 'spawn_entity'],
-    play: ['mouse_orbit', 'lock_target'],
-    showcase: ['mouse_orbit', 'mouse_pan'],
+    play: ['mouse_orbit', 'attack_light', 'attack_heavy', 'lock_target'],
+    showcase: ['mouse_orbit', 'mouse_pan', 'showcase_focus'],
     bone_edit: ['mouse_orbit'],
 }
 
@@ -106,12 +114,9 @@ export const FIXED_MOUSE_OPERATIONS: Record<MouseOperationsMode, readonly FixedM
         {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.edit_sculpt'},
     ],
     play: [
-        {keys: 'input.fixed.key.release_left', label: 'input.fixed.label.play_light'},
-        {keys: 'input.fixed.key.release_right', label: 'input.fixed.label.play_heavy'},
         {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.zoom_camera'},
     ],
     showcase: [
-        {keys: 'input.fixed.key.click_left', label: 'input.fixed.label.showcase_focus'},
         {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.zoom_camera'},
     ],
     bone_edit: [
@@ -131,6 +136,17 @@ export interface InputRegistry {
     readonly setInputCapture: (handler: ((combo: KeyCombo) => void) | undefined) => void
     /** 鼠标按键是否命中该动作的绑定（组合中的其它键需处于按下状态） */
     readonly matchesMouseButton: (action: InputAction, button: number) => boolean
+    /**
+     * 该鼠标按键是否被「更长组合」的绑定动作覆盖（组合中的修饰键需处于按下状态）。
+     * `baseAction` = 该按键上基础行为自身的动作（取其匹配组合长度作为基准）；省略时基准为普通单击（长度 1）。
+     * 当 `actions` 中某动作（≠ baseAction）匹配该按键、且组合长度大于基准时返回 true。
+     * 供基础指针行为（选中 / 旋转 / 攻击 / 聚焦）让位给「修饰键+鼠标」的绑定动作。
+     */
+    readonly isMouseButtonOverridden: (
+        button: number,
+        actions: readonly InputAction[],
+        baseAction?: InputAction,
+    ) => boolean
     readonly getBindings: () => DeepReadonly<BindingsMap>
     readonly setBindings: (map: BindingsMap) => void
     readonly resetToDefaults: () => void

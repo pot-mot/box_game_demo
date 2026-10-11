@@ -38,10 +38,12 @@ test.describe('编辑模式执行面板', () => {
     test('Stop 只停止世界步进，Reset 才还原世界', async ({page}) => {
         await enterEditMode(page)
 
-        /* 空世界：右键在指针处生成一个箱子，暂停态下它悬停在生成点 */
+        /* 空世界：Ctrl+左键在指针处生成一个箱子，暂停态下它悬停在生成点 */
         await page.mouse.move(600, 400)
-        await page.mouse.down({button: 'right'})
-        await page.mouse.up({button: 'right'})
+        await page.keyboard.down('Control')
+        await page.mouse.down({button: 'left'})
+        await page.mouse.up({button: 'left'})
+        await page.keyboard.up('Control')
         await expect(elementRows(page)).toHaveCount(1)
         const spawnY = await readFirstRowY(page)
 
@@ -78,8 +80,10 @@ test.describe('编辑模式执行面板', () => {
         await expect(buttons.nth(1)).toHaveText('单步')
 
         await page.mouse.move(600, 400)
-        await page.mouse.down({button: 'right'})
-        await page.mouse.up({button: 'right'})
+        await page.keyboard.down('Control')
+        await page.mouse.down({button: 'left'})
+        await page.mouse.up({button: 'left'})
+        await page.keyboard.up('Control')
         await expect(elementRows(page)).toHaveCount(1)
         const spawnY = await readFirstRowY(page)
 

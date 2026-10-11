@@ -1,7 +1,7 @@
 import {test, expect, type Page} from '@playwright/test'
 
 /**
- * 角色装备与属性面板：进入编辑模式 → 把生成类型切到「角色」→ 右键生成并选中角色 →
+ * 角色装备与属性面板：进入编辑模式 → 把生成类型切到「角色」→ Ctrl+左键生成并选中角色 →
  * 在角色面板选择护甲 / 基础防御 → Apply → 列表行防御数值更新。
  * 生成类型顺序见 `src/modes/edit/spawn_mode.ts`（角色 = 第 7 项，ArrowDown = 循环下一项）。
  */
@@ -16,8 +16,10 @@ const openCharacterPanel = async (page: Page): Promise<void> => {
         await page.keyboard.press('ArrowDown')
     }
     await page.mouse.move(600, 400)
-    await page.mouse.down({button: 'right'})
-    await page.mouse.up({button: 'right'})
+    await page.keyboard.down('Control')
+    await page.mouse.down({button: 'left'})
+    await page.mouse.up({button: 'left'})
+    await page.keyboard.up('Control')
     /* 生成后需在元素列表中点击角色行才会弹出角色面板（与编辑模式选中交互一致） */
     const row = page.locator('#element-list-panel [data-id][data-type="character"]')
     await expect(row).toHaveCount(1)
@@ -140,5 +142,29 @@ test.describe('角色装备与属性面板', () => {
         await page.locator('#element-list-panel [data-id][data-type="character"]').click()
         await expect(page.locator('#character-panel #hold-mode-select')).toHaveValue('one_handed')
         await expect(page.locator('#character-panel #offhand-weapon-select')).toHaveValue('short_sword')
+    })
+
+    test('和平策略：仅建造显示箱型配置，巡逻与切换回巡逻均隐藏', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        const peaceSelect = panel.getByLabel(/^和平/)
+        const boxTypesLabel = panel.locator('label', {hasText: '箱型'})
+        const addBoxTypeBtn = panel.locator('button', {hasText: '添加箱型'})
+
+        /* 默认巡逻：箱型配置整体隐藏 */
+        await expect(peaceSelect).toHaveValue('patrol')
+        await expect(boxTypesLabel).toBeHidden()
+        await expect(addBoxTypeBtn).toBeHidden()
+
+        /* 切到建造：箱型配置显示 */
+        await peaceSelect.selectOption('build')
+        await expect(boxTypesLabel).toBeVisible()
+        await expect(addBoxTypeBtn).toBeVisible()
+
+        /* 切回巡逻：重新隐藏 */
+        await peaceSelect.selectOption('patrol')
+        await expect(boxTypesLabel).toBeHidden()
+        await expect(addBoxTypeBtn).toBeHidden()
     })
 })

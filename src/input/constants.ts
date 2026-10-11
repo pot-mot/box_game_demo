@@ -28,10 +28,15 @@ export const DEFAULT_BINDINGS: BindingsMap = {
     /* 鼠标视角：左键拖拽旋转 / 右键拖拽平移（展示模式），均可在操作设置中修改 */
     mouse_orbit: [['Mouse0']],
     mouse_pan: [['Mouse2']],
-    /* 生成物体：默认右键（编辑模式），与展示模式的右键平移互不冲突，可在操作设置中修改 */
-    spawn_entity: [['Mouse2']],
+    /* 生成物体：默认 Ctrl+左键（编辑模式），与左键选中/旋转视角以修饰键区分，可在操作设置中修改 */
+    spawn_entity: [['ControlLeft', 'Mouse0'], ['ControlRight', 'Mouse0']],
     /* 锁定目标：默认中键（游玩模式） */
     lock_target: [['Mouse1']],
+    /* 游玩模式攻击：轻击 = 左键松开，重击 = 右键松开，均可在操作设置中修改 */
+    attack_light: [['Mouse0']],
+    attack_heavy: [['Mouse2']],
+    /* 展示模式聚焦：默认左键点击 */
+    showcase_focus: [['Mouse0']],
 }
 
 /** 鼠标按键码前缀（Mouse0 = 左键 / Mouse1 = 中键 / Mouse2 = 右键，与 KeyboardEvent.code 共用同一绑定空间） */

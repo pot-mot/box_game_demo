@@ -113,8 +113,6 @@ type CoreLocale = {
     'input.group.ui': string
     'input.group.system': string
     'input.fixed.key.click_left': string
-    'input.fixed.key.release_left': string
-    'input.fixed.key.release_right': string
     'input.fixed.key.wheel': string
     'input.fixed.key.drag_joint': string
     'input.fixed.key.drag_bone': string
@@ -122,10 +120,7 @@ type CoreLocale = {
     'input.fixed.key.ctrl_wheel': string
     'input.fixed.label.edit_select': string
     'input.fixed.label.edit_sculpt': string
-    'input.fixed.label.play_light': string
-    'input.fixed.label.play_heavy': string
     'input.fixed.label.zoom_camera': string
-    'input.fixed.label.showcase_focus': string
     'input.fixed.label.bone_select': string
     'input.fixed.label.bone_move_ik': string
     'input.fixed.label.bone_rotate_tail': string
@@ -154,6 +149,9 @@ type CoreLocale = {
     'input.action.mouse_pan': string
     'input.action.spawn_entity': string
     'input.action.lock_target': string
+    'input.action.attack_light': string
+    'input.action.attack_heavy': string
+    'input.action.showcase_focus': string
 
     /* ── 实体面板通用 ── */
     'panel.pos': string

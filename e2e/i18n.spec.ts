@@ -54,8 +54,10 @@ test.describe('国际化', () => {
         /* 生成类型切到「角色」后生成并选中，弹出角色面板（含大量 select / input） */
         for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown')
         await page.mouse.move(600, 400)
-        await page.mouse.down({button: 'right'})
-        await page.mouse.up({button: 'right'})
+        await page.keyboard.down('Control')
+        await page.mouse.down({button: 'left'})
+        await page.mouse.up({button: 'left'})
+        await page.keyboard.up('Control')
         await page.locator('#element-list-panel [data-id][data-type="character"]').click()
         await expect(page.locator('#character-panel')).toBeVisible()
 

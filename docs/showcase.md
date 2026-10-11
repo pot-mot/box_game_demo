@@ -34,7 +34,7 @@ src/modes/showcase/
 - **`ShowcaseModule`**：`{id, title, description, setup(host) → {updater, dispose}}`。`title` / `description` 为 i18n 文案键（强类型 `StringLocaleKey`）；`setup` 接收宿主 `{renderer}`，自建场景并返回每帧 updater 与释放函数。
 - **控制器**：持有 `SHOWCASE_MODULES` 注册表，`selectModule` 释放当前模块、装配新模块并隐藏菜单；`backToMenu` 释放模块、显示菜单；`exit` 释放模块 + 菜单 + 返回按钮后回调宿主。无激活模块时 updater 为空操作（菜单覆盖画布）。
 - **`actor_stage.ts`**：把「独立场景 + 自由飞行相机 + 多展示角色 + 聚焦环 + 点击拾取 + 空格暂停/Esc 取消聚焦 + 信息面板」这套通用编排集中一处，供 `actions` / `appearance` 复用（子模块只负责 `populate(scene, register)` 填充角色与面板行）。
-- **相机（全模块统一）**：`scene.ts` 的相机以 edit 模式自由飞行为基准——`W/A/S/D` 前后左右、`Z/X` 升 / 降（`MOVE_STEP`，随相机偏航角），鼠标左键拖拽转视角、右键拖拽平移、滚轮缩放；点击角色 / 物件进入**聚焦**（相机平滑飞向目标并环绕，期间暂停自由移动），`Esc` 或点击空白恢复自由飞行。动作 / 外观 / AI 地形 / 图鉴 / 背包五个子模块默认均使用该自由飞行相机（图鉴把注视中心对准展示人体，不进入聚焦）。
+- **相机（全模块统一）**：`scene.ts` 的相机以 edit 模式自由飞行为基准——`W/A/S/D` 前后左右、`Z/X` 升 / 降（`MOVE_STEP`，随相机偏航角），「旋转视角」绑定（默认鼠标左键）拖拽转视角、「平移视角」绑定（默认右键）拖拽平移、滚轮缩放；「聚焦」绑定（默认左键点击）命中角色 / 物件进入**聚焦**（相机平滑飞向目标并环绕，期间暂停自由移动），`Esc` 或点击空白恢复自由飞行。旋转 / 平移 / 聚焦均为可重绑的指针动作（操作设置面板「鼠标」分组）。动作 / 外观 / AI 地形 / 图鉴 / 背包五个子模块默认均使用该自由飞行相机（图鉴把注视中心对准展示人体，不进入聚焦）。
 - **新增子模块**：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 补 `showcase.module.<id>.title/desc` 与模块内文案 → 补单测（`modules.test.ts` 自动覆盖注册表一致性）/ e2e。
 
 ## 子模块
@@ -46,7 +46,7 @@ src/modes/showcase/
 - 清单条目按**武器 id + 持握模式**（`SHOWCASE_ROSTER`），武器参数与攻击链经 `weaponPresetOrDefault(id)` + `weaponAttacksOf(weapon, holdMode)` 取自武器模组。共 **27** 个展示角色。
 - 近战演示按该武器该模式的段展示顺序连播 → 停顿 0.6s（模拟松开攻击键）→ 重链 → 收尾待机 → 循环；每个**重击段播放前**先定格**满蓄力姿势**（时间 = 武器模板最长蓄力时间 `maxChargeTime`）。每段 tilt 为段固有值。
 - 副手展示：单持不装备副手；双持左手握同类武器；双手共持副手挂背（`backWeaponMount`）且双手 IK 贴合主手武器。远程为单段开火动作（不发射弹丸）。
-- 面板/控制：暂停/继续（空格）、单步、速度 0.1/0.25/0.5/1×；点击角色或下拉聚焦（Esc 取消），其余角色变暗；WASDZX 自由飞行 / 左键旋转 / 右键平移 / 滚轮缩放（聚焦期间暂停自由移动、锁定缩放）。聚焦详情卡复现 play HUD 的段计时区块（每段一行，动作/恢复/冷却三格）。
+- 面板/控制：暂停/继续（空格）、单步、速度 0.1/0.25/0.5/1×；「聚焦」绑定（默认左键点击）点击角色或下拉聚焦（Esc 取消），其余角色变暗；WASDZX 自由飞行 / 旋转视角 / 平移视角 / 滚轮缩放（聚焦期间暂停自由移动、锁定缩放）。聚焦详情卡复现 play HUD 的段计时区块（每段一行，动作/恢复/冷却三格）。
 
 **与生产代码的镜像关系**：连段时序镜像 `states/attacking/` 段子状态机（阶段推进 + 段末推进）；攻击数据镜像武器模组（`orderedSegments(weaponAttacksOf(...))`）；动画注入镜像 `world.ts` 的 `AnimationContext` 装配；刀光镜像 `world.ts`（strike/release/spin 激活）。冷却计时镜像生产（触发即挂、逐帧递减，仅展示不阻断推进）。
 

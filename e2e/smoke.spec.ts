@@ -80,8 +80,10 @@ test.describe('快捷键存档', () => {
 
         // 生成一个实体，保证存档非空
         await page.mouse.move(600, 400)
-        await page.mouse.down({button: 'right'})
-        await page.mouse.up({button: 'right'})
+        await page.keyboard.down('Control')
+        await page.mouse.down({button: 'left'})
+        await page.mouse.up({button: 'left'})
+        await page.keyboard.up('Control')
         await expect(page.locator('#element-list-panel [data-id]')).toHaveCount(1)
 
         // Ctrl+S 由应用接管：触发存档下载而非浏览器原生保存对话框

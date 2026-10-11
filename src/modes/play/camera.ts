@@ -2,6 +2,7 @@ import {Vector3, type PerspectiveCamera} from 'three'
 import {ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE, CAMERA_SMOOTH_FACTOR, LOCK_ON_TURN_FACTOR, LOCK_ON_BLEND_FACTOR} from './constants.ts'
 import {ORBIT_SENSITIVITY} from '../constants.ts'
 import {getInputRegistry} from '../../input/registry.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {applyFreeFlightMovement} from '../free_flight.ts'
 import {wrapAngle} from './lock_on.ts'
 
@@ -34,8 +35,8 @@ export interface CameraLockTarget {
 
 /**
  * 游玩模式相机：有玩家 → 第三人称环绕（平滑跟随目标，抑制角色弹跳导致的抖动）；无玩家 → 自由飞行。
- * 「旋转视角」绑定（默认左键）拖拽旋转相机，左键短按松开触发轻击，右键松开触发重击；
- * 攻击均携带按住时长供蓄力守卫区分点按/长按，拖拽视角时该次攻击不触发。
+ * 「旋转视角」绑定（默认左键）拖拽旋转相机，「轻击」绑定（默认左键松开）/「重击」绑定（默认右键松开）触发攻击；
+ * 攻击均携带按住时长供蓄力守卫区分点按/长按，拖拽视角时该次攻击不触发。攻击 / 旋转按键被本模式「修饰键+鼠标」的其它动作覆盖时让位。
  * 「锁定目标」绑定（默认中键，可改绑键盘）切换镜头锁定：锁定期间环绕角平滑转向「玩家 → 目标」方向、视点平滑过渡并对准目标，拖拽旋转超过点击阈值后解除。
  */
 export const setupPlayCamera = (
@@ -56,6 +57,11 @@ export const setupPlayCamera = (
     /** 攻击键按下时刻（performance.now()，undefined = 未按下），松开时算按住时长 */
     let leftDownAt: number | undefined
     let rightDownAt: number | undefined
+    /** 触发轻击 / 重击的鼠标按键（攻击可重绑，松开时需比对同一按键） */
+    let lightButton: number | undefined
+    let heavyButton: number | undefined
+    /** 本模式可重绑的指针动作集合：用于让基础行为让位给「修饰键+鼠标」的绑定动作 */
+    const playActions = MOUSE_ACTIONS_BY_MODE.play
     /** 平滑后的跟随目标（EMA），避免角色弹跳直接传导到相机 */
     const smoothedTarget = new Vector3()
     let hasSmoothedTarget = false
@@ -67,25 +73,31 @@ export const setupPlayCamera = (
     let lockViewBlend = 0
 
     element.addEventListener('mousedown', (e: MouseEvent) => {
-        if (input.matchesMouseButton('lock_target', e.button)) {
+        if (input.matchesMouseButton('lock_target', e.button)
+            && !input.isMouseButtonOverridden(e.button, playActions, 'lock_target')) {
             /* 阻止中键自动滚动 */
             e.preventDefault()
             lockTarget?.onToggle()
         }
-        if (input.matchesMouseButton('mouse_orbit', e.button)) {
+        if (input.matchesMouseButton('mouse_orbit', e.button)
+            && !input.isMouseButtonOverridden(e.button, playActions, 'mouse_orbit')) {
             orbitButton = e.button
             dragDist = 0
             element.focus()
         }
-        if (e.button === 0) {
+        if (input.matchesMouseButton('attack_light', e.button)
+            && !input.isMouseButtonOverridden(e.button, playActions, 'attack_light')) {
+            lightButton = e.button
             leftDownAt = performance.now()
-            /* 左键按下即开始蓄力（可蓄力远程武器；非蓄力武器为空操作）。拖拽会取消。 */
+            /* 轻击键按下即开始蓄力（可蓄力远程武器；非蓄力武器为空操作）。拖拽会取消。 */
             mouseAttack?.onLightAttackStart?.()
         }
-        if (e.button === 2) {
+        if (input.matchesMouseButton('attack_heavy', e.button)
+            && !input.isMouseButtonOverridden(e.button, playActions, 'attack_heavy')) {
             e.preventDefault()
+            heavyButton = e.button
             rightDownAt = performance.now()
-            /* 右键按下即开始重击蓄力（近战重击；非蓄力武器为空操作）。失焦会取消。 */
+            /* 重击键按下即开始重击蓄力（近战重击；非蓄力武器为空操作）。失焦会取消。 */
             mouseAttack?.onHeavyAttackStart?.()
         }
     })
@@ -98,6 +110,8 @@ export const setupPlayCamera = (
         orbitButton = undefined
         leftDownAt = undefined
         rightDownAt = undefined
+        lightButton = undefined
+        heavyButton = undefined
         mouseAttack?.onLightAttackCancel?.()
         mouseAttack?.onHeavyAttackCancel?.()
     })
@@ -105,7 +119,7 @@ export const setupPlayCamera = (
         /* 本次拖拽是否达到点击阈值之外的位移（拖拽视角不触攻击） */
         const dragged = e.button === orbitButton && dragDist >= CLICK_DRAG_THRESHOLD
         if (e.button === orbitButton) orbitButton = undefined
-        if (e.button === 0) {
+        if (e.button === lightButton) {
             if (!dragged && leftDownAt !== undefined) {
                 mouseAttack?.onLightAttack((performance.now() - leftDownAt) / 1000)
             } else {
@@ -113,14 +127,18 @@ export const setupPlayCamera = (
                 mouseAttack?.onLightAttackCancel?.()
             }
             leftDownAt = undefined
+            lightButton = undefined
         }
-        if (e.button === 2 && !dragged && rightDownAt !== undefined) {
-            /* 重击在松开时触发：携带按住时长（可蓄力重击已由 start 进入蓄力，松开走 end 结束） */
-            mouseAttack?.onHeavyAttack((performance.now() - rightDownAt) / 1000)
+        if (e.button === heavyButton) {
+            if (!dragged && rightDownAt !== undefined) {
+                /* 重击在松开时触发：携带按住时长（可蓄力重击已由 start 进入蓄力，松开走 end 结束） */
+                mouseAttack?.onHeavyAttack((performance.now() - rightDownAt) / 1000)
+            } else {
+                /* 拖拽（若改绑）或异常：取消重击蓄力 */
+                mouseAttack?.onHeavyAttackCancel?.()
+            }
             rightDownAt = undefined
-        } else if (e.button === 2) {
-            /* 右键拖拽（若改绑）或异常：取消重击蓄力 */
-            mouseAttack?.onHeavyAttackCancel?.()
+            heavyButton = undefined
         }
     })
     window.addEventListener('mousemove', (e: MouseEvent) => {

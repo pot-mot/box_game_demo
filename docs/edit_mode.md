@@ -48,9 +48,9 @@
 | 相机移动 | WASD 前后 / 左右 + Z 升 / X 降 | `modes/camera_common.ts` `setupKeyboardCamera` → `modes/free_flight.ts` |
 | 选中 | 左键点击实体选中，点击空白取消 | `modes/edit/pointer_interaction.ts` |
 | 变换 | 拖拽 gizmo 平移 / 旋转圆弧；角色仅保留 Y 轴旋转 | `modes/edit/transform_gizmo.ts` |
-| 生成 | 「生成物体」绑定（默认右键）在指针处生成当前生成类型 | `pointer_interaction.ts` + `modes/edit/spawn_mode.ts` |
+| 生成 | 「生成物体」绑定（默认 Ctrl+左键）在指针处生成当前生成类型 | `pointer_interaction.ts` + `modes/edit/spawn_mode.ts` |
 | 地形雕刻 | 选中地形后滚轮升降（笔刷半径 / 强度见 `modes/edit/constants.ts`） | `pointer_interaction.ts` |
-| 删除实体 | Delete（指针悬停在元素列表项上时） | `ui/element_list_panel.ts` |
+| 删除实体 | Delete（删除当前选中元素；无选中时删除指针悬停的列表项） | `ui/element_list_panel.ts` |
 | 其他面板 | 生成类型面板 / 元素列表面板 / 选中实体属性面板 / 相机 HUD | `ui/` |
 
 地形实体的属性面板含位置 X / Y / Z、旋转、生成器、高度区间与网格尺寸；Y 表示地形原点（网格基准面）的世界高度，可经面板输入或 gizmo Y 轴拖拽调整（`entity/terrain/base/physics/index.ts` 的 `add` / `updatePosition` / `setTransform` 均以传入 y 为原点）。

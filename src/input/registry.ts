@@ -105,6 +105,32 @@ class InputRegistryImpl implements InputRegistry {
         return false
     }
 
+    /** 该动作在当前修饰键状态下匹配某鼠标按键码的最长组合长度（无匹配为 0） */
+    private maxMatchingComboLength = (action: InputAction, code: string): number => {
+        let max = 0
+        for (const combo of this.bindings[action]) {
+            if (!combo.includes(code)) continue
+            /* 组合中的其它键（修饰键等）必须处于按下状态 */
+            if (!combo.every(c => c === code || this.activeKeys.has(c))) continue
+            if (combo.length > max) max = combo.length
+        }
+        return max
+    }
+
+    readonly isMouseButtonOverridden = (
+        button: number,
+        actions: readonly InputAction[],
+        baseAction?: InputAction,
+    ): boolean => {
+        const code = mouseCode(button)
+        const base = baseAction === undefined ? 1 : this.maxMatchingComboLength(baseAction, code)
+        for (const action of actions) {
+            if (action === baseAction) continue
+            if (this.maxMatchingComboLength(action, code) > base) return true
+        }
+        return false
+    }
+
     readonly getBindings = (): DeepReadonly<BindingsMap> => this.bindings
 
     readonly setBindings = (map: BindingsMap): void => {

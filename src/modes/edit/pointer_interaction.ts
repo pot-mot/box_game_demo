@@ -4,6 +4,7 @@ import type {EntityInfoSource} from '../../entity/box/base/types/entity_info.ts'
 import type {TerrainContext} from '../../entity/terrain/base/types'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 import {getInputRegistry} from '../../input/registry.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {focusPanel} from '../../ui/entity_control_panel.ts'
 import type {TransformGizmo, DragState, GizmoPartType} from './transform_gizmo.ts'
 
@@ -21,7 +22,7 @@ const findEntityByHit = (source: EntityInfoSource, hitObject: Object3D): {id: nu
 
 /**
  * 指针交互（左键选中 + 「生成物体」绑定生成 + 滚轮雕刻）。
- * 生成键取自操作设置中的「生成物体」绑定（默认右键，可改为其它鼠标键或键盘键）。
+ * 生成键取自操作设置中的「生成物体」绑定（默认 Ctrl+左键，可改为其它鼠标键或键盘键）。
  * 返回 setEnabled 控制开关，用于编辑/游玩模式切换。
  */
 export const setupPointerInteraction = (
@@ -45,6 +46,8 @@ export const setupPointerInteraction = (
     let pointerDownPos = {x: 0, y: 0}
     /** 最近一次 pointerdown 是否发生在 canvas 内（window 上的 pointerup 据此过滤外部点击） */
     let downInside = false
+    /** 最近一次 pointerdown 是否被本模式其它指针动作占用（用于 pointerup 跳过选中/清空流程） */
+    let actionPointerDown = false
     /** 最近一次指针屏幕坐标（hover 检测用，无拖拽时也更新） */
     let lastPointer = {x: NaN, y: NaN}
     let enabled = true
@@ -60,9 +63,16 @@ export const setupPointerInteraction = (
 
     const handlePointerDown = (e: PointerEvent) => {
         if (!enabled) return
+        renderer.domElement.focus()
+        /** 被本模式「修饰键+鼠标」的其它动作覆盖的按键（如「生成物体」= Ctrl+左键）不参与选中/清空流程 */
+        if (input.isMouseButtonOverridden(e.button, MOUSE_ACTIONS_BY_MODE.edit)) {
+            actionPointerDown = true
+            downInside = false
+            return
+        }
+        actionPointerDown = false
         /** 仅左键按下标记 canvas 内起点（右键/中键不参与选中流程） */
         downInside = e.button === 0
-        renderer.domElement.focus()
         if (e.button === 0) {
             pointerDownPos = {x: e.clientX, y: e.clientY}
             /** 检查是否点击了 gizmo 部件 */
@@ -118,6 +128,12 @@ export const setupPointerInteraction = (
 
     const handlePointerUp = (e: PointerEvent) => {
         if (!enabled) return
+        /** 指针动作按键的抬起不参与选中/清空（动作已在 pointerdown 完成） */
+        if (actionPointerDown) {
+            actionPointerDown = false
+            downInside = false
+            return
+        }
         if (e.button !== 0) return
         /* canvas 外的点击（面板按钮等）不参与选中/清空逻辑 */
         if (!downInside) {

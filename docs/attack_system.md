@@ -251,7 +251,7 @@ not(guard)                    /* 取反 */
 
 **蓄力攻击（按住计时，松开判定）**：计时在输入侧完成，状态机无计时器——
 
-1. `modes/play/camera.ts`：攻击键 mousedown 记录 `performance.now()`，mouseup 时算出按住秒数随回调传出（右键重击同为松开触发；blur/contextmenu 取消）；
+1. `modes/play/camera.ts`：「轻击」/「重击」绑定（默认左键 / 右键）mousedown 记录 `performance.now()`，mouseup 时算出按住秒数随回调传出（轻击、重击同为松开触发；blur/contextmenu 取消）；
 2. `world.ts setPlayerAttack(attackKey, holdDuration)`：把按住时长存入脉冲，经 `setInput` 第 6/7 参喂入 `CharacterInput.attackKey` / `attackHoldDuration`，帧末与脉冲一同归零；
 3. 起手候选声明顺序 = 优先级：`holdAtLeast(阈值)` 的蓄力段在前、无守卫的兜底段在后；守卫不通过或蓄力段冷却中时自动落到兜底段。
 
@@ -600,7 +600,7 @@ const phaseKey = c.phaseIndex < phases.length
 
 1. **武器类配置**（`melee_weapon.ts` 的 `MeleeWeaponClassConfig.heavyCharge?`）：`{maxChargeMultiplier, maxChargeTime, cooldown, chargePoseId?}`（`HeavyChargeConfig extends ChargeTuning`），缺省 `DEFAULT_HEAVY_CHARGE = {maxChargeMultiplier: 200, maxChargeTime: 1, cooldown: 0.8}`（`melee_attacks.ts`）。`meleeClass` 把它注入每个模式的 `BuildMeleeAttacksOptions.heavyCharge`，并把解析后的 `heavyCharge` 暴露在武器配置上；**单武器（模型）可经 `WeaponModelConfig.charge` 覆盖，角色面板可经 `AttackConfig.charge` 覆盖**（`charge_tuning.ts` 的 `ChargeTuning` / `chargeDamageScale`）。
 2. **重击段声明可蓄力**（`melee_attacks.ts` 的 `buildMeleeAttacks`）：每个重击段设 `chargeFullTime = maxChargeTime`、strike 阶段 `chargeable`、`chargeDamageBonus = maxChargeMultiplier/100 − 1`、`chargeCooldown = cooldown`、`chargePoseId = heavyCharge.chargePoseId ?? meleeChargePoseId(holdMode)`。单武器 / 面板覆写后由 `withChargeTuningMap` 重烘焙这些字段。
-3. **输入**：`modes/play/camera.ts` 右键按下 → `world.beginPlayerAttackHold('heavy')`（`attack_chain.ts` 的 `isChargeableKey` 判定该键起手段是否可蓄力）→ 进入 attacking 并冻结在 strike 起始帧；右键松开 → `endPlayerAttackHold('heavy', held)`（蓄力中则结束蓄力、进入出招）。失焦 / 拖拽 → `cancelPlayerAttackHold`。
+3. **输入**：`modes/play/camera.ts`「重击」绑定（默认右键）按下 → `world.beginPlayerAttackHold('heavy')`（`attack_chain.ts` 的 `isChargeableKey` 判定该键起手段是否可蓄力）→ 进入 attacking 并冻结在 strike 起始帧；松开 → `endPlayerAttackHold('heavy', held)`（蓄力中则结束蓄力、进入出招）。失焦 / 拖拽 → `cancelPlayerAttackHold`。
 4. **伤害与冷却**：`melee_executor` 命中时 `damage = (基础伤害 + 加成) × damageMultiplier × (1 + attackCharge × chargeDamageBonus)`；蓄力值 > 0 时在 `attacking/index.ts` 释放瞬间按 `chargeCooldown` 挂冷却（短按不挂）。
 5. **蓄力姿势（参数化）**：`AnimationContext` 携带 `attackCharge` / `attackHolding`；`appearance/system.ts` 在按住时改用段 `chargePoseId` 的**专用蓄力姿势 clip**（`charge_clip_data.ts` + `charge_pose_edits.ts`，进度 0 = 持械戒备位 → 1 = 满蓄力后引位），并按 `attackCharge` 定位其进度；无专用 clip 的武器（远程）则定位到攻击 clip 前段。`animKey` 带 `:charging`，松开时触发状态混合，消除姿势跳变。
 6. **AI 不受影响**：AI 只用轻击键（`attackKey: 'light'`）且 `holdDuration` 恒 0，永不蓄力。
@@ -724,7 +724,7 @@ const phaseKey = c.phaseIndex < phases.length
 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/ 受击箱（青）/ 检测箱（橙）/ 射程圆环（橙，远程）/ 视线扇形（蓝）debug 可视化 |
 | `src/entity/character/physics/world.ts` | `weaponRuntimeOf(attack)`（test_weapon 特判）；`setPlayerAttack(attackKey, holdDuration)` 起手解析与攻击中写脉冲；每帧段冷却/翻滚冷却/无敌计时递减与 `AnimationContext` 装配；翻滚期间朝向锁定 + `rollSpinProgress` 根自转与绕身体中心位置补偿；换装 `setCombatWeapon` + 清空段冷却/当前段 |
 | `src/entity/character/combat_vfx/material_effects.ts` | 材质表面效果统一封装：受击闪红（`DAMAGE_FLASH_*`）与翻滚无敌闪白半透明（`INVINCIBLE_FLASH_*`）共用惰性快照 / 优先级覆写 / 统一还原 |
-| `src/modes/play/camera.ts` | 攻击键按住计时（mousedown 记录时刻，mouseup 携带按住秒数触发，右键重击同为松开触发） |
+| `src/modes/play/camera.ts` | 「轻击」/「重击」绑定按住计时（mousedown 记录时刻，mouseup 携带按住秒数触发，两者同为松开触发） |
 | `src/modes/play/index.ts` | HUD 技能计时：SKILLS 首行翻滚 + 按 `orderedSegments` 每段一行（动作 / 恢复 / 冷却） |
 | `src/modes/bone_edit/builtin_clips.ts` | 骨骼动画内置动作库：按 `orderedSegments` 枚举全部武器段（`segmentDisplayName` 作显示名） |
 | `src/entity/character/ui/panel.ts` | 属性面板攻击区：武器下拉（`ALL_WEAPON_PRESETS`）+ 伤害 / 起手段冷却 / 远程弹道覆写 |

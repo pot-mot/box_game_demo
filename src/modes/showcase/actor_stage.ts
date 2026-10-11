@@ -7,6 +7,8 @@ import {createPanel} from './panel.ts'
 import type {PanelRowInfo} from './panel.ts'
 import type {ShowcaseModuleRuntime} from './module.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
+import {getInputRegistry} from '../../input/registry.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {
     CLICK_SLOP_PX,
     FOCUS_RING_COLOR,
@@ -106,12 +108,15 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
     let downY = 0
 
     const events = new AbortController()
+    const input = getInputRegistry()
     renderer.domElement.addEventListener('mousedown', (e: MouseEvent) => {
         downX = e.clientX
         downY = e.clientY
     }, {signal: events.signal})
     renderer.domElement.addEventListener('mouseup', (e: MouseEvent) => {
-        if (e.button !== 0) return
+        if (!input.matchesMouseButton('showcase_focus', e.button)) return
+        /* 聚焦键被本模式「修饰键+鼠标」的其它动作覆盖时让位 */
+        if (input.isMouseButtonOverridden(e.button, MOUSE_ACTIONS_BY_MODE.showcase, 'showcase_focus')) return
         if (Math.hypot(e.clientX - downX, e.clientY - downY) > CLICK_SLOP_PX) return
 
         pointerNdc.set(

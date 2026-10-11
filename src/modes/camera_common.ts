@@ -1,13 +1,20 @@
 import {type PerspectiveCamera} from 'three'
 import {ORBIT_SENSITIVITY} from './constants.ts'
 import {getInputRegistry} from '../input/registry.ts'
+import type {InputAction} from '../input/types.ts'
 import {applyFreeFlightMovement} from './free_flight.ts'
 
 /**
  * 鼠标拖拽旋转相机（偏航/俯仰）：edit 与 bone_edit 模式共用。
  * 监听 mousedown/mousemove/mouseup，按键取自操作设置中的「旋转视角」绑定。
+ * mouseActions 为该模式下可绑定的指针动作集合：当某按键被集合中「旋转视角」之外的绑定命中
+ * （如编辑模式的「生成物体」= Ctrl+左键）时，该次按下让位给绑定动作，不触发旋转。
  */
-export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement): {
+export const setupMouseOrbit = (
+    camera: PerspectiveCamera,
+    element: HTMLElement,
+    mouseActions: readonly InputAction[],
+): {
     setOrientation: (yaw: number, pitch: number) => void
     setEnabled: (v: boolean) => void
 } => {
@@ -23,7 +30,10 @@ export const setupMouseOrbit = (camera: PerspectiveCamera, element: HTMLElement)
     }
 
     element.addEventListener('mousedown', (e: MouseEvent) => {
-        if (enabled && input.matchesMouseButton('mouse_orbit', e.button)) {
+        if (!enabled) return
+        /* 该按键被本模式「修饰键+鼠标」的其它动作覆盖（如编辑模式「生成物体」= Ctrl+左键）时不参与旋转 */
+        if (input.isMouseButtonOverridden(e.button, mouseActions, 'mouse_orbit')) return
+        if (input.matchesMouseButton('mouse_orbit', e.button)) {
             isDown = true
             element.focus()
         }
