@@ -5,7 +5,6 @@ import type {BuildingGeneratorContext} from '../../entity/building_generator/typ
 import {createBuildingBrush} from '../../entity/building_generator/edit/brush.ts'
 import {setupBuildingBrushPanel} from '../../entity/building_generator/ui/brush_panel.ts'
 import type {SpawnMode} from '../../types/spawnMode.ts'
-import {setupMouseOrbit, setupKeyboardCamera} from '../camera_common.ts'
 import {setupSpawnModeManager} from './spawn_mode.ts'
 import {setupPointerInteraction} from './pointer_interaction.ts'
 import {setupSpawnModePanel} from '../../ui/spawn_mode_panel.ts'
@@ -13,6 +12,9 @@ import {setupElementListPanel} from '../../ui/element_list_panel.ts'
 import {setupExecutePanel, type ExecutePanel} from './execute_panel.ts'
 import {createTransformGizmo} from './transform_gizmo.ts'
 import {getCurrentPanel} from '../../ui/entity_control_panel.ts'
+import {createCameraControl} from '../control/camera_control.ts'
+import {setupTerrainSculpt} from '../../entity/terrain/base/edit/sculpt.ts'
+import {setupTerrainSculptPanel} from '../../entity/terrain/base/ui/sculpt_panel.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {GIZMO_SCALE_FACTOR} from './constants.ts'
 import {CHARACTER_ENTITY_TYPE} from '../../entity/constants.ts'
@@ -38,8 +40,14 @@ export const setupEditMode = (
     excludeFromBackground: (obj: Object3D) => void,
 ): EditModeController => {
     // 编辑控制
-    const orbit = setupMouseOrbit(camera, renderer.domElement, MOUSE_ACTIONS_BY_MODE.edit)
-    const keyboardCamera = setupKeyboardCamera(camera)
+    const cameraControl = createCameraControl(camera, renderer.domElement, {
+        pointerActions: MOUSE_ACTIONS_BY_MODE.edit,
+        keyboardFreeFlight: true,
+        panEnabled: true,
+        zoomEnabled: true,
+    })
+    /* 以当前相机位姿初始化偏航/俯仰（保持主渲染器默认第一人称视角，而非轨道相机默认观察点） */
+    cameraControl.setOrientation(camera.rotation.y, camera.rotation.x)
     const spawnMode = setupSpawnModeManager()
 
     // 变换 Gizmo
@@ -48,7 +56,7 @@ export const setupEditMode = (
     /* 折射背景渲染时排除 gizmo，避免水面上出现残影镜像 */
     excludeFromBackground(gizmo.group)
 
-    const pointer = setupPointerInteraction(camera, renderer, systems, spawnMode.getSpawnMode, terrainSources, gizmo, orbit.setEnabled)
+    const pointer = setupPointerInteraction(camera, renderer, systems, spawnMode.getSpawnMode, gizmo, cameraControl.setEnabled)
 
     /* 建造笔刷：启用时关闭实体选中 / 生成交互（相机旋转仍可用，拖拽不触发放置） */
     const brush = createBuildingBrush(building, camera, renderer.domElement)
@@ -56,7 +64,11 @@ export const setupEditMode = (
         pointer.setEnabled(!enabled)
     })
 
-    keyboardCamera.setEnabled(true)
+    /* 地形雕刻：仅在选中地形且主动勾选时拦截滚轮，勾选期间只关闭相机缩放、保留旋转 / 平移与实体选中 */
+    const terrainSculpt = setupTerrainSculpt(camera, renderer.domElement, terrainSources)
+    setupTerrainSculptPanel(terrainSculpt, terrainSources, (enabled) => {
+        cameraControl.setZoomEnabled(!enabled)
+    })
 
     // 执行面板
     const executePanel = setupExecutePanel()
@@ -65,8 +77,8 @@ export const setupEditMode = (
     const spawnModePanelUpdate = setupSpawnModePanel(spawnMode.getSpawnMode, spawnMode.setSpawnMode)
     const elementListPanelUpdate = setupElementListPanel(systems)
 
-    const updater = (_dt: number): void => {
-        keyboardCamera.updater()
+    const updater = (dt: number): void => {
+        cameraControl.update(dt)
         executePanel.update()
         spawnModePanelUpdate()
         elementListPanelUpdate()
@@ -107,7 +119,7 @@ export const setupEditMode = (
 
     return {
         updater,
-        setCameraOrientation: (yaw: number, pitch: number) => { orbit.setOrientation(yaw, pitch) },
+        setCameraOrientation: (yaw: number, pitch: number) => { cameraControl.setOrientation(yaw, pitch) },
         spawnMode: {
             getSpawnMode: spawnMode.getSpawnMode,
             setSpawnMode: spawnMode.setSpawnMode,

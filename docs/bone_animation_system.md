@@ -435,7 +435,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 
 ### 7.2 上方视窗交互（全鼠标，与 edit 模式基本一致）
 
-相机复用（评审修正：**不跨模式 import**，避免 modes 之间相互依赖——showcase 已按此约定自行镜像）：M3 将 `setupMouseOrbit`/`setupKeyboardCamera` 从 `modes/edit/` 提取为共享模块 `modes/camera_common.ts`，edit 与 bone_edit 共同引用（`applyFreeFlightMovement` 已同等待遇）；无限网格 `setupInfiniteGrid` 与相机 HUD 直接复用 `render/`、`ui/` 既有导出。
+相机复用（评审修正：**不跨模式 import**，避免 modes 之间相互依赖）：M3 将相机提取为共享纯摄像机模块 `modes/control/camera_control.ts`（`createCameraControl`），edit 与 bone_edit 共同引用；自由飞行 `applyFreeFlightMovement`（`modes/control/free_flight.ts`）与无限网格 `setupInfiniteGrid` 同样复用。
 
 指针交互（`modes/bone_edit/pointer.ts`，click-threshold + `intersectObjects(meshes, false)` 模式）：
 
@@ -578,7 +578,7 @@ export const parseAsset: (raw: string) => SkeletonAnimationAsset   // zod 校验
 |------|------|------|
 | **M1 领域层** | `skeleton/`（joint/bone/skeleton/ik/transition/anim 全模块）+ 全部领域单元测试 | 领域测试全绿，`pnpm type-check` 通过 |
 | **M2 实体层** | `entity/skeleton/`（渲染映射：领域 FK 缓存为唯一世界变换源、外观部件装载、面板、预设骨架）+ 桥接测试 | 桥接测试全绿 |
-| **M3 编辑模式** | `modes/bone_edit/`（视窗交互 + 全功能时间轴 + undo/redo + 导入导出）+ 相机模块提取 `modes/camera_common.ts` + 启动屏第 4 按钮 + 相机存档扩展 + e2e | e2e 全绿 |
+| **M3 编辑模式** | `modes/bone_edit/`（视窗交互 + 全功能时间轴 + undo/redo + 导入导出）+ 相机模块 `modes/control/camera_control.ts` + 启动屏第 4 按钮 + 相机存档扩展 + e2e | e2e 全绿 |
 | **M4a 桥接与基础动画** | 骨架桥接（Group ↔ Skeleton）、idle/walking/jumping/falling/dying/rolling/flinching clip 化、外观系统改 clip 调度器 | 基础状态动画 clip 驱动，快照回归通过 |
 | **M4b 攻击与命中** | 攻击 clip（strike_peak、全量烘焙）、事件轨道命中窗口迁移、executor 改造（播放器先于 executor.update） | 命中窗口时间区间与旧实现一致、无帧量化漏空，伤害行为不变 |
 | **M4c 接入与补全** | play/showcase 全量接入、行走/攻击变速对齐、双手 IK、`AnimationContext` 字段清理 | §8.6 验收标准全部满足 |

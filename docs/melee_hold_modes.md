@@ -117,7 +117,7 @@ interface WeaponModelConfig {
 ### 阶段 3 · 输入 / play / edit 面板
 
 - `input`：新增动作 `cycle_hold_mode`（默认 `ControlLeft` / `ControlRight`，中文「切换持握模式」，归入「角色」组），同步 `registry.test.ts` 的 `EXPECTED_DEFAULTS`。
-- `play/keyboard.ts`：`wasActionPressed('cycle_hold_mode') && isActionActive('cycle_hold_mode')`（后者利用最长组合遮蔽，规避 Ctrl+S / Ctrl+O 误触）→ 按 `availableHoldModes` 环切 → `setHoldMode`；HUD 增加当前持握文案。
+- `modes/control/player_control.ts`：`wasActionPressed('cycle_hold_mode') && isActionActive('cycle_hold_mode')`（后者利用最长组合遮蔽，规避 Ctrl+S / Ctrl+O 误触）→ 按 `availableHoldModes` 环切 → `setHoldMode`；HUD 增加当前持握文案。
 - `ui/panel.ts` 装备区：新增「副手」下拉（含「无」）与「持握」下拉（按 class 支持 + 副手可用性生成）；Apply 顺序 = 主手 / 副手配置 → `setHoldMode`；`refreshFullConfig` 回显；换主手后重建持握选项。
 - e2e：`character_equipment.spec.ts`（持握 / 副手）、`operations_panel.spec.ts`（新默认键位）。
 
@@ -175,4 +175,4 @@ interface WeaponModelConfig {
 | 世界运行时 | `src/entity/character/physics/world.ts` |
 | 战斗执行器 | `src/entity/character/combat/melee_executor.ts` |
 | 存档 | `src/save_load/types.ts`、`validation.ts`、`serialize.ts` |
-| 输入 / 模式 / UI | `src/input/types.ts`、`constants.ts`、`modes/play/keyboard.ts`、`modes/play/index.ts`、`modes/showcase/*`、`src/entity/character/ui/panel.ts` |
+| 输入 / 模式 / UI | `src/input/types.ts`、`constants.ts`、`modes/control/player_control.ts`、`modes/play/index.ts`、`modes/showcase/*`、`src/entity/character/ui/panel.ts` |

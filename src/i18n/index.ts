@@ -119,7 +119,6 @@ type CoreLocale = {
     'input.fixed.key.dbl_timeline': string
     'input.fixed.key.ctrl_wheel': string
     'input.fixed.label.edit_select': string
-    'input.fixed.label.edit_sculpt': string
     'input.fixed.label.zoom_camera': string
     'input.fixed.label.bone_select': string
     'input.fixed.label.bone_move_ik': string
@@ -133,7 +132,8 @@ type CoreLocale = {
     'input.action.move_up': string
     'input.action.move_down': string
     'input.action.jump': string
-    'input.action.sprint': string
+    'input.action.roll': string
+    'input.action.boost': string
     'input.action.cycle_hold_mode': string
     'input.action.cycle_spawn_up': string
     'input.action.cycle_spawn_down': string

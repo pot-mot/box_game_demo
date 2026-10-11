@@ -25,7 +25,9 @@ test.describe('操作设置面板', () => {
 
         /* 编辑模式下不可修改的鼠标操作单独成行 */
         await expect(page.locator('.bp-row', {hasText: '不可修改'})).toHaveCount(2)
-        await expect(page.locator('.bp-row', {hasText: '雕刻地形'})).toContainText('不可修改')
+        await expect(page.locator('.bp-row', {hasText: '视角缩放'})).toContainText('不可修改')
+        /* 编辑模式支持右键平移（与纯摄像机方案一致） */
+        await expect(page.locator('.bp-row', {hasText: '平移视角'}).locator('.bp-row-key')).toHaveText('鼠标右键')
     })
 
     test('游玩模式：鼠标分组列出旋转视角 / 轻击 / 重击 / 锁定目标，固定项仅滚轮', async ({page}) => {
@@ -95,7 +97,7 @@ test.describe('操作设置面板', () => {
         await page.mouse.down({button: 'right'})
         await page.mouse.up({button: 'right'})
 
-        /* 右键被展示模式的「平移视角」占用（编辑模式「生成物体」已改为 Ctrl+左键，不再占用右键） */
+        /* 右键被「平移视角」占用（编辑模式自身与展示模式均绑定右键平移） */
         const conflictBox = page.locator('.bp-conflict-box')
         await expect(conflictBox).toContainText('平移视角')
         await expect(conflictBox).not.toContainText('生成物体')

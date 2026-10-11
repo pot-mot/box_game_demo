@@ -326,10 +326,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     if (loadResult) {
         if (mode === 'edit') {
             if (loadResult.editCameraPos) camera.position.set(loadResult.editCameraPos.x, loadResult.editCameraPos.y, loadResult.editCameraPos.z)
-            if (loadResult.editCameraRot) {
-                camera.rotation.set(loadResult.editCameraRot.x, loadResult.editCameraRot.y, loadResult.editCameraRot.z)
-                editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
-            }
+            if (loadResult.editCameraRot) camera.rotation.set(loadResult.editCameraRot.x, loadResult.editCameraRot.y, loadResult.editCameraRot.z)
+            if (loadResult.editCameraPos || loadResult.editCameraRot) editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
         }
         if (mode === 'play') {
             if (loadResult.playCameraPos) camera.position.set(loadResult.playCameraPos.x, loadResult.playCameraPos.y, loadResult.playCameraPos.z)
@@ -367,10 +365,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             const result = loadWorldFromData(data, systemsByType, allTerrainSources)
             if (mode === 'edit') {
                 if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
-                if (result.editCameraRot) {
-                    camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
-                    editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
-                }
+                if (result.editCameraRot) camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)
+                if (result.editCameraPos || result.editCameraRot) editMode?.setCameraOrientation(camera.rotation.y, camera.rotation.x)
                 /* 载入的世界取代原有编辑内容：刷新还原基线，使 Reset 回到载入后的世界 */
                 saveSnapshot()
             }

@@ -1,7 +1,7 @@
 import {Box3, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer, type Object3D} from 'three'
 import {setupSkeletonEntities, type SkeletonEntitiesContext, type SkeletonEntity} from '../../entity/skeleton/world.ts'
 import {createCharacterSkeletonPreset} from '../../entity/character/skeleton/preset_appearance.ts'
-import {setupMouseOrbit, setupKeyboardCamera} from '../camera_common.ts'
+import {createCameraControl} from '../control/camera_control.ts'
 import {createAnimationStore, type AnimationStore} from './animation_store.ts'
 import {setupBoneEditHistory, type BoneEditHistory} from './history.ts'
 import {setupTimelinePanel, type TimelinePanel} from './timeline.ts'
@@ -46,10 +46,13 @@ export const setupBoneEditMode = (
     /* 动画库 */
     const store: AnimationStore = createAnimationStore()
 
-    /* 相机（共享模块：modes/camera_common.ts） */
-    const orbit = setupMouseOrbit(camera, renderer.domElement, MOUSE_ACTIONS_BY_MODE.bone_edit)
-    const keyboardCamera = setupKeyboardCamera(camera)
-    keyboardCamera.setEnabled(true)
+    /* 相机（共享模块：modes/control/camera_control.ts） */
+    const cameraControl = createCameraControl(camera, renderer.domElement, {
+        pointerActions: MOUSE_ACTIONS_BY_MODE.bone_edit,
+        keyboardFreeFlight: true,
+        panEnabled: true,
+        zoomEnabled: true,
+    })
 
     /* 时间轴面板（含 IK 开关状态） */
     let timeline: TimelinePanel
@@ -100,7 +103,7 @@ export const setupBoneEditMode = (
             center.z + dist * Math.cos(VIEW_ELEVATION),
         )
         /** 俯仰 = 仰角取负（俯视目标）再减去可见区域中心偏移补偿，使目标落在可视区中心 */
-        orbit.setOrientation(VIEW_YAW, -VIEW_ELEVATION - Math.atan((1 - visibleRatio) * halfTanV))
+        cameraControl.setOrientation(VIEW_YAW, -VIEW_ELEVATION - Math.atan((1 - visibleRatio) * halfTanV))
     }
     frameFocus(world.getFocus())
 
@@ -123,10 +126,10 @@ export const setupBoneEditMode = (
     const dragCoordinator = createDragCoordinator()
 
     /* 指针交互（拾取/拖拽/IK 牵引）：命中骨骼时挂起轨道相机旋转，仅保留拖拽 */
-    setupBoneEditPointer(world, camera, history, () => timeline.isIkEnabled(), onPicked, orbit.setEnabled, dragCoordinator)
+    setupBoneEditPointer(world, camera, history, () => timeline.isIkEnabled(), onPicked, cameraControl.setEnabled, dragCoordinator)
 
     /* Gizmo 指针交互（拦截 gizmo 部件拖拽） */
-    const gizmoPointer = setupBoneGizmoPointer(world, camera, gizmo, history, orbit.setEnabled, dragCoordinator)
+    const gizmoPointer = setupBoneGizmoPointer(world, camera, gizmo, history, cameraControl.setEnabled, dragCoordinator)
 
     /* Gizmo 指针事件（在原有指针之前拦截） */
     renderer.domElement.addEventListener('pointerdown', gizmoPointer.handlePointerDown)
@@ -149,8 +152,7 @@ export const setupBoneEditMode = (
     }
 
     const updater = (dt: number): void => {
-        void dt
-        keyboardCamera.updater()
+        cameraControl.update(dt)
         timeline.updater(dt)
 
         /** 更新 gizmo 位置/旋转跟随选中关节 */
@@ -185,7 +187,7 @@ export const setupBoneEditMode = (
 
     return {
         updater,
-        setCameraOrientation: (yaw: number, pitch: number) => orbit.setOrientation(yaw, pitch),
+        setCameraOrientation: (yaw: number, pitch: number) => cameraControl.setOrientation(yaw, pitch),
         exit,
     }
 }

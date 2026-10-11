@@ -37,7 +37,7 @@ src/modes/showcase/
 - **`ShowcaseModule`**：`{id, title, description, setup(host) → {updater, dispose}}`。`title` / `description` 为 i18n 文案键（强类型 `StringLocaleKey`）；`setup` 接收宿主 `{renderer}`，自建场景并返回每帧 updater 与释放函数。
 - **控制器**：持有 `SHOWCASE_MODULES` 注册表，`selectModule` 释放当前模块、装配新模块并隐藏菜单；`backToMenu` 释放模块、显示菜单；`exit` 释放模块 + 菜单 + 返回按钮后回调宿主。无激活模块时 updater 为空操作（菜单覆盖画布）。
 - **`actor_stage.ts`**：把「独立场景 + 自由飞行相机 + 多展示角色 + 聚焦环 + 点击拾取 + 空格暂停/Esc 取消聚焦 + 信息面板」这套通用编排集中一处，供 `actions` / `appearance` 复用（子模块只负责 `populate(scene, register)` 填充角色与面板行）。
-- **相机（全模块统一）**：`scene.ts` 的相机以 edit 模式自由飞行为基准——`W/A/S/D` 前后左右、`Z/X` 升 / 降（`MOVE_STEP`，随相机偏航角），「旋转视角」绑定（默认鼠标左键）拖拽转视角、「平移视角」绑定（默认右键）拖拽平移、滚轮缩放；「聚焦」绑定（默认左键点击）命中角色 / 物件进入**聚焦**（相机平滑飞向目标并环绕，期间暂停自由移动），`Esc` 或点击空白恢复自由飞行。旋转 / 平移 / 聚焦均为可重绑的指针动作（操作设置面板「鼠标」分组）。全部子模块默认均使用该自由飞行相机（图鉴把注视中心对准展示人体；交互物模块改为**相机跟随玩家**、鼠标环绕，聚焦可临时接管）。
+- **相机（两套方案）**：相机类子模块使用共享**纯摄像机** `modes/control/camera_control.ts`——`W/A/S/D` 前后左右、`Z/X` 升 / 降（`MOVE_STEP`，随相机偏航角），按住 `boost` 动作（默认 Shift）加速飞行；「旋转视角」绑定（默认鼠标左键）拖拽转视角、「平移视角」绑定（默认右键）拖拽平移、滚轮缩放；「聚焦」绑定（默认左键点击）命中角色 / 物件进入**聚焦**（相机平滑飞向目标并环绕，期间暂停自由移动），`Esc` 或点击空白恢复自由飞行。旋转 / 平移 / 聚焦均为可重绑的指针动作（操作设置面板「鼠标」分组）。**含玩家的子模块**（交互物 / 背包）使用共享**玩家主控** `modes/control/player_control.ts`：相机第三人称跟随玩家、鼠标拖拽环绕、滚轮缩放，`Shift` = 翻滚，**不提供右键平移**。
 - **新增子模块**：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 补 `showcase.module.<id>.title/desc` 与模块内文案 → 补单测（`modules.test.ts` 自动覆盖注册表一致性）/ e2e。
 
 ## 子模块
@@ -81,7 +81,7 @@ src/modes/showcase/
 内容：摆放 **7 类交互物**（存档点 / **两个传送点** / 开关 / 单开门 / 双开门 / 升降闸门 / 升降梯），全部**置于地面**（体素自底面 y=0 向上搭建）。
 
 - 使用生产同一套 `InteractableContext`（行为 / 动画 / 信号）；**开关只联动闸门**（同频道 `setSignal`），不再触发所有交互物。
-- **简化版玩家**：`WASD` 移动（以相机偏航为基准）、空格跳跃、`Shift` 冲刺（按住提移速）、`F` 触发最近交互物（面板实时显示最近交互提示）、`K` 直接击杀玩家；玩家使用生产 `CharacterEntitySystem` + 物理固定子步（`createFixedStepStepper`），站上升降梯会被平台带走。
+- **简化版玩家**：`WASD` 移动（以相机偏航为基准）、空格跳跃、`Shift` 翻滚（玩家主控方案，与 play 一致）、`F` 触发最近交互物（面板实时显示最近交互提示）、`K` 直接击杀玩家；玩家使用生产 `CharacterEntitySystem` + 物理固定子步（`createFixedStepStepper`），站上升降梯会被平台带走。
 - **相机跟随玩家**（鼠标拖拽环绕、滚轮缩放；WASD 让给玩家），聚焦交互物时临时接管、取消后恢复跟随。
 - **两个传送点**：激活其一即把玩家传送到另一个，演示传送效果。
 - **存档点 + 击杀**：`K` 或「击杀玩家」按钮清空生命触发死亡动画，延时后在最近激活的存档点重生（无存档点则回出生点）。
@@ -97,7 +97,7 @@ src/modes/showcase/
 
 复用 play 模式的俄罗斯方块背包面板（`modes/play/inventory_ui`）、双栏容器面板（`modes/play/container_ui`）与装备模型预览（`modes/play/equipment_ui`），注入一份演示背包（全武器 / 全护甲 + 消耗品 / 材料 / 钥匙），支持拖拽移动、`R` 旋转、拖到环绕装备槽装备、点装备槽卸下、丢弃，装备变化即时同步到面板预览**与场景内玩家模型**——完整复现 play 背包交互效果。
 
-- **简化版玩家**：`WASD` 移动（以相机偏航为基准）、空格跳跃、`Shift` 冲刺、`F` 交互、`Tab`（与 `open_equipment` 键）开关背包；玩家使用生产 `CharacterEntitySystem` + 物理固定子步（`createFixedStepStepper`），相机跟随玩家（鼠标拖拽环绕）。
+- **简化版玩家**：`WASD` 移动（以相机偏航为基准）、空格跳跃、`Shift` 翻滚、`F` 交互、`Tab`（与 `open_equipment` 键）开关背包；玩家使用生产 `CharacterEntitySystem` + 物理固定子步（`createFixedStepStepper`），相机跟随玩家（鼠标拖拽环绕）。
 - **箱子 + 开箱**：地面放置一个箱子；走近按 `F` 打开 play 的双栏容器面板（玩家背包 ↔ 箱子，可拖拽 / 双击存取物品），状态行回写「已打开箱子」。
 - 左上 HUD 显示标题 / 操作说明 / 最近交互提示 / 状态，并提供「打开背包」按钮；背包面板右上角带「关闭」按钮——开合均可不依赖键盘。
 - **Tab 焦点**：输入注册表在游戏画面内拦截 `Tab` 的浏览器默认焦点切换（避免焦点跳到面板按钮后空格 / 回车误触），表单 / 下拉 / 按钮等可交互控件内仍保留默认导航（`src/input/registry.ts`）。
@@ -109,7 +109,8 @@ src/modes/showcase/
 - 单元测试：
   - `src/modes/showcase/actor.test.ts` — 近战满蓄力前置。
   - `src/modes/showcase/race_actor.test.ts` — 种族 / 套装角色创建释放、站立行走 2s 交替循环、位置不动、肢体替换外观生效。
-  - `src/modes/showcase/scene.test.ts` — 相机自由飞行（WASD 沿朝向平移、Z/X 升降）、聚焦期间暂停自由移动、Esc 恢复自由飞行。
+  - `src/modes/showcase/scene.test.ts` — 纯摄像机自由飞行（WASD 沿朝向平移、Z/X 升降、按住 boost 加速）、聚焦期间暂停自由移动、Esc 恢复自由飞行、跟随目标。
+  - `src/modes/control/camera_control.test.ts` / `src/modes/control/player_control.test.ts` — 两套共享操作方案的单测（缩放门控、朝向、移动合成与翻滚边沿、锁定输入）。
   - `src/modes/showcase/focus.test.ts` — 点击聚焦拾取器：命中对象后相机平滑聚焦到目标点、脚下呼吸圆环标记显示并随尺寸缩放、点击空处取消聚焦并隐藏标记。
   - `src/entity/interactable/mesh.test.ts` — 单推门门轴（较宽水平边）落点正确（薄 X / 宽 Z 与宽 X 两种朝向）。
   - `src/entity/character/physics/support_carry.test.ts` — 移动支撑携带：被支撑角色获得平台线速度且不因 idle 阻尼逐帧累加；未注册支撑不携带。

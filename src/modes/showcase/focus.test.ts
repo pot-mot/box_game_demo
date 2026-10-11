@@ -1,7 +1,8 @@
 import {describe, it, expect, beforeEach} from 'vitest'
 import {BoxGeometry, Mesh, MeshBasicMaterial, PerspectiveCamera, Scene, Vector3} from 'three'
 import {createInputRegistry} from '../../input/registry.ts'
-import {createOrbitCamera} from './scene.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
+import {createCameraControl} from '../control/camera_control.ts'
 import {setupClickFocus} from './focus.ts'
 
 describe('展示模式：点击聚焦拾取器', () => {
@@ -19,7 +20,7 @@ describe('展示模式：点击聚焦拾取器', () => {
 
         const dom = document.createElement('div')
         const events = new AbortController()
-        const orbit = createOrbitCamera(camera, dom, events.signal)
+        const orbit = createCameraControl(camera, dom, {pointerActions: MOUSE_ACTIONS_BY_MODE.showcase, signal: events.signal})
 
         const mesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial())
         mesh.updateMatrixWorld()
@@ -67,7 +68,7 @@ describe('展示模式：点击聚焦拾取器', () => {
         camera.updateMatrixWorld()
         const dom = document.createElement('div')
         const events = new AbortController()
-        const orbit = createOrbitCamera(camera, dom, events.signal)
+        const orbit = createCameraControl(camera, dom, {pointerActions: MOUSE_ACTIONS_BY_MODE.showcase, signal: events.signal})
 
         const focused: Array<number | null> = []
         const controller = setupClickFocus<number>({

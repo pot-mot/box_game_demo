@@ -4,15 +4,19 @@
 
 ## 相机
 
-- 有玩家：第三人称环绕相机（`src/modes/play/camera.ts` 的 `setupPlayCamera`），以玩家身体中心为跟随点做帧率无关 EMA 平滑（`CAMERA_SMOOTH_FACTOR = 8`），抑制角色弹跳导致的抖动。
-- 「旋转视角」绑定（默认鼠标左键）拖拽旋转，「滚轮」缩放（距离 1 ~ 30 m）；「轻击」绑定（默认左键松开）/「重击」绑定（默认右键松开）触发攻击，攻击携带按住时长供蓄力守卫区分点按/长按，拖拽视角时该次攻击不触发。旋转 / 轻击 / 重击 / 锁定目标均为可重绑的指针动作（操作设置面板「鼠标」分组）。
+- 有玩家：第三人称环绕相机（`src/modes/control/player_control.ts` 的 `createPlayerControl`），以玩家身体中心为跟随点做帧率无关 EMA 平滑（`PLAYER_CAMERA_SMOOTH_FACTOR = 8`），抑制角色弹跳导致的抖动。攻击 / 锁定 / 交互与移动输入一并由该控制器编排（玩家主控方案）。
+- 「旋转视角」绑定（默认鼠标左键）拖拽旋转，「滚轮」缩放（`PLAYER_CAMERA_MIN_DISTANCE` ~ `PLAYER_CAMERA_MAX_DISTANCE`）；「轻击」绑定（默认左键松开）/「重击」绑定（默认右键松开）触发攻击，攻击携带按住时长供蓄力守卫区分点按/长按，拖拽视角时该次攻击不触发。旋转 / 轻击 / 重击 / 锁定目标均为可重绑的指针动作（操作设置面板「鼠标」分组）。**玩家主控不提供右键平移**（右键 = 重击）。
 - **远程蓄力（弓 / 投掷类）**：左键**按住**进入蓄力（角色冻结在拉弓/后引姿态，HUD 显示 `CHARGE` 进度条），**松开**出手；力度决定弓的射程·速度·伤害、投掷物的远近·伤害。按住后拖拽旋转视角（或窗口失焦）会取消本次蓄力，不出手。连弩 / 霰弹枪 / 法杖 / 魔杖不支持蓄力，仍为松开即发。
-- 无玩家（未标记玩家或玩家死亡）：相机回退自由飞行（`src/modes/free_flight.ts`）。
+- 无玩家（未标记玩家或玩家死亡）：相机回退自由飞行（`src/modes/control/free_flight.ts` 的 `applyFreeFlightMovement`，按住 `boost` 动作加速）。
 - 近战命中触发短促相机震动（`index.ts` 的 `applyHitShake`，叠加在相机更新之后）。
+
+## 移动与翻滚（玩家主控方案）
+
+- `WASD` 相对相机水平移动、空格跳跃、`Shift`（动作 `roll`）边沿触发**翻滚**；移动/翻滚/跳跃由 `createPlayerControl` 的 `move()` 统一读取并写入 `characterSystem.setPlayerMove`，应在角色状态机更新前调用。
 
 ## 持握模式切换（「切换持握模式」绑定，默认 Ctrl）
 
-- 近战武器按 `availableHoldModes`（武器声明 ∩ 双持需副手同类近战）环切：单持 → 双手共持 → 双持 → 单持；`src/modes/play/keyboard.ts` 轮询输入动作 `cycle_hold_mode` 后调用 `characterSystem.cyclePlayerHoldMode()`。
+- 近战武器按 `availableHoldModes`（武器声明 ∩ 双持需副手同类近战）环切：单持 → 双手共持 → 双持 → 单持；`src/modes/control/player_control.ts` 的 `move()` 轮询输入动作 `cycle_hold_mode` 后调用 `characterSystem.cyclePlayerHoldMode()`。
 - 仅 Ctrl 单独按下时生效：`isActionActive('cycle_hold_mode')` 走最长组合遮蔽，Ctrl+S / Ctrl+O 按下时该动作被 `save_world` / `load_world` 遮蔽，不会误触发切换。
 - 切换由 `world.ts` 的 `setHoldMode` 统一处理（重解析攻击链、清段冷却与当前段、同步副手挂背/回手）；HUD 装备行显示当前武器与持握模式。
 - 副手装备与持握模式的显式选择在编辑模式角色面板「装备」区（副手武器下拉 + 持握下拉），存档字段 `offhand` / `holdMode`（v6）。
@@ -30,5 +34,5 @@
 
 ## 验证
 
-- 单元测试：`src/modes/play/lock_on.test.ts`（角度归一化、偏角优先选取、半径/角度门控、默认身体中心点、额外锁定点优选与跟随、未知关节跳过、目标失效/脱锁/移除自动解除、非敌对与无玩家情形）；`src/character/lock_point.test.ts`（锁定点配置清洗）；`src/entity/character/physics/lock_points.test.ts`（存档写入/序列化/`setLockPoints` 过滤）；`src/save_load/validation.test.ts`（v5 可选字段回退）；`src/modes/play/lock_marker.test.ts`（白点显示/隐藏与位置跟随）；`src/modes/play/camera.test.ts`（拖拽阈值前不解除锁定、键盘绑定边沿触发）；`src/input/registry.test.ts` 锁定默认中键绑定。
+- 单元测试：`src/modes/play/lock_on.test.ts`（角度归一化、偏角优先选取、半径/角度门控、默认身体中心点、额外锁定点优选与跟随、未知关节跳过、目标失效/脱锁/移除自动解除、非敌对与无玩家情形）；`src/character/lock_point.test.ts`（锁定点配置清洗）；`src/entity/character/physics/lock_points.test.ts`（存档写入/序列化/`setLockPoints` 过滤）；`src/save_load/validation.test.ts`（v5 可选字段回退）；`src/modes/play/lock_marker.test.ts`（白点显示/隐藏与位置跟随）；`src/modes/control/player_control.test.ts`（拖拽阈值前不解除锁定、键盘绑定边沿触发、移动合成与翻滚边沿）；`src/input/registry.test.ts` 锁定默认中键绑定。
 - e2e：`e2e/operations_panel.spec.ts`（游玩模式鼠标分组列出「旋转视角 / 锁定目标」，中键改绑冲突确认）；`e2e/character_equipment.spec.ts`（面板添加额外锁定点并 Apply 回显）。

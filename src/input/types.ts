@@ -10,8 +10,10 @@ export const INPUT_ACTIONS = [
     'move_up',
     'move_down',
     'jump',
-    /* 移动技能（翻滚）：动作 id 保留 sprint 以兼容既有键位存档 */
-    'sprint',
+    /* 玩家主控：翻滚（边沿触发） */
+    'roll',
+    /* 纯摄像机：自由飞行加速（按住） */
+    'boost',
     /* 近战持握模式切换（单持 → 双手共持 → 双持循环；副手同类近战才含双持） */
     'cycle_hold_mode',
     'cycle_spawn_up',
@@ -54,7 +56,8 @@ export const ACTION_LABELS: Record<InputAction, StringLocaleKey> = {
     move_up: 'input.action.move_up',
     move_down: 'input.action.move_down',
     jump: 'input.action.jump',
-    sprint: 'input.action.sprint',
+    roll: 'input.action.roll',
+    boost: 'input.action.boost',
     cycle_hold_mode: 'input.action.cycle_hold_mode',
     cycle_spawn_up: 'input.action.cycle_spawn_up',
     cycle_spawn_down: 'input.action.cycle_spawn_down',
@@ -77,8 +80,8 @@ export const ACTION_LABELS: Record<InputAction, StringLocaleKey> = {
 
 /** 动作分组 */
 export const ACTION_GROUPS: readonly { readonly name: StringLocaleKey; readonly actions: readonly InputAction[] }[] = [
-    {name: 'input.group.move', actions: ['move_forward', 'move_backward', 'move_left', 'move_right', 'move_up', 'move_down']},
-    {name: 'input.group.character', actions: ['jump', 'sprint', 'cycle_hold_mode', 'interact']},
+    {name: 'input.group.move', actions: ['move_forward', 'move_backward', 'move_left', 'move_right', 'move_up', 'move_down', 'boost']},
+    {name: 'input.group.character', actions: ['jump', 'roll', 'cycle_hold_mode', 'interact']},
     {name: 'input.group.edit_tools', actions: ['cycle_spawn_up', 'cycle_spawn_down']},
     {name: 'input.group.ui', actions: ['delete_entity', 'close_panel', 'open_inventory', 'open_equipment', 'open_map']},
     {name: 'input.group.system', actions: ['save_world', 'load_world']},
@@ -101,17 +104,17 @@ export type MouseOperationsMode = typeof MOUSE_OPERATION_MODES[number]
  * 同一动作在不同模式下的含义不同（如右键在展示模式平移视角、Ctrl+左键在编辑模式生成物体），故按模式列出。
  */
 export const MOUSE_ACTIONS_BY_MODE: Record<MouseOperationsMode, readonly InputAction[]> = {
-    edit: ['mouse_orbit', 'spawn_entity'],
+    edit: ['mouse_orbit', 'mouse_pan', 'spawn_entity'],
     play: ['mouse_orbit', 'attack_light', 'attack_heavy', 'lock_target'],
     showcase: ['mouse_orbit', 'mouse_pan', 'showcase_focus'],
-    bone_edit: ['mouse_orbit'],
+    bone_edit: ['mouse_orbit', 'mouse_pan'],
 }
 
 /** 各模式下不可修改的鼠标操作（操作说明面板移除后，这部分信息在操作设置面板中保留） */
 export const FIXED_MOUSE_OPERATIONS: Record<MouseOperationsMode, readonly FixedMouseOperation[]> = {
     edit: [
         {keys: 'input.fixed.key.click_left', label: 'input.fixed.label.edit_select'},
-        {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.edit_sculpt'},
+        {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.zoom_camera'},
     ],
     play: [
         {keys: 'input.fixed.key.wheel', label: 'input.fixed.label.zoom_camera'},

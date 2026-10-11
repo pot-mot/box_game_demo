@@ -1,7 +1,6 @@
-import {Raycaster, Vector2, Vector3, Euler, type PerspectiveCamera, type WebGLRenderer, type Mesh, type Object3D} from 'three'
+import {Raycaster, Vector2, Vector3, Euler, type PerspectiveCamera, type WebGLRenderer, type Object3D} from 'three'
 import type {SpawnMode} from '../../types/spawnMode.ts'
 import type {EntityInfoSource} from '../../entity/box/base/types/entity_info.ts'
-import type {TerrainContext} from '../../entity/terrain/base/types'
 import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 import {getInputRegistry} from '../../input/registry.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
@@ -21,7 +20,7 @@ const findEntityByHit = (source: EntityInfoSource, hitObject: Object3D): {id: nu
 }
 
 /**
- * 指针交互（左键选中 + 「生成物体」绑定生成 + 滚轮雕刻）。
+ * 指针交互（左键选中 + 「生成物体」绑定生成）。
  * 生成键取自操作设置中的「生成物体」绑定（默认 Ctrl+左键，可改为其它鼠标键或键盘键）。
  * 返回 setEnabled 控制开关，用于编辑/游玩模式切换。
  */
@@ -30,7 +29,6 @@ export const setupPointerInteraction = (
     renderer: WebGLRenderer,
     sources: EntityInfoSource[],
     getSpawnMode: () => SpawnMode,
-    terrainSources?: TerrainContext[],
     gizmo?: TransformGizmo,
     setOrbitEnabled?: (v: boolean) => void,
 ): {
@@ -180,34 +178,6 @@ export const setupPointerInteraction = (
         focusPanel(undefined)
     }
 
-    const handleWheel = (e: WheelEvent) => {
-        if (!enabled) return
-        if (!terrainSources || terrainSources.length === 0) return
-        const hasTerrainSelected = terrainSources.some(ts => ts.getSelectedId() !== undefined)
-        if (!hasTerrainSelected) return
-        e.preventDefault()
-
-        pointer.x = (e.clientX / window.innerWidth) * 2 - 1
-        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1
-        raycaster.setFromCamera(pointer, camera)
-
-        const terrainMeshes = terrainSources.flatMap(s => s.getMeshes())
-        if (terrainMeshes.length === 0) return
-        const hits = raycaster.intersectObjects(terrainMeshes, false)
-        if (hits.length === 0) return
-
-        const hitMesh = hits[0].object as Mesh
-        const hitPoint = hits[0].point
-        for (const ts of terrainSources) {
-            const entity = ts.getEntityList().find(e => e.mesh === hitMesh)
-            if (entity) {
-                const dir = e.deltaY > 0 ? -1 : 1
-                ts.sculpt(entity.id, hitPoint.x, hitPoint.y, hitPoint.z, dir as 1 | -1)
-                return
-            }
-        }
-    }
-
     /** 在给定屏幕坐标处生成一个当前类型的实体 */
     const spawnAtScreen = (clientX: number, clientY: number): void => {
         const mode = getSpawnMode()
@@ -292,7 +262,6 @@ export const setupPointerInteraction = (
     /* pointercancel/失焦兜底：释放事件丢失时结束拖拽，防止幽灵拖拽与相机锁死 */
     window.addEventListener('pointercancel', cancelDrag)
     window.addEventListener('blur', cancelDrag)
-    renderer.domElement.addEventListener('wheel', handleWheel)
     renderer.domElement.addEventListener('contextmenu', handleContextMenu)
     /* 键盘绑定「生成物体」时按动作回调触发 */
     input.onActionDown('spawn_entity', handleSpawnKey)

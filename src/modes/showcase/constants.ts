@@ -161,30 +161,7 @@ export const CAMERA_FOV = 55
 export const CAMERA_NEAR = 0.1
 export const CAMERA_FAR = 500
 
-export const ORBIT_DEFAULT_TARGET_Y = 0.7
-export const ORBIT_DEFAULT_TARGET_Z = -4.6
-export const ORBIT_DEFAULT_DISTANCE = 17
-export const ORBIT_DEFAULT_PITCH = 0.46
-export const ORBIT_DEFAULT_YAW = 0
-export const ORBIT_MIN_DISTANCE = 1.5
-export const ORBIT_MAX_DISTANCE = 45
-export const ORBIT_PITCH_MIN = 0.05
-export const ORBIT_PITCH_MAX = 1.45
-
-/** 未聚焦自由旋转的俯仰角范围（对标 edit 模式，可上下自由环视，留 0.01rad 防万向锁） */
-export const FREE_PITCH_MIN = -Math.PI / 2 + 0.01
-export const FREE_PITCH_MAX = Math.PI / 2 - 0.01
-
-/** 旋转灵敏度（rad / px） */
-export const ORBIT_ROTATE_SENSITIVITY = 0.005
-/** 平移灵敏度（距离比例 / px） */
-export const ORBIT_PAN_SENSITIVITY = 0.0016
-/** 滚轮缩放指数系数 */
-export const ORBIT_WHEEL_SENSITIVITY = 0.001
-/** 聚焦时的观察距离 */
-export const ORBIT_FOCUS_DISTANCE = 3.6
-/** 聚焦/回归过渡速率（1/s，越大越快） */
-export const ORBIT_FOCUS_LERP = 6
+/* 轨道相机的默认球坐标 / 灵敏度等常量已迁至 `modes/control/constants.ts`（纯摄像机与玩家主控共用） */
 
 // ── 播放控制 ──
 
@@ -298,10 +275,9 @@ export const INTERACTABLE_SPACING = 3.2
 export const INTERACTABLE_CAMERA_DISTANCE = 12
 export const INTERACTABLE_CAMERA_TARGET_Y = 1.4
 
-/** 交互物演示的简化玩家：基础移速 / 跳跃高度 / 冲刺倍率 / 出生 Z 坐标 / 死亡重生延时（秒） */
+/** 交互物演示的简化玩家：基础移速 / 跳跃高度 / 出生 Z 坐标 / 死亡重生延时（秒） */
 export const PLAYER_SPEED = 3.5
 export const PLAYER_JUMP_HEIGHT = 2
-export const PLAYER_SPRINT_MULTIPLIER = 1.7
 export const PLAYER_SPAWN_Z = 3.5
 export const INTERACTABLE_RESPAWN_DELAY = 2.5
 

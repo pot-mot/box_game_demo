@@ -698,7 +698,7 @@ const phaseKey = c.phaseIndex < phases.length
 
 | 文件 | 内容 |
 |------|------|
-| `src/character/state_machine/types.ts` | `CHARACTER_STATES`（含 `'rolling'` / `'flinching'`）；`CharacterInput.roll`（`setInput` 第 5 参，由 `sprint` 键触发）、`attackKey: AttackKey \| undefined`、`attackHoldDuration`（第 6/7 参）；`MachineContext.attackPhase` |
+| `src/character/state_machine/types.ts` | `CHARACTER_STATES`（含 `'rolling'` / `'flinching'`）；`CharacterInput.roll`（`setInput` 第 5 参，由 `roll` 动作触发）、`attackKey: AttackKey \| undefined`、`attackHoldDuration`（第 6/7 参）；`MachineContext.attackPhase` |
 | `src/character/state_machine/machine.ts` | 静态 `Record<CharacterState, StateHandler>` 注册 8 状态；transition guard 检查 + `onStateChange` 派发；**进入 attacking 时用 `resolveEntrySegment` 完成起手解析并写入 `combat.activeSegment`** |
 | `src/character/state_machine/states/attacking/index.ts` | attacking 段子状态调度器：推进阶段时间线 → 按输入求段转换写缓冲 → 段播完推进下一段（不退出状态）→ 委托阶段 handler 或走默认行为；导出 `phaseHandlerRegistry` / `registerPhaseHandler` |
 | `src/character/state_machine/states/attacking/segment.ts` | 段子状态单元：`enterAttackSegment`（重置计时/挂段冷却/清命中记录/唤醒刚体）、`advanceSegmentPhases`、`isSegmentPhasesDone`、`resolveSegmentNextState`（同键 → 本段 `next`；异键 → 该键起手解析） |

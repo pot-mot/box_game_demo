@@ -1,6 +1,7 @@
 import type {ShowcaseModule} from '../module.ts'
 import {Vector3} from 'three'
-import {setupShowcaseScene} from '../scene.ts'
+import {setupShowcaseStage} from '../scene.ts'
+import {createPlayerControl} from '../../control/player_control.ts'
 import {createSharedWorld} from '../../../physics/world.ts'
 import {createFixedStepStepper} from '../../../physics/fixed_step.ts'
 import type {SteppableSystem} from '../../../physics/fixed_step.ts'
@@ -13,6 +14,7 @@ import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {ARMOR_SLOTS, type ArmorSlot} from '../../../character/armor/slots.ts'
 import {DEFAULT_WEAPON_ID} from '../../../character/weapon/catalog.ts'
 import {getInputRegistry} from '../../../input/registry.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../../input/types.ts'
 import {createInventoryPanel, type InventoryPanel} from '../../play/inventory_ui/panel.ts'
 import {createContainerPanel, type ContainerPanel} from '../../play/container_ui/panel.ts'
 import {createEquipmentPreview, type EquipmentPreview, type EquipPreviewData} from '../../play/equipment_ui/preview.ts'
@@ -37,7 +39,6 @@ import {
     PLAYER_JUMP_HEIGHT,
     PLAYER_SPAWN_Z,
     PLAYER_SPEED,
-    PLAYER_SPRINT_MULTIPLIER,
     SHOWCASE_INVENTORY_WIDTH,
     SHOWCASE_INVENTORY_HEIGHT,
 } from '../constants.ts'
@@ -63,7 +64,7 @@ const PLAYER_CONFIG: CharacterSaveConfig = {
  * （全武器 / 全护甲 + 消耗品 / 材料 / 钥匙），支持拖拽移动、`R` 旋转、拖到环绕装备槽装备、
  * 点装备槽卸下、丢弃——装备变化即时同步到面板预览与**场景内玩家模型**。
  *
- * 同时提供**简化版玩家**（`WASD` 移动 / 空格跳跃 / `Shift` 冲刺 / `F` 交互 / `Tab` 开关背包）与一个
+ * 同时提供**简化版玩家**（`WASD` 移动 / 空格跳跃 / `Shift` 翻滚 / `F` 交互 / `Tab` 开关背包）与一个
  * 地面箱子：走到箱子旁按 `F` 打开双栏容器面板（玩家背包 ↔ 箱子，可拖拽存取），相机跟随玩家
  * （鼠标拖拽环绕观察）。使用生产同一套 `CharacterEntitySystem` + `InteractableContext` 与物理固定子步，
  * 起到背包 / 装备 / 开箱交互的人员测试效果。
@@ -73,11 +74,11 @@ export const inventoryModule: ShowcaseModule = {
     title: 'showcase.module.inventory.title',
     description: 'showcase.module.inventory.desc',
     setup: host => {
-        /* 关闭相机 WASD 自由飞行：WASD 交给玩家，相机跟随玩家、鼠标环绕观察 */
-        const sceneCtx = setupShowcaseScene(host.renderer, false)
+        /* 玩家主控方案：WASD 交给玩家，相机第三人称跟随（鼠标环绕） */
+        const stage = setupShowcaseStage(host.renderer)
         const shared = createSharedWorld()
-        const interactables: InteractableContext = setupInteractables(sceneCtx.scene, shared)
-        const characterSystem: CharacterEntitySystem = setupCharacterEntities(sceneCtx.scene, shared)
+        const interactables: InteractableContext = setupInteractables(stage.scene, shared)
+        const characterSystem: CharacterEntitySystem = setupCharacterEntities(stage.scene, shared)
         const systems: SteppableSystem[] = [interactables, characterSystem]
 
         /* —— 简化玩家：出生在箱子前方，隐藏碰撞胶囊 —— */
@@ -249,38 +250,29 @@ export const inventoryModule: ShowcaseModule = {
             },
         })
 
-        /* 相机跟随玩家（鼠标仍可环绕 / 缩放） */
+        /* 玩家主控相机（跟随玩家，固定观察高度；Shift = 翻滚） */
         const followPoint = new Vector3(0, INVENTORY_CAMERA_TARGET_Y, PLAYER_SPAWN_Z)
-        sceneCtx.orbit.target.copy(followPoint)
-        sceneCtx.orbit.setFollow(followPoint)
-        sceneCtx.orbit.setDistance(INVENTORY_CAMERA_DISTANCE)
+        const playerControl = createPlayerControl(stage.camera, host.renderer.domElement, {
+            getTarget: () => followPoint,
+            move: (dx, dz, jump, forwardX, forwardZ, roll) =>
+                characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll),
+            pointerActions: MOUSE_ACTIONS_BY_MODE.showcase,
+            initialYaw: 0,
+            initialDistance: INVENTORY_CAMERA_DISTANCE,
+            signal: stage.signal,
+        })
+        playerControl.update(0)
 
-        /* —— 玩家输入：开关背包 / 移动 / 跳跃 / 冲刺 / 交互（相机跟随，不再消费 WASD） —— */
+        /* —— 玩家输入：开关背包 / 交互（移动 / 翻滚 / 跳跃由 playerControl.move 处理） —— */
         const input = getInputRegistry()
         const interactionOut: InteractionTarget[] = []
-        const applyInput = (): void => {
+        const applyInteraction = (): void => {
             /* 背包开关（边沿触发）：与 play 模式一致，`open_inventory` / `open_equipment` 共用 */
             if (input.wasActionPressed('open_inventory') || input.wasActionPressed('open_equipment')) {
                 toggleInventory()
             }
             const player = characterSystem.getPlayerCharacter()
             if (player === undefined) return
-            /* 冲刺：按住提升基础移速（状态机移速统一取 config.speed × 装备乘数） */
-            player.config.speed = PLAYER_SPEED * (input.isActionActive('sprint') ? PLAYER_SPRINT_MULTIPLIER : 1)
-            /* 以相机偏航角为基准的相对移动 */
-            const yaw = sceneCtx.orbit.getYaw()
-            const fwdX = -Math.sin(yaw)
-            const fwdZ = -Math.cos(yaw)
-            const rightX = Math.cos(yaw)
-            const rightZ = -Math.sin(yaw)
-            let dx = 0
-            let dz = 0
-            if (input.isActionActive('move_forward')) { dx += fwdX; dz += fwdZ }
-            if (input.isActionActive('move_backward')) { dx -= fwdX; dz -= fwdZ }
-            if (input.isActionActive('move_left')) { dx -= rightX; dz -= rightZ }
-            if (input.isActionActive('move_right')) { dx += rightX; dz += rightZ }
-            characterSystem.setPlayerMove(dx, dz, input.wasActionPressed('jump'), fwdX, fwdZ)
-
             /* 交互：收集最近可交互目标（生产解析），显示提示，按键触发 */
             const t = player.body.translation()
             interactionOut.length = 0
@@ -301,7 +293,8 @@ export const inventoryModule: ShowcaseModule = {
 
         const updater = (dt: number): void => {
             step(dt, performance.now())
-            applyInput()
+            playerControl.move()
+            applyInteraction()
             characterSystem.update(dt)
             /* 相机跟随玩家（固定观察高度） */
             const player = characterSystem.getPlayerCharacter()
@@ -309,9 +302,9 @@ export const inventoryModule: ShowcaseModule = {
                 const t = player.body.translation()
                 followPoint.set(t.x, INVENTORY_CAMERA_TARGET_Y, t.z)
             }
-            sceneCtx.followGrid()
-            sceneCtx.orbit.update(dt)
-            host.renderer.render(sceneCtx.scene, sceneCtx.camera)
+            playerControl.update(dt)
+            stage.followGrid()
+            host.renderer.render(stage.scene, stage.camera)
         }
 
         /* 初始化：装备应用到玩家模型与预览，背包面板显示 */
@@ -329,7 +322,7 @@ export const inventoryModule: ShowcaseModule = {
                 interactables.remove(chest.id)
                 hud.remove()
                 style.remove()
-                sceneCtx.dispose()
+                stage.dispose()
             },
         }
     },

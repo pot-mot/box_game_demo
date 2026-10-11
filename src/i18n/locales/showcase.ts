@@ -209,12 +209,12 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.interact.kill': '击杀玩家',
     'showcase.interact.reset': '重置',
     'showcase.interact.hint': '点击左侧交互物「激活」查看效果',
-    'showcase.interact.controls': '操作：WASD 移动 · 空格 跳跃 · Shift 冲刺 · F 交互 · K 击杀（相机跟随玩家，鼠标拖拽环绕）',
+    'showcase.interact.controls': '操作：WASD 移动 · 空格 跳跃 · Shift 翻滚 · F 交互 · K 击杀（相机跟随玩家，鼠标拖拽环绕）',
     'showcase.interact.event_save': '存档点已点燃',
     'showcase.interact.event_teleport': '已触发传送',
 
     /* ── 背包与格子交互 ── */
-    'showcase.inventory.controls': '操作：WASD 移动 · 空格 跳跃 · Shift 冲刺 · F 交互 · Tab 开关背包（相机跟随玩家，鼠标拖拽环绕）',
+    'showcase.inventory.controls': '操作：WASD 移动 · 空格 跳跃 · Shift 翻滚 · F 交互 · Tab 开关背包（相机跟随玩家，鼠标拖拽环绕）',
     'showcase.inventory.hint': '按 Tab 开关背包；走近箱子按 F 打开容器存取物品',
     'showcase.inventory.open': '打开背包',
     'showcase.inventory.event_chest': '已打开箱子',
@@ -321,12 +321,12 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.interact.kill': 'Kill player',
     'showcase.interact.reset': 'Reset',
     'showcase.interact.hint': 'Click a row\u2019s Activate button to see its effect',
-    'showcase.interact.controls': 'Controls: WASD move \u00b7 Space jump \u00b7 Shift sprint \u00b7 F interact \u00b7 K kill (camera follows the player; drag to orbit)',
+    'showcase.interact.controls': 'Controls: WASD move \u00b7 Space jump \u00b7 Shift roll \u00b7 F interact \u00b7 K kill (camera follows the player; drag to orbit)',
     'showcase.interact.event_save': 'Save point lit',
     'showcase.interact.event_teleport': 'Teleport triggered',
 
     /* ── Inventory grid ── */
-    'showcase.inventory.controls': 'Controls: WASD move \u00b7 Space jump \u00b7 Shift sprint \u00b7 F interact \u00b7 Tab toggle inventory (camera follows the player; drag to orbit)',
+    'showcase.inventory.controls': 'Controls: WASD move \u00b7 Space jump \u00b7 Shift roll \u00b7 F interact \u00b7 Tab toggle inventory (camera follows the player; drag to orbit)',
     'showcase.inventory.hint': 'Press Tab to toggle the inventory; walk to the chest and press F to open the container',
     'showcase.inventory.open': 'Open inventory',
     'showcase.inventory.event_chest': 'Chest opened',

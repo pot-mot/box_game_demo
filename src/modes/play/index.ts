@@ -3,8 +3,8 @@ import type {SharedWorld} from '../../physics/world.ts'
 import type {TerrainContext} from '../../entity/terrain/base/types'
 import type {CharacterEntitySystem} from '../../entity/character/physics/world.ts'
 import type {SpawnBoxCallback} from '../../entity/character/ai/types.ts'
-import {setupPlayerKeyboard} from './keyboard.ts'
-import {setupPlayCamera} from './camera.ts'
+import {createPlayerControl} from '../control/player_control.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {createPlayerLockOn} from './lock_on.ts'
 import {setupLockMarker} from './lock_marker.ts'
 import {setupHealthBars} from './health_bar.ts'
@@ -39,32 +39,36 @@ export const setupPlayMode = (
     characterSystem.activateAI()
     characterSystem.registerBoxSpawner(boxSpawner)
 
-    const playerInput = setupPlayerKeyboard(camera, characterSystem)
     const interaction = setupPlayInteraction(camera, characterSystem)
     /* 相机跟随目标取身体中心（mesh 原点在脚底，直接用 mesh.position 会导致相机压低） */
     const cameraTarget = new Vector3()
     const lockOn = createPlayerLockOn(characterSystem, camera)
-    const playCameraUpdate = setupPlayCamera(camera, renderer.domElement, () => {
-        const player = characterSystem.getPlayerCharacter()
-        if (!player) return undefined
-        const t = player.body.translation()
-        cameraTarget.set(t.x, t.y, t.z)
-        return cameraTarget
-    },
-    {
-        onLightAttackStart: () => characterSystem.beginPlayerAttackHold('light'),
-        onLightAttack: (held) => characterSystem.endPlayerAttackHold('light', held),
-        onLightAttackCancel: () => characterSystem.cancelPlayerAttackHold(),
-        onHeavyAttackStart: () => characterSystem.beginPlayerAttackHold('heavy'),
-        onHeavyAttack: (held) => characterSystem.endPlayerAttackHold('heavy', held),
-        onHeavyAttackCancel: () => characterSystem.cancelPlayerAttackHold(),
-    },
-    {
-        onToggle: lockOn.toggle,
-        getAimPoint: lockOn.getAimPoint,
-        onOrbit: lockOn.release,
-    },
-    )
+    const playerControl = createPlayerControl(camera, renderer.domElement, {
+        getTarget: () => {
+            const player = characterSystem.getPlayerCharacter()
+            if (!player) return undefined
+            const t = player.body.translation()
+            cameraTarget.set(t.x, t.y, t.z)
+            return cameraTarget
+        },
+        move: (dx, dz, jump, forwardX, forwardZ, roll) =>
+            characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll),
+        cycleHoldMode: () => characterSystem.cyclePlayerHoldMode(),
+        combat: {
+            onLightAttackStart: () => characterSystem.beginPlayerAttackHold('light'),
+            onLightAttack: (held) => characterSystem.endPlayerAttackHold('light', held),
+            onLightAttackCancel: () => characterSystem.cancelPlayerAttackHold(),
+            onHeavyAttackStart: () => characterSystem.beginPlayerAttackHold('heavy'),
+            onHeavyAttack: (held) => characterSystem.endPlayerAttackHold('heavy', held),
+            onHeavyAttackCancel: () => characterSystem.cancelPlayerAttackHold(),
+        },
+        lock: {
+            onToggle: lockOn.toggle,
+            getAimPoint: lockOn.getAimPoint,
+            onOrbit: lockOn.release,
+        },
+        pointerActions: MOUSE_ACTIONS_BY_MODE.play,
+    })
     const lockMarkerUpdate = setupLockMarker(scene).update
     const healthBarUpdate = setupHealthBars(
         scene,
@@ -95,11 +99,11 @@ export const setupPlayMode = (
     }
 
     const updater = (dt: number): void => {
-        playerInput()
+        playerControl.move()
         /* 交互脉冲须早于角色状态机更新，保证同帧生效 */
         interaction.update(dt)
         characterSystem.update(dt)
-        playCameraUpdate(dt)
+        playerControl.update(dt)
         lockMarkerUpdate(lockOn.getAimPoint())
         applyHitShake(dt)
         healthBarUpdate(camera, dt)

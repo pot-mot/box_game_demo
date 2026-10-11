@@ -67,6 +67,8 @@ export type EntityLocale = {
     'entity.brush.fill': string
     'entity.brush.replace': string
     'entity.brush.stamp': string
+    'entity.terrain_sculpt_title': string
+    'entity.terrain_sculpt_enable': string
 
     /* ── 骨架面板 ── */
     'skeleton.joint_title': (name: string, id: string) => string
@@ -239,6 +241,8 @@ export const entityZh: EntityLocale = {
     'entity.brush.fill': '区域填充',
     'entity.brush.replace': '区域替换',
     'entity.brush.stamp': '预制体',
+    'entity.terrain_sculpt_title': '地形雕刻',
+    'entity.terrain_sculpt_enable': '启用（滚轮雕刻）',
 
     /* ── 骨架面板 ── */
     'skeleton.joint_title': (name, id) => `关节：${name}（${id}）`,
@@ -411,6 +415,8 @@ export const entityEn: EntityLocale = {
     'entity.brush.fill': 'Fill Area',
     'entity.brush.replace': 'Replace Area',
     'entity.brush.stamp': 'Prefab',
+    'entity.terrain_sculpt_title': 'Terrain Sculpt',
+    'entity.terrain_sculpt_enable': 'Enable (wheel sculpt)',
 
     /* ── Skeleton panel ── */
     'skeleton.joint_title': (name, id) => `Joint: ${name} (${id})`,

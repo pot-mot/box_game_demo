@@ -15,7 +15,7 @@ import {
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {GroundState} from './ground_state.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
-import {CAMERA_SMOOTH_FACTOR} from '../../../modes/play/constants.ts'
+import {PLAYER_CAMERA_SMOOTH_FACTOR as CAMERA_SMOOTH_FACTOR} from '../../../modes/control/constants.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 
 const FRAMES_3600 = 3600
@@ -266,7 +266,7 @@ describe('郊狼过程动画与摄像机平滑', () => {
             const y = Math.tan(deg * Math.PI / 180) * x + 0.51
             const entity = makeChar(hw, 1, x, y, -50)
 
-            /* 与 setupPlayCamera 默认参数一致（yaw=π, pitch=π/6, distance=6），含 EMA 平滑跟随 */
+            /* 与 createPlayerControl 默认参数一致（yaw=π, pitch=π/6, distance=6），含 EMA 平滑跟随 */
             const CAM_YAW = Math.PI
             const CAM_PITCH = Math.PI / 6
             const CAM_DIST = 6

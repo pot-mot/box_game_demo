@@ -1,17 +1,19 @@
 import {describe, it, expect, beforeEach, afterEach} from 'vitest'
 import {PerspectiveCamera, Vector3} from 'three'
 import {createInputRegistry} from '../../input/registry.ts'
-import {createOrbitCamera} from './scene.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
+import {createCameraControl} from '../control/camera_control.ts'
+import {FREE_FLIGHT_BOOST_MULTIPLIER} from '../control/constants.ts'
 import {MOVE_STEP} from '../constants.ts'
 
 /**
- * 展示相机自由飞行回归：所有展示子模块的相机以 edit 模式自由飞行为基准
- * （WASD 前后左右 + Z 升 X 降），聚焦时暂停自由移动、Esc 恢复自由飞行。
+ * 纯摄像机回归：以第一人称自由飞行为基准（WASD 前后左右 + Z 升 X 降，按住 boost 加速），
+ * 聚焦时暂停自由移动、Esc 恢复自由飞行。
  */
-describe('展示相机：自由飞行 + 聚焦', () => {
+describe('纯摄像机：自由飞行 + 聚焦', () => {
     let camera: PerspectiveCamera
     let events: AbortController
-    let orbit: ReturnType<typeof createOrbitCamera>
+    let orbit: ReturnType<typeof createCameraControl>
 
     const press = (code: string): void => { window.dispatchEvent(new KeyboardEvent('keydown', {code})) }
     const release = (code: string): void => { window.dispatchEvent(new KeyboardEvent('keyup', {code})) }
@@ -21,7 +23,10 @@ describe('展示相机：自由飞行 + 聚焦', () => {
         createInputRegistry()
         camera = new PerspectiveCamera()
         events = new AbortController()
-        orbit = createOrbitCamera(camera, document.createElement('canvas'), events.signal)
+        orbit = createCameraControl(camera, document.createElement('canvas'), {
+            pointerActions: MOUSE_ACTIONS_BY_MODE.showcase,
+            signal: events.signal,
+        })
     })
 
     afterEach(() => {
@@ -52,6 +57,16 @@ describe('展示相机：自由飞行 + 聚焦', () => {
         orbit.update(1 / 60)
         release('KeyX')
         expect(orbit.target.y).toBeCloseTo(beforeUp)
+    })
+
+    it('按住 boost 时自由飞行加速', () => {
+        const start = orbit.target.clone()
+        press('KeyW')
+        press('ShiftLeft')
+        orbit.update(1 / 60)
+        release('KeyW')
+        release('ShiftLeft')
+        expect(orbit.target.z).toBeCloseTo(start.z - MOVE_STEP * FREE_FLIGHT_BOOST_MULTIPLIER)
     })
 
     it('聚焦时暂停自由移动，Esc 恢复自由飞行', () => {

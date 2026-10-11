@@ -2,7 +2,7 @@ import {Raycaster, Vector2, Vector3, Mesh, RingGeometry, MeshBasicMaterial, Doub
 import type {Intersection, Object3D, PerspectiveCamera, Scene} from 'three'
 import {getInputRegistry} from '../../input/registry.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
-import type {OrbitCamera} from './scene.ts'
+import type {FocusController} from '../control/camera_control.ts'
 import {
     CLICK_SLOP_PX,
     FOCUS_RING_COLOR,
@@ -27,7 +27,7 @@ export interface ClickFocusOptions<T> {
     readonly scene: Scene
     readonly camera: PerspectiveCamera
     readonly domElement: HTMLElement
-    readonly orbit: OrbitCamera
+    readonly orbit: FocusController
     /** 参与命中的对象（递归检测其子节点） */
     readonly getObjects: () => readonly Object3D[]
     /** 由命中对象解析聚焦目标（返回 undefined = 该命中不聚焦，继续尝试更远命中） */

@@ -11,7 +11,9 @@ export const DEFAULT_BINDINGS: BindingsMap = {
     move_up: [['KeyZ']],
     move_down: [['KeyX']],
     jump: [['Space']],
-    sprint: [['ShiftLeft'], ['ShiftRight']],
+    /* 玩家主控翻滚 / 纯摄像机自由飞行加速：默认均为 Shift */
+    roll: [['ShiftLeft'], ['ShiftRight']],
+    boost: [['ShiftLeft'], ['ShiftRight']],
     /* 持握模式切换：默认 Ctrl（仅 Ctrl 单独按下时生效；Ctrl+S / Ctrl+O 被更长组合遮蔽，不会误触发） */
     cycle_hold_mode: [['ControlLeft'], ['ControlRight']],
     cycle_spawn_up: [['ArrowUp']],
@@ -25,7 +27,7 @@ export const DEFAULT_BINDINGS: BindingsMap = {
     open_map: [['KeyM']],
     save_world: [['ControlLeft', 'KeyS'], ['MetaLeft', 'KeyS']],
     load_world: [['ControlLeft', 'KeyO'], ['MetaLeft', 'KeyO']],
-    /* 鼠标视角：左键拖拽旋转 / 右键拖拽平移（展示模式），均可在操作设置中修改 */
+    /* 鼠标视角：左键拖拽旋转 / 右键拖拽平移（纯摄像机方案），均可在操作设置中修改 */
     mouse_orbit: [['Mouse0']],
     mouse_pan: [['Mouse2']],
     /* 生成物体：默认 Ctrl+左键（编辑模式），与左键选中/旋转视角以修饰键区分，可在操作设置中修改 */

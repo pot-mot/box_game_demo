@@ -44,12 +44,11 @@
 
 | 类别 | 默认操作 | 实现 |
 |------|----------|------|
-| 视角旋转 | 鼠标左键拖拽（俯仰限 ±90°） | `modes/camera_common.ts` `setupMouseOrbit` |
-| 相机移动 | WASD 前后 / 左右 + Z 升 / X 降 | `modes/camera_common.ts` `setupKeyboardCamera` → `modes/free_flight.ts` |
+| 相机（纯摄像机方案） | 左键拖拽转视角（俯仰限 ±90°）、右键拖拽平移、滚轮缩放、WASD 前后 / 左右 + Z 升 / X 降，按住 `boost`（默认 Shift）加速 | `modes/control/camera_control.ts` `createCameraControl` |
 | 选中 | 左键点击实体选中，点击空白取消 | `modes/edit/pointer_interaction.ts` |
 | 变换 | 拖拽 gizmo 平移 / 旋转圆弧；角色仅保留 Y 轴旋转 | `modes/edit/transform_gizmo.ts` |
 | 生成 | 「生成物体」绑定（默认 Ctrl+左键）在指针处生成当前生成类型 | `pointer_interaction.ts` + `modes/edit/spawn_mode.ts` |
-| 地形雕刻 | 选中地形后滚轮升降（笔刷半径 / 强度见 `modes/edit/constants.ts`） | `pointer_interaction.ts` |
+| 地形雕刻 | 选中地形后，在**地形雕刻面板**主动勾选「启用（滚轮雕刻）」，滚轮升降（笔刷半径 / 强度见 `modes/edit/constants.ts`）；勾选期间仅关闭相机滚轮缩放，保留旋转 / 平移 | `entity/terrain/base/edit/sculpt.ts` + `entity/terrain/base/ui/sculpt_panel.ts` |
 | 删除实体 | Delete（删除当前选中元素；无选中时删除指针悬停的列表项） | `ui/element_list_panel.ts` |
 | 其他面板 | 生成类型面板 / 元素列表面板 / 选中实体属性面板 / 相机 HUD | `ui/` |
 

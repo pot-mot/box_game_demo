@@ -1,8 +1,9 @@
 import type {ShowcaseModule} from '../module.ts'
 import {Vector3} from 'three'
 import type {Object3D} from 'three'
-import {setupShowcaseScene} from '../scene.ts'
+import {setupShowcaseStage} from '../scene.ts'
 import {setupClickFocus} from '../focus.ts'
+import {createPlayerControl} from '../../control/player_control.ts'
 import {createSharedWorld} from '../../../physics/world.ts'
 import {createFixedStepStepper} from '../../../physics/fixed_step.ts'
 import type {SteppableSystem} from '../../../physics/fixed_step.ts'
@@ -13,6 +14,7 @@ import type {InteractableContext, InteractableKind} from '../../../entity/intera
 import type {InteractionTarget} from '../../../character/interaction/types.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {getInputRegistry} from '../../../input/registry.ts'
+import {MOUSE_ACTIONS_BY_MODE} from '../../../input/types.ts'
 import {
     INTERACTABLE_SPACING,
     INTERACTABLE_ROW_Z,
@@ -21,7 +23,6 @@ import {
     INTERACTABLE_RESPAWN_DELAY,
     PLAYER_SPEED,
     PLAYER_JUMP_HEIGHT,
-    PLAYER_SPRINT_MULTIPLIER,
     PLAYER_SPAWN_Z,
 } from '../constants.ts'
 import {localizeText, localizeApply} from '../../../i18n/dom.ts'
@@ -68,7 +69,7 @@ const KILL_KEY = 'KeyK'
  * 交互物交互效果子模块。
  *
  * 内容：摆放 7 类交互物（存档点 / **两个传送点** / 开关 / 单开门 / 双开门 / 升降闸门 / 升降梯），
- * **开关只联动闸门**。提供**简化版玩家**（`WASD` 移动 / 空格跳跃 / `Shift` 冲刺 / `F` 交互 / `K` 击杀）——走到交互物旁
+ * **开关只联动闸门**。提供**简化版玩家**（`WASD` 移动 / 空格跳跃 / `Shift` 翻滚 / `F` 交互 / `K` 击杀）——走到交互物旁
  * 按 `F` 触发最近交互物（面板显示最近交互提示），相机**跟随玩家**（鼠标拖拽环绕观察），点击交互物可聚焦并显示呼吸环。
  *
  * 使用生产同一套 `InteractableContext` + `CharacterEntitySystem`（行为 / 动画 / 信号 / 破坏判定 / 状态机 / 物理），
@@ -79,11 +80,11 @@ export const interactablesModule: ShowcaseModule = {
     title: 'showcase.module.interactables.title',
     description: 'showcase.module.interactables.desc',
     setup: host => {
-        /* 关闭相机 WASD 自由飞行：WASD 交给玩家，相机跟随玩家、鼠标环绕观察 */
-        const sceneCtx = setupShowcaseScene(host.renderer, false)
+        /* 玩家主控方案：WASD 交给玩家，相机第三人称跟随（鼠标环绕、点击聚焦交互物） */
+        const stage = setupShowcaseStage(host.renderer)
         const shared = createSharedWorld()
-        const interactables: InteractableContext = setupInteractables(sceneCtx.scene, shared)
-        const characterSystem: CharacterEntitySystem = setupCharacterEntities(sceneCtx.scene, shared)
+        const interactables: InteractableContext = setupInteractables(stage.scene, shared)
+        const characterSystem: CharacterEntitySystem = setupCharacterEntities(stage.scene, shared)
         const systems: SteppableSystem[] = [characterSystem]
 
         /* —— 简化玩家：出生在交互物行前方，隐藏碰撞胶囊 —— */
@@ -91,11 +92,18 @@ export const interactablesModule: ShowcaseModule = {
         characterSystem.markPlayer(playerId)
         characterSystem.setCollisionVisible(false)
 
-        /* 相机跟随玩家（鼠标仍可环绕 / 缩放；聚焦交互物时优先，取消后恢复跟随） */
+        /* 玩家主控相机（跟随玩家，固定观察高度；Shift = 翻滚） */
         const followPoint = new Vector3(0, INTERACTABLE_CAMERA_TARGET_Y, PLAYER_SPAWN_Z)
-        sceneCtx.orbit.target.copy(followPoint)
-        sceneCtx.orbit.setFollow(followPoint)
-        sceneCtx.orbit.setDistance(INTERACTABLE_CAMERA_DISTANCE)
+        const playerControl = createPlayerControl(stage.camera, host.renderer.domElement, {
+            getTarget: () => followPoint,
+            move: (dx, dz, jump, forwardX, forwardZ, roll) =>
+                characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll),
+            pointerActions: MOUSE_ACTIONS_BY_MODE.showcase,
+            initialYaw: 0,
+            initialDistance: INTERACTABLE_CAMERA_DISTANCE,
+            signal: stage.signal,
+        })
+        playerControl.update(0)
 
         /* —— 面板（左侧）：逐交互物激活按钮 + 击杀 / 重置 + 提示与事件状态 —— */
         const style = document.createElement('style')
@@ -255,10 +263,10 @@ export const interactablesModule: ShowcaseModule = {
         const focusPoint = new Vector3()
         const markerPoint = new Vector3()
         const focus = setupClickFocus<number>({
-            scene: sceneCtx.scene,
-            camera: sceneCtx.camera,
+            scene: stage.scene,
+            camera: stage.camera,
             domElement: host.renderer.domElement,
-            orbit: sceneCtx.orbit,
+            orbit: playerControl,
             getObjects: () => interactables.getMeshes(),
             resolve: hit => {
                 const all = interactables.getAll()
@@ -285,28 +293,12 @@ export const interactablesModule: ShowcaseModule = {
             onFocus: () => {},
         })
 
-        /* —— 玩家输入：移动 / 跳跃 / 冲刺 / 交互（相机跟随，不再消费 WASD） —— */
+        /* —— 玩家交互输入（移动 / 翻滚 / 跳跃由 playerControl.move 处理） —— */
         const input = getInputRegistry()
         const interactionOut: InteractionTarget[] = []
-        const applyInput = (): void => {
+        const applyInteraction = (): void => {
             const player = characterSystem.getPlayerCharacter()
             if (player === undefined) return
-            /* 冲刺：按住提升基础移速（状态机移速统一取 config.speed × 装备乘数） */
-            player.config.speed = PLAYER_SPEED * (input.isActionActive('sprint') ? PLAYER_SPRINT_MULTIPLIER : 1)
-            /* 以相机偏航角为基准的相对移动 */
-            const yaw = sceneCtx.orbit.getYaw()
-            const fwdX = -Math.sin(yaw)
-            const fwdZ = -Math.cos(yaw)
-            const rightX = Math.cos(yaw)
-            const rightZ = -Math.sin(yaw)
-            let dx = 0
-            let dz = 0
-            if (input.isActionActive('move_forward')) { dx += fwdX; dz += fwdZ }
-            if (input.isActionActive('move_backward')) { dx -= fwdX; dz -= fwdZ }
-            if (input.isActionActive('move_left')) { dx -= rightX; dz -= rightZ }
-            if (input.isActionActive('move_right')) { dx += rightX; dz += rightZ }
-            characterSystem.setPlayerMove(dx, dz, input.wasActionPressed('jump'), fwdX, fwdZ)
-
             /* 交互：收集最近可交互目标（生产解析），显示提示，按键触发 */
             const t = player.body.translation()
             interactionOut.length = 0
@@ -330,7 +322,8 @@ export const interactablesModule: ShowcaseModule = {
             interactables.update(dt)
             characterSystem.applySupportCarry(dt)
             step(dt, performance.now())
-            applyInput()
+            playerControl.move()
+            applyInteraction()
             characterSystem.update(dt)
             /* 相机跟随玩家（固定观察高度） */
             const player = characterSystem.getPlayerCharacter()
@@ -342,10 +335,10 @@ export const interactablesModule: ShowcaseModule = {
                 respawnTimer -= dt
                 if (respawnTimer <= 0) respawnPlayer()
             }
-            sceneCtx.followGrid()
-            sceneCtx.orbit.update(dt)
+            playerControl.update(dt)
+            stage.followGrid()
             focus.update(dt)
-            host.renderer.render(sceneCtx.scene, sceneCtx.camera)
+            host.renderer.render(stage.scene, stage.camera)
         }
 
         return {
@@ -355,7 +348,7 @@ export const interactablesModule: ShowcaseModule = {
                 focus.dispose()
                 panel.remove()
                 style.remove()
-                sceneCtx.dispose()
+                stage.dispose()
             },
         }
     },

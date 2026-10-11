@@ -147,16 +147,16 @@ src/
 │   └── terrain/                 # Trimesh 地形（高度数组生成，heightfield 禁用）
 ├── inventory/                   # 背包与物品领域模型（items 目录 / grid 俄罗斯方块布局 / inventory 增删装备 / 存档转换）
 ├── modes/
-│   ├── edit/                    # 编辑模式（轨道相机、键盘、指针交互）
-│   ├── play/                    # 游玩模式（第三人称、状态机驱动、中键镜头锁定、交互/背包/装备/地图/脱困）
+│   ├── control/                 # 共享操作方案（玩家主控 player_control / 纯摄像机 camera_control / 自由飞行 free_flight，见 docs/operation_schemes.md）
+│   ├── edit/                    # 编辑模式（纯摄像机操作、指针交互、地形雕刻开关）
+│   ├── play/                    # 游玩模式（玩家主控：第三人称、状态机驱动、中键镜头锁定、交互/背包/装备/地图/脱困）
 │   │   ├── interaction/         # 交互目标解析、提示与激活编排
 │   │   ├── inventory_ui/        # 俄罗斯方块背包面板（环绕式装备槽宿主）
 │   │   ├── equipment_ui/        # 装备模型预览（独立小场景，拖拽旋转）
 │   │   ├── map_ui/              # 地图面板（俯视绘制、传送选点）
 │   │   └── hakoniwa.ts          # 箱庭子系统装配（背包/装备/地图/传送/脱困）
-│   ├── showcase/                # 展示模式（二级菜单 + 子模块：动作 / 装备外观 / AI×复杂地形 / 复杂地形建筑 / 交互物 / 图鉴 / 背包格子交互）
-│   ├── startup_screen.ts
-│   └── free_flight.ts
+│   ├── showcase/                # 展示模式（二级菜单 + 子模块：动作 / 装备外观 / AI×复杂地形 / 复杂地形建筑 / 交互物 / 图鉴 / 背包格子交互；相机类用纯摄像机，含玩家子模块用玩家主控）
+│   └── startup_screen.ts
 ├── ui/                          # 面板（相机HUD、属性面板、列表侧栏、设置）
 ├── save_load/                   # 存档序列化 / 反序列化
 ├── assets/
@@ -174,11 +174,13 @@ src/
 
 3. **单 RAF 循环** — 所有帧驱动逻辑集中在 `main.ts` 的 `tick()` 中。各子系统返回 `(dt: number) => void` 类型的 updater 函数，由主循环统一调度，禁止自行启动 RAF。
 
-4. **状态机驱动角色** — `entity/character/physics/world.ts` 每帧调用 `stateMachine.update(dt, entity)` → 状态直接操作 `entity.body`（`setLinvel` 等）→ 随后 `syncPositions()` 同步 body→mesh。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/play/keyboard.ts` 每帧读取动作并调用 `characterSystem.setPlayerMove()` → `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。
+4. **状态机驱动角色** — `entity/character/physics/world.ts` 每帧调用 `stateMachine.update(dt, entity)` → 状态直接操作 `entity.body`（`setLinvel` 等）→ 随后 `syncPositions()` 同步 body→mesh。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/control/player_control.ts` 的 `move()` 每帧读取动作并调用 `characterSystem.setPlayerMove()` → `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。
 
-5. **常量集中** — 各分包的 magic number 必须提取到对应的 `constants.ts`，禁止散落在函数体内。
+5. **两套操作方案** — 所有具备操作能力的模式只归入两套共享方案（`modes/control/`，详见 [`docs/operation_schemes.md`](docs/operation_schemes.md)）：**玩家主控** `createPlayerControl`（play、showcase 含玩家子模块；`WASD` 相对相机移动 + `roll` 翻滚 + 空格跳跃 + 第三人称环绕，可选攻击/锁定/聚焦，**不提供右键平移**）与**纯摄像机** `createCameraControl`（edit / bone_edit / showcase 相机类模块 / play 无玩家兜底；`WASD`+`Z/X` 自由飞行 + `boost` 加速 + 左键旋转 + 右键 `mouse_pan` 平移 + 滚轮缩放 + 可选聚焦/跟随）。新增模式按其是否主控角色选用其一，不得另写相机/移动逻辑。`roll` 与 `boost` 默认均绑定 `Shift` 但分属两套方案，运行时不会同时消费。
 
-6. **建筑体素系统** — `entity/building_generator/` 以「建筑世界」为实体、内部承载数万体素 block：数据为稀疏 `Map<chunkKey, Uint8Array>`（0=空，1..7=`render/materials/` 的材质索引），渲染按 `CHUNK_SIZE³` 分块做**贪心网格合并**（同材质矩形面合并，UV 以格展开配合可平铺纹理），每 chunk 一个 `Mesh` + 按材质分组的共享材质单例（draw call = chunk 内材质数，通常 1–3），并做两级绘制（近处全细节、中距离按 `LOD_STRIDE` 降采样为粗 LOD）、超出 `LOD_CHUNK_RADIUS + 滞回` 距离卸载（只释放 GPU 几何、保留体素数据）；近处 chunk 合并为 trimesh collider。静态建筑不参与物理步进，其可见性更新由 `main.ts` 每帧调用 `updateView(camera, dt)`（对「帧内逻辑集中在 preSync」的有意例外）；生成配方仅用于创作期，存档以显式 RLE 体素数据为准。编辑模式提供体素拾取与笔刷工具（放置 / 擦除 / 道具 / 区域填充 / 区域替换 / 预制体，`building_generator/edit/brush.ts`，启用时关闭实体选中 / 生成交互）；区域类工具第一次单击后显示预览线框、选中世界显示包围盒高亮（`render/overlay.ts`），建筑面板提供道具列表编辑与全建筑材质替换；自由道具（门 / 窗 / 栅栏 / 灯笼，`props/kinds.ts` + `render/prop_mesh.ts`）为纯视觉装饰，不建碰撞体、不进 `getMeshes()`。
+6. **常量集中** — 各分包的 magic number 必须提取到对应的 `constants.ts`，禁止散落在函数体内。
+
+7. **建筑体素系统** — `entity/building_generator/` 以「建筑世界」为实体、内部承载数万体素 block：数据为稀疏 `Map<chunkKey, Uint8Array>`（0=空，1..7=`render/materials/` 的材质索引），渲染按 `CHUNK_SIZE³` 分块做**贪心网格合并**（同材质矩形面合并，UV 以格展开配合可平铺纹理），每 chunk 一个 `Mesh` + 按材质分组的共享材质单例（draw call = chunk 内材质数，通常 1–3），并做两级绘制（近处全细节、中距离按 `LOD_STRIDE` 降采样为粗 LOD）、超出 `LOD_CHUNK_RADIUS + 滞回` 距离卸载（只释放 GPU 几何、保留体素数据）；近处 chunk 合并为 trimesh collider。静态建筑不参与物理步进，其可见性更新由 `main.ts` 每帧调用 `updateView(camera, dt)`（对「帧内逻辑集中在 preSync」的有意例外）；生成配方仅用于创作期，存档以显式 RLE 体素数据为准。编辑模式提供体素拾取与笔刷工具（放置 / 擦除 / 道具 / 区域填充 / 区域替换 / 预制体，`building_generator/edit/brush.ts`，启用时关闭实体选中 / 生成交互）；区域类工具第一次单击后显示预览线框、选中世界显示包围盒高亮（`render/overlay.ts`），建筑面板提供道具列表编辑与全建筑材质替换；自由道具（门 / 窗 / 栅栏 / 灯笼，`props/kinds.ts` + `render/prop_mesh.ts`）为纯视觉装饰，不建碰撞体、不进 `getMeshes()`。
 
 ## 文档
 
@@ -192,6 +194,7 @@ src/
 | [`docs/equipment_system.md`](docs/equipment_system.md) | 装备与防御系统：攻击类别（物理/魔法）、护甲槽位与预设、防御固定减伤与存档兼容 |
 | [`docs/melee_hold_modes.md`](docs/melee_hold_modes.md) | 近战三持握模组改造：武器类/模型分层、副手装备槽与挂背、段 id 约定、分阶段实施与验收清单 |
 | [`docs/play_mode.md`](docs/play_mode.md) | 游玩模式：第三人称相机、镜头锁定（中键、选取与脱锁规则）、验证方式 |
+| [`docs/operation_schemes.md`](docs/operation_schemes.md) | 两套共享操作方案（玩家主控 `player_control` / 纯摄像机 `camera_control`）：行为矩阵、输入动作 `roll`/`boost`/`mouse_pan`、API、地形雕刻开关、文件索引 |
 | [`docs/projectile_system.md`](docs/projectile_system.md) | 弹丸系统分包：分层与数据流、视觉映射表、降低重力、对象池、范围伤害特效、扩展指南与测试 |
 | [`docs/building_system.md`](docs/building_system.md) | 建筑生成系统：体素 chunk 存储与 RLE 压缩存档、贪心网格合并与粗 LOD 分块渲染、距离卸载、近处合并 trimesh 物理、建造笔刷（体素/道具/区域填充/材质替换/预制体）、自由道具、基础表面材质库 |
 | [`docs/hakoniwa/00_总览.md`](docs/hakoniwa/00_总览.md) | 箱庭游玩模式总览：目标、复用 play 模式的集成策略、模块结构、依赖方向、阶段划分与验收基线 |
@@ -202,7 +205,7 @@ src/
 | [`docs/hakoniwa/05_地图与传送与脱困.md`](docs/hakoniwa/05_地图与传送与脱困.md) | 地图面板、传送点解锁与选点、存档点重生、脱困 |
 | [`docs/hakoniwa/06_箱庭生成器.md`](docs/hakoniwa/06_箱庭生成器.md) | 建筑结构原语（楼梯/旋转楼梯/斗拱/斜屋顶/廊桥/支柱）与顶层箱庭配方 |
 | [`docs/hakoniwa/07_存档与兼容.md`](docs/hakoniwa/07_存档与兼容.md) | 箱庭相关存档字段、版本推进与旧档兼容策略 |
-| [`docs/showcase.md`](docs/showcase.md) | 展示模式：二级菜单与子模块框架（`ShowcaseModule` 注册表 / 共享舞台 / 自由飞行相机）、动作 / 装备外观 / AI 行为×复杂地形 / 复杂地形建筑 / 交互物 / 全物品图鉴 / 背包格子交互各子模块展示效果、与生产代码的镜像关系、验证与扩展指南 |
+| [`docs/showcase.md`](docs/showcase.md) | 展示模式：二级菜单与子模块框架（`ShowcaseModule` 注册表 / 共享舞台 / 两套操作方案）、动作 / 装备外观 / AI 行为×复杂地形 / 复杂地形建筑 / 交互物 / 全物品图鉴 / 背包格子交互各子模块展示效果、与生产代码的镜像关系、验证与扩展指南 |
 | [`docs/i18n.md`](docs/i18n.md) | 国际化系统：`src/i18n/` 强类型文案表与领域片段、`translate`/`localize*` API、语言持久化与原地实时重译、新增文案/语言流程、数据名称与序列化字段处理 |
 | [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md) | UI 风格设计规范：日式西幻视觉语言、设计令牌色板/排版/间距、组件形态、SVG 图标目录、滚动条与 HUD 覆盖层约定、动效与反例 |
 | [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | CSS 编码指南：样式分层（reset/主题/局部）、`dc-*` 组件类与令牌命名、选择器规则、滚动条规范、图标用法、迁移流程与硬约束、验证方式 |
@@ -254,6 +257,7 @@ src/
 - 新增建筑碰撞体必须用 `categoryCollisionGroups(..., 'building')` 标注类别（`collision_category.ts` 新增类别位 `building = 1 << 11`）；碰撞组 `BUILDING_COLLISION_GROUP = 8`、掩码 `1 | 2`，碎片掩码已加入 8 使碎片能落在建筑上——漏标注会被 fail-closed 解析为 ground 并挡下子弹
 - 建筑存档（v7）用**显式 palette + 每 chunk RLE(Base64)**，校验层对 `worlds` / `chunks` / `palette` 非法输入一律 `.catch([])` 回退为空、未知材质 id 解码时回退为空，禁止抛错；生成配方仅为创作期便利，载入以显式体素为准
 - 建筑笔刷启用时必须关闭 `pointer` 的实体选中 / 生成交互（`pointer.setEnabled(false)`），否则左键会同时触发选中 / 生成与体素放置；体素拾取 `pickBlock` 只对**当前可见**的 chunk 网格有效，已距离卸载的 chunk 不可编辑（再次靠近自动重建后即可）
+- **操作层统一走 `modes/control/` 两套方案**（玩家主控 `createPlayerControl` / 纯摄像机 `createCameraControl`，见 [`docs/operation_schemes.md`](docs/operation_schemes.md)）：新增或调整模式操作不得另写相机 / 移动逻辑。`Shift` 拆为 `roll`（玩家主控，边沿翻滚）与 `boost`（纯摄像机，按住加速）两个动作、均默认绑定 Shift，分属两套方案不会同时消费；`mouse_pan`（右键平移）在所有纯摄像机模式（含 edit / bone_edit）生效，玩家主控**不提供右键平移**（play 右键 = 重击）。编辑模式**默认**滚轮 = 相机缩放、右键 = 相机平移；地形雕刻只在选中地形并勾选「启用（滚轮雕刻）」后才拦截滚轮，且**仅**关闭相机缩放、保留旋转 / 平移（`entity/terrain/base/edit/sculpt.ts` + `ui/sculpt_panel.ts`）
 - 新增输入动作（`interact` / `open_inventory` / `open_equipment` / `open_map`）必须同步 `INPUT_ACTIONS` / `ACTION_LABELS` / `ACTION_GROUPS` / `DEFAULT_BINDINGS` / `registry.test.ts` 的 `EXPECTED_DEFAULTS`（类型穷尽会编译报错）；play 交互脉冲由 `modes/play/interaction/` 每帧读取，且 `interaction.update(dt)` **必须早于 `characterSystem.update(dt)`**，否则交互脉冲晚一帧、目标守卫失效。脱困不设快捷键，走右上角设置菜单「传送至最近存档点」（`setupSettingsPanel` 第三参）
 - 交互物 / 掉落物碰撞体必须 `categoryCollisionGroups(group, mask, 'interactable' | 'item')`（`interactable = 1<<12`、`item = 1<<13`）；掉落物是 `setSensor(true)` + 掩码 0（不参与物理），拾取走邻近交互而非碰撞。交互物可动件（门 / 闸门 / 升降梯）用 `kinematicPositionBased` body，视觉根保持基准、只移动具名子节点；**移动平台（闸门 / 升降梯）以 `setTranslation` 瞬移**（见下条）
 - **移动平台载客走「物理接触 + 步进前位置携带」**：移动平台（闸门 / 升降梯 / 未来载具）用 `setTranslation` **瞬移**（**禁止** `setNextKinematicTranslation`：多物理子步下运动学体会把整帧位移压进首个子步，顶到乘客产生冲量 → 上升抖动），并每帧把自己按位置/四元数差分得到的速度注册进 `SharedWorld.movingSupports`（静止写 0，`remove` 删除）；角色系统 `checkGround` 记录**真实接触**的支撑刚体 handle（郊狼宽限不赋值），在 `world.step` **之前**由 `applySupportCarry(dt)` 按平台位移/`ω·dt` 平移乘客位姿（**位置携带，不叠加速度**——否则与碰撞推挤叠加会在上升时双倍顶起），对**所有被支撑角色（含 AI）**生效。**禁止**用 `config.size` 几何 / `PlayerAccess` 判定「是否站在平台上」（对形状 / 尺寸 / 朝向 / 移动方向敏感）

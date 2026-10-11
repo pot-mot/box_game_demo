@@ -1,286 +1,31 @@
-import {Scene, PerspectiveCamera, AmbientLight, DirectionalLight, Color, Vector3} from 'three'
+import {Scene, PerspectiveCamera, AmbientLight, DirectionalLight, Color} from 'three'
 import type {WebGLRenderer} from 'three'
 import {setupInfiniteGrid} from '../../render/grid.ts'
-import {getInputRegistry} from '../../input/registry.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
-import {MOVE_STEP} from '../constants.ts'
-import {
-    CAMERA_FAR,
-    CAMERA_FOV,
-    CAMERA_NEAR,
-    ORBIT_DEFAULT_DISTANCE,
-    ORBIT_DEFAULT_PITCH,
-    ORBIT_DEFAULT_TARGET_Y,
-    ORBIT_DEFAULT_TARGET_Z,
-    ORBIT_DEFAULT_YAW,
-    ORBIT_FOCUS_DISTANCE,
-    ORBIT_FOCUS_LERP,
-    FREE_PITCH_MAX,
-    FREE_PITCH_MIN,
-    ORBIT_MAX_DISTANCE,
-    ORBIT_MIN_DISTANCE,
-    ORBIT_PAN_SENSITIVITY,
-    ORBIT_PITCH_MAX,
-    ORBIT_PITCH_MIN,
-    ORBIT_ROTATE_SENSITIVITY,
-    ORBIT_WHEEL_SENSITIVITY,
-    SCENE_BACKGROUND,
-} from './constants.ts'
+import {createCameraControl, type CameraControl} from '../control/camera_control.ts'
+import {CAMERA_FAR, CAMERA_FOV, CAMERA_NEAR, SCENE_BACKGROUND} from './constants.ts'
 
-/**
- * 轨道相机：目标点 + 偏航/俯仰/距离球坐标，支持聚焦目标平滑过渡。
- * 滚轮缩放仅在自由视角下生效；聚焦期间（含进入/退出过渡）禁用，
- * 退出聚焦后回归进入前快照的目标点与距离。
- */
-export interface OrbitCamera {
-    readonly target: Vector3
-    rotateBy: (dxPx: number, dyPx: number) => void
-    panBy: (dxPx: number, dyPx: number) => void
-    zoomBy: (wheelDelta: number) => void
-    /** 直接设置观察距离（自由视角下生效；聚焦 / 回归过渡期间忽略） */
-    setDistance: (distance: number) => void
-    /** 聚焦到指定世界坐标（null = 取消聚焦并平滑回归进入前的自由视角）；focusDistance 缺省用 ORBIT_FOCUS_DISTANCE */
-    focusTo: (position: Vector3 | null, focusDistance?: number) => void
-    /**
-     * 设置跟随目标（非 null 时相机目标持续跟随该点；聚焦优先于跟随，取消聚焦后自动恢复跟随）。
-     * 按引用持有该向量，调用方可逐帧原地更新（如每帧填入玩家位置）。
-     */
-    setFollow: (point: Vector3 | null) => void
-    /** 当前是否处于聚焦状态（供外部复位聚焦态高亮标记） */
-    isFocused: () => boolean
-    /** 按 yaw 方向同步平移 target + camera（水平）或调整 target.y（垂直） */
-    translateTargetBy: (dx: number, dy: number, dz: number) => void
-    /** 返回当前偏航角（供键盘相机计算移动方向） */
-    getYaw: () => number
-    /** 每帧调用：执行聚焦插值并回写相机位姿 */
-    update: (dt: number) => void
-}
-
-const defaultTarget = (): Vector3 => new Vector3(0, ORBIT_DEFAULT_TARGET_Y, ORBIT_DEFAULT_TARGET_Z)
-
-/**
- * 展示相机（自由飞行 + 聚焦）：未聚焦时以 edit 模式自由飞行方式操作（WASDZX 平移 target、
- * 鼠标拖拽转视角），聚焦时相机平滑飞向目标并环绕，Esc / 再次调用 `focusTo(null)` 恢复自由飞行。
- * 导出供单测直接驱动（无需 WebGL 渲染器）。
- */
-export const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLElement, signal: AbortSignal, keyboardFreeFlight = true): OrbitCamera => {
-    const target = defaultTarget()
-    let yaw = ORBIT_DEFAULT_YAW
-    let pitch = ORBIT_DEFAULT_PITCH
-    let distance = ORBIT_DEFAULT_DISTANCE
-
-    /* 聚焦目标（非 null 时持续把 target/distance 拉向特写位）；returning = 取消聚焦后回归快照视角 */
-    let focusPoint: Vector3 | null = null
-    let focusDistance = ORBIT_FOCUS_DISTANCE
-    let returning = false
-    /* 跟随目标（非 null 时 target 持续跟随该点；聚焦优先）。按引用持有，调用方原地更新。 */
-    let followPoint: Vector3 | null = null
-    /* 进入聚焦前的自由视角快照（退出聚焦时回归，保留用户调整的目标点与距离） */
-    const savedTarget = defaultTarget()
-    let savedDistance = ORBIT_DEFAULT_DISTANCE
-    const returnTarget = defaultTarget()
-
-    const applyCamera = (): void => {
-        camera.position.set(
-            target.x + distance * Math.cos(pitch) * Math.sin(yaw),
-            target.y + distance * Math.sin(pitch),
-            target.z + distance * Math.cos(pitch) * Math.cos(yaw),
-        )
-        camera.lookAt(target)
-    }
-
-    const rotateBy = (dxPx: number, dyPx: number): void => {
-        if (focusPoint !== null || followPoint !== null) {
-            /* 聚焦 / 跟随时：绕 target 轨道旋转（观察目标） */
-            yaw -= dxPx * ORBIT_ROTATE_SENSITIVITY
-            pitch += dyPx * ORBIT_ROTATE_SENSITIVITY
-            pitch = Math.min(Math.max(pitch, ORBIT_PITCH_MIN), ORBIT_PITCH_MAX)
-            return
-        }
-        /* 未聚焦：以相机自身为轴原地旋转（对标 edit 模式第一人称），
-         * 保持 camera.position 不变，反向移动 target，使 applyCamera 回写后相机位置不变 */
-        returning = false
-        const camX = camera.position.x
-        const camY = camera.position.y
-        const camZ = camera.position.z
-        yaw -= dxPx * ORBIT_ROTATE_SENSITIVITY
-        pitch += dyPx * ORBIT_ROTATE_SENSITIVITY
-        pitch = Math.min(Math.max(pitch, FREE_PITCH_MIN), FREE_PITCH_MAX)
-        /* target = camera.position - offset(yaw, pitch)，视角方向随 yaw/pitch 改变而相机不动 */
-        target.set(
-            camX - distance * Math.cos(pitch) * Math.sin(yaw),
-            camY - distance * Math.sin(pitch),
-            camZ - distance * Math.cos(pitch) * Math.cos(yaw),
-        )
-    }
-
-    const panBy = (dxPx: number, dyPx: number): void => {
-        /* 聚焦 / 跟随锁定时禁用平移（避免与目标吸附互相拉扯） */
-        if (focusPoint !== null || followPoint !== null) return
-        returning = false
-        /* 相机水平右向 / 前向（距离越远步幅越大），拖拽方向 = 场景移动方向 */
-        const rightX = Math.cos(yaw)
-        const rightZ = -Math.sin(yaw)
-        const fwdX = Math.sin(yaw)
-        const fwdZ = Math.cos(yaw)
-        const k = distance * ORBIT_PAN_SENSITIVITY
-        target.x += (-dxPx * rightX - dyPx * fwdX) * k
-        target.z += (-dxPx * rightZ - dyPx * fwdZ) * k
-    }
-
-    const zoomBy = (wheelDelta: number): void => {
-        /* 聚焦期间与进入/退出过渡期间禁用滚轮缩放：
-         * 保持自动取景距离不被干扰，退出聚焦后由回归插值恢复快照距离 */
-        if (focusPoint !== null || returning) return
-        distance = Math.min(
-            Math.max(distance * Math.exp(wheelDelta * ORBIT_WHEEL_SENSITIVITY), ORBIT_MIN_DISTANCE),
-            ORBIT_MAX_DISTANCE,
-        )
-    }
-
-    const setDistance = (next: number): void => {
-        /* 与 zoomBy 同门控：聚焦 / 回归过渡期间不直接改距离，避免打断自动取景 */
-        if (focusPoint !== null || returning) return
-        distance = Math.min(Math.max(next, ORBIT_MIN_DISTANCE), ORBIT_MAX_DISTANCE)
-    }
-
-    const focusTo = (position: Vector3 | null, targetDistance?: number): void => {
-        if (position !== null) {
-            /* 首次进入聚焦时快照当前自由视角（连续切换聚焦目标不覆盖快照） */
-            if (focusPoint === null && !returning) {
-                savedTarget.copy(target)
-                savedDistance = distance
-            }
-            focusPoint = position.clone()
-            focusDistance = targetDistance ?? ORBIT_FOCUS_DISTANCE
-            returning = false
-        } else {
-            focusPoint = null
-            returnTarget.copy(savedTarget)
-            returning = true
-        }
-    }
-
-    const setFollow = (point: Vector3 | null): void => {
-        followPoint = point
-        /* 跟随启用时取消聚焦回归动画，避免 returning 与跟随互相拉扯 */
-        if (point !== null) returning = false
-    }
-
-    const isFocused = (): boolean => focusPoint !== null
-
-    const update = (dt: number): void => {
-        applyKeyboardFreeFlight()
-        const k = 1 - Math.exp(-ORBIT_FOCUS_LERP * dt)
-        if (focusPoint !== null) {
-            target.lerp(focusPoint, k)
-            distance += (focusDistance - distance) * k
-        } else if (followPoint !== null) {
-            target.lerp(followPoint, k)
-        } else if (returning) {
-            target.lerp(returnTarget, k)
-            distance += (savedDistance - distance) * k
-        }
-        applyCamera()
-    }
-
-    /* —— 指针事件：旋转 / 平移 / 滚轮缩放（前两者由操作设置绑定，全部随模式退出释放） —— */
-    const input = getInputRegistry()
-    const showcaseActions = MOUSE_ACTIONS_BY_MODE.showcase
-    let dragging: 'orbit' | 'pan' | null = null
-    domElement.addEventListener('mousedown', (e: MouseEvent) => {
-        /* 按键被本模式「修饰键+鼠标」的其它动作覆盖时让位（如聚焦键加了修饰键组合） */
-        if (input.matchesMouseButton('mouse_orbit', e.button)
-            && !input.isMouseButtonOverridden(e.button, showcaseActions, 'mouse_orbit')) dragging = 'orbit'
-        else if (input.matchesMouseButton('mouse_pan', e.button)
-            && !input.isMouseButtonOverridden(e.button, showcaseActions, 'mouse_pan')) dragging = 'pan'
-    }, {signal})
-    window.addEventListener('mouseup', () => {
-        dragging = null
-    }, {signal})
-    window.addEventListener('mousemove', (e: MouseEvent) => {
-        if (dragging === null) return
-        if (dragging === 'orbit') rotateBy(e.movementX, e.movementY)
-        else panBy(e.movementX, e.movementY)
-    }, {signal})
-    domElement.addEventListener('contextmenu', (e: MouseEvent) => {
-        e.preventDefault()
-    }, {signal})
-    domElement.addEventListener('wheel', (e: WheelEvent) => {
-        e.preventDefault()
-        zoomBy(e.deltaY)
-    }, {passive: false, signal})
-    /* Esc 解除聚焦（全模块统一）：恢复自由飞行；动作 / 外观模块另有监听以复位高亮环与变暗 */
-    window.addEventListener('keydown', (e: KeyboardEvent) => {
-        if (e.key === 'Escape' && focusPoint !== null) focusTo(null)
-    }, {signal})
-
-    const translateTargetBy = (dx: number, dy: number, dz: number): void => {
-        /* 聚焦锁定时禁用（与 panBy 一致） */
-        if (focusPoint !== null) return
-        /* 用户主动移动时取消聚焦回归动画（与 panBy 一致，否则 returning 永久为 true 会锁死移动） */
-        returning = false
-        /* 世界空间同步平移 target + camera（保持相对偏移不变），applyCamera 回写相机位姿，
-         * 视角方向保持不变，等效 edit 模式的自由飞行（无固定焦点） */
-        target.x += dx
-        target.y += dy
-        target.z += dz
-        camera.position.x += dx
-        camera.position.y += dy
-        camera.position.z += dz
-    }
-
-    const getYaw = (): number => yaw
-
-    /**
-     * 键盘自由飞行式平移（与 edit 模式 `free_flight.ts` 语义一致）：按相机偏航角计算世界位移，
-     * 再把位移施加到轨道相机 target（相机随 `applyCamera` 同步跟随），视角方向不变。
-     * 未聚焦时启用；聚焦 / 回归过渡期间暂停（移动会由 `translateTargetBy` 取消回归动画）。
-     */
-    const applyKeyboardFreeFlight = (): void => {
-        if (!keyboardFreeFlight || focusPoint !== null || followPoint !== null) return
-        /* 水平前向 = 相机看向 target 的方向 (-sin, -cos)，右向 = (cos, -sin) */
-        const fwdX = -Math.sin(yaw)
-        const fwdZ = -Math.cos(yaw)
-        const rightX = Math.cos(yaw)
-        const rightZ = -Math.sin(yaw)
-
-        let dx = 0
-        let dz = 0
-        if (input.isActionActive('move_forward')) { dx += fwdX * MOVE_STEP; dz += fwdZ * MOVE_STEP }
-        if (input.isActionActive('move_backward')) { dx -= fwdX * MOVE_STEP; dz -= fwdZ * MOVE_STEP }
-        if (input.isActionActive('move_left')) { dx -= rightX * MOVE_STEP; dz -= rightZ * MOVE_STEP }
-        if (input.isActionActive('move_right')) { dx += rightX * MOVE_STEP; dz += rightZ * MOVE_STEP }
-
-        let dy = 0
-        if (input.isActionActive('move_up')) dy += MOVE_STEP
-        if (input.isActionActive('move_down')) dy -= MOVE_STEP
-
-        if (dx !== 0 || dy !== 0 || dz !== 0) translateTargetBy(dx, dy, dz)
-    }
-
-    return {target, rotateBy, panBy, zoomBy, setDistance, focusTo, setFollow, isFocused, translateTargetBy, getYaw, update}
-}
-
-export interface ShowcaseScene {
+/** 展示舞台基础件：独立场景 + 相机 + 灯光 + 无限网格 + 释放信号（不含相机控制，供玩家主控模块自持相机） */
+export interface ShowcaseStage {
     readonly scene: Scene
     readonly camera: PerspectiveCamera
-    readonly orbit: OrbitCamera
     /** 每帧调用：无限网格跟随相机（复用主场景 grid.ts） */
     readonly followGrid: () => void
-    /** 释放窗口级监听（resize / 相机指针事件，挂共享 canvas 的部分随宿主销毁） */
+    /** 释放窗口级监听（resize） */
+    readonly signal: AbortSignal
     readonly dispose: () => void
 }
 
+export interface ShowcaseScene extends ShowcaseStage {
+    readonly orbit: CameraControl
+}
+
 /**
- * 展示场景：自建独立 Three 场景 + 灯光（参数与 render/setup.ts 一致）+ 无限网格地面
- * + 轨道相机，复用主页共享渲染器（同一 WebGL 上下文，不自启第二个渲染循环）。
+ * 展示舞台：自建独立 Three 场景 + 灯光（参数与 render/setup.ts 一致）+ 无限网格地面，
+ * 复用主页共享渲染器（同一 WebGL 上下文，不自启第二个渲染循环）。
  * 角色全部面向 +Z，默认相机位于 +Z 侧上方，即从正面观察攻击动作。
- *
- * `keyboardFreeFlight` 控制 WASDZX 是否驱动相机自由飞行（缺省 true）；交互物演示需要 WASD 驱动玩家时传 false，
- * 此时相机仍可用鼠标旋转 / 平移 / 滚轮缩放观察。
  */
-export const setupShowcaseScene = (renderer: WebGLRenderer, keyboardFreeFlight = true): ShowcaseScene => {
+export const setupShowcaseStage = (renderer: WebGLRenderer): ShowcaseStage => {
     const scene = new Scene()
     scene.background = new Color(SCENE_BACKGROUND)
 
@@ -302,8 +47,6 @@ export const setupShowcaseScene = (renderer: WebGLRenderer, keyboardFreeFlight =
 
     /* 所有监听由 AbortController 统一管理，dispose 一次释放 */
     const events = new AbortController()
-    const orbit = createOrbitCamera(camera, renderer.domElement, events.signal, keyboardFreeFlight)
-    orbit.update(0)
 
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight
@@ -315,5 +58,24 @@ export const setupShowcaseScene = (renderer: WebGLRenderer, keyboardFreeFlight =
         events.abort()
     }
 
-    return {scene, camera, orbit, followGrid, dispose}
+    return {scene, camera, followGrid, signal: events.signal, dispose}
+}
+
+/**
+ * 展示场景：舞台 + **纯摄像机**控制器（`modes/control/camera_control.ts`），供相机类子模块使用。
+ *
+ * `keyboardFreeFlight` 控制 WASDZX 是否驱动相机自由飞行（缺省 true）；需要 WASD 驱动玩家的子模块
+ * 应改用 `setupShowcaseStage` 并配合 `modes/control/player_control.ts`。
+ */
+export const setupShowcaseScene = (renderer: WebGLRenderer, keyboardFreeFlight = true): ShowcaseScene => {
+    const stage = setupShowcaseStage(renderer)
+    const orbit = createCameraControl(stage.camera, renderer.domElement, {
+        pointerActions: MOUSE_ACTIONS_BY_MODE.showcase,
+        keyboardFreeFlight,
+        panEnabled: true,
+        zoomEnabled: true,
+        signal: stage.signal,
+    })
+    orbit.update(0)
+    return {...stage, orbit}
 }
