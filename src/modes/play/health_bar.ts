@@ -1,6 +1,7 @@
 import {type Scene, type PerspectiveCamera, Sprite, SpriteMaterial, CanvasTexture} from 'three'
 import type {CharacterEntity} from '../../character/types.ts'
 import {CHARACTER_BASE_SIZE} from '../../entity/character/constants.ts'
+import {themeColor} from '../../ui/theme.ts'
 
 const BAR_W = 128
 const BAR_H = 16
@@ -18,18 +19,18 @@ interface BarEntry {
 const drawBar = (ctx: CanvasRenderingContext2D, health: number, maxHealth: number): void => {
     ctx.clearRect(0, 0, BAR_W, BAR_H)
 
-    ctx.fillStyle = 'rgba(0,0,0,0.65)'
+    ctx.fillStyle = themeColor('--dc-overlay', 'rgba(6,5,4,0.78)')
     ctx.fillRect(0, 0, BAR_W, BAR_H)
 
     const ratio = Math.max(0, health / maxHealth)
     const w = Math.max(2, BAR_W * ratio)
 
-    if (ratio > 0.5) ctx.fillStyle = '#4caf50'
-    else if (ratio > 0.25) ctx.fillStyle = '#ff9800'
-    else ctx.fillStyle = '#f44336'
+    if (ratio > 0.5) ctx.fillStyle = themeColor('--dc-success', '#5a7d4a')
+    else if (ratio > 0.25) ctx.fillStyle = themeColor('--dc-warning', '#d9a441')
+    else ctx.fillStyle = themeColor('--dc-danger', '#b03030')
     ctx.fillRect(0, 0, w, BAR_H)
 
-    ctx.fillStyle = '#fff'
+    ctx.fillStyle = themeColor('--dc-text', '#e8dfce')
     ctx.font = 'bold 10px monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'

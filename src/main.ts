@@ -1,4 +1,5 @@
 import './assets/style.css'
+import './assets/theme.css'
 import {type Mesh} from 'three'
 import type {EntityInfoSource} from './entity/box/base/types/entity_info.ts'
 import type {EntityTickHandler} from './types/physics.ts'
@@ -30,6 +31,7 @@ import {setupCharacterEntities} from './entity/character/physics/world.ts'
 import type {CharacterEntitySystem} from './entity/character/physics/world.ts'
 import type {CharacterEntity} from './character/types.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
+import {installIconSprite} from './ui/icons/sprite.ts'
 import {setupStartupScreen} from './modes/startup_screen.ts'
 import {setupSettingsPanel} from './ui/settings_panel.ts'
 import {setupEditMode} from './modes/edit'
@@ -51,6 +53,9 @@ import {openOperationsPanel} from './input/operations_panel.ts'
 type EntitySystem = EntityInfoSource & EntityTickHandler
 
 const app = document.querySelector<HTMLDivElement>('#app')!
+
+// 图标 sprite 需在任意面板创建前注入（<use> 引用依赖其存在）
+installIconSprite()
 
 // ── 启动页（展示模式退出后可重新拉起） ──
 

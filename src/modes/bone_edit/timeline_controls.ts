@@ -1,6 +1,7 @@
 import {ANIM_SELECT_ID, TIMELINE_MAX_HEIGHT, TIMELINE_MIN_HEIGHT} from './constants.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import {localizeText, localizeTitle} from '../../i18n/dom.ts'
+import {createIcon} from '../../ui/icons/icon.ts'
 
 /** 时间轴控制条 DOM 句柄（事件绑定由时间轴主装配完成） */
 export interface TimelineControls {
@@ -31,12 +32,11 @@ export interface TimelineControls {
     readonly getHeight: () => number
 }
 
-const BUTTON_STYLE = 'padding:2px 8px;cursor:pointer;background:#2a2a33;color:#ddd;border:1px solid #444;border-radius:3px'
-
 /** 创建控制条按钮（内容与标题由调用方本地化） */
 const makeButton = (): HTMLButtonElement => {
     const b = document.createElement('button')
-    b.style.cssText = BUTTON_STYLE
+    b.className = 'dc-btn'
+    b.style.cssText = 'padding:2px 8px'
     return b
 }
 
@@ -61,7 +61,7 @@ export const createTimelineControls = (
 
     /* ── 拖拽手柄（可折叠/调高） ── */
     const handle = document.createElement('div')
-    handle.style.cssText = 'height:6px;cursor:ns-resize;background:#333;flex-shrink:0'
+    handle.style.cssText = 'height:6px;cursor:ns-resize;background:var(--dc-bg-3);flex-shrink:0'
     localizeTitle(handle, 'bone_edit.timeline.drag_height')
     container.appendChild(handle)
 
@@ -87,21 +87,27 @@ export const createTimelineControls = (
     container.appendChild(bar)
 
     const playBtn = makeButton()
-    playBtn.textContent = '▶'
+    playBtn.id = 'bone-timeline-play'
+    playBtn.appendChild(createIcon('play', {size: 'sm'}))
     localizeTitle(playBtn, 'bone_edit.timeline.play_pause')
     const stopBtn = makeButton()
-    stopBtn.textContent = '■'
+    stopBtn.id = 'bone-timeline-stop'
+    stopBtn.appendChild(createIcon('stop', {size: 'sm'}))
     localizeTitle(stopBtn, 'bone_edit.timeline.stop')
     const loopCheck = document.createElement('label')
+    loopCheck.className = 'dc-label'
+    loopCheck.style.cssText = 'display:inline-flex;align-items:center;gap:4px'
     const loopText = document.createElement('span')
     localizeText(loopText, 'bone_edit.timeline.loop')
     loopCheck.appendChild(loopText)
     const loopInput = document.createElement('input')
     loopInput.type = 'checkbox'
+    loopInput.className = 'dc-check'
     loopCheck.appendChild(loopInput)
 
     const animSelect = document.createElement('select')
     animSelect.id = ANIM_SELECT_ID
+    animSelect.className = 'dc-select'
     localizeTitle(animSelect, 'bone_edit.timeline.anim_list_title')
     animSelect.style.cssText = 'max-width:200px'
     const newAnimBtn = makeTextButton('bone_edit.timeline.new_anim')
@@ -110,11 +116,13 @@ export const createTimelineControls = (
 
     const durationInput = document.createElement('input')
     durationInput.type = 'number'
+    durationInput.className = 'dc-input'
     durationInput.step = '0.01'
     durationInput.min = '0.01'
     durationInput.style.width = '60px'
     const speedInput = document.createElement('input')
     speedInput.type = 'number'
+    speedInput.className = 'dc-input'
     speedInput.step = '0.1'
     speedInput.min = '0'
     speedInput.style.width = '50px'
@@ -131,16 +139,19 @@ export const createTimelineControls = (
     ikBtn.textContent = translate('bone_edit.timeline.ik_off')
     localizeTitle(ikBtn, 'bone_edit.timeline.ik_title')
     const undoBtn = makeButton()
-    undoBtn.textContent = '↶'
+    undoBtn.id = 'bone-timeline-undo'
+    undoBtn.appendChild(createIcon('undo', {size: 'sm'}))
     localizeTitle(undoBtn, 'bone_edit.timeline.undo')
     const redoBtn = makeButton()
-    redoBtn.textContent = '↷'
+    redoBtn.id = 'bone-timeline-redo'
+    redoBtn.appendChild(createIcon('redo', {size: 'sm'}))
     localizeTitle(redoBtn, 'bone_edit.timeline.redo')
     const exportBtn = makeTextButton('bone_edit.timeline.export')
     const importBtn = makeTextButton('bone_edit.timeline.import')
 
     /* 骨架聚焦下拉 */
     const skeletonSelect = document.createElement('select')
+    skeletonSelect.className = 'dc-select'
     skeletonSelect.style.cssText = 'max-width:140px'
 
     const durationLabel = document.createElement('span')

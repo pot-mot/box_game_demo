@@ -6,7 +6,9 @@ import {DEFAULT_BUILDING_CONFIG} from '../validation.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
+import {createEntityPanel} from '../../../ui/components/entity_panel.ts'
 import {localizeText, appendLocalizedText} from '../../../i18n/dom.ts'
+import {createIcon} from '../../../ui/icons/icon.ts'
 import {translate} from '../../../i18n/index.ts'
 import {createSelect, findIn, materialOptions, recipeOptions, PROP_LABELS} from './labels.ts'
 
@@ -16,23 +18,12 @@ export const formatRowText = (world: BuildingWorld): string =>
 const YAW_OPTIONS = [0, 1, 2, 3].map(q => ({value: String(q), label: `${q * 90}°`}))
 
 export const createBuildingPanel = (ctx: Omit<BuildingGeneratorContext, 'panel'>): PanelContext => {
-    const el = document.createElement('div')
-    el.id = 'building-generator-panel'
-    el.style.cssText = [
-        'position: fixed; bottom: 24px; right: 24px;',
-        'background: rgba(0,0,0,.75); color: #fff;',
-        'font: 13px/1.5 monospace; padding: 16px 20px;',
-        'border-radius: 10px; min-width: 250px; max-height: 70vh; overflow-y: auto;',
-        'user-select: none; display: none;',
-    ].join(' ')
-
-    const header = document.createElement('div')
-    header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px'
-    localizeText(header, 'entity.building_generator')
-    el.appendChild(header)
+    const el = createEntityPanel('building-generator-panel', 'entity.building_generator')
+    el.style.cssText += ';min-width:250px'
 
     el.appendChild(createSection('panel.recipe'))
     const recipeRow = document.createElement('label')
+    recipeRow.className = 'dc-label'
     appendLocalizedText(recipeRow, 'panel.recipe')
     recipeRow.appendChild(document.createTextNode(' '))
     const recipe = createSelect(
@@ -61,10 +52,10 @@ export const createBuildingPanel = (ctx: Omit<BuildingGeneratorContext, 'panel'>
     /* ── 自由道具列表（编辑 / 删除）── */
     el.appendChild(createSection('panel.props'))
     const propList = document.createElement('div')
-    propList.style.cssText = 'display:flex;flex-direction:column;gap:2px'
+    propList.className = 'dc-list'
     el.appendChild(propList)
     const propEmpty = document.createElement('div')
-    propEmpty.style.cssText = 'color:#888;padding:2px 0'
+    propEmpty.className = 'dc-list-empty'
     localizeText(propEmpty, 'entity.no_props')
     propList.appendChild(propEmpty)
 
@@ -75,10 +66,12 @@ export const createBuildingPanel = (ctx: Omit<BuildingGeneratorContext, 'panel'>
     const replaceTo = createSelect(materialOptions(), 'wood')
     replaceTo.id = 'building-replace-to'
     const replaceRow = document.createElement('div')
-    replaceRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin-top:2px'
+    replaceRow.className = 'dc-row'
+    replaceRow.style.cssText = 'gap:6px;margin-top:2px'
     replaceFrom.style.flex = '1'
     replaceTo.style.flex = '1'
     const replaceBtn = document.createElement('button')
+    replaceBtn.className = 'dc-btn'
     localizeText(replaceBtn, 'entity.replace')
     replaceRow.appendChild(replaceFrom)
     replaceRow.appendChild(document.createTextNode('→'))
@@ -148,9 +141,9 @@ export const createBuildingPanel = (ctx: Omit<BuildingGeneratorContext, 'panel'>
         propEmpty.style.display = 'none'
         world.props.forEach((prop, index) => {
             const row = document.createElement('div')
-            row.style.cssText = 'display:flex;gap:4px;align-items:center'
+            row.className = 'dc-row'
             const label = document.createElement('span')
-            label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+            label.className = 'dc-list-info'
             label.textContent = `#${index} ${translate(PROP_LABELS[prop.kind])} (${prop.position[0].toFixed(1)},${prop.position[1].toFixed(1)},${prop.position[2].toFixed(1)})`
             row.appendChild(label)
 
@@ -171,8 +164,8 @@ export const createBuildingPanel = (ctx: Omit<BuildingGeneratorContext, 'panel'>
             row.appendChild(yawSelect)
 
             const del = document.createElement('button')
-            del.textContent = '×'
-            del.style.cssText = 'background:none;border:none;color:#f66;cursor:pointer;font:14px/1 monospace;padding:0 4px'
+            del.className = 'dc-list-del'
+            del.appendChild(createIcon('close', {size: 'sm'}))
             del.addEventListener('click', () => ctx.removeProp(world.id, index))
             row.appendChild(del)
 

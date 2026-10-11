@@ -90,7 +90,7 @@ export const showcaseZh: ShowcaseLocale = {
     /* ── 二级菜单 ── */
     'showcase.menu.title': '展示模式',
     'showcase.menu.subtitle': '选择要展示的子系统',
-    'showcase.back_menu': '← 返回展示菜单',
+    'showcase.back_menu': '返回展示菜单',
     'showcase.module.actions.title': '动作展示',
     'showcase.module.actions.desc': '全武器攻击动作 / 连段 / 蓄力与持握模式时序复现',
     'showcase.module.appearance.title': '装备与外观',
@@ -105,8 +105,8 @@ export const showcaseZh: ShowcaseLocale = {
     /* ── 主面板 ── */
     'showcase.title': '攻击动作展示台',
     'showcase.subtitle': '全武器攻击阶段动画 · 连段衔接时序复现',
-    'showcase.pause': '⏸ 暂停',
-    'showcase.resume': '▶ 继续',
+    'showcase.pause': '暂停',
+    'showcase.resume': '继续',
     'showcase.step': '⏭ 单步',
     'showcase.focus_none': '聚焦：无',
     'showcase.unfocus': '取消聚焦',
@@ -174,7 +174,7 @@ export const showcaseEn: ShowcaseLocale = {
     /* ── Sub-menu ── */
     'showcase.menu.title': 'Showcase',
     'showcase.menu.subtitle': 'Select a subsystem to display',
-    'showcase.back_menu': '← Back to menu',
+    'showcase.back_menu': 'Back to menu',
     'showcase.module.actions.title': 'Actions',
     'showcase.module.actions.desc': 'All-weapon attack actions / combos / charge and hold-mode timing',
     'showcase.module.appearance.title': 'Equipment & Look',
@@ -189,8 +189,8 @@ export const showcaseEn: ShowcaseLocale = {
     /* ── Main panel ── */
     'showcase.title': 'Attack Showcase',
     'showcase.subtitle': 'All-weapon attack phase animation · combo timing reproduction',
-    'showcase.pause': '⏸ Pause',
-    'showcase.resume': '▶ Resume',
+    'showcase.pause': 'Pause',
+    'showcase.resume': 'Resume',
     'showcase.step': '⏭ Step',
     'showcase.focus_none': 'Focus: None',
     'showcase.unfocus': 'Unfocus',

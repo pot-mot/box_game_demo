@@ -2,6 +2,7 @@ import type {ActorStatus, SkillTimerStatus} from './actor.ts'
 import {SPEED_OPTIONS} from './constants.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import {localizeText, localizeApply} from '../../i18n/dom.ts'
+import {createIcon} from '../../ui/icons/icon.ts'
 
 /** 面板控件的回调（由模式装配注入实际控制逻辑） */
 export interface PanelCallbacks {
@@ -41,62 +42,64 @@ const injectStyles = (): HTMLStyleElement => {
     style.textContent = `
 .sch-panel {
     position: fixed; top: 16px; left: 16px; width: 336px;
-    background: rgba(0, 0, 0, .72); color: #e8e4da;
-    font: 13px/1.5 Consolas, 'Microsoft YaHei', monospace;
-    border-radius: 10px; padding: 14px 16px 12px;
-    backdrop-filter: blur(4px); user-select: none;
+    background: var(--dc-bg-2); color: var(--dc-text);
+    font-family: var(--dc-font-mono); font-size: var(--dc-fs-13); line-height: 1.5;
+    border: 1px solid var(--dc-border); border-radius: var(--dc-radius-lg);
+    box-shadow: var(--dc-shadow-panel), inset 0 0 0 1px var(--dc-hairline);
+    padding: 14px 16px 12px; user-select: none;
 }
-.sch-title { font-size: 16px; font-weight: 700; color: #ffd070; letter-spacing: 1px; }
-.sch-sub { color: #9aa3b2; font-size: 11px; margin: 2px 0 10px; }
+.sch-title { font-family: var(--dc-font-display); font-size: 16px; font-weight: 700; color: var(--dc-gold); letter-spacing: 1px; }
+.sch-sub { color: var(--dc-text-dim); font-size: 11px; margin: 2px 0 10px; }
 .sch-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .sch-btn {
-    background: #2a2f3a; color: #e8e4da; border: 1px solid #3a4150;
-    border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit;
+    background: var(--dc-bg-3); color: var(--dc-text); border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius); padding: 4px 10px; cursor: pointer; font: inherit;
 }
-.sch-btn:hover { background: #353c4a; }
-.sch-btn.active { background: #4a5a3a; border-color: #7a9a5a; color: #ffe9a0; }
+.sch-btn:hover { background: var(--dc-bg-2); border-color: var(--dc-border-strong); }
+.sch-btn.active { background: var(--dc-bg-3); border-color: var(--dc-orange); color: var(--dc-gold-bright); }
 .sch-select {
-    background: #2a2f3a; color: #e8e4da; border: 1px solid #3a4150;
-    border-radius: 6px; padding: 4px 6px; font: inherit; max-width: 132px;
+    background: var(--dc-bg-3); color: var(--dc-text); border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius); padding: 4px 6px; font: inherit; max-width: 132px;
 }
-.sch-list { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+.sch-list { max-height: 46vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 3px; }
 .sch-row {
     display: flex; align-items: center; gap: 8px;
-    padding: 4px 8px; border-radius: 6px; cursor: pointer;
+    padding: 4px 8px; border-radius: var(--dc-radius); cursor: pointer;
     border: 1px solid transparent;
 }
-.sch-row:hover { background: rgba(255, 255, 255, .06); }
-.sch-row.focused { border-color: #ffd070; background: rgba(255, 208, 112, .08); }
+.sch-row:hover { background: var(--dc-bg-3); }
+.sch-row.focused { border-color: var(--dc-gold); background: color-mix(in srgb, var(--dc-gold) 8%, transparent); }
 .sch-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .sch-names { flex: 1; min-width: 0; }
 .sch-skill { font-weight: 700; }
-.sch-weapon { color: #9aa3b2; font-size: 11px; margin-left: 6px; }
-.sch-hold { color: #ffd070; font-size: 10px; margin-left: 6px; }
-.sch-mid { text-align: right; flex: none; font-size: 11px; color: #c8cdd8; min-width: 108px; }
-.sch-phase { color: #ffd070; }
-.sch-phase.done { color: #77808f; }
-.sch-rowbar { height: 3px; border-radius: 2px; background: #2a2f3a; overflow: hidden; margin-top: 3px; }
-.sch-rowfill { height: 100%; background: #7a9a5a; width: 0; }
+.sch-weapon { color: var(--dc-text-dim); font-size: 11px; margin-left: 6px; }
+.sch-hold { color: var(--dc-gold); font-size: 10px; margin-left: 6px; }
+.sch-mid { text-align: right; flex: none; font-size: 11px; color: var(--dc-text-dim); min-width: 108px; }
+.sch-phase { color: var(--dc-gold); }
+.sch-phase.done { color: var(--dc-text-mute); }
+.sch-rowbar { height: 3px; border-radius: var(--dc-radius-sm); background: var(--dc-bg-3); overflow: hidden; margin-top: 3px; }
+.sch-rowfill { height: 100%; background: var(--dc-success); width: 0; }
 .sch-detail {
     position: fixed; bottom: 16px; right: 16px; width: 268px;
-    background: rgba(0, 0, 0, .72); color: #e8e4da;
-    font: 13px/1.7 Consolas, 'Microsoft YaHei', monospace;
-    border-radius: 10px; padding: 12px 16px; display: none;
-    border: 1px solid rgba(255, 208, 112, .4);
+    background: var(--dc-bg-2); color: var(--dc-text);
+    font-family: var(--dc-font-mono); font-size: var(--dc-fs-13); line-height: 1.7;
+    border: 1px solid var(--dc-border); border-radius: var(--dc-radius-lg);
+    box-shadow: var(--dc-shadow-panel), inset 0 0 0 1px var(--dc-hairline);
+    padding: 12px 16px; display: none;
 }
 .sch-detail .sch-title { margin-bottom: 4px; }
-.sch-totalbar { height: 6px; border-radius: 3px; background: #2a2f3a; overflow: hidden; margin: 6px 0; }
-.sch-totalfill { height: 100%; background: #ffd070; width: 0; }
-.sch-skillhead { display: flex; gap: 4px; font-size: 9px; color: #9aa3b2; margin-top: 6px; }
+.sch-totalbar { height: 6px; border-radius: var(--dc-radius-sm); background: var(--dc-bg-3); overflow: hidden; margin: 6px 0; }
+.sch-totalfill { height: 100%; background: var(--dc-gold); width: 0; }
+.sch-skillhead { display: flex; gap: 4px; font-size: 9px; color: var(--dc-text-dim); margin-top: 6px; }
 .sch-skillhead .sch-skillspacer { min-width: 56px; flex: none; }
 .sch-skillhead span { flex: 1; text-align: center; }
 .sch-skillrow { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
 .sch-skilllabel { opacity: .7; min-width: 56px; font-size: 10px; flex: none; }
 .sch-cell { flex: 1; min-width: 0; }
-.sch-cellbar { height: 4px; background: #2a2f3a; border-radius: 2px; overflow: hidden; }
-.sch-cellfill { height: 100%; width: 0; border-radius: 2px; }
+.sch-cellbar { height: 4px; background: var(--dc-bg-3); border-radius: var(--dc-radius-sm); overflow: hidden; }
+.sch-cellfill { height: 100%; width: 0; border-radius: var(--dc-radius-sm); }
 .sch-celltext { font-size: 9px; text-align: center; opacity: .85; }
-.sch-kv b { color: #ffd070; }
+.sch-kv b { color: var(--dc-gold); }
 `
     document.head.appendChild(style)
     return style
@@ -151,7 +154,13 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
     const pauseBtn = document.createElement('button')
     pauseBtn.className = 'sch-btn'
-    pauseBtn.textContent = translate('showcase.pause')
+    const pauseIconPause = createIcon('pause', {size: 'sm'})
+    const pauseIconPlay = createIcon('play', {size: 'sm'})
+    pauseIconPlay.style.display = 'none'
+    const pauseLabel = document.createElement('span')
+    pauseBtn.appendChild(pauseIconPause)
+    pauseBtn.appendChild(pauseIconPlay)
+    pauseBtn.appendChild(pauseLabel)
     pauseBtn.addEventListener('click', () => {
         callbacks.onTogglePause()
         pauseBtn.blur()
@@ -352,7 +361,7 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     /** 冷却格：触发瞬间满条随冷却排空（同 play HUD）；无冷却常显 0.0s */
     const applyCooldownCell = (cell: TimerCellRefs, t: SkillTimerStatus): void => {
         if (t.cooldown > 0) {
-            setFill(cell.fill, t.cooldownRemaining / t.cooldown, t.cooldownRemaining > 0 ? '#ff6644' : '#4488ff')
+            setFill(cell.fill, t.cooldownRemaining / t.cooldown, t.cooldownRemaining > 0 ? 'var(--dc-danger)' : 'var(--dc-info)')
             setText(cell.text, `${t.cooldownRemaining.toFixed(1)}s`)
         } else {
             setFill(cell.fill, 0, 'transparent')
@@ -366,7 +375,9 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         speed: number,
         focusedId: number | null,
     ): void => {
-        setText(pauseBtn, translate(playing ? 'showcase.pause' : 'showcase.resume'))
+        setText(pauseLabel, translate(playing ? 'showcase.pause' : 'showcase.resume'))
+        pauseIconPause.style.display = playing ? '' : 'none'
+        pauseIconPlay.style.display = playing ? 'none' : ''
 
         for (const {option, btn} of speedBtns) {
             const active = option === speed
@@ -456,8 +467,8 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
             st.slotTimers.forEach((t, i) => {
                 const row = timerRows[i]
                 if (row === undefined) return
-                applyElapsedCell(row.cells[0], t.actionElapsed, t.duration, '#ffaa00')
-                applyElapsedCell(row.cells[1], t.recoveryElapsed, t.recovery, '#44ccff')
+                applyElapsedCell(row.cells[0], t.actionElapsed, t.duration, 'var(--dc-orange-bright)')
+                applyElapsedCell(row.cells[1], t.recoveryElapsed, t.recovery, 'var(--dc-info)')
                 applyCooldownCell(row.cells[2], t)
             })
         }

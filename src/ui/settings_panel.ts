@@ -8,6 +8,7 @@
 import {getLocale, getLocales, setLocale, type LocalKeyParam} from '../i18n/index.ts'
 import {LOCALE_DISPLAY_NAMES, isLocale} from '../i18n/constants.ts'
 import {localizeText, localizeTitle} from '../i18n/dom.ts'
+import {createIcon} from './icons/icon.ts'
 
 export const setupSettingsPanel = (
     openOperations: () => void,
@@ -16,38 +17,25 @@ export const setupSettingsPanel = (
 ): void => {
     const btn = document.createElement('button')
     btn.id = 'settings-btn'
-    btn.style.cssText = [
-        'position:fixed;top:16px;right:16px;z-index:200',
-        'width:40px;height:40px',
-        'border:1px solid #555;background:#111;color:#fff',
-        'font-size:20px;cursor:pointer',
-        'display:flex;align-items:center;justify-content:center',
-    ].join(';')
+    btn.className = 'dc-icon-btn'
+    btn.style.cssText = 'position:fixed;top:16px;right:16px;z-index:200;width:40px;height:40px'
     localizeTitle(btn, 'settings.title')
-    btn.textContent = '⚙'
-    btn.addEventListener('mouseenter', () => { btn.style.background = '#222' })
-    btn.addEventListener('mouseleave', () => { btn.style.background = '#111' })
+    btn.appendChild(createIcon('settings', {size: 'lg'}))
     document.body.appendChild(btn)
 
     const menu = document.createElement('div')
     menu.id = 'settings-menu'
+    menu.className = 'dc-panel'
     menu.style.cssText = [
         'position:fixed;top:64px;right:16px;z-index:200',
-        'display:none;min-width:200px',
-        'background:#111;border:1px solid #333',
-        'padding:4px 0',
+        'display:none;min-width:200px;padding:4px 0',
     ].join(';')
     document.body.appendChild(menu)
 
-    const ITEM_CSS = 'padding:10px 18px;font:14px/1.5 system-ui,sans-serif;color:#ccc;cursor:pointer'
-    const ITEM_HOVER_BG = '#222'
-
     const createItem = (text: LocalKeyParam, onClick: () => void): HTMLElement => {
         const el = document.createElement('div')
-        el.style.cssText = ITEM_CSS
+        el.className = 'dc-menu-item'
         localizeText(el, text)
-        el.addEventListener('mouseenter', () => { el.style.background = ITEM_HOVER_BG })
-        el.addEventListener('mouseleave', () => { el.style.background = '' })
         el.addEventListener('click', onClick)
         return el
     }
@@ -77,13 +65,14 @@ export const setupSettingsPanel = (
 
     /* ── 语言切换行 ── */
     const langRow = document.createElement('div')
-    langRow.style.cssText = `${ITEM_CSS};display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:default`
+    langRow.className = 'dc-menu-item'
+    langRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:default'
     const langLabel = document.createElement('span')
     localizeText(langLabel, 'settings.language')
     langRow.appendChild(langLabel)
     const langSelect = document.createElement('select')
     langSelect.id = 'settings-language'
-    langSelect.style.cssText = 'font:inherit;background:#222;color:#fff;border:1px solid #555;padding:2px 6px'
+    langSelect.className = 'dc-select'
     for (const locale of getLocales()) {
         const opt = document.createElement('option')
         opt.value = locale

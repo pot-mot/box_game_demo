@@ -20,8 +20,8 @@ test.describe('操作设置面板', () => {
         await expect(page.locator('.bp-row', {hasText: '生成物体'}).locator('.bp-row-key')).toHaveText('鼠标右键')
 
         /* 两项均可修改：各有替换按钮 */
-        await expect(page.locator('.bp-row', {hasText: '旋转视角'}).locator('.bp-row-btn', {hasText: '✎'})).toBeVisible()
-        await expect(page.locator('.bp-row', {hasText: '生成物体'}).locator('.bp-row-btn', {hasText: '✎'})).toBeVisible()
+        await expect(page.locator('.bp-row', {hasText: '旋转视角'}).locator('.bp-row-btn-edit')).toBeVisible()
+        await expect(page.locator('.bp-row', {hasText: '生成物体'}).locator('.bp-row-btn-edit')).toBeVisible()
 
         /* 编辑模式下不可修改的鼠标操作单独成行 */
         await expect(page.locator('.bp-row', {hasText: '不可修改'})).toHaveCount(2)
@@ -33,7 +33,7 @@ test.describe('操作设置面板', () => {
 
         await expect(page.locator('.bp-row', {hasText: '旋转视角'})).toHaveCount(1)
         await expect(page.locator('.bp-row', {hasText: '锁定目标'}).locator('.bp-row-key')).toHaveText('鼠标中键')
-        await expect(page.locator('.bp-row', {hasText: '锁定目标'}).locator('.bp-row-btn', {hasText: '✎'})).toBeVisible()
+        await expect(page.locator('.bp-row', {hasText: '锁定目标'}).locator('.bp-row-btn-edit')).toBeVisible()
         /* 生成物体 / 平移视角不参与游玩模式，不在面板中列出 */
         await expect(page.locator('.bp-row', {hasText: '生成物体'})).toHaveCount(0)
         await expect(page.locator('.bp-row', {hasText: '平移视角'})).toHaveCount(0)
@@ -46,7 +46,7 @@ test.describe('操作设置面板', () => {
         await openOperationsPanel(page, '编辑模式')
 
         const spawnRow = page.locator('.bp-row', {hasText: '生成物体'})
-        await spawnRow.locator('.bp-row-btn', {hasText: '✎'}).click()
+        await spawnRow.locator('.bp-row-btn-edit').click()
         await expect(page.locator('.bp-row-key-capturing')).toBeVisible()
 
         await page.mouse.move(600, 400)
@@ -68,7 +68,7 @@ test.describe('操作设置面板', () => {
         const orbitRow = page.locator('.bp-row', {hasText: '旋转视角'})
         const spawnRow = page.locator('.bp-row', {hasText: '生成物体'})
 
-        await spawnRow.locator('.bp-row-btn', {hasText: '✎'}).click()
+        await spawnRow.locator('.bp-row-btn-edit').click()
         await page.mouse.move(600, 400)
         await page.mouse.down({button: 'left'})
         await page.mouse.up({button: 'left'})
@@ -78,7 +78,7 @@ test.describe('操作设置面板', () => {
 
         await expect(spawnRow.locator('.bp-row-key')).toHaveText('鼠标左键')
         /* 冲突方绑定被移出后行内出现「添加替代绑定」 */
-        await expect(orbitRow.locator('.bp-row-btn', {hasText: '+'})).toBeVisible()
+        await expect(orbitRow.locator('.bp-row-btn-add')).toBeVisible()
     })
 
     test('同一输入被多个动作占用时一并列出并全部覆盖', async ({page}) => {
@@ -87,7 +87,7 @@ test.describe('操作设置面板', () => {
         const orbitRow = page.locator('.bp-row', {hasText: '旋转视角'})
         const spawnRow = page.locator('.bp-row', {hasText: '生成物体'})
 
-        await orbitRow.locator('.bp-row-btn', {hasText: '✎'}).click()
+        await orbitRow.locator('.bp-row-btn-edit').click()
         await page.mouse.move(600, 400)
         await page.mouse.down({button: 'right'})
         await page.mouse.up({button: 'right'})
@@ -100,7 +100,7 @@ test.describe('操作设置面板', () => {
 
         await expect(orbitRow.locator('.bp-row-key')).toHaveText('鼠标右键')
         await expect(spawnRow.locator('.bp-row-key')).toHaveCount(0)
-        await expect(spawnRow.locator('.bp-row-btn', {hasText: '+'})).toBeVisible()
+        await expect(spawnRow.locator('.bp-row-btn-add')).toBeVisible()
     })
 })
 
@@ -129,7 +129,7 @@ test.describe('生成物体绑定生效', () => {
         await openOperationsPanel(page, '编辑模式')
 
         const spawnRow = page.locator('.bp-row', {hasText: '生成物体'})
-        await spawnRow.locator('.bp-row-btn', {hasText: '✎'}).click()
+        await spawnRow.locator('.bp-row-btn-edit').click()
         await page.mouse.move(600, 400)
         await page.mouse.down({button: 'middle'})
         await page.mouse.up({button: 'middle'})

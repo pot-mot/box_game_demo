@@ -9,17 +9,14 @@ export interface InteractionPrompt {
 
 export const createInteractionPrompt = (): InteractionPrompt => {
     const el = document.createElement('div')
+    el.className = 'dc-panel'
     el.style.cssText = [
         'position:fixed',
         'left:50%',
         'bottom:18%',
         'transform:translateX(-50%)',
         'padding:6px 14px',
-        'background:rgba(0,0,0,0.55)',
-        'color:#f5f0e6',
-        'font:14px/1.6 system-ui, sans-serif',
-        'border:1px solid rgba(255,255,255,0.25)',
-        'border-radius:6px',
+        'font-size:var(--dc-fs-14)',
         'pointer-events:none',
         'user-select:none',
         'white-space:nowrap',

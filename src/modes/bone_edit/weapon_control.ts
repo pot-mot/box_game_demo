@@ -107,6 +107,7 @@ export interface BoneEditWeaponControl {
 export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): BoneEditWeaponControl => {
     const select = document.createElement('select')
     select.id = WEAPON_SELECT_ID
+    select.className = 'dc-select'
     localizeTitle(select, 'bone_edit.weapon.select_title')
     select.style.cssText = 'max-width:150px'
 
@@ -122,7 +123,8 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
     /* 左手贴合开关（默认关：编辑器里两只手独立，避免「拖武器牵扯另一只手」） */
     const gripToggle = document.createElement('button')
     gripToggle.id = GRIP_TOGGLE_ID
-    gripToggle.style.cssText = 'padding:2px 8px;cursor:pointer;background:#2a2a33;color:#ddd;border:1px solid #444;border-radius:3px'
+    gripToggle.className = 'dc-btn'
+    gripToggle.style.cssText = 'padding:2px 8px'
 
     /* 手动指定武器：近战 / 远程分组（optgroup 用 label 属性，不能走 localizeText 以免清空子选项） */
     const groupOf = (labelKey: StringLocaleKey): HTMLOptGroupElement => {

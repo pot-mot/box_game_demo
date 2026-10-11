@@ -4,24 +4,12 @@ import type {TerrainContext} from '../types'
 import {createLabeledNumberInput} from '../../../../ui/components/number_input.ts'
 import {createSection} from '../../../../ui/components/section.ts'
 import {createButtonRow} from '../../../../ui/components/button_row.ts'
+import {createEntityPanel} from '../../../../ui/components/entity_panel.ts'
 import {localizeText} from '../../../../i18n/dom.ts'
 import type {StringLocaleKey} from '../../../../i18n/index.ts'
 
 export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generatorOptions: {id: string; labelKey: StringLocaleKey}[]): PanelContext => {
-    const el = document.createElement('div')
-    el.id = 'terrain-panel'
-    el.style.cssText = [
-        'position: fixed; bottom: 24px; right: 24px;',
-        'background: rgba(0,0,0,.75); color: #fff;',
-        'font: 13px/1.5 monospace; padding: 16px 20px;',
-        'border-radius: 10px; min-width: 230px;',
-        'user-select: none; display: none;',
-    ].join(' ')
-
-    const header = document.createElement('div')
-    header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px;color:#684'
-    localizeText(header, 'entity.terrain_control')
-    el.appendChild(header)
+    const el = createEntityPanel('terrain-panel', 'entity.terrain_control')
 
     el.appendChild(createSection('panel.pos'))
     const posX = createLabeledNumberInput(el, 'panel.x', {step: '0.01'})
@@ -34,7 +22,8 @@ export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generator
 
     el.appendChild(createSection('panel.generator'))
     const genSelect = document.createElement('select')
-    genSelect.style.cssText = 'width:100%;padding:4px;margin:4px 0;font:inherit'
+    genSelect.className = 'dc-select'
+    genSelect.style.cssText = 'width:100%;margin:4px 0'
     for (const g of generatorOptions) {
         const opt = document.createElement('option')
         opt.value = g.id

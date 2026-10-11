@@ -4,11 +4,7 @@ import {focusPanel} from './entity_control_panel.ts'
 import {getInputRegistry} from '../input/registry.ts'
 import {localizeText, localizeTitle} from '../i18n/dom.ts'
 import type {StringLocaleKey} from '../i18n/index.ts'
-
-const ROW_STYLE = 'display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer'
-const INFO_STYLE = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
-const DEL_STYLE = 'background:none;border:none;color:#f66;cursor:pointer;font:14px/1 monospace;padding:0 4px'
-const GROUP_HEADER_STYLE = 'font-size:11px;font-weight:700;color:#aaa;padding:4px 4px 0 4px;margin-top:4px;border-top:1px solid #333'
+import {createIcon} from './icons/icon.ts'
 
 /** 实体列表分组标识（与展示名解耦，展示名走本地化） */
 const ENTITY_GROUPS = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'other'] as const
@@ -44,36 +40,24 @@ const GROUP_LABELS: Record<EntityGroup, StringLocaleKey> = {
 
 const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElement => {
     const row = document.createElement('div')
-    row.style.cssText = ROW_STYLE
+    row.className = 'dc-list-row'
     row.dataset.id = String(id)
 
-    /* hover 效果替代 .ep-row:hover */
-    row.addEventListener('mouseenter', () => {
-        row.style.background = 'rgba(255,255,255,.1)'
-    })
-    row.addEventListener('mouseleave', () => {
-        /* 选中状态由外部设置 background，leave 时仅恢复非选中默认 */
-        if (row.style.background === 'rgba(255,255,255,.1)') {
-            row.style.background = ''
-        }
-    })
-
     const typeBadge = document.createElement('span')
-    typeBadge.style.cssText = 'font-size:10px;padding:1px 4px;border-radius:3px;margin-right:4px'
+    typeBadge.className = 'dc-list-badge'
     typeBadge.textContent = badgeLabel
+    /* 徽章底色来自实体数据（阵营 / 类型色），非主题色 */
     typeBadge.style.background = badgeColor
-    typeBadge.style.color = '#fff'
     row.appendChild(typeBadge)
 
     const span = document.createElement('span')
-    span.style.cssText = INFO_STYLE
+    span.className = 'dc-list-info'
     row.appendChild(span)
 
     const btn = document.createElement('button')
-    btn.className = 'ep-del'
-    btn.style.cssText = DEL_STYLE
+    btn.className = 'dc-list-del ep-del'
     localizeTitle(btn, 'element.delete')
-    btn.textContent = '×'
+    btn.appendChild(createIcon('close', {size: 'sm'}))
     row.appendChild(btn)
 
     return row
@@ -81,9 +65,9 @@ const createRow = (id: number, badgeLabel: string, badgeColor: string): HTMLElem
 
 const createGroupContainer = (group: EntityGroup): HTMLElement => {
     const c = document.createElement('div')
-    c.style.cssText = 'display:flex;flex-direction:column;gap:2px'
+    c.className = 'dc-list'
     const h = document.createElement('div')
-    h.style.cssText = GROUP_HEADER_STYLE
+    h.className = 'dc-list-group-title'
     localizeText(h, GROUP_LABELS[group])
     c.appendChild(h)
     return c
@@ -100,23 +84,17 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
 
     const el = document.createElement('div')
     el.id = 'element-list-panel'
-    el.style.cssText = [
-        'position: fixed; top: 120px; left: 16px;',
-        'background: rgba(0,0,0,.75); color: #fff;',
-        'font: 13px/1.5 monospace; padding: 8px 12px;',
-        'border-radius: 8px; min-width: 300px;',
-        'max-height: 60vh; overflow-y: auto;',
-        'user-select: none;',
-    ].join(' ')
+    el.className = 'dc-panel dc-scroll'
+    el.style.cssText = 'position:fixed;top:120px;left:16px;padding:8px 12px;min-width:300px;max-height:60vh;user-select:none;'
     document.body.appendChild(el)
 
     const header = document.createElement('div')
-    header.style.cssText = 'font-weight:700;margin-bottom:4px;font-size:14px'
+    header.className = 'dc-panel__title'
     localizeText(header, 'element.title')
     el.appendChild(header)
 
     const list = document.createElement('div')
-    list.style.cssText = 'display:flex;flex-direction:column'
+    list.className = 'dc-list'
     el.appendChild(list)
 
     const rows = new Map<string, HTMLElement>()
@@ -236,14 +214,14 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
 
                 const source = findSource(entry)
                 const selId = source?.getSelectedId()
-                row.style.background = entry.id === selId ? 'rgba(100,180,255,.25)' : ''
+                row.classList.toggle('is-selected', entry.id === selId)
             }
         }
 
         if (allItems.length === 0) {
             if (!emptyEl) {
                 emptyEl = document.createElement('div')
-                emptyEl.style.cssText = 'color:#888;padding:4px 0'
+                emptyEl.className = 'dc-list-empty'
                 localizeText(emptyEl, 'element.empty')
                 list.appendChild(emptyEl)
             }

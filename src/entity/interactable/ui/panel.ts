@@ -5,12 +5,14 @@ import {defaultInteractableConfig} from '../constants.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
+import {createEntityPanel} from '../../../ui/components/entity_panel.ts'
 import {localizeText, type LocalKeyParam} from '../../../i18n/dom.ts'
 import type {StringLocaleKey} from '../../../i18n/index.ts'
 
 const row = (label: LocalKeyParam, control: HTMLElement): HTMLElement => {
     const wrap = document.createElement('label')
-    wrap.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin:2px 0'
+    wrap.className = 'dc-row'
+    wrap.style.cssText = 'justify-content:space-between;margin:2px 0'
     const span = document.createElement('span')
     localizeText(span, label)
     wrap.appendChild(span)
@@ -21,6 +23,7 @@ const row = (label: LocalKeyParam, control: HTMLElement): HTMLElement => {
 const textInput = (value: string, width = '120px'): HTMLInputElement => {
     const input = document.createElement('input')
     input.type = 'text'
+    input.className = 'dc-input'
     input.value = value
     input.style.cssText = `width:${width}`
     return input
@@ -28,6 +31,7 @@ const textInput = (value: string, width = '120px'): HTMLInputElement => {
 
 const selectOf = (values: readonly string[], labels: Record<string, StringLocaleKey>, current: string): HTMLSelectElement => {
     const select = document.createElement('select')
+    select.className = 'dc-select'
     for (const v of values) {
         const option = document.createElement('option')
         option.value = v
@@ -41,20 +45,8 @@ const selectOf = (values: readonly string[], labels: Record<string, StringLocale
 }
 
 export const createInteractablePanel = (ctx: Omit<InteractableContext, 'panel'>): PanelContext => {
-    const el = document.createElement('div')
-    el.id = 'interactable-panel'
-    el.style.cssText = [
-        'position:fixed;bottom:24px;right:24px',
-        'background:rgba(0,0,0,.78);color:#fff',
-        'font:13px/1.5 monospace;padding:14px 18px',
-        'border-radius:10px;min-width:250px;max-height:80vh;overflow:auto',
-        'user-select:none;display:none;z-index:30',
-    ].join(';')
-
-    const header = document.createElement('div')
-    header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px;color:#2a9d8f'
-    localizeText(header, 'entity.interactable_title')
-    el.appendChild(header)
+    const el = createEntityPanel('interactable-panel', 'entity.interactable_title')
+    el.style.cssText += ';min-width:250px;max-height:80vh;z-index:30'
 
     const kindSelect = selectOf(INTERACTABLE_KINDS, INTERACTABLE_LABELS, 'save_point')
     el.appendChild(row('entity.kind', kindSelect))
@@ -85,9 +77,11 @@ export const createInteractablePanel = (ctx: Omit<InteractableContext, 'panel'>)
     const breakableBoxes = new Map<BreakableSource, HTMLInputElement>()
     for (const source of BREAKABLE_SOURCES) {
         const label = document.createElement('label')
+        label.className = 'dc-label'
         label.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-right:10px'
         const box = document.createElement('input')
         box.type = 'checkbox'
+        box.className = 'dc-check'
         label.appendChild(box)
         const text = document.createElement('span')
         localizeText(text, BREAKABLE_SOURCE_LABELS[source])
@@ -100,6 +94,7 @@ export const createInteractablePanel = (ctx: Omit<InteractableContext, 'panel'>)
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
     const triggerBtn = document.createElement('button')
+    triggerBtn.className = 'dc-btn'
     localizeText(triggerBtn, 'entity.trigger')
     triggerBtn.style.cssText = 'margin-top:6px;width:100%'
     el.appendChild(triggerBtn)

@@ -75,18 +75,20 @@ const createAiHud = (onReset: () => void): AiHud => {
     style.textContent = `
 .sch-ai-hud {
     position: fixed; top: 16px; left: 16px; width: 460px;
-    background: rgba(0, 0, 0, .72); color: #e8e4da;
-    font: 12px/1.5 Consolas, 'Microsoft YaHei', monospace;
-    border-radius: 10px; padding: 12px 14px; backdrop-filter: blur(4px); user-select: none;
+    background: var(--dc-bg-2); color: var(--dc-text);
+    font-family: var(--dc-font-mono); font-size: var(--dc-fs-12); line-height: 1.5;
+    border: 1px solid var(--dc-border); border-radius: var(--dc-radius-lg);
+    box-shadow: var(--dc-shadow-panel), inset 0 0 0 1px var(--dc-hairline);
+    padding: 12px 14px; user-select: none;
 }
-.sch-ai-title { font-size: 15px; font-weight: 700; color: #ffd070; letter-spacing: 1px; }
-.sch-ai-sub { color: #9aa3b2; font-size: 11px; margin: 2px 0 8px; }
+.sch-ai-title { font-family: var(--dc-font-display); font-size: 15px; font-weight: 700; color: var(--dc-gold); letter-spacing: 1px; }
+.sch-ai-sub { color: var(--dc-text-dim); font-size: 11px; margin: 2px 0 8px; }
 .sch-ai-reset {
-    background: #2a2f3a; color: #e8e4da; border: 1px solid #3a4150;
-    border-radius: 6px; padding: 3px 10px; cursor: pointer; font: inherit; margin-bottom: 8px;
+    background: var(--dc-bg-3); color: var(--dc-text); border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius); padding: 3px 10px; cursor: pointer; font: inherit; margin-bottom: 8px;
 }
-.sch-ai-reset:hover { background: #353c4a; }
-.sch-ai-list { max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.sch-ai-reset:hover { background: var(--dc-bg-2); border-color: var(--dc-border-strong); }
+.sch-ai-list { max-height: 60vh; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; gap: 2px; }
 .sch-ai-row { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .sch-ai-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 `

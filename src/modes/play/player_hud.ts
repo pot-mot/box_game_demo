@@ -78,28 +78,36 @@ interface SkillTimerRow {
     cooldown: TimerCell
 }
 
+/** HUD 计时条填充色令牌（与主题色一致） */
+const FILL_SUCCESS = 'var(--dc-success)'
+const FILL_WARNING = 'var(--dc-warning)'
+const FILL_DANGER = 'var(--dc-danger)'
+const FILL_ORANGE = 'var(--dc-orange-bright)'
+
 export const createPlayerHUD = (): PlayerHUD => {
     const el = document.createElement('div')
     el.id = 'player-hud'
+    el.className = 'dc-panel dc-mono'
     el.style.cssText = [
         'position:fixed;top:16px;left:16px;',
-        'background:rgba(0,0,0,.6);color:#fff;',
-        'font:13px/1.6 monospace;padding:10px 14px;',
-        'border-radius:8px;min-width:240px;',
+        'padding:10px 14px;min-width:240px;',
         'pointer-events:none;z-index:100;',
         'display:none;',
     ].join(' ')
 
     const label = document.createElement('div')
-    label.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:2px'
+    label.className = 'dc-hint'
+    label.style.cssText = 'margin-bottom:2px'
     localizeText(label, 'play.hud.hp')
     el.appendChild(label)
 
     const barOuter = document.createElement('div')
-    barOuter.style.cssText = 'height:8px;background:rgba(255,255,255,.15);border-radius:4px;margin:4px 0;overflow:hidden'
+    barOuter.className = 'dc-bar'
+    barOuter.style.cssText = 'height:8px;margin:4px 0'
     const barInner = document.createElement('div')
     /* 宽度不加过渡（每帧重写，缓动会滞后）；背景色保留短过渡以平滑颜色切换 */
-    barInner.style.cssText = 'height:100%;width:100%;background:#44ff44;border-radius:4px;transition:background .15s'
+    barInner.className = 'dc-bar__fill'
+    barInner.style.cssText = `height:100%;width:100%;background:${FILL_SUCCESS};transition:background .15s`
     barOuter.appendChild(barInner)
     el.appendChild(barOuter)
 
@@ -111,19 +119,23 @@ export const createPlayerHUD = (): PlayerHUD => {
     const chargeRow = document.createElement('div')
     chargeRow.style.cssText = 'display:none;margin-bottom:6px'
     const chargeLabel = document.createElement('div')
-    chargeLabel.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:2px'
+    chargeLabel.className = 'dc-hint'
+    chargeLabel.style.cssText = 'margin-bottom:2px'
     chargeLabel.textContent = translate('play.hud.charge')
     const chargeBar = document.createElement('div')
-    chargeBar.style.cssText = 'height:6px;background:rgba(255,255,255,.15);border-radius:3px;overflow:hidden'
+    chargeBar.className = 'dc-bar'
+    chargeBar.style.cssText = 'height:6px'
     const chargeFill = document.createElement('div')
-    chargeFill.style.cssText = 'height:100%;width:0%;background:#ffcc44;border-radius:3px'
+    chargeFill.className = 'dc-bar__fill'
+    chargeFill.style.cssText = `height:100%;width:0;background:${FILL_ORANGE}`
     chargeBar.appendChild(chargeFill)
     chargeRow.appendChild(chargeLabel)
     chargeRow.appendChild(chargeBar)
     el.appendChild(chargeRow)
 
     const separator = document.createElement('div')
-    separator.style.cssText = 'border-top:1px solid rgba(255,255,255,.15);margin:4px 0'
+    separator.className = 'dc-divider'
+    separator.style.cssText = 'margin:4px 0'
     el.appendChild(separator)
 
     const stateEl = document.createElement('div')
@@ -132,11 +144,13 @@ export const createPlayerHUD = (): PlayerHUD => {
 
     /* 装备行：当前武器 + 持握模式（Ctrl 切换） */
     const loadoutEl = document.createElement('div')
-    loadoutEl.style.cssText = 'font-size:12px;opacity:.85'
+    loadoutEl.className = 'dc-dim'
+    loadoutEl.style.cssText = 'font-size:12px'
     el.appendChild(loadoutEl)
 
     const timersTitle = document.createElement('div')
-    timersTitle.style.cssText = 'font-size:11px;opacity:.7;margin-top:4px'
+    timersTitle.className = 'dc-hint'
+    timersTitle.style.cssText = 'margin-top:4px'
     localizeText(timersTitle, 'play.hud.timers')
     el.appendChild(timersTitle)
 
@@ -145,13 +159,15 @@ export const createPlayerHUD = (): PlayerHUD => {
     el.appendChild(timersList)
 
     const skillsTitle = document.createElement('div')
-    skillsTitle.style.cssText = 'font-size:11px;opacity:.7;margin-top:6px'
+    skillsTitle.className = 'dc-hint'
+    skillsTitle.style.cssText = 'margin-top:6px'
     localizeText(skillsTitle, 'play.hud.skills')
     el.appendChild(skillsTitle)
 
     /* 列头：动作 / 恢复 / 冷却 */
     const skillsHeader = document.createElement('div')
-    skillsHeader.style.cssText = 'display:flex;gap:4px;font-size:9px;opacity:.55;margin-top:2px'
+    skillsHeader.className = 'dc-mute'
+    skillsHeader.style.cssText = 'display:flex;gap:4px;font-size:9px;margin-top:2px'
     const headerSpacer = document.createElement('span')
     headerSpacer.style.cssText = 'min-width:56px'
     skillsHeader.appendChild(headerSpacer)
@@ -174,14 +190,18 @@ export const createPlayerHUD = (): PlayerHUD => {
     const ensureTimerRows = (count: number): void => {
         while (timerRows.length < count) {
             const row = document.createElement('div')
-            row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:1px'
+            row.className = 'dc-row'
+            row.style.cssText = 'gap:4px;margin-top:1px'
             const lbl = document.createElement('span')
-            lbl.style.cssText = 'opacity:.7;min-width:36px'
+            lbl.className = 'dc-dim'
+            lbl.style.cssText = 'min-width:36px'
             const bar = document.createElement('div')
-            bar.style.cssText = 'height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden;flex:1'
+            bar.className = 'dc-bar'
+            bar.style.cssText = 'height:4px;flex:1'
             const fill = document.createElement('div')
             /* 不加 CSS 过渡：每帧重写 width，逐帧更新本身即平滑（同技能单元格） */
-            fill.style.cssText = 'height:100%;width:100%;border-radius:2px'
+            fill.className = 'dc-bar__fill'
+            fill.style.cssText = 'height:100%;width:100%'
             bar.appendChild(fill)
             const txt = document.createElement('span')
             txt.style.cssText = 'min-width:64px;text-align:right'
@@ -204,10 +224,12 @@ export const createPlayerHUD = (): PlayerHUD => {
         const cell = document.createElement('div')
         cell.style.cssText = 'flex:1;min-width:0'
         const bar = document.createElement('div')
-        bar.style.cssText = 'height:4px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden'
+        bar.className = 'dc-bar'
+        bar.style.cssText = 'height:4px'
         const fill = document.createElement('div')
         /* 不加 CSS 过渡：HUD 每帧重写 width，缓动会导致显示值滞后真实值（起止两端差一），逐帧更新本身即平滑 */
-        fill.style.cssText = 'height:100%;width:100%;border-radius:2px'
+        fill.className = 'dc-bar__fill'
+        fill.style.cssText = 'height:100%;width:100%'
         bar.appendChild(fill)
         const txt = document.createElement('div')
         txt.style.cssText = 'font-size:9px;text-align:center;opacity:.85'
@@ -219,9 +241,11 @@ export const createPlayerHUD = (): PlayerHUD => {
     const ensureSkillRows = (count: number): void => {
         while (skillRows.length < count) {
             const row = document.createElement('div')
-            row.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:3px'
+            row.className = 'dc-row'
+            row.style.cssText = 'gap:4px;margin-top:3px'
             const lbl = document.createElement('span')
-            lbl.style.cssText = 'opacity:.7;min-width:56px;font-size:10px'
+            lbl.className = 'dc-dim'
+            lbl.style.cssText = 'min-width:56px;font-size:10px'
             row.appendChild(lbl)
             const action = makeCell()
             const recovery = makeCell()
@@ -247,9 +271,9 @@ export const createPlayerHUD = (): PlayerHUD => {
     const update = (data: PlayerHUDData): void => {
         const pct = Math.max(0, Math.min(1, data.health / data.maxHealth))
         barInner.style.width = `${pct * 100}%`
-        if (pct > 0.5) barInner.style.background = '#44ff44'
-        else if (pct > 0.25) barInner.style.background = '#ffaa00'
-        else barInner.style.background = '#ff4444'
+        if (pct > 0.5) barInner.style.background = FILL_SUCCESS
+        else if (pct > 0.25) barInner.style.background = FILL_WARNING
+        else barInner.style.background = FILL_DANGER
         hpText.textContent = `${data.health} / ${data.maxHealth}`
 
         stateEl.textContent = translate({key: 'play.hud.state', args: [data.stateName, data.stateTime.toFixed(2)]})
@@ -259,7 +283,7 @@ export const createPlayerHUD = (): PlayerHUD => {
         if (data.charging) {
             const ratio = Math.max(0, Math.min(1, data.charge))
             chargeFill.style.width = `${ratio * 100}%`
-            chargeFill.style.background = ratio >= 1 ? '#ff4444' : '#ffcc44'
+            chargeFill.style.background = ratio >= 1 ? FILL_DANGER : FILL_ORANGE
             chargeLabel.textContent = translate({key: 'play.hud.charge_pct', args: [String(Math.round(ratio * 100))]})
         }
 

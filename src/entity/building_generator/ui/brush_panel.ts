@@ -36,21 +36,16 @@ export const setupBuildingBrushPanel = (
 ): (() => void) => {
     const container = document.createElement('div')
     container.id = 'building-brush-panel'
-    container.style.cssText = [
-        'position: fixed; bottom: 24px; left: 16px;',
-        'display: none;',
-        'background: rgba(0,0,0,.75); color: #fff;',
-        'font: 13px/1.6 monospace; padding: 10px 14px;',
-        'border-radius: 8px; min-width: 200px;',
-        'user-select: none;',
-    ].join(' ')
+    container.className = 'dc-panel'
+    container.style.cssText = 'position:fixed;bottom:24px;left:16px;display:none;padding:10px 14px;min-width:200px;user-select:none;'
 
     const header = document.createElement('div')
-    header.style.cssText = 'font-weight:700;margin-bottom:6px'
+    header.className = 'dc-panel__title'
     localizeText(header, 'entity.brush_title')
     container.appendChild(header)
 
     const toolRow = document.createElement('label')
+    toolRow.className = 'dc-label'
     appendLocalizedText(toolRow, 'entity.brush_tool')
     toolRow.appendChild(document.createTextNode(' '))
     const toolSelect = createSelect(
@@ -69,6 +64,7 @@ export const setupBuildingBrushPanel = (
     container.appendChild(toolRow)
 
     const materialRow = document.createElement('label')
+    materialRow.className = 'dc-label'
     appendLocalizedText(materialRow, 'entity.brush_material')
     materialRow.appendChild(document.createTextNode(' '))
     const materialSelect = createSelect(materialOptions(), brush.getMaterial())
@@ -81,6 +77,7 @@ export const setupBuildingBrushPanel = (
     container.appendChild(materialRow)
 
     const propRow = document.createElement('label')
+    propRow.className = 'dc-label'
     appendLocalizedText(propRow, 'entity.brush_prop')
     propRow.appendChild(document.createTextNode(' '))
     const propSelect = createSelect(propOptions(), brush.getPropKind())
@@ -96,6 +93,7 @@ export const setupBuildingBrushPanel = (
     const stampBox = document.createElement('div')
     stampBox.style.cssText = 'margin-top:4px'
     const recipeRow = document.createElement('label')
+    recipeRow.className = 'dc-label'
     appendLocalizedText(recipeRow, 'panel.recipe')
     recipeRow.appendChild(document.createTextNode(' '))
     const recipeSelect = createSelect(
@@ -125,9 +123,11 @@ export const setupBuildingBrushPanel = (
     container.appendChild(stampBox)
 
     const enableRow = document.createElement('label')
+    enableRow.className = 'dc-label'
     enableRow.style.cssText = 'display:block;margin-top:6px'
     const enableCheckbox = document.createElement('input')
     enableCheckbox.type = 'checkbox'
+    enableCheckbox.className = 'dc-check'
     enableCheckbox.id = 'brush-enable'
     enableRow.appendChild(enableCheckbox)
     const enableText = document.createElement('span')

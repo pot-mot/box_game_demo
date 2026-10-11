@@ -6,13 +6,8 @@ const toDeg = (v: number) => (v * 180 / Math.PI).toFixed(1)
 export const setupCameraInfo = (camera: PerspectiveCamera): () => void => {
     const el = document.createElement('div')
     el.id = 'camera-info'
-    el.style.cssText = [
-        'position: fixed; top: 50px; left: 16px;',
-        'background: rgba(0,0,0,.7); color: #fff;',
-        'font: 14px/1.6 monospace; padding: 12px 16px;',
-        'border-radius: 8px; pointer-events: none;',
-        'min-width: 280px;',
-    ].join(' ')
+    el.className = 'dc-panel dc-mono'
+    el.style.cssText = 'position:fixed;top:50px;left:16px;padding:12px 16px;pointer-events:none;min-width:280px;'
     document.body.appendChild(el)
 
     const posSpan = document.createElement('div')

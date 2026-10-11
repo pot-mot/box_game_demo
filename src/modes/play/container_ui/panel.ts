@@ -28,17 +28,15 @@ type PaneSide = 'player' | 'chest'
  */
 export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPanel => {
     const root = document.createElement('div')
+    root.className = 'dc-panel'
     root.style.cssText = [
         'position:fixed', 'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
         'display:none', 'z-index:62', 'user-select:none',
-        'background:rgba(18,18,22,0.96)', 'color:#eee',
-        'font:13px/1.5 system-ui, sans-serif',
-        'border:1px solid #444', 'border-radius:10px', 'padding:16px',
-        'box-shadow:0 8px 40px rgba(0,0,0,0.6)',
+        'padding:16px',
     ].join(';')
 
     const title = document.createElement('div')
-    title.style.cssText = 'font-size:15px;font-weight:700;margin-bottom:10px;color:#e9c46a'
+    title.className = 'dc-panel__title'
     /* 标题随打开容器（编号）与语言切换重译 */
     let titleId: number | undefined
     const titleText = (): string => titleId === undefined
@@ -55,27 +53,30 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
     const chestColumn = document.createElement('div')
     for (const [col, labelKey] of [[playerColumn, 'play.container.player'], [chestColumn, 'play.container.chest']] as const) {
         const head = document.createElement('div')
+        head.className = 'dc-text-info'
         localizeText(head, labelKey)
-        head.style.cssText = 'margin-bottom:6px;color:#8ecae6;font-weight:700'
+        head.style.cssText = 'margin-bottom:6px;font-weight:700'
         col.appendChild(head)
         col.style.cssText = 'display:flex;flex-direction:column'
         body.appendChild(col)
     }
     const playerGrid = document.createElement('div')
-    playerGrid.style.cssText = 'border:1px solid #333;background:rgba(0,0,0,0.35)'
+    playerGrid.style.cssText = 'border:1px solid var(--dc-border);background:color-mix(in srgb, var(--dc-bg-0) 55%, transparent)'
     playerColumn.appendChild(playerGrid)
     const chestGrid = document.createElement('div')
-    chestGrid.style.cssText = 'border:1px solid #333;background:rgba(0,0,0,0.35)'
+    chestGrid.style.cssText = 'border:1px solid var(--dc-border);background:color-mix(in srgb, var(--dc-bg-0) 55%, transparent)'
     chestColumn.appendChild(chestGrid)
 
     const hint = document.createElement('div')
-    hint.style.cssText = 'border-top:1px solid #333;margin-top:10px;padding-top:8px;color:#aaa;min-height:18px'
+    hint.className = 'dc-dim'
+    hint.style.cssText = 'border-top:1px solid var(--dc-border);margin-top:10px;padding-top:8px;min-height:18px'
     localizeText(hint, 'play.container.hint')
     root.appendChild(hint)
 
     const closeBtn = document.createElement('button')
+    closeBtn.className = 'dc-btn'
     localizeText(closeBtn, 'play.container.close')
-    closeBtn.style.cssText = 'position:absolute;top:10px;right:12px;cursor:pointer'
+    closeBtn.style.cssText = 'position:absolute;top:10px;right:12px'
     closeBtn.onclick = () => close()
     root.appendChild(closeBtn)
 
@@ -139,7 +140,7 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
         const sourceGrid = from === 'player' ? playerGrid : chestGrid
         const rect = sourceGrid.getBoundingClientRect()
         const ghost = document.createElement('div')
-        ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:70;background:rgba(233,196,106,0.5);border:1px solid #e9c46a;border-radius:4px'
+        ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:70;background:color-mix(in srgb, var(--dc-gold) 50%, transparent);border:1px solid var(--dc-gold);border-radius:var(--dc-radius-sm)'
         document.body.appendChild(ghost)
         drag = {
             instanceId,

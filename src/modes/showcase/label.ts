@@ -1,5 +1,6 @@
 import {Sprite, SpriteMaterial, CanvasTexture} from 'three'
 import {onLocaleChange} from '../../i18n/index.ts'
+import {themeColor} from '../../ui/theme.ts'
 import {
     LABEL_CANVAS_H,
     LABEL_CANVAS_W,
@@ -45,20 +46,20 @@ export const createNameLabel = (getText: () => NameLabelText): NameLabel => {
         /* 圆角半透明底板 + 细描边 */
         g.beginPath()
         g.roundRect(6, 6, LABEL_CANVAS_W - 12, LABEL_CANVAS_H - 12, 20)
-        g.fillStyle = 'rgba(10, 12, 18, 0.78)'
+        g.fillStyle = themeColor('--dc-overlay', 'rgba(6,5,4,0.78)')
         g.fill()
         g.lineWidth = 3
-        g.strokeStyle = 'rgba(255, 255, 255, 0.16)'
+        g.strokeStyle = themeColor('--dc-border', '#463d33')
         g.stroke()
 
         /* 主标题 */
         g.textAlign = 'center'
-        g.fillStyle = '#f2ede2'
+        g.fillStyle = themeColor('--dc-text', '#e8dfce')
         g.font = '600 58px "Microsoft YaHei", "PingFang SC", sans-serif'
         g.fillText(title, LABEL_CANVAS_W / 2, 72)
 
         /* 副标题 */
-        g.fillStyle = '#8f9bb0'
+        g.fillStyle = themeColor('--dc-text-dim', '#a89e8e')
         g.font = '40px "Microsoft YaHei", "PingFang SC", sans-serif'
         g.fillText(subtitle, LABEL_CANVAS_W / 2, 128)
 

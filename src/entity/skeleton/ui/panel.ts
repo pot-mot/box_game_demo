@@ -40,14 +40,15 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     if (joint === undefined) return () => {}
 
     const title = document.createElement('div')
-    title.style.cssText = 'font-weight:600;margin-bottom:4px'
+    title.className = 'dc-panel__title'
     title.textContent = translate({key: 'skeleton.joint_title', args: [joint.name, joint.id]})
     container.appendChild(title)
 
     /* 位置 */
     container.appendChild(createSection('skeleton.pos'))
     const posRow = document.createElement('div')
-    posRow.style.cssText = 'display:flex;gap:4px'
+    posRow.className = 'dc-row'
+    posRow.style.cssText = 'gap:4px'
     const posX = createLabeledNumberInput(posRow, 'panel.x', {value: String(joint.position.x)})
     const posY = createLabeledNumberInput(posRow, 'panel.y', {value: String(joint.position.y)})
     const posZ = createLabeledNumberInput(posRow, 'panel.z', {value: String(joint.position.z)})
@@ -56,7 +57,8 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     /* 旋转（欧拉，XYZ 顺序） */
     container.appendChild(createSection('skeleton.rot_euler'))
     const rotRow = document.createElement('div')
-    rotRow.style.cssText = 'display:flex;gap:4px'
+    rotRow.className = 'dc-row'
+    rotRow.style.cssText = 'gap:4px'
     const euler = new Euler().setFromQuaternion(joint.rotation, EULER_ORDER)
     const rotX = createLabeledNumberInput(rotRow, 'panel.x', {value: String(euler.x)})
     const rotY = createLabeledNumberInput(rotRow, 'panel.y', {value: String(euler.y)})
@@ -67,9 +69,11 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     container.appendChild(createSection('skeleton.cascade'))
     const settings = ctx.getCascadeSettings()
     const cascadeRow = document.createElement('div')
-    cascadeRow.style.cssText = 'display:flex;align-items:center;gap:8px'
+    cascadeRow.className = 'dc-row'
+    cascadeRow.style.cssText = 'gap:8px'
     const cascadeCheck = document.createElement('input')
     cascadeCheck.type = 'checkbox'
+    cascadeCheck.className = 'dc-check'
     cascadeCheck.checked = settings.enabled
     const cascadeLabelEl = document.createElement('label')
     const cascadeText = document.createElement('span')
@@ -95,7 +99,8 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     cascadeRow.appendChild(depthLabelEl)
     container.appendChild(cascadeRow)
     const cascadeHint = document.createElement('div')
-    cascadeHint.style.cssText = 'color:#889;font-size:10px;margin-top:2px'
+    cascadeHint.className = 'dc-hint'
+    cascadeHint.style.cssText = 'margin-top:2px'
     localizeText(cascadeHint, 'skeleton.cascade_hint')
     container.appendChild(cascadeHint)
 
@@ -114,6 +119,7 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     /* IK 根级别 */
     container.appendChild(createSection('skeleton.ik_root'))
     const levelSelect = document.createElement('select')
+    levelSelect.className = 'dc-select'
     const levelOptions = [
         {value: '', label: translate('skeleton.ik_none')},
         {value: '0', label: translate('skeleton.ik_level0')},
@@ -132,6 +138,7 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     /* 父关节重连 */
     container.appendChild(createSection('skeleton.parent'))
     const parentSelect = document.createElement('select')
+    parentSelect.className = 'dc-select'
     const noneOption = document.createElement('option')
     noneOption.value = ''
     noneOption.textContent = translate('skeleton.parent_none')
@@ -149,10 +156,13 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     /* 添加子关节 */
     container.appendChild(createSection('skeleton.add_child'))
     const childRow = document.createElement('div')
-    childRow.style.cssText = 'display:flex;gap:4px'
+    childRow.className = 'dc-row'
+    childRow.style.cssText = 'gap:4px'
     const childName = document.createElement('input')
+    childName.className = 'dc-input'
     localizePlaceholder(childName, 'skeleton.new_joint_name')
     const addChildBtn = document.createElement('button')
+    addChildBtn.className = 'dc-btn'
     localizeText(addChildBtn, 'common.add')
     childRow.appendChild(childName)
     childRow.appendChild(addChildBtn)
@@ -160,13 +170,16 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
 
     /* 按钮行 */
     const applyBtn = document.createElement('button')
+    applyBtn.className = 'dc-btn dc-btn--primary'
     applyBtn.style.cssText = 'flex:1;margin-top:8px'
     localizeText(applyBtn, 'common.apply')
     const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'dc-btn dc-btn--danger'
     deleteBtn.style.cssText = 'flex:1;margin-top:8px'
     localizeText(deleteBtn, 'common.delete')
     const btnRow = document.createElement('div')
-    btnRow.style.cssText = 'display:flex;gap:8px'
+    btnRow.className = 'dc-row'
+    btnRow.style.cssText = 'gap:8px'
     btnRow.appendChild(applyBtn)
     btnRow.appendChild(deleteBtn)
     container.appendChild(btnRow)
@@ -227,7 +240,7 @@ const renderBonePanel = (ctx: SkeletonPanelContext, container: HTMLElement): (()
     if (bone === undefined) return () => {}
 
     const title = document.createElement('div')
-    title.style.cssText = 'font-weight:600;margin-bottom:4px'
+    title.className = 'dc-panel__title'
     title.textContent = translate({key: 'skeleton.bone_title', args: [bone.name, bone.id]})
     container.appendChild(title)
 
@@ -238,13 +251,16 @@ const renderBonePanel = (ctx: SkeletonPanelContext, container: HTMLElement): (()
     const rollInput = createLabeledNumberInput(container, 'skeleton.r', {value: String(bone.roll)})
 
     const applyBtn = document.createElement('button')
+    applyBtn.className = 'dc-btn dc-btn--primary'
     applyBtn.style.cssText = 'flex:1;margin-top:8px'
     localizeText(applyBtn, 'common.apply')
     const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'dc-btn dc-btn--danger'
     deleteBtn.style.cssText = 'flex:1;margin-top:8px'
     localizeText(deleteBtn, 'common.delete')
     const btnRow = document.createElement('div')
-    btnRow.style.cssText = 'display:flex;gap:8px'
+    btnRow.className = 'dc-row'
+    btnRow.style.cssText = 'gap:8px'
     btnRow.appendChild(applyBtn)
     btnRow.appendChild(deleteBtn)
     container.appendChild(btnRow)

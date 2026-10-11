@@ -1,6 +1,7 @@
 import type {BuildingGeneratorContext} from '../../../entity/building_generator/types/index.ts'
 import {translate} from '../../../i18n/index.ts'
 import {localizeText} from '../../../i18n/dom.ts'
+import {themeColor} from '../../../ui/theme.ts'
 
 const MAP_W = 480
 const MAP_H = 360
@@ -29,23 +30,23 @@ export const createMapPanel = (
     getMarkers: () => MapMarker[],
 ): MapPanel => {
     const root = document.createElement('div')
+    root.className = 'dc-panel'
     root.style.cssText = [
         'position:fixed', 'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
-        'display:none', 'z-index:55', 'background:rgba(12,12,16,0.94)', 'color:#eee',
-        'border:1px solid #444', 'border-radius:10px', 'padding:12px',
-        'font:13px system-ui, sans-serif', 'user-select:none',
+        'display:none', 'z-index:55', 'padding:12px', 'user-select:none',
     ].join(';')
     const title = document.createElement('div')
-    title.style.cssText = 'font-weight:700;margin-bottom:8px;color:#8ecae6'
+    title.className = 'dc-panel__title'
     localizeText(title, 'play.map.title')
     root.appendChild(title)
     const canvas = document.createElement('canvas')
     canvas.width = MAP_W
     canvas.height = MAP_H
-    canvas.style.cssText = 'display:block;border:1px solid #333;border-radius:6px;background:#0a0a0c'
+    canvas.style.cssText = 'display:block;border:1px solid var(--dc-border);border-radius:var(--dc-radius);background:var(--dc-bg-0)'
     root.appendChild(canvas)
     const hint = document.createElement('div')
-    hint.style.cssText = 'margin-top:6px;color:#aaa;min-height:18px'
+    hint.className = 'dc-dim'
+    hint.style.cssText = 'margin-top:6px;min-height:18px'
     root.appendChild(hint)
     /* 惰性挂载：首次显示时才加入 DOM，避免 play 启动即多出一个 canvas、多一个 WebGL 无关元素 */
     let mounted = false
@@ -110,10 +111,13 @@ export const createMapPanel = (
             const p = world.group.position
             const [x0, y0] = project(p.x, p.z)
             const [x1, y1] = project(p.x + world.config.sizeX, p.z + world.config.sizeZ)
-            ctx.fillStyle = 'rgba(120,120,140,0.18)'
+            ctx.globalAlpha = 0.18
+            ctx.fillStyle = themeColor('--dc-text-dim', '#a89e8e')
             ctx.fillRect(x0, y0, x1 - x0, y1 - y0)
-            ctx.strokeStyle = 'rgba(160,160,180,0.5)'
+            ctx.globalAlpha = 0.5
+            ctx.strokeStyle = themeColor('--dc-text-dim', '#a89e8e')
             ctx.strokeRect(x0, y0, x1 - x0, y1 - y0)
+            ctx.globalAlpha = 1
         }
         /* 标记 */
         for (const m of getMarkers()) {
@@ -121,18 +125,20 @@ export const createMapPanel = (
             const isHover = hoverKey === m.key
             ctx.beginPath()
             if (m.kind === 'teleport') {
-                ctx.fillStyle = m.known ? (isHover ? '#ffe08a' : '#8ecae6') : '#555'
+                ctx.fillStyle = m.known
+                    ? (isHover ? themeColor('--dc-gold-bright', '#e0c078') : themeColor('--dc-info', '#3f5f93'))
+                    : themeColor('--dc-text-mute', '#6d6558')
                 ctx.moveTo(mx, my - 7)
                 ctx.lineTo(mx + 7, my)
                 ctx.lineTo(mx, my + 7)
                 ctx.lineTo(mx - 7, my)
                 ctx.closePath()
             } else {
-                ctx.fillStyle = '#e76f51'
+                ctx.fillStyle = themeColor('--dc-orange', '#c9761f')
                 ctx.arc(mx, my, 6, 0, Math.PI * 2)
             }
             ctx.fill()
-            ctx.fillStyle = m.known ? '#ddd' : '#777'
+            ctx.fillStyle = m.known ? themeColor('--dc-text', '#e8dfce') : themeColor('--dc-text-mute', '#6d6558')
             ctx.font = '10px system-ui'
             ctx.fillText(m.name, mx + 9, my + 3)
         }
@@ -146,7 +152,7 @@ export const createMapPanel = (
         ctx.lineTo(5, 7)
         ctx.lineTo(-5, 7)
         ctx.closePath()
-        ctx.fillStyle = '#ffd166'
+        ctx.fillStyle = themeColor('--dc-gold', '#c9a24b')
         ctx.fill()
         ctx.restore()
     }

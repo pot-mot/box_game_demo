@@ -4,6 +4,7 @@ import type {ShowcaseMenu} from './menu.ts'
 import {SHOWCASE_MODULES} from './modules/index.ts'
 import type {ShowcaseModuleId, ShowcaseModuleRuntime} from './module.ts'
 import {localizeText} from '../../i18n/dom.ts'
+import {createIcon} from '../../ui/icons/icon.ts'
 
 /** 展示模式控制器：遵循 modes 分包约定，updater 由主页单 RAF 循环统一调度 */
 export interface ShowcaseModeController {
@@ -36,14 +37,12 @@ export const setupShowcaseMode = (host: ShowcaseModeHost): ShowcaseModeControlle
     /** 返回菜单按钮（模块激活时显示） */
     const backBtn = document.createElement('button')
     backBtn.type = 'button'
-    backBtn.style.cssText = [
-        'position:fixed', 'left:50%', 'top:16px', 'transform:translateX(-50%)',
-        'z-index:150', 'display:none',
-        'background:rgba(0,0,0,.6)', 'color:#e8e4da', 'border:1px solid #3a4150',
-        'border-radius:8px', 'padding:6px 16px', 'cursor:pointer',
-        'font:13px/1.5 system-ui,sans-serif', 'backdrop-filter:blur(4px)',
-    ].join(';')
-    localizeText(backBtn, 'showcase.back_menu')
+    backBtn.className = 'dc-btn'
+    backBtn.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:150;display:none'
+    backBtn.appendChild(createIcon('chevron-left', {size: 'sm'}))
+    const backLabel = document.createElement('span')
+    localizeText(backLabel, 'showcase.back_menu')
+    backBtn.appendChild(backLabel)
     document.body.appendChild(backBtn)
 
     const disposeCurrent = (): void => {

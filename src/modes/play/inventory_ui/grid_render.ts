@@ -27,7 +27,7 @@ export const renderInventoryGrid = (container: HTMLElement, options: GridRenderO
     for (let y = 0; y < inv.height; y++) {
         for (let x = 0; x < inv.width; x++) {
             const c = document.createElement('div')
-            c.style.cssText = `position:absolute;left:${x * INVENTORY_CELL_PX}px;top:${y * INVENTORY_CELL_PX}px;width:${INVENTORY_CELL_PX}px;height:${INVENTORY_CELL_PX}px;border:1px solid rgba(255,255,255,0.06);box-sizing:border-box`
+            c.style.cssText = `position:absolute;left:${x * INVENTORY_CELL_PX}px;top:${y * INVENTORY_CELL_PX}px;width:${INVENTORY_CELL_PX}px;height:${INVENTORY_CELL_PX}px;border:1px solid var(--dc-border);box-sizing:border-box`
             container.appendChild(c)
         }
     }
@@ -38,12 +38,12 @@ export const renderInventoryGrid = (container: HTMLElement, options: GridRenderO
         if (def === undefined) continue
         const el = document.createElement('div')
         el.dataset.instanceId = stack.instanceId
-        el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${def.shape[0].length * INVENTORY_CELL_PX}px;height:${def.shape.length * INVENTORY_CELL_PX}px;cursor:grab;background:rgba(255,255,255,0.04);border-radius:4px`
-        if (options.selectedId === stack.instanceId) el.style.outline = '2px solid #e9c46a'
+        el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${def.shape[0].length * INVENTORY_CELL_PX}px;height:${def.shape.length * INVENTORY_CELL_PX}px;cursor:grab;background:color-mix(in srgb, var(--dc-gold) 12%, transparent);border-radius:var(--dc-radius-sm)`
+        if (options.selectedId === stack.instanceId) el.style.outline = '2px solid var(--dc-gold)'
         el.title = `${itemDisplayName(def)} ×${stack.count}`
         const label = document.createElement('div')
         label.textContent = itemDisplayName(def)
-        label.style.cssText = 'position:absolute;left:3px;top:2px;font-size:10px;color:#fff;text-shadow:0 1px 2px #000;pointer-events:none'
+        label.style.cssText = 'position:absolute;left:3px;top:2px;font-size:10px;color:var(--dc-text);text-shadow:0 1px 2px var(--dc-overlay);pointer-events:none'
         el.appendChild(label)
         el.addEventListener('pointerdown', (ev) => options.onItemPointerDown(ev, stack.instanceId))
         if (options.onItemDoubleClick !== undefined) {

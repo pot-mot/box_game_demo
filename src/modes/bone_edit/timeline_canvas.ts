@@ -178,12 +178,14 @@ export const setupTimelineCanvas = (
         for (let t = 0; t <= model.duration; t += 0.25) {
             const x = timeToX(t)
             const isMajor = Math.abs(t % 1) < 0.01
-            ctx.strokeStyle = isMajor ? TIMELINE_GRID_LINE : 'rgba(42,42,51,0.5)'
+            ctx.globalAlpha = isMajor ? 1 : 0.5
+            ctx.strokeStyle = TIMELINE_GRID_LINE
             ctx.lineWidth = 1
             ctx.beginPath()
             ctx.moveTo(x, HEADER_HEIGHT)
             ctx.lineTo(x, height)
             ctx.stroke()
+            ctx.globalAlpha = 1
             if (isMajor) {
                 ctx.fillStyle = TIMELINE_LABEL
                 ctx.fillText(`${t.toFixed(0)}s`, x, 15)

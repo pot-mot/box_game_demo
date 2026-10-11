@@ -16,25 +16,25 @@ const injectStyles = (): HTMLStyleElement => {
 .sch-menu {
     position: fixed; inset: 0; z-index: 150;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 28px; background: #0e1116; color: #e8e4da;
-    font: 14px/1.6 system-ui, sans-serif; user-select: none;
+    gap: 28px; background: var(--dc-bg-0); color: var(--dc-text);
+    font-family: var(--dc-font-body); font-size: var(--dc-fs-14); line-height: 1.6; user-select: none;
 }
 .sch-menu-head { text-align: center; }
-.sch-menu-title { font-size: 32px; font-weight: 700; color: #ffd070; letter-spacing: 2px; }
-.sch-menu-sub { color: #8f9bb0; margin-top: 6px; }
+.sch-menu-title { font-family: var(--dc-font-display); font-size: 32px; font-weight: 700; color: var(--dc-gold); letter-spacing: 2px; }
+.sch-menu-sub { color: var(--dc-text-dim); margin-top: 6px; }
 .sch-menu-grid {
     display: grid; grid-template-columns: repeat(3, 240px);
     gap: 16px; max-width: 90vw;
 }
 .sch-menu-card {
     display: flex; flex-direction: column; gap: 6px; text-align: left;
-    background: #1a1f28; color: #e8e4da; border: 1px solid #313a48;
-    border-radius: 10px; padding: 16px 18px; cursor: pointer;
+    background: var(--dc-bg-2); color: var(--dc-text); border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius-lg); padding: 16px 18px; cursor: pointer;
     font: inherit; transition: background .12s, border-color .12s, transform .12s;
 }
-.sch-menu-card:hover { background: #232b38; border-color: #7a9a5a; transform: translateY(-2px); }
-.sch-menu-card-title { font-size: 16px; font-weight: 700; color: #ffe9a0; }
-.sch-menu-card-desc { font-size: 12px; color: #9aa3b2; line-height: 1.5; }
+.sch-menu-card:hover { background: var(--dc-bg-3); border-color: var(--dc-orange); transform: translateY(-2px); }
+.sch-menu-card-title { font-size: 16px; font-weight: 700; color: var(--dc-gold-bright); }
+.sch-menu-card-desc { font-size: 12px; color: var(--dc-text-dim); line-height: 1.5; }
 `
     document.head.appendChild(style)
     return style

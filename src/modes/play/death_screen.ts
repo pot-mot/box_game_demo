@@ -10,31 +10,27 @@ export interface DeathScreen {
 
 export const createDeathScreen = (onRestart: () => void, onBackToMenu: () => void): DeathScreen => {
     const overlay = document.createElement('div')
-    overlay.style.cssText = [
-        'position:fixed;inset:0;',
-        'background:rgba(0,0,0,.7);color:#fff;',
-        'display:flex;flex-direction:column;align-items:center;justify-content:center;',
-        'font:16px/1.5 monospace;z-index:200;',
-        'pointer-events:all;',
-    ].join(' ')
+    overlay.className = 'dc-overlay'
+    overlay.style.cssText = 'flex-direction:column;z-index:200;pointer-events:all'
 
     const msg = document.createElement('div')
     localizeText(msg, 'play.death.title')
-    msg.style.cssText = 'font-size:48px;font-weight:700;margin-bottom:32px;color:#ff4444'
+    msg.className = 'dc-title dc-text-danger'
+    msg.style.cssText = 'font-size:48px;font-weight:700;margin-bottom:32px'
     overlay.appendChild(msg)
 
     const btnRow = document.createElement('div')
     btnRow.style.cssText = 'display:flex;gap:16px'
 
     const restartBtn = document.createElement('button')
+    restartBtn.className = 'dc-btn dc-btn--lg dc-btn--primary'
     localizeText(restartBtn, 'play.death.restart')
-    restartBtn.style.cssText = 'padding:12px 32px;font:16px monospace;border:none;border-radius:6px;cursor:pointer;background:#44aa44;color:#fff'
     restartBtn.onclick = () => { destroy(); onRestart() }
     btnRow.appendChild(restartBtn)
 
     const menuBtn = document.createElement('button')
+    menuBtn.className = 'dc-btn dc-btn--lg'
     localizeText(menuBtn, 'play.death.menu')
-    menuBtn.style.cssText = 'padding:12px 32px;font:16px monospace;border:none;border-radius:6px;cursor:pointer;background:#555;color:#fff'
     menuBtn.onclick = () => { destroy(); onBackToMenu() }
     btnRow.appendChild(menuBtn)
 

@@ -34,6 +34,8 @@
 4. **性能** — 帧内逻辑避免无谓分配（复用向量与临时对象），更新路径中禁止创建 DOM；纹理、材质、几何体按需单例复用。
 5. **玩家可读性** — 面向玩家的 UI 文案、代码注释与文档一律中文；标识符沿用既有英文命名习惯。**UI 文案禁止硬编码**：一律经 `src/i18n/` 的 `translate` / `localizeText` / `localizeTitle` / `localizePlaceholder` 取用（详见 [`docs/i18n.md`](docs/i18n.md)）；数据名称经 `weaponDisplayName` / `armorPieceDisplayName` / `itemDisplayName` 等映射，序列化字段（如骨架关节名）不改数据、仅显示层翻译。
 
+6. **UI 风格统一** — 全部模式 / 面板 / HUD 遵循 [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)；样式只走 `src/assets/theme.css` 的 `--dc-*` 令牌与 `.dc-*` 组件类（**禁止硬编码颜色/字体/圆角/间距**），功能滚动容器统一 `scrollbar-gutter:stable`（`.dc-scroll`），装饰用 SVG 图标（`src/ui/icons/`，**禁止 Unicode/emoji 图标**）；编码规则见 [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md)。迁移存量 UI 必须保留既有 `id` / 语义类名 / `data-*` / i18n 文案（e2e 与单测依赖）。
+
 ## 规范
 
 ### 类型系统
@@ -202,6 +204,8 @@ src/
 | [`docs/hakoniwa/07_存档与兼容.md`](docs/hakoniwa/07_存档与兼容.md) | 箱庭相关存档字段、版本推进与旧档兼容策略 |
 | [`docs/showcase.md`](docs/showcase.md) | 展示模式：二级菜单与子模块框架（`ShowcaseModule` 注册表 / 共享舞台 / 轨道相机）、动作 / 装备外观 / AI 行为×复杂地形 / 全物品图鉴 / 背包格子交互各子模块展示效果、与生产代码的镜像关系、验证与扩展指南 |
 | [`docs/i18n.md`](docs/i18n.md) | 国际化系统：`src/i18n/` 强类型文案表与领域片段、`translate`/`localize*` API、语言持久化与原地实时重译、新增文案/语言流程、数据名称与序列化字段处理 |
+| [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md) | UI 风格设计规范：日式西幻视觉语言、设计令牌色板/排版/间距、组件形态、SVG 图标目录、滚动条与 HUD 覆盖层约定、动效与反例 |
+| [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | CSS 编码指南：样式分层（reset/主题/局部）、`dc-*` 组件类与令牌命名、选择器规则、滚动条规范、图标用法、迁移流程与硬约束、验证方式 |
 | [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 骨骼动画动作调优规范：坐标系与朝向、关节总表、旋转符号速查（肘前折/膝后折）、阶段与相位、动作→改动位置映射、提示词模版、三持握模式与副手槽、陷阱。同目录逐个动作建档（`武器名-攻击段名.md` / `动作名.md`） |
 | [`docs/bone_animation/持握模式动作.md`](docs/bone_animation/持握模式动作.md) | 近战三持握模式动作总表：段 id 约定、模式语义、各武器连段与动画来源 |

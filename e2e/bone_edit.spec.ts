@@ -53,7 +53,7 @@ test.describe('骨骼动画编辑模式', () => {
         await expect(page.locator('#bone-timeline')).toBeVisible()
         /* 先加关键帧使动画可播放 */
         await page.locator('button', {hasText: '+关键帧'}).click()
-        await page.locator('button', {hasText: '▶'}).click()
+        await page.locator('#bone-timeline-play').click()
         await page.waitForTimeout(300)
         const t1 = await page.locator('#bone-timeline').getAttribute('data-playhead-time')
         await page.waitForTimeout(300)
@@ -61,7 +61,7 @@ test.describe('骨骼动画编辑模式', () => {
         const n1 = Number(t1)
         const n2 = Number(t2)
         expect(n2).toBeGreaterThan(n1)
-        await page.locator('button', {hasText: '■'}).click()
+        await page.locator('#bone-timeline-stop').click()
     })
 
     test('动画列表列出全部内置动作（基础状态 + 全部攻击技能）', async ({page}) => {
@@ -85,7 +85,7 @@ test.describe('骨骼动画编辑模式', () => {
         const count = Number(await page.locator('[data-track-target="spine"] [data-keyframe-count]').getAttribute('data-keyframe-count'))
         expect(count).toBeGreaterThan(10)
         /* 播放后播放头推进 */
-        await page.locator('button', {hasText: '▶'}).click()
+        await page.locator('#bone-timeline-play').click()
         await page.waitForTimeout(300)
         const t1 = Number(await page.locator('#bone-timeline').getAttribute('data-playhead-time'))
         await page.waitForTimeout(300)
@@ -127,7 +127,7 @@ test.describe('骨骼动画编辑模式', () => {
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'heavy_sword')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-two-handed', 'true')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-solved', 'false')
-        await page.locator('button', {hasText: '▶'}).click()
+        await page.locator('#bone-timeline-play').click()
         await page.waitForTimeout(300)
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-solved', 'false')
 

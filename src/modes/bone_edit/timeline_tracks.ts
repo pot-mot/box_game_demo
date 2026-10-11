@@ -44,7 +44,7 @@ export const setupTrackView = (host: TrackViewHost): TrackView => {
     trackArea.style.cssText = 'display:flex;flex:1;min-height:0'
 
     const trackList = document.createElement('div')
-    trackList.style.cssText = `width:${TRACK_LIST_WIDTH}px;overflow-y:auto;background:#1f1f27;border-right:1px solid #333;flex-shrink:0`
+    trackList.style.cssText = `width:${TRACK_LIST_WIDTH}px;overflow-y:auto;scrollbar-gutter:stable;background:var(--dc-bg-1);border-right:1px solid var(--dc-border);flex-shrink:0`
     trackArea.appendChild(trackList)
 
     const canvasWrap = document.createElement('div')
@@ -95,7 +95,7 @@ export const setupTrackView = (host: TrackViewHost): TrackView => {
         const tracks = buildTracks()
         for (const track of tracks) {
             const row = document.createElement('div')
-            row.style.cssText = `height:${TRACK_ROW_HEIGHT}px;display:flex;align-items:center;gap:4px;padding:0 4px;border-bottom:1px solid #2a2a33`
+            row.style.cssText = `height:${TRACK_ROW_HEIGHT}px;display:flex;align-items:center;gap:4px;padding:0 4px;border-bottom:1px solid var(--dc-border)`
             row.dataset.trackTarget = track.targetId
             const label = document.createElement('span')
             label.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
@@ -103,13 +103,15 @@ export const setupTrackView = (host: TrackViewHost): TrackView => {
             row.appendChild(label)
 
             const count = document.createElement('span')
-            count.style.cssText = 'color:#889;min-width:18px;text-align:right'
+            count.className = 'dc-mute'
+            count.style.cssText = 'min-width:18px;text-align:right'
             count.dataset.keyframeCount = String(track.keyframes.length)
             count.textContent = String(track.keyframes.length)
             row.appendChild(count)
 
             if (track.kind !== 'event' && clip !== undefined) {
                 const interp = document.createElement('select')
+                interp.className = 'dc-select'
                 interp.style.cssText = 'width:84px;font-size:10px'
                 const options: readonly (readonly [string, StringLocaleKey])[] = [
                     ['linear_none', 'bone_edit.interp.linear'],

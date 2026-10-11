@@ -3,6 +3,7 @@ import type {TransitionSpec} from '../../skeleton/transition.ts'
 import type {AnimationStore} from './animation_store.ts'
 import type {BoneEditHistory} from './history.ts'
 import type {KeyframeSelection} from './timeline_ops.ts'
+import {themeColor} from '../../ui/theme.ts'
 
 /** 曲线编辑器依赖（DOM + 动画库 + 选中 + 历史） */
 export interface CurveEditorContext {
@@ -29,7 +30,7 @@ export const setupCurveEditor = (ctx: CurveEditorContext): CurveEditor => {
         const h = ctx.canvas.height
         const c = c2d
         c.clearRect(0, 0, w, h)
-        c.fillStyle = '#14141a'
+        c.fillStyle = themeColor('--dc-bg-0', '#0c0a09')
         c.fillRect(0, 0, w, h)
         const pad = 12
         const drawY = h - pad
@@ -47,13 +48,13 @@ export const setupCurveEditor = (ctx: CurveEditorContext): CurveEditor => {
             return drawY - v * drawH
         }
         /* 对角参考线 */
-        c.strokeStyle = '#333'
+        c.strokeStyle = themeColor('--dc-border', '#463d33')
         c.beginPath()
         c.moveTo(pad, drawY)
         c.lineTo(w - pad, pad)
         c.stroke()
         /* 曲线 */
-        c.strokeStyle = '#ffcc44'
+        c.strokeStyle = themeColor('--dc-gold', '#c9a24b')
         c.lineWidth = 2
         c.beginPath()
         for (let i = 0; i <= 40; i++) {
@@ -69,7 +70,7 @@ export const setupCurveEditor = (ctx: CurveEditorContext): CurveEditor => {
             const cy = spec.customCy ?? (spec.strategy === 'ease_in' ? 0 : spec.strategy === 'ease_out' ? 1 : 0.5)
             const cx = pad + 0.5 * (w - pad * 2)
             const cyy = drawY - cy * drawH
-            c.fillStyle = '#88bbff'
+            c.fillStyle = themeColor('--dc-info', '#3f5f93')
             c.beginPath()
             c.arc(cx, cyy, 5, 0, Math.PI * 2)
             c.fill()

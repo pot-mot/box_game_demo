@@ -120,7 +120,7 @@ export const setupPlayMode = (
             const cooldownCell = (cd: number, cdMax: number): TimerCellData => cdMax > 0
                 ? {
                     fillRatio: cd / cdMax,
-                    fillColor: cd > 0 ? '#ff6644' : '#4488ff',
+                    fillColor: cd > 0 ? 'var(--dc-danger)' : 'var(--dc-info)',
                     text: `${cd.toFixed(1)}s`,
                 }
                 : emptyCell('0.0s')
@@ -132,7 +132,7 @@ export const setupPlayMode = (
             skillTimers.push({
                 label: translate('play.hotbar.roll'),
                 action: rolling
-                    ? {fillRatio: Math.min(1, player.stateMachine.stateTime / rollCfg.duration), fillColor: '#ffaa00', text: `${player.stateMachine.stateTime.toFixed(2)}s`}
+                    ? {fillRatio: Math.min(1, player.stateMachine.stateTime / rollCfg.duration), fillColor: 'var(--dc-orange-bright)', text: `${player.stateMachine.stateTime.toFixed(2)}s`}
                     : emptyCell(`${rollCfg.duration.toFixed(2)}s`),
                 recovery: emptyCell('-'),
                 cooldown: cooldownCell(roll.cooldownTimer, rollCfg.cooldown),
@@ -144,12 +144,12 @@ export const setupPlayMode = (
 
                 /* 动作计时：attackTimer 处于 [0, duration] 区间时填充 */
                 const action: TimerCellData = isActive && segment.duration > 0 && t <= segment.duration
-                    ? {fillRatio: Math.min(1, t / segment.duration), fillColor: '#ffaa00', text: `${t.toFixed(2)}s`}
+                    ? {fillRatio: Math.min(1, t / segment.duration), fillColor: 'var(--dc-orange-bright)', text: `${t.toFixed(2)}s`}
                     : emptyCell(segment.duration > 0 ? `${segment.duration.toFixed(2)}s` : '-')
 
                 /* 恢复计时：attackTimer 越过 duration 后填充（recovery = 0 的段无恢复段） */
                 const recovery: TimerCellData = isActive && segment.recovery > 0 && t > segment.duration
-                    ? {fillRatio: Math.min(1, (t - segment.duration) / segment.recovery), fillColor: '#44ccff', text: `${(t - segment.duration).toFixed(2)}s`}
+                    ? {fillRatio: Math.min(1, (t - segment.duration) / segment.recovery), fillColor: 'var(--dc-info)', text: `${(t - segment.duration).toFixed(2)}s`}
                     : emptyCell(segment.recovery > 0 ? `${segment.recovery.toFixed(2)}s` : '-')
 
                 /* 冷却计时：从段触发时刻开始（段冷却递减），就绪/无冷却时显示 0.0 */

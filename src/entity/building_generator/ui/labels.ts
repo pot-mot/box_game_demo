@@ -59,6 +59,7 @@ export interface SelectOption {
 /** 创建下拉选择框（`render` 选项登记为计算型本地化，语言切换时自动重译） */
 export const createSelect = (options: readonly SelectOption[], current: string): HTMLSelectElement => {
     const select = document.createElement('select')
+    select.className = 'dc-select'
     for (const option of options) {
         const opt = document.createElement('option')
         opt.value = option.value

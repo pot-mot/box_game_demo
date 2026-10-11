@@ -111,7 +111,7 @@ export const setupTimelinePanel = (
 
     /* 曲线编辑器容器（选中关键帧时显示） */
     const curveWrap = document.createElement('div')
-    curveWrap.style.cssText = 'display:none;flex-shrink:0;border-top:1px solid #333;padding:2px 8px;height:64px'
+    curveWrap.style.cssText = 'display:none;flex-shrink:0;border-top:1px solid var(--dc-border);padding:2px 8px;height:64px'
     container.appendChild(curveWrap)
     const curveCanvas = document.createElement('canvas')
     curveCanvas.style.cssText = 'width:100%;height:100%;display:block;cursor:crosshair'

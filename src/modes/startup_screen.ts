@@ -13,20 +13,23 @@ export interface StartupHandlers {
 export const setupStartupScreen = (handlers: StartupHandlers): void => {
     const overlay = document.createElement('div')
     overlay.id = 'startup-overlay'
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:#111'
+    overlay.className = 'dc-overlay dc-overlay--solid'
+    overlay.style.zIndex = '1000'
     document.body.appendChild(overlay)
 
     const box = document.createElement('div')
-    box.style.cssText = 'text-align:center;padding:48px 64px;background:#1a1a1a;border:1px solid #333'
+    box.className = 'dc-panel'
+    box.style.cssText = 'text-align:center;padding:48px 64px'
     overlay.appendChild(box)
 
     const title = document.createElement('h1')
-    title.style.cssText = 'font:600 56px/1.2 system-ui,sans-serif;color:#fff;letter-spacing:4px'
+    title.className = 'dc-title'
     localizeText(title, 'startup.title')
     box.appendChild(title)
 
     const subtitle = document.createElement('p')
-    subtitle.style.cssText = 'font:18px/1.6 system-ui,sans-serif;color:#888;margin-top:8px;margin-bottom:32px'
+    subtitle.className = 'dc-subtitle'
+    subtitle.style.cssText = 'margin-top:8px;margin-bottom:32px'
     localizeText(subtitle, 'startup.subtitle')
     box.appendChild(subtitle)
 
@@ -34,34 +37,29 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
     btnRow.style.cssText = 'display:flex;gap:16px;justify-content:center;margin-bottom:24px'
     box.appendChild(btnRow)
 
-    const makeBtn = (text: LocalKeyParam, extraCss?: string): HTMLButtonElement => {
+    const makeBtn = (text: LocalKeyParam, variant?: string): HTMLButtonElement => {
         const b = document.createElement('button')
-        b.style.cssText = `padding:14px 48px;font:500 18px system-ui,sans-serif;border:1px solid #555;cursor:pointer;background:#222;color:#fff${extraCss ?? ''}`
+        b.className = `dc-btn dc-btn--lg${variant !== undefined ? ` ${variant}` : ''}`
         localizeText(b, text)
-        b.addEventListener('mouseenter', () => {
-            b.style.background = extraCss ? '#2a4a7c' : '#333'
-        })
-        b.addEventListener('mouseleave', () => {
-            b.style.background = extraCss ? '#1a3a5c' : '#222'
-        })
         return b
     }
 
     const editBtn = makeBtn('startup.mode.edit')
     btnRow.appendChild(editBtn)
 
-    const playBtn = makeBtn('startup.mode.play', ';background:#1a3a5c;border-color:#2a6a9c')
+    const playBtn = makeBtn('startup.mode.play', 'dc-btn--primary')
     btnRow.appendChild(playBtn)
 
     const showcaseBtn = makeBtn('startup.mode.showcase')
     btnRow.appendChild(showcaseBtn)
 
-    const boneEditBtn = makeBtn('startup.mode.bone_edit', ';background:#1a3a2c;border-color:#2a6a4c')
+    const boneEditBtn = makeBtn('startup.mode.bone_edit')
     btnRow.appendChild(boneEditBtn)
 
     // 语言切换
     const langRow = document.createElement('div')
-    langRow.style.cssText = 'font:14px system-ui,sans-serif;color:#888;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px'
+    langRow.className = 'dc-label'
+    langRow.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:16px'
     box.appendChild(langRow)
 
     const langLabel = document.createElement('span')
@@ -70,7 +68,7 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     const langSelect = document.createElement('select')
     langSelect.id = 'startup-language'
-    langSelect.style.cssText = 'font:inherit;background:#222;color:#fff;border:1px solid #555;padding:2px 6px'
+    langSelect.className = 'dc-select'
     for (const locale of getLocales()) {
         const opt = document.createElement('option')
         opt.value = locale
@@ -85,7 +83,8 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     // 导入存档（自绘文件选择：原生 input 的「选择文件 / 未选择文件」由浏览器提供，无法本地化）
     const importRow = document.createElement('div')
-    importRow.style.cssText = 'font:14px system-ui,sans-serif;color:#888;display:flex;align-items:center;justify-content:center;gap:8px'
+    importRow.className = 'dc-label'
+    importRow.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:8px'
     box.appendChild(importRow)
 
     const importLabel = document.createElement('span')
@@ -99,7 +98,7 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     const chooseFileBtn = document.createElement('button')
     chooseFileBtn.type = 'button'
-    chooseFileBtn.style.cssText = 'font:inherit;background:#222;color:#fff;border:1px solid #555;padding:2px 10px;cursor:pointer'
+    chooseFileBtn.className = 'dc-btn'
     localizeText(chooseFileBtn, 'startup.choose_file')
     chooseFileBtn.addEventListener('click', () => fileInput.click())
     importRow.appendChild(chooseFileBtn)
@@ -114,7 +113,8 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     // ── 缓存存档指示 ──
     const cacheRow = document.createElement('div')
-    cacheRow.style.cssText = 'margin-top:16px;font:14px system-ui,sans-serif;color:#888'
+    cacheRow.className = 'dc-label'
+    cacheRow.style.cssText = 'margin-top:16px'
     box.appendChild(cacheRow)
 
     const cacheLabel = document.createElement('span')
@@ -122,7 +122,8 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
     cacheRow.appendChild(cacheLabel)
 
     const clearCacheBtn = document.createElement('a')
-    clearCacheBtn.style.cssText = 'color:#f88;cursor:pointer;margin-left:12px;text-decoration:underline'
+    clearCacheBtn.className = 'dc-text-danger'
+    clearCacheBtn.style.cssText = 'cursor:pointer;margin-left:12px;text-decoration:underline'
     localizeText(clearCacheBtn, 'startup.clear')
     cacheRow.appendChild(clearCacheBtn)
 
@@ -164,15 +165,15 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
                         cacheSaveData(validated)
                         cacheRow.style.display = 'none'
                         importLabel.textContent = translate({key: 'startup.imported', args: [file.name]})
-                        importLabel.style.color = '#8f8'
+                        importLabel.className = 'dc-text-success'
                     } catch {
                         importLabel.textContent = translate('startup.invalid_save')
-                        importLabel.style.color = '#f88'
+                        importLabel.className = 'dc-text-danger'
                     }
                 })
             } catch {
                 importLabel.textContent = translate('startup.parse_failed')
-                importLabel.style.color = '#f88'
+                importLabel.className = 'dc-text-danger'
             }
         }
         reader.readAsText(file)

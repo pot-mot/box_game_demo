@@ -25,7 +25,7 @@ export const createEquipmentPreview = (): EquipmentPreview => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(240, 300)
     const canvas = renderer.domElement
-    canvas.style.cssText = 'display:block;border-radius:8px;background:rgba(0,0,0,0.25)'
+    canvas.style.cssText = 'display:block;border-radius:var(--dc-radius-lg);background:color-mix(in srgb, var(--dc-bg-0) 25%, transparent)'
 
     const scene = new Scene()
     scene.add(new AmbientLight(0xffffff, 0.7))

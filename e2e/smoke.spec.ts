@@ -52,7 +52,7 @@ test.describe('启动画面交互', () => {
 })
 
 test.describe('设置面板', () => {
-    test('⚙ 按钮切换设置面板', async ({page}) => {
+    test('设置按钮切换设置面板', async ({page}) => {
         await page.goto('/')
         // 先进入编辑模式
         await page.waitForSelector('#startup-overlay', {timeout: 5000})

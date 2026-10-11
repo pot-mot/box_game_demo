@@ -31,17 +31,15 @@ export interface InventoryPanel {
 
 export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPanel => {
     const root = document.createElement('div')
+    root.className = 'dc-panel'
     root.style.cssText = [
         'position:fixed', 'left:50%', 'top:50%', 'transform:translate(-50%,-50%)',
         'display:none', 'z-index:60', 'user-select:none',
-        'background:rgba(18,18,22,0.96)', 'color:#eee',
-        'font:13px/1.5 system-ui, sans-serif',
-        'border:1px solid #444', 'border-radius:10px', 'padding:16px',
-        'box-shadow:0 8px 40px rgba(0,0,0,0.6)',
+        'padding:16px',
     ].join(';')
 
     const title = document.createElement('div')
-    title.style.cssText = 'font-size:15px;font-weight:700;margin-bottom:10px;color:#e9c46a'
+    title.className = 'dc-panel__title'
     localizeText(title, 'play.inventory.title')
     root.appendChild(title)
 
@@ -50,7 +48,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
     root.appendChild(body)
 
     const gridWrap = document.createElement('div')
-    gridWrap.style.cssText = 'position:relative;border:1px solid #333;background:rgba(0,0,0,0.35)'
+    gridWrap.style.cssText = 'position:relative;border:1px solid var(--dc-border);background:color-mix(in srgb, var(--dc-bg-0) 55%, transparent)'
     body.appendChild(gridWrap)
 
     const rightColumn = document.createElement('div')
@@ -66,7 +64,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
     previewHost.appendChild(slotsLayer)
 
     const detail = document.createElement('div')
-    detail.style.cssText = 'border-top:1px solid #333;margin-top:10px;padding-top:8px;min-height:60px'
+    detail.style.cssText = 'border-top:1px solid var(--dc-border);margin-top:10px;padding-top:8px;min-height:60px'
     root.appendChild(detail)
 
     /* 挂载到 DOM（初始 display:none，由 setVisible / toggle 控制显隐） */
@@ -86,7 +84,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         for (let y = 0; y < inv.height; y++) {
             for (let x = 0; x < inv.width; x++) {
                 const c = document.createElement('div')
-                c.style.cssText = `position:absolute;left:${x * INVENTORY_CELL_PX}px;top:${y * INVENTORY_CELL_PX}px;width:${INVENTORY_CELL_PX}px;height:${INVENTORY_CELL_PX}px;border:1px solid rgba(255,255,255,0.06);box-sizing:border-box`
+                c.style.cssText = `position:absolute;left:${x * INVENTORY_CELL_PX}px;top:${y * INVENTORY_CELL_PX}px;width:${INVENTORY_CELL_PX}px;height:${INVENTORY_CELL_PX}px;border:1px solid var(--dc-border);box-sizing:border-box`
                 gridWrap.appendChild(c)
             }
         }
@@ -97,12 +95,12 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
             if (def === undefined) continue
             const el = document.createElement('div')
             el.dataset.instanceId = stack.instanceId
-            el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${def.shape[0].length * INVENTORY_CELL_PX}px;height:${def.shape.length * INVENTORY_CELL_PX}px;cursor:grab`
-            if (selectedId === stack.instanceId) el.style.outline = '2px solid #e9c46a'
+            el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${def.shape[0].length * INVENTORY_CELL_PX}px;height:${def.shape.length * INVENTORY_CELL_PX}px;cursor:grab;background:color-mix(in srgb, var(--dc-gold) 12%, transparent);border-radius:var(--dc-radius-sm)`
+            if (selectedId === stack.instanceId) el.style.outline = '2px solid var(--dc-gold)'
             el.title = `${itemDisplayName(def)} ×${stack.count}`
             const label = document.createElement('div')
             label.textContent = itemDisplayName(def)
-            label.style.cssText = 'position:absolute;left:2px;top:2px;font-size:10px;color:#fff;text-shadow:0 1px 2px #000;pointer-events:none'
+            label.style.cssText = 'position:absolute;left:2px;top:2px;font-size:10px;color:var(--dc-text);text-shadow:0 1px 2px var(--dc-overlay);pointer-events:none'
             el.appendChild(label)
             el.addEventListener('pointerdown', (ev) => {
                 ev.stopPropagation()
@@ -135,8 +133,8 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
             el.style.cssText = [
                 'position:absolute', `left:${anchor.left}`, `top:${anchor.top}`, 'transform:translate(-50%,-50%)',
                 'pointer-events:auto', 'cursor:pointer', 'width:110px',
-                'padding:4px 6px', 'border:1px solid #555', 'border-radius:6px',
-                'background:rgba(0,0,0,0.6)', 'font-size:11px', 'text-align:center', 'overflow:hidden',
+                'padding:4px 6px', 'border:1px solid var(--dc-border)', 'border-radius:var(--dc-radius)',
+                'background:color-mix(in srgb, var(--dc-bg-0) 70%, transparent)', 'font-size:11px', 'text-align:center', 'overflow:hidden',
                 'text-overflow:ellipsis', 'white-space:nowrap',
             ].join(';')
             const slotLabel = translate(EQUIP_SLOT_LABELS[slot])
@@ -177,12 +175,13 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         name.textContent = `${itemDisplayName(def)} ×${stack.count}`
         detail.appendChild(name)
         const desc = document.createElement('div')
-        desc.style.cssText = 'color:#aaa'
+        desc.className = 'dc-dim'
         desc.textContent = itemDisplayDescription(def)
         detail.appendChild(desc)
         const buttons = document.createElement('div')
         buttons.style.cssText = 'display:flex;gap:8px;margin-top:6px'
         const equipBtn = document.createElement('button')
+        equipBtn.className = 'dc-btn dc-btn--primary'
         const equipped = Object.values(inv.equipment).includes(stack.instanceId)
         equipBtn.textContent = equipped ? translate('play.inventory.equipped') : translate('play.inventory.equip')
         equipBtn.disabled = equipped
@@ -196,6 +195,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
             }
         }
         const dropBtn = document.createElement('button')
+        dropBtn.className = 'dc-btn dc-btn--danger'
         dropBtn.textContent = translate('play.inventory.drop')
         dropBtn.onclick = () => {
             cb.onDrop(stack.instanceId)
@@ -236,7 +236,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         const rect = gridWrap.getBoundingClientRect()
         const start = getPlacement()
         const ghost = document.createElement('div')
-        ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:70;background:rgba(233,196,106,0.5);border:1px solid #e9c46a;border-radius:4px'
+        ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:70;background:color-mix(in srgb, var(--dc-gold) 50%, transparent);border:1px solid var(--dc-gold);border-radius:var(--dc-radius-sm)'
         document.body.appendChild(ghost)
         const state: DragState = {
             instanceId,

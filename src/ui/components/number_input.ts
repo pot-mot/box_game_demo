@@ -5,6 +5,7 @@ const DEFAULT_STEP = '0.01'
 export const createNumberInput = (attrs: Record<string, string>): HTMLInputElement => {
     const input = document.createElement('input')
     input.type = 'number'
+    input.className = 'dc-input'
     input.step = attrs.step ?? DEFAULT_STEP
     if (attrs.min !== undefined) input.min = attrs.min
     if (attrs.max !== undefined) input.max = attrs.max
@@ -22,6 +23,7 @@ export const createNumberInput = (attrs: Record<string, string>): HTMLInputEleme
 export const createLabeledNumberInput = (parent: HTMLElement, label: LocalKeyParam, attrs: Record<string, string> = {}): HTMLInputElement => {
     const input = createNumberInput(attrs)
     const labelEl = document.createElement('label')
+    labelEl.className = 'dc-label'
     const textSpan = document.createElement('span')
     localizeText(textSpan, label)
     labelEl.appendChild(textSpan)

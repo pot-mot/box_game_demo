@@ -6,6 +6,8 @@ import type {TendencyConfig, TendencyId} from '../../../character/faction.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
 import {createSection} from '../../../ui/components/section.ts'
 import {createButtonRow} from '../../../ui/components/button_row.ts'
+import {createEntityPanel} from '../../../ui/components/entity_panel.ts'
+import {createIcon} from '../../../ui/icons/icon.ts'
 import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.ts'
 import {ALL_WEAPON_PRESETS, availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, isHoldMode} from '../../../character/weapon/hold_mode.ts'
@@ -223,20 +225,8 @@ const readSelectedAttack = (sel: CharacterEntity): {
 }
 
 export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>): PanelContext => {
-    const el = document.createElement('div')
-    el.id = 'character-panel'
-    el.style.cssText = [
-        'position: fixed; bottom: 24px; right: 24px;',
-        'background: rgba(0,0,0,.75); color: #fff;',
-        'font: 13px/1.5 monospace; padding: 16px 20px;',
-        'border-radius: 10px; min-width: 260px;',
-        'user-select: none; display: none;',
-    ].join(' ')
-
-    const header = document.createElement('div')
-    header.style.cssText = 'font-weight:700;margin-bottom:8px;font-size:14px'
-    localizeText(header, 'character.title')
-    el.appendChild(header)
+    const el = createEntityPanel('character-panel', 'character.title')
+    el.style.cssText += ';min-width:260px'
 
     el.appendChild(createSection('panel.position'))
     const posX = createLabeledNumberInput(el, 'panel.x', {step: '0.01'})
@@ -252,9 +242,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     el.appendChild(createSection('panel.faction'))
     const faction = createLabeledNumberInput(el, 'character.faction', {min: '0', step: '1', value: '0'})
     const tendencyLabel = document.createElement('label')
+    tendencyLabel.className = 'dc-label'
     appendLocalizedText(tendencyLabel, 'character.tendency')
     tendencyLabel.appendChild(document.createTextNode(' '))
     const tendSelect = document.createElement('select')
+    tendSelect.className = 'dc-select'
     const TENDENCY_OPTIONS: ReadonlyArray<{value: TendencyId; labelKey: StringLocaleKey}> = [
         {value: 'hostileAll', labelKey: 'character.tendency.hostile_all'},
         {value: 'hostileExceptSelf', labelKey: 'character.tendency.hostile_except_self'},
@@ -272,11 +264,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     el.appendChild(tendencyLabel)
 
     const targetFactionsLabel = document.createElement('label')
+    targetFactionsLabel.className = 'dc-label'
     appendLocalizedText(targetFactionsLabel, 'character.target_factions')
     targetFactionsLabel.appendChild(document.createTextNode(' '))
     targetFactionsLabel.style.cssText = 'display:none'
     const targetFactionsInput = document.createElement('input')
     targetFactionsInput.type = 'text'
+    targetFactionsInput.className = 'dc-input'
     targetFactionsInput.placeholder = '1,2,3'
     targetFactionsInput.style.cssText = 'width:80px;margin-left:4px'
     targetFactionsLabel.appendChild(targetFactionsInput)
@@ -304,33 +298,39 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     /* 装备模块：武器（下拉 + 数值覆写）与护甲（四槽下拉）统一放置 */
     el.appendChild(createSection('character.section.equip'))
     const atkRow = document.createElement('div')
-    atkRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    atkRow.className = 'dc-row'
     const weaponSelectLabel = document.createElement('label')
+    weaponSelectLabel.className = 'dc-label'
     appendLocalizedText(weaponSelectLabel, 'character.weapon')
     weaponSelectLabel.appendChild(document.createTextNode(' '))
     const weaponSelect = document.createElement('select')
+    weaponSelect.className = 'dc-select'
     weaponSelect.style.cssText = 'max-width:180px'
     weaponSelectLabel.appendChild(weaponSelect)
     atkRow.appendChild(weaponSelectLabel)
     el.appendChild(atkRow)
     const attackSegmentTag = document.createElement('div')
-    attackSegmentTag.style.cssText = 'font-size:11px;color:#aaa;margin-top:2px'
+    attackSegmentTag.className = 'dc-hint'
+    attackSegmentTag.style.cssText = 'margin-top:2px'
     el.appendChild(attackSegmentTag)
     fillWeaponSelect(weaponSelect, false)
 
     const weaponTag = document.createElement('div')
-    weaponTag.style.cssText = 'font-size:11px;color:#aaa;margin-top:2px;margin-bottom:4px'
+    weaponTag.className = 'dc-hint'
+    weaponTag.style.cssText = 'margin-top:2px;margin-bottom:4px'
     el.appendChild(weaponTag)
 
     /* 副手武器（近战主手可用）：单持握左手 / 双手共持挂背 / 与主手同类近战时启用双持 */
     const offhandRow = document.createElement('div')
-    offhandRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    offhandRow.className = 'dc-row'
     const offhandLabel = document.createElement('label')
+    offhandLabel.className = 'dc-label'
     appendLocalizedText(offhandLabel, 'character.offhand')
     offhandLabel.appendChild(document.createTextNode(' '))
     localizeTitle(offhandLabel, 'character.offhand_tip')
     const offhandSelect = document.createElement('select')
     offhandSelect.id = 'offhand-weapon-select'
+    offhandSelect.className = 'dc-select'
     offhandSelect.style.cssText = 'max-width:180px'
     fillWeaponSelect(offhandSelect, true)
     offhandLabel.appendChild(offhandSelect)
@@ -339,18 +339,21 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /* 持握模式（选项 = 主手武器声明的模式 ∩ 双持可用性；默认单持） */
     const holdRow = document.createElement('div')
-    holdRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    holdRow.className = 'dc-row'
     const holdLabel = document.createElement('label')
+    holdLabel.className = 'dc-label'
     appendLocalizedText(holdLabel, 'character.hold')
     holdLabel.appendChild(document.createTextNode(' '))
     localizeTitle(holdLabel, 'character.hold_tip')
     const holdModeSelect = document.createElement('select')
     holdModeSelect.id = 'hold-mode-select'
+    holdModeSelect.className = 'dc-select'
     holdLabel.appendChild(holdModeSelect)
     holdRow.appendChild(holdLabel)
     el.appendChild(holdRow)
     const holdModeHint = document.createElement('div')
-    holdModeHint.style.cssText = 'font-size:11px;color:#aa8844;margin-bottom:4px;display:none'
+    holdModeHint.className = 'dc-hint dc-text-warning'
+    holdModeHint.style.cssText = 'margin-bottom:4px;display:none'
     localizeText(holdModeHint, 'character.hold_mode_hint')
     el.appendChild(holdModeHint)
 
@@ -388,21 +391,25 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     for (const {armor, limb} of EQUIP_ROWS) {
         const row = document.createElement('div')
-        row.style.cssText = 'display:flex;gap:8px;align-items:center'
+        row.className = 'dc-row'
 
         const armorLabel = document.createElement('label')
+        armorLabel.className = 'dc-label'
         appendLocalizedText(armorLabel, ARMOR_SLOT_LABELS[armor])
         armorLabel.appendChild(document.createTextNode(' '))
+        armorSelects[armor].className = 'dc-select'
         armorSelects[armor].style.cssText = 'max-width:180px'
         fillEquipSelect(armorSelects[armor], armorPiecesOfSlot(armor))
         armorLabel.appendChild(armorSelects[armor])
         row.appendChild(armorLabel)
 
         const limbLabel = document.createElement('label')
+        limbLabel.className = 'dc-label'
         appendLocalizedText(limbLabel, 'character.limb_prefix')
         appendLocalizedText(limbLabel, LIMB_SLOT_LABELS[limb])
         limbLabel.appendChild(document.createTextNode(' '))
         localizeTitle(limbLabel, 'character.limb_tip')
+        limbSelects[limb].className = 'dc-select'
         limbSelects[limb].style.cssText = 'max-width:180px'
         fillEquipSelect(limbSelects[limb], limbPiecesOfSlot(limb))
         limbLabel.appendChild(limbSelects[limb])
@@ -418,7 +425,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const baseDefPhys = createLabeledNumberInput(el, 'character.base_def_phys', {min: '0', step: '1', value: '0'})
     const baseDefMagic = createLabeledNumberInput(el, 'character.base_def_magic', {min: '0', step: '1', value: '0'})
     const equipmentPreviewTag = document.createElement('div')
-    equipmentPreviewTag.style.cssText = 'font-size:11px;color:#aaa;margin-bottom:4px;white-space:pre-line'
+    equipmentPreviewTag.className = 'dc-hint'
+    equipmentPreviewTag.style.cssText = 'margin-bottom:4px;white-space:pre-line'
     el.appendChild(equipmentPreviewTag)
 
     /** 读取当前护甲选择（空 value = 空槽） */
@@ -475,15 +483,18 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     /* 锁定点区：默认身体中心点（不可编辑）+ 可增删改的关节锁定点（关节 id + 关节本地偏移） */
     el.appendChild(createSection('character.section.lock_points'))
     const defaultLockPointTag = document.createElement('div')
-    defaultLockPointTag.style.cssText = 'font-size:11px;color:#888;margin-bottom:2px'
+    defaultLockPointTag.className = 'dc-hint'
+    defaultLockPointTag.style.cssText = 'margin-bottom:2px'
     localizeText(defaultLockPointTag, 'character.default_lock_point')
     el.appendChild(defaultLockPointTag)
 
     const lockPointsContainer = document.createElement('div')
-    lockPointsContainer.style.cssText = 'max-height:120px;overflow-y:auto;margin:2px 0'
+    lockPointsContainer.className = 'dc-scroll'
+    lockPointsContainer.style.cssText = 'max-height:120px;margin:2px 0'
     el.appendChild(lockPointsContainer)
 
     const addLockPointBtn = document.createElement('button')
+    addLockPointBtn.className = 'dc-btn'
     localizeText(addLockPointBtn, 'character.add_lock_point')
     addLockPointBtn.style.cssText = 'font-size:12px'
     el.appendChild(addLockPointBtn)
@@ -495,10 +506,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         for (let index = 0; index < cachedLockPoints.length; index++) {
             const point = cachedLockPoints[index]
             const row = document.createElement('div')
-            row.className = 'lock-point-row'
-            row.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:11px;padding:2px 0'
+            row.className = 'lock-point-row dc-row'
+            row.style.cssText = 'gap:4px;font-size:11px;padding:2px 0'
             const jointSelect = document.createElement('select')
-            jointSelect.className = 'lock-point-joint'
+            jointSelect.className = 'lock-point-joint dc-select'
             jointSelect.style.cssText = 'max-width:118px;font-size:11px'
             for (const option of JOINT_LOCK_POINT_OPTIONS) {
                 const o = document.createElement('option')
@@ -511,13 +522,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             row.appendChild(jointSelect)
             for (let axis = 0; axis < point.offset.length; axis++) {
                 const input = createLabeledNumberInput(row, OFFSET_AXIS_LABELS[axis], {step: '0.01', style: 'width:42px'})
-                input.className = 'lock-point-offset'
+                input.classList.add('lock-point-offset')
                 input.value = point.offset[axis]
                 input.oninput = () => { point.offset[axis] = input.value }
             }
             const delBtn = document.createElement('button')
-            delBtn.textContent = '×'
-            delBtn.style.cssText = 'font-size:10px;padding:0 3px'
+            delBtn.className = 'dc-list-del'
+            delBtn.appendChild(createIcon('close', {size: 'sm'}))
             delBtn.onclick = () => { cachedLockPoints.splice(index, 1); refreshLockPointList() }
             row.appendChild(delBtn)
             lockPointsContainer.appendChild(row)
@@ -531,11 +542,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     el.appendChild(createSection('character.section.player'))
     const playerRow = document.createElement('div')
-    playerRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    playerRow.className = 'dc-row'
     const playerCheck = document.createElement('input')
     playerCheck.type = 'checkbox'
+    playerCheck.className = 'dc-check'
     playerCheck.id = 'chk-player'
     const playerLabel = document.createElement('label')
+    playerLabel.className = 'dc-label'
     playerLabel.htmlFor = 'chk-player'
     localizeText(playerLabel, 'character.mark_player')
     playerLabel.style.cssText = 'cursor:pointer'
@@ -549,11 +562,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /* 和平策略下拉框 */
     const peaceRow = document.createElement('div')
-    peaceRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    peaceRow.className = 'dc-row'
     const peaceLabel = document.createElement('label')
+    peaceLabel.className = 'dc-label'
     appendLocalizedText(peaceLabel, 'character.peace_label')
     peaceLabel.appendChild(document.createTextNode(' '))
     const peaceSelect = document.createElement('select')
+    peaceSelect.className = 'dc-select'
     for (const s of PEACE_SUB_STRATEGIES) {
         const o = document.createElement('option')
         o.value = s
@@ -566,11 +581,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /* 战斗策略下拉框 */
     const combatRow = document.createElement('div')
-    combatRow.style.cssText = 'display:flex;gap:8px;align-items:center'
+    combatRow.className = 'dc-row'
     const combatLabel = document.createElement('label')
+    combatLabel.className = 'dc-label'
     appendLocalizedText(combatLabel, 'character.combat_label')
     combatLabel.appendChild(document.createTextNode(' '))
     const combatSelect = document.createElement('select')
+    combatSelect.className = 'dc-select'
     const COMBAT_OPTIONS: ReadonlyArray<{value: string; labelKey: StringLocaleKey}> = [
         {value: 'tactical', labelKey: 'character.combat.tactical'},
         {value: 'aggressive', labelKey: 'character.combat.aggressive'},
@@ -588,11 +605,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /* 导航感知开关 */
     const navRow = document.createElement('div')
-    navRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:4px'
+    navRow.className = 'dc-row'
+    navRow.style.cssText = 'margin-top:4px'
     const navCheck = document.createElement('input')
     navCheck.type = 'checkbox'
+    navCheck.className = 'dc-check'
     navCheck.id = 'chk-nav'
     const navLabel = document.createElement('label')
+    navLabel.className = 'dc-label'
     navLabel.htmlFor = 'chk-nav'
     localizeText(navLabel, 'character.enable_nav')
     navLabel.style.cssText = 'cursor:pointer'
@@ -605,18 +625,20 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     el.appendChild(buildSection)
     const buildIntervalInput = createLabeledNumberInput(el, 'character.build_interval', {min: '0.5', step: '0.1', value: '3'})
     const buildBoxTypesLabel = document.createElement('label')
+    buildBoxTypesLabel.className = 'dc-label'
     localizeText(buildBoxTypesLabel, 'character.box_types')
-    buildBoxTypesLabel.style.cssText = 'font-size:12px;color:#aaa'
     el.appendChild(buildBoxTypesLabel)
     el.appendChild(document.createElement('br'))
 
     /* 箱型概览列表容器 */
     const boxTypesContainer = document.createElement('div')
-    boxTypesContainer.style.cssText = 'max-height:120px;overflow-y:auto;margin:4px 0'
+    boxTypesContainer.className = 'dc-scroll'
+    boxTypesContainer.style.cssText = 'max-height:120px;margin:4px 0'
     el.appendChild(boxTypesContainer)
 
     /* 添加箱型按钮 */
     const addBoxTypeBtn = document.createElement('button')
+    addBoxTypeBtn.className = 'dc-btn'
     localizeText(addBoxTypeBtn, 'character.add_box_type')
     addBoxTypeBtn.style.cssText = 'font-size:12px;margin-top:4px'
     el.appendChild(addBoxTypeBtn)
@@ -624,8 +646,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /* 箱型详细配置弹出面板 */
     const detailPanel = document.createElement('div')
-    detailPanel.style.cssText = 'display:none;background:rgba(255,255,255,.08);padding:8px;border-radius:6px;margin-top:6px'
+    detailPanel.style.cssText = 'display:none;background:var(--dc-bg-3);border:1px solid var(--dc-border);padding:8px;border-radius:var(--dc-radius);margin-top:6px'
     const detailTitle = document.createElement('div')
+    detailTitle.className = 'dc-text-gold'
     detailTitle.style.cssText = 'font-weight:700;font-size:12px;margin-bottom:4px'
     detailPanel.appendChild(detailTitle)
     const detailFields = document.createElement('div')
@@ -748,12 +771,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         for (let i = 0; i < cachedBoxTypes.length; i++) {
             const bt = cachedBoxTypes[i]
             const row = document.createElement('div')
-            row.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:11px;padding:2px 0;cursor:pointer'
+            row.className = 'dc-row'
+            row.style.cssText = 'gap:4px;font-size:11px;padding:2px 0;cursor:pointer'
             row.textContent = `${bt.entityType} (${bt.probability}) ${bt.minWidth}-${bt.maxWidth}×${bt.minHeight}-${bt.maxHeight}×${bt.minDepth}-${bt.maxDepth}`
             row.title = translate('character.detail_hint')
             const delBtn = document.createElement('button')
-            delBtn.textContent = '×'
-            delBtn.style.cssText = 'font-size:10px;padding:0 3px;margin-left:auto'
+            delBtn.className = 'dc-list-del'
+            delBtn.appendChild(createIcon('close', {size: 'sm'}))
+            delBtn.style.cssText = 'margin-left:auto'
             delBtn.onclick = (e) => { e.stopPropagation(); cachedBoxTypes.splice(i, 1); refreshBoxTypeList() }
             row.appendChild(delBtn)
             row.onclick = () => showDetail(i)
@@ -768,12 +793,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         detailFields.innerHTML = ''
         const addField = (labelKey: StringLocaleKey, key: keyof typeof bt): void => {
             const div = document.createElement('div')
-            div.style.cssText = 'display:flex;gap:4px;align-items:center;margin:2px 0'
+            div.className = 'dc-row'
+            div.style.cssText = 'gap:4px;margin:2px 0'
             const lbl = document.createElement('span')
             lbl.textContent = translate(labelKey)
+            lbl.className = 'dc-label'
             lbl.style.cssText = 'font-size:11px;width:100px'
             const inp = document.createElement('input')
-            inp.type = 'text'; inp.style.cssText = 'width:60px;font-size:11px'
+            inp.type = 'text'; inp.className = 'dc-input'; inp.style.cssText = 'width:60px;font-size:11px'
             inp.value = String(bt[key] ?? '')
             inp.oninput = () => { (bt as Record<string, string>)[key] = inp.value; refreshBoxTypeList() }
             div.appendChild(lbl); div.appendChild(inp)
@@ -799,6 +826,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             addField('character.field.max_deform', 'maxDeformFraction')
         }
         const closeBtn = document.createElement('button')
+        closeBtn.className = 'dc-btn'
         closeBtn.textContent = translate('character.done')
         closeBtn.style.cssText = 'font-size:11px;margin-top:4px'
         closeBtn.onclick = () => { detailPanel.style.display = 'none' }

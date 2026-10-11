@@ -1,3 +1,5 @@
+import {themeColor} from '../../ui/theme.ts'
+
 /** 时间轴面板初始高度（px） */
 export const TIMELINE_HEIGHT = 240
 
@@ -25,14 +27,14 @@ export const DRAG_CLICK_THRESHOLD = 4
 /** 骨骼/关节拖拽旋转灵敏度（rad/px） */
 export const ROT_SENSITIVITY = 0.012
 
-/** 时间轴配色 */
-export const TIMELINE_BG = '#1b1b22'
-export const TIMELINE_GRID_LINE = '#2a2a33'
-export const TIMELINE_PLAYHEAD = '#ffcc44'
-export const TIMELINE_LABEL = '#aab'
-export const KEYFRAME_COLOR = '#e8e8f0'
-export const KEYFRAME_SELECTED_COLOR = '#ffcc44'
-export const KEYFRAME_EVENT_COLOR = '#ff8866'
+/* 时间轴配色：Canvas 无法直接使用 CSS 变量，统一在模块加载时从主题令牌解析（读取失败回退为同色值） */
+export const TIMELINE_BG = themeColor('--dc-bg-1', '#14110d')
+export const TIMELINE_GRID_LINE = themeColor('--dc-border', '#463d33')
+export const TIMELINE_PLAYHEAD = themeColor('--dc-gold', '#c9a24b')
+export const TIMELINE_LABEL = themeColor('--dc-text-dim', '#a89e8e')
+export const KEYFRAME_COLOR = themeColor('--dc-text', '#e8dfce')
+export const KEYFRAME_SELECTED_COLOR = themeColor('--dc-gold', '#c9a24b')
+export const KEYFRAME_EVENT_COLOR = themeColor('--dc-orange', '#c9761f')
 
 /** 洋葱皮：预览前后帧数量（每侧） */
 export const ONION_SKIN_RANGE = 1

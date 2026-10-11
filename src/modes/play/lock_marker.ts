@@ -1,5 +1,6 @@
 import {Mesh, MeshBasicMaterial, SphereGeometry, type Scene, type Vector3} from 'three'
 import {LOCK_MARKER_DIAMETER} from './constants.ts'
+import {themeColor} from '../../ui/theme.ts'
 
 /** 锁定标记（目标头顶白点）控制器 */
 export interface LockMarker {
@@ -13,7 +14,7 @@ export interface LockMarker {
  */
 export const setupLockMarker = (scene: Scene): LockMarker => {
     const geometry = new SphereGeometry(LOCK_MARKER_DIAMETER / 2, 12, 12)
-    const material = new MeshBasicMaterial({color: 0xffffff, depthTest: false, depthWrite: false})
+    const material = new MeshBasicMaterial({color: themeColor('--dc-gold', '#c9a24b'), depthTest: false, depthWrite: false})
     const marker = new Mesh(geometry, material)
     marker.renderOrder = 1000
     marker.visible = false

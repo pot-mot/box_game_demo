@@ -25,31 +25,10 @@ export interface ExecutePanel {
     forceStop: () => void
 }
 
-const STYLES = {
-    container: [
-        'position: fixed; top: 16px; left: 50%;',
-        'transform: translateX(-50%);',
-        'font: 14px/1.6 monospace;',
-        'display: flex; gap: 8px;',
-        'user-select: none; z-index: 100;',
-    ].join(' '),
-    btn: (active: boolean): string => [
-        'padding: 8px 16px; border: none; border-radius: 8px;',
-        'cursor: pointer; font: 14px/1.6 monospace;',
-        'transition: background .15s;',
-        active
-            ? 'background: rgba(255,80,80,.85); color: #fff;'
-            : 'background: rgba(0,0,0,.7); color: #fff;',
-    ].join(' '),
-    btnHover: (active: boolean): string => active
-        ? 'rgba(255,100,100,.9)'
-        : 'rgba(255,255,255,.15)',
-    btnDisabled: 'opacity: .4; cursor: default;',
-    input: [
-        'width: 48px; padding: 8px; border: none; border-radius: 8px;',
-        'background: rgba(0,0,0,.7); color: #fff;',
-        'font: 14px/1.6 monospace; text-align: center;',
-    ].join(' '),
+/** 设置按钮的主题态：主操作（执行中）/ 禁用 */
+const setButtonState = (btn: HTMLButtonElement, active: boolean, disabled: boolean): void => {
+    btn.classList.toggle('dc-btn--primary', active && !disabled)
+    btn.classList.toggle('is-disabled', disabled)
 }
 
 export const setupExecutePanel = (): ExecutePanel => {
@@ -60,19 +39,13 @@ export const setupExecutePanel = (): ExecutePanel => {
 
     const container = document.createElement('div')
     container.id = 'execute-panel'
-    container.style.cssText = STYLES.container
+    container.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;user-select:none;z-index:100;'
 
     /* ── 执行 / 停止按钮 ── */
     const executeBtn = document.createElement('button')
+    executeBtn.className = 'dc-btn'
     executeBtn.textContent = translate('edit.execute')
     executeBtn.title = translate('edit.title.execute_start')
-    executeBtn.style.cssText = STYLES.btn(false)
-    executeBtn.addEventListener('mouseenter', () => {
-        executeBtn.style.background = STYLES.btnHover(isExecuting)
-    })
-    executeBtn.addEventListener('mouseleave', () => {
-        executeBtn.style.cssText = STYLES.btn(isExecuting)
-    })
     executeBtn.addEventListener('click', () => {
         if (pendingSteps > 0) return
         isExecuting = !isExecuting
@@ -82,16 +55,9 @@ export const setupExecutePanel = (): ExecutePanel => {
 
     /* ── 单步步进按钮 ── */
     const stepBtn = document.createElement('button')
+    stepBtn.className = 'dc-btn'
     stepBtn.textContent = translate('edit.step')
     stepBtn.title = translate('edit.title.step')
-    stepBtn.style.cssText = STYLES.btn(false)
-    stepBtn.addEventListener('mouseenter', () => {
-        if (!isExecuting) stepBtn.style.background = STYLES.btnHover(false)
-    })
-    stepBtn.addEventListener('mouseleave', () => {
-        stepBtn.style.cssText = isExecuting ? STYLES.btn(false) + STYLES.btnDisabled : STYLES.btn(false)
-        if (isExecuting) stepBtn.style.background = ''
-    })
     stepBtn.addEventListener('click', () => {
         if (isExecuting) return
         pendingSteps += 1
@@ -101,7 +67,8 @@ export const setupExecutePanel = (): ExecutePanel => {
     const stepInput = document.createElement('input')
     stepInput.type = 'text'
     stepInput.value = '60'
-    stepInput.style.cssText = STYLES.input
+    stepInput.className = 'dc-input'
+    stepInput.style.cssText = 'width:48px;text-align:center'
     stepInput.title = translate('edit.title.input')
     stepInput.addEventListener('input', () => {
         stepInput.value = stepInput.value.replace(/\D/g, '')
@@ -117,16 +84,9 @@ export const setupExecutePanel = (): ExecutePanel => {
 
     /* ── 执行 N 步按钮 ── */
     const runStepsBtn = document.createElement('button')
+    runStepsBtn.className = 'dc-btn'
     runStepsBtn.textContent = translate('edit.run')
     runStepsBtn.title = translate('edit.title.run')
-    runStepsBtn.style.cssText = STYLES.btn(false)
-    runStepsBtn.addEventListener('mouseenter', () => {
-        if (!isExecuting) runStepsBtn.style.background = STYLES.btnHover(false)
-    })
-    runStepsBtn.addEventListener('mouseleave', () => {
-        runStepsBtn.style.cssText = isExecuting ? STYLES.btn(false) + STYLES.btnDisabled : STYLES.btn(false)
-        if (isExecuting) runStepsBtn.style.background = ''
-    })
     runStepsBtn.addEventListener('click', () => {
         if (isExecuting) return
         const n = parseInt(stepInput.value, 10) || 1
@@ -137,7 +97,7 @@ export const setupExecutePanel = (): ExecutePanel => {
     const resetBtn = document.createElement('button')
     resetBtn.textContent = translate('edit.reset')
     resetBtn.title = translate('edit.title.reset')
-    resetBtn.style.cssText = STYLES.btn(false)
+    resetBtn.className = 'dc-btn'
     const triggerReset = (): void => {
         if (isExecuting) {
             isExecuting = false
@@ -145,12 +105,6 @@ export const setupExecutePanel = (): ExecutePanel => {
         pendingSteps = 0
         for (const cb of resetCallbacks) cb()
     }
-    resetBtn.addEventListener('mouseenter', () => {
-        resetBtn.style.background = STYLES.btnHover(false)
-    })
-    resetBtn.addEventListener('mouseleave', () => {
-        resetBtn.style.cssText = STYLES.btn(false)
-    })
     resetBtn.addEventListener('click', triggerReset)
 
     container.appendChild(executeBtn)
@@ -162,28 +116,23 @@ export const setupExecutePanel = (): ExecutePanel => {
 
     const update = (): void => {
         if (isExecuting) {
-            stepBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
-            stepBtn.style.background = ''
-            runStepsBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
-            runStepsBtn.style.background = ''
-            executeBtn.style.cssText = STYLES.btn(true)
+            setButtonState(executeBtn, true, false)
+            setButtonState(stepBtn, false, true)
+            setButtonState(runStepsBtn, false, true)
             executeBtn.textContent = translate('edit.stop')
             executeBtn.title = translate('edit.title.execute_stop')
         } else if (pendingSteps > 0) {
-            executeBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
-            executeBtn.style.background = ''
+            setButtonState(executeBtn, false, true)
             executeBtn.textContent = translate('edit.execute')
             executeBtn.title = translate('edit.title.execute_pending')
-            stepBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
-            stepBtn.style.background = ''
-            runStepsBtn.style.cssText = STYLES.btn(false) + STYLES.btnDisabled
-            runStepsBtn.style.background = ''
+            setButtonState(stepBtn, false, true)
+            setButtonState(runStepsBtn, false, true)
         } else {
+            setButtonState(executeBtn, false, false)
             executeBtn.textContent = translate('edit.execute')
             executeBtn.title = translate('edit.title.execute_start')
-            executeBtn.style.cssText = STYLES.btn(false)
-            stepBtn.style.cssText = STYLES.btn(false)
-            runStepsBtn.style.cssText = STYLES.btn(false)
+            setButtonState(stepBtn, false, false)
+            setButtonState(runStepsBtn, false, false)
         }
         if (pendingSteps > 0) {
             runStepsBtn.textContent = translate({key: 'edit.run_n', args: [String(pendingSteps)]})
