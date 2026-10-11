@@ -620,29 +620,30 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     navRow.appendChild(navLabel)
     el.appendChild(navRow)
 
-    /* 建造配置区（仅 build 策略可见） */
-    const buildSection = createSection('character.section.build')
-    el.appendChild(buildSection)
-    const buildIntervalInput = createLabeledNumberInput(el, 'character.build_interval', {min: '0.5', step: '0.1', value: '3'})
+    /* 建造配置区（仅 build 策略可见）：标题与全部控件包进同一容器，统一显隐 */
+    const buildPanel = document.createElement('div')
+    el.appendChild(buildPanel)
+    buildPanel.appendChild(createSection('character.section.build'))
+    const buildIntervalInput = createLabeledNumberInput(buildPanel, 'character.build_interval', {min: '0.5', step: '0.1', value: '3'})
     const buildBoxTypesLabel = document.createElement('label')
     buildBoxTypesLabel.className = 'dc-label'
     localizeText(buildBoxTypesLabel, 'character.box_types')
-    el.appendChild(buildBoxTypesLabel)
-    el.appendChild(document.createElement('br'))
+    buildPanel.appendChild(buildBoxTypesLabel)
+    buildPanel.appendChild(document.createElement('br'))
 
     /* 箱型概览列表容器 */
     const boxTypesContainer = document.createElement('div')
     boxTypesContainer.className = 'dc-scroll'
     boxTypesContainer.style.cssText = 'max-height:120px;margin:4px 0'
-    el.appendChild(boxTypesContainer)
+    buildPanel.appendChild(boxTypesContainer)
 
     /* 添加箱型按钮 */
     const addBoxTypeBtn = document.createElement('button')
     addBoxTypeBtn.className = 'dc-btn'
     localizeText(addBoxTypeBtn, 'character.add_box_type')
     addBoxTypeBtn.style.cssText = 'font-size:12px;margin-top:4px'
-    el.appendChild(addBoxTypeBtn)
-    el.appendChild(document.createElement('br'))
+    buildPanel.appendChild(addBoxTypeBtn)
+    buildPanel.appendChild(document.createElement('br'))
 
     /* 箱型详细配置弹出面板 */
     const detailPanel = document.createElement('div')
@@ -653,17 +654,20 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     detailPanel.appendChild(detailTitle)
     const detailFields = document.createElement('div')
     detailPanel.appendChild(detailFields)
-    el.appendChild(detailPanel)
+    buildPanel.appendChild(detailPanel)
+
+    /* 建造配置区显隐：仅非玩家且和平策略为 build 时展示，隐藏时收起详情弹窗 */
+    const applyBuildVisibility = (peaceStrategy: string, isPlayer: boolean): void => {
+        const show = !isPlayer && peaceStrategy === 'build'
+        buildPanel.style.display = show ? '' : 'none'
+        if (!show) detailPanel.style.display = 'none'
+    }
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
     peaceSelect.onchange = () => {
-        const show = peaceSelect.value === 'build'
-        buildSection.style.display = show ? '' : 'none'
-        buildBoxTypesLabel.style.display = show ? '' : 'none'
-        boxTypesContainer.style.display = show ? '' : 'none'
-        addBoxTypeBtn.style.display = show ? '' : 'none'
+        applyBuildVisibility(peaceSelect.value, playerCheck.checked)
     }
 
     /** 远程弹道数值仅在所选武器为远程时显示（近战打击距离由武器几何驱动） */
@@ -928,7 +932,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         peaceRow.style.display = sel.isPlayer ? 'none' : ''
         combatRow.style.display = sel.isPlayer ? 'none' : ''
         navRow.style.display = sel.isPlayer ? 'none' : ''
-        buildSection.style.display = (!sel.isPlayer && sel.peaceStrategy === 'build') ? '' : 'none'
+        applyBuildVisibility(sel.peaceStrategy, sel.isPlayer)
         showRanged()
         showCharge()
     }
@@ -960,7 +964,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 peaceRow.style.display = isPlayer ? 'none' : ''
                 combatRow.style.display = isPlayer ? 'none' : ''
                 navRow.style.display = isPlayer ? 'none' : ''
-                buildSection.style.display = (!isPlayer && peaceSelect.value === 'build') ? '' : 'none'
+                applyBuildVisibility(peaceSelect.value, isPlayer)
                 ctx.setNavEnabled?.(cur.id, navCheck.checked)
                 const peaceStrat = peaceSelect.value
                 if (isPeaceSubStrategy(peaceStrat)) {
