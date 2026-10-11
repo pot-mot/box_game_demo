@@ -311,6 +311,18 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         else endDrag()
     }
 
+    /* 右上角关闭按钮：点击隐藏面板（与再次按开关背包键等价） */
+    const closeBtn = document.createElement('button')
+    closeBtn.type = 'button'
+    closeBtn.className = 'dc-btn'
+    closeBtn.style.cssText = 'position:absolute;top:10px;right:12px'
+    localizeText(closeBtn, 'play.container.close')
+    closeBtn.addEventListener('click', () => {
+        setVisible(false)
+        closeBtn.blur()
+    })
+    root.appendChild(closeBtn)
+
     return {
         toggle: () => setVisible(!visible),
         setVisible,

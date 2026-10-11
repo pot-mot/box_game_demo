@@ -280,3 +280,48 @@ export const CATALOG_CUBE_Y = 0.7
 /** 演示背包尺寸（格）；需容纳全物品清单 */
 export const SHOWCASE_INVENTORY_WIDTH = 12
 export const SHOWCASE_INVENTORY_HEIGHT = 10
+
+/** 演示箱子摆放 Z 坐标（X = 0，玩家自 +Z 面向 -Z 走向它） */
+export const INVENTORY_CHEST_Z = 0
+
+/** 背包模块相机默认距离（m）与跟随目标高度（m） */
+export const INVENTORY_CAMERA_DISTANCE = 10
+export const INVENTORY_CAMERA_TARGET_Y = 1.4
+
+// ── 交互物交互效果展示 ──
+
+/** 交互物摆放行 Z 坐标与间距（m） */
+export const INTERACTABLE_ROW_Z = 0
+export const INTERACTABLE_SPACING = 3.2
+
+/** 交互物展示相机默认距离（m）与跟随目标高度（m） */
+export const INTERACTABLE_CAMERA_DISTANCE = 12
+export const INTERACTABLE_CAMERA_TARGET_Y = 1.4
+
+/** 交互物演示的简化玩家：基础移速 / 跳跃高度 / 冲刺倍率 / 出生 Z 坐标 / 死亡重生延时（秒） */
+export const PLAYER_SPEED = 3.5
+export const PLAYER_JUMP_HEIGHT = 2
+export const PLAYER_SPRINT_MULTIPLIER = 1.7
+export const PLAYER_SPAWN_Z = 3.5
+export const INTERACTABLE_RESPAWN_DELAY = 2.5
+
+// ── 复杂地形与建筑展示 ──
+
+/** 地形网格边长（格点数）与格边长（m） */
+export const TERRAIN_GRID_SIZE = 32
+export const TERRAIN_CELL_SIZE = 3
+/** 地形最低 / 最高高度（m）与摩擦 */
+export const TERRAIN_MIN_HEIGHT = 0
+export const TERRAIN_MAX_HEIGHT = 4
+export const TERRAIN_FRICTION = 0.3
+/** 默认地形生成器与可切换生成器列表 */
+export const TERRAIN_DEFAULT_GENERATOR = 'fbm'
+export const TERRAIN_GENERATORS = ['fbm', 'sine', 'steps', 'flat'] as const
+
+/** 建筑摆放网格：列数与行列间距（m） */
+export const BUILDING_GRID_COLUMNS = 4
+export const BUILDING_GRID_SPACING = 18
+
+/** 地形 / 建筑展示相机默认距离（m）与目标高度（m） */
+export const TERRAIN_CAMERA_DISTANCE = 42
+export const TERRAIN_CAMERA_TARGET_Y = 3

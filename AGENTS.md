@@ -154,7 +154,7 @@ src/
 │   │   ├── equipment_ui/        # 装备模型预览（独立小场景，拖拽旋转）
 │   │   ├── map_ui/              # 地图面板（俯视绘制、传送选点）
 │   │   └── hakoniwa.ts          # 箱庭子系统装配（背包/装备/地图/传送/脱困）
-│   ├── showcase/                # 展示模式（二级菜单 + 子模块：动作 / 装备外观 / AI×复杂地形 / 图鉴 / 背包格子交互）
+│   ├── showcase/                # 展示模式（二级菜单 + 子模块：动作 / 装备外观 / AI×复杂地形 / 复杂地形建筑 / 交互物 / 图鉴 / 背包格子交互）
 │   ├── startup_screen.ts
 │   └── free_flight.ts
 ├── ui/                          # 面板（相机HUD、属性面板、列表侧栏、设置）
@@ -202,7 +202,7 @@ src/
 | [`docs/hakoniwa/05_地图与传送与脱困.md`](docs/hakoniwa/05_地图与传送与脱困.md) | 地图面板、传送点解锁与选点、存档点重生、脱困 |
 | [`docs/hakoniwa/06_箱庭生成器.md`](docs/hakoniwa/06_箱庭生成器.md) | 建筑结构原语（楼梯/旋转楼梯/斗拱/斜屋顶/廊桥/支柱）与顶层箱庭配方 |
 | [`docs/hakoniwa/07_存档与兼容.md`](docs/hakoniwa/07_存档与兼容.md) | 箱庭相关存档字段、版本推进与旧档兼容策略 |
-| [`docs/showcase.md`](docs/showcase.md) | 展示模式：二级菜单与子模块框架（`ShowcaseModule` 注册表 / 共享舞台 / 轨道相机）、动作 / 装备外观 / AI 行为×复杂地形 / 全物品图鉴 / 背包格子交互各子模块展示效果、与生产代码的镜像关系、验证与扩展指南 |
+| [`docs/showcase.md`](docs/showcase.md) | 展示模式：二级菜单与子模块框架（`ShowcaseModule` 注册表 / 共享舞台 / 自由飞行相机）、动作 / 装备外观 / AI 行为×复杂地形 / 复杂地形建筑 / 交互物 / 全物品图鉴 / 背包格子交互各子模块展示效果、与生产代码的镜像关系、验证与扩展指南 |
 | [`docs/i18n.md`](docs/i18n.md) | 国际化系统：`src/i18n/` 强类型文案表与领域片段、`translate`/`localize*` API、语言持久化与原地实时重译、新增文案/语言流程、数据名称与序列化字段处理 |
 | [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md) | UI 风格设计规范：日式西幻视觉语言、设计令牌色板/排版/间距、组件形态、SVG 图标目录、滚动条与 HUD 覆盖层约定、动效与反例 |
 | [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | CSS 编码指南：样式分层（reset/主题/局部）、`dc-*` 组件类与令牌命名、选择器规则、滚动条规范、图标用法、迁移流程与硬约束、验证方式 |
@@ -223,7 +223,7 @@ src/
 - 物理 body 与 three mesh 位置同步在 `syncPositions()` 中逐帧覆盖，手动移动 mesh 后要通过 `body.setTranslation` / `body.setRotation` 同步
 - `Mesh` 是运行时值（`new Mesh(...)`，如 `entity/box/*/render/index.ts`），必须用 `import {Mesh}` 而非 `import type {Mesh}`
 - rapier3d-compat 的休眠 body 无视 velocity 写入，操作 velocity 前必须 `body.wakeUp()`（`setLinvel(vel, true)` 第二参数同样会唤醒，本项目一律传 `true`）
-- Rapier `addForce` 不会在 `step` 后自动清除，本项目所有施力均为**每帧瞬态**语义：任何自建 `SharedWorld` 都必须每个物理子步结束后 `clearAllForces`（`main.ts` / 角色测试 `harness` 均注册），否则 idle / 站定攻击的坡面反重力力残留、抵消重力，角色跳跃后**持续升空**。独立持世界（如展示模式 `ai_terrain` 子模块）一律经 `physics/fixed_step.ts` 的 `createFixedStepStepper` 步进——清力已内聚在运行器内，勿再各自手写子步循环
+- Rapier `addForce` 不会在 `step` 后自动清除，本项目所有施力均为**每帧瞬态**语义：任何自建 `SharedWorld` 都必须每个物理子步结束后 `clearAllForces`（`main.ts` / 角色测试 `harness` 均注册），否则 idle / 站定攻击的坡面反重力力残留、抵消重力，角色跳跃后**持续升空**。**独立持世界一律经 `physics/fixed_step.ts` 的 `createFixedStepStepper` 步进**（清力已内聚在运行器内）——展示模式 `ai_terrain` / `interactables` 子模块均如此；**严禁**在子模块内手写 `world.step` / `eventBus.drain` 子步循环（曾因漏清力导致玩家跳跃时无限升空）
 - 角色 collider 是**竖直胶囊**（半径 = `CHARACTER_BASE_SIZE.width/2`，总高 = `height`），不是 cuboid。平底 cuboid 在 trimesh 地形上坡时会跨网格顶点线被内部棱幽灵水平法线卡死（原地 walking 不动）；rapier3d-compat 0.19/0.20 的 `FIX_INTERNAL_EDGES` 已损坏（开启后 trimesh 完全无碰撞），禁止使用；heightfield 在该版本 wasm 直接崩溃，禁止使用（地形用 `RAPIER.ColliderDesc.trimesh` 生成）
 - 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击**阶段**子状态（`attacking_{segmentId}_{phaseName}`）通过 `states/attacking/index.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为；攻击**段**子状态不在此列——它由武器模组的段定义（含 `next` 转换）驱动，新增/调整段只改 `character/weapon/*_attacks.ts`
 - 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 8`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，v5 起增加可选锁定点 `lockPoints`，v6 起增加可选副手武器 `offhand` 与持握模式 `holdMode`，v7 起增加可选肢体组件 `limb`，v7 起新增 `building_generator` 建筑实体，v8 起新增 `interactable` / `item` 实体与 play 背包 `inventory`、传送点 `teleports`（modeInfo.play），旧档缺失时安全回退默认；未知副手武器 id 加载时安全丢弃）

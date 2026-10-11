@@ -5,7 +5,7 @@ import type {StringLocaleKey} from '../../i18n/index.ts'
  * 展示子模块标识：进入展示模式后先展示二级菜单，每个条目对应一个子模块。
  * 新增子模块须在 `SHOWCASE_MODULES`（`modules/index.ts`）登记并补齐 `locales/showcase.ts` 文案。
  */
-export const SHOWCASE_MODULE_IDS = ['actions', 'appearance', 'ai_terrain', 'catalog', 'inventory'] as const
+export const SHOWCASE_MODULE_IDS = ['actions', 'appearance', 'ai_terrain', 'terrain', 'interactables', 'catalog', 'inventory'] as const
 export type ShowcaseModuleId = typeof SHOWCASE_MODULE_IDS[number]
 
 /** 子模块装配所需的宿主上下文：复用主页共享渲染器（不自建 WebGL 上下文 / 单 RAF 循环） */

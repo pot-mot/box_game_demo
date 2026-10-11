@@ -2,6 +2,8 @@ import type {ShowcaseModule} from '../module.ts'
 import {actionsModule} from './actions.ts'
 import {appearanceModule} from './appearance.ts'
 import {aiTerrainModule} from './ai_terrain.ts'
+import {terrainModule} from './terrain.ts'
+import {interactablesModule} from './interactables.ts'
 import {catalogModule} from './catalog.ts'
 import {inventoryModule} from './inventory.ts'
 
@@ -10,6 +12,8 @@ export const SHOWCASE_MODULES: readonly ShowcaseModule[] = [
     actionsModule,
     appearanceModule,
     aiTerrainModule,
+    terrainModule,
+    interactablesModule,
     catalogModule,
     inventoryModule,
 ]

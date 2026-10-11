@@ -60,9 +60,17 @@ export const createInteractableMesh = (config: InteractableConfig): Interactable
         case 'push_door_single': {
             const door = new Group()
             door.name = 'door'
-            door.position.set(-w / 2, 0, 0)
-            root.add(door)
-            into(door, builder.add(builder.box(w, h, d), mat, w / 2, h / 2, 0))
+            /* 门轴：铰链在门扇较宽的水平边（w ≥ d → 沿 X 边，否则沿 Z 边），
+             * 门扇从铰链侧向外铺开，行为层旋转 `door.rotation.y` 即绕门轴开合 */
+            if (w >= d) {
+                door.position.set(-w / 2, 0, 0)
+                root.add(door)
+                into(door, builder.add(builder.box(w, h, d), mat, w / 2, h / 2, 0))
+            } else {
+                door.position.set(0, 0, -d / 2)
+                root.add(door)
+                into(door, builder.add(builder.box(w, h, d), mat, 0, h / 2, d / 2))
+            }
             break
         }
         case 'push_door_double': {

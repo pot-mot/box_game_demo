@@ -17,6 +17,26 @@ const isStrictSubset = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean
     return true
 }
 
+/**
+ * 焦点是否位于可交互控件（表单 / 按钮 / 链接 / 可编辑区）。
+ * 游戏画面内（焦点落在 body）按 Tab 不得切换浏览器焦点，故需拦截默认行为；
+ * 设置面板等控件内则保留 Tab 的默认焦点导航。
+ */
+const isFocusInteractive = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false
+    if (target.isContentEditable) return true
+    switch (target.tagName) {
+        case 'INPUT':
+        case 'TEXTAREA':
+        case 'SELECT':
+        case 'BUTTON':
+        case 'A':
+            return true
+        default:
+            return false
+    }
+}
+
 class InputRegistryImpl implements InputRegistry {
     private activeKeys = new Set<string>()
     private pressedThisFrame = new Set<string>()
@@ -246,6 +266,12 @@ class InputRegistryImpl implements InputRegistry {
         }
 
         /* 忽略捕获中仍触发的 keydown（安全保护） */
+        /* Tab：游戏画面内拦截浏览器默认焦点切换（避免焦点跳到面板按钮后空格 / 回车误触），
+         * 可交互控件（输入框 / 下拉 / 按钮）内的 Tab 保留默认导航 */
+        if (e.code === 'Tab' && !isFocusInteractive(e.target)) {
+            e.preventDefault()
+        }
+
         /* 更新 activeKeys */
         this.activeKeys.add(e.code)
         this.pressedThisFrame.add(e.code)

@@ -74,4 +74,23 @@ describe('展示相机：自由飞行 + 聚焦', () => {
         release('KeyW')
         expect(orbit.target.z).toBeLessThan(focusedTarget.z)
     })
+
+    it('跟随目标时相机目标持续跟随（原地更新向量）', () => {
+        const follow = new Vector3(5, 1.4, -5)
+        orbit.setFollow(follow)
+        for (let i = 0; i < 120; i++) orbit.update(1 / 60)
+        expect(orbit.target.distanceTo(follow)).toBeLessThan(0.1)
+
+        /* 更新跟随向量后目标继续跟随 */
+        follow.set(8, 1.4, -2)
+        for (let i = 0; i < 120; i++) orbit.update(1 / 60)
+        expect(orbit.target.distanceTo(follow)).toBeLessThan(0.1)
+
+        /* 跟随时 WASD 不移动相机（跟随优先） */
+        const before = orbit.target.clone()
+        press('KeyW')
+        orbit.update(1 / 60)
+        release('KeyW')
+        expect(orbit.target.distanceTo(before)).toBeLessThan(MOVE_STEP / 10)
+    })
 })

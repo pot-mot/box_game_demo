@@ -145,3 +145,25 @@ describe('输入注册表：鼠标绑定', () => {
     })
 
 })
+
+describe('输入注册表：Tab 焦点切换拦截', () => {
+    beforeEach(() => {
+        localStorage.clear()
+        createInputRegistry()
+    })
+
+    it('焦点在游戏画面（body）时拦截 Tab 默认行为', () => {
+        const event = new KeyboardEvent('keydown', {code: 'Tab', bubbles: true, cancelable: true})
+        window.dispatchEvent(event)
+        expect(event.defaultPrevented).toBe(true)
+    })
+
+    it('焦点在表单控件内时保留 Tab 默认行为', () => {
+        const field = document.createElement('input')
+        document.body.appendChild(field)
+        const event = new KeyboardEvent('keydown', {code: 'Tab', bubbles: true, cancelable: true})
+        field.dispatchEvent(event)
+        expect(event.defaultPrevented).toBe(false)
+        field.remove()
+    })
+})

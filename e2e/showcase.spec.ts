@@ -9,9 +9,9 @@ const enterShowcaseMenu = async (page: import('@playwright/test').Page): Promise
 }
 
 test.describe('展示模式（二级菜单 + 子模块）', () => {
-    test('进入展示模式先出现二级菜单，含 5 个子模块卡片', async ({page}) => {
+    test('进入展示模式先出现二级菜单，含 7 个子模块卡片', async ({page}) => {
         await enterShowcaseMenu(page)
-        await expect(page.locator('.sch-menu-card')).toHaveCount(5)
+        await expect(page.locator('.sch-menu-card')).toHaveCount(7)
     })
 
     test('选择「动作展示」：面板出现，近战三模式 + 远程共 27 个角色', async ({page}) => {
@@ -60,11 +60,35 @@ test.describe('展示模式（二级菜单 + 子模块）', () => {
         await expect(page.locator('.sch-cat .sch-cat-cell')).toHaveCount(41)
     })
 
-    test('选择「背包与格子交互」：复用背包 / 装备面板', async ({page}) => {
+    test('选择「背包与格子交互」：复用背包 / 装备面板，含玩家 HUD', async ({page}) => {
         await enterShowcaseMenu(page)
         await page.locator('.sch-menu-card', {hasText: '背包与格子交互'}).click()
         await expect(page.locator('.sch-menu')).toBeHidden()
         await expect(page.getByText('背包 / 装备')).toBeVisible()
+        await expect(page.locator('.sch-inv')).toBeVisible()
+        /* HUD「打开背包」按钮：点击可关闭 / 重新打开背包面板 */
+        await expect(page.locator('.sch-inv-btn')).toBeVisible()
+        await page.locator('.sch-inv-btn').click()
+        await expect(page.getByText('背包 / 装备')).toBeHidden()
+        await page.locator('.sch-inv-btn').click()
+        await expect(page.getByText('背包 / 装备')).toBeVisible()
+    })
+
+    test('选择「复杂地形与建筑」：出现地形 / 建筑面板与 12 种配方', async ({page}) => {
+        await enterShowcaseMenu(page)
+        await page.locator('.sch-menu-card', {hasText: '复杂地形与建筑'}).click()
+        await expect(page.locator('.sch-ter')).toBeVisible()
+        await expect(page.locator('.sch-ter .sch-ter-chip')).toHaveCount(12)
+    })
+
+    test('选择「交互物」：出现交互物面板与 8 个交互物（传送点 ×2）', async ({page}) => {
+        await enterShowcaseMenu(page)
+        await page.locator('.sch-menu-card', {hasText: '交互物'}).click()
+        await expect(page.locator('.sch-it')).toBeVisible()
+        await expect(page.locator('.sch-it .sch-it-row')).toHaveCount(8)
+        /* 点击存档点的「激活」：状态行回写 */
+        await page.locator('.sch-it .sch-it-row').first().locator('button').click()
+        await expect(page.locator('.sch-it-status')).toHaveText('存档点已点燃')
     })
 
     test('经设置菜单返回主页面（启动屏重现）', async ({page}) => {

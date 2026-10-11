@@ -13,6 +13,10 @@ export type ShowcaseLocale = {
     'showcase.module.appearance.desc': string
     'showcase.module.ai_terrain.title': string
     'showcase.module.ai_terrain.desc': string
+    'showcase.module.terrain.title': string
+    'showcase.module.terrain.desc': string
+    'showcase.module.interactables.title': string
+    'showcase.module.interactables.desc': string
     'showcase.module.catalog.title': string
     'showcase.module.catalog.desc': string
     'showcase.module.inventory.title': string
@@ -79,6 +83,30 @@ export type ShowcaseLocale = {
     'showcase.ai.subtitle': string
     'showcase.ai.reset': string
 
+    /* ── 复杂地形与建筑 ── */
+    'showcase.terrain.title': string
+    'showcase.terrain.subtitle': string
+    'showcase.terrain.generator': string
+    'showcase.terrain.reseed': string
+    'showcase.terrain.recipes': string
+
+    /* ── 交互物交互效果 ── */
+    'showcase.interact.title': string
+    'showcase.interact.subtitle': string
+    'showcase.interact.activate': string
+    'showcase.interact.kill': string
+    'showcase.interact.reset': string
+    'showcase.interact.hint': string
+    'showcase.interact.controls': string
+    'showcase.interact.event_save': string
+    'showcase.interact.event_teleport': string
+
+    /* ── 背包与格子交互 ── */
+    'showcase.inventory.controls': string
+    'showcase.inventory.hint': string
+    'showcase.inventory.open': string
+    'showcase.inventory.event_chest': string
+
     /* ── 全物品图鉴 ── */
     'showcase.catalog.title': string
     'showcase.catalog.subtitle': string
@@ -97,10 +125,14 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.module.appearance.desc': '种族肢体与全护甲件图鉴（站立 / 行走）',
     'showcase.module.ai_terrain.title': 'AI 与复杂地形',
     'showcase.module.ai_terrain.desc': '双阵营 AI 在起伏地形中的寻路 / 跳跃 / 索敌攻击',
+    'showcase.module.terrain.title': '复杂地形与建筑',
+    'showcase.module.terrain.desc': 'FBM 起伏地形 + 全部建筑配方（可切换生成器 / 随机重建）',
+    'showcase.module.interactables.title': '交互物',
+    'showcase.module.interactables.desc': '7 类交互物：门 / 闸门 / 升降梯 / 开关 / 传送 / 存档',
     'showcase.module.catalog.title': '全物品图鉴',
     'showcase.module.catalog.desc': '全物品与装备清单预览（含模型装配）',
     'showcase.module.inventory.title': '背包与格子交互',
-    'showcase.module.inventory.desc': '俄罗斯方块背包拖拽 / 旋转 / 装备 / 丢弃交互',
+    'showcase.module.inventory.desc': '俄罗斯方块背包交互 + 可操作玩家走近开箱',
 
     /* ── 主面板 ── */
     'showcase.title': '攻击动作展示台',
@@ -163,6 +195,30 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.ai.subtitle': '红蓝双阵营互相敌对 · 寻路 / 跳跃 / 索敌攻击',
     'showcase.ai.reset': '重开战斗',
 
+    /* ── 复杂地形与建筑 ── */
+    'showcase.terrain.title': '复杂地形与建筑',
+    'showcase.terrain.subtitle': '切换地形生成器 / 随机重建，观察全部建筑配方',
+    'showcase.terrain.generator': '地形生成器',
+    'showcase.terrain.reseed': '随机重建',
+    'showcase.terrain.recipes': '建筑配方',
+
+    /* ── 交互物交互效果 ── */
+    'showcase.interact.title': '交互物交互效果',
+    'showcase.interact.subtitle': '点击激活；开关联动同频道的门 / 闸门 / 升降梯',
+    'showcase.interact.activate': '激活',
+    'showcase.interact.kill': '击杀玩家',
+    'showcase.interact.reset': '重置',
+    'showcase.interact.hint': '点击左侧交互物「激活」查看效果',
+    'showcase.interact.controls': '操作：WASD 移动 · 空格 跳跃 · Shift 冲刺 · F 交互 · K 击杀（相机跟随玩家，鼠标拖拽环绕）',
+    'showcase.interact.event_save': '存档点已点燃',
+    'showcase.interact.event_teleport': '已触发传送',
+
+    /* ── 背包与格子交互 ── */
+    'showcase.inventory.controls': '操作：WASD 移动 · 空格 跳跃 · Shift 冲刺 · F 交互 · Tab 开关背包（相机跟随玩家，鼠标拖拽环绕）',
+    'showcase.inventory.hint': '按 Tab 开关背包；走近箱子按 F 打开容器存取物品',
+    'showcase.inventory.open': '打开背包',
+    'showcase.inventory.event_chest': '已打开箱子',
+
     /* ── 全物品图鉴 ── */
     'showcase.catalog.title': '全物品图鉴',
     'showcase.catalog.subtitle': '点击格子预览物品外观（装备 / 方块）',
@@ -181,10 +237,14 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.module.appearance.desc': 'Race limbs and full armor-piece codex (stand / walk)',
     'showcase.module.ai_terrain.title': 'AI & Terrain',
     'showcase.module.ai_terrain.desc': 'Two factions pathfinding / jumping / engaging over rolling terrain',
+    'showcase.module.terrain.title': 'Terrain & Buildings',
+    'showcase.module.terrain.desc': 'FBM rolling terrain + all building recipes (switch generator / reseed)',
+    'showcase.module.interactables.title': 'Interactables',
+    'showcase.module.interactables.desc': '7 kinds: doors / gate / elevator / switch / teleport / save',
     'showcase.module.catalog.title': 'Item Codex',
     'showcase.module.catalog.desc': 'All items and equipment with model preview',
     'showcase.module.inventory.title': 'Inventory Grid',
-    'showcase.module.inventory.desc': 'Tetris inventory drag / rotate / equip / drop interactions',
+    'showcase.module.inventory.desc': 'Tetris inventory interactions + a controllable player to open a chest',
 
     /* ── Main panel ── */
     'showcase.title': 'Attack Showcase',
@@ -246,6 +306,30 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.ai.title': 'AI Behavior × Terrain',
     'showcase.ai.subtitle': 'Red vs blue (mutually hostile) · pathfinding / jumping / engagement',
     'showcase.ai.reset': 'Restart battle',
+
+    /* ── Complex terrain & buildings ── */
+    'showcase.terrain.title': 'Terrain & Buildings',
+    'showcase.terrain.subtitle': 'Switch terrain generator / reseed and inspect every building recipe',
+    'showcase.terrain.generator': 'Terrain generator',
+    'showcase.terrain.reseed': 'Reseed',
+    'showcase.terrain.recipes': 'Building recipes',
+
+    /* ── Interactable effects ── */
+    'showcase.interact.title': 'Interactable Effects',
+    'showcase.interact.subtitle': 'Click to activate; the switch drives linked doors / gate / elevator',
+    'showcase.interact.activate': 'Activate',
+    'showcase.interact.kill': 'Kill player',
+    'showcase.interact.reset': 'Reset',
+    'showcase.interact.hint': 'Click a row\u2019s Activate button to see its effect',
+    'showcase.interact.controls': 'Controls: WASD move \u00b7 Space jump \u00b7 Shift sprint \u00b7 F interact \u00b7 K kill (camera follows the player; drag to orbit)',
+    'showcase.interact.event_save': 'Save point lit',
+    'showcase.interact.event_teleport': 'Teleport triggered',
+
+    /* ── Inventory grid ── */
+    'showcase.inventory.controls': 'Controls: WASD move \u00b7 Space jump \u00b7 Shift sprint \u00b7 F interact \u00b7 Tab toggle inventory (camera follows the player; drag to orbit)',
+    'showcase.inventory.hint': 'Press Tab to toggle the inventory; walk to the chest and press F to open the container',
+    'showcase.inventory.open': 'Open inventory',
+    'showcase.inventory.event_chest': 'Chest opened',
 
     /* ── Item codex ── */
     'showcase.catalog.title': 'Item Codex',
