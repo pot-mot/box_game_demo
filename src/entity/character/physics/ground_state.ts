@@ -4,6 +4,8 @@ export interface GroundState {
     isOnGround: boolean
     groundNormal: {x: number; y: number; z: number}
     groundKeepTimer: number
+    /** 真实接触中被判定为支撑的对方刚体 handle；无真实接触（含郊狼宽限）= null/undefined */
+    groundBodyHandle?: number | null
 }
 
 /** 无接触时的默认法线（朝上） */
@@ -30,6 +32,8 @@ interface NormalVote {
     y: number
     z: number
     count: number
+    /** 首个贡献该法线簇的对方刚体 handle（供移动平台携带判定） */
+    handle: number
 }
 
 export const resolveGroundState = (
@@ -48,6 +52,8 @@ export const resolveGroundState = (
         if (ny <= 0) continue
         const nx = c.normal.x * flip
         const nz = c.normal.z * flip
+        /* 对方刚体 handle（用于识别移动支撑） */
+        const otherHandle = c.bodyAHandle === bodyHandle ? c.bodyBHandle : c.bodyAHandle
         /* 法线方向簇投票：多数投票抑制孤立异常法线（Box 棱-三角形棱、Box 底面面接触伪影） */
         let group: NormalVote | undefined
         for (const g of groups) {
@@ -62,7 +68,7 @@ export const resolveGroundState = (
             group.z += nz
             group.count++
         } else {
-            groups.push({x: nx, y: ny, z: nz, count: 1})
+            groups.push({x: nx, y: ny, z: nz, count: 1, handle: otherHandle})
         }
     }
 
@@ -84,6 +90,7 @@ export const resolveGroundState = (
                 z: best.z * inv + 0,
             },
             groundKeepTimer: GROUND_KEEP_TIME,
+            groundBodyHandle: best.handle,
         }
     }
     if (prev.groundKeepTimer > 0) {
@@ -94,6 +101,8 @@ export const resolveGroundState = (
                 isOnGround: true,
                 groundNormal: prev.groundNormal,
                 groundKeepTimer: remaining,
+                /* 郊狼宽限无真实接触：不赋支撑 handle（避免跳跃后仍被平台拖拽） */
+                groundBodyHandle: null,
             }
         }
         /* 持续脱离超过宽限期：真正判定为脱离地面 */
@@ -101,11 +110,13 @@ export const resolveGroundState = (
             isOnGround: false,
             groundNormal: DEFAULT_GROUND_NORMAL,
             groundKeepTimer: 0,
+            groundBodyHandle: null,
         }
     }
     return {
         isOnGround: false,
         groundNormal: DEFAULT_GROUND_NORMAL,
         groundKeepTimer: 0,
+        groundBodyHandle: null,
     }
 }

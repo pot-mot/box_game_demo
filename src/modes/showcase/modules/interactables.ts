@@ -84,27 +84,12 @@ export const interactablesModule: ShowcaseModule = {
         const shared = createSharedWorld()
         const interactables: InteractableContext = setupInteractables(sceneCtx.scene, shared)
         const characterSystem: CharacterEntitySystem = setupCharacterEntities(sceneCtx.scene, shared)
-        const systems: SteppableSystem[] = [interactables, characterSystem]
+        const systems: SteppableSystem[] = [characterSystem]
 
         /* —— 简化玩家：出生在交互物行前方，隐藏碰撞胶囊 —— */
         let playerId = characterSystem.add(PLAYER_CONFIG, 0, 0.6, PLAYER_SPAWN_Z).id
         characterSystem.markPlayer(playerId)
         characterSystem.setCollisionVisible(false)
-        interactables.setPlayerAccess({
-            readPosition: () => {
-                const p = characterSystem.getPlayerCharacter()
-                if (p === undefined) return undefined
-                const t = p.body.translation()
-                return {x: t.x, y: t.y, z: t.z}
-            },
-            isGrounded: () => characterSystem.getPlayerCharacter()?.isOnGround ?? false,
-            translate: (dx, dy, dz) => {
-                const p = characterSystem.getPlayerCharacter()
-                if (p === undefined) return
-                const t = p.body.translation()
-                p.body.setTranslation({x: t.x + dx, y: t.y + dy, z: t.z + dz}, true)
-            },
-        })
 
         /* 相机跟随玩家（鼠标仍可环绕 / 缩放；聚焦交互物时优先，取消后恢复跟随） */
         const followPoint = new Vector3(0, INTERACTABLE_CAMERA_TARGET_Y, PLAYER_SPAWN_Z)
@@ -336,11 +321,14 @@ export const interactablesModule: ShowcaseModule = {
             }
         }
 
-        /* 固定子步物理（镜像 main.ts，清力内聚于运行器）：世界步进 → 各系统 preSync / syncPositions
-         * （preSync 内已推进交互物动画）。陷阱：漏清力会让角色坡面反重力力残留、跳跃后持续升空。 */
+        /* 固定子步物理（镜像 main.ts，清力内聚于运行器）：移动平台先瞬移到位、乘客步进**前**对齐，
+         * 再世界步进。陷阱：漏清力会让角色坡面反重力力残留、跳跃后持续升空。 */
         const step = createFixedStepStepper(shared, systems)
 
         const updater = (dt: number): void => {
+            /* 推进交互物（移动平台瞬移 + 注册速度），随后步进前携带乘客（避免运动学推挤/速度叠加双倍） */
+            interactables.update(dt)
+            characterSystem.applySupportCarry(dt)
             step(dt, performance.now())
             applyInput()
             characterSystem.update(dt)

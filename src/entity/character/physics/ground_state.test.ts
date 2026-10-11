@@ -34,6 +34,8 @@ describe('resolveGroundState', () => {
         expect(next.isOnGround).toBe(true)
         expect(next.groundNormal).toEqual({x: 0, y: 1, z: 0})
         expect(next.groundKeepTimer).toBe(GROUND_KEEP_TIME)
+        /* 真实接触：记录支撑刚体 handle（对方） */
+        expect(next.groundBodyHandle).toBe(BODY_B_HANDLE)
     })
 
     it('多数法线方向簇胜出（抑制孤立异常法线）', () => {
@@ -74,6 +76,8 @@ describe('resolveGroundState', () => {
         expect(next.isOnGround).toBe(true)
         expect(next.groundNormal).toEqual({x: 0, y: 0.6, z: 0.8})
         expect(next.groundKeepTimer).toBeCloseTo(0.05 - 1 / 60, 10)
+        /* 郊狼宽限无真实接触：支撑 handle 为空（避免跳跃后仍被移动平台拖拽） */
+        expect(next.groundBodyHandle).toBeNull()
     })
 
     it('持续脱离超过宽限期：真正判定为脱离地面', () => {

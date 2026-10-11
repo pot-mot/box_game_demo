@@ -32,6 +32,11 @@ export interface CharacterEntity {
     groundNormal: { readonly x: number; readonly y: number; readonly z: number }
     /** 郊狼时间计时（秒）：最近一次真实接触至今，宽限期内仍判定为着地 */
     groundKeepTimer: number
+    /**
+     * 本帧真实接触中被判定为「支撑」的刚体 handle（无真实接触 = null/undefined，郊狼宽限不赋值）。
+     * 供移动平台携带乘客：查 `SharedWorld.movingSupports` 叠加支撑速度。
+     */
+    groundBodyHandle?: number | null
     /** 连续悬空计时（秒）：shouldFall 持续时长，达到阈值才允许进入 falling（防下坡弹跳误触发） */
     airborneTime: number
     /** 连续支撑计时（秒）：可恢复支撑持续时长，达到阈值才允许退出 falling */

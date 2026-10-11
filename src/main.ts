@@ -229,23 +229,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         boneEditMode = setupBoneEditMode(camera, renderer, scene, excludeFromBackground)
     }
 
-    /* ── 交互物接线：玩家访问 / 存档回调 / 可破坏命中目标注册 ── */
+    /* ── 交互物接线：存档回调 / 可破坏命中目标注册 ── */
     const hakoniwa = mode === 'play' ? setupHakoniwa(characterSystem, itemEntities, interactables, building, savedPlay) : undefined
-    interactables.setPlayerAccess({
-        readPosition: () => {
-            const player = characterSystem.getPlayerCharacter()
-            if (player === undefined) return undefined
-            const t = player.body.translation()
-            return {x: t.x, y: t.y, z: t.z}
-        },
-        isGrounded: () => characterSystem.getPlayerCharacter()?.isOnGround ?? false,
-        translate: (dx, dy, dz) => {
-            const player = characterSystem.getPlayerCharacter()
-            if (player === undefined) return
-            const t = player.body.translation()
-            player.body.setTranslation({x: t.x + dx, y: t.y + dy, z: t.z + dz}, true)
-        },
-    })
     interactables.setHooks({
         onSavePoint: () => {
             const state = collectWorldState(systemsByType, allTerrainSources, mode, camera.position, camera.rotation)
@@ -420,6 +405,9 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             if (simActive) {
                 /* 世界一旦步进就不再是编辑基线（编辑模式的 Reset 需回到步进前的状态） */
                 if (mode === 'edit') steppedSinceBaseline = true
+                /* 移动平台（升降梯 / 闸门）先瞬移到位并注册速度，乘客在步进前对齐（避免顶起抖动） */
+                interactables.update(delta)
+                characterSystem.applySupportCarry(delta)
                 /* play 模式或持续执行：正常变速步进 */
                 const totalSteps = Math.min(Math.max(1, Math.ceil(delta / FIXED_TIME_STEP)), MAX_SUB_STEPS)
                 for (let s = 0; s < totalSteps; s++) {
@@ -428,15 +416,18 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                      * 延迟到循环结束再排空会丢失非末子步的接触开始/结束事件 */
                     shared.eventBus.drain()
                 }
-                for (const s of systems) s.preSync?.(delta, time)
+                /* 交互物已在步进前 update，跳过其 preSync（避免二次推进） */
+                for (const s of systems) { if (s !== interactables) s.preSync?.(delta, time) }
                 for (const s of systems) s.syncPositions()
             } else if (stepActive) {
                 /* 单步 / 排队步进同样会推进世界：基线随之固定 */
                 steppedSinceBaseline = true
                 /* 逐帧步进：每帧精确推进 1 物理步 */
+                interactables.update(FIXED_TIME_STEP)
+                characterSystem.applySupportCarry(FIXED_TIME_STEP)
                 shared.world.step(shared.eventQueue)
                 shared.eventBus.drain()
-                for (const s of systems) s.preSync?.(FIXED_TIME_STEP, time)
+                for (const s of systems) { if (s !== interactables) s.preSync?.(FIXED_TIME_STEP, time) }
                 for (const s of systems) s.syncPositions()
                 editMode?.execute.consumeStep()
             }

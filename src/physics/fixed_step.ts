@@ -18,16 +18,20 @@ export interface SteppableSystem {
  *
  * @param shared 独立物理世界
  * @param systems 每子步步进后需 preSync / syncPositions 的系统
+ * @param preStep 可选的每物理子步**步进前**回调（如推进移动平台并按子步注册支撑速度）
  * @returns `(dt, time) => void`：按固定子步推进世界并同步各系统位置
  */
 export const createFixedStepStepper = (
     shared: SharedWorld,
     systems: readonly SteppableSystem[],
+    preStep?: (dt: number) => void,
 ): ((dt: number, time: number) => void) => {
     shared.eventBus.onStepEnd(() => clearAllForces(shared.world))
     return (dt, time) => {
         const totalSteps = Math.min(Math.max(1, Math.ceil(dt / FIXED_TIME_STEP)), MAX_SUB_STEPS)
+        const subDt = dt / totalSteps
         for (let s = 0; s < totalSteps; s++) {
+            preStep?.(subDt)
             shared.world.step(shared.eventQueue)
             shared.eventBus.drain()
         }

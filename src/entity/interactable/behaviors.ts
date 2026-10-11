@@ -154,7 +154,9 @@ const gateBehavior: InteractableBehavior = {
             const node = animNode(e, 'gate')
             if (node !== undefined) node.position.y = p * travel
         }, (p) => {
-            e.body.setNextKinematicTranslation({x: e.base.x, y: e.base.y + p * travel, z: e.base.z})
+            /* 瞬移平台（而非 setNextKinematicTranslation）：运动学体在多物理子步下会把整帧位移压到首个子步，
+             * 顶到乘客产生 ~cm 级冲量 → 上升抖动；瞬移不产生运动学速度，携带完全交给 movingSupports 速度注册表 */
+            e.body.setTranslation({x: e.base.x, y: e.base.y + p * travel, z: e.base.z}, true)
         })
         /* 上升（开启）后不挡路；下落过程与关闭时挡路 */
         setCollidersEnabled(e, e.progress < 0.9)
@@ -180,44 +182,43 @@ const chestBehavior: InteractableBehavior = {
 /* ── 升降梯 ── */
 const elevatorBehavior: InteractableBehavior = {
     interactable: true,
-    prompt: (e) => e.progress > 0.5 ? translate('interact.prompt.elevator_down') : translate('interact.prompt.elevator_up'),
+    prompt: (e) => {
+        if (e.config.kind !== 'elevator') return undefined
+        if (e.paused) return translate('interact.prompt.elevator_run')
+        if (Math.abs(e.progress - e.target) > 1e-4) return translate('interact.prompt.elevator_stop')
+        return e.progress > 0.5 ? translate('interact.prompt.elevator_down') : translate('interact.prompt.elevator_up')
+    },
+    /* F 语义：运行中 → 就地停止；已暂停 → 继续；停在端点 → 反向并运行 */
     interact: (e) => {
+        if (e.config.kind !== 'elevator') return
+        const moving = !e.paused && Math.abs(e.progress - e.target) > 1e-4
+        if (moving) {
+            e.paused = true
+            return
+        }
+        if (e.paused) {
+            e.paused = false
+            return
+        }
         e.target = e.target > 0.5 ? 0 : 1
+        e.paused = false
     },
     onSignal: (e, on) => {
         e.target = on ? 1 : 0
+        e.paused = false
     },
-    update: (dt, e, ctx) => {
+    update: (dt, e) => {
         if (e.config.kind !== 'elevator') return
+        if (e.paused) return
         const travel = e.config.travel
         const speed = e.config.speed > 0 ? e.config.speed : 1
-        const prev = e.progress
         moveTowardTarget(dt, e, speed / Math.max(travel, 0.001), (p) => {
             const platform = animNode(e, 'platform')
             if (platform !== undefined) platform.position.y = p * travel
         }, (p) => {
-            e.body.setNextKinematicTranslation({x: e.base.x, y: e.base.y + p * travel, z: e.base.z})
+            e.body.setTranslation({x: e.base.x, y: e.base.y + p * travel, z: e.base.z}, true)
         })
-        /* 载客：站在平台上时按行程位移平移玩家 */
-        const delta = e.progress - prev
-        if (delta !== 0 && ctx.player !== undefined && ctx.player.isGrounded()) {
-            const pos = ctx.player.readPosition()
-            if (pos !== undefined && insidePlatform(e, pos.x, pos.y, pos.z)) {
-                ctx.player.translate(0, delta * travel, 0)
-            }
-        }
     },
-}
-
-const insidePlatform = (e: InteractableEntity, x: number, y: number, z: number): boolean => {
-    if (e.config.kind !== 'elevator') return false
-    const halfX = e.config.size[0] / 2
-    const halfZ = e.config.size[2] / 2
-    const platformY = e.base.y + e.progress * e.config.travel
-    return Math.abs(x - e.base.x) <= halfX
-        && Math.abs(z - e.base.z) <= halfZ
-        && y >= platformY - 0.05
-        && y <= platformY + 0.6
 }
 
 /* ── 可破坏道具 ── */

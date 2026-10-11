@@ -7,6 +7,5 @@ export type {
     InteractableEntity,
     InteractableContext,
     InteractableHooks,
-    InteractablePlayerAccess,
     InteractableSaveEntry,
 } from './types.ts'

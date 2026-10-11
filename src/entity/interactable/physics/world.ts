@@ -1,6 +1,6 @@
 import {type Mesh, type Object3D, type Scene, Quaternion, Vector3} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
-import type {SharedWorld} from '../../../physics/world.ts'
+import {type SharedWorld, deleteMovingSupport, setMovingSupport} from '../../../physics/world.ts'
 import {INTERACTABLE_COLLISION_GROUP, INTERACTABLE_COLLISION_MASK} from '../../../physics/constants.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {createColliderForBody} from '../../../physics/rapier_utils.ts'
@@ -15,7 +15,6 @@ import {
     type InteractableContext,
     type InteractableEntity,
     type InteractableHooks,
-    type InteractablePlayerAccess,
     type InteractableRuntimeContext,
     type InteractableSaveEntry,
 } from '../types.ts'
@@ -53,7 +52,6 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
     let nextId = 1
     let selectedId: number | undefined
     let hooks: InteractableHooks = {}
-    let playerAccess: InteractablePlayerAccess | undefined
 
     const rebuildPanelInfo = (): void => {
         panelInfo.length = 0
@@ -72,7 +70,6 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
 
     const runtimeContext = (): InteractableRuntimeContext => ({
         setSignal,
-        player: playerAccess,
         hooks,
         despawn: remove,
     })
@@ -122,6 +119,7 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
             progress: 0,
             target: 0,
             on: false,
+            paused: false,
             container: config.kind === 'chest' ? createInventory(CHEST_GRID_WIDTH, CHEST_GRID_HEIGHT) : createInventory(0, 0),
             health: config.kind === 'breakable' ? config.health : 1,
             dead: false,
@@ -152,6 +150,10 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
         if (wasSelected) select(undefined)
         scene.remove(e.group)
         e.meshDispose()
+        /* 移动支撑注册表清理（避免 handle 复用/残留速度） */
+        deleteMovingSupport(shared, e.body.handle)
+        lastSupportPos.delete(e.id)
+        lastSupportRot.delete(e.id)
         world.removeRigidBody(e.body)
         entities.splice(idx, 1)
         byId.delete(id)
@@ -186,11 +188,51 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
         e.body.setRotation({x: _quat.x, y: _quat.y, z: _quat.z, w: _quat.w}, true)
     }
 
+    /**
+     * 把运动学平台（闸门 / 升降梯）本帧的**实际位移/转动**换算为速度并注册到 `SharedWorld.movingSupports`，
+     * 供角色系统对「真实接触支撑」的乘客叠加携带。
+     * 平台以 `setTranslation` 瞬移（见 behaviors）：多物理子步下 `setNextKinematicTranslation` 会把整帧位移
+     * 压进首个子步，顶到乘客产生冲量 → 上升抖动；故速度由逐帧位置/四元数差分得到，携带完全交给速度注册表。
+     */
+    const lastSupportPos = new Map<number, {x: number; y: number; z: number}>()
+    const lastSupportRot = new Map<number, {x: number; y: number; z: number; w: number}>()
+    const _supQ0 = new Quaternion()
+    const _supQ1 = new Quaternion()
+    const _supDelta = new Quaternion()
+    const registerMovingSupport = (e: InteractableEntity, dt: number): void => {
+        if (!(dt > 0)) return
+        const body = e.body
+        const cur = body.translation()
+        const prev = lastSupportPos.get(e.id)
+        const v = prev === undefined
+            ? {x: 0, y: 0, z: 0}
+            : {x: (cur.x - prev.x) / dt, y: (cur.y - prev.y) / dt, z: (cur.z - prev.z) / dt}
+        let w = {x: 0, y: 0, z: 0}
+        const r = body.rotation()
+        const prevR = lastSupportRot.get(e.id)
+        if (prevR !== undefined) {
+            _supQ0.set(prevR.x, prevR.y, prevR.z, prevR.w)
+            _supQ1.set(r.x, r.y, r.z, r.w)
+            _supDelta.copy(_supQ1).multiply(_supQ0.invert())
+            if (_supDelta.w < 0) _supDelta.set(-_supDelta.x, -_supDelta.y, -_supDelta.z, -_supDelta.w)
+            const sinHalf = Math.sqrt(Math.max(0, 1 - _supDelta.w * _supDelta.w))
+            if (sinHalf > 1e-6) {
+                const angle = 2 * Math.acos(Math.min(1, _supDelta.w))
+                const k = angle / dt / sinHalf
+                w = {x: _supDelta.x * k, y: _supDelta.y * k, z: _supDelta.z * k}
+            }
+        }
+        lastSupportPos.set(e.id, {x: cur.x, y: cur.y, z: cur.z})
+        lastSupportRot.set(e.id, {x: r.x, y: r.y, z: r.z, w: r.w})
+        setMovingSupport(shared, body.handle, {v, w})
+    }
+
     const update = (dt: number): void => {
         const ctx = runtimeContext()
         for (const e of entities) {
             if (e.dead) continue
             BEHAVIORS[e.config.kind].update(dt, e, ctx)
+            if (isKinematic(e.config)) registerMovingSupport(e, dt)
             e.lastProgress = e.progress
         }
     }
@@ -212,8 +254,12 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
             if (!behavior.interactable) continue
             const prompt = behavior.prompt(e)
             if (prompt === undefined) continue
+            /* 升降梯的交互锚点跟随平台当前位置（乘坐到高处仍可 F 停/启/反向） */
+            const anchorY = e.config.kind === 'elevator'
+                ? e.base.y + e.progress * e.config.travel + e.config.size[1] / 2
+                : e.base.y
             const dx = e.base.x - actorX
-            const dy = e.base.y - actorY
+            const dy = anchorY - actorY
             const dz = e.base.z - actorZ
             const dist = Math.hypot(dx, dz)
             if (dist > INTERACTION_MAX_DISTANCE || Math.abs(dy) > INTERACTION_MAX_DISTANCE) continue
@@ -222,7 +268,7 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
                 kind: e.config.kind,
                 prompt,
                 x: e.base.x,
-                y: e.base.y,
+                y: anchorY,
                 z: e.base.z,
                 score: dist,
             })
@@ -302,9 +348,6 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
     const setHooks = (next: InteractableHooks): void => {
         hooks = next
     }
-    const setPlayerAccess = (player: InteractablePlayerAccess | undefined): void => {
-        playerAccess = player
-    }
 
     const ctxWithoutPanel: Omit<InteractableContext, 'panel'> = {
         type: TYPE,
@@ -314,7 +357,6 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
         activate,
         setSignal,
         setHooks,
-        setPlayerAccess,
         update,
         getAll: () => entities,
         getById: (id: number) => byId.get(id),

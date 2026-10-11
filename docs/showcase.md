@@ -85,6 +85,7 @@ src/modes/showcase/
 - **相机跟随玩家**（鼠标拖拽环绕、滚轮缩放；WASD 让给玩家），聚焦交互物时临时接管、取消后恢复跟随。
 - **两个传送点**：激活其一即把玩家传送到另一个，演示传送效果。
 - **存档点 + 击杀**：`K` 或「击杀玩家」按钮清空生命触发死亡动画，延时后在最近激活的存档点重生（无存档点则回出生点）。
+- **升降梯**：乘客由角色系统按**物理接触**、在物理步进**前**位置携带（平台瞬移 + 注册速度 → 角色 `applySupportCarry`，见 AGENTS 移动平台陷阱）；乘坐到任意高度按 `F` 可**就地停止 / 继续 / 端点反向**，提示随状态在「上升 / 下降 / 停止 / 运行」间切换。
 - 左侧面板逐行列出交互物与「激活」按钮（存档点点燃 / 传送 / 门开合），另有「击杀玩家」「重置」按钮；领域钩子（`onSavePoint` / `onTeleport`）把事件回写到状态行。起到交互系统的人员测试效果。
 - **点击聚焦**：点击某交互物即把相机飞向其中部、并在其脚下显示**呼吸圆环标记**（随尺寸放大；仅聚焦、不触发激活），`Esc` / 点击空处取消聚焦并恢复跟随。
 
@@ -111,6 +112,9 @@ src/modes/showcase/
   - `src/modes/showcase/scene.test.ts` — 相机自由飞行（WASD 沿朝向平移、Z/X 升降）、聚焦期间暂停自由移动、Esc 恢复自由飞行。
   - `src/modes/showcase/focus.test.ts` — 点击聚焦拾取器：命中对象后相机平滑聚焦到目标点、脚下呼吸圆环标记显示并随尺寸缩放、点击空处取消聚焦并隐藏标记。
   - `src/entity/interactable/mesh.test.ts` — 单推门门轴（较宽水平边）落点正确（薄 X / 宽 Z 与宽 X 两种朝向）。
+  - `src/entity/character/physics/support_carry.test.ts` — 移动支撑携带：被支撑角色获得平台线速度且不因 idle 阻尼逐帧累加；未注册支撑不携带。
+  - `src/entity/character/physics/ground_state.test.ts` — 真实接触记录支撑刚体 handle、郊狼宽限与脱离返回空（支撑寄存器判定的基础）。
+  - `src/entity/interactable/behaviors.test.ts` — 升降梯 `F` 停止 / 继续 / 端点反向、暂停不推进、信号清除暂停、提示随状态。
   - `src/modes/showcase/modules.test.ts` — 注册表与 `SHOWCASE_MODULE_IDS` 一一对应、标题/说明可本地化、id 唯一。
   - `src/modes/showcase/menu.test.ts` — 每个子模块渲染一张卡片、点击触发 `onSelect`、show/hide/dispose。
 - e2e：`e2e/showcase.spec.ts` — 二级菜单 7 张卡片、动作模块 27 行、外观模块 20 行、AI 模块 10 单位、地形模块 12 配方、交互物模块 8 行（含激活回写状态）、图鉴 41 格、背包模块（背包 / 装备面板 + 玩家 HUD）、聚焦段计时行顺序、返回展示菜单、经设置菜单返回主页面。

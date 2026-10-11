@@ -89,6 +89,7 @@ export const makeChar = (
         isOnGround: true,
         groundNormal: {x: 0, y: 1, z: 0},
         groundKeepTimer: 0,
+        groundBodyHandle: null,
         airborneTime: 0,
         groundedTime: 0,
         rowText: '',
@@ -394,4 +395,5 @@ export const initGS = (): GroundState => ({
     isOnGround: true,
     groundNormal: {x: 0, y: 1, z: 0},
     groundKeepTimer: 0,
+    groundBodyHandle: null,
 })

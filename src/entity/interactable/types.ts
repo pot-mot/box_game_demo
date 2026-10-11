@@ -81,6 +81,8 @@ export interface InteractableEntity {
     target: number
     /** 开关当前状态 */
     on: boolean
+    /** 升降梯：是否暂停（运行时，不进存档；false = 按 target 运行） */
+    paused: boolean
     /** 容器内容（chest）：独立格位背包（俄罗斯方块布局）；其它类型为空背包 */
     container: InventoryState
     /** 生命（breakable） */
@@ -97,14 +99,6 @@ export interface InteractableEntity {
     rowText: string
 }
 
-/** 玩家访问钩子（由 play 侧注入，交互物领域不依赖角色系统） */
-export interface InteractablePlayerAccess {
-    readPosition: () => {x: number; y: number; z: number} | undefined
-    isGrounded: () => boolean
-    /** 平移玩家（升降梯载客） */
-    translate: (dx: number, dy: number, dz: number) => void
-}
-
 /** 跨领域动作钩子 */
 export interface InteractableHooks {
     onSavePoint?: (e: InteractableEntity) => void
@@ -116,7 +110,6 @@ export interface InteractableHooks {
 /** 行为运行期上下文 */
 export interface InteractableRuntimeContext {
     setSignal: (channel: string, on: boolean) => void
-    player: InteractablePlayerAccess | undefined
     hooks: InteractableHooks
     despawn: (id: number) => void
 }
@@ -141,7 +134,6 @@ export interface InteractableContext extends EntityInfoSource {
     activate: (id: number) => boolean
     setSignal: (channel: string, on: boolean) => void
     setHooks: (hooks: InteractableHooks) => void
-    setPlayerAccess: (player: InteractablePlayerAccess | undefined) => void
     /** 每帧行为推进（由 preSync 调用） */
     update: (dt: number) => void
     /** 实体 tick：推进行为（注册进 main.ts systems 后由物理循环调用） */

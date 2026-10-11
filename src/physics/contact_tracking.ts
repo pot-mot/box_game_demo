@@ -1,6 +1,9 @@
 import type RAPIER from '@dimforge/rapier3d-compat'
 import type {CollisionEventBus} from './collision_events.ts'
 
+/** 接触法线复用缓冲（避免每帧每接触分配） */
+const _normalScratch: RAPIER.Vector = {x: 0, y: 0, z: 0}
+
 /** 活跃接触对（碰撞开始加入、结束移除） */
 export interface ActiveContactPair {
     colliderAHandle: number
@@ -66,8 +69,16 @@ export interface ColliderContact {
 
 /**
  * 从活跃接触对中查询 queryCollider 与对方的实时接触信息。
- * normal 取 contactCollider 的 normal1（指向 queryCollider 外侧，即从 queryCollider 指向对方），
- * 与 cannon-es 时代 contact.ni（bi → bj）语义一致。
+ * normal 统一为「从 queryCollider 指向对方」，与 cannon-es 时代 contact.ni（bi → bj）语义一致。
+ *
+ * 取法线策略（两个 Rapier API 各有缺陷，需配合）：
+ * - 首选接触流形 `world.contactPair`：`numSolverContacts() > 0` 时法线准确（真接触），
+ *   且不会像 `contactCollider` 那样在角色同时接触地面与箱体时返回被污染的对角法线
+ *   （平地 ground 法线读成 (0.86,-0.28,-0.43)，行走状态据此做坡面投影会把水平速度转成
+ *   大垂直速度 → 撞箱被弹飞，或误判 falling）；
+ * - 回退 `contactCollider`：本版本 trimesh 接触的流形恒无求解点（`numSolverContacts()===0`）
+ *   且其流形法线不可用，而 `contactCollider` 对 trimesh（斜坡地形）法线正确。
+ * 两者都取不到（流形未触发 = 形状未真正接触）时跳过，避免 speculative 接触污染地面判定。
  */
 export const queryColliderContacts = (
     world: RAPIER.World,
@@ -83,15 +94,33 @@ export const queryColliderContacts = (
         const otherHandle = pair.colliderAHandle === myHandle ? pair.colliderBHandle : pair.colliderAHandle
         const otherCollider = world.getCollider(otherHandle)
         if (!otherCollider) continue
-        const contactShape = queryCollider.contactCollider(otherCollider, 0.1)
-        if (!contactShape) continue
         const otherBody = otherCollider.parent()
         if (!otherBody) continue
+        const otherCollisionGroups = otherCollider.collisionGroups()
+
+        let normal: {x: number; y: number; z: number} | undefined
+        let sawManifold = false
+        world.contactPair(queryCollider, otherCollider, (manifold, flipped) => {
+            sawManifold = true
+            if (manifold.numSolverContacts() === 0) return
+            /* normal() 指向流形内部第一形状 → 第二形状；flipped 时顺序相反，取「queryCollider → other」约定 */
+            const n = manifold.normal(_normalScratch)
+            const sign = flipped ? -1 : 1
+            normal = {x: n.x * sign, y: n.y * sign, z: n.z * sign}
+        })
+        if (normal === undefined && sawManifold) {
+            /* trimesh 回退：接触流形无求解点，改用 contactCollider 的 normal1（同为 query → other） */
+            const contactShape = queryCollider.contactCollider(otherCollider, 0.1)
+            if (contactShape) {
+                normal = {x: contactShape.normal1.x, y: contactShape.normal1.y, z: contactShape.normal1.z}
+            }
+        }
+        if (normal === undefined) continue
         contacts.push({
-            normal: {x: contactShape.normal1.x, y: contactShape.normal1.y, z: contactShape.normal1.z},
+            normal,
             bodyAHandle: myBody.handle,
             bodyBHandle: otherBody.handle,
-            otherCollisionGroups: otherCollider.collisionGroups(),
+            otherCollisionGroups,
         })
     }
     return contacts

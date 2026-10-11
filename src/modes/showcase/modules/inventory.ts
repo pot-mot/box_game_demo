@@ -84,21 +84,6 @@ export const inventoryModule: ShowcaseModule = {
         const playerId = characterSystem.add(PLAYER_CONFIG, 0, 0.6, PLAYER_SPAWN_Z).id
         characterSystem.markPlayer(playerId)
         characterSystem.setCollisionVisible(false)
-        interactables.setPlayerAccess({
-            readPosition: () => {
-                const p = characterSystem.getPlayerCharacter()
-                if (p === undefined) return undefined
-                const t = p.body.translation()
-                return {x: t.x, y: t.y, z: t.z}
-            },
-            isGrounded: () => characterSystem.getPlayerCharacter()?.isOnGround ?? false,
-            translate: (dx, dy, dz) => {
-                const p = characterSystem.getPlayerCharacter()
-                if (p === undefined) return
-                const t = p.body.translation()
-                p.body.setTranslation({x: t.x + dx, y: t.y + dy, z: t.z + dz}, true)
-            },
-        })
 
         /* —— 演示箱子：置于玩家前方地面（原点在底面，玩家自 +Z 面向 -Z 走向它） —— */
         const chest = interactables.add(defaultInteractableConfig('chest'), 0, 0, INVENTORY_CHEST_Z, 0)

@@ -182,6 +182,11 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
     update: (dt: number) => void
+    /**
+     * 移动平台携带：对「真实接触移动支撑」的角色按平台本帧位移/转动平移位姿。
+     * **必须在 `world.step` 之前调用**（平台同级已瞬移到新位姿，乘客对齐后步进无穿透 → 无顶起抖动）。
+     */
+    applySupportCarry: (dt: number) => void
     setAIEnabled: (enabled: boolean) => void
     activateAI: () => void
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
@@ -271,6 +276,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 活跃接触对（从碰撞事件总线维护），供地面检测 / AI 推挤 / 分离使用 */
     const contactTracker: ContactTracker = createContactTracker(shared.eventBus)
+
+    /* 移动支撑携带的临时对象（逐角色顺序使用，避免帧内分配） */
+    const _supportAxis = new Vector3()
+    const _supportQuat = new Quaternion()
+    const _supportVec = new Vector3()
 
     const getCharacterByBody = (body: CharacterRigidBody): CharacterEntity | undefined => bodyCharMap.get(body.handle)
 
@@ -499,6 +509,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             isOnGround: true,
             groundNormal: { x: 0, y: 1, z: 0 },
             groundKeepTimer: 0,
+            groundBodyHandle: null,
             airborneTime: 0,
             groundedTime: 0,
             rowText: '',
@@ -827,16 +838,61 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         queryColliderContacts(world, entity.mainCollider, contactTracker.pairsInvolving(entity.mainCollider.handle))
             .filter(c => collisionCategoryOf(c.otherCollisionGroups) !== 'character')
 
+    /**
+     * 移动支撑携带（**步进前的位置携带**）：对「本帧真实接触支撑某个移动平台」的角色，按平台本帧
+     * 位移/转动平移其位姿。做法在物理步进**之前**调用——平台同级已瞬移到新位姿，乘客随之对齐，
+     * 步进时二者无穿透 → 碰撞解算不产生额外冲量，故上升不抖、下降不落/地循环；跳跃/下落因无真实接触
+     * 而自动不携带。这避免了「运动学推挤 + 速度叠加」在上升时的双倍顶起。
+     */
+    const applySupportCarry = (dt: number): void => {
+        if (!(dt > 0)) return
+        for (const entity of characters) {
+            if (entity.combat.isDead) continue
+            const handle = entity.groundBodyHandle
+            if (handle === null || handle === undefined) continue
+            const support = shared.movingSupports.get(handle)
+            if (support === undefined) continue
+            const {v, w} = support
+            let px = 0
+            let py = 0
+            let pz = 0
+            const rotating = w.x !== 0 || w.y !== 0 || w.z !== 0
+            if (rotating) {
+                const supportBody = world.getRigidBody(handle)
+                if (supportBody) {
+                    const c = supportBody.translation()
+                    const p = entity.body.translation()
+                    const wLen = Math.hypot(w.x, w.y, w.z)
+                    const angle = wLen * dt
+                    _supportAxis.set(w.x / wLen, w.y / wLen, w.z / wLen)
+                    _supportQuat.setFromAxisAngle(_supportAxis, angle)
+                    _supportVec.set(p.x - c.x, p.y - c.y, p.z - c.z).applyQuaternion(_supportQuat)
+                    px = (c.x + _supportVec.x) - p.x
+                    py = (c.y + _supportVec.y) - p.y
+                    pz = (c.z + _supportVec.z) - p.z
+                }
+            }
+            const dx = px + v.x * dt
+            const dy = py + v.y * dt
+            const dz = pz + v.z * dt
+            if (dx === 0 && dy === 0 && dz === 0) continue
+            const p = entity.body.translation()
+            entity.body.setTranslation({x: p.x + dx, y: p.y + dy, z: p.z + dz}, true)
+        }
+    }
+
     const checkGround = (entity: CharacterEntity, dt: number): void => {
         const contacts = buildGroundContacts(entity)
         const next = resolveGroundState(contacts, entity.body.handle, {
             isOnGround: entity.isOnGround,
             groundNormal: entity.groundNormal,
             groundKeepTimer: entity.groundKeepTimer,
+            groundBodyHandle: entity.groundBodyHandle,
         }, dt)
         entity.isOnGround = next.isOnGround
         entity.groundNormal = next.groundNormal
         entity.groundKeepTimer = next.groundKeepTimer
+        entity.groundBodyHandle = next.groundBodyHandle
     }
 
     const update = (rawDt: number): void => {
@@ -1647,6 +1703,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         getHostileTo,
         getCharacterByBody,
         update,
+        applySupportCarry,
         setAIEnabled,
         activateAI,
         add,

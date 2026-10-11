@@ -138,6 +138,8 @@ export type EntityLocale = {
     'interact.prompt.chest_open': string
     'interact.prompt.elevator_down': string
     'interact.prompt.elevator_up': string
+    'interact.prompt.elevator_stop': string
+    'interact.prompt.elevator_run': string
     'interact.prompt.pickup': (name: string) => string
 
     /* ── 建筑材质 / 道具 / 配方 ── */
@@ -308,6 +310,8 @@ export const entityZh: EntityLocale = {
     'interact.prompt.chest_open': '打开箱子',
     'interact.prompt.elevator_down': '下降',
     'interact.prompt.elevator_up': '上升',
+    'interact.prompt.elevator_stop': '停止',
+    'interact.prompt.elevator_run': '运行',
     'interact.prompt.pickup': (name) => `拾取 ${name}`,
 
     /* ── 建筑材质 / 道具 / 配方 ── */
@@ -478,6 +482,8 @@ export const entityEn: EntityLocale = {
     'interact.prompt.chest_open': 'Open chest',
     'interact.prompt.elevator_down': 'Descend',
     'interact.prompt.elevator_up': 'Ascend',
+    'interact.prompt.elevator_stop': 'Stop',
+    'interact.prompt.elevator_run': 'Run',
     'interact.prompt.pickup': (name) => `Pick up ${name}`,
 
     /* ── Building materials / props / recipes ── */
