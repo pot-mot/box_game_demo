@@ -103,7 +103,7 @@ export const createTerrainContextImpl = (
 
     // ── CRUD ──
 
-    const add = (config: BaseTerrainConfig, x: number, _y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): BaseTerrainEntity => {
+    const add = (config: BaseTerrainConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}): BaseTerrainEntity => {
         const id = nextId++
         const generator = options.generators[config.generatorId]
         const heights = generator.generate(config.gridSize, config.cellSize, config.minHeight, config.maxHeight)
@@ -111,14 +111,14 @@ export const createTerrainContextImpl = (
         const cs = config.cellSize
 
         const {mesh, edges} = createTerrainMesh(heights, config)
-        mesh.position.set(x, 0, z)
+        mesh.position.set(x, y, z)
         if (quat) mesh.quaternion.set(quat.x, quat.y, quat.z, quat.w)
         scene.add(mesh)
 
         const {vertices, indices} = buildTrimesh(heights, gs, cs)
 
         const bodyDesc = RAPIER.RigidBodyDesc.fixed()
-            .setTranslation(x, 0, z)
+            .setTranslation(x, y, z)
         if (quat) bodyDesc.setRotation(quat)
         const body = world.createRigidBody(bodyDesc)
 
@@ -182,11 +182,11 @@ export const createTerrainContextImpl = (
 
     // ── 位置移动 ──
 
-    const updatePosition = (id: number, x: number, z: number): void => {
+    const updatePosition = (id: number, x: number, y: number, z: number): void => {
         const t = entities.find(e => e.id === id)
         if (!t) return
-        t.mesh.position.set(x, 0, z)
-        t.body.setTranslation({x, y: 0, z}, true)
+        t.mesh.position.set(x, y, z)
+        t.body.setTranslation({x, y, z}, true)
         t.rowText = formatRowText(t)
         rebuildPanelInfo()
     }
@@ -194,9 +194,9 @@ export const createTerrainContextImpl = (
     const setTransform = (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}): void => {
         const t = entities.find(e => e.id === id)
         if (!t) return
-        t.mesh.position.set(pos.x, 0, pos.z)
+        t.mesh.position.set(pos.x, pos.y, pos.z)
         t.mesh.rotation.set(rotDeg.x * Math.PI / 180, rotDeg.y * Math.PI / 180, rotDeg.z * Math.PI / 180)
-        t.body.setTranslation({x: pos.x, y: 0, z: pos.z}, true)
+        t.body.setTranslation({x: pos.x, y: pos.y, z: pos.z}, true)
         t.body.setRotation(
             {x: t.mesh.quaternion.x, y: t.mesh.quaternion.y, z: t.mesh.quaternion.z, w: t.mesh.quaternion.w},
             true,

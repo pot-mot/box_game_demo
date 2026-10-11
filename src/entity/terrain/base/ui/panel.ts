@@ -13,6 +13,7 @@ export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generator
 
     el.appendChild(createSection('panel.pos'))
     const posX = createLabeledNumberInput(el, 'panel.x', {step: '0.01'})
+    const posY = createLabeledNumberInput(el, 'panel.y', {step: '0.01'})
     const posZ = createLabeledNumberInput(el, 'panel.z', {step: '0.01'})
 
     el.appendChild(createSection('panel.rot'))
@@ -43,30 +44,39 @@ export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generator
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
+    const refreshValues = (): void => {
+        /* 输入框聚焦中不刷新，避免覆盖用户输入 */
+        if (el.contains(document.activeElement)) return
+        const sel = ctx.getSelected() as BaseTerrainEntity | undefined
+        if (!sel) return
+        posX.value = sel.mesh.position.x.toFixed(2)
+        posY.value = sel.mesh.position.y.toFixed(2)
+        posZ.value = sel.mesh.position.z.toFixed(2)
+        rotX.value = (sel.mesh.rotation.x * 180 / Math.PI).toFixed(1)
+        rotY.value = (sel.mesh.rotation.y * 180 / Math.PI).toFixed(1)
+        rotZ.value = (sel.mesh.rotation.z * 180 / Math.PI).toFixed(1)
+        genSelect.value = sel.config.generatorId
+        minH.value = String(sel.config.minHeight)
+        maxH.value = String(sel.config.maxHeight)
+        gridSize.value = String(sel.config.gridSize)
+        cellSize.value = String(sel.config.cellSize)
+    }
+
     return {
         render: (container: HTMLElement) => {
-            const sel = ctx.getSelected() as BaseTerrainEntity | undefined
-            if (!sel) return
             container.appendChild(el)
             el.style.display = 'block'
-            posX.value = sel.mesh.position.x.toFixed(2)
-            posZ.value = sel.mesh.position.z.toFixed(2)
-            rotX.value = (sel.mesh.rotation.x * 180 / Math.PI).toFixed(1)
-            rotY.value = (sel.mesh.rotation.y * 180 / Math.PI).toFixed(1)
-            rotZ.value = (sel.mesh.rotation.z * 180 / Math.PI).toFixed(1)
-            genSelect.value = sel.config.generatorId
-            minH.value = String(sel.config.minHeight)
-            maxH.value = String(sel.config.maxHeight)
-            gridSize.value = String(sel.config.gridSize)
-            cellSize.value = String(sel.config.cellSize)
+            refreshValues()
 
             applyBtn.onclick = () => {
+                const sel = ctx.getSelected()
+                if (!sel) return
                 let newMin = Number(minH.value)
                 let newMax = Number(maxH.value)
                 if (newMin > newMax) [newMin, newMax] = [newMax, newMin]
                 ctx.setTransform(sel.id, {
                     x: Number(posX.value),
-                    y: 0,
+                    y: Number(posY.value),
                     z: Number(posZ.value),
                 }, {
                     x: parseFloat(rotX.value),
@@ -82,11 +92,13 @@ export const createTerrainPanel = (ctx: Omit<TerrainContext, 'panel'>, generator
                 })
             }
             deleteBtn.onclick = () => {
-                ctx.remove(sel.id)
+                const sel = ctx.getSelected()
+                if (sel) ctx.remove(sel.id)
             }
         },
         destroy: () => {
             el.remove()
         },
+        update: refreshValues,
     }
 }

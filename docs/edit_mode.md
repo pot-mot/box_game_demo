@@ -53,6 +53,8 @@
 | 删除实体 | Delete（指针悬停在元素列表项上时） | `ui/element_list_panel.ts` |
 | 其他面板 | 生成类型面板 / 元素列表面板 / 选中实体属性面板 / 相机 HUD | `ui/` |
 
+地形实体的属性面板含位置 X / Y / Z、旋转、生成器、高度区间与网格尺寸；Y 表示地形原点（网格基准面）的世界高度，可经面板输入或 gizmo Y 轴拖拽调整（`entity/terrain/base/physics/index.ts` 的 `add` / `updatePosition` / `setTransform` 均以传入 y 为原点）。
+
 ## 相关文件
 
 | 文件 | 职责 |
