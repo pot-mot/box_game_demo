@@ -3,6 +3,21 @@
  * 由 `src/i18n/index.ts` 聚合进 `MainLocale`；中文表 `showcaseZh`、英文表 `showcaseEn` 必须结构一致。
  */
 export type ShowcaseLocale = {
+    /* ── 二级菜单 ── */
+    'showcase.menu.title': string
+    'showcase.menu.subtitle': string
+    'showcase.back_menu': string
+    'showcase.module.actions.title': string
+    'showcase.module.actions.desc': string
+    'showcase.module.appearance.title': string
+    'showcase.module.appearance.desc': string
+    'showcase.module.ai_terrain.title': string
+    'showcase.module.ai_terrain.desc': string
+    'showcase.module.catalog.title': string
+    'showcase.module.catalog.desc': string
+    'showcase.module.inventory.title': string
+    'showcase.module.inventory.desc': string
+
     /* ── 主面板 ── */
     'showcase.title': string
     'showcase.subtitle': string
@@ -55,9 +70,38 @@ export type ShowcaseLocale = {
     'showcase.armor_set.iron': string
     'showcase.armor_set.mage': string
     'showcase.armor_set.wind': string
+
+    /* ── 外观图鉴 ── */
+    'showcase.appearance.armor_stat': (slot: string, physical: string, magic: string, speed: string) => string
+
+    /* ── AI 行为 × 复杂地形 ── */
+    'showcase.ai.title': string
+    'showcase.ai.subtitle': string
+    'showcase.ai.reset': string
+
+    /* ── 全物品图鉴 ── */
+    'showcase.catalog.title': string
+    'showcase.catalog.subtitle': string
+    'showcase.catalog.hint': string
+    'showcase.catalog.all': string
 }
 
 export const showcaseZh: ShowcaseLocale = {
+    /* ── 二级菜单 ── */
+    'showcase.menu.title': '展示模式',
+    'showcase.menu.subtitle': '选择要展示的子系统',
+    'showcase.back_menu': '← 返回展示菜单',
+    'showcase.module.actions.title': '动作展示',
+    'showcase.module.actions.desc': '全武器攻击动作 / 连段 / 蓄力与持握模式时序复现',
+    'showcase.module.appearance.title': '装备与外观',
+    'showcase.module.appearance.desc': '种族肢体与全护甲件图鉴（站立 / 行走）',
+    'showcase.module.ai_terrain.title': 'AI 与复杂地形',
+    'showcase.module.ai_terrain.desc': '双阵营 AI 在起伏地形中的寻路 / 跳跃 / 索敌攻击',
+    'showcase.module.catalog.title': '全物品图鉴',
+    'showcase.module.catalog.desc': '全物品与装备清单预览（含模型装配）',
+    'showcase.module.inventory.title': '背包与格子交互',
+    'showcase.module.inventory.desc': '俄罗斯方块背包拖拽 / 旋转 / 装备 / 丢弃交互',
+
     /* ── 主面板 ── */
     'showcase.title': '攻击动作展示台',
     'showcase.subtitle': '全武器攻击阶段动画 · 连段衔接时序复现',
@@ -110,9 +154,38 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.armor_set.iron': '铁甲套装',
     'showcase.armor_set.mage': '法袍套装',
     'showcase.armor_set.wind': '疾风皮甲',
+
+    /* ── 外观图鉴 ── */
+    'showcase.appearance.armor_stat': (slot, physical, magic, speed) => `${slot} · 物防${physical} 魔防${magic} 速${speed}`,
+
+    /* ── AI 行为 × 复杂地形 ── */
+    'showcase.ai.title': 'AI 行为 × 复杂地形',
+    'showcase.ai.subtitle': '红蓝双阵营互相敌对 · 寻路 / 跳跃 / 索敌攻击',
+    'showcase.ai.reset': '重开战斗',
+
+    /* ── 全物品图鉴 ── */
+    'showcase.catalog.title': '全物品图鉴',
+    'showcase.catalog.subtitle': '点击格子预览物品外观（装备 / 方块）',
+    'showcase.catalog.hint': '选择格子查看物品详情与外观',
+    'showcase.catalog.all': '全部',
 }
 
 export const showcaseEn: ShowcaseLocale = {
+    /* ── Sub-menu ── */
+    'showcase.menu.title': 'Showcase',
+    'showcase.menu.subtitle': 'Select a subsystem to display',
+    'showcase.back_menu': '← Back to menu',
+    'showcase.module.actions.title': 'Actions',
+    'showcase.module.actions.desc': 'All-weapon attack actions / combos / charge and hold-mode timing',
+    'showcase.module.appearance.title': 'Equipment & Look',
+    'showcase.module.appearance.desc': 'Race limbs and full armor-piece codex (stand / walk)',
+    'showcase.module.ai_terrain.title': 'AI & Terrain',
+    'showcase.module.ai_terrain.desc': 'Two factions pathfinding / jumping / engaging over rolling terrain',
+    'showcase.module.catalog.title': 'Item Codex',
+    'showcase.module.catalog.desc': 'All items and equipment with model preview',
+    'showcase.module.inventory.title': 'Inventory Grid',
+    'showcase.module.inventory.desc': 'Tetris inventory drag / rotate / equip / drop interactions',
+
     /* ── Main panel ── */
     'showcase.title': 'Attack Showcase',
     'showcase.subtitle': 'All-weapon attack phase animation · combo timing reproduction',
@@ -165,4 +238,18 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.armor_set.iron': 'Iron Set',
     'showcase.armor_set.mage': 'Mage Robe Set',
     'showcase.armor_set.wind': 'Wind Leather',
+
+    /* ── Appearance codex ── */
+    'showcase.appearance.armor_stat': (slot, physical, magic, speed) => `${slot} · phys ${physical} magic ${magic} spd ${speed}`,
+
+    /* ── AI behavior × complex terrain ── */
+    'showcase.ai.title': 'AI Behavior × Terrain',
+    'showcase.ai.subtitle': 'Red vs blue (mutually hostile) · pathfinding / jumping / engagement',
+    'showcase.ai.reset': 'Restart battle',
+
+    /* ── Item codex ── */
+    'showcase.catalog.title': 'Item Codex',
+    'showcase.catalog.subtitle': 'Click a cell to preview the item (equipment / block)',
+    'showcase.catalog.hint': 'Select a cell to view item details and appearance',
+    'showcase.catalog.all': 'All',
 }

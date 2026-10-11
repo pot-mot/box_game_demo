@@ -2,7 +2,8 @@ import type {InventoryState, Placement} from '../../../inventory/types.ts'
 import {INVENTORY_CELL_PX as CELL} from '../../../inventory/types.ts'
 import {findItemDef, findStack, moveStack, transferStack} from '../../../inventory/index.ts'
 import {renderInventoryGrid} from '../inventory_ui/grid_render.ts'
-import {translate} from '../../../i18n/index.ts'
+import {translate, onLocaleChange} from '../../../i18n/index.ts'
+import {localizeText, localizeApply} from '../../../i18n/dom.ts'
 
 export interface ContainerPanelCallbacks {
     getPlayerInventory: () => InventoryState
@@ -11,8 +12,8 @@ export interface ContainerPanelCallbacks {
 }
 
 export interface ContainerPanel {
-    /** 打开指定容器（箱子持有其 InventoryState 引用） */
-    open: (container: InventoryState, title?: string) => void
+    /** 打开指定容器（箱子持有其 InventoryState 引用）；containerId 用于标题本地化显示 */
+    open: (container: InventoryState, containerId?: number) => void
     close: () => void
     isVisible: () => boolean
     refresh: () => void
@@ -38,7 +39,12 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
 
     const title = document.createElement('div')
     title.style.cssText = 'font-size:15px;font-weight:700;margin-bottom:10px;color:#e9c46a'
-    title.textContent = translate('play.container.title')
+    /* 标题随打开容器（编号）与语言切换重译 */
+    let titleId: number | undefined
+    const titleText = (): string => titleId === undefined
+        ? translate('play.container.title')
+        : translate({key: 'play.container.named', args: [String(titleId)]})
+    localizeApply(title, el => { el.textContent = titleText() })
     root.appendChild(title)
 
     const body = document.createElement('div')
@@ -49,7 +55,7 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
     const chestColumn = document.createElement('div')
     for (const [col, labelKey] of [[playerColumn, 'play.container.player'], [chestColumn, 'play.container.chest']] as const) {
         const head = document.createElement('div')
-        head.textContent = translate(labelKey)
+        localizeText(head, labelKey)
         head.style.cssText = 'margin-bottom:6px;color:#8ecae6;font-weight:700'
         col.appendChild(head)
         col.style.cssText = 'display:flex;flex-direction:column'
@@ -64,14 +70,17 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
 
     const hint = document.createElement('div')
     hint.style.cssText = 'border-top:1px solid #333;margin-top:10px;padding-top:8px;color:#aaa;min-height:18px'
-    hint.textContent = translate('play.container.hint')
+    localizeText(hint, 'play.container.hint')
     root.appendChild(hint)
 
     const closeBtn = document.createElement('button')
-    closeBtn.textContent = translate('play.container.close')
+    localizeText(closeBtn, 'play.container.close')
     closeBtn.style.cssText = 'position:absolute;top:10px;right:12px;cursor:pointer'
     closeBtn.onclick = () => close()
     root.appendChild(closeBtn)
+
+    /* 挂载到 DOM（初始 display:none，由 open / close 控制显隐） */
+    document.body.appendChild(root)
 
     let visible = false
     let chest: InventoryState | undefined
@@ -94,6 +103,11 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
             })
         }
     }
+
+    /* 语言切换后重译网格内物品名（仅在可见时重渲染） */
+    const unsubscribeLocale = onLocaleChange(() => {
+        if (visible) render()
+    })
 
     const sync = (): void => {
         cb.onChanged?.()
@@ -203,9 +217,10 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
     }
 
     return {
-        open: (container, titleText) => {
+        open: (container, containerId) => {
             chest = container
-            title.textContent = titleText ?? translate('play.container.title')
+            titleId = containerId
+            title.textContent = titleText()
             visible = true
             root.style.display = 'block'
             render()
@@ -214,6 +229,7 @@ export const createContainerPanel = (cb: ContainerPanelCallbacks): ContainerPane
         isVisible: () => visible,
         refresh: () => { if (visible) render() },
         destroy: () => {
+            unsubscribeLocale()
             close()
             root.remove()
         },

@@ -3,7 +3,7 @@ import {EQUIP_SLOTS, EQUIP_SLOT_LABELS, INVENTORY_CELL_PX} from '../../../invent
 import {findItemDef, itemDisplayName, itemDisplayDescription} from '../../../inventory/items.ts'
 import {findStack} from '../../../inventory/inventory.ts'
 import type {Placement} from '../../../inventory/types.ts'
-import {translate} from '../../../i18n/index.ts'
+import {translate, onLocaleChange} from '../../../i18n/index.ts'
 import {localizeText} from '../../../i18n/dom.ts'
 
 export interface InventoryPanelCallbacks {
@@ -68,6 +68,9 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
     const detail = document.createElement('div')
     detail.style.cssText = 'border-top:1px solid #333;margin-top:10px;padding-top:8px;min-height:60px'
     root.appendChild(detail)
+
+    /* 挂载到 DOM（初始 display:none，由 setVisible / toggle 控制显隐） */
+    document.body.appendChild(root)
 
     let visible = false
     let selectedId: string | undefined
@@ -210,6 +213,11 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         renderDetail()
     }
 
+    /* 语言切换后重译本地面板内的物品名 / 装备槽名 / 详情（仅在可见时重渲染，避免无谓开销） */
+    const unsubscribeLocale = onLocaleChange(() => {
+        if (visible) render()
+    })
+
     /* ── 拖拽 ── */
     interface DragState {
         instanceId: string
@@ -313,6 +321,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         },
         rightColumn,
         destroy: () => {
+            unsubscribeLocale()
             endDrag()
             root.remove()
         },

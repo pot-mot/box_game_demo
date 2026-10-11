@@ -89,15 +89,31 @@ test.describe('国际化', () => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '展示模式'}).click()
+        await page.locator('.sch-menu-card', {hasText: '装备与外观'}).click()
         await page.waitForSelector('.sch-panel', {timeout: 5000})
 
-        /* 最后一排首个（种族展示）：骷髅 */
-        await expect(page.locator('.sch-panel .sch-skill').nth(27)).toHaveText('骷髅')
+        /* 外观模块首行（种族展示）：骷髅 */
+        await expect(page.locator('.sch-panel .sch-skill').first()).toHaveText('骷髅')
 
         await page.locator('#settings-btn').click()
         await page.locator('#settings-language').selectOption('en')
 
-        await expect(page.locator('.sch-panel .sch-skill').nth(27)).toHaveText('Skeleton')
+        await expect(page.locator('.sch-panel .sch-skill').first()).toHaveText('Skeleton')
+    })
+
+    test('背包面板切换语言后物品名 / 装备槽名同步重译', async ({page}) => {
+        await page.goto('/')
+        await page.waitForSelector('#startup-overlay', {timeout: 5000})
+        await page.locator('button', {hasText: '展示模式'}).click()
+        await page.locator('.sch-menu-card', {hasText: '背包与格子交互'}).click()
+        /* 演示背包预装主手短剑：装备槽显示「主手: 短剑」 */
+        await expect(page.getByText('短剑').first()).toBeVisible()
+
+        await page.locator('#settings-btn').click()
+        await page.locator('#settings-language').selectOption('en')
+
+        await expect(page.getByText('Short Sword').first()).toBeVisible()
+        await expect(page.getByText('Main Hand').first()).toBeVisible()
     })
 
     test('骨骼动画洋葱皮按钮随语言切换按当前开合态重译', async ({page}) => {

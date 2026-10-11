@@ -1,6 +1,6 @@
 import type {InventoryState} from '../../../inventory/types.ts'
 import {INVENTORY_CELL_PX} from '../../../inventory/types.ts'
-import {findItemDef} from '../../../inventory/items.ts'
+import {findItemDef, itemDisplayName} from '../../../inventory/items.ts'
 
 export interface GridRenderOptions {
     getInventory: () => InventoryState
@@ -40,9 +40,9 @@ export const renderInventoryGrid = (container: HTMLElement, options: GridRenderO
         el.dataset.instanceId = stack.instanceId
         el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${def.shape[0].length * INVENTORY_CELL_PX}px;height:${def.shape.length * INVENTORY_CELL_PX}px;cursor:grab;background:rgba(255,255,255,0.04);border-radius:4px`
         if (options.selectedId === stack.instanceId) el.style.outline = '2px solid #e9c46a'
-        el.title = `${def.name} ×${stack.count}`
+        el.title = `${itemDisplayName(def)} ×${stack.count}`
         const label = document.createElement('div')
-        label.textContent = def.name
+        label.textContent = itemDisplayName(def)
         label.style.cssText = 'position:absolute;left:3px;top:2px;font-size:10px;color:#fff;text-shadow:0 1px 2px #000;pointer-events:none'
         el.appendChild(label)
         el.addEventListener('pointerdown', (ev) => options.onItemPointerDown(ev, stack.instanceId))

@@ -2,6 +2,7 @@ import {Scene, PerspectiveCamera, AmbientLight, DirectionalLight, Color, Vector3
 import type {WebGLRenderer} from 'three'
 import {setupInfiniteGrid} from '../../render/grid.ts'
 import {getInputRegistry} from '../../input/registry.ts'
+import {MOVE_STEP} from '../constants.ts'
 import {
     CAMERA_FAR,
     CAMERA_FOV,
@@ -35,6 +36,8 @@ export interface OrbitCamera {
     rotateBy: (dxPx: number, dyPx: number) => void
     panBy: (dxPx: number, dyPx: number) => void
     zoomBy: (wheelDelta: number) => void
+    /** 直接设置观察距离（自由视角下生效；聚焦 / 回归过渡期间忽略） */
+    setDistance: (distance: number) => void
     /** 聚焦到指定世界坐标（null = 取消聚焦并平滑回归进入前的自由视角） */
     focusTo: (position: Vector3 | null) => void
     /** 按 yaw 方向同步平移 target + camera（水平）或调整 target.y（垂直） */
@@ -47,7 +50,12 @@ export interface OrbitCamera {
 
 const defaultTarget = (): Vector3 => new Vector3(0, ORBIT_DEFAULT_TARGET_Y, ORBIT_DEFAULT_TARGET_Z)
 
-const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLElement, signal: AbortSignal): OrbitCamera => {
+/**
+ * 展示相机（自由飞行 + 聚焦）：未聚焦时以 edit 模式自由飞行方式操作（WASDZX 平移 target、
+ * 鼠标拖拽转视角），聚焦时相机平滑飞向目标并环绕，Esc / 再次调用 `focusTo(null)` 恢复自由飞行。
+ * 导出供单测直接驱动（无需 WebGL 渲染器）。
+ */
+export const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLElement, signal: AbortSignal): OrbitCamera => {
     const target = defaultTarget()
     let yaw = ORBIT_DEFAULT_YAW
     let pitch = ORBIT_DEFAULT_PITCH
@@ -119,6 +127,12 @@ const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLElement, s
         )
     }
 
+    const setDistance = (next: number): void => {
+        /* 与 zoomBy 同门控：聚焦 / 回归过渡期间不直接改距离，避免打断自动取景 */
+        if (focusPoint !== null || returning) return
+        distance = Math.min(Math.max(next, ORBIT_MIN_DISTANCE), ORBIT_MAX_DISTANCE)
+    }
+
     const focusTo = (position: Vector3 | null): void => {
         if (position !== null) {
             /* 首次进入聚焦时快照当前自由视角（连续切换聚焦目标不覆盖快照） */
@@ -136,6 +150,7 @@ const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLElement, s
     }
 
     const update = (dt: number): void => {
+        applyKeyboardFreeFlight()
         const k = 1 - Math.exp(-ORBIT_FOCUS_LERP * dt)
         if (focusPoint !== null) {
             target.lerp(focusPoint, k)
@@ -169,6 +184,10 @@ const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLElement, s
         e.preventDefault()
         zoomBy(e.deltaY)
     }, {passive: false, signal})
+    /* Esc 解除聚焦（全模块统一）：恢复自由飞行；动作 / 外观模块另有监听以复位高亮环与变暗 */
+    window.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && focusPoint !== null) focusTo(null)
+    }, {signal})
 
     const translateTargetBy = (dx: number, dy: number, dz: number): void => {
         /* 聚焦锁定时禁用（与 panBy 一致） */
@@ -187,7 +206,34 @@ const createOrbitCamera = (camera: PerspectiveCamera, domElement: HTMLElement, s
 
     const getYaw = (): number => yaw
 
-    return {target, rotateBy, panBy, zoomBy, focusTo, translateTargetBy, getYaw, update}
+    /**
+     * 键盘自由飞行式平移（与 edit 模式 `free_flight.ts` 语义一致）：按相机偏航角计算世界位移，
+     * 再把位移施加到轨道相机 target（相机随 `applyCamera` 同步跟随），视角方向不变。
+     * 未聚焦时启用；聚焦 / 回归过渡期间暂停（移动会由 `translateTargetBy` 取消回归动画）。
+     */
+    const applyKeyboardFreeFlight = (): void => {
+        if (focusPoint !== null) return
+        /* 水平前向 = 相机看向 target 的方向 (-sin, -cos)，右向 = (cos, -sin) */
+        const fwdX = -Math.sin(yaw)
+        const fwdZ = -Math.cos(yaw)
+        const rightX = Math.cos(yaw)
+        const rightZ = -Math.sin(yaw)
+
+        let dx = 0
+        let dz = 0
+        if (input.isActionActive('move_forward')) { dx += fwdX * MOVE_STEP; dz += fwdZ * MOVE_STEP }
+        if (input.isActionActive('move_backward')) { dx -= fwdX * MOVE_STEP; dz -= fwdZ * MOVE_STEP }
+        if (input.isActionActive('move_left')) { dx -= rightX * MOVE_STEP; dz -= rightZ * MOVE_STEP }
+        if (input.isActionActive('move_right')) { dx += rightX * MOVE_STEP; dz += rightZ * MOVE_STEP }
+
+        let dy = 0
+        if (input.isActionActive('move_up')) dy += MOVE_STEP
+        if (input.isActionActive('move_down')) dy -= MOVE_STEP
+
+        if (dx !== 0 || dy !== 0 || dz !== 0) translateTargetBy(dx, dy, dz)
+    }
+
+    return {target, rotateBy, panBy, zoomBy, setDistance, focusTo, translateTargetBy, getYaw, update}
 }
 
 export interface ShowcaseScene {

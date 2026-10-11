@@ -139,11 +139,11 @@ export const RACE_SHOWCASE_ROSTER: readonly ShowcaseExtraEntry[] = [
     },
 ]
 
-/** 种族 / 套装展示行 Z 坐标（远程行之后，为最后一排） */
-export const RACE_SHOWCASE_ROW_Z = RANGED_ROW_Z - 3.4
+/** 外观图鉴行角色间距（m） */
+export const SHOWCASE_APPEARANCE_SPACING = 3.0
 
-/** 种族 / 套装展示行角色间距（m） */
-export const RACE_SHOWCASE_SPACING = 3.0
+/** 外观图鉴行间距（m） */
+export const SHOWCASE_APPEARANCE_ROW_SPACING = 3.4
 
 /** 站立 / 行走各持续时长（秒）：到达即切换到另一姿态并循环 */
 export const RACE_SHOWCASE_HOLD_SECONDS = 2.0
@@ -227,3 +227,56 @@ export const DIMMED_OPACITY = 0.22
 
 /** 判定为"点击拾取"的最大按下位移（px，超过视为拖拽旋转） */
 export const CLICK_SLOP_PX = 5
+
+// ── AI 行为 × 复杂地形展示 ──
+
+/** 地形网格边长（格点数）；实际尺寸 = 格点数 × 格边长 */
+export const AI_TERRAIN_GRID_SIZE = 24
+/** 地形格边长（m） */
+export const AI_TERRAIN_CELL_SIZE = 2
+/** 地形最低 / 最高高度（m） */
+export const AI_TERRAIN_MIN_HEIGHT = 0
+export const AI_TERRAIN_MAX_HEIGHT = 5
+/** 地形地面摩擦 */
+export const AI_TERRAIN_FRICTION = 0.3
+/** 地形生成器 id（`GENERATORS`） */
+export const AI_TERRAIN_GENERATOR = 'fbm'
+
+/** 双方出生点 X 坐标（沿 X 轴对置） */
+export const AI_TEAM_SPAWN_X = 7
+/** 同性阵营单位沿 Z 轴间距（m） */
+export const AI_TEAM_SPAWN_Z_SPAN = 3
+/** AI 角色基础移速（m/s） */
+export const AI_CHARACTER_SPEED = 3.2
+/** AI 角色跳跃高度（m） */
+export const AI_CHARACTER_JUMP_HEIGHT = 2
+/** AI 角色最大生命 */
+export const AI_CHARACTER_MAX_HEALTH = 60
+
+/** 中央低墙（跳跃演示）厚度（X）/ 高度（Y）/ 长度（Z） */
+export const AI_OBSTACLE_WALL_THICKNESS = 0.6
+export const AI_OBSTACLE_WALL_HEIGHT = 0.8
+export const AI_OBSTACLE_WALL_DEPTH = 20
+
+/** AI 状态 HUD 刷新间隔（秒） */
+export const AI_HUD_REFRESH_INTERVAL = 0.2
+/** 相机观察 AI 战场的默认距离（m）与目标高度（m） */
+export const AI_CAMERA_DISTANCE = 24
+export const AI_CAMERA_TARGET_Y = 2
+
+// ── 全物品图鉴展示 ──
+
+/** 图鉴展示人体的相机注视目标高度（m） */
+export const CATALOG_CAMERA_TARGET_Y = 0.95
+
+/** 图鉴默认自由飞行视角的观察距离（m，把展示人体置于画面中央，可用 WASDZX 自由环绕） */
+export const CATALOG_CAMERA_DISTANCE = 4.5
+
+/** 图鉴方块预览的中心高度（m） */
+export const CATALOG_CUBE_Y = 0.7
+
+// ── 背包格子交互展示 ──
+
+/** 演示背包尺寸（格）；需容纳全物品清单 */
+export const SHOWCASE_INVENTORY_WIDTH = 12
+export const SHOWCASE_INVENTORY_HEIGHT = 10

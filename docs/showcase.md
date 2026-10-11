@@ -1,40 +1,85 @@
-# 攻击动作展示场景（展示模式）
+# 展示模式（二级菜单 + 子模块）
 
-入口：主页 http://localhost:5173/（`pnpm dev`）启动屏第三个按钮"展示模式"；不再有独立 URL。退出走右上角设置菜单「🏠 返回主页面」（`setupSettingsPanel` 的 `onReturnHome` 覆写为优雅退出：释放面板/监听/场景资源后重现启动屏）。
+展示模式是一个**多子系统的展示 / 图鉴 / 人员测试**平台：进入后先显示二级菜单，选择要展示的子系统，再装配对应子模块。每个子模块自建独立 Three 场景（复用主页共享渲染器与单 RAF 循环），可随时「返回展示菜单」切换。
 
-## 展示清单（33 角色，每角色循环播放）
+## 入口
 
-- 清单条目按**武器 id + 持握模式**（`SHOWCASE_ROSTER`）：近战 6 武器 × 3 模式 = 18 + 远程 9，武器参数与攻击链经 `weaponPresetOrDefault(id)` + `weaponAttacksOf(weapon, holdMode)` 取自武器模组。
-- **近战按持握模式分三排**（单持 → 双手共持 → 双持，由前到后），每排 6 把武器；远程 9 单独一排。
-- 近战演示：按该武器该模式的段展示顺序连播（如巨剑双手 轻击一段 → 轻击二段 → 轻击三段 → 重击一段 → 重击二段）→ 停顿 0.6s（模拟松开攻击键）→ 重链 → 收尾待机 → 循环。每个**重击段播放前**先定格**满蓄力姿势**（前置时长 = 该武器模板的最长蓄力时间 `maxChargeTime`，`charging` 前置表现，镜像玩家按住重击键的满蓄力状态）再出招，便于观察蓄力动作与「蓄力→出招」衔接。每段 tilt 为段固有值（确定性，非轮转）。
-- 副手展示：单持行不装备副手（单持即主手单手使用）；双持行左手握同类武器；双手共持行副手挂背（`backWeaponMount`）且双手 IK 贴合主手武器。
-- 远程武器为单段开火动作（draw → aim → release 等阶段由该武器段定义；不发射弹丸）。
-- **种族 / 套装展示排**（`RACE_SHOWCASE_ROSTER`，最后一排，6 角色）：三族（骷髅 / 兽人 / 精灵，各装备四槽同族肢体，默认 replace 完整替换身体）+ 三套护甲套装（铁甲 / 法袍 / 疾风皮甲，人类肢体 + 成套护甲）。每角色**站立 2s ↔ 行走 2s 交替循环**（`RACE_SHOWCASE_HOLD_SECONDS`），空手无武器攻击、位置原地不动（纯外观展示）。三族各用独立阵营（`faction` 11/12/13），肢体披挂 / 发色随阵营调色板着色（颜色随阵营变化）。
+- 主页 http://localhost:5173/（`pnpm dev`）启动屏第三个按钮「展示模式」→ **二级菜单**。
+- 菜单选择子模块进入；模块顶部常驻「← 返回展示菜单」按钮。
+- 退出走右上角设置菜单「🏠 返回主页面」（`setupSettingsPanel` 的 `onReturnHome` 覆写为优雅退出：释放当前子模块与菜单后重现启动屏）；菜单 z-index（150）低于设置面板（200），返回主页全程可点。
+- 展示模式不加载存档元素，为独立干净场景。
 
-## 面板与控制
+## 架构
 
-- 左侧信息面板：武器名 + **持握模式列**（单持 / 双手共持 / 双持；远程显示其默认模式；种族/套装行显示「种族肢体」/「护甲套装」）、当前段号（第 n 击 / 共 m 段）、阶段名与进度条、衔接方式（首次起手/段内推进/重新起手）。种族/套装行无攻击状态，中列显示「站立/行走」、隐藏阶段与进度条，聚焦时仅高亮不展开计时详情卡。
-- 聚焦详情卡：标题为「武器 · 持握模式」；除阶段/总进度外，展示与 play HUD 同规则的段计时区块——每段一行（段名用 `segmentDisplayName`），同行动作/恢复/冷却三个计时格（颜色、填充方向、文本格式与 play 一致）；行顺序 = 段展示顺序。
-- 按钮：暂停/继续（或空格，防按住 auto-repeat）、单步（暂停时逐帧）、速度 0.1/0.25/0.5/1×；退出经右上角设置菜单（见上文入口说明）。
-- 点击角色或下拉聚焦（Esc 取消），其余角色变暗（含刀光）。
-- 相机：左键旋转 / 右键平移 / **滚轮缩放仅自由视角生效，聚焦期间（含过渡）锁定，退出后回归进入前的视角距离**。
+```
+src/modes/showcase/
+├── module.ts          # ShowcaseModule / ShowcaseModuleHost / ShowcaseModuleRuntime / SHOWCASE_MODULE_IDS
+├── index.ts           # 控制器：二级菜单 + 子模块宿主（updater 委托当前模块；exit 统一释放）
+├── menu.ts            # 二级菜单（条目卡片 + 选择回调，文案经 i18n）
+├── scene.ts           # 独立 Scene + 灯光 + 无限网格 + 自由飞行相机（WASDZX 平移 + 拖拽转视角 + 聚焦环绕）
+├── actor_stage.ts     # 共享舞台：场景 + 自由飞行相机 + 多展示角色 + 聚焦环 + 暂停/单步/变速 + 信息面板
+├── panel.ts           # 信息面板（标题 / 副标题可经 PanelOptions 自定义）
+├── actor.ts           # 武器攻击展示角色驱动器
+├── race_actor.ts      # 种族 / 套装展示角色驱动器（站立/行走循环）
+├── label.ts / actor_handle.ts / constants.ts
+└── modules/
+    ├── index.ts       # SHOWCASE_MODULES 注册表（顺序即菜单顺序）
+    ├── actions.ts     # 动作展示
+    ├── appearance.ts  # 装备与外观图鉴
+    ├── ai_terrain.ts  # AI 行为 × 复杂地形
+    ├── catalog.ts     # 全物品图鉴
+    └── inventory.ts   # 背包与格子交互
+```
 
-## 与生产代码的镜像关系
+- **`ShowcaseModule`**：`{id, title, description, setup(host) → {updater, dispose}}`。`title` / `description` 为 i18n 文案键（强类型 `StringLocaleKey`）；`setup` 接收宿主 `{renderer}`，自建场景并返回每帧 updater 与释放函数。
+- **控制器**：持有 `SHOWCASE_MODULES` 注册表，`selectModule` 释放当前模块、装配新模块并隐藏菜单；`backToMenu` 释放模块、显示菜单；`exit` 释放模块 + 菜单 + 返回按钮后回调宿主。无激活模块时 updater 为空操作（菜单覆盖画布）。
+- **`actor_stage.ts`**：把「独立场景 + 自由飞行相机 + 多展示角色 + 聚焦环 + 点击拾取 + 空格暂停/Esc 取消聚焦 + 信息面板」这套通用编排集中一处，供 `actions` / `appearance` 复用（子模块只负责 `populate(scene, register)` 填充角色与面板行）。
+- **相机（全模块统一）**：`scene.ts` 的相机以 edit 模式自由飞行为基准——`W/A/S/D` 前后左右、`Z/X` 升 / 降（`MOVE_STEP`，随相机偏航角），鼠标左键拖拽转视角、右键拖拽平移、滚轮缩放；点击角色 / 物件进入**聚焦**（相机平滑飞向目标并环绕，期间暂停自由移动），`Esc` 或点击空白恢复自由飞行。动作 / 外观 / AI 地形 / 图鉴 / 背包五个子模块默认均使用该自由飞行相机（图鉴把注视中心对准展示人体，不进入聚焦）。
+- **新增子模块**：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 补 `showcase.module.<id>.title/desc` 与模块内文案 → 补单测（`modules.test.ts` 自动覆盖注册表一致性）/ e2e。
 
-- 连段时序镜像 `src/character/state_machine/states/attacking/`（段子状态机）：阶段推进、**段末推进**（最终阶段 recovery 完整播完后消费缓冲切换下一段，不出 attacking 状态）。
-- 攻击数据镜像武器模组：展示角色直接持有 `WeaponConfig` + 持握模式，脚本 = `orderedSegments(weaponAttacksOf(weapon, holdMode))`，段时长/阶段/伤害倍率全部来自武器段定义（与生产同一份数据），不再有技能槽装配与展示顺序重排。
-- 动画注入镜像 `src/entity/character/physics/world.ts`：按同名同语义字段构造 `AnimationContext`（含 `attackSegment` 与 `holdMode`）交给 `createAppearanceSystem()`；段切换触发动画键（`attacking:{段 id}`）变化走快照混合，衔接平滑。
-- 展示角色放大 `ACTOR_SCALE = 1.3`：双手 IK 目标经 `rootObject: model.group` 换算回骨架（未缩放）空间，臂展与目标同空间，双手贴合与 play 模式相对姿态一致（见 `two_handed_ik.ts` 的 `computeTwoHandGripTarget`）。
-- 冷却计时镜像生产：段触发（起手/段末推进）即挂自身段冷却、逐帧递减，供详情卡计时格展示（仅展示不阻断脚本推进）。
-- 装配遵循 modes 约定：`src/modes/showcase/index.ts` 返回 updater 由主页单 RAF 调度，复用共享渲染器、自建独立 Three 场景。
+## 子模块
 
-## 刻意差异（均已在代码注释标注）
+### 动作展示（actions）
 
-- 站立攻击：`horizontalSpeed` / `horizontalTravel` 恒 0（生产为物理体实时速度）；物理世界冻结不步进。
-- 缓冲恒有值：演示中假设玩家持续按键，段末自动推进；链间停顿模拟松键。
-- 省略 hitbox/hitstop/命中执行器 —— 展示场景仅播动作时序；冷却计时仅镜像展示，不阻断推进。
+全武器攻击动作展示台：近战 6 武器 × 3 持握模式分三排（单持 → 双手共持 → 双持，由前到后），远程 9 单独一排，每角色循环播放其连段（轻链 → 停顿 → 重链），信息面板复现段计时。
+
+- 清单条目按**武器 id + 持握模式**（`SHOWCASE_ROSTER`），武器参数与攻击链经 `weaponPresetOrDefault(id)` + `weaponAttacksOf(weapon, holdMode)` 取自武器模组。共 **27** 个展示角色。
+- 近战演示按该武器该模式的段展示顺序连播 → 停顿 0.6s（模拟松开攻击键）→ 重链 → 收尾待机 → 循环；每个**重击段播放前**先定格**满蓄力姿势**（时间 = 武器模板最长蓄力时间 `maxChargeTime`）。每段 tilt 为段固有值。
+- 副手展示：单持不装备副手；双持左手握同类武器；双手共持副手挂背（`backWeaponMount`）且双手 IK 贴合主手武器。远程为单段开火动作（不发射弹丸）。
+- 面板/控制：暂停/继续（空格）、单步、速度 0.1/0.25/0.5/1×；点击角色或下拉聚焦（Esc 取消），其余角色变暗；WASDZX 自由飞行 / 左键旋转 / 右键平移 / 滚轮缩放（聚焦期间暂停自由移动、锁定缩放）。聚焦详情卡复现 play HUD 的段计时区块（每段一行，动作/恢复/冷却三格）。
+
+**与生产代码的镜像关系**：连段时序镜像 `states/attacking/` 段子状态机（阶段推进 + 段末推进）；攻击数据镜像武器模组（`orderedSegments(weaponAttacksOf(...))`）；动画注入镜像 `world.ts` 的 `AnimationContext` 装配；刀光镜像 `world.ts`（strike/release/spin 激活）。冷却计时镜像生产（触发即挂、逐帧递减，仅展示不阻断推进）。
+
+**刻意差异**（代码注释已标注）：站立攻击（水平速度恒 0）；缓冲恒有值（段末自动推进）；省略 hitbox / hitstop / 命中执行器。
+
+### 装备与外观（appearance）
+
+种族 / 护甲件图鉴：第一排三族肢体（骷髅 / 兽人 / 精灵，四槽同族肢体 replace，各自独立阵营着色）；后续排按槽位分组逐个展示全部护甲预设（人类身体 + 单件护甲，副名标注槽位与逐类别防御 / 移速）。共 **20** 个展示角色（3 种族 + 17 护甲件）。全部角色站立 2s ↔ 行走 2s 交替循环（`RACE_SHOWCASE_HOLD_SECONDS`），位置原地不动，纯外观展示。
+
+### AI 行为 × 复杂地形（ai_terrain）
+
+内容：FBM 起伏地形（`AI_TERRAIN_*`）+ 中央低墙（高度低于跳跃高度，触发导航跳跃）+ 红蓝双阵营各 5 个单位（近战 / 远程混合、三档战斗策略 aggressive/tactical/cowardly），阵营互相敌对（`hostileExceptSelf`）——展示不同 AI 在同一复杂地形中的寻路、障碍跳跃与面向敌对阵营的索敌 / 追击 / 攻击行为。
+
+- 物理：模块自建 `SharedWorld`（地形 trimesh + 障碍 + 角色），每帧按 `main.ts` play 模式同一固定子步策略步进（`world.step` → `eventBus.drain` → 各系统 `preSync` / `syncPositions` → `characterSystem.update`），运行的是与生产同一套 AI / 物理 / 状态机运行时（人员测试镜像）。子步运行器经 `physics/fixed_step.ts` 的 `createFixedStepStepper` 统一内聚「每物理子步结束后清力」（`clearAllForces`）——施力为每帧瞬态语义，漏清力会让 idle / 站定攻击的坡面反重力力残留、抵消重力，角色跳跃后持续升空。
+- 相机默认俯视战场全貌（`setDistance` 取初始距离），可用 WASDZX 自由飞行、拖拽旋转 / 平移 / 缩放。
+- 左侧 HUD 逐角色列出面板行文本（HP / 武器 / 防御 / 移速 / 状态机状态）与阵营色点；「重开战斗」按钮清子弹、移除并重新生成双方单位、重建 AI 上下文，便于反复观察。
+
+### 全物品图鉴（catalog）
+
+以**格子 + 预览**呈现 `ITEM_DEFS` 全量物品（全部武器 15 / 护甲 17 / 方块 6 + 消耗品 / 材料 / 钥匙，共 41 件，由 `items.test.ts` 对照武器 / 护甲目录与实体类型锁定完整性）：右侧面板提供类别筛选标签（全部 / 武器 / 护甲 / 方块 / 消耗品 / 材料 / 关键物品）与按类别着色的物品格子；点击格子即选中并在左侧 3D 场景**预览**——武器 / 护甲在展示人体上即时装配（武器 → 主手、护甲 → 对应槽），方块以代表方块模型（复用各方块渲染模块底色）呈现、其它物品以类别色方块呈现。相机默认自由飞行并对准展示人体（`CATALOG_CAMERA_DISTANCE`），WASDZX 可自由环绕观察。起到玩家图鉴效果。
+
+### 背包与格子交互（inventory）
+
+复用 play 模式的俄罗斯方块背包面板（`modes/play/inventory_ui`）与装备模型预览（`modes/play/equipment_ui`），注入一份演示背包（全武器 / 全护甲 + 消耗品 / 材料 / 钥匙），支持拖拽移动、`R` 旋转、拖到环绕装备槽装备、点装备槽卸下、丢弃，装备变化即时同步到面板内角色模型预览——完整复现 play 背包交互效果。
+
+> `inventory` 子模块复用了 play 模式的 UI 组件；这两个组件仅依赖 `inventory/` 领域层与外观 / 武器目录，属可复用 UI，不构成循环依赖。
 
 ## 验证
 
-- 单元测试：`src/character/weapon/attack_chain.test.ts` 锁定段清单顺序（`orderedSegments` 为 轻击一段 → 轻击二段 → 重击一段 → 重击二段）、段转换（`next` 守卫变体优先）与武器运行时数值覆写；`hold_mode.test.ts` 锁定三模式与双持可用性；`src/modes/showcase/race_actor.test.ts` 锁定种族 / 套装角色创建释放、站立行走 2s 交替循环与位置不动、肢体替换外观生效；`actor.test.ts` 锁定近战满蓄力前置。
-- e2e：`e2e/showcase.spec.ts`（信息面板 33 行、持握模式/装备类别列、种族与套装排、聚焦近战/双持角色后段计时行顺序、经设置菜单返回主页面）。
+- 单元测试：
+  - `src/modes/showcase/actor.test.ts` — 近战满蓄力前置。
+  - `src/modes/showcase/race_actor.test.ts` — 种族 / 套装角色创建释放、站立行走 2s 交替循环、位置不动、肢体替换外观生效。
+  - `src/modes/showcase/scene.test.ts` — 相机自由飞行（WASD 沿朝向平移、Z/X 升降）、聚焦期间暂停自由移动、Esc 恢复自由飞行。
+  - `src/modes/showcase/modules.test.ts` — 注册表与 `SHOWCASE_MODULE_IDS` 一一对应、标题/说明可本地化、id 唯一。
+  - `src/modes/showcase/menu.test.ts` — 每个子模块渲染一张卡片、点击触发 `onSelect`、show/hide/dispose。
+- e2e：`e2e/showcase.spec.ts` — 二级菜单 5 张卡片、动作模块 27 行、外观模块 20 行、聚焦段计时行顺序、返回展示菜单、经设置菜单返回主页面。

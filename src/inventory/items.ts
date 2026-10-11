@@ -1,12 +1,13 @@
 import type {EquipSlot} from './types.ts'
 import {translate, type StringLocaleKey} from '../i18n/index.ts'
 
-export const ITEM_CATEGORIES = ['weapon', 'armor', 'consumable', 'material', 'key'] as const
+export const ITEM_CATEGORIES = ['weapon', 'armor', 'block', 'consumable', 'material', 'key'] as const
 export type ItemCategory = typeof ITEM_CATEGORIES[number]
 
 export const ITEM_CATEGORY_LABELS: Record<ItemCategory, StringLocaleKey> = {
     weapon: 'item_category.weapon',
     armor: 'item_category.armor',
+    block: 'item_category.block',
     consumable: 'item_category.consumable',
     material: 'item_category.material',
     key: 'item_category.key',
@@ -14,7 +15,8 @@ export const ITEM_CATEGORY_LABELS: Record<ItemCategory, StringLocaleKey> = {
 
 /**
  * 物品定义：`shape` 为俄罗斯方块形状（每行一个字符串，`#` 为占格；行数 = 高度，最长行 = 宽度）。
- * `weaponId` / `armorId` 指向既有武器模型 / 护甲预设，实现背包装备。
+ * `weaponId` / `armorId` 指向既有武器模型 / 护甲预设，实现背包装备；
+ * `blockType` 指向实体类型（`ENTITY_TYPE_VALUES` 中的方块类），用于方块物品（图鉴 / 放置）。
  */
 export interface ItemDef {
     readonly id: string
@@ -25,6 +27,8 @@ export interface ItemDef {
     readonly weaponId?: string
     readonly armorId?: string
     readonly equipSlot?: EquipSlot
+    /** 方块物品对应的实体类型（`box/common` / `area/water` 等；仅 `block` 类别） */
+    readonly blockType?: string
     readonly dropSize: readonly [number, number, number]
     readonly description: string
 }
@@ -53,28 +57,66 @@ const armor = (id: string, name: string, shape: readonly string[], armorId: stri
     description: `${name}（${effect}）`,
 })
 
-/** 物品目录（生产物品；未知 defId 由运行时丢弃） */
+const block = (id: string, name: string, shape: readonly string[], blockType: string, description: string): ItemDef => ({
+    id,
+    name,
+    category: 'block',
+    shape,
+    maxStack: 99,
+    blockType,
+    dropSize: [0.4, 0.4, 0.4],
+    description: `${name}（${description}）`,
+})
+
+/**
+ * 物品目录（生产物品；未知 defId 由运行时丢弃）。
+ * 覆盖**全部武器模型**（近战 6 + 远程 9）、**全部护甲预设**（17）与**全部方块实体**（5 类箱子 + 水方块）；
+ * 由 `items.test.ts` 对照武器 / 护甲目录与实体类型锁定完整性，新增武器 / 护甲 / 方块须同步补条目。
+ */
 export const ITEM_DEFS: readonly ItemDef[] = [
-    /* ── 武器 ── */
+    /* ── 近战武器 ── */
     weapon('weapon_short_sword', '短剑', ['#', '#', '#'], 'short_sword', '轻快短兵'),
     weapon('weapon_long_sword', '长剑', ['#', '#', '#', '#'], 'long_sword', '均衡单手剑'),
     weapon('weapon_heavy_sword', '巨剑', ['##', '##', '##'], 'heavy_sword', '沉重双手剑'),
     weapon('weapon_spear', '长枪', ['#', '#', '#', '#', '#'], 'spear', '突刺长柄'),
     weapon('weapon_war_hammer', '战锤', ['##', '##', '.#'], 'war_hammer', '破甲重锤'),
     weapon('weapon_dual_axe', '战斧', ['##', '##'], 'dual_axe', '可双持'),
+    /* ── 远程武器 ── */
     weapon('weapon_longbow', '长弓', ['#.', '##', '.#'], 'longbow', '远程弓箭'),
     weapon('weapon_crossbow', '弩', ['##', '.#'], 'crossbow', '远程弩矢'),
+    weapon('weapon_shotgun', '霰弹枪', ['##', '##', '#.'], 'shotgun', '近距散射'),
     weapon('weapon_staff', '法杖', ['#', '#', '#'], 'staff', '施放魔法'),
+    weapon('weapon_magic_wand', '魔杖', ['#', '#'], 'magic_wand', '蓄能法术'),
+    weapon('weapon_throwing_axe', '飞斧', ['##', '##'], 'throwing_axe', '投掷兵器'),
+    weapon('weapon_grenade', '手雷', ['#'], 'grenade', '范围爆炸'),
+    weapon('weapon_molotov', '燃烧瓶', ['#', '#'], 'molotov', '范围灼烧'),
+    weapon('weapon_throwing_dart', '飞镖', ['#', '#'], 'throwing_dart', '轻巧暗器'),
     /* ── 护甲 ── */
     armor('armor_cloth_cap', '布帽', ['#'], 'cloth_cap', 'head', '轻便'),
     armor('armor_iron_helmet', '铁盔', ['#'], 'iron_helmet', 'head', '物理防御'),
+    armor('armor_mage_hood', '法师兜帽', ['#'], 'mage_hood', 'head', '魔法强化'),
     armor('armor_cloth_vest', '布衣', ['##', '##'], 'cloth_vest', 'chest', '轻便'),
     armor('armor_iron_plate', '铁板甲', ['##', '##'], 'iron_plate', 'chest', '物理防御'),
     armor('armor_leather_armor', '皮甲', ['##', '##'], 'leather_armor', 'chest', '均衡防御'),
+    armor('armor_mage_robe', '法袍', ['##', '##'], 'mage_robe', 'chest', '魔法防御'),
+    armor('armor_scale_mail', '鳞甲', ['##', '##'], 'scale_mail', 'chest', '厚重复合甲'),
+    armor('armor_cloth_bracers', '布护腕', ['#', '#'], 'cloth_bracers', 'arms', '轻便'),
     armor('armor_iron_bracers', '铁护腕', ['#', '#'], 'iron_bracers', 'arms', '物理防御'),
+    armor('armor_battle_bracers', '战臂甲', ['#', '#'], 'battle_bracers', 'arms', '物理攻击'),
+    armor('armor_mage_wraps', '法印护腕', ['#', '#'], 'mage_wraps', 'arms', '魔法强化'),
     armor('armor_cloth_pants', '布裤', ['#', '#'], 'cloth_pants', 'legs', '轻便'),
     armor('armor_iron_greaves', '铁护胫', ['#', '#'], 'iron_greaves', 'legs', '物理防御'),
-    /* ── 消耗品 / 材料 ── */
+    armor('armor_mage_leggings', '法师护腿', ['#', '#'], 'mage_leggings', 'legs', '魔法防御'),
+    armor('armor_swift_boots', '疾行靴', ['#', '#'], 'swift_boots', 'legs', '提升移速'),
+    armor('armor_wind_boots', '疾风靴', ['#', '#'], 'wind_boots', 'legs', '大幅提升移速'),
+    /* ── 方块 ── */
+    block('block_common', '普通方块', ['#'], 'box/common', '基础物理方块'),
+    block('block_destruction', '可破坏方块', ['#'], 'box/destruction', '受击碎裂'),
+    block('block_burning', '燃烧方块', ['#'], 'box/burning', '受击燃烧'),
+    block('block_magnet', '磁力方块', ['#'], 'box/magnet', '吸引金属物'),
+    block('block_elasticity', '弹性方块', ['#'], 'box/elasticity', '受力形变'),
+    block('block_water', '水方块', ['#'], 'area/water', '液面折射'),
+    /* ── 消耗品 / 材料 / 钥匙 ── */
     {
         id: 'consumable_flask', name: '恢复药', category: 'consumable', shape: ['#'], maxStack: 20,
         dropSize: [0.25, 0.25, 0.25], description: '饮用后恢复生命',
@@ -105,6 +147,13 @@ const ITEM_NAME_KEYS: Record<string, StringLocaleKey> = {
     weapon_longbow: 'item.weapon_longbow.name',
     weapon_crossbow: 'item.weapon_crossbow.name',
     weapon_staff: 'item.weapon_staff.name',
+    /* 新增武器条目复用武器目录既有名称键，避免重复维护 */
+    weapon_shotgun: 'weapon.shotgun',
+    weapon_magic_wand: 'weapon.magic_wand',
+    weapon_throwing_axe: 'weapon.throwing_axe',
+    weapon_grenade: 'weapon.grenade',
+    weapon_molotov: 'weapon.molotov',
+    weapon_throwing_dart: 'weapon.throwing_dart',
     armor_cloth_cap: 'item.armor_cloth_cap.name',
     armor_iron_helmet: 'item.armor_iron_helmet.name',
     armor_cloth_vest: 'item.armor_cloth_vest.name',
@@ -113,6 +162,23 @@ const ITEM_NAME_KEYS: Record<string, StringLocaleKey> = {
     armor_iron_bracers: 'item.armor_iron_bracers.name',
     armor_cloth_pants: 'item.armor_cloth_pants.name',
     armor_iron_greaves: 'item.armor_iron_greaves.name',
+    /* 新增护甲条目复用护甲目录既有名称键 */
+    armor_mage_hood: 'armor.mage_hood',
+    armor_mage_robe: 'armor.mage_robe',
+    armor_scale_mail: 'armor.scale_mail',
+    armor_cloth_bracers: 'armor.cloth_bracers',
+    armor_battle_bracers: 'armor.battle_bracers',
+    armor_mage_wraps: 'armor.mage_wraps',
+    armor_mage_leggings: 'armor.mage_leggings',
+    armor_swift_boots: 'armor.swift_boots',
+    armor_wind_boots: 'armor.wind_boots',
+    /* 方块 */
+    block_common: 'item.block_common.name',
+    block_destruction: 'item.block_destruction.name',
+    block_burning: 'item.block_burning.name',
+    block_magnet: 'item.block_magnet.name',
+    block_elasticity: 'item.block_elasticity.name',
+    block_water: 'item.block_water.name',
     consumable_flask: 'item.consumable_flask.name',
     material_stone: 'item.material_stone.name',
     key_rusted: 'item.key_rusted.name',
@@ -129,6 +195,13 @@ const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
     weapon_longbow: 'item.weapon_longbow.desc',
     weapon_crossbow: 'item.weapon_crossbow.desc',
     weapon_staff: 'item.weapon_staff.desc',
+    /* 新增武器 / 护甲共用类别描述键（数值由图鉴详情单独呈现） */
+    weapon_shotgun: 'item.weapon_generic.desc',
+    weapon_magic_wand: 'item.weapon_generic.desc',
+    weapon_throwing_axe: 'item.weapon_generic.desc',
+    weapon_grenade: 'item.weapon_generic.desc',
+    weapon_molotov: 'item.weapon_generic.desc',
+    weapon_throwing_dart: 'item.weapon_generic.desc',
     armor_cloth_cap: 'item.armor_cloth_cap.desc',
     armor_iron_helmet: 'item.armor_iron_helmet.desc',
     armor_cloth_vest: 'item.armor_cloth_vest.desc',
@@ -137,6 +210,21 @@ const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
     armor_iron_bracers: 'item.armor_iron_bracers.desc',
     armor_cloth_pants: 'item.armor_cloth_pants.desc',
     armor_iron_greaves: 'item.armor_iron_greaves.desc',
+    armor_mage_hood: 'item.armor_generic.desc',
+    armor_mage_robe: 'item.armor_generic.desc',
+    armor_scale_mail: 'item.armor_generic.desc',
+    armor_cloth_bracers: 'item.armor_generic.desc',
+    armor_battle_bracers: 'item.armor_generic.desc',
+    armor_mage_wraps: 'item.armor_generic.desc',
+    armor_mage_leggings: 'item.armor_generic.desc',
+    armor_swift_boots: 'item.armor_generic.desc',
+    armor_wind_boots: 'item.armor_generic.desc',
+    block_common: 'item.block_common.desc',
+    block_destruction: 'item.block_destruction.desc',
+    block_burning: 'item.block_burning.desc',
+    block_magnet: 'item.block_magnet.desc',
+    block_elasticity: 'item.block_elasticity.desc',
+    block_water: 'item.block_water.desc',
     consumable_flask: 'item.consumable_flask.desc',
     material_stone: 'item.material_stone.desc',
     key_rusted: 'item.key_rusted.desc',

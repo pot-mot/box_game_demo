@@ -5,6 +5,7 @@
 export type CatalogLocale = {
     'item_category.weapon': string
     'item_category.armor': string
+    'item_category.block': string
     'item_category.consumable': string
     'item_category.material': string
     'item_category.key': string
@@ -32,6 +33,8 @@ export type CatalogLocale = {
     'item.weapon_crossbow.desc': string
     'item.weapon_staff.name': string
     'item.weapon_staff.desc': string
+    'item.weapon_generic.desc': string
+    'item.armor_generic.desc': string
     'item.armor_cloth_cap.name': string
     'item.armor_cloth_cap.desc': string
     'item.armor_iron_helmet.name': string
@@ -48,6 +51,18 @@ export type CatalogLocale = {
     'item.armor_cloth_pants.desc': string
     'item.armor_iron_greaves.name': string
     'item.armor_iron_greaves.desc': string
+    'item.block_common.name': string
+    'item.block_common.desc': string
+    'item.block_destruction.name': string
+    'item.block_destruction.desc': string
+    'item.block_burning.name': string
+    'item.block_burning.desc': string
+    'item.block_magnet.name': string
+    'item.block_magnet.desc': string
+    'item.block_elasticity.name': string
+    'item.block_elasticity.desc': string
+    'item.block_water.name': string
+    'item.block_water.desc': string
     'item.consumable_flask.name': string
     'item.consumable_flask.desc': string
     'item.material_stone.name': string
@@ -59,6 +74,7 @@ export type CatalogLocale = {
 export const catalogZh: CatalogLocale = {
     'item_category.weapon': '武器',
     'item_category.armor': '护甲',
+    'item_category.block': '方块',
     'item_category.consumable': '消耗品',
     'item_category.material': '材料',
     'item_category.key': '关键物品',
@@ -86,6 +102,8 @@ export const catalogZh: CatalogLocale = {
     'item.weapon_crossbow.desc': '弩（远程弩矢）',
     'item.weapon_staff.name': '法杖',
     'item.weapon_staff.desc': '法杖（施放魔法）',
+    'item.weapon_generic.desc': '可装备武器（装备后替换主手，左侧模型即时预览）',
+    'item.armor_generic.desc': '可穿戴护甲（装备后替换对应槽位，左侧模型即时预览）',
     'item.armor_cloth_cap.name': '布帽',
     'item.armor_cloth_cap.desc': '布帽（轻便）',
     'item.armor_iron_helmet.name': '铁盔',
@@ -102,6 +120,18 @@ export const catalogZh: CatalogLocale = {
     'item.armor_cloth_pants.desc': '布裤（轻便）',
     'item.armor_iron_greaves.name': '铁护胫',
     'item.armor_iron_greaves.desc': '铁护胫（物理防御）',
+    'item.block_common.name': '普通方块',
+    'item.block_common.desc': '基础物理方块，参与碰撞与堆叠',
+    'item.block_destruction.name': '可破坏方块',
+    'item.block_destruction.desc': '受击累积破坏，破坏后碎裂为碎片',
+    'item.block_burning.name': '燃烧方块',
+    'item.block_burning.desc': '被击中后燃起火焰并逐渐销毁',
+    'item.block_magnet.name': '磁力方块',
+    'item.block_magnet.desc': '吸引附近的金属刚体物体',
+    'item.block_elasticity.name': '弹性方块',
+    'item.block_elasticity.desc': '受力产生形变的弹性材质',
+    'item.block_water.name': '水方块',
+    'item.block_water.desc': '带波浪与折射效果的液面区域',
     'item.consumable_flask.name': '恢复药',
     'item.consumable_flask.desc': '饮用后恢复生命',
     'item.material_stone.name': '石块',
@@ -113,6 +143,7 @@ export const catalogZh: CatalogLocale = {
 export const catalogEn: CatalogLocale = {
     'item_category.weapon': 'Weapon',
     'item_category.armor': 'Armor',
+    'item_category.block': 'Block',
     'item_category.consumable': 'Consumable',
     'item_category.material': 'Material',
     'item_category.key': 'Key Item',
@@ -140,6 +171,8 @@ export const catalogEn: CatalogLocale = {
     'item.weapon_crossbow.desc': 'Crossbow (ranged)',
     'item.weapon_staff.name': 'Staff',
     'item.weapon_staff.desc': 'Staff (casts magic)',
+    'item.weapon_generic.desc': 'Equippable weapon (replaces main hand; previewed on the left)',
+    'item.armor_generic.desc': 'Wearable armor (replaces its slot; previewed on the left)',
     'item.armor_cloth_cap.name': 'Cloth Cap',
     'item.armor_cloth_cap.desc': 'Cloth Cap (light)',
     'item.armor_iron_helmet.name': 'Iron Helmet',
@@ -156,6 +189,18 @@ export const catalogEn: CatalogLocale = {
     'item.armor_cloth_pants.desc': 'Cloth Pants (light)',
     'item.armor_iron_greaves.name': 'Iron Greaves',
     'item.armor_iron_greaves.desc': 'Iron Greaves (physical defense)',
+    'item.block_common.name': 'Common Block',
+    'item.block_common.desc': 'Basic physical block with collision and stacking',
+    'item.block_destruction.name': 'Breakable Block',
+    'item.block_destruction.desc': 'Takes damage and shatters into fragments',
+    'item.block_burning.name': 'Burning Block',
+    'item.block_burning.desc': 'Ignites and burns away when struck',
+    'item.block_magnet.name': 'Magnet Block',
+    'item.block_magnet.desc': 'Attracts nearby metal rigid bodies',
+    'item.block_elasticity.name': 'Elastic Block',
+    'item.block_elasticity.desc': 'Deforms elastically under force',
+    'item.block_water.name': 'Water Block',
+    'item.block_water.desc': 'Liquid surface with waves and refraction',
     'item.consumable_flask.name': 'Healing Flask',
     'item.consumable_flask.desc': 'Restores health when drunk',
     'item.material_stone.name': 'Stone',

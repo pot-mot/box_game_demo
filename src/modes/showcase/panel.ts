@@ -1,6 +1,6 @@
 import type {ActorStatus, SkillTimerStatus} from './actor.ts'
 import {SPEED_OPTIONS} from './constants.ts'
-import {translate} from '../../i18n/index.ts'
+import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import {localizeText, localizeApply} from '../../i18n/dom.ts'
 
 /** 面板控件的回调（由模式装配注入实际控制逻辑） */
@@ -27,6 +27,12 @@ export interface ShowcasePanel {
     refresh: (statuses: readonly ActorStatus[], playing: boolean, speed: number, focusedId: number | null) => void
     /** 移除全部面板 DOM 与注入样式（退出展示模式时调用） */
     dispose: () => void
+}
+
+/** 面板标题 / 副标题文案键（不同子模块可自定义；缺省沿用攻击动作展示台文案） */
+export interface PanelOptions {
+    readonly titleKey?: StringLocaleKey
+    readonly subtitleKey?: StringLocaleKey
 }
 
 /** 一次性注入面板样式（返回 style 元素供 dispose 移除） */
@@ -121,7 +127,7 @@ interface RowRefs {
     readonly fill: HTMLElement
 }
 
-export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCallbacks): ShowcasePanel => {
+export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCallbacks, options?: PanelOptions): ShowcasePanel => {
     const infoById = new Map(infos.map(info => [info.id, info]))
     const style = injectStyles()
 
@@ -131,12 +137,12 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
     const title = document.createElement('div')
     title.className = 'sch-title'
-    localizeText(title, 'showcase.title')
+    localizeText(title, options?.titleKey ?? 'showcase.title')
     panel.appendChild(title)
 
     const sub = document.createElement('div')
     sub.className = 'sch-sub'
-    localizeText(sub, 'showcase.subtitle')
+    localizeText(sub, options?.subtitleKey ?? 'showcase.subtitle')
     panel.appendChild(sub)
 
     /* 控件行 */
