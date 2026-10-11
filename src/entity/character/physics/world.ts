@@ -17,13 +17,14 @@ import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/at
 import {createTestWeaponRuntime, TEST_WEAPON_ID} from '../../../character/combat/test_weapon.ts'
 import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {availableHoldModes, defaultHoldMode, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
-import {translate} from '../../../i18n/index.ts'
+import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
 import {segmentTotalDuration, isChargeableKey, type AttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
+import type {CharacterState} from '../../../character/state_machine/types.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
-import type {AIContext, SpawnBoxCallback} from '../ai/types.ts'
+import type {AIContext, CombatState, PeaceState, SpawnBoxCallback} from '../ai/types.ts'
 import type {CombatSubStrategy, PeaceSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
@@ -342,14 +343,45 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     /** 玩家是否正按住可蓄力远程武器的攻击键（持续状态；按住期间冻结蓄力段并累积力度） */
     let playerAttackHeld = false
 
-    /** 列表行当前状态文本：角色 FSM 状态；AI 激活时追加 AI 双层 FSM（和平/战斗层:子状态）；死亡显示 dead */
+    /** 角色 FSM 状态 → 本地化键 */
+    const CHARACTER_STATE_KEYS: Record<CharacterState, StringLocaleKey> = {
+        idle: 'entity.state.idle',
+        walking: 'entity.state.walking',
+        jumping: 'entity.state.jumping',
+        falling: 'entity.state.falling',
+        attacking: 'entity.state.attacking',
+        dying: 'entity.state.dying',
+        rolling: 'entity.state.rolling',
+        flinching: 'entity.state.flinching',
+        interacting: 'entity.state.interacting',
+    }
+
+    /** AI 战斗层状态 → 本地化键 */
+    const COMBAT_STATE_KEYS: Record<CombatState, StringLocaleKey> = {
+        chase: 'entity.ai.combat.chase',
+        approach: 'entity.ai.combat.approach',
+        volley: 'entity.ai.combat.volley',
+        kite: 'entity.ai.combat.kite',
+        attack: 'entity.ai.combat.attack',
+        flee: 'entity.ai.combat.flee',
+        inactive: 'entity.ai.combat.inactive',
+    }
+
+    /** AI 和平层状态 → 本地化键 */
+    const PEACE_STATE_KEYS: Record<PeaceState, StringLocaleKey> = {
+        patrol: 'entity.ai.peace.patrol',
+        build: 'entity.ai.peace.build',
+    }
+
+    /** 列表行当前状态文本：角色 FSM 状态；AI 激活时追加 AI 双层 FSM（和平/战斗层:子状态）；死亡显示「已死亡」 */
     const stateLabelOf = (ch: CharacterEntity): string => {
-        if (ch.combat.isDead) return 'dead'
+        if (ch.combat.isDead) return translate('entity.state.dead')
+        const state = translate(CHARACTER_STATE_KEYS[ch.stateMachine.currentState])
         const ai = aiMap.get(ch.id)
-        if (ai === undefined) return ch.stateMachine.currentState
+        if (ai === undefined) return state
         return ai.activeFsm === 'combat'
-            ? `${ch.stateMachine.currentState}|combat:${ai.combatState}`
-            : `${ch.stateMachine.currentState}|peace:${ai.peaceState}`
+            ? `${state}|${translate('entity.ai.combat')}:${translate(COMBAT_STATE_KEYS[ai.combatState])}`
+            : `${state}|${translate('entity.ai.peace')}:${translate(PEACE_STATE_KEYS[ai.peaceState])}`
     }
 
     /** 单条角色列表行文本（含本地化武器名 / 攻击类别短名；语言切换后由 element_list 按需重算） */

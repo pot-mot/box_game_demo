@@ -33,6 +33,27 @@ export type EntityLocale = {
     'entity.skeleton_name': (n: string) => string
     'entity.def_phys_short': string
     'entity.def_magic_short': string
+    'entity.state.idle': string
+    'entity.state.walking': string
+    'entity.state.jumping': string
+    'entity.state.falling': string
+    'entity.state.attacking': string
+    'entity.state.dying': string
+    'entity.state.rolling': string
+    'entity.state.flinching': string
+    'entity.state.interacting': string
+    'entity.state.dead': string
+    'entity.ai.peace': string
+    'entity.ai.combat': string
+    'entity.ai.peace.patrol': string
+    'entity.ai.peace.build': string
+    'entity.ai.combat.chase': string
+    'entity.ai.combat.approach': string
+    'entity.ai.combat.volley': string
+    'entity.ai.combat.kite': string
+    'entity.ai.combat.attack': string
+    'entity.ai.combat.flee': string
+    'entity.ai.combat.inactive': string
     'entity.no_props': string
     'entity.replace': string
     'entity.brush_title': string
@@ -182,6 +203,27 @@ export const entityZh: EntityLocale = {
     'entity.skeleton_name': (n) => `骨架${n}`,
     'entity.def_phys_short': '物',
     'entity.def_magic_short': '魔',
+    'entity.state.idle': '待机',
+    'entity.state.walking': '行走',
+    'entity.state.jumping': '跳跃',
+    'entity.state.falling': '下落',
+    'entity.state.attacking': '攻击',
+    'entity.state.dying': '死亡',
+    'entity.state.rolling': '翻滚',
+    'entity.state.flinching': '受击硬直',
+    'entity.state.interacting': '交互',
+    'entity.state.dead': '已死亡',
+    'entity.ai.peace': '和平',
+    'entity.ai.combat': '战斗',
+    'entity.ai.peace.patrol': '巡逻',
+    'entity.ai.peace.build': '建造',
+    'entity.ai.combat.chase': '追击',
+    'entity.ai.combat.approach': '接近',
+    'entity.ai.combat.volley': '齐射',
+    'entity.ai.combat.kite': '风筝',
+    'entity.ai.combat.attack': '出招',
+    'entity.ai.combat.flee': '逃跑',
+    'entity.ai.combat.inactive': '待机',
     'entity.no_props': '（无道具）',
     'entity.replace': '替换',
     'entity.brush_title': '建筑笔刷',
@@ -331,6 +373,27 @@ export const entityEn: EntityLocale = {
     'entity.skeleton_name': (n) => `Skeleton ${n}`,
     'entity.def_phys_short': 'Phys',
     'entity.def_magic_short': 'Magic',
+    'entity.state.idle': 'Idle',
+    'entity.state.walking': 'Walk',
+    'entity.state.jumping': 'Jump',
+    'entity.state.falling': 'Fall',
+    'entity.state.attacking': 'Attack',
+    'entity.state.dying': 'Death',
+    'entity.state.rolling': 'Roll',
+    'entity.state.flinching': 'Flinch',
+    'entity.state.interacting': 'Interact',
+    'entity.state.dead': 'Dead',
+    'entity.ai.peace': 'Peace',
+    'entity.ai.combat': 'Combat',
+    'entity.ai.peace.patrol': 'Patrol',
+    'entity.ai.peace.build': 'Build',
+    'entity.ai.combat.chase': 'Chase',
+    'entity.ai.combat.approach': 'Approach',
+    'entity.ai.combat.volley': 'Volley',
+    'entity.ai.combat.kite': 'Kite',
+    'entity.ai.combat.attack': 'Attack',
+    'entity.ai.combat.flee': 'Flee',
+    'entity.ai.combat.inactive': 'Idle',
     'entity.no_props': '(no props)',
     'entity.replace': 'Replace',
     'entity.brush_title': 'Building Brush',
