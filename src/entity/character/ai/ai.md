@@ -473,19 +473,25 @@ const BUILDABLE_BOX_TYPES = ['box/common', 'box/destruction', 'box/burning', 'bo
 
 ```ts
 interface LineOfSightChecker {
-    hasLOS(fromX: number, fromY: number, fromZ: number, toX: number, toY: number, toZ: number): boolean
+    hasLOS(fromX, fromY, fromZ, toX, toY, toZ, ignoreMesh?, selfMesh?): boolean
     /** 扇形扫描：向 yaw ±半角内发射 VISION_FAN_RAY_COUNT 条水平射线（每 10° 一条），
      * 把每条射线最近遮挡物距离写入 out（无遮挡写 maxDist） */
-    castFan(fromX: number, fromY: number, fromZ: number, yaw: number, maxDist: number, out: Float32Array): void
+    castFan(fromX, fromY, fromZ, yaw, maxDist, out: Float32Array, selfMesh?): void
+    collectBlockers(): void
+    hasLOSPrepared(fromX..toZ, ignoreMesh?, selfMesh?): boolean
 }
 ```
 
-使用 Three.js `Raycaster`（`intersectObjects(meshes, false)`）检测实体遮挡，扫描射线起点取眼部高度（`height × scale × 0.4`，与 debug 可视化同源）。
+**射线来源统一走 Rapier 碰撞体 BVH**（`physics/raycast.ts` 的 `castRay` / `castRayAndGetNormal`），不再用 Three.js `Raycaster` 扫渲染 mesh：地形 / 建筑 trimesh 三角形再多也不影响单次查询成本（曾因 64×64 地形 + 23 个 AI 每帧 ~5M 次射线-三角形求交而完全卡死；改用 `castRay` 后同一场景主循环步从 ~187ms 降到 ~7ms）。扫描射线起点取眼部高度（`height × scale × 0.4`，与 debug 可视化同源）。
 
-**270° 扇形扫描**（`machine.ts` `findNearestEnemy`）：索敌不用单条目标射线，而是用**覆盖整个扇形的扫描射线**——每 10° 一条（共 28 条，含左右边界）：
+**自身必须排除**：Rapier `castRay` 的 `solid=true` 会让起点落在自身体内的射线 toi=0 自遮挡，故接口新增 `selfMesh`（经 `world.ts` 的 `meshBodyHandle` 映射到刚体 handle 过滤）；`findNearestEnemy` / debug 可视化传 `character.mesh`，目标候选仍靠 `d - 胶囊半径 - 0.05` 容差处理自遮挡。
+
+**270° 扇形扫描（稀疏 + 节流 + 旋转采样）**（`machine.ts` `findNearestEnemy`）：索敌不用单条目标射线，而是用覆盖扇形的扫描射线。为降低每帧射线开销，采用**稀疏 7 条射线（步长 45°）+ 每 `VISION_FAN_RECAST_INTERVAL`（6）帧才重扫一次 + 每次重扫整扇旋转 `VISION_FAN_ROTATE_STEP`（5°）**：帧间复用缓存距离，多次重扫的旋转偏移逐步填补 45° 角度空隙（9 次重扫覆盖一个步长）。
 
 1. **角度门控**：目标方位角 `atan2(dx, dz)` 与角色朝向角（`ctx.getFacingAngle()`，由 `world.ts` 的 `facingAngles` 注入）的归一化角差超出 ±`VISION_FAN_HALF_ANGLE`（135°）则不可见，即正后方 90° 为盲区。
-2. **射线遮挡**：`castFan` 懒发射（有候选才扫描一次，整帧复用），取最接近目标方位角的射线（角度量化到 10° 网格）；命中点早于目标体表（`d - 胶囊半径 - 0.05` 容差）才判遮挡——射线会命中目标自身网格，不加容差会把目标自遮挡误判为不可见。
+2. **射线遮挡**：`castFan` 懒投射（有候选且 `visionFanCooldown ≤ 0` 才重扫一次），取相对**缓存扇形中心** `visionFanYaw` 最接近目标方位角的射线（量化到 45° 网格，含旋转偏移）；命中点早于目标体表（`d - 胶囊半径 - 0.05` 容差）才判遮挡——射线会命中目标自身网格，不加容差会把目标自遮挡误判为不可见。缓存状态挂在 `AIContext`（`visionFanDists` / `visionFanYaw` / `visionFanValid` / `visionFanCooldown` / `visionFanRotation`）。
+
+> 代价：稀疏 + 节流使遮挡判定**瞬时角分辨率降为 45°、结果最多滞后 6 帧**，薄障碍后方的目标可能被短暂判为可见；作为补偿靠逐次旋转采样在约 54 帧内覆盖 5° 网格。这是刻意的性能/精度取舍（贴身混战场景下 LOS 射线开销降约 20×）。
 
 常量在 `src/entity/character/ai/constants.ts`：
 
@@ -493,10 +499,12 @@ interface LineOfSightChecker {
 |------|-----|------|
 | `VISION_FAN_ANGLE` | `π × 1.5` | 视线扇形总角（270°） |
 | `VISION_FAN_HALF_ANGLE` | `3π / 4` | 半角（±135°） |
-| `VISION_FAN_RAY_STEP` | `π / 18` | 扫描射线步长（10°） |
-| `VISION_FAN_RAY_COUNT` | `28` | 扫描射线数（270°/10° + 1） |
+| `VISION_FAN_RAY_COUNT` | `7` | 扫描射线数（稀疏） |
+| `VISION_FAN_RAY_STEP` | `π / 4` | 射线步长（270°/(7−1) = 45°） |
+| `VISION_FAN_RECAST_INTERVAL` | `6` | 重扫间隔（帧） |
+| `VISION_FAN_ROTATE_STEP` | `π / 36` | 每次重扫整扇旋转（5°） |
 
-edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：眼部高度处画全部 28 条扫描射线（与判定同源 castFan，**截断到遮挡点**，直观看到哪条射线被什么挡住），存在索敌目标时额外画到目标的连线。
+edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：眼部高度处画全部 7 条扫描射线（与判定同源 castFan，**截断到遮挡点**），存在索敌目标时额外画到目标的连线。
 
 ### 5.6 导航传感器（斜坡处理）
 
@@ -504,14 +512,16 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 
 | 机制 | 说明 |
 |------|------|
-| 世界空间法线过滤 | 命中面法线经 `normalMatrix` 转世界空间后判定可行性（`ny ≥ WALKABLE_NORMAL_MIN_Y`），地形/箱子带旋转时不会误判 |
+| 射线后端（Rapier castRay） | 导航 `cast` 抽象为 `NavRayCaster`（`nav/raycast.ts`）：生产用 `createRapierNavRayCaster`（碰撞体 BVH 查询，`rapier_queries.ts`），单测用 `createMeshNavRayCaster`（three mesh）。命中目标 = 除**水域（area）与隐式基础地面（ground）**外的一切场景几何（与旧障碍/地面 mesh 列表一致）；过滤自身与当前战斗目标经 `world.ts` 的 `meshBodyHandle` 映射到刚体 handle |
+| 世界空间法线过滤 | 命中面法线经 `normalMatrix` 转世界空间后判定可行性（`ny ≥ WALKABLE_NORMAL_MIN_Y`），地形/箱子带旋转时不会误判（Rapier 后端直接取 `castRayAndGetNormal` 的世界系法线） |
 | 坑洞探针 | 从脚底高度向下探测 `checkDistance` 处地面，落差超过 `jumpHeight` 判为 `blocked_pit` |
 | 隐式平面回退 | 探针完全未命中任何 mesh 时，下方只剩隐式无限平面 y=0（物理地面非 mesh）：脚底到平面距离 `footY ≤ jumpHeight` 即视为可走（角色在 y=0 基础平面上不误判坑洞），超出则为真实落差（悬崖/深坑）。与旧实现（仅 `grounds.length === 0` 时回退）的区别：有地形 mesh 存在时基础平面同样可见，修复"从 terrain 跌落到 y=0 后所有方向都被判 blocked_pit"的卡死 |
 | 上坡兜底 | 上坡时探针起点位于坡面内部必然 miss，此时若正前方（hAngle=0）射线命中可行走坡面，说明地形持续向上延伸 → 视为有地面，避免误判 `blocked_pit` 导致 AI 在斜坡上无限绕行（持续 walking 不前进） |
+| 绕行候选轻量探测 | `NavSensor.isForwardClear`（前向扇面 + 坑洞探针，**不含侧向扫描**）供 `findSteerAngle` 试探候选方向：侧向扫描只影响 `left/rightClear`、不影响 `result`，故 `isForwardClear === (sense 结果 === 'clear')` 但少 4 条侧向射线；贴身混战（大量绕行）时导航射线开销约降 25% |
 | 角色分离坡面补偿 | `separation.ts` 的 `separationSlopeDy()`：角色间强制分离的水平瞬移按支撑面平面方程补偿 Y（`SEPARATION_SLOPE_MIN_NY = 0.5` 以下不补偿），防止斜坡上纯水平平移把碰撞体埋进坡面（穿模 + 物理暴力弹出） |
 | 角色分离速度踢 | `CHARACTER_SEPARATION_SPEED = 8`（每边 4 m/s）：分离以 `computeSeparation()` 的位置修正为主，速度踢仅辅助防回穿；过大（旧值 24）会把对方弹飞很远 |
 | 地面检测排除角色 | `world.ts` 的 `buildGroundContacts()` 按碰撞类别过滤掉 `character` 接触（`collisionCategoryOf`）：对方竖直胶囊的近水平侧面法线若进入 `groundNormal`，瞬态坡面投影会把水平速度转成垂直速度（翻滚撞人表现为「跳到对方头顶」），也会误判为着地而站在对方身上 |
-| 战斗目标排除 | 导航传感器把「除自己以外所有角色 mesh」视为 `blocked_wall` 并绕行（用于和平态/非目标角色的互相避让）；但**当前 combat target 必须排除**，否则 AI 在贴脸前（短近战武器攻击检测箱前缘如短剑 ≈0.68m，小于导航前向探测距离 1.5m）就被自己的目标判为墙而绕行，表现为原地环绕目标、永不进入 `attack`（两个近战 AI 会互相绕圈直到 `chaseTimeout`）。实现：`NavRunContext.ignoredMesh`（`NavSensor.sense` 第 5 参）在 `world.ts` 每帧按 `activeFsm === 'combat' && combatTargetId` 设为目标 mesh，传感器在障碍列表与角色集合两处都跳过它；目标重叠/推挤仍由接触推挤闸门与强制分离兜底 |
+| 战斗目标排除 | 导航传感器把「除自己以外所有角色 mesh」视为 `blocked_wall` 并绕行（用于和平态/非目标角色的互相避让）；但**当前 combat target 必须排除**，否则 AI 在贴脸前（短近战武器攻击检测箱前缘如短剑 ≈0.68m，小于导航前向探测距离 1.5m）就被自己的目标判为墙而绕行，表现为原地环绕目标、永不进入 `attack`（两个近战 AI 会互相绕圈直到 `chaseTimeout`）。实现：`NavRunContext.ignoredMesh`（`NavSensor.sense` 第 5 参）在 `world.ts` 每帧按 `activeFsm === 'combat' && combatTargetId` 设为目标 mesh，传感器经 `setExcludes` 把自身与目标映射为刚体 handle 从射线查询中排除（mesh 后端按 mesh 身份排除）；目标重叠/推挤仍由接触推挤闸门与强制分离兜底 |
 
 ### 5.7 阵营与攻击倾向
 
@@ -554,12 +564,15 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 | AI 入口 | `src/entity/character/ai/machine.ts` | `createAIMachine()`, `updateAI()`, `findNearestEnemy()`（含 270° 扇形门控与扫描射线遮挡） |
 | AI 常量 | `src/entity/character/ai/constants.ts` | `VISION_FAN_ANGLE` / `VISION_FAN_HALF_ANGLE` / `VISION_FAN_RAY_STEP` / `VISION_FAN_RAY_COUNT` |
 | AI 类型 | `src/entity/character/ai/types.ts` | `AIContext` 接口、`AttackDetectChecker` |
-| 视线检测 | `src/entity/character/ai/line_of_sight.ts` | `LineOfSightChecker` 实现（`hasLOS` + `castFan` 扇形扫描） |
+| 视线检测 | `src/entity/character/ai/line_of_sight.ts` | `LineOfSightChecker`（`buildLineOfSight` + mesh / Rapier `LosRayCaster`；`hasLOS` + `castFan` 扇形扫描） |
 | OBB 几何 | `src/entity/character/combat/obb.ts` | `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
 | 攻击检测箱 | `src/entity/character/combat/melee_executor.ts` | `attackDetectOBB` / `testAttackDetect`（几何由武器 `detectBox` 配置驱动） |
 | Debug 可视化 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/受击箱（青）/检测箱（橙）/射程圆环（橙，远程）/视线扇形（蓝） |
 | 导航 FSM | `src/entity/character/ai/nav/machine.ts` | navigating/steering/jumping/stuck 子状态机（stuck 超时输出倒退逃逸脉冲） |
-| 导航传感器 | `src/entity/character/ai/nav/sensor.ts` | 前方扇面射线 + 侧向扫描 + 坑洞探针（斜坡感知） |
+| 导航传感器 | `src/entity/character/ai/nav/sensor.ts` | `buildNavSensor` + mesh / Rapier `NavRayCaster`：前方扇面 + 侧向扫描 + 坑洞探针（斜坡感知） |
+| 导航射线后端 | `src/entity/character/ai/nav/raycast.ts` | `NavRayCaster` 抽象 + mesh 后端（单测） |
+| 共享射线工具 | `src/physics/raycast.ts` | `createRapierRayCaster`（`castRayAndGetNormal` / `intersectionsWithRay`，类别掩码 / 刚体排除） |
+| Rapier 感知适配 | `src/entity/character/physics/rapier_queries.ts` | `createRapierNavRayCaster` / `createRapierLosRayCaster`（mesh→handle 排除，生产射线源） |
 | 角色分离 | `src/entity/character/physics/separation.ts` | 重叠分离计算 + 斜坡 Y 补偿 |
 | 和平 FSM | `src/entity/character/ai/peace/machine.ts` | 巡逻/建造子状态机 |
 | 和平类型 | `src/entity/character/ai/peace/types.ts` | `PeaceState`, `PeaceStateHandler` |

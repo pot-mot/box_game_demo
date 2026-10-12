@@ -9,6 +9,7 @@ import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {AIContext, AISetInput} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
+import {VISION_FAN_RAY_COUNT} from './constants.ts'
 import {createNavRunContext, processNav} from './nav/machine.ts'
 import type {NavSenseOutput, NavSensor} from './nav/types.ts'
 import {createAIMachine, notifyAIDamaged, updateAI} from './machine.ts'
@@ -111,6 +112,11 @@ const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: numb
         nav: createNavRunContext(true),
         navSensor: null,
         activeFsm: 'combat',
+        visionFanDists: new Float32Array(VISION_FAN_RAY_COUNT),
+        visionFanYaw: 0,
+        visionFanValid: false,
+        visionFanCooldown: 0,
+        visionFanRotation: 0,
         stallTimer: 0,
         stallAnchorX: 0,
         stallAnchorZ: 0,
@@ -729,19 +735,48 @@ describe('视线扇形扫描射线遮挡（castFan）', () => {
     })
 
     it('遮挡物只挡住对应方位射线：其他方向敌人仍可见', () => {
-        /* 左半扇形（射线 0–13）被挡在 0.5 处，右半无遮挡；
-         * 正前方 +Z 敌人方位角 0° → 射线索引 round(135/10) = 14，属无遮挡区 */
+        /* 7 条射线（步长 45°：-135/-90/-45/0/45/90/135）；
+         * 挡住左侧三条（idx 0-2，即 -135/-90/-45），其余无遮挡 */
         const los: LineOfSightChecker = {
             hasLOS: () => true,
             castFan: (_fx, _fy, _fz, _yaw, maxDist, out) => {
-                for (let i = 0; i < out.length; i++) out[i] = i < out.length / 2 ? 0.5 : maxDist
+                for (let i = 0; i < out.length; i++) out[i] = i <= 2 ? 0.5 : maxDist
             },
             collectBlockers: () => {},
             hasLOSPrepared: () => true,
         }
+        /* 正前方 +Z 敌人方位角 0° → 射线索引 round((0+135)/45)=3，属无遮挡区 → 可见 */
         expect(runWithLos(los, 0, 3)).toBe('combat')
-        /* 左侧 90° 敌人（方位角 -90° → 射线索引 round(45/10) = 5）落在被挡区 → 不可见 */
+        /* 左侧 90° 敌人（方位角 -90° → 射线索引 round((-90+135)/45)=1）落在被挡区 → 不可见 */
         expect(runWithLos(los, -3, 0)).toBe('peace')
+    })
+
+    it('扇形节流：每 6 帧才重扫一次，且逐次旋转 5°', () => {
+        let casts = 0
+        let lastYaw = 0
+        const los: LineOfSightChecker = {
+            hasLOS: () => true,
+            castFan: (_fx, _fy, _fz, yaw, maxDist, out) => {
+                casts++
+                lastYaw = yaw
+                out.fill(maxDist)
+            },
+            collectBlockers: () => {},
+            hasLOSPrepared: () => true,
+        }
+        const char = makeChar(1, 0, 0, 0, 'melee')
+        const ctx = createAIMachine(char, 0, 0, 0, los, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        ctx.activeFsm = 'peace'
+        const enemies = [makeChar(2, 0, 3, 1, 'melee')]
+
+        /* 第 1 帧投射（cooldown 0），随后 5 帧复用缓存 → 6 帧内仅 1 次 */
+        for (let f = 0; f < 6; f++) updateAI(0.016, ctx, char, enemies, () => {})
+        expect(casts).toBe(1)
+
+        /* 第 7 帧 cooldown 归零再次投射，且扇形中心相对首帧旋转了 5° */
+        updateAI(0.016, ctx, char, enemies, () => {})
+        expect(casts).toBe(2)
+        expect(lastYaw).toBeCloseTo(Math.PI / 36, 6)
     })
 })
 
@@ -1009,6 +1044,7 @@ describe('nav stuck 倒退逃逸', () => {
             rightClear: false,
             groundAhead: false,
         }),
+        isForwardClear: () => false,
     }
     const navChar = {body: {translation: () => ({x: 0, y: 0, z: 0})}} as unknown as CharacterEntity
 

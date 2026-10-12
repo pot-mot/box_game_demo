@@ -5,7 +5,7 @@ import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {AIContext, AISetInput, AttackDetectChecker} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
-import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, CHASE_LEASH_RADIUS, COMBAT_STALL_MAX_RETRIES, COMBAT_STALL_DETOUR_DURATION, COMBAT_RETARGET_INTERVAL} from './constants.ts'
+import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, VISION_FAN_RECAST_INTERVAL, VISION_FAN_ROTATE_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, CHASE_LEASH_RADIUS, COMBAT_STALL_MAX_RETRIES, COMBAT_STALL_DETOUR_DURATION, COMBAT_RETARGET_INTERVAL} from './constants.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
@@ -13,8 +13,8 @@ import {fleeHandler} from './combat/states/flee.ts'
 import {rerollWaypoint} from './peace/states/patrol.ts'
 import {createNavRunContext} from './nav/machine.ts'
 
-/* 扇形扫描射线命中距离复用缓冲（由 castFan 写入，避免每帧分配） */
-const _fanDists = new Float32Array(VISION_FAN_RAY_COUNT)
+/** 角度归一化到 (-π, π] */
+const normalizeAngle = (a: number): number => ((a + Math.PI) % (2 * Math.PI)) - Math.PI
 
 /** 检测最近敌人，返回角色 ID 和距离。
  * 三重门控：侦测半径 → 身前 270° 扇形（朝向两侧各 135°，正后方为盲区）
@@ -35,9 +35,12 @@ const findNearestEnemy = (
     /* 扫描射线起点取眼部高度（与 debug 可视化同源） */
     const eyeY = pos.y + CHARACTER_BASE_SIZE.height * character.config.scale * 0.4
 
+    /* 扇形重扫节流：非全向模式下每帧递减，帧间复用缓存射线结果 */
+    if (!ignoreFacing) ctx.visionFanCooldown = Math.max(0, ctx.visionFanCooldown - 1)
+
     let bestDist = Infinity
     let bestId: number | undefined
-    let fanCast = false
+    let fanReady = false
     /* 全向模式的遮挡网格懒收集（一次扫描只收集一次，逐候选复用） */
     let blockersReady = false
 
@@ -52,11 +55,9 @@ const findNearestEnemy = (
         if (d >= detRange || d >= bestDist) continue
 
         /* 扇形角度门控：目标方位角与朝向的归一化角差超出半角（身后盲区）则不可见 */
-        let diff = 0
-        if (d > 0.001) {
-            diff = Math.atan2(dx, dz) - facing
-            diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
-            if (!ignoreFacing && Math.abs(diff) > VISION_FAN_HALF_ANGLE) continue
+        const bearing = Math.atan2(dx, dz)
+        if (d > 0.001 && !ignoreFacing) {
+            if (Math.abs(normalizeAngle(bearing - facing)) > VISION_FAN_HALF_ANGLE) continue
         }
 
         /* 视线遮挡：默认复用扇形扫描射线；全向模式改走直接视线射线（排除目标自身网格） */
@@ -64,18 +65,27 @@ const findNearestEnemy = (
             if (ignoreFacing) {
                 if (!blockersReady) { los.collectBlockers(); blockersReady = true }
                 const targetY = op.y + CHARACTER_BASE_SIZE.height * other.config.scale * 0.4
-                if (!los.hasLOSPrepared(pos.x, eyeY, pos.z, op.x, targetY, op.z, other.mesh)) continue
+                if (!los.hasLOSPrepared(pos.x, eyeY, pos.z, op.x, targetY, op.z, other.mesh, character.mesh)) continue
             } else {
-                /* 扇形射线遮挡：取最接近目标方位角的扫描射线（懒发射：有候选才扫描一次）。
-                 * 射线会命中目标自身体表（约 d - 胶囊半径），命中点比体表更近才判遮挡 */
-                if (!fanCast) {
-                    los.castFan(pos.x, eyeY, pos.z, facing, detRange, _fanDists)
-                    fanCast = true
+                /* 扇形射线遮挡：懒投射（有候选才投），按 RECAST_INTERVAL 节流 + 逐次旋转偏移。
+                 * 稀疏 7 条射线经多次重扫旋转可覆盖 45° 空隙；帧间复用缓存距离 */
+                if (!fanReady) {
+                    if (!ctx.visionFanValid || ctx.visionFanCooldown <= 0) {
+                        const fanYaw = facing + ctx.visionFanRotation
+                        los.castFan(pos.x, eyeY, pos.z, fanYaw, detRange, ctx.visionFanDists, character.mesh)
+                        ctx.visionFanYaw = fanYaw
+                        ctx.visionFanValid = true
+                        ctx.visionFanCooldown = VISION_FAN_RECAST_INTERVAL
+                        ctx.visionFanRotation = (ctx.visionFanRotation + VISION_FAN_ROTATE_STEP) % VISION_FAN_RAY_STEP
+                    }
+                    fanReady = true
                 }
-                const idx = Math.round((diff + VISION_FAN_HALF_ANGLE) / VISION_FAN_RAY_STEP)
+                /* 取最接近目标方位角的扫描射线（相对缓存扇形中心），命中点早于目标体表才判遮挡 */
+                const fanDiff = normalizeAngle(bearing - ctx.visionFanYaw)
+                const idx = Math.round((fanDiff + VISION_FAN_HALF_ANGLE) / VISION_FAN_RAY_STEP)
                 const clamped = Math.max(0, Math.min(VISION_FAN_RAY_COUNT - 1, idx))
                 const bodyRadius = CHARACTER_BASE_SIZE.width * other.config.scale / 2
-                if (_fanDists[clamped] < d - bodyRadius - 0.05) continue
+                if (ctx.visionFanDists[clamped] < d - bodyRadius - 0.05) continue
             }
         }
 
@@ -104,6 +114,13 @@ export const createAIMachine = (
         nav: createNavRunContext(character.navEnabled),
         navSensor: null,
         activeFsm: 'peace',
+
+        /* 视线扇形（节流 + 旋转采样）字段 */
+        visionFanDists: new Float32Array(VISION_FAN_RAY_COUNT),
+        visionFanYaw: 0,
+        visionFanValid: false,
+        visionFanCooldown: 0,
+        visionFanRotation: 0,
 
         /* 静止检测（卡死自愈）字段 */
         stallTimer: 0,

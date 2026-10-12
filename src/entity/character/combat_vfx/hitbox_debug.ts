@@ -17,7 +17,7 @@ const _targetBoxMat = new LineBasicMaterial({color: TARGET_HIT_BOX_COLOR})
 const _detectBoxMat = new LineBasicMaterial({color: ATTACK_DETECT_BOX_COLOR})
 const _visionMat = new LineBasicMaterial({color: VISION_FAN_COLOR})
 
-/** 视线扇形调试线段顶点数：扇形扫描射线（每 10° 一条，共 VISION_FAN_RAY_COUNT 条）+ 目标连线 1 段，每段 2 顶点 */
+/** 视线扇形调试线段顶点数：扇形扫描射线（步长 45°，共 VISION_FAN_RAY_COUNT 条）+ 目标连线 1 段，每段 2 顶点 */
 export const VISION_FAN_VERTEX_COUNT = (VISION_FAN_RAY_COUNT + 1) * 2
 
 /* 射程圆环单位几何：XZ 平面半径 1 的正多边形（实例经 scale 缩放到实际射程） */

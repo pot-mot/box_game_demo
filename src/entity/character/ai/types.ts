@@ -42,6 +42,18 @@ export interface AIContext {
     /** 角色当前朝向角（rad）：视线扇形门控用，由 world.ts 注入 */
     getFacingAngle?: () => number
 
+    /* ── 视线扇形（节流 + 旋转采样） ── */
+    /** 缓存的扇形射线命中距离（长度 = VISION_FAN_RAY_COUNT，复用避免分配） */
+    visionFanDists: Float32Array
+    /** 缓存扇形投射时的中心朝向角（世界系，含旋转偏移） */
+    visionFanYaw: number
+    /** 缓存是否已投射过（未投射时须强制投射一次） */
+    visionFanValid: boolean
+    /** 距下次重扫的剩余帧数 */
+    visionFanCooldown: number
+    /** 当前整扇旋转偏移（rad）：每次重扫 +VISION_FAN_ROTATE_STEP，达到一个射线步长后回绕 */
+    visionFanRotation: number
+
     /** 当前活跃的 FSM */
     activeFsm: 'peace' | 'combat'
 

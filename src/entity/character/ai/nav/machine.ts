@@ -31,8 +31,7 @@ const findSteerAngle = (
         const tx = fx * cosA - fz * sinA
         const tz = fx * sinA + fz * cosA
 
-        const result = sensor.sense(entity, tx, tz, config, ignoredMesh)
-        if (result.result === 'clear') {
+        if (sensor.isForwardClear(entity, tx, tz, config, ignoredMesh)) {
             return angle
         }
     }
@@ -45,8 +44,7 @@ const findSteerAngle = (
         const tx = fx * cosA - fz * sinA
         const tz = fx * sinA + fz * cosA
 
-        const result = sensor.sense(entity, tx, tz, config, ignoredMesh)
-        if (result.result === 'clear') {
+        if (sensor.isForwardClear(entity, tx, tz, config, ignoredMesh)) {
             return angle
         }
     }

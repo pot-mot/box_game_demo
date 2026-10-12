@@ -2,10 +2,14 @@
 export const VISION_FAN_ANGLE = Math.PI * 1.5
 /** 视线扇形半角（朝向两侧各 135°） */
 export const VISION_FAN_HALF_ANGLE = VISION_FAN_ANGLE / 2
-/** 扇形扫描射线步长：每 10° 一条 */
-export const VISION_FAN_RAY_STEP = Math.PI / 18
-/** 扇形扫描射线数：270° / 10° + 1 = 28（含左右边界射线） */
-export const VISION_FAN_RAY_COUNT = Math.floor(VISION_FAN_ANGLE / VISION_FAN_RAY_STEP) + 1
+/** 扇形扫描射线数：稀疏 7 条（配合逐次旋转偏移 + 节流重扫，用时间换取角度覆盖，降低每帧射线开销） */
+export const VISION_FAN_RAY_COUNT = 7
+/** 扇形扫描射线步长：270° / (7 - 1) = 45° */
+export const VISION_FAN_RAY_STEP = VISION_FAN_ANGLE / (VISION_FAN_RAY_COUNT - 1)
+/** 视线扇形重扫间隔（帧）：每 N 帧才重投一次射线，帧间复用缓存结果（观测到的最远遮挡距离） */
+export const VISION_FAN_RECAST_INTERVAL = 6
+/** 每次重扫整扇旋转偏移（rad，5°）：逐次旋转以在多个重扫周期内填补 45° 稀疏射线的角度空隙 */
+export const VISION_FAN_ROTATE_STEP = Math.PI / 36
 
 /* ── 静止检测（卡死自愈） ── */
 /** 有移动意图的最小输入模长（与动作层 walking 守卫阈值一致） */

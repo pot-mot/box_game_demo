@@ -72,6 +72,14 @@ export interface NavSensor {
         /** 本次感知需忽略的 mesh（如当前 combat target），缺省不忽略 */
         ignoredMesh?: Object3D | null,
     ) => NavSenseOutput
+    /** 轻量前向探测（前向扇面 + 坑洞探针，不含侧向扫描）：等价「该方向可否前进」，供绕行候选试探 */
+    isForwardClear: (
+        entity: CharacterEntity,
+        forwardX: number,
+        forwardZ: number,
+        config: NavConfig,
+        ignoredMesh?: Object3D | null,
+    ) => boolean
 }
 
 /* 导航 FSM 状态处理器 */

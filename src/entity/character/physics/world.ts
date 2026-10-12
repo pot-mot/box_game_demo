@@ -1,4 +1,4 @@
-import {Euler, type LineBasicMaterial, type Mesh, Quaternion, type Scene, Vector3} from 'three'
+import {Euler, type LineBasicMaterial, type Mesh, type Object3D, Quaternion, type Scene, Vector3} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
@@ -29,8 +29,9 @@ import type {CombatSubStrategy, PeaceSubStrategy} from '../../../character/ai_st
 import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
-import {createNavSensor, type NavSensor} from '../ai/nav/sensor.ts'
-import {createLineOfSightChecker, type LineOfSightChecker} from '../ai/line_of_sight.ts'
+import {createRapierNavSensor, type NavSensor} from '../ai/nav/sensor.ts'
+import {createRapierLineOfSight, type LineOfSightChecker} from '../ai/line_of_sight.ts'
+import {createRapierLosRayCaster, createRapierNavRayCaster} from './rapier_queries.ts'
 import {createAIMachine, notifyAIDamaged, updateAI} from '../ai/machine.ts'
 import {processNav} from '../ai/nav/machine.ts'
 import {createCharacterMesh, updateCharacterMesh} from '../render'
@@ -121,11 +122,12 @@ const placeVisionFan = (
     los: LineOfSightChecker | null,
     x: number, eyeY: number, z: number,
     yaw: number, len: number,
+    selfMesh?: Object3D,
     targetX?: number, targetY?: number, targetZ?: number,
 ): void => {
     const vp = hitBoxes.visionPositions
     /* 与索敌判定同源：castFan 扫描整个扇形，射线截断到最近遮挡点（无 checker 时直达侦测半径） */
-    if (los) los.castFan(x, eyeY, z, yaw, len, _fanVizDists)
+    if (los) los.castFan(x, eyeY, z, yaw, len, _fanVizDists, selfMesh)
     let p = 0
     for (let i = 0; i < VISION_FAN_RAY_COUNT; i++) {
         const a = yaw - VISION_FAN_HALF_ANGLE + i * VISION_FAN_RAY_STEP
@@ -235,6 +237,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const bodyCharMap = new Map<number, CharacterEntity>()
     /** 角色 id → 实体（战斗目标 / 瞄准目标查询 O(1)，避免逐帧对 characters 线性扫描） */
     const charById = new Map<number, CharacterEntity>()
+    /** 角色碰撞 mesh → 物理刚体 handle（Rapier 射线查询排除自身 / 战斗目标用；每帧重建） */
+    const meshBodyHandle = new Map<Object3D, number>()
     const aiTargetDirs = new Map<number, {dx: number; dz: number}>()
     const appearanceModels = new Map<number, CharacterModel>()
     const appearanceSystems = new Map<number, AppearanceSystem>()
@@ -533,6 +537,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
         bodyCharMap.set(body.handle, entity)
         charById.set(entity.id, entity)
+        meshBodyHandle.set(entity.mesh, body.handle)
         characters.push(entity)
         appearanceModels.set(entity.id, model)
         appearanceSystems.set(entity.id, createAppearanceSystem({onAttackEvent}))
@@ -655,7 +660,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             hitBoxes.rangeRing.visible = false
         }
         placeVisionFan(hitBoxes, losChecker, x, y + CHARACTER_BASE_SIZE.height * entity.config.scale * 0.4, z, yaw,
-            weapon.detectionRange)
+            weapon.detectionRange, entity.mesh as Object3D)
         hitBoxes.visionFan.visible = show
         /* 攻击判定箱（红）需逐帧跟随武器 matrixWorld，暂停态不强行显示，由 update() 维护 */
         if (!show) {
@@ -711,6 +716,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         world.removeRigidBody(entity.body)
         bodyCharMap.delete(entity.body.handle)
         charById.delete(entity.id)
+        meshBodyHandle.delete(entity.mesh)
         entity.mesh.geometry.dispose()
         const mat = entity.mesh.material
         if (Array.isArray(mat)) mat.forEach(m => m.dispose())
@@ -902,6 +908,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
         /* 清理失效接触对（销毁的实体不会产生 stopped 事件） */
         contactTracker.prune(world)
+
+        /* 重建「角色碰撞 mesh → 刚体 handle」映射，供 Rapier 视线 / 导航射线排除自身与战斗目标 */
+        meshBodyHandle.clear()
+        for (const entity of characters) meshBodyHandle.set(entity.mesh, entity.body.handle)
 
         for (const entity of characters) {
             if (entity.combat.isDead) continue
@@ -1236,7 +1246,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                                 tz = tp.z
                             }
                         }
-                        placeVisionFan(hitBoxes, losChecker, bPos.x, eyeY, bPos.z, yaw, fanLen, tx, ty, tz)
+                        placeVisionFan(hitBoxes, losChecker, bPos.x, eyeY, bPos.z, yaw, fanLen, entity.mesh as Object3D, tx, ty, tz)
                         hitBoxes.visionFan.visible = true
                     } else {
                         hitBoxes.visionFan.visible = false
@@ -1381,38 +1391,19 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
     }
 
-    const setupAI = (systems: readonly EntityInfoSource[]): void => {
-        losChecker = createLineOfSightChecker(() => {
-            const meshes: Mesh[] = []
-            for (const s of systems) {
-                for (const m of s.getMeshes()) meshes.push(m)
-            }
-            return meshes
-        })
+    const setupAI = (_systems: readonly EntityInfoSource[]): void => {
+        /* 视线 / 导航统一走 Rapier 碰撞体 BVH 射线查询：地形 / 建筑 trimesh 三角形再多也不拖慢
+         * （旧实现用 three Raycaster 全量扫渲染 mesh，大网格场景会卡死）。
+         * mesh → 刚体 handle 解析用于在查询中排除发射者自身 / 战斗目标。 */
+        const resolveBody = (mesh: Object3D | null): number | undefined =>
+            mesh === null ? undefined : meshBodyHandle.get(mesh)
+
+        losChecker = createRapierLineOfSight(createRapierLosRayCaster(shared, resolveBody))
         for (const ctx of aiMap.values()) {
             ctx.losChecker = losChecker
         }
 
-        /* 同时初始化导航传感器（复用 system 的 mesh 列表） */
-        /* 排除 area/ 类型的系统（水域等非障碍物不应参与碰撞检测） */
-        navSensor = createNavSensor(
-            () => {
-                const meshes: Mesh[] = []
-                for (const s of systems) {
-                    if (s.type.startsWith('area/')) continue
-                    for (const m of s.getMeshes()) meshes.push(m)
-                }
-                return meshes
-            },
-            () => {
-                const terrain = systems.find(s => s.type === 'terrain')
-                return terrain?.getMeshes() ?? []
-            },
-            () => {
-                const char = systems.find(s => s.type === 'character')
-                return char?.getMeshes() ?? []
-            },
-        )
+        navSensor = createRapierNavSensor(createRapierNavRayCaster(shared, resolveBody))
         for (const ctx of aiMap.values()) {
             ctx.navSensor = navSensor
         }
