@@ -23,6 +23,8 @@ export interface ItemDef {
     readonly id: string
     readonly name: string
     readonly category: ItemCategory
+    /** 背包 / 图鉴呈现图标（`ui/icons` sprite 中的图标名，逐物品专属） */
+    readonly icon: IconName
     /** 俄罗斯方块形状：每行一个字符串，'#' 为占格；行数=高，最长行=宽 */
     readonly shape: readonly string[]
     readonly maxStack: number
@@ -38,6 +40,7 @@ export const findItemDef = (id: string | undefined): ItemDef | undefined
 ```
 
 - `ITEM_DEFS` 覆盖**全部武器模型**（近战 6 + 远程 9）、**全部护甲预设**、**全部方块实体**；`items.test.ts` 对照武器 / 护甲目录与 `ENTITY_TYPE_VALUES` 锁定完整性——新增武器 / 护甲 / 方块须同步补条目。本地化名复用 `weapon.*` / `armor.*` 名称键，描述共用 `item.weapon_generic.desc` / `item.armor_generic.desc`。
+- **物品图标**：每件物品的 `icon` 为专属图标（登记于 `src/ui/icons/sprite.ts` 的 `ICON_NAMES`，命名 `item-*`），`items.test.ts` 锁定「图标均已登记且逐件唯一」；背包网格（`modes/play/inventory_ui/grid_render.ts`）与图鉴（`modes/showcase/modules/catalog.ts`）据此呈现。
 - `grid.ts` 纯函数（带单测）：`rotatedShape` / `canPlace` / `findPlacement` / `buildOccupancy`（`rot` = 0..3 顺时针 90°）。
 
 ## 背包实例与操作（`types.ts` / `inventory.ts`）
@@ -67,7 +70,7 @@ export const addItem / removeAt / moveStack / equipStack / unequipSlot / equippe
 ## 背包 UI（`modes/play/inventory_ui/`）
 
 - `open_inventory`（默认 `KeyB`）切换显隐，打开时释放鼠标；面板工厂 `createInventoryPanel(host) → {update,setVisible,destroy,open}`，脏检查刷新，退出时销毁并移除注入样式。
-- `width×height` 格子网格，物品绝对定位覆盖占用格（尺寸 = 形状包围盒 × 格宽），用 CSS `clip-path` / 内层方块呈现形状。
+- `width×height` 格子网格，物品绝对定位覆盖占用格（尺寸 = 形状包围盒 × 格宽）；物品图标（`ItemDef.icon`）居中呈现，底部为名称、右上角为堆叠数量；网格渲染与双栏容器面板共用 `grid_render.ts` 的 `renderInventoryGrid`。
 - 拖拽移动（`pointerdown` 拎起、`pointerup` 落位，实时 `canPlace` 校验高亮）、拖拽中按 `R` 旋转、右键/双击装备、悬停细节卡（名称/描述/数量/装备/丢弃）。
 - 丢弃：转成玩家前方掉落物并从背包移除。
 

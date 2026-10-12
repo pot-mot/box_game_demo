@@ -58,6 +58,8 @@ test.describe('展示模式（二级菜单 + 子模块）', () => {
         await expect(page.locator('.sch-cat')).toBeVisible()
         /* 全部武器 15 + 护甲 17 + 方块 6 + 其它 3 = 41 */
         await expect(page.locator('.sch-cat .sch-cat-cell')).toHaveCount(41)
+        /* 每格显示该物品专属图标 */
+        await expect(page.locator('.sch-cat .sch-cat-cell svg.dc-icon')).toHaveCount(41)
     })
 
     test('选择「背包与格子交互」：复用背包 / 装备面板，含玩家 HUD', async ({page}) => {
@@ -66,6 +68,8 @@ test.describe('展示模式（二级菜单 + 子模块）', () => {
         await expect(page.locator('.sch-menu')).toBeHidden()
         await expect(page.getByText('背包 / 装备')).toBeVisible()
         await expect(page.locator('.sch-inv')).toBeVisible()
+        /* 背包网格物品显示专属图标 */
+        await expect(page.locator('[data-instance-id] svg.dc-icon').first()).toBeVisible()
         /* HUD「打开背包」按钮：点击可关闭 / 重新打开背包面板 */
         await expect(page.locator('.sch-inv-btn')).toBeVisible()
         await page.locator('.sch-inv-btn').click()

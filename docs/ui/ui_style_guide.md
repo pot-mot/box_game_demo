@@ -144,6 +144,7 @@
 | 状态 | `warning` `info` `lock` `unlock` `eye` `eye-off` |
 | 播放控制 | `play` `pause` `step` |
 | 玩法 | `settings` `map-pin` `backpack` `armor` `sword` `bow` `crosshair` `heart` `bolt` `flame` `brush` `drag` |
+| 物品图标（背包 / 图鉴，命名 `item-*`，逐物品专属，`ItemDef.icon` 引用） | `item-short-sword` `item-long-sword` `item-heavy-sword` `item-spear` `item-war-hammer` `item-dual-axe` `item-longbow` `item-crossbow` `item-shotgun` `item-staff` `item-magic-wand` `item-throwing-axe` `item-grenade` `item-molotov` `item-throwing-dart` `item-cloth-cap` `item-iron-helmet` `item-mage-hood` `item-cloth-vest` `item-iron-plate` `item-leather-armor` `item-mage-robe` `item-scale-mail` `item-cloth-bracers` `item-iron-bracers` `item-battle-bracers` `item-mage-wraps` `item-cloth-pants` `item-iron-greaves` `item-mage-leggings` `item-swift-boots` `item-wind-boots` `item-block` `item-block-destruction` `item-block-burning` `item-block-magnet` `item-block-elasticity` `item-block-water` `item-flask` `item-stone` `item-key` |
 | 装饰（仅标题角落，非必需） | `rune` `flourish` |
 
 - 新增图标：在 `sprite.ts` 追加 `<symbol>` 并登记到目录表；不得内联到业务组件。

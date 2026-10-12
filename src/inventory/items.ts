@@ -1,5 +1,6 @@
 import type {EquipSlot} from './types.ts'
 import {translate, type StringLocaleKey} from '../i18n/index.ts'
+import type {IconName} from '../ui/icons/sprite.ts'
 
 export const ITEM_CATEGORIES = ['weapon', 'armor', 'block', 'consumable', 'material', 'key'] as const
 export type ItemCategory = typeof ITEM_CATEGORIES[number]
@@ -22,6 +23,8 @@ export interface ItemDef {
     readonly id: string
     readonly name: string
     readonly category: ItemCategory
+    /** 背包 / 图鉴呈现用图标（`ui/icons` sprite 中的图标名，逐物品专属） */
+    readonly icon: IconName
     readonly shape: readonly string[]
     readonly maxStack: number
     readonly weaponId?: string
@@ -33,10 +36,11 @@ export interface ItemDef {
     readonly description: string
 }
 
-const weapon = (id: string, name: string, shape: readonly string[], weaponId: string, damage: string): ItemDef => ({
+const weapon = (id: string, name: string, shape: readonly string[], weaponId: string, damage: string, icon: IconName): ItemDef => ({
     id,
     name,
     category: 'weapon',
+    icon,
     shape,
     maxStack: 1,
     weaponId,
@@ -45,10 +49,11 @@ const weapon = (id: string, name: string, shape: readonly string[], weaponId: st
     description: `${name}（${damage}）`,
 })
 
-const armor = (id: string, name: string, shape: readonly string[], armorId: string, slot: EquipSlot, effect: string): ItemDef => ({
+const armor = (id: string, name: string, shape: readonly string[], armorId: string, slot: EquipSlot, effect: string, icon: IconName): ItemDef => ({
     id,
     name,
     category: 'armor',
+    icon,
     shape,
     maxStack: 1,
     armorId,
@@ -57,10 +62,11 @@ const armor = (id: string, name: string, shape: readonly string[], armorId: stri
     description: `${name}（${effect}）`,
 })
 
-const block = (id: string, name: string, shape: readonly string[], blockType: string, description: string): ItemDef => ({
+const block = (id: string, name: string, shape: readonly string[], blockType: string, description: string, icon: IconName): ItemDef => ({
     id,
     name,
     category: 'block',
+    icon,
     shape,
     maxStack: 99,
     blockType,
@@ -75,58 +81,58 @@ const block = (id: string, name: string, shape: readonly string[], blockType: st
  */
 export const ITEM_DEFS: readonly ItemDef[] = [
     /* ── 近战武器 ── */
-    weapon('weapon_short_sword', '短剑', ['#', '#', '#'], 'short_sword', '轻快短兵'),
-    weapon('weapon_long_sword', '长剑', ['#', '#', '#', '#'], 'long_sword', '均衡单手剑'),
-    weapon('weapon_heavy_sword', '巨剑', ['##', '##', '##'], 'heavy_sword', '沉重双手剑'),
-    weapon('weapon_spear', '长枪', ['#', '#', '#', '#', '#'], 'spear', '突刺长柄'),
-    weapon('weapon_war_hammer', '战锤', ['##', '##', '.#'], 'war_hammer', '破甲重锤'),
-    weapon('weapon_dual_axe', '战斧', ['##', '##'], 'dual_axe', '可双持'),
+    weapon('weapon_short_sword', '短剑', ['#', '#', '#'], 'short_sword', '轻快短兵', 'item-short-sword'),
+    weapon('weapon_long_sword', '长剑', ['#', '#', '#', '#'], 'long_sword', '均衡单手剑', 'item-long-sword'),
+    weapon('weapon_heavy_sword', '巨剑', ['##', '##', '##'], 'heavy_sword', '沉重双手剑', 'item-heavy-sword'),
+    weapon('weapon_spear', '长枪', ['#', '#', '#', '#', '#'], 'spear', '突刺长柄', 'item-spear'),
+    weapon('weapon_war_hammer', '战锤', ['##', '##', '.#'], 'war_hammer', '破甲重锤', 'item-war-hammer'),
+    weapon('weapon_dual_axe', '战斧', ['##', '##'], 'dual_axe', '可双持', 'item-dual-axe'),
     /* ── 远程武器 ── */
-    weapon('weapon_longbow', '长弓', ['#.', '##', '.#'], 'longbow', '远程弓箭'),
-    weapon('weapon_crossbow', '弩', ['##', '.#'], 'crossbow', '远程弩矢'),
-    weapon('weapon_shotgun', '霰弹枪', ['##', '##', '#.'], 'shotgun', '近距散射'),
-    weapon('weapon_staff', '法杖', ['#', '#', '#'], 'staff', '施放魔法'),
-    weapon('weapon_magic_wand', '魔杖', ['#', '#'], 'magic_wand', '蓄能法术'),
-    weapon('weapon_throwing_axe', '飞斧', ['##', '##'], 'throwing_axe', '投掷兵器'),
-    weapon('weapon_grenade', '手雷', ['#'], 'grenade', '范围爆炸'),
-    weapon('weapon_molotov', '燃烧瓶', ['#', '#'], 'molotov', '范围灼烧'),
-    weapon('weapon_throwing_dart', '飞镖', ['#', '#'], 'throwing_dart', '轻巧暗器'),
+    weapon('weapon_longbow', '长弓', ['#.', '##', '.#'], 'longbow', '远程弓箭', 'item-longbow'),
+    weapon('weapon_crossbow', '弩', ['##', '.#'], 'crossbow', '远程弩矢', 'item-crossbow'),
+    weapon('weapon_shotgun', '霰弹枪', ['##', '##', '#.'], 'shotgun', '近距散射', 'item-shotgun'),
+    weapon('weapon_staff', '法杖', ['#', '#', '#'], 'staff', '施放魔法', 'item-staff'),
+    weapon('weapon_magic_wand', '魔杖', ['#', '#'], 'magic_wand', '蓄能法术', 'item-magic-wand'),
+    weapon('weapon_throwing_axe', '飞斧', ['##', '##'], 'throwing_axe', '投掷兵器', 'item-throwing-axe'),
+    weapon('weapon_grenade', '手雷', ['#'], 'grenade', '范围爆炸', 'item-grenade'),
+    weapon('weapon_molotov', '燃烧瓶', ['#', '#'], 'molotov', '范围灼烧', 'item-molotov'),
+    weapon('weapon_throwing_dart', '飞镖', ['#', '#'], 'throwing_dart', '轻巧暗器', 'item-throwing-dart'),
     /* ── 护甲 ── */
-    armor('armor_cloth_cap', '布帽', ['#'], 'cloth_cap', 'head', '轻便'),
-    armor('armor_iron_helmet', '铁盔', ['#'], 'iron_helmet', 'head', '物理防御'),
-    armor('armor_mage_hood', '法师兜帽', ['#'], 'mage_hood', 'head', '魔法强化'),
-    armor('armor_cloth_vest', '布衣', ['##', '##'], 'cloth_vest', 'chest', '轻便'),
-    armor('armor_iron_plate', '铁板甲', ['##', '##'], 'iron_plate', 'chest', '物理防御'),
-    armor('armor_leather_armor', '皮甲', ['##', '##'], 'leather_armor', 'chest', '均衡防御'),
-    armor('armor_mage_robe', '法袍', ['##', '##'], 'mage_robe', 'chest', '魔法防御'),
-    armor('armor_scale_mail', '鳞甲', ['##', '##'], 'scale_mail', 'chest', '厚重复合甲'),
-    armor('armor_cloth_bracers', '布护腕', ['#', '#'], 'cloth_bracers', 'arms', '轻便'),
-    armor('armor_iron_bracers', '铁护腕', ['#', '#'], 'iron_bracers', 'arms', '物理防御'),
-    armor('armor_battle_bracers', '战臂甲', ['#', '#'], 'battle_bracers', 'arms', '物理攻击'),
-    armor('armor_mage_wraps', '法印护腕', ['#', '#'], 'mage_wraps', 'arms', '魔法强化'),
-    armor('armor_cloth_pants', '布裤', ['#', '#'], 'cloth_pants', 'legs', '轻便'),
-    armor('armor_iron_greaves', '铁护胫', ['#', '#'], 'iron_greaves', 'legs', '物理防御'),
-    armor('armor_mage_leggings', '法师护腿', ['#', '#'], 'mage_leggings', 'legs', '魔法防御'),
-    armor('armor_swift_boots', '疾行靴', ['#', '#'], 'swift_boots', 'legs', '提升移速'),
-    armor('armor_wind_boots', '疾风靴', ['#', '#'], 'wind_boots', 'legs', '大幅提升移速'),
+    armor('armor_cloth_cap', '布帽', ['#'], 'cloth_cap', 'head', '轻便', 'item-cloth-cap'),
+    armor('armor_iron_helmet', '铁盔', ['#'], 'iron_helmet', 'head', '物理防御', 'item-iron-helmet'),
+    armor('armor_mage_hood', '法师兜帽', ['#'], 'mage_hood', 'head', '魔法强化', 'item-mage-hood'),
+    armor('armor_cloth_vest', '布衣', ['##', '##'], 'cloth_vest', 'chest', '轻便', 'item-cloth-vest'),
+    armor('armor_iron_plate', '铁板甲', ['##', '##'], 'iron_plate', 'chest', '物理防御', 'item-iron-plate'),
+    armor('armor_leather_armor', '皮甲', ['##', '##'], 'leather_armor', 'chest', '均衡防御', 'item-leather-armor'),
+    armor('armor_mage_robe', '法袍', ['##', '##'], 'mage_robe', 'chest', '魔法防御', 'item-mage-robe'),
+    armor('armor_scale_mail', '鳞甲', ['##', '##'], 'scale_mail', 'chest', '厚重复合甲', 'item-scale-mail'),
+    armor('armor_cloth_bracers', '布护腕', ['#', '#'], 'cloth_bracers', 'arms', '轻便', 'item-cloth-bracers'),
+    armor('armor_iron_bracers', '铁护腕', ['#', '#'], 'iron_bracers', 'arms', '物理防御', 'item-iron-bracers'),
+    armor('armor_battle_bracers', '战臂甲', ['#', '#'], 'battle_bracers', 'arms', '物理攻击', 'item-battle-bracers'),
+    armor('armor_mage_wraps', '法印护腕', ['#', '#'], 'mage_wraps', 'arms', '魔法强化', 'item-mage-wraps'),
+    armor('armor_cloth_pants', '布裤', ['#', '#'], 'cloth_pants', 'legs', '轻便', 'item-cloth-pants'),
+    armor('armor_iron_greaves', '铁护胫', ['#', '#'], 'iron_greaves', 'legs', '物理防御', 'item-iron-greaves'),
+    armor('armor_mage_leggings', '法师护腿', ['#', '#'], 'mage_leggings', 'legs', '魔法防御', 'item-mage-leggings'),
+    armor('armor_swift_boots', '疾行靴', ['#', '#'], 'swift_boots', 'legs', '提升移速', 'item-swift-boots'),
+    armor('armor_wind_boots', '疾风靴', ['#', '#'], 'wind_boots', 'legs', '大幅提升移速', 'item-wind-boots'),
     /* ── 方块 ── */
-    block('block_common', '普通方块', ['#'], 'box/common', '基础物理方块'),
-    block('block_destruction', '可破坏方块', ['#'], 'box/destruction', '受击碎裂'),
-    block('block_burning', '燃烧方块', ['#'], 'box/burning', '受击燃烧'),
-    block('block_magnet', '磁力方块', ['#'], 'box/magnet', '吸引金属物'),
-    block('block_elasticity', '弹性方块', ['#'], 'box/elasticity', '受力形变'),
-    block('block_water', '水方块', ['#'], 'area/water', '液面折射'),
+    block('block_common', '普通方块', ['#'], 'box/common', '基础物理方块', 'item-block'),
+    block('block_destruction', '可破坏方块', ['#'], 'box/destruction', '受击碎裂', 'item-block-destruction'),
+    block('block_burning', '燃烧方块', ['#'], 'box/burning', '受击燃烧', 'item-block-burning'),
+    block('block_magnet', '磁力方块', ['#'], 'box/magnet', '吸引金属物', 'item-block-magnet'),
+    block('block_elasticity', '弹性方块', ['#'], 'box/elasticity', '受力形变', 'item-block-elasticity'),
+    block('block_water', '水方块', ['#'], 'area/water', '液面折射', 'item-block-water'),
     /* ── 消耗品 / 材料 / 钥匙 ── */
     {
-        id: 'consumable_flask', name: '恢复药', category: 'consumable', shape: ['#'], maxStack: 20,
+        id: 'consumable_flask', name: '恢复药', category: 'consumable', icon: 'item-flask', shape: ['#'], maxStack: 20,
         dropSize: [0.25, 0.25, 0.25], description: '饮用后恢复生命',
     },
     {
-        id: 'material_stone', name: '石块', category: 'material', shape: ['#'], maxStack: 99,
+        id: 'material_stone', name: '石块', category: 'material', icon: 'item-stone', shape: ['#'], maxStack: 99,
         dropSize: [0.25, 0.25, 0.25], description: '常见建材',
     },
     {
-        id: 'key_rusted', name: '锈蚀钥匙', category: 'key', shape: ['#'], maxStack: 1,
+        id: 'key_rusted', name: '锈蚀钥匙', category: 'key', icon: 'item-key', shape: ['#'], maxStack: 1,
         dropSize: [0.2, 0.2, 0.2], description: '可以开启某处锁闭的门',
     },
 ] as const

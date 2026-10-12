@@ -3,6 +3,7 @@ import {ITEM_CATEGORIES, ITEM_DEFS} from './items.ts'
 import {ALL_WEAPON_PRESETS} from '../character/weapon/catalog.ts'
 import {ALL_ARMOR_PRESETS} from '../character/armor/catalog.ts'
 import {ENTITY_TYPE_VALUES} from '../entity/constants.ts'
+import {ICON_NAMES} from '../ui/icons/sprite.ts'
 
 /** 方块实体类型（物品图鉴需覆盖全部方块类实体） */
 const BLOCK_ENTITY_TYPES = ['box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity', 'area/water'] as const
@@ -44,5 +45,13 @@ describe('物品目录完整性', () => {
         for (const def of ITEM_DEFS) {
             expect(ITEM_CATEGORIES).toContain(def.category)
         }
+    })
+
+    it('每件物品都有专属图标且已在图标 sprite 登记', () => {
+        const icons = ITEM_DEFS.map(def => def.icon)
+        for (const def of ITEM_DEFS) {
+            expect(ICON_NAMES, `未知图标：${def.id} → ${def.icon}`).toContain(def.icon)
+        }
+        expect(new Set(icons).size, '物品图标应逐件专属').toBe(icons.length)
     })
 })

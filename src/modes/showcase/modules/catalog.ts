@@ -22,8 +22,9 @@ import {WATER_COLOR_DEEP, WATER_COLOR_SHALLOW} from '../../../entity/area/water/
 import {ACTOR_JUMP_HEIGHT, ACTOR_SPEED, CATALOG_CAMERA_DISTANCE, CATALOG_CAMERA_TARGET_Y, CATALOG_CUBE_Y} from '../constants.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import {localizeText, localizeApply} from '../../../i18n/dom.ts'
+import {createIcon} from '../../../ui/icons/icon.ts'
 
-/** 类别代表色（图鉴格子色条 / 非装备类预览方块取色） */
+/** 类别代表色（图鉴格子图标着色 / 非装备类预览方块取色） */
 const CATEGORY_COLORS: Record<ItemCategory, number> = {
     weapon: 0xc96a5a,
     armor: 0x5a7fc9,
@@ -44,6 +45,9 @@ const BLOCK_PREVIEW: Record<string, {base: number; grid: number}> = {
 }
 
 const isEquipment = (def: ItemDef): boolean => def.category === 'weapon' || def.category === 'armor'
+
+/** 类别代表色（CSS `#rrggbb`，用于图标着色） */
+const categoryColorHex = (def: ItemDef): string => `#${CATEGORY_COLORS[def.category].toString(16).padStart(6, '0')}`
 
 /** 把物品定义装备到展示人体上（武器 → 主手；护甲 → 对应槽；其余 → 空手无甲） */
 const applyItemToModel = (model: ReturnType<typeof createCharacterModel>, def: ItemDef | undefined): void => {
@@ -136,12 +140,13 @@ export const catalogModule: ShowcaseModule = {
 }
 .sch-cat-cell:hover { border-color: var(--dc-border-strong); }
 .sch-cat-cell.active { border-color: var(--dc-gold); background: color-mix(in srgb, var(--dc-gold) 12%, transparent); color: var(--dc-gold-bright); }
-.sch-cat-swatch { display: block; height: 4px; border-radius: var(--dc-radius-sm); flex: none; }
+.sch-cat-icon { display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; }
 .sch-cat-label {
-    flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+    flex: none; display: flex; align-items: center; justify-content: center; text-align: center;
     overflow: hidden; word-break: break-all;
 }
 .sch-cat-detail { border-top: 1px solid var(--dc-border); margin-top: 8px; padding-top: 8px; min-height: 76px; }
+.sch-cat-head { display: flex; align-items: center; gap: 8px; }
 .sch-cat-name { font-weight: 700; color: var(--dc-gold-bright); }
 .sch-cat-subline { color: var(--dc-text-dim); font-size: 12px; }
 .sch-cat-desc { color: var(--dc-text-dim); font-size: 12px; margin-top: 3px; }
@@ -208,13 +213,19 @@ export const catalogModule: ShowcaseModule = {
             const name = document.createElement('div')
             name.className = 'sch-cat-name'
             localizeApply(name, el => { el.textContent = itemDisplayName(def) })
+            const head = document.createElement('div')
+            head.className = 'sch-cat-head'
+            const headIcon = createIcon(def.icon, {size: 'lg'})
+            headIcon.style.color = categoryColorHex(def)
+            head.appendChild(headIcon)
+            head.appendChild(name)
             const subline = document.createElement('div')
             subline.className = 'sch-cat-subline'
             localizeApply(subline, el => { el.textContent = subLineOf(def) })
             const desc = document.createElement('div')
             desc.className = 'sch-cat-desc'
             localizeApply(desc, el => { el.textContent = itemDisplayDescription(def) })
-            detail.appendChild(name)
+            detail.appendChild(head)
             detail.appendChild(subline)
             detail.appendChild(desc)
         }
@@ -241,13 +252,14 @@ export const catalogModule: ShowcaseModule = {
                 const cell = document.createElement('button')
                 cell.type = 'button'
                 cell.className = 'sch-cat-cell'
-                const swatch = document.createElement('span')
-                swatch.className = 'sch-cat-swatch'
-                swatch.style.background = `#${CATEGORY_COLORS[def.category].toString(16).padStart(6, '0')}`
+                const iconWrap = document.createElement('span')
+                iconWrap.className = 'sch-cat-icon'
+                iconWrap.style.color = categoryColorHex(def)
+                iconWrap.appendChild(createIcon(def.icon, {size: 'lg'}))
                 const label = document.createElement('span')
                 label.className = 'sch-cat-label'
                 localizeApply(label, el => { el.textContent = itemDisplayName(def) })
-                cell.appendChild(swatch)
+                cell.appendChild(iconWrap)
                 cell.appendChild(label)
                 cell.addEventListener('click', () => { select(def); cell.blur() })
                 grid.appendChild(cell)

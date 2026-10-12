@@ -1,6 +1,7 @@
 import type {InventoryState} from '../../../inventory/types.ts'
 import {INVENTORY_CELL_PX} from '../../../inventory/types.ts'
 import {findItemDef, itemDisplayName} from '../../../inventory/items.ts'
+import {createIcon} from '../../../ui/icons/icon.ts'
 
 export interface GridRenderOptions {
     getInventory: () => InventoryState
@@ -36,15 +37,28 @@ export const renderInventoryGrid = (container: HTMLElement, options: GridRenderO
         if (stack.grid === undefined) continue
         const def = findItemDef(stack.defId)
         if (def === undefined) continue
+        const w = def.shape[0].length * INVENTORY_CELL_PX
+        const h = def.shape.length * INVENTORY_CELL_PX
         const el = document.createElement('div')
         el.dataset.instanceId = stack.instanceId
-        el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${def.shape[0].length * INVENTORY_CELL_PX}px;height:${def.shape.length * INVENTORY_CELL_PX}px;cursor:grab;background:color-mix(in srgb, var(--dc-gold) 12%, transparent);border-radius:var(--dc-radius-sm)`
+        el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${w}px;height:${h}px;cursor:grab;overflow:hidden;background:color-mix(in srgb, var(--dc-gold) 12%, transparent);border-radius:var(--dc-radius-sm)`
         if (options.selectedId === stack.instanceId) el.style.outline = '2px solid var(--dc-gold)'
         el.title = `${itemDisplayName(def)} ×${stack.count}`
+        /* 物品图标：居中于形状包围盒，尺寸随最小边长缩放 */
+        const icon = createIcon(def.icon)
+        const iconPx = Math.round(Math.min(def.shape[0].length, def.shape.length) * INVENTORY_CELL_PX * 0.56)
+        icon.style.cssText = `position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:${iconPx}px;height:${iconPx}px;color:var(--dc-gold-bright)`
+        el.appendChild(icon)
         const label = document.createElement('div')
         label.textContent = itemDisplayName(def)
-        label.style.cssText = 'position:absolute;left:3px;top:2px;font-size:10px;color:var(--dc-text);text-shadow:0 1px 2px var(--dc-overlay);pointer-events:none'
+        label.style.cssText = 'position:absolute;left:0;right:0;bottom:1px;padding:0 2px;font-size:10px;line-height:1.15;text-align:center;color:var(--dc-text);text-shadow:0 1px 2px var(--dc-overlay);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
         el.appendChild(label)
+        if (stack.count > 1) {
+            const count = document.createElement('div')
+            count.textContent = `${stack.count}`
+            count.style.cssText = 'position:absolute;right:1px;top:1px;min-width:12px;padding:0 2px;box-sizing:border-box;font-size:10px;font-weight:700;line-height:1.3;text-align:center;color:var(--dc-gold-bright);background:var(--dc-overlay);border-radius:var(--dc-radius-sm);pointer-events:none'
+            el.appendChild(count)
+        }
         el.addEventListener('pointerdown', (ev) => options.onItemPointerDown(ev, stack.instanceId))
         if (options.onItemDoubleClick !== undefined) {
             el.addEventListener('dblclick', () => options.onItemDoubleClick?.(stack.instanceId))

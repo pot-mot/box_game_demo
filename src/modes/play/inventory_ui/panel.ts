@@ -5,6 +5,7 @@ import {findStack} from '../../../inventory/inventory.ts'
 import type {Placement} from '../../../inventory/types.ts'
 import {translate, onLocaleChange} from '../../../i18n/index.ts'
 import {localizeText} from '../../../i18n/dom.ts'
+import {renderInventoryGrid} from './grid_render.ts'
 
 export interface InventoryPanelCallbacks {
     getInventory: () => InventoryState
@@ -73,43 +74,20 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
     let visible = false
     let selectedId: string | undefined
 
-    const cell = (x: number, y: number): number => y * cb.getInventory().width + x
-
     const renderGrid = (): void => {
-        const inv = cb.getInventory()
-        gridWrap.style.width = `${inv.width * INVENTORY_CELL_PX}px`
-        gridWrap.style.height = `${inv.height * INVENTORY_CELL_PX}px`
-        gridWrap.replaceChildren()
-        /* 背景格线 */
-        for (let y = 0; y < inv.height; y++) {
-            for (let x = 0; x < inv.width; x++) {
-                const c = document.createElement('div')
-                c.style.cssText = `position:absolute;left:${x * INVENTORY_CELL_PX}px;top:${y * INVENTORY_CELL_PX}px;width:${INVENTORY_CELL_PX}px;height:${INVENTORY_CELL_PX}px;border:1px solid var(--dc-border);box-sizing:border-box`
-                gridWrap.appendChild(c)
-            }
-        }
-        void cell
-        for (const stack of inv.stacks) {
-            if (stack.grid === undefined) continue
-            const def = findItemDef(stack.defId)
-            if (def === undefined) continue
-            const el = document.createElement('div')
-            el.dataset.instanceId = stack.instanceId
-            el.style.cssText = `position:absolute;left:${stack.grid.x * INVENTORY_CELL_PX}px;top:${stack.grid.y * INVENTORY_CELL_PX}px;width:${def.shape[0].length * INVENTORY_CELL_PX}px;height:${def.shape.length * INVENTORY_CELL_PX}px;cursor:grab;background:color-mix(in srgb, var(--dc-gold) 12%, transparent);border-radius:var(--dc-radius-sm)`
-            if (selectedId === stack.instanceId) el.style.outline = '2px solid var(--dc-gold)'
-            el.title = `${itemDisplayName(def)} ×${stack.count}`
-            const label = document.createElement('div')
-            label.textContent = itemDisplayName(def)
-            label.style.cssText = 'position:absolute;left:2px;top:2px;font-size:10px;color:var(--dc-text);text-shadow:0 1px 2px var(--dc-overlay);pointer-events:none'
-            el.appendChild(label)
-            el.addEventListener('pointerdown', (ev) => {
+        renderInventoryGrid(gridWrap, {
+            getInventory: cb.getInventory,
+            selectedId,
+            onItemPointerDown: (ev, instanceId) => {
                 ev.stopPropagation()
-                selectedId = stack.instanceId
+                selectedId = instanceId
                 render()
-                startDrag(ev, stack.instanceId, () => ({x: stack.grid!.x, y: stack.grid!.y, rot: stack.grid!.rot}))
-            })
-            gridWrap.appendChild(el)
-        }
+                const stack = findStack(cb.getInventory(), instanceId)
+                if (stack?.grid === undefined) return
+                const placement = stack.grid
+                startDrag(ev, instanceId, () => ({x: placement.x, y: placement.y, rot: placement.rot}))
+            },
+        })
     }
 
     const SLOT_ANCHORS: Record<EquipSlot, {left: string; top: string}> = {
