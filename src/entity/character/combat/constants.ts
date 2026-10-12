@@ -17,7 +17,7 @@ export const MELEE_FALLBACK_DETECT_RANGE = 1.5
 /* ── 近战出招检测箱（detectBox）估算 ──
  * detectBox 不在运行时推导，而是按以下常量离线估算后写入武器类配置（`melee_weapon.ts`），
  * 并由 `detect_box.test.ts` 锁定：detectBox = 估算攻击范围盒 + 每轴 MELEE_DETECT_MARGIN。
- * 详见 `docs/ai_system.md` 2.5。
+ * 详见 `src/entity/character/ai/ai.md` 2.5。
  */
 
 /** 持械臂完全前伸时的前伸量（m，scale=1）：上臂 + 前臂（bodyH = 0.36）+ 躯干前侧 / 刺击探身余量 */

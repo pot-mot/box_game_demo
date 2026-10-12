@@ -86,7 +86,7 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         damage: 2,
         knockbackForce: 2, knockbackY: 1,
         detectionRange: 6,
-        /* 前缘 = (0.5 + reach 0.3125) × 0.8 = 0.65，外扩 +0.05 见 docs/ai_system.md 2.5.1 */
+        /* 前缘 = (0.5 + reach 0.3125) × 0.8 = 0.65，外扩 +0.05 见 src/entity/character/ai/ai.md 2.5.1 */
         detectBox: { size: { x: 0.5, y: 1.15, z: 0.8 }, offset: { x: 0, y: 0, z: 0.275 } },
     }, {
         one_handed: {},

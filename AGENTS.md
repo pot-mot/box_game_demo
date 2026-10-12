@@ -5,6 +5,8 @@
 
 基于 Three.js + rapier3d-compat 的游戏项目：物理交互沙盒 + 角色动作战斗 + 编辑 / 游玩 / 展示 / 骨骼动画四套模式。
 
+> **改动任一模块前，先读该模块根目录下的**同名文档**（如 `src/physics/physics.md`；子文档在其子目录，如 `src/character/weapon/bone_animation/`）。见文末[模块文档索引](#模块文档索引)。按需惰性加载，不要预读全部。** 本文件只保留全局、跨模块、必须每次在场的规则。
+
 ## 命令
 
 - `pnpm dev` — 启动 Vite 开发服务器
@@ -28,30 +30,26 @@
 
 ## 工程标准
 
-1. **无占位实现** — 不提交 TODO、空实现或调试用 `console.log`；未完成的能力要么不合并，要么在 `docs/` 中记录设计方案。
-2. **改动完整** — 功能改动必须同时补齐类型、测试（按改动性质选单测或 e2e）、相关 `docs/` 文档，以及 AGENTS.md 中受影响的结构/约定描述。
+1. **无占位实现** — 不提交 TODO、空实现或调试用 `console.log`；未完成的能力要么不合并，要么在对应模块文档中记录设计方案。
+2. **改动完整** — 功能改动必须同时补齐类型、测试（按改动性质选单测或 e2e）、相关模块的同名文档，以及根 AGENTS.md 中受影响的结构/约定描述。
 3. **兼容性** — 存档格式（`save_load/`）与本地存储（如键位绑定 `localStorage`）变更必须考虑旧数据：校验层需安全回退到默认值，不得抛错崩溃。
 4. **性能** — 帧内逻辑避免无谓分配（复用向量与临时对象），更新路径中禁止创建 DOM；纹理、材质、几何体按需单例复用。
 5. **玩家可读性** — 面向玩家的 UI 文案、代码注释与文档一律中文；标识符沿用既有英文命名习惯。**UI 文案禁止硬编码**：一律经 `src/i18n/` 的 `translate` / `localizeText` / `localizeTitle` / `localizePlaceholder` 取用（详见 [`docs/i18n.md`](docs/i18n.md)）；数据名称经 `weaponDisplayName` / `armorPieceDisplayName` / `itemDisplayName` 等映射，序列化字段（如骨架关节名）不改数据、仅显示层翻译。
-
-6. **UI 风格统一** — 全部模式 / 面板 / HUD 遵循 [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)；样式只走 `src/assets/theme.css` 的 `--dc-*` 令牌与 `.dc-*` 组件类（**禁止硬编码颜色/字体/圆角/间距**），功能滚动容器统一 `scrollbar-gutter:stable`（`.dc-scroll`），装饰用 SVG 图标（`src/ui/icons/`，**禁止 Unicode/emoji 图标**）；编码规则见 [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md)。迁移存量 UI 必须保留既有 `id` / 语义类名 / `data-*` / i18n 文案（e2e 与单测依赖）。
+6. **UI 风格统一** — 全部模式 / 面板 / HUD 遵循 [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)；样式只走 `src/assets/theme.css` 的 `--dc-*` 令牌与 `.dc-*` 组件类（**禁止硬编码颜色/字体/圆角/间距**），功能滚动容器统一 `scrollbar-gutter:stable`（`.dc-scroll`），装饰用 SVG 图标（`src/ui/icons/`，**禁止 Unicode/emoji 图标**）；编码规则见 [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md)。迁移存量 UI 必须保留既有 `id` / 语义类名 / `data-*` / i18n 文案（e2e 与单测依赖）。详见 [`src/ui/ui.md`](src/ui/ui.md)。
 
 ## 规范
 
 ### 类型系统
 
 1. **严格类型** — 禁止使用 `any`，启用 `noUnusedLocals`、`noUnusedParameters`。
-
 2. **`null`/`undefined`** — 优先使用 `undefined`，严格区分两者，禁止 `==`/`!=`，一律用 `===`/`!==`。
-
 3. **`readonly`** — 尽可能使用 `const` 显式声明常量，针对类型，尽可能使用 `DeepReadonly`。
-
 4. **禁止不安全类型断言** — 严禁使用 `as any`、`as unknown as Xxx` 等旁路类型系统的不安全转换。安全的 `as` 用法仅限：
    - `as const` 常量断言
    - DOM 事件目标窄化（`e.target as HTMLElement`、`e.target as Node`）
-   - material 窄化（需配合 `instanceof` 守卫，如 `mesh.material as MeshBasicMaterial` 前确认 `mesh.material instanceof MeshBasicMaterial`）
+   - material 窄化（需配合 `instanceof` 守卫）
    - `JSON.parse()` 返回 `as unknown`（用于给校验层，但不得裸用 `as Xxx`）
-   - **判别式 Map 访问** — 当 `Map<Key, BaseType>` 的值在运行时是不同类型的子类，可通过泛型映射类型 `Record<Key, SubType>` 配合 `as` 做一次集中窄化，后续所有下游访问均获得精确类型，避免散落的 `as any`：
+   - **判别式 Map 访问** — `Map<Key, BaseType>` 的值运行时是不同类型子类时，用泛型映射类型 `Record<Key, SubType>` 配合 `as` 做一次集中窄化，避免散落 `as any`：
      ```ts
      type SourceMap = {
          'type_a': ContextA
@@ -60,10 +58,8 @@
      const getSource = <K extends KeyType>(key: K): SourceMap[K] | undefined =>
          map.get(key) as SourceMap[K] | undefined
      ```
-
-5. **两阶段初始化** — 禁止使用 `undefined as unknown as Xxx` 在对象字面量中占位再覆盖属性。若工厂函数无法在构造阶段提供完整对象（如 `panel` 依赖 `ctx` 自身），应将返回类型定为 `Omit<FullType, 'panel'>`，由调用方通过 `{ ...partial, panel: createPanel(partial) }` 组装为完整类型。
-
-6. **枚举** - 禁止使用 `enum`，尽可能使用常量 + 索引类型推导的形式：
+5. **两阶段初始化** — 禁止使用 `undefined as unknown as Xxx` 在对象字面量中占位再覆盖属性。工厂函数无法在构造阶段提供完整对象时，将返回类型定为 `Omit<FullType, 'panel'>`，由调用方通过 `{ ...partial, panel: createPanel(partial) }` 组装。
+6. **枚举** — 禁止 `enum`，用常量 + 索引类型推导：
    ```ts
    const EnumType_CONTANTS = ['A', 'B'] as const
    type EnumType = typeof EnumType_CONTANTS[number]
@@ -73,196 +69,97 @@
 ### 代码风格
 
 1. **缩进** — 4 个空格。
-
 2. **函数风格** — 拒绝非必要的 `class`、`function` 声明、`this`，尽可能使用 `const` 箭头函数，包括导出函数。
-
 3. **注释语言** — 所有注释必须使用中文。
 
 ### Import / Export
 
-1. **`verbatimModuleSyntax`** — 类型专用的 import 必须用 `import type`。若同模块同时需要值和类型，使用内联修饰符：
-   ```ts
-   import {Value, type SomeType} from 'module'
-   ```
-
+1. **`verbatimModuleSyntax`** — 类型专用的 import 必须用 `import type`。若同模块同时需要值和类型，使用内联修饰符：`import {Value, type SomeType} from 'module'`。（`tsconfig.json` 启用 `noUnusedLocals` / `noUnusedParameters` / `erasableSyntaxOnly` / `verbatimModuleSyntax`。）
 2. **`import type` + `as`** — 类型冲突时用 `import type {Material as ThreeMaterial} from 'three'`，值类型冲突时用 `import {Material as ThreeMaterial}` 并额外使用 `type` 修饰符。
-
 3. **路径后缀** — import 路径除 `xxx/index.ts` 可省略外，必须包含 `.ts` 扩展名。
-
 4. **命名导出** — 禁止 `export default`，全部使用命名导出。
 
-### 模块约定
+## 架构规则
 
-1. **常量集中** — 每个分包（`physics/`、`render/`、`input/`）的 magic number 必须提取到各自的 `constants.ts`。
+1. **分包原则** — 代码按 `character/`（角色领域模型）、`entity/`（实体实现）、`modes/`（游戏模式）、`physics/`（共享物理）、`render/`（渲染管线）、`input/`（输入注册表）、`i18n/`（国际化，叶子包，不依赖其它 `src/` 包）、`ui/`（面板）、`save_load/`（存档）分包。禁止循环依赖。
+2. **依赖方向** — `character/` 是独立领域层，不依赖 `entity/`。`entity/character/` 依赖 `character/`。各 entity 之间不相互引用（**唯一例外**：`entity/character/skeleton/` 可引用通用骨架层 `entity/skeleton/`；`entity/skeleton/` 保持与人形无关，人形定义与外观装配由 `entity/character/` 提供并经 `SkeletonPreset` 注入，不得反向引用 `entity/character/`）。
+3. **单 RAF 循环** — 所有帧驱动逻辑集中在 `main.ts` 的 `tick()` 中。各子系统返回 `(dt: number) => void` 类型的 updater 函数，由主循环统一调度，禁止自行启动 RAF。
+4. **常量集中** — 各分包的 magic number 必须提取到对应的 `constants.ts`，禁止散落在函数体内。
+5. **状态机驱动角色** — `entity/character/physics/world.ts` 每帧调用 `stateMachine.update(dt, entity)` → 状态直接操作 `entity.body`（`setLinvel` 等）→ 随后 `syncPositions()` 同步 body→mesh。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/control/player_control.ts` 的 `move()` 每帧读取动作并调用 `characterSystem.setPlayerMove()` → `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。详见 [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md)。
+6. **两套操作方案** — 所有具备操作能力的模式只归入 `modes/control/` 的两套共享方案（玩家主控 `createPlayerControl` / 纯摄像机 `createCameraControl`），新增模式不得另写相机/移动逻辑。详见 [`src/modes/control/control.md`](src/modes/control/control.md)。
 
-2. **RAF 回调** — 需要在每帧执行的逻辑返回 `updater` 函数，由 `main.ts` 的单 RAF 循环统一调用。updater 签名统一为 `(dt: number) => void`。
+## 高危红线（跨模块，必须遵守）
 
-3. **状态机** — `character/state_machine/` 实现标准 FSM：
-   - 每个状态一个独立文件，导出 `StateHandler` 对象（`enter` / `update` / `exit` / `transitions`）
-   - 转换规则由各状态通过 `transitions[]` 声明，状态机核心 `machine.ts` 统一检查 guard 并派发 `onStateChange`
-   - 状态持有 `CharacterEntity` 引用，可直接操作 `body` / `mesh`
-   - 依赖方向：`entity/character/` → `character/state_machine/` → `character/types.ts`
-   - **攻击连段**由 `states/attacking/` 的段子状态机表达：`attacking` meta-state 负责调度，段定义（含自身声明的 `next` 转换）由武器模组拥有（`character/weapon/`），禁止在角色侧重建槽位/连段索引
+这些规则漏了会引发跨模块、难定位的故障，故始终在场；细节见对应模块文档。
 
-4. **攻击动作归属** — 武器的段（时长 / 恢复 / 阶段时序 / 伤害倍率 / 冷却 / 连段拓扑）一律写在武器模组（`character/weapon/melee_attacks.ts`、`ranged_attacks.ts`）；**动画不再由抽象动作参数生成**，而是段通过 `poses`（`SegmentPoseLayer[]`）引用显式骨骼关键帧。基础轨道在 `attack_clip_data.ts`，逐段关键姿势修订在 `attack_pose_edits.ts`，播放器合并后仍按 clip 播放；修订不得增加程序化阶段或每帧动画器。**近战段按三段式约定**：t=0 起手/蓄力 → 中帧（动作段结束）= 打击完成 → 末帧 = 持械戒备（肩 `-0.45` / 肘 `-0.85` / 挂点 `1.7`，与 idle 一致）；挥砍平面与枪口朝向由武器骨骼承担（收招帧回 `WEAPON_GRIP_FLEX`），命中窗口 on ≈ 0.5×动作时间 / off ≈ 0.95×动作时间。角色与存档持有「主手武器 + 副手武器 + 持握模式 + 数值覆写」。
-5. **武器类 / 持握模式 / 副手** — 武器分为**武器类**（玩法数据：`*_WEAPON_CLASSES`）与**模型**（`*_WEAPON_MODELS`：id / classId / 名称 / 网格），`resolveMeleeWeapon` / `resolveRangedWeapon` 合并为运行时武器配置（带 `classId`）；段 id 统一 `{classId}_{holdMode}_{模板键}`（远程单模式沿用 `{classId}_{动作}`）。三态常量 `HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`（`character/weapon/hold_mode.ts`）；全部近战类支持三模式、默认单持，每模式独立连段（`attacks: HoldModeAttacks`，`catalog.ts` 的 `weaponAttacksOf(weapon, holdMode?)` 解析）。角色实体持久化 `holdMode` 与副手装备槽（`CombatComponent.offhand`）；`world.ts` 的 `setHoldMode` 按 `availableHoldModes(weapon, offhand)` 校验（双持需副手同类近战，`sameWeaponClass`），不可用时回退默认并返回 `false`，切换后重解析攻击链并同步外观（双手共持副手挂背 `backWeaponMount`、其余模式回左手）。play 模式 `Ctrl`（`cycle_hold_mode`）环切可用模式；edit 面板可选副手武器与持握；展示模式近战按模式分三排。
-6. **骨骼动画组合** — `skeleton/anim/composition.ts` 的 `composePoses(layers)` / `applyComposedPose(skeleton, layers)` 按**关节归一化加权平均**合成任意层（`PoseLayer = {clip, weight, progress}`），未被任何层覆盖的关节保留骨架当前值（实现上下半身任意拼装）；单层有效贡献时走快速路径直接采样（零额外开销）。`skeleton/anim/composed_player.ts` 的 `createComposedAnimationPlayer` 驱动组合播放与分层事件。基础状态的分层（下半身/体态 + 按持握模式的上半身）在 `appearance/clips/base_clips.ts` 中**离线预组合**为单 clip（`getBaseClipForHoldMode`，运行时单层播放），需要运行时动态权重时用 `getBaseLayers` + `composePoses`；攻击段即 `segment.poses` 组合。
-
-7. **统一模型构建器** — 人类骨架与方块人外观只有一套构建路径：骨架定义 `entity/character/skeleton/preset.ts` 的 `buildCharacterSkeletonDefinition()` 为唯一真相源；`entity/character/appearance/model.ts` 的 `createCharacterModel`（游玩/展示）与 `modes/bone_edit`（编辑器）都经 `skeleton/render/joint_hierarchy.ts` 的 `createJointHierarchy` 建 Group 层级、再用 `entity/character/appearance/assemble.ts` 的 `assembleCharacterAppearance` 装配部件（**含手部模型**）。手部关节 `rightHandPivot` / `leftHandPivot` 与其骨骼段 `rightHand` / `leftHand` 两侧都有，且已纳入 `CHARACTER_JOINT_IDS`（可被动画驱动）；武器挂点 `rightWeaponMount` / `leftWeaponMount` 是腕下独立零偏移关节，不并入手部骨骼；`backWeaponMount` 为背部视觉挂点（双手共持时副手武器挂背，无 clip 轨道）。`entity/skeleton` 为通用骨架实体，人形预设/外观经 `createCharacterSkeletonPreset()` 注入。
-
-8. **程序化网格构建器** — 武器与护甲的外观模型共用 `entity/character/appearance/mesh_builder.ts` 的 `createMeshBuilder()`：它提供几何 / 材质工厂（`box` / `cylinder` / `sphere` / `cone` / `material`）与组装接口（`add` / `faceBox`），统一登记并 `dispose` 释放，取代原先 `weapon_mesh` 的模块级 `begin()` 共享数组。`weapon_mesh` 与 `armor_mesh` 的每个模型都是**独立参数化 `gen` 函数**（接收 `(builder, 参数)`，各自拼装部件），派发表只做 id → gen 的映射；护甲 gen 的尺寸参数来自 `PRESET_PART_SIZES` 的关节基准部件，武器 gen 的参数来自自身 `WeaponMeshConfig`。**新增/修改武器或护甲外观只改对应 gen**，不要重建通用构建逻辑。
-
-9. **交互系统** — `character/interaction/` 为纯类型层（`InteractionTarget` / `InteractionProvider`、时长常量）；`entity/interactable/` 与 `entity/item/` 实现 `InteractionProvider`，由 `modes/play/interaction/` 汇总候选（距离 + 镜头偏角）并在角色进入 `interacting` 状态的动作进度 50%（`INTERACTION_ACTIVATE_TIME`）时激活；`interacting` 状态由 `input.interact`（默认 F）脉冲 + `entity.interactTargetActive` 守卫触发，动画为 `pose_fns` 的程序化姿态。edit 模式经交互物面板按钮 / `interact` 快捷键主动触发。可破坏道具按来源类别（`BreakableSource` = melee/ranged/explosion/roll）过滤：角色系统 `registerWorldDamageTargets` 注册提供者，近战 / 远程 / 爆炸 / 翻滚命中路径投递，行为侧按 `breakableBy` 决定是否扣血。
-
-10. **背包与箱庭子系统** — `inventory/` 为纯领域层（items 目录 + grid 俄罗斯方块布局 + inventory 增删装备），UI 在 `modes/play/inventory_ui/`（环绕式装备槽 + `equipment_ui` 的独立模型预览，惰性创建避免额外 WebGL 上下文），编排在 `modes/play/hakoniwa.ts`（输入事件驱动，不占每帧 updater；地图/传送/脱困同处）。装备应用走 `characterSystem.updateCharacterConfig`（主手/副手武器 + 四槽护甲），与角色战斗数值互通；背包 / 传送点持久化于 `modeInfo.play`（`inventory` / `teleports`），旧档缺失安全回退。
+- **每帧瞬态施力 / 单一步进器** — Rapier `addForce` 不在 `step` 后自动清除。任何自建 `SharedWorld` 必须逐物理子步 `clearAllForces`；**独立持世界一律经 `physics/fixed_step.ts` 的 `createFixedStepStepper`**，严禁手写 `world.step` / `eventBus.drain` 子步循环（曾因漏清力导致角色跳跃后无限升空）。见 [`src/physics/physics.md`](src/physics/physics.md)。
+- **地面接触法线** — 必须经 `physics/contact_tracking.ts` 的 `queryColliderContacts` 取，禁止直接用 `Collider.contactCollider`（同时接触地面与箱/交互物会返回被污染法线）。
+- **角色 collider 是竖直胶囊（非 cuboid）**；地形一律 `RAPIER.ColliderDesc.trimesh`；**heightfield 与 `FIX_INTERNAL_EDGES` 禁用**。
+- **碰撞类别 fail-closed** — 新增碰撞体必须显式 `setCollisionGroups` 并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注类别；未声明者 membership 全 1 会被解析为 `ground` 并挡下子弹。
+- **存档兼容** — 改存档结构必须同步 `save_load/types.ts` / `validation.ts` / `serialize.ts`，可选字段旧档缺失一律安全回退默认、未知 id 安全丢弃，不得抛错。见 [`src/save_load/save_load.md`](src/save_load/save_load.md)。
 
 ## 项目结构
+
 ```
 src/
 ├── types/                       # 通用类型定义
 ├── physics/                     # 共享物理世界（rapier3d-compat）
 ├── render/                      # Three.js 渲染（materials/ 为基础表面材质库）
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
-├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/、translate/localize* API、语言持久化与原地重译）
-├── character/                   # 角色领域模型（纯 TS 类型 + 状态机）
-│   ├── interaction/             # 交互领域模型（InteractionTarget/Provider 抽象、交互时长常量）
-│   ├── weapon/                  # 武器模组（武器类/模型分层 weapon_class + 持握模式 hold_mode / 攻击链：attack_chain（含段→pose 组合 SegmentPoseLayer）/ melee_attacks / ranged_attacks / catalog / weapon_runtime / attack_clip_data（基础关键帧）/ attack_pose_edits（逐段姿势修订））
-│   ├── combat/                  # 战斗运行时（段冷却与转换上下文、阶段模型、执行器注册表、伤害/攻击类别与防御、翻滚技能与无敌帧、world_targets 世界受击目标）
-│   ├── armor/                   # 护甲 / 肢体领域模型（护甲四槽 head/chest/arms/legs + 肢体四槽 head/arms/body/legs；共享数值与外观机制；预设 armor_pieces / limb_pieces，目录与装备表校验 catalog，类型 types）
-│   └── state_machine/states/    # idle / walking / jumping / falling / attacking（段子状态机）/ dying / rolling（翻滚，中段无敌帧）/ flinching / interacting（交互）
+├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/）
+├── character/                   # 角色领域模型：ai_strategy / interaction / weapon / combat / armor / state_machine
 ├── entity/
-│   ├── character/               # 角色实体
-│   │   ├── skeleton/            # 角色骨架定义（人形预设 preset.ts + PRESET_PART_SIZES + preset_appearance.ts，引用 entity/skeleton）
-│   │   ├── appearance/          # 方块人外观（统一模型构建器：预设骨架→Group 层级→部件装配，含手部、护甲与肢体 armor_mesh）+ 动画/武器装配
-│   │   ├── combat/              # 近战执行器 / 开火控制（ranged_executor）
-│   │   └── projectile/          # 弹丸分包（物理·视觉·命中·特效·对象池；独立 build 模块 mesh.ts）
-│   ├── skeleton/                # 通用骨架实体与编辑可视化（小球/菱形、面板、桥接；人形无关，预设由外部注入）
-│   ├── interactable/            # 交互物实体系统（9 类交互物行为 behaviors + 信号联动 + 可破坏战斗集成 + 程序化网格 + 编辑面板）
-│   ├── item/                    # 掉落物实体系统（sensor body 漂浮小立方体，拾取经交互）
-│   ├── building_generator/      # 建筑生成器（体素网格 / 生成配方 structures + 结构原语 architecture / 分块面剔除渲染 / 距离卸载 / 近处合并 trimesh 物理）
-│   ├── box/                     # common / destructed / burning / magnet / elasticity
-│   ├── fragment/common/         # 碎片实体
-│   ├── destroyed/               # Voronoi 断裂算法
-│   ├── area/water/              # 水方块
-│   └── terrain/                 # Trimesh 地形（高度数组生成，heightfield 禁用）
-├── inventory/                   # 背包与物品领域模型（items 目录 / grid 俄罗斯方块布局 / inventory 增删装备 / 存档转换）
-├── modes/
-│   ├── control/                 # 共享操作方案（玩家主控 player_control / 纯摄像机 camera_control / 自由飞行 free_flight，见 docs/operation_schemes.md）
-│   ├── edit/                    # 编辑模式（纯摄像机操作、指针交互、地形雕刻开关）
-│   ├── play/                    # 游玩模式（玩家主控：第三人称、状态机驱动、中键镜头锁定、交互/背包/装备/地图/脱困）
-│   │   ├── interaction/         # 交互目标解析、提示与激活编排
-│   │   ├── inventory_ui/        # 俄罗斯方块背包面板（环绕式装备槽宿主）
-│   │   ├── equipment_ui/        # 装备模型预览（独立小场景，拖拽旋转）
-│   │   ├── map_ui/              # 地图面板（俯视绘制、传送选点）
-│   │   └── hakoniwa.ts          # 箱庭子系统装配（背包/装备/地图/传送/脱困）
-│   ├── showcase/                # 展示模式（二级菜单 + 子模块：动作 / 装备外观 / AI×复杂地形 / 复杂地形建筑 / 交互物 / 图鉴 / 背包格子交互；相机类用纯摄像机，含玩家子模块用玩家主控）
-│   └── startup_screen.ts
+│   ├── character/               # 角色实体（skeleton / appearance / combat / projectile / physics / ai / combat_vfx / ui）
+│   ├── skeleton/                # 通用骨架实体与编辑可视化（人形无关，预设外部注入）
+│   ├── interactable/            # 交互物实体系统（行为 + 信号联动 + 可破坏 + 网格 + 编辑面板）
+│   ├── item/                    # 掉落物实体（sensor body 漂浮小立方体，拾取经交互）
+│   ├── building_generator/      # 建筑生成器（体素 / 结构原语 / 分块面剔除渲染 / 距离卸载 / trimesh 物理）
+│   ├── box/ fragment/ destroyed/ area/ terrain/   # 箱子变体 / 碎片 / Voronoi 断裂 / 水 / Trimesh 地形
+├── inventory/                   # 背包与物品领域模型（items 目录 / grid 俄罗斯方块布局 / 增删装备 / 存档转换）
+├── modes/                       # control / bone_edit / edit / play / showcase
 ├── ui/                          # 面板（相机HUD、属性面板、列表侧栏、设置）
 ├── save_load/                   # 存档序列化 / 反序列化
 ├── assets/
-│   └── style.css
 └── main.ts
 ```
 
-展示模式由启动屏第三个按钮进入（共享主页渲染器与单 RAF 循环，可返回启动屏），详见 [`docs/showcase.md`](docs/showcase.md)。
+展示模式由启动屏第三个按钮进入（共享主页渲染器与单 RAF 循环，可返回启动屏），详见 [`src/modes/showcase/showcase.md`](src/modes/showcase/showcase.md)。
 
-## 架构规则
+## 模块文档索引
 
-1. **分包原则** — 代码按 `character/`（角色领域模型）、`entity/`（实体实现）、`modes/`（游戏模式）、`physics/`（共享物理）、`render/`（渲染管线）、`input/`（输入注册表）、`i18n/`（国际化，叶子包，不依赖其它 `src/` 包）、`ui/`（面板）、`save_load/`（存档）分包。禁止循环依赖。
+每个模块只有一份以模块命名的文档，位于模块根目录（子主题文档在其子目录，如武器动作 `src/character/weapon/bone_animation/`）。**跨模块不变量只写在本文件（下「架构规则」「高危红线」）；模块文档只写该模块特有内容，不重复全局规则。**
 
-2. **依赖方向** — `character/` 是独立领域层，不依赖 `entity/`。`entity/character/` 依赖 `character/`。各 entity 之间不相互引用（**唯一例外**：`entity/character/skeleton/` 可引用通用骨架层 `entity/skeleton/`；`entity/skeleton/` 保持与人形无关，人形定义与外观装配由 `entity/character/` 提供并经 `SkeletonPreset` 注入，不得反向引用 `entity/character/`）。
+| 模块 / 主题 | 文档 | 何时读 |
+|---|---|---|
+| 物理（shared） | [`src/physics/physics.md`](src/physics/physics.md) | 碰撞体、力、接触、步进 |
+| 渲染 | [`src/render/render.md`](src/render/render.md) | 材质/纹理单例、拾取、颜色常量 |
+| 输入 | [`src/input/input.md`](src/input/input.md) | 键位/鼠标绑定、新增输入动作 |
+| 存档 | [`src/save_load/save_load.md`](src/save_load/save_load.md) | 存档结构/版本/兼容 |
+| UI 面板 | [`src/ui/ui.md`](src/ui/ui.md) | 面板样式、图标、迁移 |
+| 角色领域（lock_point/faction/原型） | [`src/character/character.md`](src/character/character.md) | 锁定点、阵营 |
+| 武器 | [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) | 武器类/模型、持握、攻击段、蓄力、动作 |
+| 战斗运行时 | [`src/character/combat/combat.md`](src/character/combat/combat.md) | 伤害类别、防御、无敌帧 |
+| 护甲 / 肢体 | [`src/character/armor/armor.md`](src/character/armor/armor.md) | 护甲槽位、防御/加成 |
+| 交互领域 | [`src/character/interaction/interaction.md`](src/character/interaction/interaction.md) | 交互类型层、时长 |
+| 状态机 | [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md) | 新增状态、死亡/翻滚、攻击段 |
+| 骨骼动画 | [`src/skeleton/skeleton.md`](src/skeleton/skeleton.md) | 骨骼/IK/组合动画 |
+| 角色 AI | [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) | 寻路索敌、导航避障、朝向 |
+| 方块人外观 | [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md) | 模型构建、挂点、武器/护甲/肢体网格、种族 |
+| 弹丸 | [`src/entity/character/projectile/projectile.md`](src/entity/character/projectile/projectile.md) | 弹丸物理/视觉/对象池 |
+| 角色物理 | [`src/entity/character/physics/physics.md`](src/entity/character/physics/physics.md) | body/mesh 同步、移动平台载客 |
+| 角色战斗特效 | [`src/entity/character/combat_vfx/combat_vfx.md`](src/entity/character/combat_vfx/combat_vfx.md) | 受击/无敌材质效果 |
+| 建筑 | [`src/entity/building_generator/building_generator.md`](src/entity/building_generator/building_generator.md) | 体素、渲染、物理、笔刷、结构原语 |
+| 交互物 | [`src/entity/interactable/interactable.md`](src/entity/interactable/interactable.md) | 交互物行为、信号、可破坏 |
+| 掉落物 | [`src/entity/item/item.md`](src/entity/item/item.md) | 掉落物拾取 |
+| 箱子 | [`src/entity/box/box.md`](src/entity/box/box.md) | 箱子尺寸与纹理 |
+| 地形 | [`src/entity/terrain/terrain.md`](src/entity/terrain/terrain.md) | Trimesh 地形、雕刻 |
+| 背包 | [`src/inventory/inventory.md`](src/inventory/inventory.md) | 背包/装备 UI 与持久化 |
+| 操作方案 | [`src/modes/control/control.md`](src/modes/control/control.md) | 相机/移动、翻滚/加速 |
+| 游玩模式 | [`src/modes/play/play.md`](src/modes/play/play.md) | 第三人称、锁定、箱庭子系统 |
+| 编辑模式 | [`src/modes/edit/edit.md`](src/modes/edit/edit.md) | 指针、执行面板、雕刻 |
+| 展示模式 | [`src/modes/showcase/showcase.md`](src/modes/showcase/showcase.md) | 子模块框架与注册 |
+| 全局 UI 风格 | [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)、[`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | 任何面板/HUD |
+| 全局 i18n | [`docs/i18n.md`](docs/i18n.md) | 文案 |
+| 全局动作规范 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 调动作 |
 
-3. **单 RAF 循环** — 所有帧驱动逻辑集中在 `main.ts` 的 `tick()` 中。各子系统返回 `(dt: number) => void` 类型的 updater 函数，由主循环统一调度，禁止自行启动 RAF。
-
-4. **状态机驱动角色** — `entity/character/physics/world.ts` 每帧调用 `stateMachine.update(dt, entity)` → 状态直接操作 `entity.body`（`setLinvel` 等）→ 随后 `syncPositions()` 同步 body→mesh。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/control/player_control.ts` 的 `move()` 每帧读取动作并调用 `characterSystem.setPlayerMove()` → `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。
-
-5. **两套操作方案** — 所有具备操作能力的模式只归入两套共享方案（`modes/control/`，详见 [`docs/operation_schemes.md`](docs/operation_schemes.md)）：**玩家主控** `createPlayerControl`（play、showcase 含玩家子模块；`WASD` 相对相机移动 + `roll` 翻滚 + 空格跳跃 + 第三人称环绕，可选攻击/锁定/聚焦，**不提供右键平移**）与**纯摄像机** `createCameraControl`（edit / bone_edit / showcase 相机类模块 / play 无玩家兜底；`WASD`+`Z/X` 自由飞行 + `boost` 加速 + 左键旋转 + 右键 `mouse_pan` 平移 + 滚轮缩放 + 可选聚焦/跟随）。新增模式按其是否主控角色选用其一，不得另写相机/移动逻辑。`roll` 与 `boost` 默认均绑定 `Shift` 但分属两套方案，运行时不会同时消费。
-
-6. **常量集中** — 各分包的 magic number 必须提取到对应的 `constants.ts`，禁止散落在函数体内。
-
-7. **建筑体素系统** — `entity/building_generator/` 以「建筑世界」为实体、内部承载数万体素 block：数据为稀疏 `Map<chunkKey, Uint8Array>`（0=空，1..7=`render/materials/` 的材质索引），渲染按 `CHUNK_SIZE³` 分块做**贪心网格合并**（同材质矩形面合并，UV 以格展开配合可平铺纹理），每 chunk 一个 `Mesh` + 按材质分组的共享材质单例（draw call = chunk 内材质数，通常 1–3），并做两级绘制（近处全细节、中距离按 `LOD_STRIDE` 降采样为粗 LOD）、超出 `LOD_CHUNK_RADIUS + 滞回` 距离卸载（只释放 GPU 几何、保留体素数据）；近处 chunk 合并为 trimesh collider。静态建筑不参与物理步进，其可见性更新由 `main.ts` 每帧调用 `updateView(camera, dt)`（对「帧内逻辑集中在 preSync」的有意例外）；生成配方仅用于创作期，存档以显式 RLE 体素数据为准。编辑模式提供体素拾取与笔刷工具（放置 / 擦除 / 道具 / 区域填充 / 区域替换 / 预制体，`building_generator/edit/brush.ts`，启用时关闭实体选中 / 生成交互）；区域类工具第一次单击后显示预览线框、选中世界显示包围盒高亮（`render/overlay.ts`），建筑面板提供道具列表编辑与全建筑材质替换；自由道具（门 / 窗 / 栅栏 / 灯笼，`props/kinds.ts` + `render/prop_mesh.ts`）为纯视觉装饰，不建碰撞体、不进 `getMeshes()`。
-
-## 文档
-
-项目文档统一存放在 `docs/` 目录，修改相关功能前务必先阅读对应文档、修改完成后及时更新。
-
-| 文档 | 内容 |
-|------|------|
-| [`docs/ai_system.md`](docs/ai_system.md) | 角色 AI 寻路索敌系统：双层 FSM 架构、状态转移图、全量配置项、类型定义、扩展指南、核心文件索引 |
-| [`docs/attack_system.md`](docs/attack_system.md) | 攻击系统：武器模组攻击链（段模型）与段子状态连段、起手解析与输入缓冲、受击硬直、伤害判定几何、动画系统 |
-| [`docs/edit_mode.md`](docs/edit_mode.md) | 编辑模式：与主循环的关系、执行面板（Execute / Stop / Step / Run / Reset）语义与快照基线生命周期、其余控制与文件索引 |
-| [`docs/equipment_system.md`](docs/equipment_system.md) | 装备与防御系统：攻击类别（物理/魔法）、护甲槽位与预设、防御固定减伤与存档兼容 |
-| [`docs/melee_hold_modes.md`](docs/melee_hold_modes.md) | 近战三持握模组改造：武器类/模型分层、副手装备槽与挂背、段 id 约定、分阶段实施与验收清单 |
-| [`docs/play_mode.md`](docs/play_mode.md) | 游玩模式：第三人称相机、镜头锁定（中键、选取与脱锁规则）、验证方式 |
-| [`docs/operation_schemes.md`](docs/operation_schemes.md) | 两套共享操作方案（玩家主控 `player_control` / 纯摄像机 `camera_control`）：行为矩阵、输入动作 `roll`/`boost`/`mouse_pan`、API、地形雕刻开关、文件索引 |
-| [`docs/projectile_system.md`](docs/projectile_system.md) | 弹丸系统分包：分层与数据流、视觉映射表、降低重力、对象池、范围伤害特效、扩展指南与测试 |
-| [`docs/building_system.md`](docs/building_system.md) | 建筑生成系统：体素 chunk 存储与 RLE 压缩存档、贪心网格合并与粗 LOD 分块渲染、距离卸载、近处合并 trimesh 物理、建造笔刷（体素/道具/区域填充/材质替换/预制体）、自由道具、基础表面材质库 |
-| [`docs/hakoniwa/00_总览.md`](docs/hakoniwa/00_总览.md) | 箱庭游玩模式总览：目标、复用 play 模式的集成策略、模块结构、依赖方向、阶段划分与验收基线 |
-| [`docs/hakoniwa/01_交互系统.md`](docs/hakoniwa/01_交互系统.md) | 交互系统：F 交互输入、`interacting` 状态与骨骼动画、目标解析与提示、edit 主动触发 |
-| [`docs/hakoniwa/02_交互物.md`](docs/hakoniwa/02_交互物.md) | 交互物子系统：9 类交互物行为、信号联动、可破坏道具与战斗来源过滤、存档 |
-| [`docs/hakoniwa/03_背包与物品.md`](docs/hakoniwa/03_背包与物品.md) | 背包与物品：物品目录与俄罗斯方块形状、格子布局、掉落/拾取、背包 UI 与存档 |
-| [`docs/hakoniwa/04_装备系统.md`](docs/hakoniwa/04_装备系统.md) | 装备 UI：模型展示预览与环绕式装备槽、与物品子系统互通 |
-| [`docs/hakoniwa/05_地图与传送与脱困.md`](docs/hakoniwa/05_地图与传送与脱困.md) | 地图面板、传送点解锁与选点、存档点重生、脱困 |
-| [`docs/hakoniwa/06_箱庭生成器.md`](docs/hakoniwa/06_箱庭生成器.md) | 建筑结构原语（楼梯/旋转楼梯/斗拱/斜屋顶/廊桥/支柱）与顶层箱庭配方 |
-| [`docs/hakoniwa/07_存档与兼容.md`](docs/hakoniwa/07_存档与兼容.md) | 箱庭相关存档字段、版本推进与旧档兼容策略 |
-| [`docs/showcase.md`](docs/showcase.md) | 展示模式：二级菜单与子模块框架（`ShowcaseModule` 注册表 / 共享舞台 / 两套操作方案）、动作 / 装备外观 / AI 行为×复杂地形 / 复杂地形建筑 / 交互物 / 全物品图鉴 / 背包格子交互各子模块展示效果、与生产代码的镜像关系、验证与扩展指南 |
-| [`docs/i18n.md`](docs/i18n.md) | 国际化系统：`src/i18n/` 强类型文案表与领域片段、`translate`/`localize*` API、语言持久化与原地实时重译、新增文案/语言流程、数据名称与序列化字段处理 |
-| [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md) | UI 风格设计规范：日式西幻视觉语言、设计令牌色板/排版/间距、组件形态、SVG 图标目录、滚动条与 HUD 覆盖层约定、动效与反例 |
-| [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | CSS 编码指南：样式分层（reset/主题/局部）、`dc-*` 组件类与令牌命名、选择器规则、滚动条规范、图标用法、迁移流程与硬约束、验证方式 |
-| [`docs/bone_animation_system.md`](docs/bone_animation_system.md) | 骨骼动画系统设计与实施方案（`feature/bone-system` 分支）：骨骼/动画领域模型、编辑模式、外观装载、事件轨道化攻击迁移与测试计划 |
-| [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 骨骼动画动作调优规范：坐标系与朝向、关节总表、旋转符号速查（肘前折/膝后折）、阶段与相位、动作→改动位置映射、提示词模版、三持握模式与副手槽、陷阱。同目录逐个动作建档（`武器名-攻击段名.md` / `动作名.md`） |
-| [`docs/bone_animation/持握模式动作.md`](docs/bone_animation/持握模式动作.md) | 近战三持握模式动作总表：段 id 约定、模式语义、各武器连段与动画来源 |
-| [`docs/bone_animation/长枪.md`](docs/bone_animation/长枪.md) | 长枪五段攻击动作与双手握点说明 |
-| [`docs/bone_animation/远程攻击.md`](docs/bone_animation/远程攻击.md) | 九种远程动作逐段姿势与武器主、副握点说明 |
-
-**扩展 AI 功能时**：阅读 `docs/ai_system.md` → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。
-
-## 陷阱
-
-- `raycaster.intersectObjects(meshes, false)` — 必须传 `false` 禁止递归，否则会检测到 `LineSegments` 子对象而非 Mesh（Three.js r185 默认 `recursive = true`）
-- 修改箱子尺寸（高）后需要同步调整 `body.translation()` / `mesh.position`，防止底部钻入地面引发物理引擎暴力弹飞
-- `tsconfig.json` 启用 `noUnusedLocals`、`noUnusedParameters`、`erasableSyntaxOnly`、`verbatimModuleSyntax`，import 必须用 `import type`，若同时需要值和类型，用内联 `type` 修饰符（`import {Value, type SomeType} from 'module'`）
-- 纹理使用单例 `CanvasTexture`（`gridMaskTexture()`，`render/texture.ts`），所有箱子共享
-- 物理 body 与 three mesh 位置同步在 `syncPositions()` 中逐帧覆盖，手动移动 mesh 后要通过 `body.setTranslation` / `body.setRotation` 同步
-- `Mesh` 是运行时值（`new Mesh(...)`，如 `entity/box/*/render/index.ts`），必须用 `import {Mesh}` 而非 `import type {Mesh}`
-- rapier3d-compat 的休眠 body 无视 velocity 写入，操作 velocity 前必须 `body.wakeUp()`（`setLinvel(vel, true)` 第二参数同样会唤醒，本项目一律传 `true`）
-- Rapier `addForce` 不会在 `step` 后自动清除，本项目所有施力均为**每帧瞬态**语义：任何自建 `SharedWorld` 都必须每个物理子步结束后 `clearAllForces`（`main.ts` / 角色测试 `harness` 均注册），否则 idle / 站定攻击的坡面反重力力残留、抵消重力，角色跳跃后**持续升空**。**独立持世界一律经 `physics/fixed_step.ts` 的 `createFixedStepStepper` 步进**（清力已内聚在运行器内）——展示模式 `ai_terrain` / `interactables` 子模块均如此；**严禁**在子模块内手写 `world.step` / `eventBus.drain` 子步循环（曾因漏清力导致玩家跳跃时无限升空）
-- 角色 collider 是**竖直胶囊**（半径 = `CHARACTER_BASE_SIZE.width/2`，总高 = `height`），不是 cuboid。平底 cuboid 在 trimesh 地形上坡时会跨网格顶点线被内部棱幽灵水平法线卡死（原地 walking 不动）；rapier3d-compat 0.19/0.20 的 `FIX_INTERNAL_EDGES` 已损坏（开启后 trimesh 完全无碰撞），禁止使用；heightfield 在该版本 wasm 直接崩溃，禁止使用（地形用 `RAPIER.ColliderDesc.trimesh` 生成）
-- 新增状态机状态时：写 `states/*.ts` → 在 `machine.ts` 的 `STATE_HANDLERS` 中注册 → 在 `types.ts` 的 `CHARACTER_STATES` 中添加。攻击**阶段**子状态（`attacking_{segmentId}_{phaseName}`）通过 `states/attacking/index.ts` 的 `registerPhaseHandler` 注册，未注册阶段走默认行为；攻击**段**子状态不在此列——它由武器模组的段定义（含 `next` 转换）驱动，新增/调整段只改 `character/weapon/*_attacks.ts`
-- 存档 `attack`（武器 id + 伤害/起手段冷却/远程弹道覆写）与武器模组是**单向**关系：数值可覆写，动作（段/时长/阶段/动画）不可覆写；改存档结构必须同步 `save_load/types.ts`、`validation.ts`（缺失时安全回退默认武器，不得抛错）与 `serialize.ts`，历史存档不保证兼容（当前 `SAVE_FORMAT_VERSION = 8`：v4 起 character 增加可选的基础防御 `defense` 与护甲 `armor`，v5 起增加可选锁定点 `lockPoints`，v6 起增加可选副手武器 `offhand` 与持握模式 `holdMode`，v7 起增加可选肢体组件 `limb`，v7 起新增 `building_generator` 建筑实体，v8 起新增 `interactable` / `item` 实体与 play 背包 `inventory`、传送点 `teleports`（modeInfo.play），旧档缺失时安全回退默认；未知副手武器 id 加载时安全丢弃）
-- 默认操作配置由 `input/constants.ts` 的 `DEFAULT_BINDINGS` 定义，并由 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 锁定：改默认键位/鼠标绑定必须同步该测试；`localStorage` 与导入文件中已有动作的绑定不会被新默认值覆盖（需「重置默认」或导入配置），缺失的动作（如版本新增）由 `loadFromStorageInternal` / 导入校验自动以默认值补齐
-- 鼠标动作按模式生效：`MOUSE_ACTIONS_BY_MODE` 决定操作设置面板中各模式可改的指针动作（编辑模式：旋转视角 / 生成物体；游玩模式：旋转视角 / 轻击 / 重击 / 锁定目标；展示模式：旋转视角 / 平移视角 / 聚焦）；改默认键位/鼠标绑定必须同步 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 与 `e2e/operations_panel.spec.ts`
-- 武器挂点为两个零偏移关节 `rightWeaponMount` 与 `leftWeaponMount`（另有背部视觉挂点 `backWeaponMount`）：它们是可动画关节，模型按各自几何握点与固有旋转将主握点校正到挂点原点。自定义骨架缺关节时自动回退同名手腕关节。**手部与武器挂点是不同关节**：手部模型挂在 `rightHandPivot` / `leftHandPivot`，武器模型直接挂在腕下的武器挂点。`CharacterModel.equipWeapon` 对同一网格配置引用跳过重建（换模式只做挂背/回手换父节点），`setOffhandStowed` 不重建几何。
-- 持握模式由武器类数据推导：**单持** / **双手共持**（左手 IK 到该武器单独声明的 `supportGripOffset`，与是否装备副手无关）/ **双持**（需副手同类近战：`sameWeaponClass`；左手握持自身武器，不走共享 IK，副手命中按副手武器数值结算）。双持命中事件按 `main` / `offhand` 分槽。双手副握点以主握把为原点沿武器本地 `+Y` 定位；勿将不同武器统一设为同一点。主手肘保持屈曲，左手链带肘极向约束。**左臂链长仅约 0.36m**：双手段每个关键帧与插值路径都要让左肩→副握点 ≤ ~0.34m（双手收向身体中线、躯干前倾带距离），否则 IK 截断、左手脱柄（`system.test.ts` 逐帧锁定副握残差 < 0.18m；新增双手段统一以巨剑双手链为模板族最稳妥）。
-- 角色动画肘关节一律前折（`elbow rx < 0`）、膝后折（`rx > 0`）；武器朝向由武器骨骼控制，握把模型坐标与固有握持在 `weapon_mesh.ts` 烘焙；`WEAPON_GRIP_FLEX`（武器⊥前臂）是戒备/待机握法，攻击打击帧要用武器骨骼（必要时腕）把刃/枪口转向打击方向。攻击基础轨道在 `attack_clip_data.ts`，逐段修订在 `attack_pose_edits.ts`。
-- 死亡动画保持直立（`pose_fns.ts` 的 `dyingPose` 不旋转根关节）：倒地方向由 `states/dying.ts` 取最后受击的冲击方向（`DamageEvent.dirX/dirZ` → `combat.lastHitDirX/Z`，无记录默认向后倒）决定，`world.ts` 绕「上 × 倒向」轴把 `dyingFallAngle`（0→90°，0.3s）合成到模型根旋转；新增伤害路径须携带方向，否则角色一律向后倒。
-- 攻击动画由基础关键帧资产与显式逐段姿势修订共同定义；`getAttackClipById` 惰性解析缓存。新增或修改姿势时校验修订关节/时间与基础轨道一致；不增加抽象动作参数或每帧生成动画。
-- **远程弹丸在 `release` 阶段开始发射**（`ranged_executor`）：动画 t=0 即起手瞄准位（枪口 / 箭向 / 杖头朝目标），释放帧朝向与弹道一致；`hitbox_on/off` 事件对远程只是遗留数据。**弹道水平方向按主体分源**：**玩家 = 瞄准方向（`combat.attackDirX/Z` = 相机前方）**——玩家以准心瞄准，不得让武器骨骼姿态偏差或上一帧采样延迟把子弹带偏；**非玩家（AI）= 武器实际朝向**——`world.ts` 每帧从武器骨骼（本地 +Y）采样水平方向写入 `combat.muzzleDirX/Z`，`ranged_executor` 据此发射（无数据时回退 `attackDir`），保留「背身开火按枪口」。**远程 AI 朝向策略**：默认跟随移动方向（逃跑/回撤时面朝移动方向，禁止背身放风筝）；仅在 `combatAimActive`（站定瞄准）或 `attackActive`（射击动作）期间由 `world.ts` 锁到战斗目标。回身射击统一走 `ai/combat/aim.ts` 的 `aimAndFireAt`（站定 → 转身 → 攻击），未对准（夹角 > `AIM_ALIGN_HALF_ANGLE`）只站定不出手；开火受 `COMBAT_SHOT_INTERVAL` 节流。**远程 AI 的站定/攻击需要移动清零也能进入 attacking**——`walking.ts` 的 `to:'attacking'` 必须排在 `to:'idle'` 之前，否则移动清零那一帧会先转 idle 而漏掉攻击。
-- **弹丸物理 / 视觉 / 特效统一归 `entity/character/projectile/` 分包**（`ranged_executor` 只做开火门控与方向/散布）。视觉由 `RangedWeaponClassConfig.projectile` 声明，新增武器/外观只改数据与 `projectile/mesh.ts` 的对应 `gen`。**降低重力用逐弹 `RigidBodyDesc.setGravityScale`（`RangedWeaponConfig.projectileGravityScale`，不可存档覆写），禁止改世界重力 `GRAVITY`**；依赖滞空时间的弹道测试在改动重力后须复核（纯「地面阻挡」类用例已显式固定 `projectileGravityScale`）。弹丸记录 / 视觉 / 刚体 / 特效全部对象池化：空闲刚体以 `setEnabled(false)` 留在世界中复用，因此识别「在飞弹丸」必须只统计**启用中**的 sensor（`clear_bullets.test.ts` / `ranged_aim.test.ts` 为此改写）。
-- **远程蓄力（弓 + 投掷类）由三处数据配套声明**：`AttackPhase.chargeable`（冻结锚点阶段）+ `RangedWeaponClassConfig.charge`（`ProjectileChargeCurve extends ChargeTuning`：`maxChargeMultiplier` / `maxChargeTime` + 初速/生命期缩放区间）+ 段 `chargeFullTime`（= `charge.maxChargeTime`，由 `rangedClass` 注入）。玩家按住攻击键时状态机冻结在该阶段**起始帧**并逐帧累积 `CombatComponent.attackCharge`（0~1），松开后 `release` 发射——**伤害按 `maxChargeMultiplier` 一次函数缩放（0→100%，满蓄力→max%）**，初速/生命期按区间缩放。**AI 不蓄力**（`CharacterInput.attackHeld` 恒 false、不传 `ProjectileSpawn.charge`），保持武器预设数值与行为不变。输入链路：`camera.ts` 左键按下 → `world.beginPlayerAttackHold`，松开 → `endPlayerAttackHold`（非蓄力武器回退 `setPlayerAttack`），按下后拖拽/失焦 → `cancelPlayerAttackHold`（把段标记为已播完，不发射）。蓄力调参来源：武器模板默认 → 单武器（`WeaponModelConfig.charge`）→ 角色面板（`AttackConfig.charge` / `save_load`）逐层覆盖；覆写后由 `withChargeTuningMap` 重烘焙段字段。
-- **近战重击蓄力（所有近战武器通用，内置）**：`MeleeWeaponClassConfig.heavyCharge`（`HeavyChargeConfig extends ChargeTuning`：`{maxChargeMultiplier, maxChargeTime, cooldown, chargePoseId?}`，缺省 `DEFAULT_HEAVY_CHARGE`：满蓄力 1s → 200%、冷却 0.8s）→ `meleeClass` 把每个模式的**重击段**声明为可蓄力（`chargeFullTime = maxChargeTime` + strike `chargeable` + `chargePoseId` + `chargeDamageBonus = maxChargeMultiplier/100 − 1` + `chargeCooldown`）。玩家**按下重击键即进入蓄力**（`world.beginPlayerAttackHold('heavy')`，`isChargeableKey` 判定；冻结在重击起手帧并累积 `combat.attackCharge`），**松开出手**；`melee_executor` 命中时按 `1 + attackCharge × chargeDamageBonus` 放大伤害；蓄力值 > 0 时按 `chargeCooldown` 挂冷却（短按不挂）。**AI 只用轻击键、`holdDuration` 恒 0，永不蓄力**。蓄力期间动画按 `attackCharge` 定位**专用蓄力姿势 clip**（`charge_melee_{holdMode}`，`charge_clip_data.ts` + `charge_pose_edits.ts`，进度 0=戒备位 → 1=满蓄力后引位）；无专用 clip 的武器（远程）则定位到攻击 clip 前段，同样随蓄力参数化。**蓄力调参来源**：武器模板默认 → 单武器（`WeaponModelConfig.charge`）→ 角色面板（`AttackConfig.charge` / `save_load`）；覆写后由 `withChargeTuningMap` 重烘焙段字段。
-- 新增碰撞体必须显式 `setCollisionGroups`，并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注碰撞类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character`）——投掷物的「可穿过类别」判定依赖类别位；类别位从 membership 第 5 位起，不参与交互，但未声明碰撞组的碰撞体 membership 全 1，会被解析为 `ground` 并挡下子弹（fail-closed）
-- 伤害事件 `DamageEvent.damageType` 必填（武器固有：近战/远程直取当前武器、爆炸继承所属武器）；新增伤害路径漏填即编译报错。防御力在 `applyDamage` 内、`damageModifiers` 之后按类别固定减免（`max(MIN_DAMAGE=1, 伤害 − defense[damageType])`，低于 1 点的原始伤害保持原值），禁止在别处重复减伤
-- 护甲 / 肢体（`character/armor/`，护甲四槽 head/chest/arms/legs + 肢体四槽 head/arms/body/legs）提供逐类别防御、逐类别攻击加成与移速乘数：`armor` / `limb`（槽位 → 装备 id）与 `defense`（基础逐类别防御）是存档可选字段，未知 id / 槽位不匹配一律回退空槽（肢体空 / undefined / null = 默认人类肢体）；`CombatComponent` 的 `setCombatEquipment` 统一重算有效防御 / `attackBonus` / `moveSpeedMultiplier`（护甲与肢体同一汇总口径；攻击加成在攻击侧并入近战/远程伤害，仅与武器类别匹配才计入；状态机移速一律走 `moveSpeedOf(entity)`，禁止在面板或状态机里对 `config.speed` 预乘装备系数）；护甲 / 肢体件是关节下的纯视觉子节点，不建碰撞体、不进 `getMeshes()`，不影响受击箱 / 视线 / 导航；护甲近全包件可用 `ArmorMeshConfig.hideBodyParts`（`ARMOR_BODY_PARTS` 语义部位名，映射表 `ARMOR_BODY_PART_JOINTS` 在 `entity/character/appearance/armor_mesh.ts`）隐藏被顶替的基础身体部件；**肢体默认 replace**——`model.ts` 的 `LIMB_SLOT_HIDDEN_PARTS` 按槽位顶替对应人类部位，装备肢体即隐藏、卸下还原；`equipArmor` / `equipLimbs` 共用 `refreshHiddenBodyParts`（先整体还原再统一隐藏，两套装备互不干扰，同一部件只备份一次），护甲 / 肢体领域数据不得写死关节 id
-- 肢体外观（`createLimbMesh`，`armor_mesh.ts`）复用护甲关节基座与 `mesh_builder`：种族基色来自 `LimbMeshConfig.color`，披挂 / 束带 / 发色取自角色阵营调色板（`BoxPartPalette`），因此**换阵营时 `model.recolor` 会用新调色板重建已装备肢体**（并非每帧）；例外：精灵金发（`ELF_GOLDEN_HAIR_COLOR`）为种族固有、不随阵营。`LimbMeshConfig` 无 `hideBodyParts`（replace 恒开启），肢体高度严格对齐被顶替的人类部件、粗壮度只体现在宽深，避免沉入地面 / 超出身高
-- 种族造型（`genLimb*` + `drawRaceFaceCanvas`）：**骷髅**骨骼化——头骨以「**暗腔底板 + 留有开口的前置骨质框**」造出**真实空洞**（眼窝/鼻腔/口腔，`SKELETON_HOLLOW_COLOR`），下颌骨独立成块（与上颌留口腔空洞）、眉骨外凸显凶、眼窝深处嵌 `SKELETON_EYE_COLOR` 凶光红点；躯干不建实心主躯，由脊柱+成对肋骨+胸骨+锁骨+骨盆拼成空心胸腔；四肢细骨干+两端加粗骨节。**精灵**（日式女性化）——金发+齐刘海+鬓发+后脑长发、后掠尖耳（锥尖绕 X 轴前倾指向 -Z 后方）、**真棱台**（`frustumStack`：4 边 cylinder，每段上下底面不等宽）沙漏躯干（宽肩→细腰→略宽胯）与锥形四肢、胸前无居中突出物、柔美脸（大眼睫毛/小鼻小口/腮红 `ELF_BLUSH_COLOR`）。跨模块共用颜色（象牙白 / 骨腔 / 眼红 / 金发 / 腮红）集中在 `render/constants.ts`；脸部贴图材质与 CanvasTexture 必须 `trackMaterial` + `trackTexture` 登记，否则泄漏
-- **阵营 → 涂色唯一入口**：`entity/character/appearance/constants.ts` 的 `factionColorOf(faction)`（基础色 `faction % 6`：0 红/1 蓝/2 绿/3 黄/4 粉/5 灰，每圈按暗/亮/原微调；`SELECT_PALETTE().bodyColor` 即它）。人类身体、肢体披挂/束带、面板色点、展示台一律复用它，禁止另写映射；展示台种族/套装条目与人类行共用同一阵营编号（不再自带偏移），保证同号阵营处处同色
-- 翻滚与死亡的全身体根旋转都由 `world.ts` 合成：基础 clip 不写根关节自转（`rollingPose` 只表达抱团蜷缩），否则根原点在脚底会绕脚底划大圈/沉入地面；翻滚中段无敌帧由 `states/rolling.ts` 在窗口内逐帧写 `combat.invincibleTimer`（`exit` 清零），免疫判定统一走 `damage.ts` 的 `isDamageImmune(target)`（`applyDamage` 顶部短路，先于 modifier/防御，不触发任何受击回调），新增伤害路径不得绕过；三条命中路径也用它跳过击退与命中反馈——近战不写 `attackedTargets`/不 `onHit`（无敌结束后同一命中窗口内仍可命中）、远程弹丸穿过无敌目标不消耗、爆炸跳过该目标
-- 角色材质表面效果（受击闪红 / 翻滚无敌半透明白）统一走 `entity/character/combat_vfx/material_effects.ts`（惰性快照 → 按优先级覆写 → 全部结束统一还原；闪红优先于闪白，`transparent` 仅在真正变化时置 `needsUpdate`），禁止在别处直接改角色模型材质颜色/透明度或另建快照还原逻辑
-- 角色锁定点（`character/lock_point.ts`）：默认锁定点恒为身体最中心（`body.translation()`，不落数组），额外点 = 关节 id + **关节本地**偏移（`CharacterEntity.lockPoints`，面板「锁定点」区增删改、存档可选字段 `lockPoints`）；play 锁定选取按**锁定点**（而非角色）判定半径/角度，白点标记与相机瞄准点同为命中的数据点（同一 `getAimPoint`）。关节解析先 `updateWorldMatrix(true, false)` 再 `localToWorld`（动画刚写入 Group、`matrixWorld` 可能滞后），找不到关节的点跳过，锁定期间点被移除即自动解除
-- 战斗 AI 的导航避障把「除自身外所有角色」视为墙绕行；短近战武器攻击检测箱前缘（如短剑 ≈0.68m）小于导航前向探测 `DEFAULT_CHECK_DISTANCE = 1.5m`，贴脸前目标会先被判为墙——必须把**当前 combat target** 从导航感知排除，否则 AI 会环绕目标、永不进入 `attack`（两个近战 AI 互相绕圈直到 `chaseTimeout`）。实现：`NavRunContext.ignoredMesh`（`NavSensor.sense` 第 5 参），由 `world.ts` 每帧按 `activeFsm === 'combat' && combatTargetId` 设为目标 mesh；传感器在障碍列表与角色集合两处都跳过它，目标重叠/推挤由接触推挤闸门与强制分离兜底
-- 建筑体素的**跨 chunk 面剔除必须走 `block_world.getBlock`**（统一坐标查询），不能只看当前 chunk 的 `Uint8Array`，否则接缝会出现裂缝或重复面；chunk 网格 `dispose` 只释放 `geometry`，**共享材质单例（`getSurfaceMaterials`）不得 dispose**；贪心合并四边形按格展开 UV，材质必须 `RepeatWrapping` 的可平铺纹理（不可用图集，否则跨格采样错误）
-- 建筑 chunk 网格顶点必须**加上 chunk 的世界局部原点**（`greedyMesh` 的 `origin` 参数 = chunk 坐标 × cells）；漏加会让非零 chunk 的网格被渲染 / 碰撞到原点附近（典型表现：在某面放置方块后新块出现在远处、再次点击命中原面并覆盖同一格）
-- 建筑**距离卸载只释放 GPU 几何、必须保留体素数据**（再次靠近时按脏 chunk 重建，误清数据会丢建筑）；静态建筑不参与物理步进，可见性更新走 `building.updateView(camera, dt)`（`main.ts` 每帧在 `renderFrame` 前调用），**不要塞进 `preSync`**（物理暂停时不执行）
-- 新增建筑碰撞体必须用 `categoryCollisionGroups(..., 'building')` 标注类别（`collision_category.ts` 新增类别位 `building = 1 << 11`）；碰撞组 `BUILDING_COLLISION_GROUP = 8`、掩码 `1 | 2`，碎片掩码已加入 8 使碎片能落在建筑上——漏标注会被 fail-closed 解析为 ground 并挡下子弹
-- 建筑存档（v7）用**显式 palette + 每 chunk RLE(Base64)**，校验层对 `worlds` / `chunks` / `palette` 非法输入一律 `.catch([])` 回退为空、未知材质 id 解码时回退为空，禁止抛错；生成配方仅为创作期便利，载入以显式体素为准
-- 建筑笔刷启用时必须关闭 `pointer` 的实体选中 / 生成交互（`pointer.setEnabled(false)`），否则左键会同时触发选中 / 生成与体素放置；体素拾取 `pickBlock` 只对**当前可见**的 chunk 网格有效，已距离卸载的 chunk 不可编辑（再次靠近自动重建后即可）
-- **操作层统一走 `modes/control/` 两套方案**（玩家主控 `createPlayerControl` / 纯摄像机 `createCameraControl`，见 [`docs/operation_schemes.md`](docs/operation_schemes.md)）：新增或调整模式操作不得另写相机 / 移动逻辑。`Shift` 拆为 `roll`（玩家主控，边沿翻滚）与 `boost`（纯摄像机，按住加速）两个动作、均默认绑定 Shift，分属两套方案不会同时消费；`mouse_pan`（右键平移）在所有纯摄像机模式（含 edit / bone_edit）生效，玩家主控**不提供右键平移**（play 右键 = 重击）。编辑模式**默认**滚轮 = 相机缩放、右键 = 相机平移；地形雕刻只在选中地形并勾选「启用（滚轮雕刻）」后才拦截滚轮，且**仅**关闭相机缩放、保留旋转 / 平移（`entity/terrain/base/edit/sculpt.ts` + `ui/sculpt_panel.ts`）
-- 新增输入动作（`interact` / `open_inventory` / `open_equipment` / `open_map`）必须同步 `INPUT_ACTIONS` / `ACTION_LABELS` / `ACTION_GROUPS` / `DEFAULT_BINDINGS` / `registry.test.ts` 的 `EXPECTED_DEFAULTS`（类型穷尽会编译报错）；play 交互脉冲由 `modes/play/interaction/` 每帧读取，且 `interaction.update(dt)` **必须早于 `characterSystem.update(dt)`**，否则交互脉冲晚一帧、目标守卫失效。脱困不设快捷键，走右上角设置菜单「传送至最近存档点」（`setupSettingsPanel` 第三参）
-- 交互物 / 掉落物碰撞体必须 `categoryCollisionGroups(group, mask, 'interactable' | 'item')`（`interactable = 1<<12`、`item = 1<<13`）；掉落物是 `setSensor(true)` + 掩码 0（不参与物理），拾取走邻近交互而非碰撞。交互物可动件（门 / 闸门 / 升降梯）用 `kinematicPositionBased` body，视觉根保持基准、只移动具名子节点；**移动平台（闸门 / 升降梯）以 `setTranslation` 瞬移**（见下条）
-- **移动平台载客走「物理接触 + 步进前位置携带」**：移动平台（闸门 / 升降梯 / 未来载具）用 `setTranslation` **瞬移**（**禁止** `setNextKinematicTranslation`：多物理子步下运动学体会把整帧位移压进首个子步，顶到乘客产生冲量 → 上升抖动），并每帧把自己按位置/四元数差分得到的速度注册进 `SharedWorld.movingSupports`（静止写 0，`remove` 删除）；角色系统 `checkGround` 记录**真实接触**的支撑刚体 handle（郊狼宽限不赋值），在 `world.step` **之前**由 `applySupportCarry(dt)` 按平台位移/`ω·dt` 平移乘客位姿（**位置携带，不叠加速度**——否则与碰撞推挤叠加会在上升时双倍顶起），对**所有被支撑角色（含 AI）**生效。**禁止**用 `config.size` 几何 / `PlayerAccess` 判定「是否站在平台上」（对形状 / 尺寸 / 朝向 / 移动方向敏感）
-- **地面接触法线必须经 `physics/contact_tracking.ts` 的 `queryColliderContacts` 取，禁止直接用 `Collider.contactCollider`**：后者在角色同时接触地面与箱子 / 交互物时会返回被污染的世界法线（平地 ground 法线读成对角，如 `(0.86,-0.28,-0.43)`），且会返回形状并未真正接触的 speculative 接触；行走状态的坡面投影据此把水平速度转成大垂直速度（撞箱 / 撞交互物被弹飞，或法线偏水平误判 `falling`）。实现为：优先取接触流形 `world.contactPair` 且 `manifold.numSolverContacts()>0` 的法线（`flipped` 时按「query→other」约定取反），trimesh 在本版本无求解点（恒 0）时回退 `contactCollider` 的 `normal1`，两者皆无（形状未接触）则跳过。回归见 `entity/character/physics/walk_into_box.test.ts`
-- 交互物外观经 `mesh_builder` 的 `add(geometry, material, ...)` 传入**共享表面材质**（`getSurfaceMaterial`），`meshDispose` 只释放 builder 登记的几何（共享材质不得 dispose）；行为层通过 `group.getObjectByName('door' | 'gate' | 'platform' | 'lid' | ...)` 取可动子节点
-- 背包 / 传送点持久化在 `modeInfo.play`（`inventory` / `teleports`，非 character 存档），保存时由 `main.ts` 合并 `hakoniwa.getSaveData()`；`inventoryFromSave` 对未知 defId / 越界格位 / 未知装备槽安全回退，未知 defId 的掉落物拾取时丢弃。装备应用（`hakoniwa.applyEquipment`）走 `updateCharacterConfig`：主手未装备武器时回退 `DEFAULT_WEAPON_ID`，副手 `null` 卸下，护甲汇总四槽 `ArmorLoadout`；**仅当背包有装备映射时才在启动时应用**，避免覆盖旧档 character 的武器配置
-- 装备模型预览（`modes/play/equipment_ui/preview.ts`）持有独立 `WebGLRenderer`，**必须惰性创建**（首次打开背包时），否则 play 启动即多出一个 `canvas`，且每个模式切换都会累积 WebGL 上下文
-- 箱庭建筑结构（`building_generator/generators/architecture.ts`）只能通过轴对齐 `BlockWriter.set/clear` 写入：旋转 / 镜像一律在结构函数内部做坐标变换（`rotateQuarter`），斜屋顶檐口外扩、楼梯每级高差 1、廊桥自动落支柱至地面；新增顶层配方登记到 `structures.ts` 的 `RECIPES`（未知配方回退 house）
+**扩展 AI 功能时**：阅读 [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。
