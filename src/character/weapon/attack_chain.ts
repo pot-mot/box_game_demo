@@ -14,14 +14,19 @@ import {translate, type StringLocaleKey} from '../../i18n/index.ts'
  * 依赖方向：weapon/ → combat/attack_phases.ts（阶段与动画参数模型）。武器模组不依赖角色实体与状态机。
  */
 
-/** 攻击键组（输入侧语义，与槽位下标无关） */
-export const ATTACK_KEYS = ['light', 'heavy'] as const
+/** 攻击键组（输入侧语义，与槽位下标无关）；`air` = 空中攻击键（跳跃/下落中触发） */
+export const ATTACK_KEYS = ['light', 'heavy', 'air'] as const
 export type AttackKey = typeof ATTACK_KEYS[number]
+
+/** 地面攻击键（不含空中键）：起手/链路参数只需覆盖这两键时使用 */
+export const GROUND_ATTACK_KEYS = ['light', 'heavy'] as const
+export type GroundAttackKey = typeof GROUND_ATTACK_KEYS[number]
 
 /** 攻击键本地化名键（HUD/面板/展示标签用） */
 export const ATTACK_KEY_LABELS: Record<AttackKey, StringLocaleKey> = {
     light: 'attack_key.light',
     heavy: 'attack_key.heavy',
+    air: 'attack_key.air',
 }
 
 /**

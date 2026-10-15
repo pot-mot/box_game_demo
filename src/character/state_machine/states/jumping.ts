@@ -2,6 +2,7 @@ import type {StateHandler} from '../types.ts'
 import {AIR_DAMPING, AIR_CONTROL_FACTOR, SLOPE_WALK_THRESHOLD, JUMP_LAND_MIN_TIME} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
 import {moveSpeedOf} from '../../types.ts'
+import {canStartAirAttack} from './air_attacking.ts'
 
 export const jumpingHandler: StateHandler = {
     enter: (entity) => {
@@ -70,6 +71,11 @@ export const jumpingHandler: StateHandler = {
         {
             to: 'flinching',
             guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+        },
+        {
+            /* 空中攻击：跳跃中按攻击键且武器声明了空中链（死亡/受击优先级更高，故置于末尾） */
+            to: 'air_attacking',
+            guard: (input, entity) => input.attack && canStartAirAttack(entity),
         },
     ],
 }

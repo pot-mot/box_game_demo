@@ -27,7 +27,8 @@ test.describe('展示模式（二级菜单 + 子模块）', () => {
         await page.locator('.sch-menu-card', {hasText: '动作展示'}).click()
         await expect(page.locator('.sch-panel')).toBeVisible()
         await page.locator('.sch-panel .sch-row').first().click()
-        await expect(page.locator('.sch-detail .sch-skilllabel')).toHaveCount(4)
+        /* 首个近战角色 = 短剑·单持：轻 1 / 轻 2 / 重 1 / 重 2 + 空中 1（段清单含 air 链，见 3.8） */
+        await expect(page.locator('.sch-detail .sch-skilllabel')).toHaveCount(5)
     })
 
     test('选择「装备与外观」：种族 3 + 护甲件 17 = 20 个展示角色', async ({page}) => {

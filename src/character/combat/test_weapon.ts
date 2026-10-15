@@ -16,6 +16,7 @@ import type {AttackPhase} from './attack_phases.ts'
  * - 循环链：tap ↔ light_2、heavy_1 ↔ heavy_2；thrust 播完回 tap
  * - 无链单发：charge 的 next 为空（链终止）
  * - 冷却：charge 1.2s / tap 0.3s / heavy_1 0.6s 非 0，作为冷却机制验证夹具
+ * - 空中单段：air 链单段（复用 tap pose），覆盖 air_attacking 起手/转换
  */
 
 export const TEST_WEAPON_ID = 'test_weapon'
@@ -67,8 +68,14 @@ const buildTestWeaponAttacks = (): WeaponAttacks => {
         damageMultiplier: 1, cooldown: 0,
         next: [{to: 'test_weapon_heavy_1'}],
     }
+    const air1: AttackSegment = {
+        id: 'test_weapon_air_1', key: 'air', step: 1,
+        duration: 0.32, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_tap'),
+        damageMultiplier: 1.25, cooldown: 0,
+        next: [],
+    }
     const segments: Record<string, AttackSegment> = {}
-    for (const segment of [charge, tap, thrust, light2, heavy1, heavy2]) segments[segment.id] = segment
+    for (const segment of [charge, tap, thrust, light2, heavy1, heavy2, air1]) segments[segment.id] = segment
 
     return {
         segments,
@@ -86,6 +93,12 @@ const buildTestWeaponAttacks = (): WeaponAttacks => {
                 key: 'heavy',
                 entries: [{segmentId: 'test_weapon_heavy_1'}],
                 steps: ['test_weapon_heavy_1', 'test_weapon_heavy_2'],
+            },
+            /* 空中攻击：单段（无链），复用点按轻击 pose */
+            air: {
+                key: 'air',
+                entries: [{segmentId: 'test_weapon_air_1'}],
+                steps: ['test_weapon_air_1'],
             },
         },
     }

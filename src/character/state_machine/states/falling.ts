@@ -10,6 +10,7 @@ import {
 import {isSupportedOn, projectToSlope} from '../ground.ts'
 import {v3Length} from '../../../physics/rapier_utils.ts'
 import {moveSpeedOf} from '../../types.ts'
+import {canStartAirAttack} from './air_attacking.ts'
 
 export const fallingHandler: StateHandler = {
     enter: () => {},
@@ -68,6 +69,11 @@ export const fallingHandler: StateHandler = {
         {
             to: 'flinching',
             guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+        },
+        {
+            /* 空中攻击：下落中按攻击键且武器声明了空中链（死亡/受击优先级更高，故置于末尾） */
+            to: 'air_attacking',
+            guard: (input, entity) => input.attack && canStartAirAttack(entity),
         },
     ],
 }

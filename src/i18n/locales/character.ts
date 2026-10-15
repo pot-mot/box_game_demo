@@ -11,6 +11,7 @@ export type CharacterLocale = {
     'damage.magic': string
     'attack_key.light': string
     'attack_key.heavy': string
+    'attack_key.air': string
     'character.segment_name': (keyLabel: string, step: string) => string
     'armor_slot.head': string
     'armor_slot.chest': string
@@ -166,6 +167,7 @@ export const characterZh: CharacterLocale = {
     'damage.magic': '魔法',
     'attack_key.light': '轻击',
     'attack_key.heavy': '重击',
+    'attack_key.air': '空中攻击',
     'character.segment_name': (keyLabel, step) => {
         const numerals: Record<string, string> = {'1': '一', '2': '二', '3': '三', '4': '四', '5': '五', '6': '六'}
         return `${keyLabel}${numerals[step] ?? step}段`
@@ -324,6 +326,7 @@ export const characterEn: CharacterLocale = {
     'damage.magic': 'Magic',
     'attack_key.light': 'Light',
     'attack_key.heavy': 'Heavy',
+    'attack_key.air': 'Air',
     'character.segment_name': (keyLabel, step) => `${keyLabel} ${step}`,
     'armor_slot.head': 'Head',
     'armor_slot.chest': 'Chest',

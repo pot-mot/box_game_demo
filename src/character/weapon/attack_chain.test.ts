@@ -121,6 +121,7 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
         expect(orderedSegments(attacks).map(segment => segment.id)).toEqual([
             'heavy_sword_two_handed_light_1', 'heavy_sword_two_handed_light_2', 'heavy_sword_two_handed_light_3',
             'heavy_sword_two_handed_heavy_1', 'heavy_sword_two_handed_heavy_2',
+            'heavy_sword_two_handed_air_1', 'heavy_sword_two_handed_air_2',
         ])
         expect(segmentDisplayName(findSegment(attacks, 'heavy_sword_two_handed_light_3')!)).toBe('轻击三段')
     })
@@ -211,10 +212,12 @@ describe('段清单顺序（orderedSegments）', () => {
             const ordered = orderedSegments(attacks)
             const lightSegments = ordered.filter(segment => segment.key === 'light')
             const heavySegments = ordered.filter(segment => segment.key === 'heavy')
-            /* 轻链整体位于重链之前 */
+            const airSegments = ordered.filter(segment => segment.key === 'air')
+            /* 轻链整体位于重链之前，空中链整体位于最后 */
             expect(ordered.map(segment => segment.id)).toEqual([
                 ...lightSegments.map(segment => segment.id),
                 ...heavySegments.map(segment => segment.id),
+                ...airSegments.map(segment => segment.id),
             ])
             /* 每键内：主干段按编排顺序连续排在前面，变体段接在其后 */
             const expected = MELEE_CHAIN_STEPS[weaponId]
@@ -237,6 +240,7 @@ describe('段清单顺序（orderedSegments）', () => {
             'test_weapon_thrust',
             'test_weapon_heavy_1',
             'test_weapon_heavy_2',
+            'test_weapon_air_1',
         ])
     })
 
@@ -373,6 +377,7 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
         /* 清单顺序跟随编排（每键内按 steps 顺序） */
         expect(orderedSegments(attacks).map(segment => segment.id)).toEqual([
             'demo_blade_one_handed_light_2', 'demo_blade_one_handed_light_1', 'demo_blade_one_handed_heavy_1', 'demo_blade_one_handed_heavy_2',
+            'demo_blade_one_handed_air_1',
         ])
     })
 
@@ -406,7 +411,7 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
         expect(findSegment(attacks, 'demo_axe_charge')).toBe(charge)
         expect(orderedSegments(attacks).map(segment => segment.id)).toEqual([
             'demo_axe_dual_wield_light_1', 'demo_axe_dual_wield_light_2', 'demo_axe_charge', 'demo_axe_thrust',
-            'demo_axe_dual_wield_heavy_1', 'demo_axe_dual_wield_heavy_2',
+            'demo_axe_dual_wield_heavy_1', 'demo_axe_dual_wield_heavy_2', 'demo_axe_dual_wield_air_1',
         ])
         /* 起手：长按命中守卫变体，点按落回兜底段 */
         expect(resolveEntrySegment(attacks, 'light', ctxOf({holdDuration: 0.6}))?.id).toBe('demo_axe_charge')
@@ -477,6 +482,61 @@ describe('武器运行时（createWeaponRuntime）', () => {
         expect(runtime.weapon.id).toBe(TEST_WEAPON_ID)
         expect(findWeaponPreset(TEST_WEAPON_ID)?.type).toBe('melee')
         const attacks: WeaponAttacks = runtime.attacks
-        expect(Object.keys(attacks.segments)).toHaveLength(6)
+        expect(Object.keys(attacks.segments)).toHaveLength(7)
+    })
+})
+
+describe('空中攻击链（跳跃中按攻击键，武器种类独立模组）', () => {
+    it.each(MELEE_WEAPON_IDS)('%s：每种模式都声明 air 链，起手为第一段、段键为 air、不可蓄力', (weaponId) => {
+        for (const mode of MELEE_WEAPON_CLASSES[weaponId].holdModes) {
+            const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
+            const air = chainOf(attacks, 'air')
+            expect(air.entries.length, `${weaponId}/${mode}`).toBeGreaterThan(0)
+            expect(air.entries[0].segmentId).toBe(air.steps[0])
+            for (const segmentId of air.steps) {
+                const segment = findSegment(attacks, segmentId)!
+                expect(segment.key).toBe('air')
+                expect(segment.chargeFullTime).toBeUndefined()
+                expect(segment.id).toBe(`${weaponId}_${mode}_air_${segment.step}`)
+            }
+            expect(resolveEntrySegment(attacks, 'air', ctxOf())?.id).toBe(air.steps[0])
+        }
+    })
+
+    it('空中段动画复用地面段 pose（不单独烘焙关键帧）', () => {
+        for (const weaponId of MELEE_WEAPON_IDS) {
+            const mode = defaultHoldMode(MELEE_WEAPON_PRESETS[weaponId])
+            const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
+            for (const segmentId of chainOf(attacks, 'air').steps) {
+                const segment = findSegment(attacks, segmentId)!
+                const poseId = segment.poses[0].poseId
+                /* pose 指向同一持握模式下的地面段（存在且非空中段） */
+                expect(attacks.segments[poseId], `${segmentId} → ${poseId}`).toBeDefined()
+                expect(poseId.includes('_air_')).toBe(false)
+            }
+        }
+    })
+
+    it('武器种类独立模组：巨剑两段、长枪复用重刺、战锤单段砸地', () => {
+        expect(chainOf(weaponAttacksOf(MELEE_WEAPON_PRESETS.heavy_sword, 'two_handed'), 'air').steps)
+            .toEqual(['heavy_sword_two_handed_air_1', 'heavy_sword_two_handed_air_2'])
+        expect(findSegment(weaponAttacksOf(MELEE_WEAPON_PRESETS.spear), 'spear_one_handed_air_1')?.poses[0].poseId)
+            .toBe('spear_one_handed_heavy_1')
+        expect(MELEE_WEAPON_PRESETS.war_hammer.airAttack?.slamSpeed).toBeGreaterThan(0)
+        expect(chainOf(weaponAttacksOf(MELEE_WEAPON_PRESETS.war_hammer), 'air').steps)
+            .toEqual(['war_hammer_one_handed_air_1'])
+    })
+
+    it('空中链单段非循环时无 next（播完收招）', () => {
+        const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS.long_sword)
+        const air1 = findSegment(attacks, 'long_sword_one_handed_air_1')!
+        expect(air1.next).toEqual([])
+        expect(resolveNextSegment(attacks, air1, ctxOf({attackKey: 'air'}))).toBeUndefined()
+    })
+
+    it.each(RANGED_WEAPON_IDS)('%s：无空中攻击链（空链，起手解析恒失败）', (weaponId) => {
+        const attacks = weaponAttacksOf(RANGED_WEAPON_PRESETS[weaponId])
+        expect(chainOf(attacks, 'air')).toEqual({key: 'air', entries: [], steps: []})
+        expect(resolveEntrySegment(attacks, 'air', ctxOf())).toBeUndefined()
     })
 })

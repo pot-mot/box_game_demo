@@ -10,12 +10,16 @@ import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
 import {solveTwoHandedGrip} from './two_handed_ik.ts'
 import {STATE_BLEND_DURATION, TWO_HAND_GRIP_OFFSET, walkSpeedScale} from './constants.ts'
 
-/** clip 驱动的状态（全部 9 状态；基础状态用基础生成器，attacking 用攻击生成器） */
-const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'rolling', 'flinching', 'attacking', 'interacting']
+/** clip 驱动的状态（全部 10 状态；基础状态用基础生成器，attacking / air_attacking 用攻击生成器） */
+const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'rolling', 'flinching', 'attacking', 'air_attacking', 'interacting']
 
-type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'attacking' | 'interacting'
+type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'attacking' | 'air_attacking' | 'interacting'
 
 const isClipState = (state: CharacterState): state is ClipState => CLIP_STATES.includes(state)
+
+/** 攻击态（地面攻击 + 空中攻击共用攻击 clip 生成器与双手 IK） */
+type AttackClipState = 'attacking' | 'air_attacking'
+const isAttackState = (state: ClipState): state is AttackClipState => state === 'attacking' || state === 'air_attacking'
 
 /** 参与过渡混合的关节快照（旋转 + 位置，位置仅 spine 使用） */
 interface JointSnapshot {
@@ -93,11 +97,11 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         bridge = createCharacterSkeletonBridge(model)
         /* 双手共持：左肩设为 IK 根（仅攻击态、持握模式为双手时），左手链可独立求解贴合握柄。
          * 副手武器（若装备）在双手模式下挂背，不影响 IK；双持模式左手握持自身武器，不走共享 IK。 */
-        if (state === 'attacking' && ctx.holdMode === 'two_handed') {
+        if (isAttackState(state) && ctx.holdMode === 'two_handed') {
             const leftShoulder = bridge.findJoint('leftArmShoulder')
             if (leftShoulder !== undefined) leftShoulder.ikRootLevel = 0
         }
-        if (state === 'attacking') {
+        if (isAttackState(state)) {
             /* 攻击段动作组合：段引用的 pose 层（含 hitbox 事件轨），按权重合成；按住蓄力时按蓄力值定位姿势 */
             const segment = ctx.attackSegment
             chargingPose = ctx.attackHolding && segment !== undefined
@@ -153,7 +157,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         currentModel = model
         if (isClipState(to)) {
             /* 攻击进入/链段切换：先关闭旧命中窗口（新 clip 的 hitbox_on 稍后重新打开） */
-            if (to === 'attacking') {
+            if (to === 'attacking' || to === 'air_attacking') {
                 onAttackEvent?.({time: 0, eventName: 'hitbox_off'})
             }
             /* 用真实 ctx 生成 clip（falling 速度档 / attacking 阶段配置等依赖当前上下文） */
@@ -167,7 +171,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {
         /* 动画键：attacking 用当前段 id（段切换触发混合）；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
         const weaponKey = ctx.weaponHeld ? `:${ctx.holdMode}` : ':n'
-        const animKey = state === 'attacking' && ctx.attackSegment !== undefined
+        const animKey = (state === 'attacking' || state === 'air_attacking') && ctx.attackSegment !== undefined
             ? `attacking:${ctx.attackSegment.id}${ctx.attackHolding ? ':charging' : ''}`
             : state === 'falling'
                 ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${weaponKey}`
@@ -190,7 +194,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
                 }
             }
             /* 双手武器 IK（applyPose 后、混合前：IK 覆盖左臂链，评审分层顺序） */
-            if (state === 'attacking') {
+            if (state === 'attacking' || state === 'air_attacking') {
                 applyTwoHandedIk(ctx, model)
             }
         }

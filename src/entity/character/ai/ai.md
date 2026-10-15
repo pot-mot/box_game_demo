@@ -15,7 +15,7 @@
 
 AI 系统采用**双层有限状态机（FSM）**架构：
 
-1. **角色动作状态机**（底层）— 8 个状态，负责移动/战斗的物理执行
+1. **角色动作状态机**（底层）— 10 个状态，负责移动/战斗的物理执行
 2. **AI 决策状态机**（上层）— 又分为 **和平 FSM** 和 **战斗 FSM**，负责决策
 
 ```
@@ -24,12 +24,16 @@ AI 决策层（entity/character/ai/machine.ts）
   └── 战斗子 FSM: chase / approach / volley / kite / attack / flee / inactive
         ↓ 设置输入 (dx, dz, attack)
 角色动作层（character/state_machine/）
-  └── idle / walking / jumping / falling / attacking / dying / rolling / flinching
+  └── idle / walking / jumping / falling / attacking / air_attacking / dying / rolling / flinching / interacting
         ↓ 操作物理体
   rapier3d-compat RigidBody
 ```
 
 **关键：无传统寻路算法**。所有移动均为目标方向的直接向量移动，无障碍物避让。
+
+> **AI 与空中攻击**：战斗 FSM 的 `attack` 状态只设置输入 `attack=true`，不区分角色是否离地。
+> 角色动作层据此判定：离地（`jumping`/`falling`）时该输入触发 `air_attacking`（跳跃攻击，见 [`weapon/weapon.md`](../../../character/weapon/weapon.md) §3.8），
+> 即 AI 在跳跃/下落的攻击窗口内也会施放空中攻击（远程武器无空中链则不起手）。
 
 ---
 

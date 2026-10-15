@@ -22,6 +22,7 @@ import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
 import {segmentTotalDuration, isChargeableKey, type AttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
+import {isAirborneAttackState} from '../../../character/state_machine/states/air_attacking.ts'
 import type {CharacterState} from '../../../character/state_machine/types.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext, CombatState, PeaceState, SpawnBoxCallback} from '../ai/types.ts'
@@ -364,6 +365,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         jumping: 'entity.state.jumping',
         falling: 'entity.state.falling',
         attacking: 'entity.state.attacking',
+        air_attacking: 'entity.state.air_attacking',
         dying: 'entity.state.dying',
         rolling: 'entity.state.rolling',
         flinching: 'entity.state.flinching',
@@ -762,7 +764,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const setPlayerAttack = (attackKey?: AttackKey, holdDuration?: number): AttackResult => {
         const player = getPlayerCharacter()
         if (!player || player.combat.isDead) return 'dead'
-        const key: AttackKey = attackKey ?? 'light'
+        /* 空中攻击态按下的攻击键统一映射到空中攻击键（无空中链的武器起手解析失败 → 拒绝） */
+        const key: AttackKey = isAirborneAttackState(player.stateMachine.currentState) ? 'air' : (attackKey ?? 'light')
         const hold = holdDuration ?? 0
         if (player.combat.attackActive) {
             /* 攻击中不再拒绝：写入单帧脉冲，由 attacking 段转换在段末推进（同键续链/异键切链） */
@@ -784,6 +787,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const beginPlayerAttackHold = (attackKey?: AttackKey): void => {
         const player = getPlayerCharacter()
         if (!player || player.combat.isDead) return
+        /* 空中攻击不可蓄力：空中攻击态忽略蓄力保持，松开后按空中攻击语义出招 */
+        if (isAirborneAttackState(player.stateMachine.currentState)) return
         const key = attackKey ?? 'light'
         /* 该攻击键的起手段声明了 chargeFullTime 才进入蓄力；否则忽略（松开时按原有语义出招） */
         if (!isChargeableKey(player.combat.attacks, key)) return
@@ -1013,7 +1018,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const hSpeed = Math.hypot(linvel.x, linvel.z)
                 /* 计算阶段动画上下文（仅 attacking 状态注入当前段信息） */
                 const activeSegment = entity.combat.activeSegment
-                const inAttacking = entity.stateMachine.currentState === 'attacking' && activeSegment !== undefined
+                const inAttacking = (entity.stateMachine.currentState === 'attacking' || entity.stateMachine.currentState === 'air_attacking') && activeSegment !== undefined
                 const phases = inAttacking ? resolvePhases(activeSegment.phases) : []
                 const phaseDuration = inAttacking && entity.combat.phaseIndex < phases.length
                     ? phaseDurationOf(phases[entity.combat.phaseIndex], activeSegment.duration, activeSegment.recovery)

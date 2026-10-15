@@ -137,11 +137,11 @@ src/
 | 存档 | [`src/save_load/save_load.md`](src/save_load/save_load.md) | 存档结构/版本/兼容 |
 | UI 面板 | [`src/ui/ui.md`](src/ui/ui.md) | 面板样式、图标、迁移 |
 | 角色领域（lock_point/faction/原型） | [`src/character/character.md`](src/character/character.md) | 锁定点、阵营 |
-| 武器 | [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) | 武器类/模型、持握、攻击段、蓄力、动作 |
+| 武器 | [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) | 武器类/模型、持握、攻击段、蓄力、空中攻击、动作 |
 | 战斗运行时 | [`src/character/combat/combat.md`](src/character/combat/combat.md) | 伤害类别、防御、无敌帧 |
 | 护甲 / 肢体 | [`src/character/armor/armor.md`](src/character/armor/armor.md) | 护甲槽位、防御/加成 |
 | 交互领域 | [`src/character/interaction/interaction.md`](src/character/interaction/interaction.md) | 交互类型层、时长 |
-| 状态机 | [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md) | 新增状态、死亡/翻滚、攻击段 |
+| 状态机 | [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md) | 新增状态、死亡/翻滚、攻击段、空中攻击 |
 | 骨骼动画 | [`src/skeleton/skeleton.md`](src/skeleton/skeleton.md) | 骨骼/IK/组合动画 |
 | 角色 AI | [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) | 寻路索敌、导航避障、朝向 |
 | 方块人外观 | [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md) | 模型构建、挂点、武器/护甲/肢体网格、种族 |
@@ -161,5 +161,6 @@ src/
 | 全局 UI 风格 | [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)、[`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | 任何面板/HUD |
 | 全局 i18n | [`docs/i18n.md`](docs/i18n.md) | 文案 |
 | 全局动作规范 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 调动作 |
+| 盾牌 / 格挡（设计） | [`docs/design/shield_block.md`](docs/design/shield_block.md) | 实现盾牌 / 格挡前 |
 
 **扩展 AI 功能时**：阅读 [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。

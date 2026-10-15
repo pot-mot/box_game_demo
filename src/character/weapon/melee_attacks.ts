@@ -1,5 +1,5 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
-import type {AttackEntry, AttackKey, AttackSegment, AttackTransition, WeaponAttackChain, WeaponAttacks} from './attack_chain.ts'
+import type {AttackEntry, AttackKey, AttackSegment, AttackTransition, GroundAttackKey, WeaponAttackChain, WeaponAttacks} from './attack_chain.ts'
 import type {HoldMode} from './hold_mode.ts'
 import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
 
@@ -38,6 +38,20 @@ export const DEFAULT_HEAVY_CHARGE: HeavyChargeConfig = {maxChargeMultiplier: 200
 export const MELEE_SEGMENT_KEYS = ['light_1', 'light_2', 'light_3', 'heavy_1', 'heavy_2'] as const
 export type MeleeSegmentKey = typeof MELEE_SEGMENT_KEYS[number]
 
+/**
+ * 空中段模板键（与地面段命名空间分离；段数可与地面不同）。
+ * 空中段不单独烘焙关键帧，动画经 `MeleeAirAttackConfig.poseKeys` 复用地面段 pose。
+ */
+export const MELEE_AIR_SEGMENT_KEYS = ['air_1', 'air_2'] as const
+export type MeleeAirSegmentKey = typeof MELEE_AIR_SEGMENT_KEYS[number]
+
+/** 空中段动作时间（秒，仅挥砍动作，不含后摇） */
+export const MELEE_AIR_DURATION = 0.32
+/** 空中段恢复时间（秒，动作结束后的后摇） */
+export const MELEE_AIR_RECOVERY = 0.2
+/** 空中段伤害倍率（相对武器基础伤害，略高于地面轻击） */
+export const MELEE_AIR_DAMAGE_MULTIPLIER = 1.25
+
 /** 段模板键 → 攻击键/序号/是否重段 */
 const SEGMENT_META: Record<MeleeSegmentKey, {key: 'light' | 'heavy'; step: number; heavy: boolean}> = {
     light_1: {key: 'light', step: 1, heavy: false},
@@ -54,9 +68,19 @@ const segmentPhases = (chargeable = false): readonly AttackPhase[] => [
     {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.35, cancellable: false},
 ]
 
+/** 空中段阶段时序：strike（ratio 1）+ recovery；空中段不可蓄力。 */
+const airSegmentPhases = (): readonly AttackPhase[] => [
+    {name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false},
+    {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.5, cancellable: false},
+]
+
 /** 段 id：`{classId}_{holdMode}_{模板键}`（与武器类 + 持握模式一一对应，同时是动画键与骨骼动画数据键） */
 export const meleeSegmentId = (classId: string, holdMode: HoldMode, segmentKey: MeleeSegmentKey): string =>
     `${classId}_${holdMode}_${segmentKey}`
+
+/** 空中段 id：`{classId}_{holdMode}_{air_N}`（命名空间与地面段分离） */
+export const meleeAirSegmentId = (classId: string, holdMode: HoldMode, airKey: MeleeAirSegmentKey): string =>
+    `${classId}_${holdMode}_${airKey}`
 
 /** 近战默认专用蓄力姿势 clip id（按持握模式共享；武器类可经 `heavyCharge.chargePoseId` 覆写） */
 export const meleeChargePoseId = (holdMode: HoldMode): string => `charge_melee_${holdMode}`
@@ -72,19 +96,46 @@ export interface MeleeChainSpec {
  * 生产近战武器的链编排 —— **增删段/改循环只改这一处**：
  * 单段链请用 `loop: false`（loop 的单段链 next 指向自身，按住攻击会连续重播同一段）。
  */
-export const MELEE_CHAIN_SPECS: Readonly<Record<AttackKey, MeleeChainSpec>> = {
+export const MELEE_CHAIN_SPECS: Readonly<Record<GroundAttackKey, MeleeChainSpec>> = {
     light: {steps: ['light_1', 'light_2'], loop: true},
     heavy: {steps: ['heavy_1', 'heavy_2'], loop: true},
+}
+
+/**
+ * 空中攻击模组配置（武器类拥有）：
+ * 「跳跃中按攻击键」时由 `air_attacking` 状态读取——空中不单独烘焙关键帧，
+ * 每段动画经 `poseKeys` 复用地面段 pose；动量/操控/砸地由武器种类决定（段数可与地面不同）。
+ */
+export interface MeleeAirAttackConfig {
+    /** 空中链主干段（顺序 = 播放与清单顺序；段数可与地面不同） */
+    readonly steps: readonly MeleeAirSegmentKey[]
+    /** true = 末段 next 回首段（循环）；false = 末段终止（空中通常单段） */
+    readonly loop: boolean
+    /** 空中攻击期间的每帧水平动量保留系数（0~1；1 = 完全保持起跳惯性，0 = 每帧清空） */
+    readonly momentum: number
+    /** 空中攻击期间输入对水平速度的操控系数（0~1；越小越不可转向） */
+    readonly airControl: number
+    /** 打击段起始施加的向下冲量（m/s，0 = 无；战锤「跳跃砸地」用） */
+    readonly slamSpeed: number
+    /** 每段动画复用的地面段模板键（与 `steps` 一一对应；缺省按轻击 1 段） */
+    readonly poseKeys: readonly MeleeSegmentKey[]
+}
+
+/** 默认空中攻击模组：单段、保留惯性、低操控、无砸地、复用轻击 1 段动画 */
+export const DEFAULT_MELEE_AIR_ATTACK: MeleeAirAttackConfig = {
+    steps: ['air_1'], loop: false, momentum: 0.98, airControl: 0.35, slamSpeed: 0, poseKeys: ['light_1'],
 }
 
 /** 构建近战攻击链的可选覆盖项（武器独立编排 / 追加特殊段 / 起手候选覆写） */
 export interface BuildMeleeAttacksOptions {
     /** 链编排覆写（缺省 = MELEE_CHAIN_SPECS） */
-    readonly chains?: Partial<Record<AttackKey, MeleeChainSpec>>
+    readonly chains?: Partial<Record<GroundAttackKey, MeleeChainSpec>>
     /** 追加段（条件变体段 / 特殊技；可被 entries 或其它段的 next 引用，也可仅出现在清单中） */
     readonly extraSegments?: readonly AttackSegment[]
     /** 起手候选覆写（缺省 = 各键第一段，无守卫；守卫变体应声明在兜底候选之前） */
     readonly entries?: Partial<Record<AttackKey, readonly AttackEntry[]>>
+    /** 空中攻击模组覆写（缺省 = DEFAULT_MELEE_AIR_ATTACK） */
+    readonly air?: MeleeAirAttackConfig
     /**
      * 重击蓄力配置：提供后，本模式的重击段声明为可蓄力（`chargeFullTime` + strike `chargeable`），
      * 按住攻击键即冻结在重击起手帧蓄力、松开出手；伤害按蓄力值连续缩放，蓄力值 > 0 时挂冷却。
@@ -111,10 +162,11 @@ export const buildMeleeAttacks = (
     holdMode: HoldMode,
     options: BuildMeleeAttacksOptions = {},
 ): WeaponAttacks => {
-    const chains: Record<AttackKey, MeleeChainSpec> = {
+    const chains: Record<GroundAttackKey, MeleeChainSpec> = {
         light: options.chains?.light ?? MELEE_CHAIN_SPECS.light,
         heavy: options.chains?.heavy ?? MELEE_CHAIN_SPECS.heavy,
     }
+    const air = options.air ?? DEFAULT_MELEE_AIR_ATTACK
 
     /** 编排涉及的全部模板键（保持 MELEE_SEGMENT_KEYS 声明顺序，保证段索引顺序稳定） */
     const usedKeys = MELEE_SEGMENT_KEYS.filter(key => chains.light.steps.includes(key) || chains.heavy.steps.includes(key))
@@ -153,6 +205,36 @@ export const buildMeleeAttacks = (
         const segment = make(segmentKey)
         segments[segment.id] = segment
     }
+
+    /* 空中段：独立命名空间，动画复用地面段 pose（不单独烘焙关键帧）；
+     * poseKeys 必须与 steps 一一对应且指向本模式实际生成的地面段（fail loudly，避免静默回退到不存在的 clip） */
+    if (air.poseKeys.length !== air.steps.length) {
+        throw new Error(`近战空中攻击模组错误（${classId}/${holdMode}）：poseKeys 数量（${air.poseKeys.length}）须与 steps 数量（${air.steps.length}）一致`)
+    }
+    for (const poseKey of air.poseKeys) {
+        if (!usedKeys.includes(poseKey)) {
+            throw new Error(`近战空中攻击模组错误（${classId}/${holdMode}）：poseKeys 引用了未生成的地面段模板键（${poseKey}）`)
+        }
+    }
+    const airIds = air.steps.map(step => meleeAirSegmentId(classId, holdMode, step))
+    air.steps.forEach((_step, index) => {
+        const id = airIds[index]
+        const nextId = airIds[index + 1] ?? (air.loop ? airIds[0] : undefined)
+        const poseKey = air.poseKeys[index]
+        segments[id] = {
+            id,
+            key: 'air',
+            step: index + 1,
+            duration: MELEE_AIR_DURATION,
+            recovery: MELEE_AIR_RECOVERY,
+            phases: airSegmentPhases(),
+            poses: [{poseId: meleeSegmentId(classId, holdMode, poseKey), weight: 1}],
+            damageMultiplier: MELEE_AIR_DAMAGE_MULTIPLIER,
+            cooldown: 0,
+            next: nextId !== undefined ? [{to: nextId}] : [],
+        }
+    })
+
     for (const extra of options.extraSegments ?? []) {
         if (segments[extra.id] !== undefined) {
             throw new Error(`近战攻击链构建失败：追加段 id 与模板段冲突（${extra.id}）`)
@@ -160,11 +242,17 @@ export const buildMeleeAttacks = (
         segments[extra.id] = extra
     }
 
-    const chainOfKey = (key: AttackKey): WeaponAttackChain => {
+    const chainOfKey = (key: GroundAttackKey): WeaponAttackChain => {
         const steps = chains[key].steps.map(step => meleeSegmentId(classId, holdMode, step))
         const entries = options.entries?.[key] ?? (steps.length > 0 ? [{segmentId: steps[0]}] : [])
         return {key, entries, steps}
     }
 
-    return {segments, chains: {light: chainOfKey('light'), heavy: chainOfKey('heavy')}}
+    const airChain: WeaponAttackChain = {
+        key: 'air',
+        entries: options.entries?.air ?? (airIds.length > 0 ? [{segmentId: airIds[0]}] : []),
+        steps: airIds,
+    }
+
+    return {segments, chains: {light: chainOfKey('light'), heavy: chainOfKey('heavy'), air: airChain}}
 }

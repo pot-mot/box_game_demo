@@ -14,6 +14,7 @@ import {walkingHandler} from './states/walking.ts'
 import {jumpingHandler} from './states/jumping.ts'
 import {fallingHandler} from './states/falling.ts'
 import {attackingHandler} from './states/attacking/index.ts'
+import {airAttackingHandler} from './states/air_attacking.ts'
 import {dyingHandler} from './states/dying.ts'
 import {rollingHandler} from './states/rolling.ts'
 import {flinchingHandler} from './states/flinching.ts'
@@ -26,6 +27,7 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     jumping: jumpingHandler,
     falling: fallingHandler,
     attacking: attackingHandler,
+    air_attacking: airAttackingHandler,
     dying: dyingHandler,
     rolling: rollingHandler,
     flinching: flinchingHandler,
@@ -41,7 +43,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
 
     const makeContext = (entity?: CharacterEntity): MachineContext => {
         let attackPhase: string | undefined
-        if (entity !== undefined && currentState === 'attacking') {
+        if (entity !== undefined && (currentState === 'attacking' || currentState === 'air_attacking')) {
             const segment = entity.combat.activeSegment
             if (segment !== undefined) {
                 const phases = resolvePhases(segment.phases)
@@ -80,9 +82,10 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
                 previousState = currentState
                 currentState = t.to
                 stateTime = 0
-                if (currentState === 'attacking') {
-                    /* 起手解析：攻击键的起手候选按守卫（蓄力/方向变体）+ 冷却解析（转换 guard 已验证存在候选） */
-                    const key = input.attackKey
+                if (currentState === 'attacking' || currentState === 'air_attacking') {
+                    /* 起手解析：攻击键的起手候选按守卫（蓄力/方向变体）+ 冷却解析（转换 guard 已验证存在候选）；
+                     * 空中攻击固定走 `air` 链（与地面轻重链分离） */
+                    const key = currentState === 'air_attacking' ? 'air' : input.attackKey
                     entity.combat.activeSegment = key !== undefined
                         ? resolveEntrySegment(
                             entity.combat.attacks,

@@ -327,6 +327,17 @@ attacking update(dt):
 - **类型形态**：原通用的 `SkillSlot` / `SkillTimingConfig` 已随槽位模型移除，翻滚保留自身最小配置类型，攻击链路无需任何窄化。
 - **HUD**：play 面板 SKILLS 区块首行展示「翻滚」（动作格 = 翻滚期间状态机驻留时间，恢复格恒 `-`，冷却格同攻击段规则）。
 
+### 3.8 空中攻击（air 链 / air_attacking 状态）
+
+「跳跃 / 下落中按攻击键」进入独立状态 `air_attacking`（与地面 `attacking` 并列的 meta-state，共用 `states/attacking/segment.ts` 的段调度），按**武器种类**读取空中攻击模组（`MeleeWeaponClassConfig.airAttack`，缺省 `DEFAULT_MELEE_AIR_ATTACK`）：
+
+- **独立攻击键 `air`**：`ATTACK_KEYS = ['light','heavy','air']`，空中攻击固定走 `air` 链，与地面轻重链命名空间分离；段 id 形如 `{classId}_{holdMode}_air_N`。**远程武器声明空 air 链**（`buildRangedAttacks` 的 `air: {entries: [], steps: []}`）→ 空中起手解析失败，跳跃中按攻击键无效。
+- **每武器独立模组**（`MeleeAirAttackConfig`）：`steps`（空中段数，可与地面不同）、`loop`、`momentum`（每帧水平动量保留系数）、`airControl`（输入对水平速度的操控系数）、`slamSpeed`（打击段向下冲量，战锤「跳跃砸地」）、`poseKeys`（每段动画复用的**地面段模板键**）。空中段不单独烘焙关键帧：`poses[0].poseId` 指向地面段 id（如战锤 air_1 复用 `heavy_1` 的重砸 pose），属显式复用而非占位。
+- **起手/输入映射**：`world.ts` 的 `setPlayerAttack` 在角色处于空中攻击态（`isAirborneAttackState(currentState)`，即 `jumping`/`falling`/`air_attacking`）时把按键统一映射为 `'air'`；`beginPlayerAttackHold` 同判据下直接 return（**空中攻击不可蓄力**，`air` 段无 `chargeFullTime`）。**按状态而非 `isSupportedOn` 判定离地**——胶囊跨 trimesh 棱线时接触法线会瞬时读陡，`idle`/`walking` 也会短暂 `isSupportedOn=false`，否则地面攻击会误走 `air` 链（无空中动量/砸地）。转换守卫 `canStartAirAttack(entity)` = `canStartAttack(attacks, 'air')`。
+- **状态转换**：`jumping` / `falling` 末尾新增 `→ air_attacking`（死亡/受击优先级更高，故置于末尾）；`air_attacking` 播完 → 支撑则 `walking`/`idle`、否则 `falling`；**绝不回 `jumping`**（`jumping.enter` 会重置 vy 造成二段跳）。
+- **位移**：`applyAirAttackMotion` 保留起跳惯性（`vx *= momentum`）并按 `airControl` 微调；不走段默认的 `moveSpeedMultiplier` 与斜坡投影。
+- **动画**：`appearance/system.ts` 的 `isAttackState` 把 `attacking` 与 `air_attacking` 归入同一攻击 clip 生成器与双手 IK 分支；动画键仍为 `attacking:{segment.id}`。
+
 ---
 
 ## 四、中断系统
@@ -338,7 +349,7 @@ attacking update(dt):
 ```ts
 export const CHARACTER_STATES = [
     'idle', 'walking', 'jumping', 'falling',
-    'attacking', 'dying', 'rolling', 'flinching',
+    'attacking', 'air_attacking', 'dying', 'rolling', 'flinching', 'interacting',
 ] as const
 ```
 
@@ -707,7 +718,7 @@ const phaseKey = c.phaseIndex < phases.length
 | `attack_runtime.ts` | 段冷却读写与上下文构造：`segmentCooldownRemaining` / `armSegmentCooldown` / `tickSegmentCooldowns` / `attackContextOf` / `canStartAttack` |
 | `attack_phases.ts` | `ATTACK_PHASES` / `AttackPhaseName`、`AttackPhase`（仅时序/移速/可中断）、`resolvePhases`（未定义时回退单阶段）、`phaseDurationOf`、`FLINCH_DURATION` / `FLINCH_IMMUNITY_DURATION` |
 | `roll_skill.ts` | 翻滚（角色能力，非武器段）：`RollSkillConfig` / `RollSkillRuntime`、`ROLL_DURATION` / `ROLL_COOLDOWN` / `ROLL_IFRAME_START` / `ROLL_IFRAME_END`、`createRollSkillRuntime`、`rollSpinProgress`（world 根自转进度） |
-| `test_weapon.ts` | 测试武器：6 段守卫链夹具（蓄力 / 点按兜底 / 键组分离 / 方向变体 / 循环链 / 无链单发 / 非 0 冷却），仅供单元测试 |
+| `test_weapon.ts` | 测试武器：7 段守卫链夹具（蓄力 / 点按兜底 / 键组分离 / 方向变体 / 循环链 / 无链单发 / 非 0 冷却 / 空中单段），仅供单元测试 |
 | `executor.ts` / `damage.ts` / `explosion.ts` | 执行器接口与伤害结算（命中窗口由动画事件轨驱动） |
 
 ### 9.3 状态机与角色侧
@@ -715,8 +726,9 @@ const phaseKey = c.phaseIndex < phases.length
 | 文件 | 内容 |
 |------|------|
 | `src/character/state_machine/types.ts` | `CHARACTER_STATES`（含 `'rolling'` / `'flinching'`）；`CharacterInput.roll`（`setInput` 第 5 参，由 `roll` 动作触发）、`attackKey: AttackKey \| undefined`、`attackHoldDuration`（第 6/7 参）；`MachineContext.attackPhase` |
-| `src/character/state_machine/machine.ts` | 静态 `Record<CharacterState, StateHandler>` 注册 8 状态；transition guard 检查 + `onStateChange` 派发；**进入 attacking 时用 `resolveEntrySegment` 完成起手解析并写入 `combat.activeSegment`** |
+| `src/character/state_machine/machine.ts` | 静态 `Record<CharacterState, StateHandler>` 注册全部状态；transition guard 检查 + `onStateChange` 派发；**进入 attacking / air_attacking 时用 `resolveEntrySegment` 完成起手解析并写入 `combat.activeSegment`**（后者固定 `'air'` 键） |
 | `src/character/state_machine/states/attacking/index.ts` | attacking 段子状态调度器：推进阶段时间线 → 按输入求段转换写缓冲 → 段播完推进下一段（不退出状态）→ 委托阶段 handler 或走默认行为；导出 `phaseHandlerRegistry` / `registerPhaseHandler` |
+| `src/character/state_machine/states/air_attacking.ts` | 空中攻击 meta-state：起手走 `air` 链、空中动量/操控/砸地（`airAttackOf`）、播完回 walking/idle/falling（回 `canStartAirAttack`）；**不得转 `jumping`** |
 | `src/character/state_machine/states/attacking/segment.ts` | 段子状态单元：`enterAttackSegment`（重置计时/挂段冷却/清命中记录/唤醒刚体）、`advanceSegmentPhases`、`isSegmentPhasesDone`、`resolveSegmentNextState`（同键 → 本段 `next`；异键 → 该键起手解析） |
 | `src/character/state_machine/states/{idle,walking}.ts` | 攻击转换 guard 复用 `canStartAttack`（无起手候选则不进入 attacking） |
 | `src/character/state_machine/states/rolling.ts` | 翻滚状态 handler：锁定方向位移 + 中段无敌帧写入 `invincibleTimer`（exit 清零），结束转 walking/idle/falling |

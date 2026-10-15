@@ -1,7 +1,7 @@
 import type {CharacterEntity} from '../types.ts'
 import type {AttackKey} from '../weapon/attack_chain.ts'
 
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'dying', 'rolling', 'flinching', 'interacting'] as const
+export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'air_attacking', 'dying', 'rolling', 'flinching', 'interacting'] as const
 export type CharacterState = typeof CHARACTER_STATES[number]
 
 export interface CharacterInput {

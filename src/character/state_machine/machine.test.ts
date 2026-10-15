@@ -1,7 +1,8 @@
 import {describe, it, expect} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from './machine.ts'
-import type {CharacterStateMachine} from './types.ts'
+import {isAirborneAttackState} from './states/air_attacking.ts'
+import {CHARACTER_STATES, type CharacterStateMachine} from './types.ts'
 import {createWeaponRuntime, type WeaponRuntime} from '../weapon/weapon_runtime.ts'
 import {createCombatComponent} from '../combat/types.ts'
 import {ROLL_COOLDOWN} from '../combat/roll_skill.ts'
@@ -698,5 +699,110 @@ describe('交互状态（interacting）', () => {
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, true)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('idle')
+    })
+})
+
+describe('空中攻击（air_attacking）', () => {
+    /** 进入跳跃（idle → jumping，enter 会给出向上初速），随后离地模拟上升段 */
+    const jumpOff = (e: CharacterEntity): void => {
+        e.stateMachine.setInput(0, 0, true, false)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('jumping')
+        e.isOnGround = false
+    }
+    const pressAttack = (e: CharacterEntity, key: 'light' | 'heavy' = 'light'): void => {
+        e.stateMachine.setInput(0, 0, false, true, false, key, 0)
+        e.stateMachine.update(DT, e)
+    }
+
+    it('跳跃中按攻击键走武器 air 链（而非地面轻重链）', () => {
+        const e = makeMock(createWeaponRuntime('long_sword'))
+        jumpOff(e)
+        pressAttack(e)
+        expect(e.stateMachine.currentState).toBe('air_attacking')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_air_1')
+        expect(e.combat.attackActive).toBe(true)
+    })
+
+    it('空中攻击与按下的攻击键无关（按重击键同样走 air 链）', () => {
+        const e = makeMock(createWeaponRuntime('long_sword'))
+        jumpOff(e)
+        pressAttack(e, 'heavy')
+        expect(e.stateMachine.currentState).toBe('air_attacking')
+        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_air_1')
+    })
+
+    it('空中段播完仍悬空 → falling；落地 → idle', () => {
+        const e = makeMock(createWeaponRuntime('long_sword'))
+        jumpOff(e)
+        pressAttack(e)
+        e.stateMachine.setInput(0, 0, false, false)
+        for (let i = 0; i < 40 && e.stateMachine.currentState === 'air_attacking'; i++) {
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.stateMachine.currentState).toBe('falling')
+        /* 落地并等待 groundedTime 越过防抖阈值后回到 idle */
+        e.isOnGround = true
+        e.groundNormal = {x: 0, y: 1, z: 0}
+        for (let i = 0; i < 40 && e.stateMachine.currentState !== 'idle'; i++) {
+            e.stateMachine.setInput(0, 0, false, false)
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.stateMachine.currentState).toBe('idle')
+    })
+
+    it('空中连段：巨剑双手 air_1 中再按攻击 → air_2', () => {
+        const e = makeMock(createWeaponRuntime('heavy_sword', {}, 'two_handed'))
+        jumpOff(e)
+        pressAttack(e)
+        expect(e.combat.activeSegment?.id).toBe('heavy_sword_two_handed_air_1')
+        /* 段内再次按攻击键缓冲下一段 */
+        pressAttack(e)
+        for (let i = 0; i < 40 && e.combat.activeSegment?.id !== 'heavy_sword_two_handed_air_2'; i++) {
+            e.stateMachine.setInput(0, 0, false, false)
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.combat.activeSegment?.id).toBe('heavy_sword_two_handed_air_2')
+    })
+
+    it('战锤跳跃攻击砸地：进入瞬间施加向下冲量', () => {
+        const e = makeMock(createWeaponRuntime('war_hammer'))
+        jumpOff(e)
+        pressAttack(e)
+        expect(e.stateMachine.currentState).toBe('air_attacking')
+        expect(getMockBody(e).linvel().y).toBeLessThanOrEqual(-10)
+    })
+
+    it('空中攻击不可蓄力：按住攻击键不冻结、不累积蓄力', () => {
+        const e = makeMock(createWeaponRuntime('long_sword'))
+        jumpOff(e)
+        pressAttack(e)
+        expect(e.stateMachine.currentState).toBe('air_attacking')
+        for (let i = 0; i < 10; i++) {
+            e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.combat.attackHolding).toBe(false)
+        expect(e.combat.attackCharge).toBe(0)
+    })
+
+    it('远程武器无空中链：跳跃中按攻击键不起手（保持 jumping）', () => {
+        const e = makeMock(createWeaponRuntime('longbow'))
+        jumpOff(e)
+        pressAttack(e)
+        expect(e.stateMachine.currentState).toBe('jumping')
+        expect(e.combat.attackActive).toBe(false)
+    })
+
+    it('攻击键映射依据：仅跳跃/下落/空中攻击态视为空中（防止地面误走 air 链）', () => {
+        /* world.ts 用 isAirborneAttackState 决定是否把攻击键映射为 air 键；
+         * 若把 idle/walking 误列进来，地面攻击会播到空中段（无空中动量/砸地）。 */
+        expect(isAirborneAttackState('jumping')).toBe(true)
+        expect(isAirborneAttackState('falling')).toBe(true)
+        expect(isAirborneAttackState('air_attacking')).toBe(true)
+        for (const state of CHARACTER_STATES) {
+            if (state === 'jumping' || state === 'falling' || state === 'air_attacking') continue
+            expect(isAirborneAttackState(state)).toBe(false)
+        }
     })
 })

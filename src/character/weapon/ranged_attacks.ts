@@ -141,6 +141,8 @@ export const buildRangedAttacks = (weaponId: string, charge?: ChargeTuning): Wea
             light: {key: 'light', entries: [{segmentId: segment.id}], steps: [segment.id]},
             /* 远程武器无重击链（空链：起手解析恒失败） */
             heavy: {key: 'heavy', entries: [], steps: []},
+            /* 远程武器无空中攻击链（空链：跳跃中按攻击键不起手） */
+            air: {key: 'air', entries: [], steps: []},
         },
     }
 }

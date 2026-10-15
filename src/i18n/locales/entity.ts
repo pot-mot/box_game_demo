@@ -38,6 +38,7 @@ export type EntityLocale = {
     'entity.state.jumping': string
     'entity.state.falling': string
     'entity.state.attacking': string
+    'entity.state.air_attacking': string
     'entity.state.dying': string
     'entity.state.rolling': string
     'entity.state.flinching': string
@@ -212,6 +213,7 @@ export const entityZh: EntityLocale = {
     'entity.state.jumping': '跳跃',
     'entity.state.falling': '下落',
     'entity.state.attacking': '攻击',
+    'entity.state.air_attacking': '空中攻击',
     'entity.state.dying': '死亡',
     'entity.state.rolling': '翻滚',
     'entity.state.flinching': '受击硬直',
@@ -386,6 +388,7 @@ export const entityEn: EntityLocale = {
     'entity.state.jumping': 'Jump',
     'entity.state.falling': 'Fall',
     'entity.state.attacking': 'Attack',
+    'entity.state.air_attacking': 'Air Attack',
     'entity.state.dying': 'Death',
     'entity.state.rolling': 'Roll',
     'entity.state.flinching': 'Flinch',
