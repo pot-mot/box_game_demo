@@ -141,7 +141,7 @@ src/
 | 战斗运行时 | [`src/character/combat/combat.md`](src/character/combat/combat.md) | 伤害类别、防御、无敌帧 |
 | 护甲 / 肢体 | [`src/character/armor/armor.md`](src/character/armor/armor.md) | 护甲槽位、防御/加成 |
 | 交互领域 | [`src/character/interaction/interaction.md`](src/character/interaction/interaction.md) | 交互类型层、时长 |
-| 状态机 | [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md) | 新增状态、死亡/翻滚、攻击段、空中攻击 |
+| 状态机 | [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md) | 新增状态、死亡/翻滚/倒地起身、攻击段、空中攻击 |
 | 骨骼动画 | [`src/skeleton/skeleton.md`](src/skeleton/skeleton.md) | 骨骼/IK/组合动画 |
 | 角色 AI | [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) | 寻路索敌、导航避障、朝向 |
 | 方块人外观 | [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md) | 模型构建、挂点、武器/护甲/肢体网格、种族 |
@@ -162,5 +162,6 @@ src/
 | 全局 i18n | [`docs/i18n.md`](docs/i18n.md) | 文案 |
 | 全局动作规范 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 调动作 |
 | 盾牌 / 格挡（设计） | [`docs/design/shield_block.md`](docs/design/shield_block.md) | 实现盾牌 / 格挡前 |
+| AI 行为原点策略（设计） | [`docs/design/ai_origin_strategy.md`](docs/design/ai_origin_strategy.md) | 实现原点策略 / 可配置追击半径前 |
 
 **扩展 AI 功能时**：阅读 [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。
