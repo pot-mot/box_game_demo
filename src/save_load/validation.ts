@@ -292,6 +292,12 @@ const CharacterConfigInner = z.object({
     armor: ArmorLoadoutSchema,
     limb: LimbLoadoutSchema,
     lockPoints: LockPointsSchema,
+    /* 韧性 / 倒地属性：非法值安全回退 undefined（运行时用默认），不抛错 */
+    poiseMax: z.number().positive().optional().catch(undefined),
+    poiseRegenDelay: z.number().min(0).optional().catch(undefined),
+    poiseRegenPerSec: z.number().min(0).optional().catch(undefined),
+    knockdownDuration: z.number().min(0).optional().catch(undefined),
+    getUpDuration: z.number().min(0).optional().catch(undefined),
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),
 })

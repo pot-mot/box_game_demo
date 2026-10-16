@@ -1,9 +1,10 @@
 import {describe, it, expect, vi} from 'vitest'
 import {Group} from 'three'
-import {testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor} from './melee_executor.ts'
+import {testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor, shieldCoverOBB} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 import {MELEE_WEAPON_PRESETS, type MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
+import {SHIELD_BLOCK_MEDIUM} from '../../../character/weapon/constants.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
@@ -173,7 +174,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
             airborneTime: 0, groundedTime: 0,
             rowText: '',
             navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
-            isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
+            isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
             combat,
             stateMachine: createCharacterStateMachine(),
         }
@@ -408,5 +409,97 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         executor.setHitWindow(true, 'offhand')
         executor.update(0.016, combat, attacker, {} as ExecutorContext)
         expect(targetCombat.health).toBe(200 - 99)
+    })
+
+    it('盾格挡：目标举盾且武器命中箱与盾遮挡体相交 → 按格挡系数减免并扣格挡槽', () => {
+        const runtime = createWeaponRuntime('war_hammer')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
+        const attacker = makeEntity()
+        attacker.combat = combat
+
+        const targetCombat = createCombatComponent(
+            createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
+        )
+        const block = SHIELD_BLOCK_MEDIUM
+        targetCombat.block = block
+        targetCombat.blocking = true
+        targetCombat.guard = block.guardMax
+        const target = makeEntity()
+        target.id = 2
+        target.combat = targetCombat
+
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: new Group(),
+            weaponHitBox: local,
+            offhandWeaponGroup: null,
+            offhandWeaponHitBox: null,
+        } as unknown as CharacterModel
+
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
+        executor.setHitWindow(true)
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        /* 战锤物理轻 1 段伤害 10 × 格挡系数 0.20 = 2 */
+        const blockedDamage = 10 * block.blockDamageMultiplier
+        expect(targetCombat.health).toBe(15 - blockedDamage)
+        expect(targetCombat.guard).toBeCloseTo(block.guardMax - blockedDamage, 4)
+        expect(combat.attackedTargets.has(2)).toBe(true)
+    })
+
+    it('盾格挡：未举盾时（持盾但未格挡）不减免，全额结算且格挡槽不消耗', () => {
+        const runtime = createWeaponRuntime('war_hammer')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
+        const attacker = makeEntity()
+        attacker.combat = combat
+
+        const targetCombat = createCombatComponent(
+            createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
+        )
+        const block = SHIELD_BLOCK_MEDIUM
+        targetCombat.block = block
+        targetCombat.blocking = false
+        targetCombat.guard = block.guardMax
+        const target = makeEntity()
+        target.id = 2
+        target.combat = targetCombat
+
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: new Group(),
+            weaponHitBox: local,
+            offhandWeaponGroup: null,
+            offhandWeaponHitBox: null,
+        } as unknown as CharacterModel
+
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
+        executor.setHitWindow(true)
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        expect(targetCombat.health).toBe(15 - 10)
+        expect(targetCombat.guard).toBe(block.guardMax)
+    })
+
+    it('shieldCoverOBB：遮挡体中心相对脚底（非 body 中心）偏移，半尺寸随 scale 缩放', () => {
+        const block = SHIELD_BLOCK_MEDIUM
+        const cover = block.cover
+        const scale = 2
+        const bodyY = 5
+        const obb = shieldCoverOBB({x: 1, y: bodyY, z: -3}, scale, 0, cover)
+        expect(obb.half.x).toBeCloseTo(cover.width * scale / 2, 6)
+        expect(obb.half.y).toBeCloseTo(cover.height * scale / 2, 6)
+        expect(obb.half.z).toBeCloseTo(cover.depth * scale / 2, 6)
+        /* 角色原点（脚底）= body 中心 − 身高/2；遮挡体偏移相对脚底叠加 */
+        const feetY = bodyY - scale / 2
+        expect(obb.center.y).toBeCloseTo(feetY + cover.offsetY * scale, 6)
+        expect(obb.center.x).toBeCloseTo(1, 6)
+        expect(obb.center.z).toBeCloseTo(-3 + cover.offsetZ * scale, 6)
+    })
+
+    it('shieldCoverOBB：yaw=π/2 时 offsetZ 沿 +X 方向偏移（盾随朝向旋转）', () => {
+        const cover = SHIELD_BLOCK_MEDIUM.cover
+        const obb = shieldCoverOBB({x: 0, y: 0, z: 0}, 1, Math.PI / 2, cover)
+        expect(obb.center.x).toBeCloseTo(cover.offsetZ, 6)
+        expect(obb.center.z).toBeCloseTo(0, 6)
     })
 })

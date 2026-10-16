@@ -162,3 +162,22 @@ export const totalMoveSpeedOf = (
     }
     return multiplier
 }
+
+/** 韧性加成 = 各槽位护甲与肢体韧性之和（缺省 0） */
+export const totalPoiseOf = (
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): number => {
+    let total = 0
+    for (const slot of ARMOR_SLOTS) {
+        const piece = resolved[slot]
+        if (piece !== undefined) total += piece.poise ?? 0
+    }
+    if (resolvedLimbs !== undefined) {
+        for (const slot of LIMB_SLOTS) {
+            const piece = resolvedLimbs[slot]
+            if (piece !== undefined) total += piece.poise ?? 0
+        }
+    }
+    return total
+}

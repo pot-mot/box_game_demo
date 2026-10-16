@@ -10,3 +10,24 @@
 
 - **新增伤害路径不得绕过 `isDamageImmune`**；三条命中路径也用它跳过击退与命中反馈——近战不写 `attackedTargets` / 不 `onHit`（无敌结束后同一命中窗口内仍可命中）、远程弹丸穿过无敌目标不消耗、爆炸跳过该目标。
 - 翻滚与死亡的全身体根旋转都由 `world.ts` 合成，基础 clip 不写根关节自转（`rollingPose` 只表达抱团蜷缩），否则根原点在脚底会绕脚底划大圈/沉入地面。
+
+## 冲击力与韧性
+
+- **冲击力枚举**（`impact.ts`，唯一来源）：`IMPACT_LEVELS = ['light','medium','heavy','knockdown']`；`impactRank` / `downgradeImpact`（降一级，`light` 为下限，供盾格挡削弱来袭冲击）；`IMPACT_LABELS` 为本地化名键。
+- `DamageEvent.impact` / `DamageEvent.poiseDamage` **必填**（与 `damageType` 同规）：新增伤害路径漏填即编译报错。两者与物理击退（`knockbackForce`）解耦——冲击力决定受击状态效果，击退决定位移。
+- **受击效果分派**（`world.ts` 的 `onDamageTaken`，顺序即优先级）：先按 `poiseDamage` 扣韧并重置回充延迟（`poiseRegenDelayTimer = poiseRegenDelay`），再按 `health > 0` 分派——
+    1. `knockdown` 级 **或** `poise <= 0` → `pendingKnockdown`（倒地，见状态机）；
+    2. `heavy` 且未在 `flinchImmunityTimer` 内 → 累计 `flinchDuration = HEAVY_FLINCH_DURATION` + `pendingFlinch`（打断攻击）；
+    3. `medium` 且未在免疫内 **且** 当前状态 `isWeakFlinchReceptive` → `flinchDuration = FLINCH_DURATION` + `pendingFlinch`（不打断攻击）；
+    4. `light` → 无受击反应（仅扣韧）。
+- **弱硬直可受状态**（`WEAK_FLINCH_RECEPTIVE_STATES = ['idle','walking','jumping','falling','interacting']`）：攻击 / 翻滚等承诺动作状态不受 `medium` 打断，但仍会被 `heavy` / 倒地打断。
+- **韧性回充**（`world.ts` 主循环）：`poiseRegenDelayTimer` 递减到 0 后，`poise` 以 `poiseRegenPerSec` 每秒恢复至 `poiseMax`；`hitImmunityTimer`（倒地/起身无敌）在主循环递减兜底。
+- **韧性上界** `poiseMax = basePoiseMax + totalPoiseOf(护甲, 肢体)`，由 `setCombatEquipment` 重算并 clamp `poise`；`basePoiseMax` 由角色配置 `CharacterConfig.poiseMax` 传入（见 `character.md`）。
+- 免疫判定 `isDamageImmune(target)` 同时查翻滚无敌 `invincibleTimer` 与倒地/起身无敌 `hitImmunityTimer`；倒地与起身期间**完全免疫**（含伤害与击退），状态机期间忽略 `pendingFlinch` / `pendingKnockdown`。
+
+## 盾格挡资源（guard）
+
+- `CombatComponent` 的盾格挡字段（`combat/types.ts`）：`block?: ShieldBlockConfig`（持盾武器必带，见 [`weapon.md`](../weapon/weapon.md)）、`guard`（当前格挡槽）、`blocking`（是否处于格挡态）、`blockHeld`（输入意图，每帧由 `machine.ts` 从 `stateMachine.setInput(..., block)` 同步）。
+- `guardMaxOf(c)` = `c.block?.guardMax ?? 0`；`updateShieldBlock(c)` 在未受击（`guardRegenDelayTimer <= 0`）时按 `guardRegenPerSec` 回充 `guard` 至上界，受击后延迟回充（由 `world.ts` 主循环驱动，与韧性回充并列）。
+- 破防由状态机全局分支统一触发（`guard <= 0` → `guard_broken`，见 [`state_machine.md`](../state_machine/state_machine.md)），不在此模块。
+- **格挡减免结算**（近战 / 子弹命中举盾目标）：`伤害 → damage × blockDamageMultiplier`、`impact` 非 `knockdown` 时降一级（`downgradeImpact`）、`削韧 → poiseDamage × poiseMultiplier`、`guard -= blockedDamage`、击退 `× blockKnockbackMultiplier`；`knockdown` 击穿格挡不降级。爆炸 / AOE **完全无视盾**。判定路径见 [`projectile.md`](../../entity/character/projectile/projectile.md) 与 [`melee` 执行器](../../entity/character/combat/melee_executor.ts)。

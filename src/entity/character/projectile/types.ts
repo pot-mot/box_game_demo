@@ -4,6 +4,7 @@ import type {CharacterEntity} from '../../../character/types.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import type {ExplosionStyle} from '../../../character/weapon/projectile_visual.ts'
 import type {DamageType} from '../../../character/combat/damage_type.ts'
+import type {ImpactLevel} from '../../../character/combat/impact.ts'
 import type {AttackTendency} from '../../../character/faction.ts'
 import type {RapVector3} from '../../../physics/rapier_utils.ts'
 import type {ProjectileTrail} from './trail.ts'
@@ -44,11 +45,19 @@ export interface Projectile {
     ownerAttackTendency: AttackTendency
     damage: number
     damageType: DamageType
+    /** 命中冲击力（来自开火段；决定目标受击效果） */
+    impact: ImpactLevel
+    /** 命中削韧值（来自开火段） */
+    poiseDamage: number
     knockbackForce: number
     lifetime: number
     homingStrength: number
     explosionRadius: number
     explosionStyle: ExplosionStyle
+    /** 爆炸冲击力（爆炸范围伤害用） */
+    explosionImpact: ImpactLevel
+    /** 爆炸削韧值（爆炸范围伤害用） */
+    explosionPoise: number
     /** 爆炸特效主色（魔法球取自身颜色，物理爆炸为火焰色） */
     explosionColor: number
     /** 命中闪光颜色 */
@@ -70,6 +79,10 @@ export interface ProjectileSpawn {
     readonly direction: RapVector3
     /** 当前武器（含模型 / 视觉规格 / 弹道数值） */
     readonly weapon: RangedWeaponConfig
+    /** 本发弹丸的冲击力（来自开火段；缺省 = 远程默认冲击力） */
+    readonly impact?: ImpactLevel
+    /** 本发弹丸的削韧值（来自开火段；缺省 = 远程默认削韧值） */
+    readonly poiseDamage?: number
     /** 抛射仰角（rad） */
     readonly throwAngle: number
     /**

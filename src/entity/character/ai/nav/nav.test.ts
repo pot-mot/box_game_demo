@@ -7,8 +7,7 @@ import {STUCK_ESCAPE_DURATION, STUCK_ESCAPE_MAX_RETRIES} from './constants.ts'
 import type {NavSensor, NavRunContext, NavConfig} from './types.ts'
 import type {CharacterEntity} from '../../../../character/types.ts'
 import {createWeaponRuntime} from '../../../../character/weapon/weapon_runtime.ts'
-import {createRollSkillRuntime} from '../../../../character/combat/roll_skill.ts'
-import type {CombatComponent} from '../../../../character/combat/types.ts'
+import {createCombatComponent, type CombatComponent} from '../../../../character/combat/types.ts'
 import {CHARACTER_BASE_SIZE} from '../../constants.ts'
 
 const FIXED_DT = 1 / 60
@@ -31,45 +30,7 @@ const mockBodyOf = (entity: CharacterEntity): MockBody =>
  */
 const createCombatStub = (): CombatComponent => {
     const weaponRuntime = createWeaponRuntime('long_sword')
-    return {
-        weapon: weaponRuntime.weapon,
-        offhand: undefined,
-        attacks: weaponRuntime.attacks,
-        segmentCooldowns: new Map(),
-        activeSegment: undefined,
-        bufferedSegment: undefined,
-        attackActive: false,
-        attackTimer: 0,
-        attackDirX: 0,
-        attackDirZ: 1,
-        muzzleDirX: 0,
-        muzzleDirZ: 0,
-        attackedTargets: new Set(),
-        phaseIndex: 0,
-        attackCharge: 0,
-        attackHolding: false,
-        phaseTimer: 0,
-        pendingFlinch: false,
-        flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
-        rollSkill: createRollSkillRuntime(),
-        invincibleTimer: 0,
-        faction: 0,
-        attackTendency: () => false,
-        tendencyConfig: {tendencyId: 'hostileExceptSelf'},
-        health: 15,
-        maxHealth: 15,
-        isDead: false,
-        baseDefense: {physical: 0, magic: 0},
-        armor: {},
-        limb: {},
-        defense: {physical: 0, magic: 0},
-        attackBonus: {physical: 0, magic: 0},
-        moveSpeedMultiplier: 1,
-        damageModifiers: [],
-        onDamageTaken: null,
-        onDamageDealt: null,
-        onDeath: null,
-    }
+    return createCombatComponent(weaponRuntime, 0, () => false, {tendencyId: 'hostileExceptSelf'}, 15)
 }
 
 const createBoxMesh = (x: number, y: number, z: number, w: number, h: number, d: number): Mesh => {
@@ -133,6 +94,9 @@ const createCharEntity = (
         dyingFallDirX: 0,
         dyingFallDirZ: 0,
         dyingFallAngle: 0,
+        knockdownFallDirX: 0,
+        knockdownFallDirZ: 0,
+        knockdownFallAngle: 0,
         combat: createCombatStub(),
         stateMachine: {
             currentState: 'idle',
@@ -583,7 +547,7 @@ const createCharOnBox = (boxTopY: number): CharacterEntity => {
         airborneTime: 0, groundedTime: 0, rowText: 'OnBox',
         isPlayer: false, navEnabled: true,
         peaceStrategy: 'patrol' as const, combatStrategy: 'tactical' as const,
-        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
+        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
         combat: createCombatStub(),
         stateMachine: {
             currentState: 'idle', previousState: null, stateTime: 0,

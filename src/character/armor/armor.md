@@ -189,6 +189,7 @@ export const applyDamage = (
 | 防御 `defense` | 基础防御（存档持久化）+ 各槽位护甲防御之和 | `applyDamage` 按事件类别取用 |
 | 攻击加成 `attackBonus` | 各槽位护甲攻击加成之和（无基础项） | 攻击时仅与武器类别匹配的项计入伤害 |
 | 移速乘数 `moveSpeedMultiplier` | 各槽位护甲移速乘数之积（空装备 = 1） | 状态机经 `moveSpeedOf(entity)` 读取 |
+| 韧性上界 `poiseMax` | 基础上界（`CharacterConfig.poiseMax` / `basePoiseMax`）+ 各槽位护甲与肢体 `poise` 之和 | 受击削韧至 0 → 倒地；见 [`combat.md`](../combat/combat.md) |
 
 `CombatComponent`（`character/combat/types.ts`）新增五字段：
 
@@ -220,6 +221,8 @@ export const setCombatEquipment = (
     c.defense = totalDefenseOf(baseDefense, resolved)
     c.attackBonus = totalAttackOf(resolved)
     c.moveSpeedMultiplier = totalMoveSpeedOf(resolved)
+    c.poiseMax = c.basePoiseMax + totalPoiseOf(resolved)
+    if (c.poise > c.poiseMax) c.poise = c.poiseMax
 }
 ```
 
@@ -277,6 +280,7 @@ export interface EquipPieceConfig<S extends string, M> {
     readonly defense: DamageTypeProfile          // 逐攻击类别防御（固定减伤）
     readonly attack: DamageTypeProfile           // 逐攻击类别攻击加成（匹配武器类别才计入）
     readonly moveSpeedMultiplier: number         // 移速乘数（多件相乘）
+    readonly poise?: number                      // 韧性上界加成（缺省 = 0，汇总进 poiseMax）
     readonly mesh: M                             // 外观部件配方
 }
 
@@ -307,6 +311,8 @@ export const totalDefenseOf = (base, resolvedArmor, resolvedLimbs?): DefenseProf
 export const totalAttackOf = (resolvedArmor, resolvedLimbs?): DamageTypeProfile => ...
 /** 移速乘数 = 各护甲 × 各肢体移速乘数之积（空装备表 = 1） */
 export const totalMoveSpeedOf = (resolvedArmor, resolvedLimbs?): number => ...
+/** 韧性上界加成 = 各护甲 + 各肢体 poise 之和（缺省 = 0） */
+export const totalPoiseOf = (resolvedArmor, resolvedLimbs?): number => ...
 ```
 
 `resolvedLimbs` 为可选参数：不传时行为与仅护甲完全一致（向后兼容既有调用与测试）。
@@ -338,6 +344,7 @@ export const totalMoveSpeedOf = (resolvedArmor, resolvedLimbs?): number => ...
 - **法师系头盔提供法术攻击力**：`mage_hood`（法师兜帽）魔攻 +1；`mage_wraps`（法印护腕）亦提供魔攻 +1，供法系堆叠。
 - **重甲减速**：铁盔 / 铁胸甲 / 铁胫甲 / 战臂甲 / 鳞甲均 `moveSpeedMultiplier < 1`；满配物理重甲约 ×0.81，用移速换取防御。
 - **加速鞋**：`swift_boots`（疾行靴 ×1.15）与 `wind_boots`（疾风靴 ×1.25）占护腿槽位、无防御收益，作为移速流代价。
+- **重甲提供韧性**：重甲件额外提供 `poise`（汇总进角色 `poiseMax`，降低被削韧倒地的概率）——`iron_helmet` 2 / `iron_plate` 4 / `scale_mail` 5 / `battle_bracers` 1 / `iron_greaves` 2；其余件缺省 0。满配重甲（铁盔 + 鳞甲 + 战臂甲 + 铁胫甲）共 +10 韧性。
 
 ### 4.1.1 肢体组件预设（`limb_pieces.ts`）
 
@@ -475,7 +482,7 @@ const ARMOR_SLOT_JOINTS: Record<ArmorSlot, readonly string[]> = {
 
 角色面板按「装备 / 属性」两模块组织（与其它分区同风格，复用 `createSection` / `createLabeledNumberInput`）。
 
-**装备模块**：武器与装备统一放置——武器下拉（含数值覆写与攻击类别标签）、**副手武器下拉**（首项「无」；主手为远程时禁用）与**持握模式下拉**（选项 = 武器类 `holdModes` ∩ 双持可用性，`HOLD_MODE_LABELS` 中文名）、**四行两列装备区**。Apply 顺序 = 主手 / 副手配置 → `setHoldMode`（详见 [`src/character/weapon/weapon.md`](../weapon/weapon.md)）。
+**装备模块**：武器与装备统一放置——武器下拉（含数值覆写与攻击类别标签）、**副手武器下拉**（首项「无」；主手为远程时禁用）与**持握模式下拉**（选项 = 武器类 `holdModes` ∩ 双持可用性，`HOLD_MODE_LABELS` 中文名）、**四行两列装备区**。武器下拉与副手下拉按 **近战武器 / 盾牌 / 远程武器** 三组 `optgroup` 组织（盾为近战类、经 `block !== undefined` 归入盾牌组，i18n `character.weapon_group_shield`）；盾类不参与双持。Apply 顺序 = 主手 / 副手配置 → `setHoldMode`（详见 [`src/character/weapon/weapon.md`](../weapon/weapon.md)）。
 
 **装备区一行两列（左护甲 / 右肢体）**，按语义顺序 头部 → 手臂 → 身体 → 腿部（`EQUIP_ROWS`，其中「身体」肢体对应胸甲槽的同一区域）：
 

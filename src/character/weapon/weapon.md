@@ -153,6 +153,8 @@ export interface AttackSegment {
     readonly recovery: number           /* 恢复时长（秒，0 = 无恢复段） */
     readonly phases: readonly AttackPhase[]  /* 阶段序列（仅时序）；recovery 阶段时长取本段 recovery */
     readonly damageMultiplier: number   /* 伤害倍率（相对武器基础伤害） */
+    readonly impact: ImpactLevel        /* 冲击力等级（light/medium/heavy/knockdown，决定受击状态效果） */
+    readonly poiseDamage: number        /* 削韧值（命中扣除目标韧性，韧性归零 → 倒地） */
     readonly cooldown: number           /* 冷却（秒，0 = 无冷却；从段触发时刻计时，只挡起手） */
     readonly next: readonly AttackTransition[]  /* 段播完（含恢复段）后的下一状态候选；空数组 = 链终止 */
     readonly label?: string             /* 显示名覆写（条件变体段用，如「蓄力重劈」） */
@@ -210,6 +212,7 @@ export interface WeaponAttacks {
 - **连段**：`light_1 ↔ light_2`、`heavy_1 ↔ heavy_2` 各自成循环链（持续输入无限循环），全部由段的 `next` 声明；`next` 无守卫，因此同键按住即循环。
 - **段冷却全为 0**：节奏由动作 + 恢复时间自然形成。
 - **动作形态**（挥砍/直刺/方向、双手幅度等）不再是参数，而是各段 id 的**显式骨骼关键帧**（`attack_clip_data.ts`）；武器间差异直接体现在关键帧数据中。
+- **冲击力 / 削韧**（`AttackSegment.impact` / `poiseDamage`，必填）：由 `buildMeleeAttacks` 按段类型注入默认——轻段 `MELEE_LIGHT_IMPACT='medium'` / `MELEE_LIGHT_POISE_DAMAGE=1`、重段 `MELEE_HEAVY_IMPACT='heavy'` / `MELEE_HEAVY_POISE_DAMAGE=4`、空中段 `MELEE_AIR_IMPACT='medium'` / `MELEE_AIR_POISE_DAMAGE=2`；单段可经 `BuildMeleeAttacksOptions.impact`（`SegmentImpactOverride`，逐段 `impact`/`poiseDamage` 覆写）覆盖。远程段默认 `RANGED_DEFAULT_IMPACT='medium'` / `RANGED_DEFAULT_POISE_DAMAGE=2`；爆炸子弹的爆炸伤害用 `RangedWeaponConfig.explosionImpact` / `explosionPoise`，缺省 `EXPLOSION_DEFAULT_IMPACT='knockdown'` / `EXPLOSION_DEFAULT_POISE_DAMAGE=6`（受击效果语义见 [`combat.md`](../combat/combat.md)）。
 
 ### 3.3 远程段：每武器单段
 
@@ -532,6 +535,15 @@ export const getAttackClipById = (clipId: string): BoneAnimationClip => {}
 ### 6.5 动作形态
 
 每个攻击段的形态由基础 clip 与该段显式姿势修订共同定义，不使用抽象动作参数。调整动作时修改 `attack_pose_edits.ts` 中具体段、具体时间、具体关节的关键姿势；调整关键帧结构时再修改 `attack_clip_data.ts`。基础状态（待机/行走/跳跃/…）仍由 `pose_fns.ts` 生成基础 clip（`base_clips.ts`）。
+
+### 6.6 盾牌（格挡武器类）
+
+盾牌是**近战武器类**（`type: 'melee'` 不变），不新增 `WeaponType`；通过近战武器类可选字段 `block?: ShieldBlockConfig` 声明格挡能力（`melee_weapon.ts` / `constants.ts`）。三档预设 `shield_small` / `shield_medium` / `shield_large` 由 `meleeClass(...)` 生成真实轻 / 重攻击链（轻 = 盾击、重 = 盾撞），并由 `buildMeleeAttacks` 走既有段结构，无空链特判。
+
+- `ShieldBlockConfig`：`guardMax` / `guardRegenPerSec` / `guardBreakDuration` / `blockDamageMultiplier` / `blockKnockbackMultiplier` / `poiseMultiplier` / `holdThreshold` / `moveSpeedMultiplier` / `blockHalfAngle` / `cover`（`ShieldCoverBox`，相对角色原点（脚底）的宽×高×厚 + `offsetY` / `offsetZ`）。
+- 盾模型 / 网格经 `weaponClassModelRegistry` 注册（`weapon_mesh.ts`），三档均 `GRIP_NEUTRAL`；盾击 / 盾撞姿态由 `attack_pose_edits.ts` 的 `shieldPoseEdits()` 提供（三档共用），基础举盾 / 破防姿态见 `pose_fns.ts`。
+- 攻防判定与输入路由不在本模块：短按盾击 / 长按格挡的按键路由见 [`physics.md`](../../entity/character/physics/physics.md) 与 [`control.md`](../../modes/control/control.md)，格挡状态与格挡槽见 [`state_machine.md`](../state_machine/state_machine.md) / [`combat.md`](../combat/combat.md)，子弹 / 近战盾判定见 [`projectile.md`](../../entity/character/projectile/projectile.md)。
+- 完整方案（数值表 / 判定路径 / 实施顺序）见 [`docs/design/shield_block.md`](../../../docs/design/shield_block.md)。
 
 ---
 

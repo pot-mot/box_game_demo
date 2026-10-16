@@ -250,6 +250,12 @@ export const collectWorldState = (
                         jointId: point.jointId,
                         offset: [point.offset[0], point.offset[1], point.offset[2]],
                     })),
+                    /* 韧性 / 倒地属性（写实际值；旧代码读到缺字段安全回退默认） */
+                    poiseMax: e.combat.basePoiseMax,
+                    poiseRegenDelay: e.combat.poiseRegenDelay,
+                    poiseRegenPerSec: e.combat.poiseRegenPerSec,
+                    knockdownDuration: e.combat.knockdownDuration,
+                    getUpDuration: e.combat.getUpDuration,
                     isPlayer: e.isPlayer,
                     navEnabled: e.navEnabled,
                 },

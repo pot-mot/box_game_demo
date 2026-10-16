@@ -236,6 +236,7 @@ describe('郊狼过程动画与摄像机平滑', () => {
                     attackCharge: 0,
                     attackHolding: false,
                     weaponHeld: false,
+                    shieldHand: undefined,
                 })
                 if (state !== prevState) prevState = state
                 if (i < WARMUP_FRAMES) continue

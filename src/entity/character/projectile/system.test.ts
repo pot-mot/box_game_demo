@@ -1,9 +1,11 @@
 import {beforeAll, describe, it, expect} from 'vitest'
 import {Scene} from 'three'
-import type RAPIER from '@dimforge/rapier3d-compat'
+import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createHarnessWorld, initRapier, makeChar, makeStaticBox, stepWorld, DT} from '../physics/harness.ts'
+import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import {SHIELD_BLOCK_MEDIUM} from '../../../character/weapon/constants.ts'
 import {createProjectileSystem} from './system.ts'
 
 /**
@@ -162,5 +164,59 @@ describe('弹丸系统', () => {
         expect(damageOf(1)).toBeCloseTo(bow.damage * (curve.maxChargeMultiplier / 100), 4)
         /* 统一蓄力模型：0 蓄力 = 100% 伤害 */
         expect(damageOf(0)).toBeCloseTo(bow.damage, 4)
+    })
+
+    /** 场景：owner(0) 平射举盾 target(6)，返回目标与武器（`yaw` 决定盾在身前还是身后） */
+    const fireAtBlockingTarget = (yaw: number) => {
+        const hw = createHarnessWorld()
+        const scene = new Scene()
+        const shieldOwners = new Map<number, number>()
+        const system = createProjectileSystem(hw.shared, scene, undefined, (h) => shieldOwners.get(h))
+        const owner = makeChar(hw, 1, 0, 0.5, 0)
+        const target = makeChar(hw, 2, 0, 0.5, 6)
+        const block = SHIELD_BLOCK_MEDIUM
+        target.combat.block = block
+        target.combat.blocking = true
+        target.combat.guard = block.guardMax
+        const cover = block.cover
+        const desc = RAPIER.ColliderDesc.cuboid(cover.width / 2, cover.height / 2, cover.depth / 2)
+            .setSensor(true)
+            .setCollisionGroups(categoryCollisionGroups(0, 0, 'shield'))
+        const collider = hw.shared.world.createCollider(desc)
+        shieldOwners.set(collider.handle, 2)
+
+        const bow = RANGED_WEAPON_PRESETS.longbow
+        /* harness 胶囊总高 1.0 → body 中心比脚底高 0.5；`cover` 偏移相对脚底。
+         * 位置须在 stepWorld 前写好，查询管线才在下一步生效（与 world.ts 的每帧同步一致）。 */
+        const scale = target.config.scale
+        const tp0 = target.body.translation()
+        collider.setTranslation({
+            x: tp0.x + Math.sin(yaw) * cover.offsetZ * scale,
+            y: tp0.y - 0.5 + cover.offsetY * scale,
+            z: tp0.z + Math.cos(yaw) * cover.offsetZ * scale,
+        })
+        collider.setRotation({x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2)})
+
+        system.spawn({owner, direction: {x: 0, y: 0, z: 1}, weapon: bow, throwAngle: 0})
+        for (let i = 0; i < 80; i++) {
+            stepWorld(hw)
+            system.update(DT, [owner, target])
+        }
+        return {target, bow, block}
+    }
+
+    it('盾格挡：正面来弹先命中盾遮挡体，按格挡系数减免伤害 / 扣格挡槽并消耗子弹', () => {
+        /* 目标面朝 -Z（正对 owner）：盾位于身体前方 */
+        const {target, bow, block} = fireAtBlockingTarget(Math.PI)
+        const blockedDamage = bow.damage * block.blockDamageMultiplier
+        expect(target.combat.guard).toBeCloseTo(block.guardMax - blockedDamage, 4)
+        expect(target.combat.maxHealth - target.combat.health).toBeCloseTo(blockedDamage, 4)
+    })
+
+    it('盾格挡：盾在背后时弹道未触及遮挡体，按正常伤害结算且格挡槽不消耗', () => {
+        /* 目标面朝 +Z（背对 owner）：盾在身体后方，弹道在角色中心终止 */
+        const {target, bow, block} = fireAtBlockingTarget(0)
+        expect(target.combat.guard).toBe(block.guardMax)
+        expect(target.combat.maxHealth - target.combat.health).toBeCloseTo(bow.damage, 4)
     })
 })

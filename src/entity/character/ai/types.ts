@@ -15,8 +15,8 @@ export type {PeaceState}
 /** 箱子生成回调签名 */
 export type SpawnBoxCallback = (entry: BoxSpawnEntry, x: number, y: number, z: number, size: {width: number; height: number; depth: number}) => void
 
-/** AI 输入回调：移动方向 + 攻击意图 + 可选显式攻击方向（缺省取移动方向，供边逃边射等移动/攻击分离场景） */
-export type AISetInput = (dx: number, dz: number, attack: boolean, attackDX?: number, attackDZ?: number) => void
+/** AI 输入回调：移动方向 + 攻击意图 + 可选显式攻击方向（缺省取移动方向，供边逃边射等移动/攻击分离场景）+ 可选格挡保持 */
+export type AISetInput = (dx: number, dz: number, attack: boolean, attackDX?: number, attackDZ?: number, block?: boolean) => void
 
 /** 攻击检测箱检查器：目标是否在角色的攻击检测箱内（缺失时 AI 回退圆形距离判定） */
 export type AttackDetectChecker = (character: CharacterEntity, target: CharacterEntity) => boolean

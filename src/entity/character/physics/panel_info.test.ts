@@ -176,6 +176,37 @@ describe('角色 panelInfo 同步', () => {
         expect(entity.combat.moveSpeedMultiplier).toBeCloseTo(1.125, 6)
     })
 
+    it('updateCharacterConfig 修改韧性属性：写入战斗组件，且基础上界变更后按装备重算上界', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+
+        system.updateCharacterConfig(id, {
+            poiseMax: 30,
+            poiseRegenDelay: 2,
+            poiseRegenPerSec: 12,
+            knockdownDuration: 1,
+            getUpDuration: 0.9,
+        })
+        expect(entity.config.poiseMax).toBe(30)
+        expect(entity.combat.basePoiseMax).toBe(30)
+        /* 未装备护甲：上界等于基础上界 */
+        expect(entity.combat.poiseMax).toBe(30)
+        expect(entity.combat.poiseRegenDelay).toBe(2)
+        expect(entity.combat.poiseRegenPerSec).toBe(12)
+        expect(entity.combat.knockdownDuration).toBe(1)
+        expect(entity.combat.getUpDuration).toBe(0.9)
+
+        /* 装备铁盔（poise 2）+ 铁胸甲（poise 4）：上界重算为 30 + 6 */
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            armor: {head: 'iron_helmet', chest: 'iron_plate'},
+        })
+        expect(entity.combat.poiseMax).toBe(36)
+
+        /* 仅改基础上界：重算时保留护甲汇总 → 40 + 6 */
+        system.updateCharacterConfig(id, {poiseMax: 40})
+        expect(entity.combat.poiseMax).toBe(46)
+    })
+
     it('护甲外观随装备同步装配与移除（换装不残留部件）', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         const entity = system.getAll().find(e => e.id === id)!

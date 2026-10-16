@@ -90,6 +90,10 @@ player/AI 输入 → attacking 状态机（release 阶段）
   - `frag`：亮闪 + 受重力抛撒的碎片 + 烟团；
   - `magic`：武器色扩散球 + 冲击环。
 - 特效全部在 `system.update` 中随帧推进，更新路径不创建 DOM / 几何。
+- **冲击力 / 削韧随弹丸携带**：`ProjectileSpawn` / `Projectile` 携带 `impact` / `poiseDamage`（由 `ranged_executor` 从当前段取值，远程段默认 `medium` / 2），命中角色结算时透传进 `DamageEvent`；爆炸弹丸另带 `explosionImpact` / `explosionPoise`（缺省 `knockdown` / 6），由 `detonateAt` 传给 `applyExplosionDamage`。受击效果语义见 [`combat.md`](../../../character/combat/combat.md)。
+- **盾格挡拦截**（`getShieldOwner?: (colliderHandle) => number | undefined`，由 `ranged_executor` 从 `world.ts` 的 `shieldOwnerByHandle` 透传）：
+  - 顺序在角色宽容半径判定**之前**：沿本帧位移 `prev → cur` 做 `filterPredicate = 类别为 'shield'` 的 `castShape`；命中 → `resolveShieldBlock` 结算（`damage × blockDamageMultiplier`、`impact` 非 `knockdown` 时降一级、`poiseDamage × poiseMultiplier`、`guard` 扣减、击退 `× blockKnockbackMultiplier`）并消耗子弹。
+  - **宽容半径内补扫**：盾遮挡体在角色原点前方 `~0.34`、远小于 `PROJECTILE_HIT_RADIUS`（1.2），正面来弹在跨入半径的当帧未必扫到盾；故角色命中分支内对举盾目标沿「弹丸 → 身体中心」补做一次盾 `castShape`，命中即按格挡结算，否则正常结算（盾在背后或未举盾 → 全额）。爆炸弹丸（`explosionRadius > 0`）不做盾判定（爆炸无视盾）。
 
 ## 七、扩展指南
 

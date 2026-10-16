@@ -10,6 +10,7 @@ import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
 import {fleeHandler} from './combat/states/flee.ts'
+import {shouldReactiveBlock} from './combat/shield_block.ts'
 import {rerollWaypoint} from './peace/states/patrol.ts'
 import {createNavRunContext} from './nav/machine.ts'
 
@@ -361,15 +362,27 @@ export const updateAI = (
         }
     }
 
-    /* 包装 setInput 记录本帧意图方向与攻击意图（过滤前），供静止检测使用 */
+    /* 包装 setInput 记录本帧意图方向与攻击意图（过滤前），供静止检测使用；
+     * 仅缓存最新一次调用，帧末统一转发（含反应式格挡），避免重复触发 world 侧接触/nav 处理 */
     let intentDX = 0
     let intentDZ = 0
     let intentAttack = false
+    let pendingDX = 0
+    let pendingDZ = 0
+    let pendingAttack = false
+    let pendingAttackDX: number | undefined
+    let pendingAttackDZ: number | undefined
+    let pendingValid = false
     const trackedSetInput: AISetInput = (dx, dz, attack, attackDX, attackDZ) => {
         intentDX = dx
         intentDZ = dz
         if (attack) intentAttack = true
-        setInput(dx, dz, attack, attackDX, attackDZ)
+        pendingDX = dx
+        pendingDZ = dz
+        pendingAttack = attack
+        pendingAttackDX = attackDX
+        pendingAttackDZ = attackDZ
+        pendingValid = true
     }
 
     if (ctx.activeFsm === 'combat') {
@@ -410,6 +423,12 @@ export const updateAI = (
         }
     } else {
         updatePeaceFSM(dt, ctx, character, trackedSetInput)
+    }
+
+    /* 统一转发本帧输入：战斗态叠加反应式格挡（目标在威胁范围内起手/开火且朝向我方 → 举盾） */
+    if (pendingValid) {
+        const block = ctx.activeFsm === 'combat' && shouldReactiveBlock(ctx, character, allCharacters)
+        setInput(pendingDX, pendingDZ, pendingAttack, pendingAttackDX, pendingAttackDZ, block)
     }
 
     /* 静止自检：决策层对被截断输入的兜底（接触阻断/nav stuck 清零后由这里触发自救）；

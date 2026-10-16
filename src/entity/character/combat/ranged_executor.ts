@@ -6,6 +6,7 @@ import type {SkillExecutor, ExecutorContext} from '../../../character/combat/exe
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import type {WorldDamageTarget} from '../../../character/combat/world_targets.ts'
 import {resolvePhases} from '../../../character/combat/attack_phases.ts'
+import {RANGED_DEFAULT_IMPACT, RANGED_DEFAULT_POISE_DAMAGE} from '../../../character/weapon/ranged_attacks.ts'
 import {createProjectileSystem} from '../projectile/system.ts'
 
 /**
@@ -33,12 +34,13 @@ export const createRangedExecutor = (
     shared: SharedWorld,
     scene: Scene,
     getWorldTargets?: () => readonly WorldDamageTarget[],
+    getShieldOwner?: (colliderHandle: number) => number | undefined,
 ): SkillExecutor & {
     updateBullets: (dt: number, allCharacters: readonly CharacterEntity[]) => void
     getBulletCount: () => number
     clear: () => void
 } => {
-    const projectiles = createProjectileSystem(shared, scene, getWorldTargets)
+    const projectiles = createProjectileSystem(shared, scene, getWorldTargets, getShieldOwner)
     const firedThisAttack = new Set<number>()
     const attackDirections = new Map<number, {dx: number; dz: number}>()
 
@@ -84,6 +86,9 @@ export const createRangedExecutor = (
         const spreadCount = weapon.spreadCount ?? 1
         /* 玩家蓄力：把蓄力值交给弹丸系统按武器 charge 曲线缩放速度/伤害/生命期；AI 不蓄力 */
         const chargeProp = entity.isPlayer ? {charge: combat.attackCharge} : {}
+        /* 弹丸冲击力 / 削韧取自当前开火段（缺省沿用远程默认值） */
+        const impact = combat.activeSegment?.impact ?? RANGED_DEFAULT_IMPACT
+        const poiseDamage = combat.activeSegment?.poiseDamage ?? RANGED_DEFAULT_POISE_DAMAGE
 
         if (spreadCount > 1) {
             const halfSpread = (weapon.spreadAngle ?? 0) / 2
@@ -94,11 +99,11 @@ export const createRangedExecutor = (
                 const px = fixedDx * cosOff - fixedDz * sinOff
                 const pz = fixedDx * sinOff + fixedDz * cosOff
                 v3Set(_tmpVec, px, 0, pz)
-                projectiles.spawn({owner: entity, direction: _tmpVec, weapon, throwAngle, ...chargeProp})
+                projectiles.spawn({owner: entity, direction: _tmpVec, weapon, throwAngle, impact, poiseDamage, ...chargeProp})
             }
         } else {
             v3Set(_tmpVec, fixedDx, 0, fixedDz)
-            projectiles.spawn({owner: entity, direction: _tmpVec, weapon, throwAngle, ...chargeProp})
+            projectiles.spawn({owner: entity, direction: _tmpVec, weapon, throwAngle, impact, poiseDamage, ...chargeProp})
         }
     }
 

@@ -4,7 +4,8 @@
 
 - 共享物理世界统一用 `SharedWorld`（`world.ts`）；**独立持世界一律经 `fixed_step.ts` 的 `createFixedStepStepper` 步进**（清力已内聚在运行器内）。
 - **场景查询（射线）统一走 `raycast.ts` 的 `createRapierRayCaster`**（`castOne`，基于 Rapier 查询管线 BVH）。禁止用 `THREE.Raycaster` 对渲染 mesh 做逐帧场景查询：大 trimesh（地形 / 建筑）会线性扫全部三角形，曾致 AI 视线 / 导航每帧数百万次求交而卡死。查询排除传感器碰撞体（投掷物 / 掉落物 / 水域），过滤用 `RayQueryFilter` 的类别掩码（`collision_category.ts` 的 `collisionCategoryMask`）+ 排除刚体 handle；命中结果含世界系法线、类别、刚体 handle 与世界 AABB 顶部 Y（trimesh / 凸多面体由顶点 AABB 缓存导出）。
-- 新增碰撞体必须显式 `setCollisionGroups`，用 `collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character` / `building` / `interactable` / `item`）。
+- 新增碰撞体必须显式 `setCollisionGroups`，用 `collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注类别（`ground` / `box` / `fragment` / `area` / `terrain` / `character` / `building` / `interactable` / `item` / `shield`）。
+- **`'shield'` 类别**（位 `1 << 14`）：盾遮挡体为**无父刚体的 parentless sensor**，membership 仅含盾类别位、mask 0（不参与物理碰撞），仅供子弹形状扫描识别（`castShape` 的 `filterPredicate` 按类别匹配）；`isBlockingGeometry` 对 `'shield'` 返回 true（非 `character`），故未走盾判定时仍可兜底阻挡投掷物。同步 / 释放见 [`entity/character/physics/physics.md`](../entity/character/physics/physics.md)。
 - magic number 提取到 `constants.ts`。
 
 ## 陷阱

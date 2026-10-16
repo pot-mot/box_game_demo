@@ -5,6 +5,13 @@
 - `world.ts` 每帧：`stateMachine.update(dt, entity)` → 状态直接操作 `entity.body`（`setLinvel` 等）→ `syncPositions()` 同步 body→mesh。
 - 输入注入链路：`input/` 注册表动作抽象 → `modes/control/player_control.ts` 的 `move()` 每帧读取并调用 `characterSystem.setPlayerMove()` → `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。
 
+## 盾牌：输入路由与遮挡体同步
+
+- **按键路由**（`world.ts`）：`shieldHoldKeysOf(player)` 决定哪把攻击键长按格挡（主手盾 = 轻/重击键皆可，副手盾 = 仅重击键）。`beginPlayerAttackHold` 对盾键只记录按下时刻（不进蓄力）；`endPlayerAttackHold(key, held)`：已格挡 → 仅落盾；否则主手盾短按 `setPlayerAttack(key, held)` 出盾击，副手盾无攻击；`cancelPlayerAttackHold(key)` 按槽落盾。
+- 展开时长累加 `playerShieldHoldTime`，`update` 计算 `playerBlockHeld`（`block !== undefined && guard > 0 && !isDead && state !== 'guard_broken' && holdTime >= block.holdThreshold`）并作为 `block` 参数传给 `stateMachine.setInput(...)`；`machine.update` 每帧把它同步到 `entity.combat.blockHeld`（`world.ts` 不再直接写 `blockHeld`）。AI 经 `ai/machine.ts` 同样注入 `block`。
+- **盾遮挡体**：`syncShieldCollider(entity)` 在每实体执行器之前调用，懒创建**无父刚体的 parentless sensor**（`ColliderDesc.cuboid(cover/2)`、membership 仅 `categoryCollisionGroups(0,0,'shield')`、mask 0），仅 `blocking && guard > 0 && !isDead` 时 `setEnabled(true)`；位置 = `body 中心 − originToCenterY(scale) + cover 偏移`（`cover` 相对角色原点 / 脚底），朝向按 yaw 绕 Y 旋转并叠加 `offsetZ`。`remove()` 释放碰撞体并从 `shieldOwnerByHandle` 反查表移除。子弹经该表把 `collider.handle → 盾主 id`（见 [`projectile.md`](../projectile/projectile.md)）。
+
+
 ## 陷阱
 
 - 物理 body 与 three mesh 位置同步在 `syncPositions()` 中逐帧覆盖；手动移动 mesh 后要通过 `body.setTranslation` / `body.setRotation` 同步。

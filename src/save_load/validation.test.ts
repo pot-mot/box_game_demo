@@ -293,6 +293,55 @@ describe('validateSaveData', () => {
         }
     })
 
+    it('character 韧性 / 倒地属性 — 可选字段：合法值保留，非法值安全回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    attack: {weaponId: 'long_sword', damage: 3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        const valid = validateSaveData(characterConfig({
+            poiseMax: 24, poiseRegenDelay: 1.2, poiseRegenPerSec: 9, knockdownDuration: 0.8, getUpDuration: 0.7,
+        }))
+        const e0 = valid.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.config.poiseMax).toBe(24)
+            expect(e0.config.poiseRegenDelay).toBe(1.2)
+            expect(e0.config.poiseRegenPerSec).toBe(9)
+            expect(e0.config.knockdownDuration).toBe(0.8)
+            expect(e0.config.getUpDuration).toBe(0.7)
+        }
+
+        /* 非法值（非正上界 / 负时长 / 非数字）：单项回退 undefined，不抛错 */
+        const invalid = validateSaveData(characterConfig({
+            poiseMax: 0, poiseRegenDelay: -1, poiseRegenPerSec: 'x', knockdownDuration: -0.5, getUpDuration: null,
+        }))
+        const e1 = invalid.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.poiseMax).toBeUndefined()
+            expect(e1.config.poiseRegenDelay).toBeUndefined()
+            expect(e1.config.poiseRegenPerSec).toBeUndefined()
+            expect(e1.config.knockdownDuration).toBeUndefined()
+            expect(e1.config.getUpDuration).toBeUndefined()
+        }
+
+        /* 旧档缺字段：全部 undefined（运行时回退默认） */
+        const legacy = validateSaveData(characterConfig({}))
+        const e2 = legacy.entities[0]
+        if (e2.type === 'character') {
+            expect(e2.config.poiseMax).toBeUndefined()
+            expect(e2.config.getUpDuration).toBeUndefined()
+        }
+    })
+
     it('character 持握模式 / 副手武器 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
         const characterConfig = (extra: Record<string, unknown>) => ({
             entities: [{
@@ -316,6 +365,18 @@ describe('validateSaveData', () => {
         if (e0.type === 'character') {
             expect(e0.config.holdMode).toBe('dual_wield')
             expect(e0.config.offhand).toEqual({weaponId: 'short_sword', damage: 2})
+        }
+
+        /* 盾牌作为主手 / 副手武器：id 属已知预设，校验层原样往返，不破坏格挡能力 */
+        const shield = validateSaveData(characterConfig({
+            attack: {weaponId: 'shield_medium', damage: 3},
+            holdMode: 'one_handed',
+            offhand: {weaponId: 'shield_small', damage: 2},
+        }))
+        const es = shield.entities[0]
+        if (es.type === 'character') {
+            expect(es.config.attack.weaponId).toBe('shield_medium')
+            expect(es.config.offhand).toEqual({weaponId: 'shield_small', damage: 2})
         }
 
         /* 未知武器 id 属于运行时容错范畴：校验层保留字符串，world.add 加载时安全丢弃 */

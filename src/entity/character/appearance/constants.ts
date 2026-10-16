@@ -142,3 +142,21 @@ export const FLINCH_HEAD_BACK = 0.15
 
 /** clip 关键帧烘焙采样率（fps）：基础状态动画使用 */
 export const CLIP_SAMPLE_FPS = 60
+
+// ── 格挡 / 破防姿态 ──
+
+/** 举盾臂前抬角（rad，负值 = 前举；使盾牌护于身前） */
+export const BLOCK_SHOULDER = -0.35
+/** 举盾屈肘（rad，负值 = 前臂前折收盾于身前） */
+export const BLOCK_ELBOW = -1.35
+/** 格挡躯干前倾（rad） */
+export const BLOCK_LEAN = 0.08
+/** 格挡姿态轻微起伏幅度（rad，循环呼吸感） */
+export const BLOCK_SWAY = 0.02
+/** 格挡举盾循环姿态周期（秒） */
+export const BLOCKING_POSE_PERIOD = 1.6
+/** 未持盾侧手臂自然下垂角（肩 / 肘，rad） */
+export const BLOCK_IDLE_SHOULDER = -0.05
+export const BLOCK_IDLE_ELBOW = -0.1
+/** 破防硬直姿态时长（秒；取最大盾档破防时长，仅用于编辑器预览与基础 clip 烘焙） */
+export const GUARD_BROKEN_POSE_DURATION = 1.2

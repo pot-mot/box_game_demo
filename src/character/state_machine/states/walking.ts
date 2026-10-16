@@ -33,6 +33,14 @@ export const walkingHandler: StateHandler = {
             guard: (input, entity) => input.interact && entity.interactTargetActive === true,
         },
         {
+            to: 'blocking',
+            /* 持盾且长按格挡键（blockHeld）且格挡槽未空时举盾（可限速移动） */
+            guard: (_input, entity) => entity.combat.blockHeld
+                && entity.combat.block !== undefined
+                && entity.combat.guard > 0
+                && entity.combat.health > 0,
+        },
+        {
             to: 'attacking',
             /* 起手解析：攻击键的起手候选按守卫（蓄力/方向组合键）与冷却求值，存在候选才进入。
              * 置于 idle 之前：原地站定开火（移动输入为 0）时攻击优先于「停下」，否则会转入 idle 而漏掉攻击 */

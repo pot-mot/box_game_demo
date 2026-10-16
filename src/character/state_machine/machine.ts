@@ -19,6 +19,10 @@ import {dyingHandler} from './states/dying.ts'
 import {rollingHandler} from './states/rolling.ts'
 import {flinchingHandler} from './states/flinching.ts'
 import {interactingHandler} from './states/interacting.ts'
+import {knockdownHandler} from './states/knockdown.ts'
+import {gettingUpHandler} from './states/getting_up.ts'
+import {blockingHandler} from './states/blocking.ts'
+import {guardBrokenHandler} from './states/guard_broken.ts'
 import {updateGroundTimers} from './ground.ts'
 
 const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
@@ -32,6 +36,10 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     rolling: rollingHandler,
     flinching: flinchingHandler,
     interacting: interactingHandler,
+    knockdown: knockdownHandler,
+    getting_up: gettingUpHandler,
+    blocking: blockingHandler,
+    guard_broken: guardBrokenHandler,
 }
 
 export const createCharacterStateMachine = (): CharacterStateMachine => {
@@ -39,7 +47,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     let previousState: CharacterState | null = null
     let stateTime = 0
     let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
-    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false, interact: false}
+    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false, interact: false, block: false}
 
     const makeContext = (entity?: CharacterEntity): MachineContext => {
         let attackPhase: string | undefined
@@ -59,7 +67,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         }
     }
 
-    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean): void => {
+    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean): void => {
         input.dx = dx
         input.dz = dz
         input.jump = jump
@@ -69,12 +77,51 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.attackHoldDuration = attackHoldDuration ?? 0
         input.attackHeld = attackHeld ?? false
         input.interact = interact ?? false
+        input.block = block ?? false
     }
 
     const update = (dt: number, entity: CharacterEntity): void => {
         const handler = STATE_HANDLERS[currentState]
         const ctx = makeContext(entity)
         updateGroundTimers(entity, dt)
+        /* 格挡保持：统一由输入同步到战斗组件，供 blocking 状态守卫与盾判定读取 */
+        entity.combat.blockHeld = input.block
+
+        /* 全局倒地：任意非死亡 / 非倒地状态在韧性归零或受 knockdown 冲击时强制进入 knockdown（dying 优先级最高） */
+        if (
+            entity.combat.pendingKnockdown
+            && entity.combat.health > 0
+            && currentState !== 'dying'
+            && currentState !== 'knockdown'
+            && currentState !== 'getting_up'
+        ) {
+            handler.exit(entity, ctx)
+            previousState = currentState
+            currentState = 'knockdown'
+            stateTime = 0
+            STATE_HANDLERS[currentState].enter(entity, makeContext(entity))
+            onStateChange?.(previousState, currentState)
+            return
+        }
+
+        /* 全局破防：持盾且格挡槽归零时强制进入 guard_broken（倒地 / 起身与死亡优先级更高，不受此约束） */
+        if (
+            entity.combat.block !== undefined
+            && entity.combat.guard <= 0
+            && entity.combat.health > 0
+            && currentState !== 'dying'
+            && currentState !== 'knockdown'
+            && currentState !== 'getting_up'
+            && currentState !== 'guard_broken'
+        ) {
+            handler.exit(entity, ctx)
+            previousState = currentState
+            currentState = 'guard_broken'
+            stateTime = 0
+            STATE_HANDLERS[currentState].enter(entity, makeContext(entity))
+            onStateChange?.(previousState, currentState)
+            return
+        }
 
         for (const t of handler.transitions) {
             if (t.guard(input, entity, ctx)) {
@@ -123,6 +170,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.attackHoldDuration = 0
         input.attackHeld = false
         input.interact = false
+        input.block = false
     }
 
     return {

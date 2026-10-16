@@ -6,12 +6,15 @@ import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {applyDamage, isDamageImmune} from '../../../character/combat/damage.ts'
 import {applyExplosionDamage} from '../../../character/combat/explosion.ts'
+import {EXPLOSION_DEFAULT_IMPACT, EXPLOSION_DEFAULT_POISE_DAMAGE} from '../../../character/combat/constants.ts'
 import type {WorldDamageTarget} from '../../../character/combat/world_targets.ts'
 import {
-    collisionCategoryMask, isBlockingGeometry, maskIncludesCategory, matchesCategoryMask,
+    collisionCategoryMask, collisionCategoryOf, isBlockingGeometry, maskIncludesCategory, matchesCategoryMask,
 } from '../../../physics/collision_category.ts'
+import {downgradeImpact} from '../../../character/combat/impact.ts'
 import {DEFAULT_BULLET_PASS_THROUGH_CATEGORIES, DEFAULT_PROJECTILE_GRAVITY_SCALE} from '../../../character/weapon/ranged_weapon.ts'
 import {chargeDamageScale} from '../../../character/weapon/charge_tuning.ts'
+import {RANGED_DEFAULT_IMPACT, RANGED_DEFAULT_POISE_DAMAGE} from '../../../character/weapon/ranged_attacks.ts'
 import {createObjectPool, type ObjectPool} from './pool.ts'
 import {createProjectileVisualPool, projectileColorOf} from './mesh.ts'
 import {createImpactEffects} from './impact_effect.ts'
@@ -40,6 +43,8 @@ const _spinAxis = new Vector3()
  * 1. 落在可穿过类别掩码内 → 放行（子弹穿过）；
  * 2. 其它已标注类别的场景几何（箱子 / 碎片 / 地形 / 世界地面）→ 阻挡；
  * 3. 角色类别与未标注类别的碰撞体（武器、其它子弹）→ 不参与扫描（角色另走宽容半径判定）。
+ * 注：盾遮挡体解析为「已标注类别」→ 阻挡（fail-closed）；敌对盾由命中半径前 / 半径内的分阵营
+ * 逻辑优先处理并结算减免，此处仅覆盖「未走盾判定」的兜底（见 `physics/physics.md`）。
  */
 const blocksBullet = (collider: RAPIER.Collider, passThroughMask: number): boolean => {
     const groups = collider.collisionGroups()
@@ -55,6 +60,8 @@ export const createProjectileSystem = (
     shared: SharedWorld,
     scene: Scene,
     getWorldTargets?: () => readonly WorldDamageTarget[],
+    /** 盾遮挡体 handle → 持盾角色 id（供盾格挡按阵营过滤归属；缺省则不做盾判定） */
+    getShieldOwner?: (colliderHandle: number) => number | undefined,
 ): ProjectileSystem => {
     const {world} = shared
     const visualPool = createProjectileVisualPool(scene)
@@ -82,11 +89,15 @@ export const createProjectileSystem = (
             ownerAttackTendency: () => false,
             damage: 0,
             damageType: 'physical',
+            impact: 'light',
+            poiseDamage: 0,
             knockbackForce: 0,
             lifetime: 0,
             homingStrength: 0,
             explosionRadius: 0,
             explosionStyle: 'frag',
+            explosionImpact: EXPLOSION_DEFAULT_IMPACT,
+            explosionPoise: EXPLOSION_DEFAULT_POISE_DAMAGE,
             explosionColor: PROJECTILE_HIT_COLOR,
             impactColor: PROJECTILE_HIT_COLOR,
             passThroughMask: 0,
@@ -109,7 +120,7 @@ export const createProjectileSystem = (
     )
 
     const spawn = (args: ProjectileSpawn): void => {
-        const {owner, direction, weapon, throwAngle, charge} = args
+        const {owner, direction, weapon, throwAngle, charge, impact, poiseDamage} = args
         const spec = weapon.projectile
         const p = projectilePool.acquire()
         p.body.setEnabled(true)
@@ -165,11 +176,15 @@ export const createProjectileSystem = (
         p.ownerAttackTendency = owner.combat.attackTendency
         p.damage = (weapon.damage + owner.combat.attackBonus[weapon.damageType]) * damageScale
         p.damageType = weapon.damageType
+        p.impact = impact ?? RANGED_DEFAULT_IMPACT
+        p.poiseDamage = poiseDamage ?? RANGED_DEFAULT_POISE_DAMAGE
         p.knockbackForce = weapon.knockbackForce
         p.lifetime = weapon.projectileLifetime * lifetimeScale
         p.homingStrength = weapon.homingStrength ?? 0
         p.explosionRadius = weapon.explosionRadius ?? 0
         p.explosionStyle = spec.explosionStyle ?? (weapon.damageType === 'magic' ? 'magic' : 'frag')
+        p.explosionImpact = weapon.explosionImpact ?? EXPLOSION_DEFAULT_IMPACT
+        p.explosionPoise = weapon.explosionPoise ?? EXPLOSION_DEFAULT_POISE_DAMAGE
         p.explosionColor = isMagic ? color : PROJECTILE_HIT_COLOR
         p.impactColor = isMagic ? color : PROJECTILE_HIT_COLOR
         p.passThroughMask = collisionCategoryMask(
@@ -203,6 +218,7 @@ export const createProjectileSystem = (
             x, y, z,
             p.explosionRadius, p.damage, p.damageType, p.knockbackForce,
             owner, allCharacters, getWorldTargets?.() ?? [],
+            p.explosionImpact, p.explosionPoise,
         )
     }
 
@@ -235,6 +251,51 @@ export const createProjectileSystem = (
         }
         visual.animate?.(p.elapsed)
         visual.trail?.update(dt, px, py, pz)
+    }
+
+    /**
+     * 盾格挡结算：命中盾遮挡体 → 命中特效 + 按格挡减免结算（伤害 / 削韧 / 击退 / 扣格挡槽）并消耗子弹。
+     * 与近战共用规则：`knockdown` 击穿格挡不降级，其余降一级。
+     */
+    const resolveShieldBlock = (
+        p: Projectile,
+        owner: CharacterEntity,
+        hx: number,
+        hy: number,
+        hz: number,
+        index: number,
+    ): void => {
+        effects.hit(hx, hy, hz, p.impactColor)
+        const block = owner.combat.block
+        if (block !== undefined) {
+            const blockedDamage = p.damage * block.blockDamageMultiplier
+            v3Set(_tmpVec, owner.body.translation().x - hx, 0, owner.body.translation().z - hz)
+            const blen = v3Length(_tmpVec)
+            const hasDir = blen > 0.0001
+            const dirX = hasDir ? _tmpVec.x / blen : 0
+            const dirZ = hasDir ? _tmpVec.z / blen : 0
+            applyDamage(owner.combat, {
+                sourceId: p.ownerId,
+                targetId: owner.id,
+                damageType: p.damageType,
+                baseAmount: blockedDamage,
+                finalAmount: blockedDamage,
+                skillId: 'ranged',
+                impact: p.impact === 'knockdown' ? p.impact : downgradeImpact(p.impact),
+                poiseDamage: p.poiseDamage * block.poiseMultiplier,
+                ...(hasDir ? {dirX, dirZ} : {}),
+            })
+            owner.combat.guard = Math.max(0, owner.combat.guard - blockedDamage)
+            if (p.knockbackForce > 0 && hasDir) {
+                const kb = p.knockbackForce * block.blockKnockbackMultiplier
+                owner.body.applyImpulseAtPoint(
+                    {x: dirX * kb, y: 1, z: dirZ * kb},
+                    owner.body.translation(),
+                    true,
+                )
+            }
+        }
+        release(index)
     }
 
     const update = (dt: number, allCharacters: readonly CharacterEntity[]): void => {
@@ -293,11 +354,54 @@ export const createProjectileSystem = (
 
             syncVisual(p, dt, bulletPos.x, bulletPos.y, bulletPos.z)
 
+            let hit = false
+
+            /* 0) 盾格挡 —— 举盾目标先于角色宽容半径拦截：沿位移形状扫描盾遮挡体（阵营过滤），
+             * 命中即按格挡减免结算并消耗子弹；爆炸弹丸不触发盾判定（爆炸无视盾） */
+            if (p.explosionRadius <= 0 && getShieldOwner !== undefined
+                && !maskIncludesCategory(p.passThroughMask, 'shield')) {
+                const sdx = bulletPos.x - p.prevX
+                const sdy = bulletPos.y - p.prevY
+                const sdz = bulletPos.z - p.prevZ
+                if (sdx !== 0 || sdy !== 0 || sdz !== 0) {
+                    v3Set(_sweepOrigin, p.prevX, p.prevY, p.prevZ)
+                    v3Set(_sweepVelocity, sdx, sdy, sdz)
+                    const sweep = world.castShape(
+                        _sweepOrigin, IDENTITY_ROTATION, _sweepVelocity, bulletShape,
+                        0, 1, true,
+                        undefined, undefined, p.collider, p.body,
+                        (collider) => {
+                            if (collisionCategoryOf(collider.collisionGroups()) !== 'shield') return false
+                            const ownerId = getShieldOwner(collider.handle)
+                            if (ownerId === undefined || ownerId === p.ownerId) return false
+                            const owner = allCharacters.find(c => c.id === ownerId)
+                            if (owner === undefined || owner.combat.isDead) return false
+                            if (!owner.combat.blocking || owner.combat.guard <= 0) return false
+                            return p.ownerAttackTendency(p.ownerFaction, owner.combat.faction)
+                        },
+                    )
+                    if (sweep) {
+                        const ownerId = getShieldOwner(sweep.collider.handle)
+                        const owner = ownerId !== undefined ? allCharacters.find(c => c.id === ownerId) : undefined
+                        if (owner !== undefined) {
+                            const toi = sweep.time_of_impact
+                            resolveShieldBlock(
+                                p, owner,
+                                p.prevX + sdx * toi,
+                                p.prevY + sdy * toi,
+                                p.prevZ + sdz * toi,
+                                i,
+                            )
+                            hit = true
+                        }
+                    }
+                }
+            }
+
             /* 1) 角色命中 —— 宽容半径判定（角色类别不参与形状扫描）。
              * 命中角色即消失；仅敌对阵营结算伤害 / 击退 / 爆炸；
              * 翻滚无敌目标视为穿过（不消耗、不结算，可命中其后目标） */
-            let hit = false
-            if (!maskIncludesCategory(p.passThroughMask, 'character')) {
+            if (!hit && !maskIncludesCategory(p.passThroughMask, 'character')) {
                 for (const target of allCharacters) {
                     if (target.id === p.ownerId || target.combat.isDead) continue
 
@@ -312,6 +416,38 @@ export const createProjectileSystem = (
 
                     if (p.ownerAttackTendency(p.ownerFaction, target.combat.faction)) {
                         if (isDamageImmune(target.combat)) continue
+
+                        /* 盾格挡补扫 —— 盾遮挡体位于宽容半径内，正面来弹跨入半径的当帧未必扫到盾（盾在角色
+                         * 中心之前、半径之内）。命中举盾目标时，沿「弹丸 → 身体中心」补做一次盾形状扫描，
+                         * 命中即按格挡结算并消耗子弹（爆炸弹丸无视盾）。 */
+                        if (p.explosionRadius <= 0 && getShieldOwner !== undefined
+                            && target.combat.block !== undefined && target.combat.blocking && target.combat.guard > 0
+                            && !maskIncludesCategory(p.passThroughMask, 'shield')) {
+                            v3Set(_sweepOrigin, bulletPos.x, bulletPos.y, bulletPos.z)
+                            v3Set(_sweepVelocity, tp.x - bulletPos.x, tp.y - bulletPos.y, tp.z - bulletPos.z)
+                            const blockSweep = world.castShape(
+                                _sweepOrigin, IDENTITY_ROTATION, _sweepVelocity, bulletShape,
+                                0, 1, true,
+                                undefined, undefined, p.collider, p.body,
+                                (collider) => {
+                                    if (collisionCategoryOf(collider.collisionGroups()) !== 'shield') return false
+                                    return getShieldOwner(collider.handle) === target.id
+                                },
+                            )
+                            if (blockSweep) {
+                                const toi = blockSweep.time_of_impact
+                                resolveShieldBlock(
+                                    p, target,
+                                    _sweepOrigin.x + _sweepVelocity.x * toi,
+                                    _sweepOrigin.y + _sweepVelocity.y * toi,
+                                    _sweepOrigin.z + _sweepVelocity.z * toi,
+                                    i,
+                                )
+                                hit = true
+                                break
+                            }
+                        }
+
                         if (p.explosionRadius > 0) {
                             detonateAt(p, bulletPos.x, bulletPos.y, bulletPos.z, allCharacters)
                         } else {
@@ -340,6 +476,8 @@ export const createProjectileSystem = (
                                 baseAmount: p.damage,
                                 finalAmount: p.damage,
                                 skillId: 'ranged',
+                                impact: p.impact,
+                                poiseDamage: p.poiseDamage,
                                 ...(hasDir ? {dirX, dirZ} : {}),
                             })
 

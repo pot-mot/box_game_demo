@@ -43,6 +43,10 @@ export type EntityLocale = {
     'entity.state.rolling': string
     'entity.state.flinching': string
     'entity.state.interacting': string
+    'entity.state.knockdown': string
+    'entity.state.getting_up': string
+    'entity.state.blocking': string
+    'entity.state.guard_broken': string
     'entity.state.dead': string
     'entity.ai.peace': string
     'entity.ai.combat': string
@@ -218,6 +222,10 @@ export const entityZh: EntityLocale = {
     'entity.state.rolling': '翻滚',
     'entity.state.flinching': '受击硬直',
     'entity.state.interacting': '交互',
+    'entity.state.knockdown': '倒地',
+    'entity.state.getting_up': '起身',
+    'entity.state.blocking': '格挡',
+    'entity.state.guard_broken': '破防',
     'entity.state.dead': '已死亡',
     'entity.ai.peace': '和平',
     'entity.ai.combat': '战斗',
@@ -393,6 +401,10 @@ export const entityEn: EntityLocale = {
     'entity.state.rolling': 'Roll',
     'entity.state.flinching': 'Flinch',
     'entity.state.interacting': 'Interact',
+    'entity.state.knockdown': 'Knockdown',
+    'entity.state.getting_up': 'Get Up',
+    'entity.state.blocking': 'Block',
+    'entity.state.guard_broken': 'Guard Broken',
     'entity.state.dead': 'Dead',
     'entity.ai.peace': 'Peace',
     'entity.ai.combat': 'Combat',

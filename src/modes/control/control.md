@@ -41,6 +41,11 @@
 - 二者默认均绑定 `Shift`，但分属不同方案，运行时不会同时消费。
 - `mouse_pan`：所有纯摄像机模式（含 edit / bone_edit）共用，默认右键。
 
+## 盾牌：短按盾击 / 长按格挡
+
+- 复用既有攻击键（主手盾 = 轻 / 重击键皆可长按格挡；副手盾 = 仅重击键），不新增输入动作。**短按**（< `block.holdThreshold` ≈ 0.25s）松开 = 盾击；**长按** = 进入 `blocking` 格挡。主手盾双键并存时仅认先按下的盾键，另一盾键的按下 / 松开均被忽略（避免互相覆盖致松手误出招）。
+- 路由在 `world.ts`（非本模块相机逻辑）：`beginPlayerAttackHold` / `endPlayerAttackHold(key, held)` / `cancelPlayerAttackHold(key)`；`modes/play/index.ts` 的两个 cancel 回调已扩参传 key。`move()` 每帧仍经 `characterSystem.setPlayerMove()` 注入移动；格挡意图 `blockHeld` 由 `world.ts` 计算并注入 `stateMachine.setInput(..., block)`。启发与判定见 [`physics.md`](../../entity/character/physics/physics.md)、状态见 [`state_machine.md`](../../character/state_machine/state_machine.md)。
+
 ## 玩家主控 API
 
 ```ts

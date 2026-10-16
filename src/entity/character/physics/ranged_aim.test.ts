@@ -185,7 +185,7 @@ describe('远程瞄准与弹道朝向', () => {
         for (let i = 0; i < 30; i++) system.update(FIXED_TIME_STEP)
         expect(findBulletBody(shared)).toBeUndefined()
 
-        system.cancelPlayerAttackHold()
+        system.cancelPlayerAttackHold('light')
         for (let i = 0; i < 30; i++) system.update(FIXED_TIME_STEP)
 
         expect(findBulletBody(shared)).toBeUndefined()

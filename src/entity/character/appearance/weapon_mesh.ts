@@ -5,6 +5,7 @@ import {createMeshBuilder, type MeshBuilder} from './mesh_builder.ts'
 
 const WEAPON_MESH_IDS = [
     'sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer',
+    'shield_small', 'shield_medium', 'shield_large',
     'bow', 'crossbow', 'shotgun',
     'staff', 'magic_wand',
     'throwing_axe', 'grenade', 'molotov', 'throwing_dart',
@@ -19,6 +20,9 @@ export type WeaponMeshConfig =
     | { id: 'spear';        poleLen: number;  headLen: number; color: number; headColor: number }
     | { id: 'dual_axe';     bladeSize: number; color: number; gripColor: number }
     | { id: 'war_hammer';   headSize: number; color: number; gripColor: number }
+    | { id: 'shield_small';  width: number; height: number; thickness: number; round: boolean; color: number; gripColor: number; bossColor: number }
+    | { id: 'shield_medium'; width: number; height: number; thickness: number; round: boolean; color: number; gripColor: number; bossColor: number }
+    | { id: 'shield_large';  width: number; height: number; thickness: number; round: boolean; color: number; gripColor: number; bossColor: number }
     | { id: 'bow';          size: number; color: number; stringColor: number }
     | { id: 'crossbow';     size: number; color: number; metalColor: number }
     | { id: 'shotgun';      size: number; color: number; metalColor: number }
@@ -55,6 +59,11 @@ export const WEAPON_MESH_GRIPS: Record<WeaponMeshId, WeaponGripPose> = {
     staff:        {x: 0, y: 0, z: 0, rx: 0.05, ry: 0, rz: 0.1},
     dual_axe:     {x: 0, y: 0, z: 0, rx: -0.2, ry: 0, rz: 0},
     war_hammer:   {x: 0, y: 0, z: 0, rx: -0.3, ry: Math.PI / 4, rz: 0},
+    /* 盾面立于武器本地 X-Z 平面（法线沿 +Y，握把在原点、盾面在 +Y 前方）：握持角保持中性，
+     * 盾的朝向由武器骨骼动画（格挡 / 盾击姿态）控制 */
+    shield_small:  GRIP_NEUTRAL,
+    shield_medium: GRIP_NEUTRAL,
+    shield_large:  GRIP_NEUTRAL,
     throwing_axe: {x: 0, y: 0, z: 0, rx: -0.3, ry: 0, rz: 0},
     bow:          {x: 0, y: 0, z: 0, rx: -0.15, ry: 0, rz: 0},
     crossbow:     {x: 0, y: 0, z: 0, rx: -0.6, ry: 0, rz: 0},
@@ -261,6 +270,34 @@ const genWarHammer = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'war_hammer'
         hitHalf, (hitHighY - hitLowY) / 2 + hitMargin, hitHalf)
 }
 
+/* 盾牌：盾面立于本地 X-Z 平面（法线 +Y = 朝向、X = 左右宽、Z = 上下高），
+ * 握把在模型原点（gripY = 0）、盾面沿 +Y 前伸；`round` 决定圆盾（圆柱碟）或方盾（薄板）。 */
+const genShield = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'shield_small' | 'shield_medium' | 'shield_large' }): WeaponMeshResult => {
+    const plateMat = b.material(cfg.color, 0.6, 0.2)
+    const gripMat = b.material(cfg.gripColor, 0.7, 0.05)
+    const bossMat = b.material(cfg.bossColor, 0.3, 0.7)
+    const w = cfg.width; const h = cfg.height; const t = cfg.thickness
+    const plateY = 0.10 + t / 2
+
+    if (cfg.round) {
+        b.add(b.cylinder(w / 2, w / 2, t, 16), plateMat, 0, plateY, 0)
+    } else {
+        b.add(b.box(w, t, h), plateMat, 0, plateY, 0)
+    }
+    /* 正面中心盾凸 */
+    b.add(b.sphere(Math.min(w, h) * 0.16), bossMat, 0, plateY + t / 2, 0)
+    /* 背面横握把 */
+    b.add(b.box(w * 0.5, 0.05, 0.05), gripMat, 0, plateY - t / 2 - 0.03, 0)
+
+    const hitMargin = 0.04
+    const hitHalfX = w / 2 + hitMargin
+    const hitHalfY = t / 2 + hitMargin
+    const hitHalfZ = h / 2 + hitMargin
+    return finish(b, 0, plateY, 0, 0, plateY + t / 2, 0, 0,
+        0, plateY, 0,
+        hitHalfX, hitHalfY, hitHalfZ)
+}
+
 const genBow = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'bow' }): WeaponMeshResult => {
     const bm = b.material(cfg.color, 0.6, 0.05)
     const sm = b.material(cfg.stringColor, 0.8, 0)
@@ -427,6 +464,9 @@ const meshHandlers = {
     spear: genSpear,
     dual_axe: genDualAxe,
     war_hammer: genWarHammer,
+    shield_small: genShield,
+    shield_medium: genShield,
+    shield_large: genShield,
     bow: genBow,
     crossbow: genCrossbow,
     shotgun: genShotgun,

@@ -24,7 +24,7 @@ const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterE
     groundKeepTimer: 0,
     airborneTime: 0, groundedTime: 0,
     rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical',
-    isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
+    isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
     combat: null!, holdMode: 'one_handed', lockPoints: [], stateMachine: null!,
 })
 

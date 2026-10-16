@@ -76,6 +76,8 @@ const hitEvent = (id: number) => ({
     baseAmount: 5,
     finalAmount: 5,
     skillId: 'test',
+    impact: 'light' as const,
+    poiseDamage: 0,
 })
 
 describe('受击闪红颜色恢复', () => {

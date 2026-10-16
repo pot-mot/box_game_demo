@@ -20,7 +20,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         id: 'iron_helmet', name: '铁盔', slot: 'head',
         defense: {physical: 2, magic: 0},
         attack: {physical: 0, magic: 0},
-        moveSpeedMultiplier: 0.98,
+        moveSpeedMultiplier: 0.98, poise: 2,
         mesh: {id: 'helmet', color: 0x8a8f98, accentColor: 0x5a5f68},
     },
     /* 法师系头盔：除魔法防御外提供法术攻击力 */
@@ -51,7 +51,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         id: 'iron_plate', name: '铁胸甲', slot: 'chest',
         defense: {physical: 3, magic: 0},
         attack: {physical: 0, magic: 0},
-        moveSpeedMultiplier: 0.9,
+        moveSpeedMultiplier: 0.9, poise: 4,
         mesh: {id: 'plate', color: 0x8a8f98, accentColor: 0x5a5f68},
     },
     mage_robe: {
@@ -65,7 +65,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         id: 'scale_mail', name: '鳞甲', slot: 'chest',
         defense: {physical: 3, magic: 2},
         attack: {physical: 0, magic: 0},
-        moveSpeedMultiplier: 0.92,
+        moveSpeedMultiplier: 0.92, poise: 5,
         mesh: {id: 'plate', color: 0x6b7a5a, accentColor: 0x3f4a34},
     },
 
@@ -88,7 +88,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         id: 'battle_bracers', name: '战臂甲', slot: 'arms',
         defense: {physical: 1, magic: 1},
         attack: {physical: 2, magic: 0},
-        moveSpeedMultiplier: 0.97,
+        moveSpeedMultiplier: 0.97, poise: 1,
         mesh: {id: 'bracer', color: 0x6a6f78, accentColor: 0xaa8833},
     },
     mage_wraps: {
@@ -111,7 +111,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         id: 'iron_greaves', name: '铁胫甲', slot: 'legs',
         defense: {physical: 2, magic: 0},
         attack: {physical: 0, magic: 0},
-        moveSpeedMultiplier: 0.95,
+        moveSpeedMultiplier: 0.95, poise: 2,
         mesh: {id: 'greaves', color: 0x8a8f98, accentColor: 0x5a5f68},
     },
     mage_leggings: {

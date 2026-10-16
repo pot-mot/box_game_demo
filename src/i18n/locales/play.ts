@@ -4,6 +4,8 @@
  */
 export type PlayLocale = {
     'play.hud.hp': string
+    'play.hud.poise': string
+    'play.hud.guard': string
     'play.hud.charge': string
     'play.hud.timers': string
     'play.hud.skills': string
@@ -35,6 +37,8 @@ export type PlayLocale = {
 
 export const playZh: PlayLocale = {
     'play.hud.hp': '玩家生命',
+    'play.hud.poise': '韧性',
+    'play.hud.guard': '格挡',
     'play.hud.charge': '蓄力',
     'play.hud.timers': '计时器',
     'play.hud.skills': '技能',
@@ -66,6 +70,8 @@ export const playZh: PlayLocale = {
 
 export const playEn: PlayLocale = {
     'play.hud.hp': 'PLAYER HP',
+    'play.hud.poise': 'POISE',
+    'play.hud.guard': 'GUARD',
     'play.hud.charge': 'CHARGE',
     'play.hud.timers': 'TIMERS',
     'play.hud.skills': 'SKILLS',

@@ -41,3 +41,9 @@ export const COMBAT_RETARGET_INTERVAL = 10
  * 退避类状态（kite / flee）据此形成「后退逃跑（面朝移动方向）→ 站定转身射击」交替；
  * 环绕/逼近类状态（volley / approach）据此在两次射击之间恢复走位 */
 export const COMBAT_SHOT_INTERVAL = 1.0
+
+/* ── 反应式盾格挡 ── */
+/** 威胁判定半径（m）：战斗目标在此范围内正在起手 / 开火且朝向我方时反应式举盾 */
+export const AI_DEFEND_RANGE = 3.5
+/** 目标攻击方向朝向我方的最小点积（cos 阈值，约 72°）：低于该值视为不构成正面威胁，不举盾 */
+export const AI_DEFEND_FACING_DOT = 0.3

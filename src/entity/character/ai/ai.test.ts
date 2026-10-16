@@ -1,8 +1,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
-import {createRollSkillRuntime} from '../../../character/combat/roll_skill.ts'
-import type {CombatComponent} from '../../../character/combat/types.ts'
+import {createCombatComponent} from '../../../character/combat/types.ts'
 import {type CombatConfig, DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
@@ -39,51 +38,13 @@ const makeChar = (
     /* 武器运行时替代原技能槽夹具：近战取长剑、远程取长弓（与旧预设数值一致） */
     const weaponRuntime = createWeaponRuntime(skillType === 'melee' ? 'long_sword' : 'longbow')
     /* 旧 cooldownTimer 覆写语义 = 轻击起手段冷却剩余（0 = 就绪） */
-    const segmentCooldowns = new Map<string, number>()
+    const combat = createCombatComponent(weaponRuntime, faction, (a: number, b: number) => a !== b, {tendencyId: 'hostileExceptSelf'}, 15)
     const entryCooldown = overrides?.cooldownTimer ?? 0
     if (entryCooldown > 0) {
-        segmentCooldowns.set(weaponRuntime.attacks.chains.light.entries[0].segmentId, entryCooldown)
+        combat.segmentCooldowns.set(weaponRuntime.attacks.chains.light.entries[0].segmentId, entryCooldown)
     }
-
-    const combat: CombatComponent = {
-        weapon: weaponRuntime.weapon,
-        offhand: undefined,
-        attacks: weaponRuntime.attacks,
-        segmentCooldowns,
-        activeSegment: undefined,
-        bufferedSegment: undefined,
-        attackActive: overrides?.attackActive ?? false,
-        attackTimer: 0,
-        attackDirX: 0,
-        attackDirZ: 1,
-        muzzleDirX: 0,
-        muzzleDirZ: 0,
-        attackedTargets: new Set(),
-        phaseIndex: 0,
-        attackCharge: 0,
-        attackHolding: false,
-        phaseTimer: 0,
-        pendingFlinch: false,
-        flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
-        rollSkill: createRollSkillRuntime(),
-        invincibleTimer: 0,
-        faction,
-        attackTendency: (a: number, b: number) => a !== b,
-        tendencyConfig: {tendencyId: 'hostileExceptSelf'},
-        health: 15,
-        maxHealth: 15,
-        isDead: overrides?.isDead ?? false,
-        baseDefense: {physical: 0, magic: 0},
-        armor: {},
-        limb: {},
-        defense: {physical: 0, magic: 0},
-        attackBonus: {physical: 0, magic: 0},
-        moveSpeedMultiplier: 1,
-        damageModifiers: [],
-        onDamageTaken: null,
-        onDamageDealt: null,
-        onDeath: null,
-    }
+    combat.attackActive = overrides?.attackActive ?? false
+    combat.isDead = overrides?.isDead ?? false
 
     return {
         id,
@@ -98,7 +59,7 @@ const makeChar = (
         navEnabled: true,
         peaceStrategy: 'patrol' as const,
         combatStrategy,
-        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
+        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
         stateMachine: null!,
     } as unknown as CharacterEntity
 }

@@ -5,7 +5,7 @@
 ## 约定
 
 - 改存档结构必须同步 `types.ts`、`validation.ts`（缺失时安全回退默认，不得抛错）与 `serialize.ts`。
-- 当前 `SAVE_FORMAT_VERSION = 8`，版本推进：v4 起 character 增加可选基础防御 `defense` 与护甲 `armor`；v5 起锁定点 `lockPoints`；v6 起副手 `offhand` 与持握 `holdMode`；v7 起肢体 `limb` 与 `building_generator` 建筑实体；v8 起 `interactable` / `item` 实体与 play 背包 `inventory`、传送点 `teleports`（`modeInfo.play`）。
+- 当前 `SAVE_FORMAT_VERSION = 9`，版本推进：v4 起 character 增加可选基础防御 `defense` 与护甲 `armor`；v5 起锁定点 `lockPoints`；v6 起副手 `offhand` 与持握 `holdMode`；v7 起肢体 `limb` 与 `building_generator` 建筑实体；v8 起 `interactable` / `item` 实体与 play 背包 `inventory`、传送点 `teleports`（`modeInfo.play`）；v9 起 character 增加可选韧性/倒地属性 `poiseMax` / `poiseRegenDelay` / `poiseRegenPerSec` / `knockdownDuration` / `getUpDuration`。
 - 历史存档不保证兼容；未知副手武器 id 加载时安全丢弃。
 
 ## 陷阱
@@ -16,11 +16,12 @@
 
 ## 1. 版本推进
 
-`SAVE_FORMAT_VERSION` 从 `7` 推进到 `8`（`types.ts` 注释说明）：
+`SAVE_FORMAT_VERSION` 从 `8` 推进到 `9`（`types.ts` 注释说明）：
 
 | 版本 | 新增 |
 |------|------|
 | v8 | `interactable` 实体（9 类交互物）；`item` 掉落物实体；`modeInfo.play.inventory`（玩家背包）；`modeInfo.play.teleports`（已解锁传送点键） |
+| v9 | character 可选韧性/倒地属性：`poiseMax`（韧性上界基础值，仅本项参与「基础上界 + 护甲/肢体 poise 汇总」重算）、`poiseRegenDelay`、`poiseRegenPerSec`、`knockdownDuration`、`getUpDuration`；旧档缺字段加载时安全回退运行时默认 |
 
 > 重生点当前经由存档点激活时刷新缓存存档实现（玩家就在点上），不再单列字段。
 

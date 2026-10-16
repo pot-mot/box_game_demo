@@ -1,8 +1,10 @@
 import {v3Set, v3Length, type RapVector3} from '../../physics/rapier_utils.ts'
 import type {CharacterEntity} from '../types.ts'
 import type {DamageType} from './damage_type.ts'
+import type {ImpactLevel} from './impact.ts'
 import type {WorldDamageTarget} from './world_targets.ts'
 import {applyDamage, isDamageImmune} from './damage.ts'
+import {EXPLOSION_DEFAULT_IMPACT, EXPLOSION_DEFAULT_POISE_DAMAGE} from './constants.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -18,6 +20,8 @@ export const applyExplosionDamage = (
     sourceEntity: CharacterEntity,
     allCharacters: readonly CharacterEntity[],
     worldTargets: readonly WorldDamageTarget[] = [],
+    impact: ImpactLevel = EXPLOSION_DEFAULT_IMPACT,
+    poiseDamage: number = EXPLOSION_DEFAULT_POISE_DAMAGE,
 ): void => {
     for (const target of allCharacters) {
         if (target.id === sourceEntity.id || target.combat.isDead) continue
@@ -42,6 +46,8 @@ export const applyExplosionDamage = (
             baseAmount: dmg,
             finalAmount: dmg,
             skillId: 'explosion',
+            impact,
+            poiseDamage,
             ...(hasDir ? {dirX: _dir.x / hLen, dirZ: _dir.z / hLen} : {}),
         })
 

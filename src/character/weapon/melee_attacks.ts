@@ -1,4 +1,5 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
+import type {ImpactLevel} from '../combat/impact.ts'
 import type {AttackEntry, AttackKey, AttackSegment, AttackTransition, GroundAttackKey, WeaponAttackChain, WeaponAttacks} from './attack_chain.ts'
 import type {HoldMode} from './hold_mode.ts'
 import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
@@ -22,6 +23,14 @@ export const MELEE_LIGHT_RECOVERY = 0.266
 export const MELEE_HEAVY_RECOVERY = 0.267
 /** 重段伤害倍率（相对武器基础伤害） */
 export const MELEE_HEAVY_DAMAGE_MULTIPLIER = 1.6
+/** 轻段默认冲击力（弱硬直：不打断攻击，仅中断非承诺动作） */
+export const MELEE_LIGHT_IMPACT: ImpactLevel = 'medium'
+/** 轻段默认削韧值 */
+export const MELEE_LIGHT_POISE_DAMAGE = 1
+/** 重段默认冲击力（强硬直：打断攻击与持续动作） */
+export const MELEE_HEAVY_IMPACT: ImpactLevel = 'heavy'
+/** 重段默认削韧值 */
+export const MELEE_HEAVY_POISE_DAMAGE = 4
 
 /** 重击蓄力配置（武器模板默认，可被单武器 / 面板覆盖）：蓄力调参 + 冷却 + 蓄力姿势 */
 export interface HeavyChargeConfig extends ChargeTuning {
@@ -51,6 +60,10 @@ export const MELEE_AIR_DURATION = 0.32
 export const MELEE_AIR_RECOVERY = 0.2
 /** 空中段伤害倍率（相对武器基础伤害，略高于地面轻击） */
 export const MELEE_AIR_DAMAGE_MULTIPLIER = 1.25
+/** 空中段默认冲击力（弱硬直） */
+export const MELEE_AIR_IMPACT: ImpactLevel = 'medium'
+/** 空中段默认削韧值 */
+export const MELEE_AIR_POISE_DAMAGE = 2
 
 /** 段模板键 → 攻击键/序号/是否重段 */
 const SEGMENT_META: Record<MeleeSegmentKey, {key: 'light' | 'heavy'; step: number; heavy: boolean}> = {
@@ -126,6 +139,12 @@ export const DEFAULT_MELEE_AIR_ATTACK: MeleeAirAttackConfig = {
     steps: ['air_1'], loop: false, momentum: 0.98, airControl: 0.35, slamSpeed: 0, poseKeys: ['light_1'],
 }
 
+/** 单段冲击力 / 削韧覆写（缺省字段沿用重段/轻段/空中段默认值） */
+export interface SegmentImpactOverride {
+    readonly impact?: ImpactLevel
+    readonly poiseDamage?: number
+}
+
 /** 构建近战攻击链的可选覆盖项（武器独立编排 / 追加特殊段 / 起手候选覆写） */
 export interface BuildMeleeAttacksOptions {
     /** 链编排覆写（缺省 = MELEE_CHAIN_SPECS） */
@@ -136,6 +155,8 @@ export interface BuildMeleeAttacksOptions {
     readonly entries?: Partial<Record<AttackKey, readonly AttackEntry[]>>
     /** 空中攻击模组覆写（缺省 = DEFAULT_MELEE_AIR_ATTACK） */
     readonly air?: MeleeAirAttackConfig
+    /** 逐段冲击力 / 削韧覆写（键 = 模板键，地面与空中段共用命名空间） */
+    readonly impact?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, SegmentImpactOverride>>
     /**
      * 重击蓄力配置：提供后，本模式的重击段声明为可蓄力（`chargeFullTime` + strike `chargeable`），
      * 按住攻击键即冻结在重击起手帧蓄力、松开出手；伤害按蓄力值连续缩放，蓄力值 > 0 时挂冷却。
@@ -179,6 +200,7 @@ export const buildMeleeAttacks = (
         const id = meleeSegmentId(classId, holdMode, segmentKey)
         /* 重击段可蓄力：按住攻击键冻结在 strike 起始帧蓄力，松开出手 */
         const chargeable = heavy && heavyCharge !== undefined
+        const impactOverride = options.impact?.[segmentKey]
         return {
             id,
             key: meta.key,
@@ -189,6 +211,8 @@ export const buildMeleeAttacks = (
             /* 动作组合：默认单层（段 id 即 pose 资产 id），可继续追加分层 pose 与权重 */
             poses: [{poseId: id, weight: 1}],
             damageMultiplier: heavy ? MELEE_HEAVY_DAMAGE_MULTIPLIER : 1,
+            impact: impactOverride?.impact ?? (heavy ? MELEE_HEAVY_IMPACT : MELEE_LIGHT_IMPACT),
+            poiseDamage: impactOverride?.poiseDamage ?? (heavy ? MELEE_HEAVY_POISE_DAMAGE : MELEE_LIGHT_POISE_DAMAGE),
             cooldown: 0,
             ...(chargeable && heavyCharge !== undefined ? {
                 chargeFullTime: heavyCharge.maxChargeTime,
@@ -221,6 +245,7 @@ export const buildMeleeAttacks = (
         const id = airIds[index]
         const nextId = airIds[index + 1] ?? (air.loop ? airIds[0] : undefined)
         const poseKey = air.poseKeys[index]
+        const impactOverride = options.impact?.[_step]
         segments[id] = {
             id,
             key: 'air',
@@ -230,6 +255,8 @@ export const buildMeleeAttacks = (
             phases: airSegmentPhases(),
             poses: [{poseId: meleeSegmentId(classId, holdMode, poseKey), weight: 1}],
             damageMultiplier: MELEE_AIR_DAMAGE_MULTIPLIER,
+            impact: impactOverride?.impact ?? MELEE_AIR_IMPACT,
+            poiseDamage: impactOverride?.poiseDamage ?? MELEE_AIR_POISE_DAMAGE,
             cooldown: 0,
             next: nextId !== undefined ? [{to: nextId}] : [],
         }

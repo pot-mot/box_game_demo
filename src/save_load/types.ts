@@ -24,7 +24,7 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  v7 起 character 增加肢体组件装备 limb；
  *  v7 起新增 building_generator 实体（显式压缩体素 block 数据，均为可选字段，旧档加载时安全回退默认）；
  *  v8 起新增 interactable / item 实体与 play 背包 inventory、传送点 teleports（modeInfo.play），均为可选，旧档安全回退 */
-export const SAVE_FORMAT_VERSION = 8
+export const SAVE_FORMAT_VERSION = 9
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -175,6 +175,16 @@ export interface CharacterSaveConfig {
     limb?: LimbLoadout
     /** 额外锁定点（关节 id + 关节本地偏移；缺省 = 仅默认身体中心点，非法条目加载时安全剔除） */
     lockPoints?: LockPointConfig[]
+    /** 韧性上界基础值（缺省 = 默认，旧存档无此字段时安全回退） */
+    poiseMax?: number
+    /** 受击后延迟开始回充（秒；缺省 = 默认，安全回退） */
+    poiseRegenDelay?: number
+    /** 韧性回充速率（/秒；缺省 = 默认，安全回退） */
+    poiseRegenPerSec?: number
+    /** 倒地时长（秒；缺省 = 默认，安全回退） */
+    knockdownDuration?: number
+    /** 起身时长（秒；缺省 = 默认，安全回退） */
+    getUpDuration?: number
     isPlayer: boolean
     navEnabled?: boolean
 }

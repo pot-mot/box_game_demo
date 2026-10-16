@@ -16,6 +16,7 @@ import {HOLD_MODE_LABELS} from '../../character/weapon/hold_mode.ts'
 import {weaponDisplayName} from '../../character/weapon/catalog.ts'
 import {translate} from '../../i18n/index.ts'
 import {segmentCooldownRemaining} from '../../character/combat/attack_runtime.ts'
+import {guardMaxOf} from '../../character/combat/types.ts'
 import type {InteractionProvider} from '../../character/interaction/types.ts'
 import {setupPlayInteraction} from './interaction/index.ts'
 import {HIT_SHAKE_DURATION, HIT_SHAKE_AMPLITUDE} from './constants.ts'
@@ -57,10 +58,10 @@ export const setupPlayMode = (
         combat: {
             onLightAttackStart: () => characterSystem.beginPlayerAttackHold('light'),
             onLightAttack: (held) => characterSystem.endPlayerAttackHold('light', held),
-            onLightAttackCancel: () => characterSystem.cancelPlayerAttackHold(),
+            onLightAttackCancel: () => characterSystem.cancelPlayerAttackHold('light'),
             onHeavyAttackStart: () => characterSystem.beginPlayerAttackHold('heavy'),
             onHeavyAttack: (held) => characterSystem.endPlayerAttackHold('heavy', held),
-            onHeavyAttackCancel: () => characterSystem.cancelPlayerAttackHold(),
+            onHeavyAttackCancel: () => characterSystem.cancelPlayerAttackHold('heavy'),
         },
         lock: {
             onToggle: lockOn.toggle,
@@ -168,6 +169,10 @@ export const setupPlayMode = (
             hud.update({
                 health: player.combat.health,
                 maxHealth: player.combat.maxHealth,
+                poise: player.combat.poise,
+                poiseMax: player.combat.poiseMax,
+                guard: player.combat.guard,
+                guardMax: guardMaxOf(player.combat),
                 stateName: player.stateMachine.currentState,
                 stateTime: player.stateMachine.stateTime,
                 timers,

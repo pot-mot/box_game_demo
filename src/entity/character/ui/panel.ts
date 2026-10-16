@@ -1,6 +1,6 @@
 import type {PanelContext} from '../../box/base/ui'
 import type {CharacterEntitySystem} from '../physics/world.ts'
-import type {CharacterEntity} from '../../../character/types.ts'
+import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig, TendencyId} from '../../../character/faction.ts'
 import {createLabeledNumberInput} from '../../../ui/components/number_input.ts'
@@ -52,6 +52,8 @@ interface WeaponOption {
 
 /** 近战武器名（optgroup 标签） */
 const WEAPON_GROUP_LABEL_MELEE: StringLocaleKey = 'character.weapon_group_melee'
+/** 盾牌名（optgroup 标签；盾为近战类，单独成组） */
+const WEAPON_GROUP_LABEL_SHIELD: StringLocaleKey = 'character.weapon_group_shield'
 /** 远程武器名（optgroup 标签） */
 const WEAPON_GROUP_LABEL_RANGED: StringLocaleKey = 'character.weapon_group_ranged'
 
@@ -67,22 +69,27 @@ const describeWeapon = (w: WeaponConfig): string => {
     return `${name} (dmg:${w.damage} rng:${w.range})${tags.length > 0 ? ` [${tags.join(' ')}]` : ''}`
 }
 
-/** 武器下拉按近战/远程分组（类型由所选武器决定，因此不再有独立「攻击类型」选择器） */
-const buildWeaponOptions = (): {melee: readonly WeaponOption[]; ranged: readonly WeaponOption[]} => {
+/** 武器下拉按近战 / 盾牌 / 远程分组（类型由所选武器决定，因此不再有独立「攻击类型」选择器） */
+const buildWeaponOptions = (): {melee: readonly WeaponOption[]; shield: readonly WeaponOption[]; ranged: readonly WeaponOption[]} => {
     const melee: WeaponOption[] = []
+    const shield: WeaponOption[] = []
     const ranged: WeaponOption[] = []
     for (const preset of ALL_WEAPON_PRESETS) {
         const option: WeaponOption = {id: preset.id, type: preset.type, preset}
-        if (preset.type === 'melee') melee.push(option)
-        else ranged.push(option)
+        if (preset.type === 'melee') {
+            if (preset.block !== undefined) shield.push(option)
+            else melee.push(option)
+        } else {
+            ranged.push(option)
+        }
     }
-    return {melee, ranged}
+    return {melee, shield, ranged}
 }
 
 /** 武器下拉数据（模块级构建一次：预设为静态数据） */
 const WEAPON_OPTIONS = buildWeaponOptions()
 
-/** 填充武器下拉：近战 / 远程分组（withNone = 追加「无」空项，供副手选择）；选项文案随语言切换重译 */
+/** 填充武器下拉：近战 / 盾牌 / 远程分组（withNone = 追加「无」空项，供副手选择）；选项文案随语言切换重译 */
 const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean): void => {
     if (withNone) {
         const none = document.createElement('option')
@@ -90,7 +97,11 @@ const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean): void =>
         localizeText(none, 'common.none')
         select.appendChild(none)
     }
-    for (const group of [{labelKey: WEAPON_GROUP_LABEL_MELEE, options: WEAPON_OPTIONS.melee}, {labelKey: WEAPON_GROUP_LABEL_RANGED, options: WEAPON_OPTIONS.ranged}]) {
+    for (const group of [
+        {labelKey: WEAPON_GROUP_LABEL_MELEE, options: WEAPON_OPTIONS.melee},
+        {labelKey: WEAPON_GROUP_LABEL_SHIELD, options: WEAPON_OPTIONS.shield},
+        {labelKey: WEAPON_GROUP_LABEL_RANGED, options: WEAPON_OPTIONS.ranged},
+    ]) {
         const optGroup = document.createElement('optgroup')
         localizeApply(optGroup, el => {
             if (el instanceof HTMLOptGroupElement) el.label = translate(group.labelKey)
@@ -424,6 +435,19 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const curHP = createLabeledNumberInput(el, 'character.cur_hp', {min: '0', step: '1', value: '15'})
     const baseDefPhys = createLabeledNumberInput(el, 'character.base_def_phys', {min: '0', step: '1', value: '0'})
     const baseDefMagic = createLabeledNumberInput(el, 'character.base_def_magic', {min: '0', step: '1', value: '0'})
+    /* 韧性 / 倒地属性：上界基础值 + 受击后延迟回充参数 + 倒地/起身时长。
+       逐项包在块级容器内——`createLabeledNumberInput` 追加的是行内 `label`，若连续直接挂在
+       面板根上会排成一行，其宽度之和会撑大面板（属性段原有 4 项已接近满宽，再加 5 项会遮住左侧实体列表）。 */
+    const blockRow = (): HTMLDivElement => {
+        const row = document.createElement('div')
+        el.appendChild(row)
+        return row
+    }
+    const poiseMaxInput = createLabeledNumberInput(blockRow(), 'character.poise', {min: '1', step: '1', value: '20'})
+    const poiseRegenDelayInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_delay', {min: '0', step: '0.1', value: '1'})
+    const poiseRegenRateInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_rate', {min: '0', step: '1', value: '8'})
+    const knockdownDurationInput = createLabeledNumberInput(blockRow(), 'character.knockdown_duration', {min: '0', step: '0.1', value: '0.7'})
+    const getUpDurationInput = createLabeledNumberInput(blockRow(), 'character.get_up_duration', {min: '0', step: '0.1', value: '0.6'})
     const equipmentPreviewTag = document.createElement('div')
     equipmentPreviewTag.className = 'dc-hint'
     equipmentPreviewTag.style.cssText = 'margin-bottom:4px;white-space:pre-line'
@@ -915,6 +939,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         }
         baseDefPhys.value = formatNumber(sel.combat.baseDefense.physical)
         baseDefMagic.value = formatNumber(sel.combat.baseDefense.magic)
+        poiseMaxInput.value = formatNumber(sel.combat.basePoiseMax)
+        poiseRegenDelayInput.value = formatNumber(sel.combat.poiseRegenDelay)
+        poiseRegenRateInput.value = formatNumber(sel.combat.poiseRegenPerSec)
+        knockdownDurationInput.value = formatNumber(sel.combat.knockdownDuration)
+        getUpDurationInput.value = formatNumber(sel.combat.getUpDuration)
         updateEquipmentPreview()
 
         /* 额外锁定点回显（默认身体中心点固定，不在此列表） */
@@ -1034,10 +1063,27 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 /* 副手武器：空选择 = 卸下（null）；否则按所选武器（数值取预设，可后续扩展覆写） */
                 const selectedOffhand = selectedOffhandWeapon()
                 const newOffhand: AttackConfig | null = selectedOffhand === undefined ? null : {weaponId: selectedOffhand.id}
+                /* 韧性属性（可选）：非法输入不写入，保留运行时原值 */
+                const poiseCfg: Partial<CharacterConfig> = {}
+                const parseOpt = (v: string): number | undefined => {
+                    const n = parseFloat(v)
+                    return isNaN(n) ? undefined : n
+                }
+                const poiseMaxValue = parseOpt(poiseMaxInput.value)
+                if (poiseMaxValue !== undefined) poiseCfg.poiseMax = poiseMaxValue
+                const poiseDelayValue = parseOpt(poiseRegenDelayInput.value)
+                if (poiseDelayValue !== undefined) poiseCfg.poiseRegenDelay = poiseDelayValue
+                const poiseRateValue = parseOpt(poiseRegenRateInput.value)
+                if (poiseRateValue !== undefined) poiseCfg.poiseRegenPerSec = poiseRateValue
+                const knockdownValue = parseOpt(knockdownDurationInput.value)
+                if (knockdownValue !== undefined) poiseCfg.knockdownDuration = knockdownValue
+                const getUpValue = parseOpt(getUpDurationInput.value)
+                if (getUpValue !== undefined) poiseCfg.getUpDuration = getUpValue
                 ctx.updateCharacterConfig?.(cur.id, {
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
                     scale: parseFloat(scale.value),
+                    ...poiseCfg,
                 }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
                     baseDefense: readBaseDefense(),
                     armor: readArmorLoadout(),

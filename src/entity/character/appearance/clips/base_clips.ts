@@ -127,6 +127,7 @@ const buildBaseClipWithJoints = (
     weaponHeld: boolean,
     horizontalSpeed: number,
     holdMode: HoldMode | undefined,
+    blockArm: 'right' | 'left' | undefined = undefined,
 ): BoneAnimationClip => {
     const meta = BASE_CLIP_META[state]
     const sampler = BASE_POSE_SAMPLERS[state]
@@ -135,7 +136,10 @@ const buildBaseClipWithJoints = (
         const records: BoneJointKeyframeRecord[] = []
         for (let i = 0; i < frameCount; i++) {
             const t = meta.duration * i / (frameCount - 1)
-            const pose = adjustArmsForHoldMode(sampler(t, {weaponHeld, horizontalSpeed}), holdMode, weaponHeld, state)
+            const pose = adjustArmsForHoldMode(
+                sampler(t, {weaponHeld, horizontalSpeed, ...(blockArm !== undefined ? {blockArm} : {})}),
+                holdMode, weaponHeld, state,
+            )
             const record = poseToRecord(pose).get(jointId)!
             records.push({time: t, position: record.position, rotation: record.rotation})
         }
@@ -241,9 +245,11 @@ export const getBaseClipForHoldMode = (
     weaponHeld: boolean,
     holdMode: HoldMode,
     horizontalSpeed = 0,
+    blockArm: 'right' | 'left' | undefined = undefined,
 ): BoneAnimationClip => {
     const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
-    const key = `${state}:${weaponHeld ? holdMode : 'n'}${speedKey}`
+    const armKey = state === 'blocking' ? `:${blockArm ?? 'right'}` : ''
+    const key = `${state}:${weaponHeld ? holdMode : 'n'}${speedKey}${armKey}`
     const cached = holdClipCache.get(key)
     if (cached !== undefined) return cached
     const clip = buildBaseClipWithJoints(
@@ -252,6 +258,7 @@ export const getBaseClipForHoldMode = (
         weaponHeld,
         horizontalSpeed,
         weaponHeld ? holdMode : undefined,
+        blockArm,
     )
     holdClipCache.set(key, clip)
     return clip

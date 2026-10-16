@@ -396,11 +396,11 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
     it('追加条件变体段：起手候选守卫 + 挂到某个段的 next 上（无需改状态机）', () => {
         const charge: AttackSegment = {
             id: 'demo_axe_charge', key: 'light', step: 1, label: '蓄力重劈',
-            duration: 0.4, recovery: 0.3, phases: [], poses: [{poseId: 'demo_axe_charge', weight: 1}], damageMultiplier: 2, cooldown: 1, next: [],
+            duration: 0.4, recovery: 0.3, phases: [], poses: [{poseId: 'demo_axe_charge', weight: 1}], damageMultiplier: 2, impact: 'heavy', poiseDamage: 4, cooldown: 1, next: [],
         }
         const thrust: AttackSegment = {
             id: 'demo_axe_thrust', key: 'light', step: 2, label: '方向突刺',
-            duration: 0.25, recovery: 0.2, phases: [], poses: [{poseId: 'demo_axe_thrust', weight: 1}], damageMultiplier: 1, cooldown: 0, next: [],
+            duration: 0.25, recovery: 0.2, phases: [], poses: [{poseId: 'demo_axe_thrust', weight: 1}], damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0, next: [],
         }
         const attacks = buildMeleeAttacks('demo_axe', 'dual_wield', {
             extraSegments: [charge, thrust],
@@ -421,7 +421,7 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
     it('追加段 id 与模板段冲突时构建失败（fail loudly）', () => {
         const duplicate: AttackSegment = {
             id: 'demo_sword_one_handed_light_1', key: 'light', step: 1,
-            duration: 0.2, recovery: 0.2, phases: [], poses: [{poseId: 'demo_sword_one_handed_light_1', weight: 1}], damageMultiplier: 1, cooldown: 0, next: [],
+            duration: 0.2, recovery: 0.2, phases: [], poses: [{poseId: 'demo_sword_one_handed_light_1', weight: 1}], damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0, next: [],
         }
         expect(() => buildMeleeAttacks('demo_sword', 'one_handed', {extraSegments: [duplicate]})).toThrow()
     })

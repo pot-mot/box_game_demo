@@ -19,8 +19,9 @@ import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../..
 import {availableHoldModes, defaultHoldMode, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
+import type {ShieldBlockConfig} from '../../../character/weapon/constants.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
-import {segmentTotalDuration, isChargeableKey, type AttackKey} from '../../../character/weapon/attack_chain.ts'
+import {segmentTotalDuration, isChargeableKey, type AttackKey, type GroundAttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {isAirborneAttackState} from '../../../character/state_machine/states/air_attacking.ts'
 import type {CharacterState} from '../../../character/state_machine/types.ts'
@@ -65,7 +66,8 @@ import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entit
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {cleanupWireframe, createWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
-import {phaseDurationOf, resolvePhases} from '../../../character/combat/attack_phases.ts'
+import {phaseDurationOf, resolvePhases, FLINCH_DURATION, HEAVY_FLINCH_DURATION} from '../../../character/combat/attack_phases.ts'
+import {isWeakFlinchReceptive} from '../../../character/combat/impact.ts'
 import {rollSpinProgress} from '../../../character/combat/roll_skill.ts'
 
 /** Rapier 带 body/bodyHandle 反查的超类型 */
@@ -95,6 +97,7 @@ const _rollSpinQuat = new Quaternion()
 const _rollYawQuat = new Quaternion()
 const _rollPivot = new Vector3()
 const _rollOffset = new Vector3()
+const _shieldQuat = new Quaternion()
 
 /** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写；test_weapon 走测试专用链） */
 const weaponRuntimeOf = (attack: AttackConfig, holdMode?: HoldMode): WeaponRuntime => {
@@ -167,18 +170,18 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setPlayerAttack: (attackKey?: AttackKey, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
     /**
      * 玩家按下攻击键：可蓄力的远程武器进入蓄力（按住期间冻结在蓄力锚点阶段并累积力度）；
-     * 非蓄力武器该次按下忽略（仍走松开触发的既有路径）。AI 不使用。
+     * 盾键（主手盾=轻/重击键、副手盾=重击键）改为记录按住时刻，长按阈值后举盾格挡。AI 不使用。
      */
     beginPlayerAttackHold: (attackKey?: AttackKey) => void
     /**
-     * 玩家松开攻击键：若处于蓄力中则结束蓄力（段继续推进并出手）；否则按原有语义触发攻击
-     * （携带按住时长供蓄力变体守卫区分点按/长按）。
+     * 玩家松开攻击键：盾键长按已举盾则仅落盾（不出招）、短按按该键出招（副手盾无攻击）；
+     * 其余若处于蓄力中则结束蓄力（段继续推进并出手），否则按原有语义触发攻击。
      */
     endPlayerAttackHold: (attackKey: AttackKey, holdDuration: number) => void
     /**
-     * 玩家取消蓄力（如按下后拖拽旋转视角）：清空按住状态并中止当前攻击段（不发射）。
+     * 玩家取消攻击保持（拖拽旋转视角、失焦等）：盾键仅落盾；蓄力键清空按住状态并中止当前攻击段（不发射）。
      */
-    cancelPlayerAttackHold: () => void
+    cancelPlayerAttackHold: (attackKey: AttackKey) => void
     /** 玩家交互脉冲：本帧按下交互键且存在目标时传 true，并给出目标世界坐标（用于转身朝向） */
     setPlayerInteract: (pending: boolean, targetX: number, targetZ: number) => void
     getPlayerCharacter: () => CharacterEntity | undefined
@@ -245,6 +248,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const appearanceSystems = new Map<number, AppearanceSystem>()
     const weaponTrails = new Map<number, WeaponTrail>()
     const facingAngles = new Map<number, number>()
+    /** 盾遮挡体：每持盾角色的无父刚体 parentless sensor 碰撞体 + 其当前 `ShieldBlockConfig`（配置引用变化时重建） */
+    const shieldColliders = new Map<number, {collider: RAPIER.Collider; block: ShieldBlockConfig}>()
+    /**
+     * 盾碰撞体 handle → 持盾角色 id（供子弹形状扫描按阵营过滤归属）。
+     * Rapier 的 handle 在碰撞体销毁后可能被复用，每次重建 / 销毁都同步维护。
+     */
+    const shieldOwnerByHandle = new Map<number, number>()
     /** 攻击判定箱调试线框（edit 模式随碰撞体可视化一同显示） */
     const attackHitBoxes = new Map<number, AttackHitBoxes>()
     let attackHitBoxVisible = false
@@ -262,6 +272,59 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 ? {offhand: entity.combat.offhand?.weapon.mesh, offhandStowed: entity.holdMode === 'two_handed'}
                 : {}),
         })
+    }
+
+    /** 销毁角色盾遮挡体碰撞体（重建 / 卸盾 / 移除角色时调用） */
+    const destroyShieldCollider = (id: number): void => {
+        const state = shieldColliders.get(id)
+        if (state === undefined) return
+        shieldOwnerByHandle.delete(state.collider.handle)
+        world.removeCollider(state.collider, false)
+        shieldColliders.delete(id)
+    }
+
+    /**
+     * 每帧同步盾遮挡体：持盾时懒创建 parentless sensor（membership 仅 `'shield'` 类别位、mask 0，不参与物理，
+     * 仅供子弹形状扫描），按 body 位置 + 朝向 + `cover` 写 world 位姿；仅举盾且未破防时启用。
+     *
+     * 注意：本函数在 `world.step` 之后运行，移动碰撞体不刷新 Rapier 查询管线，故同帧子弹 `castShape`
+     * 命中的盾位姿比角色晚一帧（≤ 1 帧位移）。当前由「命中半径内补扫」补偿，未观察到穿透；若后续
+     * 高速弹在盾缘漏判，再评估在全部盾同步后补一次 `queryPipeline.update()`。
+     */
+    const syncShieldCollider = (entity: CharacterEntity): void => {
+        const block = entity.combat.block
+        if (block === undefined) {
+            destroyShieldCollider(entity.id)
+            return
+        }
+        let state = shieldColliders.get(entity.id)
+        if (state === undefined || state.block !== block) {
+            destroyShieldCollider(entity.id)
+            const {cover} = block
+            const desc = RAPIER.ColliderDesc.cuboid(cover.width / 2, cover.height / 2, cover.depth / 2)
+                .setSensor(true)
+                .setCollisionGroups(categoryCollisionGroups(0, 0, 'shield'))
+            state = {collider: createColliderForBody(world, desc, undefined), block}
+            shieldColliders.set(entity.id, state)
+            shieldOwnerByHandle.set(state.collider.handle, entity.id)
+        }
+        const active = entity.combat.blocking && entity.combat.guard > 0 && !entity.combat.isDead
+        state.collider.setEnabled(active)
+        if (!active) return
+        const scale = entity.config.scale
+        const p = entity.body.translation()
+        const yaw = facingAngles.get(entity.id) ?? 0
+        /* `cover` 相对角色原点（脚底）：body 中心比原点高 originToCenterY，故减去还原到原点坐标 */
+        const originY = p.y - originToCenterY(entity.config)
+        const offsetZ = block.cover.offsetZ * scale
+        const offsetY = block.cover.offsetY * scale
+        state.collider.setTranslation({
+            x: p.x + Math.sin(yaw) * offsetZ,
+            y: originY + offsetY,
+            z: p.z + Math.cos(yaw) * offsetZ,
+        })
+        _shieldQuat.setFromAxisAngle(_upAxis, yaw)
+        state.collider.setRotation(_shieldQuat)
     }
 
     let playerAttackPending = false
@@ -328,7 +391,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         hitstopTimer = HITSTOP_DURATION
         meleeImpactListener?.(x, y, z)
     }, () => worldDamageTargets?.() ?? [])
-    const rangedExecutor = createRangedExecutor(shared, scene, () => worldDamageTargets?.() ?? [])
+    const rangedExecutor = createRangedExecutor(shared, scene, () => worldDamageTargets?.() ?? [], (handle) => shieldOwnerByHandle.get(handle))
     registerSkillExecutor('melee', meleeExecutor)
     registerSkillExecutor('ranged', rangedExecutor)
 
@@ -357,6 +420,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let playerAttackHoldDuration = 0
     /** 玩家是否正按住可蓄力远程武器的攻击键（持续状态；按住期间冻结蓄力段并累积力度） */
     let playerAttackHeld = false
+    /** 玩家当前按住且由盾接管的攻击键（主手盾=轻/重击键，副手盾=重击键）；undefined 表示无盾按住 */
+    let playerShieldHoldKey: GroundAttackKey | undefined = undefined
+    /** 盾按住已持续时长（秒）：达到 block.holdThreshold 后进入格挡 */
+    let playerShieldHoldTime = 0
 
     /** 角色 FSM 状态 → 本地化键 */
     const CHARACTER_STATE_KEYS: Record<CharacterState, StringLocaleKey> = {
@@ -370,6 +437,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         rolling: 'entity.state.rolling',
         flinching: 'entity.state.flinching',
         interacting: 'entity.state.interacting',
+        knockdown: 'entity.state.knockdown',
+        getting_up: 'entity.state.getting_up',
+        blocking: 'entity.state.blocking',
+        guard_broken: 'entity.state.guard_broken',
     }
 
     /** AI 战斗层状态 → 本地化键 */
@@ -501,6 +572,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const combat = createCombatComponent(
             runtime, faction,
             resolveTendency(tendencyConfig), tendencyConfig, maxHP,
+            {
+                ...(config.poiseMax !== undefined ? {poiseMax: config.poiseMax} : {}),
+                ...(config.poiseRegenDelay !== undefined ? {poiseRegenDelay: config.poiseRegenDelay} : {}),
+                ...(config.poiseRegenPerSec !== undefined ? {poiseRegenPerSec: config.poiseRegenPerSec} : {}),
+                ...(config.knockdownDuration !== undefined ? {knockdownDuration: config.knockdownDuration} : {}),
+                ...(config.getUpDuration !== undefined ? {getUpDuration: config.getUpDuration} : {}),
+            },
         )
         setCombatOffhand(combat, offhandRuntime)
 
@@ -528,6 +606,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             dyingFallDirX: 0,
             dyingFallDirZ: 0,
             dyingFallAngle: 0,
+            knockdownFallDirX: 0,
+            knockdownFallDirZ: 0,
+            knockdownFallAngle: 0,
             combat,
             holdMode: defaultHoldMode(runtime.weapon),
             lockPoints: [],
@@ -560,9 +641,26 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 entity.combat.lastHitDirX = event.dirX
                 entity.combat.lastHitDirZ = event.dirZ
             }
-            /* 攻击中被击中时标记硬直；受击保护窗口内不再触发，防止无限连段锁死（伤害照常） */
-            if (entity.combat.attackActive && entity.combat.health > 0 && entity.combat.flinchImmunityTimer <= 0) {
-                entity.combat.pendingFlinch = true
+            const c = entity.combat
+            /* 韧性结算：命中按削韧值扣除并重置回充延迟 */
+            if (event.poiseDamage > 0) {
+                c.poise = Math.max(0, c.poise - event.poiseDamage)
+                c.poiseRegenDelayTimer = c.poiseRegenDelay
+            }
+            /* 冲击反应：倒地（韧性归零或 knockdown 级）> 强硬直（打断攻击）> 弱硬直（仅非承诺动作）> 轻（无效果） */
+            if (c.health > 0) {
+                if (event.impact === 'knockdown' || c.poise <= 0) {
+                    c.pendingKnockdown = true
+                } else if (event.impact === 'heavy') {
+                    if (c.flinchImmunityTimer <= 0) {
+                        c.flinchDuration = HEAVY_FLINCH_DURATION
+                        c.pendingFlinch = true
+                    }
+                } else if (event.impact === 'medium' && c.flinchImmunityTimer <= 0
+                    && isWeakFlinchReceptive(entity.stateMachine.currentState)) {
+                    c.flinchDuration = FLINCH_DURATION
+                    c.pendingFlinch = true
+                }
             }
             /* 受击转战斗（仇恨）：被背后/视野外攻击或接敌冷却期内挨打时强制还击 */
             const aiCtx = aiMap.get(entity.id)
@@ -736,6 +834,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         attackHitBoxes.get(entity.id)?.dispose()
         attackHitBoxes.delete(entity.id)
         facingAngles.delete(entity.id)
+        destroyShieldCollider(entity.id)
 
         characters.splice(idx, 1)
         aiMap.delete(id)
@@ -783,13 +882,34 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         return 'ok'
     }
 
-    /** 玩家按下攻击键：可蓄力攻击（远程弓/投掷、近战重击）进入蓄力（按住期间冻结并累积力度）；其余忽略（仍走松开触发） */
+    /**
+     * 盾接管按键：主手盾由轻 / 重击键控盾（长按=格挡、短按仍可盾击 / 盾撞）；
+     * 副手盾仅重击键控盾（长按=格挡、短按不出招，副手盾无攻击能力）。
+     */
+    const shieldHoldKeysOf = (player: CharacterEntity): readonly GroundAttackKey[] => {
+        const main = player.combat.weapon
+        if (main !== undefined && main.type === 'melee' && main.block !== undefined) return ['light', 'heavy']
+        const off = player.combat.offhand
+        if (off !== undefined && off.weapon.type === 'melee' && off.weapon.block !== undefined) return ['heavy']
+        return []
+    }
+
+    /** 玩家按下攻击键：可蓄力攻击（远程弓/投掷、近战重击）进入蓄力（按住期间冻结并累积力度）；盾键转入举盾计时 */
     const beginPlayerAttackHold = (attackKey?: AttackKey): void => {
         const player = getPlayerCharacter()
         if (!player || player.combat.isDead) return
         /* 空中攻击不可蓄力：空中攻击态忽略蓄力保持，松开后按空中攻击语义出招 */
         if (isAirborneAttackState(player.stateMachine.currentState)) return
         const key = attackKey ?? 'light'
+        /* 盾键：记录按下时刻，长按超过阈值后进入格挡（不进蓄力） */
+        if (key !== 'air' && shieldHoldKeysOf(player).includes(key)) {
+            /* 已有盾键按住时忽略后续盾键（主手盾双键均可控盾），避免互相覆盖致松手误出招 */
+            if (playerShieldHoldKey !== undefined) return
+            playerShieldHoldKey = key
+            playerShieldHoldTime = 0
+            playerAttackHeld = false
+            return
+        }
         /* 该攻击键的起手段声明了 chargeFullTime 才进入蓄力；否则忽略（松开时按原有语义出招） */
         if (!isChargeableKey(player.combat.attacks, key)) return
         playerAttackHeld = true
@@ -804,8 +924,27 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
     }
 
-    /** 玩家松开攻击键：蓄力中 → 结束蓄力（段继续推进并在 release 帧出手）；否则按原有语义触发攻击 */
+    /** 玩家松开攻击键：盾键 → 长按已举盾则仅落盾（不出招），短按按该键出招；否则蓄力结束或按原有语义触发攻击 */
     const endPlayerAttackHold = (attackKey: AttackKey, holdDuration: number): void => {
+        if (playerShieldHoldKey === attackKey) {
+            const player = getPlayerCharacter()
+            const wasBlocking = player?.combat.blocking === true
+            playerShieldHoldKey = undefined
+            playerShieldHoldTime = 0
+            if (player === undefined) return
+            player.combat.blockHeld = false
+            /* 已进入格挡 → 松手仅落盾；未进入格挡（短按）→ 主手盾出招，副手盾无攻击 */
+            if (!wasBlocking && shieldHoldKeysOf(player).includes(attackKey)
+                && player.combat.weapon.type === 'melee' && player.combat.weapon.block !== undefined) {
+                setPlayerAttack(attackKey, holdDuration)
+            }
+            return
+        }
+        /* 盾键但非当前按住键（主手盾双键并存时被忽略者）：松手不应触发攻击 */
+        if (attackKey !== 'air') {
+            const player = getPlayerCharacter()
+            if (player !== undefined && shieldHoldKeysOf(player).includes(attackKey)) return
+        }
         if (playerAttackHeld) {
             playerAttackHeld = false
             return
@@ -813,8 +952,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setPlayerAttack(attackKey, holdDuration)
     }
 
-    /** 玩家取消蓄力（按下后拖拽旋转视角等）：清空按住状态并中止当前攻击段，不发射 */
-    const cancelPlayerAttackHold = (): void => {
+    /** 玩家取消攻击保持（按下后拖拽旋转视角、失焦等）：盾键仅落盾，蓄力键清空并中止当前攻击段 */
+    const cancelPlayerAttackHold = (attackKey: AttackKey): void => {
+        if (playerShieldHoldKey === attackKey) {
+            const player = getPlayerCharacter()
+            playerShieldHoldKey = undefined
+            playerShieldHoldTime = 0
+            if (player !== undefined) player.combat.blockHeld = false
+            return
+        }
         if (!playerAttackHeld) return
         playerAttackHeld = false
         const player = getPlayerCharacter()
@@ -927,6 +1073,24 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.combat.flinchImmunityTimer = Math.max(0, entity.combat.flinchImmunityTimer - dt)
             /* 无敌帧计时安全网：rolling 状态在窗口内每帧重算，退出状态已清零；此处递减兜底异常残留 */
             entity.combat.invincibleTimer = Math.max(0, entity.combat.invincibleTimer - dt)
+            /* 倒地 / 起身无敌计时（knockdown / getting_up 状态逐帧写入，退出清零，此处递减兜底） */
+            entity.combat.hitImmunityTimer = Math.max(0, entity.combat.hitImmunityTimer - dt)
+            /* 韧性回充：受击延迟内暂停，延迟结束后按每秒回复量恢复至上限 */
+            if (entity.combat.poiseRegenDelayTimer > 0) {
+                entity.combat.poiseRegenDelayTimer = Math.max(0, entity.combat.poiseRegenDelayTimer - dt)
+            } else if (entity.combat.poise < entity.combat.poiseMax) {
+                entity.combat.poise = Math.min(entity.combat.poiseMax, entity.combat.poise + entity.combat.poiseRegenPerSec * dt)
+            }
+            /* 格挡槽回充：未举盾、未破防且未满时按每秒回复量恢复（举盾 / 破防期间暂停） */
+            {
+                const block = entity.combat.block
+                if (block !== undefined
+                    && !entity.combat.blocking
+                    && entity.stateMachine.currentState !== 'guard_broken'
+                    && entity.combat.guard < block.guardMax) {
+                    entity.combat.guard = Math.min(block.guardMax, entity.combat.guard + block.guardRegenPerSec * dt)
+                }
+            }
             materialEffects.get(entity.id)?.tick(dt)
             checkGround(entity, dt)
 
@@ -939,7 +1103,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     : undefined
                 aiCtx.nav.ignoredMesh = combatTarget !== undefined && !combatTarget.combat.isDead ? combatTarget.mesh : null
 
-                updateAI(dt, aiCtx, entity, characters, (dx, dz, attack, attackDX, attackDZ) => {
+                updateAI(dt, aiCtx, entity, characters, (dx, dz, attack, attackDX, attackDZ, block) => {
                     /* 若与另一个角色有物理接触，禁止继续向其方向推挤 */
                     let finalDX = dx
                     let finalDZ = dz
@@ -972,7 +1136,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         jump = navResult.jump
                     }
 
-                    entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 'light')
+                    entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 'light', 0, false, false, block ?? false)
                     /* 记录意图方向（过滤前）：驱动朝向持续对准目标/路点，被接触阻断/nav 卡住时
                      * 仍能转正朝向，保证攻击检测箱门控与发射方向可用（过滤后方向会清零导致朝向自锁） */
                     aiTargetDirs.set(entity.id, {dx, dz})
@@ -987,13 +1151,22 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 })
             } else if (entity.isPlayer) {
+                /* 盾长按计时：按住盾键期间累计时长，供阈值判定举盾 */
+                if (playerShieldHoldKey !== undefined) playerShieldHoldTime += dt
                 /* 交互目标活跃：本帧按下交互键，或正处于 interacting（供转换守卫与转身朝向使用） */
                 entity.interactTargetActive = playerInteractPending || entity.stateMachine.currentState === 'interacting'
                 if (playerInteractPending) {
                     entity.interactTargetX = playerInteractTargetX
                     entity.interactTargetZ = playerInteractTargetZ
                 }
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerAttackHeld, playerInteractPending)
+                const block = entity.combat.block
+                const playerBlockHeld = playerShieldHoldKey !== undefined
+                    && block !== undefined
+                    && entity.combat.guard > 0
+                    && !entity.combat.isDead
+                    && entity.stateMachine.currentState !== 'guard_broken'
+                    && playerShieldHoldTime >= block.holdThreshold
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerAttackHeld, playerInteractPending, playerBlockHeld)
                 /* 攻击期间（含待起手帧）瞄准方向持续取相机前方：角色随之转向瞄准方向，
                  * 射击弹道再由武器实际朝向（muzzleDir）决定，避免背身射向目标 */
                 if (playerAttackPending || entity.combat.attackActive) {
@@ -1028,6 +1201,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     ? phases[entity.combat.phaseIndex].name
                     : undefined
 
+                /* 持盾手：格挡姿态据此决定抬臂；主手盾优先（与 `updateShieldBlock` 的盾来源一致） */
+                const mainWeapon = entity.combat.weapon
+                const shieldHand: 'main' | 'off' | undefined = entity.combat.block === undefined
+                    ? undefined
+                    : mainWeapon.type === 'melee' && mainWeapon.block !== undefined ? 'main' : 'off'
+
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
@@ -1040,12 +1219,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     attackCharge: entity.combat.attackCharge,
                     attackHolding: entity.combat.attackHolding,
                     weaponHeld: model.weaponMesh !== null,
+                    shieldHand,
                 })
 
                 const vx = entity.body.linvel().x
                 const vz = entity.body.linvel().z
                 const currentAngle = facingAngles.get(entity.id) ?? 0
                 const isRolling = entity.stateMachine.currentState === 'rolling'
+                const isKnockdown = entity.stateMachine.currentState === 'knockdown'
+                const isGettingUp = entity.stateMachine.currentState === 'getting_up'
 
                 let targetAngle: number
                 /** 远程武器（近战不受瞄准朝向影响，攻击判定箱随武器模型） */
@@ -1119,6 +1301,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     if (_deathFallAxis.lengthSq() > 1e-8) {
                         _deathFallAxis.normalize()
                         _deathFallQuat.setFromAxisAngle(_deathFallAxis, entity.dyingFallAngle)
+                        _deathYawQuat.setFromAxisAngle(_upAxis, newAngle)
+                        model.group.quaternion.copy(_deathFallQuat).multiply(_deathYawQuat)
+                    } else {
+                        model.group.rotation.set(0, newAngle, 0)
+                    }
+                } else if (isKnockdown || isGettingUp) {
+                    /* 倒地 / 起身：绕世界轴「上 × 倒向」旋转 knockdownFallAngle（0 → π/2 倒地，π/2 → 0 起身），
+                     * 再叠加保持的最后朝向；方向 / 角度由 knockdown / getting_up state 推进，与死亡倒地同机制 */
+                    _deathFallAxis.set(entity.knockdownFallDirZ, 0, -entity.knockdownFallDirX)
+                    if (_deathFallAxis.lengthSq() > 1e-8) {
+                        _deathFallAxis.normalize()
+                        _deathFallQuat.setFromAxisAngle(_deathFallAxis, entity.knockdownFallAngle)
                         _deathYawQuat.setFromAxisAngle(_upAxis, newAngle)
                         model.group.quaternion.copy(_deathFallQuat).multiply(_deathYawQuat)
                     } else {
@@ -1258,6 +1452,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 }
             }
+
+            /* 盾遮挡体同步：须在攻击 / 弹丸执行器之前（同帧子弹形状扫描据此命中盾） */
+            syncShieldCollider(entity)
 
             if (entity.combat.attackActive && !entity.combat.isDead) {
                 const executor = getSkillExecutor(entity.combat.weapon.type)
@@ -1415,7 +1612,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
-        const cfg: CharacterConfig = {speed: saveConfig.speed, jumpHeight: saveConfig.jumpHeight, scale: saveConfig.scale}
+        const cfg: CharacterConfig = {
+            speed: saveConfig.speed,
+            jumpHeight: saveConfig.jumpHeight,
+            scale: saveConfig.scale,
+            /* 韧性 / 倒地属性：旧档缺字段回退默认（createCombatComponent 内 clamp 默认值） */
+            ...(saveConfig.poiseMax !== undefined ? {poiseMax: saveConfig.poiseMax} : {}),
+            ...(saveConfig.poiseRegenDelay !== undefined ? {poiseRegenDelay: saveConfig.poiseRegenDelay} : {}),
+            ...(saveConfig.poiseRegenPerSec !== undefined ? {poiseRegenPerSec: saveConfig.poiseRegenPerSec} : {}),
+            ...(saveConfig.knockdownDuration !== undefined ? {knockdownDuration: saveConfig.knockdownDuration} : {}),
+            ...(saveConfig.getUpDuration !== undefined ? {getUpDuration: saveConfig.getUpDuration} : {}),
+        }
         /* 副手：未知武器 id 安全丢弃（回退无副手），避免未知 id 被静默替换成默认武器带入存档 */
         const offhandAttack = saveConfig.offhand !== undefined && isKnownWeaponId(saveConfig.offhand.weaponId)
             ? saveConfig.offhand
@@ -1425,6 +1632,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (saveConfig.holdMode !== undefined) setHoldMode(entity.id, saveConfig.holdMode)
         /* 防御 / 护甲 / 肢体：旧档缺字段回退零防御空装备；未知 id 由 resolve*Loadout 安全剔除 */
         setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {}, saveConfig.limb ?? {})
+        /* 载入即回满韧性（poiseMax 已含装备汇总） */
+        entity.combat.poise = entity.combat.poiseMax
         /* 额外锁定点：旧档缺字段回退仅默认身体中心点；非法条目由 sanitizeLockPoints 安全剔除 */
         entity.lockPoints = sanitizeLockPoints(saveConfig.lockPoints)
         const model = appearanceModels.get(entity.id)
@@ -1600,6 +1809,28 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
         if (newHealth !== undefined) {
             entity.combat.health = Math.max(0, Math.min(newHealth, entity.combat.maxHealth))
+        }
+        /* 韧性属性：基础上界变更须重算「护甲 / 肢体 poise 汇总」，其余参数直接写入战斗组件 */
+        if (charCfg.poiseMax !== undefined) {
+            entity.config.poiseMax = charCfg.poiseMax
+            entity.combat.basePoiseMax = charCfg.poiseMax
+            setCombatEquipment(entity.combat, entity.combat.baseDefense, entity.combat.armor)
+        }
+        if (charCfg.poiseRegenDelay !== undefined) {
+            entity.config.poiseRegenDelay = charCfg.poiseRegenDelay
+            entity.combat.poiseRegenDelay = charCfg.poiseRegenDelay
+        }
+        if (charCfg.poiseRegenPerSec !== undefined) {
+            entity.config.poiseRegenPerSec = charCfg.poiseRegenPerSec
+            entity.combat.poiseRegenPerSec = charCfg.poiseRegenPerSec
+        }
+        if (charCfg.knockdownDuration !== undefined) {
+            entity.config.knockdownDuration = charCfg.knockdownDuration
+            entity.combat.knockdownDuration = charCfg.knockdownDuration
+        }
+        if (charCfg.getUpDuration !== undefined) {
+            entity.config.getUpDuration = charCfg.getUpDuration
+            entity.combat.getUpDuration = charCfg.getUpDuration
         }
         if (newTendencyConfig) {
             entity.combat.attackTendency = resolveTendency(newTendencyConfig)

@@ -1,4 +1,5 @@
 import type {DamageType} from './damage_type.ts'
+import type {ImpactLevel} from './impact.ts'
 import type {DefenseProfile} from './defense.ts'
 import {reduceByDefense} from './defense.ts'
 
@@ -11,6 +12,10 @@ export interface DamageEvent {
     readonly baseAmount: number
     readonly finalAmount: number
     readonly skillId: string
+    /** 冲击力等级（决定受击效果；盾格挡会将其降一级） */
+    readonly impact: ImpactLevel
+    /** 削韧值（命中时从目标韧性扣除；0 = 不削韧） */
+    readonly poiseDamage: number
     /**
      * 冲击方向（世界水平单位向量，来源 → 受击者；可选）：
      * 近战 = 武器握把 → 目标、远程 = 弹丸 → 目标、爆炸 = 爆心 → 目标。
@@ -24,12 +29,13 @@ export interface DamageEvent {
 export type DamageModifier = (event: DamageEvent) => DamageEvent
 
 /**
- * 目标当前是否处于伤害免疫（翻滚无敌帧）：`applyDamage` 据此完全免疫；
+ * 目标当前是否处于伤害免疫：`applyDamage` 据此完全免疫；
  * 三条命中路径（近战 / 远程 / 爆炸）也用它跳过击退、命中反馈与命中消耗，
  * 保证「无敌」在伤害与物理反馈上语义一致。
+ * 免疫来源：翻滚无敌帧（`invincibleTimer`）与倒地 / 起身无敌（`hitImmunityTimer`）。
  */
-export const isDamageImmune = (target: { readonly invincibleTimer?: number }): boolean =>
-    (target.invincibleTimer ?? 0) > 0
+export const isDamageImmune = (target: { readonly invincibleTimer?: number; readonly hitImmunityTimer?: number }): boolean =>
+    (target.invincibleTimer ?? 0) > 0 || (target.hitImmunityTimer ?? 0) > 0
 
 /**
  * 统一伤害应用 — 遍历 modifier → 按目标对应类别防御固定减伤 → 扣血 → 触发回调（不设 isDead，由状态机 dying 处理）。
@@ -44,6 +50,8 @@ export const applyDamage = (
         readonly defense?: DefenseProfile
         /** 无敌帧剩余时间（秒，翻滚移动技能）：> 0 时完全免疫伤害，可选（仅测试替身可不填） */
         readonly invincibleTimer?: number
+        /** 倒地 / 起身无敌剩余时间（秒）：> 0 时完全免疫伤害，可选 */
+        readonly hitImmunityTimer?: number
         readonly damageModifiers?: readonly DamageModifier[]
         onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
         onDeath: (() => void) | null

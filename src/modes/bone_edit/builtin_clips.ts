@@ -104,13 +104,21 @@ const BASE_STATE_LABELS: Record<BaseState, StringLocaleKey> = {
     rolling: 'bone_edit.state.rolling',
     flinching: 'bone_edit.state.flinching',
     interacting: 'bone_edit.state.interacting',
+    knockdown: 'bone_edit.state.knockdown',
+    getting_up: 'bone_edit.state.getting_up',
+    blocking: 'bone_edit.state.blocking',
+    guard_broken: 'bone_edit.state.guard_broken',
 }
 
 /** 基础状态展示顺序（待机 → 移动 → 受击/倒地） */
-const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'rolling', 'flinching', 'dying', 'interacting']
+const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'rolling', 'flinching', 'dying', 'knockdown', 'getting_up', 'interacting', 'blocking', 'guard_broken']
 
 /** 姿态公式区分持械/空手的状态（其余状态两种变体姿态相同，只列出一份） */
 const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']
+
+/** 基础状态条目数（含 idle/walking 的空手 / 持械变体），供测试校验动作库条目总数 */
+export const BASE_STATE_ENTRY_COUNT = BASE_STATE_ORDER.reduce(
+    (sum, state) => sum + (WEAPON_VARIANT_STATES.includes(state) ? 2 : 1), 0)
 
 const buildBaseEntries = (): BuiltinClipEntry[] => {
     const entries: BuiltinClipEntry[] = []
@@ -177,7 +185,7 @@ const buildAttackEntries = (): BuiltinClipEntry[] =>
 
 let cachedLibrary: readonly BuiltinClipEntry[] | undefined
 
-/** 全部内置动作（基础状态 9 项 + 全部武器的攻击段） */
+/** 全部内置动作（基础状态 + 全部武器的攻击段） */
 export const getBuiltinClips = (): readonly BuiltinClipEntry[] => {
     if (cachedLibrary === undefined) {
         cachedLibrary = [...buildBaseEntries(), ...buildAttackEntries()]

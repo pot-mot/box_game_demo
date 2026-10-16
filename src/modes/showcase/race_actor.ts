@@ -86,6 +86,7 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
             attackCharge: 0,
             attackHolding: false,
             weaponHeld: false,
+            shieldHand: undefined,
         }
         system.update(dt, model, currentState, ctx)
     }

@@ -10,10 +10,10 @@ import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
 import {solveTwoHandedGrip} from './two_handed_ik.ts'
 import {STATE_BLEND_DURATION, TWO_HAND_GRIP_OFFSET, walkSpeedScale} from './constants.ts'
 
-/** clip 驱动的状态（全部 10 状态；基础状态用基础生成器，attacking / air_attacking 用攻击生成器） */
-const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'rolling', 'flinching', 'attacking', 'air_attacking', 'interacting']
+/** clip 驱动的状态（全部 14 状态；基础状态用基础生成器，attacking / air_attacking 用攻击生成器） */
+const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'rolling', 'flinching', 'attacking', 'air_attacking', 'interacting', 'knockdown', 'getting_up', 'blocking', 'guard_broken']
 
-type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'attacking' | 'air_attacking' | 'interacting'
+type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'attacking' | 'air_attacking' | 'interacting' | 'knockdown' | 'getting_up' | 'blocking' | 'guard_broken'
 
 const isClipState = (state: CharacterState): state is ClipState => CLIP_STATES.includes(state)
 
@@ -121,7 +121,13 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         } else {
             chargingPose = false
             /* 基础状态：持握模式感知的完整 clip（下半身 + 上半身已离线预组合，运行时不产生组合开销） */
-            const clip = getBaseClipForHoldMode(state, ctx.weaponHeld, ctx.holdMode, ctx.horizontalSpeed)
+            const clip = getBaseClipForHoldMode(
+                state,
+                ctx.weaponHeld,
+                ctx.holdMode,
+                ctx.horizontalSpeed,
+                ctx.shieldHand === 'off' ? 'left' : ctx.shieldHand === 'main' ? 'right' : undefined,
+            )
             player = createComposedAnimationPlayer(bridge, [{clip, weight: 1}])
             player.play()
             /* 行走：步频随水平速度变速 */
@@ -171,11 +177,12 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {
         /* 动画键：attacking 用当前段 id（段切换触发混合）；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
         const weaponKey = ctx.weaponHeld ? `:${ctx.holdMode}` : ':n'
+        const shieldKey = state === 'blocking' && ctx.shieldHand !== undefined ? `:${ctx.shieldHand}` : ''
         const animKey = (state === 'attacking' || state === 'air_attacking') && ctx.attackSegment !== undefined
             ? `attacking:${ctx.attackSegment.id}${ctx.attackHolding ? ':charging' : ''}`
             : state === 'falling'
                 ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${weaponKey}`
-                : `${state}${weaponKey}`
+                : `${state}${weaponKey}${shieldKey}`
         if (animKey !== currentAnimKey || model !== currentModel) {
             onStateChange(currentState, state, model, ctx)
             currentAnimKey = animKey

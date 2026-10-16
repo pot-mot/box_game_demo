@@ -9,3 +9,8 @@
 ## 陷阱
 
 - **角色锁定点**：默认锁定点恒为身体最中心（`body.translation()`，不落数组），额外点 = 关节 id + **关节本地**偏移（`CharacterEntity.lockPoints`）。关节解析先 `updateWorldMatrix(true, false)` 再 `localToWorld`（动画刚写入 Group、`matrixWorld` 可能滞后），找不到关节的点跳过，锁定期间点被移除即自动解除。
+
+## 韧性 / 倒地属性
+
+- `CharacterConfig` 新增 5 个**可选**韧性字段（供面板 / 存档覆写，缺省走 `combat/constants.ts` 默认值）：`poiseMax`（上界基础值，叠加护甲/肢体 `poise`）、`poiseRegenDelay`、`poiseRegenPerSec`、`knockdownDuration`、`getUpDuration`；经 `spawnEntity` 汇总进 `CombatComponent`（`basePoiseMax` 等），受击结算与状态机语义见 [`combat/combat.md`](combat/combat.md) 与 [`state_machine.md`](state_machine/state_machine.md)。
+- `CharacterEntity` 新增倒地字段：`knockdownFallDirX/Z`（倒向水平单位向量，进入 `knockdown` 时按 `combat.lastHitDirX/Z` 写入，无记录则向后倒）与 `knockdownFallAngle`（缓动角度，`world.ts` 据此合成根旋转，与死亡倒地同模式）。

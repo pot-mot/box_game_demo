@@ -80,6 +80,8 @@ describe('isBlockingGeometry（形状扫描的阻挡候选）', () => {
         expect(isBlockingGeometry(categoryCollisionGroups(TERRAIN_COLLISION_GROUP, TERRAIN_COLLISION_MASK, 'terrain'))).toBe(true)
         expect(isBlockingGeometry(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'ground'))).toBe(true)
         expect(isBlockingGeometry(categoryCollisionGroups(DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK, 'area'))).toBe(true)
+        /* 盾遮挡体：子弹先走显式盾判定（§8.3），但仍是可阻挡几何（未走盾判定时兜底阻挡） */
+        expect(isBlockingGeometry(categoryCollisionGroups(0, 0, 'shield'))).toBe(true)
     })
 
     it('角色与未标注类别的碰撞体不参与形状扫描', () => {

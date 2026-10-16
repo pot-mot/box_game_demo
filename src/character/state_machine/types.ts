@@ -1,7 +1,7 @@
 import type {CharacterEntity} from '../types.ts'
 import type {AttackKey} from '../weapon/attack_chain.ts'
 
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'air_attacking', 'dying', 'rolling', 'flinching', 'interacting'] as const
+export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'attacking', 'air_attacking', 'dying', 'rolling', 'flinching', 'interacting', 'knockdown', 'getting_up', 'blocking', 'guard_broken'] as const
 export type CharacterState = typeof CHARACTER_STATES[number]
 
 export interface CharacterInput {
@@ -22,6 +22,11 @@ export interface CharacterInput {
     attackHeld: boolean
     /** 交互触发（本帧按下交互键，且存在可交互目标） */
     interact: boolean
+    /**
+     * 格挡保持（逐帧写入，供状态机守卫）：玩家长按盾攻击键超过阈值、或 AI 反应式举盾时为真。
+     * 由 `machine.ts` 每帧同步到 `entity.combat.blockHeld`，`blocking` 状态据此维持。
+     */
+    block: boolean
 }
 
 export interface MachineContext {
@@ -49,7 +54,7 @@ export interface CharacterStateMachine {
     readonly stateTime: number
     onStateChange: ((from: CharacterState, to: CharacterState) => void) | null
 
-    setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean): void
+    setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean): void
     update(dt: number, entity: CharacterEntity): void
     reset(): void
 }

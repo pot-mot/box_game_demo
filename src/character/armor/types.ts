@@ -18,6 +18,8 @@ export interface EquipPieceConfig<S extends string, M> {
     readonly attack: DamageTypeProfile
     /** 移速乘数（1 = 无修正；<1 减速、>1 加速；多件装备相乘） */
     readonly moveSpeedMultiplier: number
+    /** 韧性加成（加到角色韧性上限；缺省 0） */
+    readonly poise?: number
     /** 外观部件配方 */
     readonly mesh: M
 }

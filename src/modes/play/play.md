@@ -59,6 +59,12 @@
 - 脱困：右上角设置菜单「传送至最近存档点」（`setupSettingsPanel` 第三参 → `hakoniwa.teleportToNearestSavePoint()`）：优先最近**已点燃存档点**，无则最近**已解锁传送点**，都没有则不动作；传送将玩家 body 平移到目标点（略抬 0.5m）并清零速度、唤醒刚体。
 - 地图 / 传送 / 脱困逻辑在 `modes/play/hakoniwa.ts` 装配（输入事件驱动），`updater` 中刷新地图标记。
 
+## 血条与韧性 / 格挡 HUD
+
+- 世界空间血条（`health_bar.ts`，投影到角色头顶）在血条下沿追加**韧性条**：`drawBar` 接收 `poise` / `maxPoise`，条高 `POISE_BAR_H`，颜色按剩余比例（> 0.25 用 `--dc-info`，否则 `--dc-danger`）。韧性每帧连续回充，`BarEntry` 记录 `lastPoise` / `lastMaxPoise`，仅当变化超过 `POISE_DRAW_STEP` 阈值才重绘，避免每帧重建纹理。
+- 世界空间血条在**持盾单位**下方再追加一条**格挡槽条**（`GUARD_BAR_H`，`--dc-warning`）：仅当 `block?.guardMax > 0` 时占位（血条区相应压缩），`BarEntry` 记录 `lastGuard` / `lastMaxGuard`，随 `guard` 变化重绘。
+- 玩家 HUD（`player_hud.ts`）在 HP 文本下显示韧性标签（i18n `play.hud.poise`）+ 竖向填充条；**持盾时**再显示格挡槽标签（i18n `play.hud.guard`）+ 填充条（`guardMax > 0` 才占位，破防后 `guard = 0` 仍显示）。`index.ts` 每帧传入 `player.combat.poise` / `poiseMax` 与 `guard` / `guardMaxOf(player.combat)`。
+
 ## 验证
 
 - 单元测试：`src/modes/play/lock_on.test.ts`（角度归一化、偏角优先选取、半径/角度门控、默认身体中心点、额外锁定点优选与跟随、未知关节跳过、目标失效/脱锁/移除自动解除、非敌对与无玩家情形）；`src/character/lock_point.test.ts`（锁定点配置清洗）；`src/entity/character/physics/lock_points.test.ts`（存档写入/序列化/`setLockPoints` 过滤）；`src/save_load/validation.test.ts`（v5 可选字段回退）；`src/modes/play/lock_marker.test.ts`（白点显示/隐藏与位置跟随）；`src/modes/control/player_control.test.ts`（拖拽阈值前不解除锁定、键盘绑定边沿触发、移动合成与翻滚边沿）；`src/input/registry.test.ts` 锁定默认中键绑定。

@@ -36,42 +36,42 @@ const buildTestWeaponAttacks = (): WeaponAttacks => {
     const charge: AttackSegment = {
         id: 'test_weapon_charge', key: 'light', step: 1, label: '蓄力重劈',
         duration: 0.42, recovery: 0.28, phases: segmentPhases(), poses: pose('test_weapon_charge'),
-        damageMultiplier: 1, cooldown: 1.2, next: [],
+        damageMultiplier: 1, impact: 'heavy', poiseDamage: 4, cooldown: 1.2, next: [],
     }
     const tap: AttackSegment = {
         id: 'test_weapon_tap', key: 'light', step: 1, label: '点按轻击',
         duration: 0.2, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_tap'),
-        damageMultiplier: 1, cooldown: 0.3,
+        damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0.3,
         next: [{to: 'test_weapon_thrust', guard: hasMoveInput}, {to: 'test_weapon_light_2'}],
     }
     const thrust: AttackSegment = {
         id: 'test_weapon_thrust', key: 'light', step: 2, label: '方向突刺',
         duration: 0.2, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_thrust'),
-        damageMultiplier: 1, cooldown: 0,
+        damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0,
         next: [{to: 'test_weapon_tap'}],
     }
     const light2: AttackSegment = {
         id: 'test_weapon_light_2', key: 'light', step: 2,
         duration: 0.2, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_light_2'),
-        damageMultiplier: 1, cooldown: 0,
+        damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0,
         next: [{to: 'test_weapon_tap'}],
     }
     const heavy1: AttackSegment = {
         id: 'test_weapon_heavy_1', key: 'heavy', step: 1,
         duration: 0.3, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_heavy_1'),
-        damageMultiplier: 1, cooldown: 0.6,
+        damageMultiplier: 1, impact: 'heavy', poiseDamage: 4, cooldown: 0.6,
         next: [{to: 'test_weapon_heavy_2'}],
     }
     const heavy2: AttackSegment = {
         id: 'test_weapon_heavy_2', key: 'heavy', step: 2,
         duration: 0.3, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_heavy_2'),
-        damageMultiplier: 1, cooldown: 0,
+        damageMultiplier: 1, impact: 'heavy', poiseDamage: 4, cooldown: 0,
         next: [{to: 'test_weapon_heavy_1'}],
     }
     const air1: AttackSegment = {
         id: 'test_weapon_air_1', key: 'air', step: 1,
         duration: 0.32, recovery: 0.2, phases: segmentPhases(), poses: pose('test_weapon_tap'),
-        damageMultiplier: 1.25, cooldown: 0,
+        damageMultiplier: 1.25, impact: 'medium', poiseDamage: 2, cooldown: 0,
         next: [],
     }
     const segments: Record<string, AttackSegment> = {}

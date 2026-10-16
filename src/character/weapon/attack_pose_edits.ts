@@ -8,13 +8,14 @@
  * - 末帧 = 持械戒备（肩 -0.45 / 肘 -0.85 / 挂点 1.7），与 idle/walking 一致，链段之间无跳变。
  * 武器骨骼（rightWeaponMount / leftWeaponMount）承担挥砍平面与刃面朝向；腕关节只做小幅甩腕。
  */
+import {SHIELD_CLASS_IDS, SHIELD_SEGMENT_TIMES} from './shield_clip_data.ts'
+
 type JointPose = readonly [number, number, number]
 
 interface AttackPoseEdit {
     readonly time: number
     readonly joints: Readonly<Record<string, JointPose>>
 }
-
 /** 持械戒备末帧（与 pose_fns.ts 的 idle 持械姿态一致） */
 const READY = {
     rightArmShoulder: [-0.45, 0, 0],
@@ -28,7 +29,50 @@ const READY = {
     spine: [0, 0, 0],
 } as const satisfies Readonly<Record<string, JointPose>>
 
+/* ── 盾牌：三档盾共享的盾击（light）/ 盾撞（heavy）姿态，仅握持角不同，故共用同一套修订 ── */
+
+/** 盾击削弱打击面：盾击为一整套独立姿态（非刀剑挥砍），末帧统一回到持械戒备 */
+const shieldPoseEdits = (): Record<string, readonly AttackPoseEdit[]> => {
+    const light = SHIELD_SEGMENT_TIMES.light_1
+    const heavy = SHIELD_SEGMENT_TIMES.heavy_1
+
+    /* 轻 1：前推盾击（盾面法线朝前，臂前伸） */
+    const light1: readonly AttackPoseEdit[] = [
+        {time: light[0], joints: {rightArmShoulder: [-1.0, 0.15, 0.5], rightArmElbow: [-1.5, 0, 0], rightWristPivot: [0.12, 0, 0], rightWeaponMount: [1.9, 0, 0], leftArmShoulder: [0.3, 0, -0.3], leftArmElbow: [-0.6, 0, 0], spine: [0.1, 0.15, 0]}},
+        {time: light[1], joints: {rightArmShoulder: [0.35, 0, 0], rightArmElbow: [-0.4, 0, 0], rightWristPivot: [-0.05, 0, 0], rightWeaponMount: [1.65, 0, 0], leftArmShoulder: [0.1, 0, -0.15], leftArmElbow: [-0.4, 0, 0], spine: [0.2, 0, 0]}},
+        {time: light[2], joints: READY},
+    ]
+    /* 轻 2：横扫盾击（盾沿横向扫出） */
+    const light2: readonly AttackPoseEdit[] = [
+        {time: light[0], joints: {rightArmShoulder: [-0.6, -0.4, 0.3], rightArmElbow: [-1.3, 0, 0], rightWristPivot: [-0.1, 0, 0], rightWeaponMount: [1.8, 0, 0], leftArmShoulder: [0.2, 0, 0.15], leftArmElbow: [-0.5, 0, 0], spine: [0.1, -0.2, 0]}},
+        {time: light[1], joints: {rightArmShoulder: [-0.25, 0.5, -0.2], rightArmElbow: [-0.6, 0, 0], rightWristPivot: [0.06, 0, 0], rightWeaponMount: [1.7, 0, 0], leftArmShoulder: [0.05, 0, -0.25], leftArmElbow: [-0.45, 0, 0], spine: [0.2, 0.2, 0]}},
+        {time: light[2], joints: READY},
+    ]
+    /* 重 1：盾撞（整臂前顶，躯干压前） */
+    const heavy1: readonly AttackPoseEdit[] = [
+        {time: heavy[0], joints: {rightArmShoulder: [-1.3, 0.1, 0.6], rightArmElbow: [-1.9, 0, 0], rightWristPivot: [0.16, 0, 0], rightWeaponMount: [2.0, 0, 0], leftArmShoulder: [0.35, 0, -0.35], leftArmElbow: [-0.7, 0, 0], spine: [0.15, 0.2, 0]}},
+        {time: heavy[1], joints: {rightArmShoulder: [0.55, 0, 0], rightArmElbow: [-0.3, 0, 0], rightWristPivot: [-0.1, 0, 0], rightWeaponMount: [1.6, 0, 0], leftArmShoulder: [0.1, 0, -0.2], leftArmElbow: [-0.4, 0, 0], spine: [0.35, 0, 0]}},
+        {time: heavy[2], joints: READY},
+    ]
+    /* 重 2：上撩盾撞（盾自下向上顶出） */
+    const heavy2: readonly AttackPoseEdit[] = [
+        {time: heavy[0], joints: {rightArmShoulder: [-0.9, -0.2, 0.2], rightArmElbow: [-1.6, 0, 0], rightWristPivot: [0.1, 0, 0], rightWeaponMount: [1.8, 0, 0], leftArmShoulder: [0.25, 0, 0.1], leftArmElbow: [-0.55, 0, 0], spine: [0.1, -0.15, 0]}},
+        {time: heavy[1], joints: {rightArmShoulder: [-1.55, 0.3, -0.3], rightArmElbow: [-0.5, 0, 0], rightWristPivot: [-0.12, 0, 0], rightWeaponMount: [2.2, 0, 0], leftArmShoulder: [0.15, 0, -0.2], leftArmElbow: [-0.45, 0, 0], spine: [0.1, 0.1, 0]}},
+        {time: heavy[2], joints: READY},
+    ]
+
+    const edits: Record<string, readonly AttackPoseEdit[]> = {}
+    for (const classId of SHIELD_CLASS_IDS) {
+        edits[`${classId}_one_handed_light_1`] = light1
+        edits[`${classId}_one_handed_light_2`] = light2
+        edits[`${classId}_one_handed_heavy_1`] = heavy1
+        edits[`${classId}_one_handed_heavy_2`] = heavy2
+    }
+    return edits
+}
+
 export const ATTACK_POSE_EDITS: Readonly<Record<string, readonly AttackPoseEdit[]>> = {
+    ...shieldPoseEdits(),
     short_sword_one_handed_light_1: [
         {time: 0, joints: {rightArmShoulder: [-2.072, -0.161, 1.453], rightArmElbow: [-1.909, 0, 0], rightWristPivot: [0.409, 0, 0], rightWeaponMount: [3.355, 0, 0], leftArmShoulder: [0.35, 0, -0.4], leftArmElbow: [-0.7, 0, 0], spine: [0.05, 0, 0]}},
         {time: 0.267, joints: {rightArmShoulder: [-0.76, 0.098, 0.039], rightArmElbow: [-0.533, 0, 0], rightWristPivot: [0.031, 0, 0], rightWeaponMount: [3.061, 0, 0], leftArmShoulder: [0.12, 0, -0.15], leftArmElbow: [-0.35, 0, 0], spine: [0.3, 0, 0]}},

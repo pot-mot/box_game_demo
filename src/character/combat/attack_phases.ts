@@ -36,6 +36,12 @@ export const FLINCH_DURATION = 0.1
  *  取 0.5s > 轻链段间隔 0.4s，保证被击方至少一个完整的反击/脱身窗口；伤害不受影响。 */
 export const FLINCH_IMMUNITY_DURATION = 0.5
 
+/** 强硬直（heavy 冲击）持续时间（秒）：比普通受击更长，用于表达重击的分量 */
+export const HEAVY_FLINCH_DURATION = 0.35
+
+/** 强硬直结束后的保护窗口（秒） */
+export const HEAVY_FLINCH_IMMUNITY_DURATION = 0.6
+
 /** 回退单阶段：无阶段信息时使用（行为与重构前一致） */
 const FALLBACK_PHASE: AttackPhase = {
     name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false,

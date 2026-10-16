@@ -3,7 +3,9 @@ import {Vector3, type Group} from 'three'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
 import {applyDamage, isDamageImmune} from '../../../character/combat/damage.ts'
+import {downgradeImpact} from '../../../character/combat/impact.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
+import type {ShieldCoverBox} from '../../../character/weapon/constants.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from './obb.ts'
 import type {CharacterModel} from '../appearance/types.ts'
@@ -36,6 +38,33 @@ export const targetHurtOBB = (
 ): OBB => {
     const th = targetHitBoxHalves(scale)
     return yawOBB(pos.x, pos.y, pos.z, th.x, th.y, th.z, yaw)
+}
+
+/**
+ * 盾遮挡体 OBB（世界空间）：由角色位置（body 中心）+ 朝向 + 盾 `cover` 几何 / 偏移计算，
+ * 与 `world.ts` 的盾碰撞体同源（碰撞体用于子弹、此 OBB 用于近战 SAT）。
+ * `cover` 偏移相对角色原点（脚底），故先将 body 中心还原到原点再叠加偏移。
+ */
+export const shieldCoverOBB = (
+    pos: Vec3Like,
+    scale: number,
+    yaw: number,
+    cover: ShieldCoverBox,
+): OBB => {
+    const offsetZ = cover.offsetZ * scale
+    const offsetY = cover.offsetY * scale
+    const originY = pos.y - (CHARACTER_BASE_SIZE.height * scale) / 2
+    const sin = Math.sin(yaw)
+    const cos = Math.cos(yaw)
+    return yawOBB(
+        pos.x + sin * offsetZ,
+        originY + offsetY,
+        pos.z + cos * offsetZ,
+        cover.width * scale / 2,
+        cover.height * scale / 2,
+        cover.depth * scale / 2,
+        yaw,
+    )
 }
 
 /**
@@ -196,6 +225,41 @@ export const createMeleeExecutor = (
                 const dirX = hasDir ? _tmpVec.x / len : 0
                 const dirZ = hasDir ? _tmpVec.z / len : 0
 
+                /* 盾格挡：目标举盾且未破防、武器命中箱与盾遮挡体相交 → 减免结算（不进行全额结算） */
+                const block = target.combat.block
+                if (block !== undefined && target.combat.blocking && target.combat.guard > 0
+                    && obbIntersect(
+                        obbFromTransform(elements, local.center, local.half),
+                        shieldCoverOBB(tTrans, target.config.scale, getFacingAngle(target.id), block.cover),
+                    )) {
+                    const blockedDamage = damage * block.blockDamageMultiplier
+                    const incomingImpact = segment?.impact ?? 'light'
+                    applyDamage(target.combat, {
+                        sourceId: entity.id,
+                        targetId: target.id,
+                        damageType: slotWeapon.damageType,
+                        baseAmount: blockedDamage,
+                        finalAmount: blockedDamage,
+                        skillId: attackId,
+                        /* knockdown 击穿格挡不降级，其余降一级 */
+                        impact: incomingImpact === 'knockdown' ? incomingImpact : downgradeImpact(incomingImpact),
+                        poiseDamage: (segment?.poiseDamage ?? 0) * block.poiseMultiplier,
+                        ...(hasDir ? {dirX, dirZ} : {}),
+                    })
+                    target.combat.guard = Math.max(0, target.combat.guard - blockedDamage)
+                    combat.attackedTargets.add(target.id)
+                    onHit?.(wx, wy, wz)
+                    if (hasDir) {
+                        const kb = slotWeapon.knockbackForce * block.blockKnockbackMultiplier
+                        target.body.applyImpulseAtPoint(
+                            {x: dirX * kb, y: slotWeapon.knockbackY, z: dirZ * kb},
+                            target.body.translation(),
+                            true,
+                        )
+                    }
+                    continue
+                }
+
                 applyDamage(target.combat, {
                     sourceId: entity.id,
                     targetId: target.id,
@@ -203,6 +267,9 @@ export const createMeleeExecutor = (
                     baseAmount: damage,
                     finalAmount: damage,
                     skillId: attackId,
+                    /* 冲击力 / 削韧来自当前攻击段（无段时按轻冲击、不削韧回退） */
+                    impact: segment?.impact ?? 'light',
+                    poiseDamage: segment?.poiseDamage ?? 0,
                     ...(hasDir ? {dirX, dirZ} : {}),
                 })
                 combat.attackedTargets.add(target.id)

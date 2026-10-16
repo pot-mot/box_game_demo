@@ -73,6 +73,10 @@ export type BoneEditLocale = {
     'bone_edit.state.rolling': string
     'bone_edit.state.flinching': string
     'bone_edit.state.interacting': string
+    'bone_edit.state.knockdown': string
+    'bone_edit.state.getting_up': string
+    'bone_edit.state.blocking': string
+    'bone_edit.state.guard_broken': string
     'bone_edit.state.variant_bare': string
     'bone_edit.state.variant_held': string
 }
@@ -148,6 +152,10 @@ export const boneEditZh: BoneEditLocale = {
     'bone_edit.state.rolling': '翻滚',
     'bone_edit.state.flinching': '受击硬直',
     'bone_edit.state.interacting': '交互',
+    'bone_edit.state.knockdown': '倒地',
+    'bone_edit.state.getting_up': '起身',
+    'bone_edit.state.blocking': '格挡',
+    'bone_edit.state.guard_broken': '破防',
     'bone_edit.state.variant_bare': '（空手）',
     'bone_edit.state.variant_held': '（持械）',
 }
@@ -223,6 +231,10 @@ export const boneEditEn: BoneEditLocale = {
     'bone_edit.state.rolling': 'Roll',
     'bone_edit.state.flinching': 'Flinch',
     'bone_edit.state.interacting': 'Interact',
+    'bone_edit.state.knockdown': 'Knockdown',
+    'bone_edit.state.getting_up': 'Get Up',
+    'bone_edit.state.blocking': 'Block',
+    'bone_edit.state.guard_broken': 'Guard Broken',
     'bone_edit.state.variant_bare': ' (Unarmed)',
     'bone_edit.state.variant_held': ' (Armed)',
 }

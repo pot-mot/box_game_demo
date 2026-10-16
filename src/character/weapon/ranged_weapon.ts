@@ -1,5 +1,6 @@
 import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
 import type { DamageType } from '../combat/damage_type.ts'
+import type { ImpactLevel } from '../combat/impact.ts'
 import type { CollisionCategory } from '../../physics/collision_category.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
@@ -78,6 +79,10 @@ export interface RangedWeaponClassConfig {
     readonly spreadCount?: number
     readonly spreadAngle?: number
     readonly explosionRadius?: number
+    /** 爆炸冲击力（缺省 = 常量 `EXPLOSION_DEFAULT_IMPACT`；爆炸为范围冲击，通常为倒地级） */
+    readonly explosionImpact?: ImpactLevel
+    /** 爆炸削韧值（缺省 = 常量 `EXPLOSION_DEFAULT_POISE_DAMAGE`） */
+    readonly explosionPoise?: number
     readonly homingStrength?: number
     readonly throwAngle?: number
     /**

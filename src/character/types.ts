@@ -14,6 +14,16 @@ export interface CharacterConfig {
     jumpHeight: number
     /** 整体缩放（碰撞箱和模型等比缩放） */
     scale: number
+    /** 韧性上限基础值（缺省 = 常量 `DEFAULT_POISE_MAX`；有效上限再叠加装备加成） */
+    poiseMax?: number
+    /** 受击后韧性停止回充的延迟（秒，缺省 = 常量 `DEFAULT_POISE_REGEN_DELAY`） */
+    poiseRegenDelay?: number
+    /** 延迟结束后每秒回充的韧性值（缺省 = 常量 `DEFAULT_POISE_REGEN_PER_SEC`） */
+    poiseRegenPerSec?: number
+    /** 倒地状态持续时间（秒，缺省 = 常量 `DEFAULT_KNOCKDOWN_DURATION`） */
+    knockdownDuration?: number
+    /** 起身状态持续时间（秒，缺省 = 常量 `DEFAULT_GET_UP_DURATION`） */
+    getUpDuration?: number
 }
 
 export interface CharacterEntity {
@@ -61,6 +71,12 @@ export interface CharacterEntity {
     dyingFallDirZ: number
     /** 死亡倒下角度（rad，0 → π/2，由死亡 state 按缓动推进；世界层据此绕「上 × 倒向」轴合成根旋转） */
     dyingFallAngle: number
+
+    /** 倒地倒向（世界水平单位向量，由 knockdown state 依据最后受击冲击方向写入；无受击记录时默认向后倒） */
+    knockdownFallDirX: number
+    knockdownFallDirZ: number
+    /** 倒地 / 起身根旋转角度（rad）：knockdown 期间 0 → π/2，getting_up 期间 π/2 → 0 */
+    knockdownFallAngle: number
 
     combat: CombatComponent
 

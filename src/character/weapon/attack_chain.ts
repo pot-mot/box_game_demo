@@ -1,4 +1,5 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
+import type {ImpactLevel} from '../combat/impact.ts'
 import {HOLD_MODES, type HoldMode} from './hold_mode.ts'
 import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
@@ -87,6 +88,10 @@ export interface AttackSegment {
     readonly poses: readonly SegmentPoseLayer[]
     /** 伤害倍率（相对武器基础伤害） */
     readonly damageMultiplier: number
+    /** 冲击力等级（决定目标受击效果：轻无效果 / 中弱硬直 / 重强硬直 / 倒地） */
+    readonly impact: ImpactLevel
+    /** 削韧值（命中时从目标韧性扣除；韧性归零触发倒地） */
+    readonly poiseDamage: number
     /** 冷却（秒，0 = 无冷却；非 0 时从段触发时刻开始计时，只挡起手） */
     readonly cooldown: number
     /**

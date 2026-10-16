@@ -147,6 +147,11 @@ export interface AnimationContext {
     readonly attackHolding: boolean
     /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
     readonly weaponHeld: boolean
+    /**
+     * 当前持盾手（主手 / 副手）：`blocking` 姿态据此决定举起哪只手臂；
+     * 无盾 = undefined（其余状态不使用）。
+     */
+    readonly shieldHand: 'main' | 'off' | undefined
 }
 
 /** 单个状态的动画处理器 */

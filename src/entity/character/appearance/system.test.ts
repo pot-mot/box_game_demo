@@ -37,6 +37,7 @@ const makeCtx = (overrides: Partial<AnimationContext> = {}): AnimationContext =>
     attackCharge: 0,
     attackHolding: false,
     weaponHeld: false,
+    shieldHand: undefined,
     ...overrides,
 })
 

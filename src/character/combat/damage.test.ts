@@ -24,6 +24,8 @@ const makeEvent = (overrides?: Partial<DamageEvent>): DamageEvent => ({
     baseAmount: 10,
     finalAmount: 10,
     skillId: 'test',
+    impact: 'light',
+    poiseDamage: 0,
     ...overrides,
 })
 

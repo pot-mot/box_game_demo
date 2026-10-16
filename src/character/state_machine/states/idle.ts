@@ -22,6 +22,14 @@ export const idleHandler: StateHandler = {
             to: 'interacting',
             guard: (input, entity) => input.interact && entity.interactTargetActive === true,
         },
+        {
+            to: 'blocking',
+            /* 持盾且长按格挡键（blockHeld）且格挡槽未空时举盾 */
+            guard: (_input, entity) => entity.combat.blockHeld
+                && entity.combat.block !== undefined
+                && entity.combat.guard > 0
+                && entity.combat.health > 0,
+        },
         { to: 'walking', guard: (input) => Math.hypot(input.dx, input.dz) > 0.001 },
         {
             to: 'attacking',

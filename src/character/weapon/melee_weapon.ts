@@ -5,6 +5,7 @@ import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
 import { withChargeTuningMap } from './attack_chain.ts'
 import { buildMeleeAttacks, DEFAULT_HEAVY_CHARGE, DEFAULT_MELEE_AIR_ATTACK, type BuildMeleeAttacksOptions, type HeavyChargeConfig, type MeleeAirAttackConfig } from './melee_attacks.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
+import { SHIELD_BLOCK_LARGE, SHIELD_BLOCK_MEDIUM, SHIELD_BLOCK_SMALL, type ShieldBlockConfig } from './constants.ts'
 
 /**
  * 攻击检测箱（AI 出招触发判定专用，与红色伤害判定箱解耦）：
@@ -50,6 +51,11 @@ export interface MeleeWeaponClassConfig {
      * 操控系数与打击段向下冲量（如战锤「跳跃砸地」）。所有模式共用同一套空中编排。
      */
     readonly airAttack?: Partial<MeleeAirAttackConfig>
+    /**
+     * 盾牌格挡能力（可选；仅盾类声明）。声明后该武器可长按攻击键举盾格挡，
+     * 提供遮挡减免与格挡槽；短按仍照常出招（盾击）。详见 `constants.ts` 与 `docs/design/shield_block.md`。
+     */
+    readonly block?: ShieldBlockConfig
 }
 
 /** 解析后的近战武器 = 武器类固有属性 + 所属模型（模型 id / 名称 / 网格） */
@@ -82,7 +88,8 @@ const meleeClass = (
 }
 
 /**
- * 近战武器类目录（键 = 类 id）。全部近战类支持单持 / 双手共持 / 双持三模式，默认单持；
+ * 近战武器类目录（键 = 类 id）。普通近战类支持单持 / 双手共持 / 双持三模式，默认单持；
+ * 盾类仅支持单持（`holdModes: ['one_handed']`，承载格挡）。
  * 每种模式有独立连段（段 id = `{classId}_{holdMode}_{模板键}`）。
  */
 export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
@@ -179,6 +186,43 @@ export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         two_handed: {},
         dual_wield: {},
     }),
+    /* 盾牌：仅单持，承载格挡（`block`）。轻击 = 盾击，重击 = 盾撞；三档共用同一套盾击 / 盾撞姿态，仅握持角不同。 */
+    shield_small: meleeClass({
+        id: 'shield_small', type: 'melee',
+        damageType: 'physical',
+        holdModes: ['one_handed'],
+        damage: 2,
+        knockbackForce: 3, knockbackY: 1,
+        detectionRange: 3,
+        detectBox: { size: { x: 0.5, y: 1.15, z: 0.7 }, offset: { x: 0, y: 0, z: 0.225 } },
+        block: SHIELD_BLOCK_SMALL,
+    }, {
+        one_handed: {},
+    }),
+    shield_medium: meleeClass({
+        id: 'shield_medium', type: 'melee',
+        damageType: 'physical',
+        holdModes: ['one_handed'],
+        damage: 3,
+        knockbackForce: 4, knockbackY: 2,
+        detectionRange: 4,
+        detectBox: { size: { x: 0.5, y: 1.15, z: 0.8 }, offset: { x: 0, y: 0, z: 0.275 } },
+        block: SHIELD_BLOCK_MEDIUM,
+    }, {
+        one_handed: {},
+    }),
+    shield_large: meleeClass({
+        id: 'shield_large', type: 'melee',
+        damageType: 'physical',
+        holdModes: ['one_handed'],
+        damage: 4,
+        knockbackForce: 5, knockbackY: 2,
+        detectionRange: 5,
+        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
+        block: SHIELD_BLOCK_LARGE,
+    }, {
+        one_handed: {},
+    }),
 }
 
 /** 近战武器模型目录（键 = 模型 id；当前每类只有默认模型，模型 id = 类 id） */
@@ -206,6 +250,18 @@ export const MELEE_WEAPON_MODELS: Record<string, WeaponModelConfig> = {
     war_hammer: {
         id: 'war_hammer', classId: 'war_hammer', name: '战锤',
         mesh: { id: 'war_hammer', headSize: 0.35, color: 0x777777, gripColor: 0x443311 },
+    },
+    shield_small: {
+        id: 'shield_small', classId: 'shield_small', name: '小盾',
+        mesh: { id: 'shield_small', width: 0.44, height: 0.44, thickness: 0.06, round: true, color: 0x8a6a3a, gripColor: 0x4a3520, bossColor: 0x9a9a9a },
+    },
+    shield_medium: {
+        id: 'shield_medium', classId: 'shield_medium', name: '中盾',
+        mesh: { id: 'shield_medium', width: 0.6, height: 0.9, thickness: 0.12, round: false, color: 0x6a5a44, gripColor: 0x4a3520, bossColor: 0x8a8a8a },
+    },
+    shield_large: {
+        id: 'shield_large', classId: 'shield_large', name: '大盾',
+        mesh: { id: 'shield_large', width: 0.9, height: 1.4, thickness: 0.15, round: false, color: 0x556070, gripColor: 0x3a2a18, bossColor: 0x9a9a9a },
     },
 }
 

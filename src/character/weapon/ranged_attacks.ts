@@ -1,6 +1,12 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
+import type {ImpactLevel} from '../combat/impact.ts'
 import type {AttackSegment, WeaponAttacks} from './attack_chain.ts'
 import type {ChargeTuning} from './charge_tuning.ts'
+
+/** 远程武器默认冲击力（弹丸命中：弱硬直，不打断攻击） */
+export const RANGED_DEFAULT_IMPACT: ImpactLevel = 'medium'
+/** 远程武器默认削韧值 */
+export const RANGED_DEFAULT_POISE_DAMAGE = 2
 
 /**
  * 远程武器攻击段（武器模组固有数据）：
@@ -131,6 +137,8 @@ export const buildRangedAttacks = (weaponId: string, charge?: ChargeTuning): Wea
         /* 动作组合：默认单层（段 id 即 pose 资产 id） */
         poses: [{poseId: spec.segmentId, weight: 1}],
         damageMultiplier: 1,
+        impact: RANGED_DEFAULT_IMPACT,
+        poiseDamage: RANGED_DEFAULT_POISE_DAMAGE,
         cooldown: spec.cooldown,
         ...(charge !== undefined ? {chargeFullTime: charge.maxChargeTime} : {}),
         next: [],

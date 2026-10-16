@@ -80,6 +80,8 @@ describe('死亡倒下（世界层按最后受击方向合成根旋转）', () =
             baseAmount: 1,
             finalAmount: 1,
             skillId: 'test',
+            impact: 'light',
+            poiseDamage: 0,
             dirX: hitDirX,
             dirZ: hitDirZ,
         })

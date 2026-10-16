@@ -9,6 +9,10 @@ export type CharacterLocale = {
     'hold_mode.dual_wield': string
     'damage.physical': string
     'damage.magic': string
+    'impact.light': string
+    'impact.medium': string
+    'impact.heavy': string
+    'impact.knockdown': string
     'attack_key.light': string
     'attack_key.heavy': string
     'attack_key.air': string
@@ -27,6 +31,9 @@ export type CharacterLocale = {
     'weapon.spear': string
     'weapon.dual_axe': string
     'weapon.war_hammer': string
+    'weapon.shield_small': string
+    'weapon.shield_medium': string
+    'weapon.shield_large': string
     'weapon.longbow': string
     'weapon.crossbow': string
     'weapon.shotgun': string
@@ -95,6 +102,11 @@ export type CharacterLocale = {
     'character.bullet_life': string
     'character.max_hp': string
     'character.cur_hp': string
+    'character.poise': string
+    'character.poise_regen_delay': string
+    'character.poise_regen_rate': string
+    'character.knockdown_duration': string
+    'character.get_up_duration': string
     'character.base_def_phys': string
     'character.base_def_magic': string
     'character.build_interval': string
@@ -113,6 +125,7 @@ export type CharacterLocale = {
     'character.hold_tip': string
     'character.limb_tip': string
     'character.weapon_group_melee': string
+    'character.weapon_group_shield': string
     'character.weapon_group_ranged': string
     'character.tag.spread': (n: string) => string
     'character.tag.explosion': (r: string) => string
@@ -165,6 +178,10 @@ export const characterZh: CharacterLocale = {
     'hold_mode.dual_wield': '双持',
     'damage.physical': '物理',
     'damage.magic': '魔法',
+    'impact.light': '轻',
+    'impact.medium': '中',
+    'impact.heavy': '重',
+    'impact.knockdown': '倒地',
     'attack_key.light': '轻击',
     'attack_key.heavy': '重击',
     'attack_key.air': '空中攻击',
@@ -186,6 +203,9 @@ export const characterZh: CharacterLocale = {
     'weapon.spear': '长枪',
     'weapon.dual_axe': '战斧',
     'weapon.war_hammer': '战锤',
+    'weapon.shield_small': '小盾',
+    'weapon.shield_medium': '中盾',
+    'weapon.shield_large': '大盾',
     'weapon.longbow': '长弓',
     'weapon.crossbow': '弩',
     'weapon.shotgun': '霰弹枪',
@@ -254,6 +274,11 @@ export const characterZh: CharacterLocale = {
     'character.bullet_life': '存活',
     'character.max_hp': '最大生命',
     'character.cur_hp': '当前生命',
+    'character.poise': '韧性',
+    'character.poise_regen_delay': '韧性延迟',
+    'character.poise_regen_rate': '韧性回复',
+    'character.knockdown_duration': '倒地时长',
+    'character.get_up_duration': '起身时长',
     'character.base_def_phys': '基础物防',
     'character.base_def_magic': '基础魔防',
     'character.build_interval': '间隔(秒)',
@@ -272,6 +297,7 @@ export const characterZh: CharacterLocale = {
     'character.hold_tip': '持握模式：单持 / 双手共持 / 双持（双持需副手装备同类近战武器）',
     'character.limb_tip': '肢体组件（骷髅 / 兽人 / 精灵）：装备后默认顶替该部位的人类肢体，颜色随阵营变化；空 = 默认人类肢体',
     'character.weapon_group_melee': '近战武器',
+    'character.weapon_group_shield': '盾牌',
     'character.weapon_group_ranged': '远程武器',
     'character.tag.spread': (n) => `散射×${n}`,
     'character.tag.explosion': (r) => `爆炸 R:${r}`,
@@ -324,6 +350,10 @@ export const characterEn: CharacterLocale = {
     'hold_mode.dual_wield': 'Dual wield',
     'damage.physical': 'Physical',
     'damage.magic': 'Magic',
+    'impact.light': 'Light',
+    'impact.medium': 'Medium',
+    'impact.heavy': 'Heavy',
+    'impact.knockdown': 'Knockdown',
     'attack_key.light': 'Light',
     'attack_key.heavy': 'Heavy',
     'attack_key.air': 'Air',
@@ -342,6 +372,9 @@ export const characterEn: CharacterLocale = {
     'weapon.spear': 'Spear',
     'weapon.dual_axe': 'Battle Axe',
     'weapon.war_hammer': 'War Hammer',
+    'weapon.shield_small': 'Small Shield',
+    'weapon.shield_medium': 'Medium Shield',
+    'weapon.shield_large': 'Large Shield',
     'weapon.longbow': 'Longbow',
     'weapon.crossbow': 'Crossbow',
     'weapon.shotgun': 'Shotgun',
@@ -410,6 +443,11 @@ export const characterEn: CharacterLocale = {
     'character.bullet_life': 'BulLife',
     'character.max_hp': 'MaxHP',
     'character.cur_hp': 'CurHP',
+    'character.poise': 'Poise',
+    'character.poise_regen_delay': 'PoiseDelay',
+    'character.poise_regen_rate': 'PoiseRegen',
+    'character.knockdown_duration': 'Knockdown(s)',
+    'character.get_up_duration': 'GetUp(s)',
     'character.base_def_phys': 'Base Phys Def',
     'character.base_def_magic': 'Base Magic Def',
     'character.build_interval': 'Interval(s)',
@@ -428,6 +466,7 @@ export const characterEn: CharacterLocale = {
     'character.hold_tip': 'Hold mode: one-handed / two-handed / dual wield (dual wield needs an offhand melee weapon of the same class)',
     'character.limb_tip': 'Limb parts (skeleton / orc / elf): equipping replaces the human limb of that part, color follows faction; empty = default human limb',
     'character.weapon_group_melee': 'Melee Weapons',
+    'character.weapon_group_shield': 'Shields',
     'character.weapon_group_ranged': 'Ranged Weapons',
     'character.tag.spread': (n) => `Spread×${n}`,
     'character.tag.explosion': (r) => `Blast R:${r}`,

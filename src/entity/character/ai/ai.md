@@ -1,5 +1,7 @@
 # 角色 AI 系统文档（寻路 / 索敌）
 
+> **设计中（尚未实现）**：行为原点策略（居民 / 战斗者 / 狩猎者 / 漫游者）与可配置追击半径详见 [`docs/design/ai_origin_strategy.md`](../../../../docs/design/ai_origin_strategy.md)。实现前以该设计文档为准。
+
 ## 约定
 
 - 双层 FSM：AI 决策层（`machine.ts`：和平 FSM patrol/build + 战斗 FSM chase/approach/volley/kite/attack/flee/inactive）→ 角色物理层（`character/state_machine/`）。
@@ -418,6 +420,19 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 - `range`：武器攻击的最大射程
 - `idealRange`：远程角色维持的最佳攻击距离
 - `retreatRange`：触发后退/风筝的距离阈值（敌人进入此范围则后撤）
+
+### 4.6 反应式盾格挡（AI）
+
+**文件**：`ai/combat/shield_block.ts`（`shouldReactiveBlock(ctx, character, allCharacters)`）+ `ai/constants.ts`
+
+持盾 AI 在满足条件时把 `block` 注入状态机（`ai/machine.ts` 在 `updateAI` 末尾统一 `setInput(..., block)`；`trackedSetInput` 缓存当帧参数，避免重复触发世界接触 / 导航处理）：
+
+| 常量 | 默认 | 含义 |
+|------|------|------|
+| `AI_DEFEND_RANGE` | 3.5 | 进入威胁范围（目标在此距离内才考虑格挡） |
+| `AI_DEFEND_FACING_DOT` | 0.3 | 目标攻击方向与「目标 → 自身」朝向的最小点积（判定来袭是否朝向自己） |
+
+生效条件（全部满足）：自身装备盾（`combat.block !== undefined`）、`guard > 0`、未死亡、存在 `combatTargetId`、目标未死亡且 `attackActive`、目标距离 ≤ `AI_DEFEND_RANGE`、目标攻击方向与来袭方向点积 ≥ `AI_DEFEND_FACING_DOT`；仅在 `activeFsm === 'combat'` 时注入，其余帧注入 `block = false`。签发按钮不做别的处理（沿用玩家同一 `setInput` 通路）。
 
 ---
 

@@ -10,8 +10,17 @@ import {
     FLINCH_ARM_SPREAD,
     FLINCH_ELBOW,
     FLINCH_HEAD_BACK,
+    BLOCK_SHOULDER,
+    BLOCK_ELBOW,
+    BLOCK_LEAN,
+    BLOCK_SWAY,
+    BLOCK_IDLE_SHOULDER,
+    BLOCK_IDLE_ELBOW,
+    BLOCKING_POSE_PERIOD,
+    GUARD_BROKEN_POSE_DURATION,
 } from './constants.ts'
 import {FLINCH_DURATION} from '../../../character/combat/attack_phases.ts'
+import {DEFAULT_KNOCKDOWN_DURATION, DEFAULT_GET_UP_DURATION} from '../../../character/combat/constants.ts'
 import {ROLL_DURATION} from '../../../character/combat/roll_skill.ts'
 import {INTERACTION_DURATION} from '../../../character/interaction/types.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
@@ -53,6 +62,8 @@ const GRIP_BONE_POSE: JointEulerState = {rx: WEAPON_GRIP_FLEX, ry: 0, rz: 0}
 export interface PoseContext {
     readonly weaponHeld: boolean
     readonly horizontalSpeed: number
+    /** 格挡举盾手（blocking 姿态决定抬起哪只手臂；undefined = 默认主手 / 右臂） */
+    readonly blockArm?: 'right' | 'left'
 }
 
 /** 固定步频（rad/s）：原式在 3.6 m/s 匀速时频率 ≈5.9，取整 6 保持基准视觉 */
@@ -280,6 +291,42 @@ const flinchingPose = (t: number): PoseState => {
     }
 }
 
+/* ── 倒地 / 起身姿态 ──
+ * 身体「倒下」的根旋转由 world 层按受击方向合成（与 dying / rolling 同机制），
+ * 姿势本身只负责四肢松软伏地：0 = 站立中立位，1 = 完全伏地。 */
+const KNOCKDOWN_POSE_SETTLE = 0.2
+const GETUP_POSE_STAND = 0.4
+
+const downedPose = (e: number, ctx: PoseContext): PoseState => {
+    /* 持械时武器骨骼回到垂直握持，避免倒地时武器穿身 */
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
+    return {
+        rightArmShoulder: {rx: -0.9 * e, ry: 0, rz: 0.5 * e},
+        rightArmElbow: {rx: -0.6 * e, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: grip,
+        leftArmShoulder: {rx: -0.9 * e, ry: 0, rz: -0.5 * e},
+        leftArmElbow: {rx: -0.6 * e, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: grip,
+        rightLegHip: {rx: 0.5 * e, ry: 0, rz: 0},
+        rightLegKnee: {rx: -0.9 * e, ry: 0, rz: 0},
+        leftLegHip: {rx: 0.5 * e, ry: 0, rz: 0},
+        leftLegKnee: {rx: -0.9 * e, ry: 0, rz: 0},
+        headNeck: {rx: 0.4 * e, ry: 0, rz: 0},
+        spine: {rotation: {rx: 0.3 * e, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
+
+const knockdownPose = (t: number, ctx: PoseContext): PoseState =>
+    downedPose(clamp01(t / KNOCKDOWN_POSE_SETTLE), ctx)
+
+const gettingUpPose = (t: number, ctx: PoseContext): PoseState =>
+    downedPose(1 - clamp01(t / GETUP_POSE_STAND), ctx)
+
 export type PoseSampler = (t: number, ctx: PoseContext) => PoseState
 
 /* ── 交互姿态：伸手（0→REACH_END）→ 发力后收回（REACH_END→INTERACTION_DURATION） ── */
@@ -315,8 +362,82 @@ const interactingPose = (t: number): PoseState => {
     }
 }
 
+/* ── 格挡 / 破防姿态 ──
+ * 举盾：`blockArm` 决定抬哪只手臂（主手盾 = 右臂，副手盾 = 左臂），另一只手持械则保持戒备位、空手则自然下垂。 */
+
+/** 单臂关节姿态（举盾 / 戒备 / 下垂三选一） */
+interface ArmPose {
+    readonly shoulder: JointEulerState
+    readonly elbow: JointEulerState
+    readonly mount: JointEulerState
+}
+
+const blockingPose = (t: number, ctx: PoseContext): PoseState => {
+    const sway = Math.sin((t / BLOCKING_POSE_PERIOD) * Math.PI * 2) * BLOCK_SWAY
+    const guardArm: ArmPose = {
+        shoulder: {rx: BLOCK_SHOULDER + sway, ry: 0, rz: 0},
+        elbow: {rx: BLOCK_ELBOW, ry: 0, rz: 0},
+        mount: GRIP_BONE_POSE,
+    }
+    const idleArm: ArmPose = {
+        shoulder: {rx: BLOCK_IDLE_SHOULDER, ry: 0, rz: 0},
+        elbow: {rx: BLOCK_IDLE_ELBOW, ry: 0, rz: 0},
+        mount: ZERO,
+    }
+    /* 非举盾侧：副手盾时主手仍握械（戒备位），主手盾时空手（自然下垂） */
+    const offArm: ArmPose = ctx.blockArm === 'left' && ctx.weaponHeld
+        ? {shoulder: {rx: WEAPON_READY_SHOULDER, ry: 0, rz: 0}, elbow: {rx: WEAPON_READY_ELBOW, ry: 0, rz: 0}, mount: GRIP_BONE_POSE}
+        : idleArm
+    const isLeft = ctx.blockArm === 'left'
+    const rightArm = isLeft ? offArm : guardArm
+    const leftArm = isLeft ? guardArm : offArm
+    return {
+        rightArmShoulder: rightArm.shoulder,
+        rightArmElbow: rightArm.elbow,
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: rightArm.mount,
+        leftArmShoulder: leftArm.shoulder,
+        leftArmElbow: leftArm.elbow,
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: leftArm.mount,
+        rightLegHip: {rx: 0.06, ry: 0, rz: 0},
+        rightLegKnee: {rx: 0.12, ry: 0, rz: 0},
+        leftLegHip: {rx: 0.06, ry: 0, rz: 0},
+        leftLegKnee: {rx: 0.12, ry: 0, rz: 0},
+        headNeck: {rx: 0.05, ry: 0, rz: 0},
+        spine: {rotation: {rx: BLOCK_LEAN, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
+
+/** 破防：双臂脱力下垂、躯干后仰下沉（ease-out 到位后保持）。 */
+const guardBrokenPose = (t: number): PoseState => {
+    const e = 1 - Math.pow(1 - clamp01(t / GUARD_BROKEN_POSE_DURATION), 3)
+    return {
+        rightArmShoulder: {rx: 0.25 * e, ry: 0, rz: 0.25 * e},
+        rightArmElbow: {rx: -0.45 * e, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: ZERO,
+        leftArmShoulder: {rx: 0.25 * e, ry: 0, rz: -0.25 * e},
+        leftArmElbow: {rx: -0.45 * e, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: ZERO,
+        rightLegHip: {rx: -0.15 * e, ry: 0, rz: 0},
+        rightLegKnee: {rx: 0.35 * e, ry: 0, rz: 0},
+        leftLegHip: {rx: -0.15 * e, ry: 0, rz: 0},
+        leftLegKnee: {rx: 0.35 * e, ry: 0, rz: 0},
+        headNeck: {rx: -FLINCH_HEAD_BACK * e, ry: 0, rz: 0},
+        spine: {rotation: {rx: -FLINCH_SPINE_BACK * e, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
+
 /** 基础状态 → 姿态采样器（公式与旧 animators 一一对应；falling 腿张开随速度，行走步频由播放器变速） */
-export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'interacting', PoseSampler> = {
+export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'interacting' | 'knockdown' | 'getting_up' | 'blocking' | 'guard_broken', PoseSampler> = {
     idle: (t, ctx) => idlePose(t, ctx),
     walking: (t, ctx) => walkingPose(t * WALK_CYCLE_FREQ, ctx),
     jumping: (t) => jumpingPose(t),
@@ -325,6 +446,10 @@ export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'fallin
     rolling: (t, ctx) => rollingPose(t, ctx),
     flinching: (t) => flinchingPose(t),
     interacting: (t) => interactingPose(t),
+    knockdown: (t, ctx) => knockdownPose(t, ctx),
+    getting_up: (t, ctx) => gettingUpPose(t, ctx),
+    blocking: (t, ctx) => blockingPose(t, ctx),
+    guard_broken: (t) => guardBrokenPose(t),
 }
 
 /**
@@ -361,4 +486,8 @@ export const BASE_CLIP_META: Record<keyof typeof BASE_POSE_SAMPLERS, {duration: 
     rolling: {duration: ROLL_DURATION, loop: false},
     flinching: {duration: FLINCH_DURATION, loop: false},
     interacting: {duration: INTERACTION_DURATION, loop: false},
+    knockdown: {duration: DEFAULT_KNOCKDOWN_DURATION, loop: false},
+    getting_up: {duration: DEFAULT_GET_UP_DURATION, loop: false},
+    blocking: {duration: BLOCKING_POSE_PERIOD, loop: true},
+    guard_broken: {duration: GUARD_BROKEN_POSE_DURATION, loop: false},
 }

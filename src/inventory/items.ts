@@ -76,7 +76,7 @@ const block = (id: string, name: string, shape: readonly string[], blockType: st
 
 /**
  * 物品目录（生产物品；未知 defId 由运行时丢弃）。
- * 覆盖**全部武器模型**（近战 6 + 远程 9）、**全部护甲预设**（17）与**全部方块实体**（5 类箱子 + 水方块）；
+ * 覆盖**全部武器模型**（近战 6 + 盾牌 3 + 远程 9）、**全部护甲预设**（17）与**全部方块实体**（5 类箱子 + 水方块）；
  * 由 `items.test.ts` 对照武器 / 护甲目录与实体类型锁定完整性，新增武器 / 护甲 / 方块须同步补条目。
  */
 export const ITEM_DEFS: readonly ItemDef[] = [
@@ -87,6 +87,9 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     weapon('weapon_spear', '长枪', ['#', '#', '#', '#', '#'], 'spear', '突刺长柄', 'item-spear'),
     weapon('weapon_war_hammer', '战锤', ['##', '##', '.#'], 'war_hammer', '破甲重锤', 'item-war-hammer'),
     weapon('weapon_dual_axe', '战斧', ['##', '##'], 'dual_axe', '可双持', 'item-dual-axe'),
+    weapon('weapon_shield_small', '小盾', ['##', '##', '.#'], 'shield_small', '轻装盾击 / 格挡', 'item-shield-small'),
+    weapon('weapon_shield_medium', '中盾', ['##', '##', '##'], 'shield_medium', '均衡盾击 / 格挡', 'item-shield-medium'),
+    weapon('weapon_shield_large', '大盾', ['###', '###', '.#.'], 'shield_large', '重型盾击 / 格挡', 'item-shield-large'),
     /* ── 远程武器 ── */
     weapon('weapon_longbow', '长弓', ['#.', '##', '.#'], 'longbow', '远程弓箭', 'item-longbow'),
     weapon('weapon_crossbow', '弩', ['##', '.#'], 'crossbow', '远程弩矢', 'item-crossbow'),
@@ -150,6 +153,9 @@ const ITEM_NAME_KEYS: Record<string, StringLocaleKey> = {
     weapon_spear: 'item.weapon_spear.name',
     weapon_war_hammer: 'item.weapon_war_hammer.name',
     weapon_dual_axe: 'item.weapon_dual_axe.name',
+    weapon_shield_small: 'weapon.shield_small',
+    weapon_shield_medium: 'weapon.shield_medium',
+    weapon_shield_large: 'weapon.shield_large',
     weapon_longbow: 'item.weapon_longbow.name',
     weapon_crossbow: 'item.weapon_crossbow.name',
     weapon_staff: 'item.weapon_staff.name',
@@ -198,6 +204,9 @@ const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
     weapon_spear: 'item.weapon_spear.desc',
     weapon_war_hammer: 'item.weapon_war_hammer.desc',
     weapon_dual_axe: 'item.weapon_dual_axe.desc',
+    weapon_shield_small: 'item.weapon_generic.desc',
+    weapon_shield_medium: 'item.weapon_generic.desc',
+    weapon_shield_large: 'item.weapon_generic.desc',
     weapon_longbow: 'item.weapon_longbow.desc',
     weapon_crossbow: 'item.weapon_crossbow.desc',
     weapon_staff: 'item.weapon_staff.desc',

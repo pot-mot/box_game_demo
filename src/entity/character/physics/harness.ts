@@ -14,7 +14,7 @@ import {categoryCollisionGroups, collisionCategoryOf} from '../../../physics/col
 import {computeSeparation, separationSlopeDy} from './separation.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
-import {createRollSkillRuntime} from '../../../character/combat/roll_skill.ts'
+import {createCombatComponent} from '../../../character/combat/types.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {CHARACTER_BASE_SIZE, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
@@ -102,46 +102,15 @@ export const makeChar = (
         dyingFallDirX: 0,
         dyingFallDirZ: 0,
         dyingFallAngle: 0,
+        knockdownFallDirX: 0,
+        knockdownFallDirZ: 0,
+        knockdownFallAngle: 0,
         lockPoints: [],
         interactTargetActive: false,
         interactTargetX: 0,
         interactTargetZ: 0,
-        /* 测试专用最小 combat mock（集中窄化一次，避免测试文件散落 as unknown as） */
-        combat: {
-            faction: 0,
-            health: 100,
-            maxHealth: 100,
-            isDead: false,
-            baseDefense: {physical: 0, magic: 0},
-            armor: {},
-            limb: {},
-            defense: {physical: 0, magic: 0},
-            attackBonus: {physical: 0, magic: 0},
-            moveSpeedMultiplier: 1,
-            damageModifiers: [],
-            attackTendency: () => true,
-            tendencyConfig: {tendencyId: 'hostileExceptSelf'},
-            onDamageTaken: null,
-            onDeath: null,
-            onDamageDealt: null,
-            weapon: runtime.weapon,
-            offhand: undefined,
-            attacks: runtime.attacks,
-            segmentCooldowns: new Map(),
-            activeSegment: undefined,
-            bufferedSegment: undefined,
-            rollSkill: createRollSkillRuntime(),
-            invincibleTimer: 0,
-            attackActive: false,
-            attackTimer: 0,
-            attackedTargets: new Set(),
-            attackDirX: 0,
-            attackDirZ: 0,
-            muzzleDirX: 0,
-            muzzleDirZ: 0,
-            phaseIndex: 0, phaseTimer: 0, pendingFlinch: false, flinchImmunityTimer: 0, lastHitDirX: 0, lastHitDirZ: 0,
-            attackCharge: 0, attackHolding: false,
-        },
+        /* 测试专用最小 combat（真实组件，仅倾向设为无条件敌对；避免手写字段随组件结构漂移） */
+        combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 100),
         holdMode: runtime.holdMode,
         stateMachine: createCharacterStateMachine(),
     }

@@ -2,12 +2,30 @@ import type { Faction, AttackTendency, TendencyConfig } from '../faction.ts'
 import type { AttackSegment, WeaponAttacks } from '../weapon/attack_chain.ts'
 import type { WeaponConfig } from '../weapon/catalog.ts'
 import type { WeaponRuntime } from '../weapon/weapon_runtime.ts'
+import type { ShieldBlockConfig } from '../weapon/constants.ts'
 import type { ArmorLoadout, LimbLoadout } from '../armor/types.ts'
-import { resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf } from '../armor/catalog.ts'
+import { resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf, totalPoiseOf } from '../armor/catalog.ts'
 import { createRollSkillRuntime, type RollSkillRuntime } from './roll_skill.ts'
 import type { DamageEvent, DamageModifier } from './damage.ts'
 import { ZERO_PROFILE, type DefenseProfile } from './defense.ts'
 import type { DamageTypeProfile } from './damage_type.ts'
+import { FLINCH_DURATION } from './attack_phases.ts'
+import {
+    DEFAULT_POISE_MAX,
+    DEFAULT_POISE_REGEN_DELAY,
+    DEFAULT_POISE_REGEN_PER_SEC,
+    DEFAULT_KNOCKDOWN_DURATION,
+    DEFAULT_GET_UP_DURATION,
+} from './constants.ts'
+
+/** 韧性相关角色属性（缺省取 `constants.ts` 默认值；可被角色配置覆写） */
+export interface CombatAttributes {
+    readonly poiseMax?: number
+    readonly poiseRegenDelay?: number
+    readonly poiseRegenPerSec?: number
+    readonly knockdownDuration?: number
+    readonly getUpDuration?: number
+}
 
 /** 攻击结果码 */
 export const ATTACK_RESULT_CODES = ['ok', 'cooldown', 'dead', 'already_attacking', 'no_valid_skill'] as const
@@ -72,8 +90,36 @@ export interface CombatComponent {
 
     /** 是否被标记为受击硬直 */
     pendingFlinch: boolean
+    /** 本次硬直持续时间（秒）：由受击冲击力决定（轻/中 = `FLINCH_DURATION`、重 = `HEAVY_FLINCH_DURATION`），flinching 状态读取 */
+    flinchDuration: number
     /** 受击保护剩余时间（秒）：flinching 退出后的免硬直窗口，防止无限连段把目标永久锁在受击状态；伤害不受影响 */
     flinchImmunityTimer: number
+
+    /* ── 韧性 / 冲击反应 ── */
+
+    /** 当前韧性值：受击按 `poiseDamage` 扣除，延迟后逐帧回充；归零触发倒地 */
+    poise: number
+    /** 韧性上限基础值（角色固有，不含装备加成） */
+    basePoiseMax: number
+    /** 有效韧性上限 = 基础值 + 装备韧性加成（`setCombatEquipment` 统一重算） */
+    poiseMax: number
+    /** 受击后停止回充的剩余延迟（秒）：> 0 时暂停回充，逐帧递减 */
+    poiseRegenDelayTimer: number
+    /** 停止回充延迟时长（秒，角色属性） */
+    poiseRegenDelay: number
+    /** 延迟结束后每秒回充的韧性值（角色属性） */
+    poiseRegenPerSec: number
+    /** 倒地状态持续时间（秒，角色属性） */
+    knockdownDuration: number
+    /** 起身状态持续时间（秒，角色属性；结束时韧性回满） */
+    getUpDuration: number
+    /** 是否被标记为受击倒地（由受击结算置位，knockdown 状态消费后清零） */
+    pendingKnockdown: boolean
+    /**
+     * 倒地 / 起身无敌剩余时间（秒）：> 0 时 `applyDamage` 完全免疫伤害与击退
+     * （倒地与起身期间不可被再次打击），由对应状态逐帧写入 / 退出清零。
+     */
+    hitImmunityTimer: number
 
     /**
      * 最近一次受击的冲击方向（世界水平单位向量，来源 → 受击者；无记录为 0,0）：
@@ -111,6 +157,20 @@ export interface CombatComponent {
     /** 装备提供的移速乘数（多件相乘，1 = 无修正；`moveSpeedOf` 与基础移速相乘） */
     moveSpeedMultiplier: number
 
+    /* ── 格挡 / 盾牌 ── */
+
+    /**
+     * 当前盾牌格挡配置（主手盾优先，其次副手盾；无盾 = undefined）。
+     * 由 `updateShieldBlock` 在装备（武器 / 副手）变更时同步，供格挡状态、盾碰撞体与减免结算读取。
+     */
+    block: ShieldBlockConfig | undefined
+    /** 格挡槽当前值（0 ~ `block.guardMax`；无盾 = 0）：被挡命中扣除，归零触发破防 */
+    guard: number
+    /** 是否正在举盾格挡（`blocking` 状态进入 / 退出时写入，供盾碰撞体与判定使用） */
+    blocking: boolean
+    /** 本帧格挡输入（逐帧写入，供状态机守卫；玩家由输入路由写入，AI 由 AI 注入） */
+    blockHeld: boolean
+
     readonly damageModifiers: readonly DamageModifier[]
 
     onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
@@ -122,11 +182,35 @@ export interface CombatComponent {
 export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime): void => {
     c.weapon = runtime.weapon
     c.attacks = runtime.attacks
+    updateShieldBlock(c)
 }
 
 /** 变更副手武器（undefined = 卸下；双持可用性判定见 world.ts 的 setHoldMode） */
 export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | undefined): void => {
     c.offhand = runtime
+    updateShieldBlock(c)
+}
+
+/** 取当前盾牌格挡槽上限（无盾 = 0） */
+export const guardMaxOf = (c: CombatComponent): number => c.block?.guardMax ?? 0
+
+/**
+ * 解析当前装备的盾牌格挡配置（主手盾优先，其次副手盾）并写入 `c.block`，
+ * 同时把 `guard` 夹到 `[0, 上限]`（卸下 / 换更小盾时安全收敛，无盾则归零）。
+ * 装备（主手 / 副手）变更后必须调用，保证格挡状态与盾碰撞体读取到一致数据。
+ */
+export const updateShieldBlock = (c: CombatComponent): void => {
+    const mainBlock = c.weapon.type === 'melee' ? c.weapon.block : undefined
+    const offBlock = c.offhand !== undefined && c.offhand.weapon.type === 'melee' ? c.offhand.weapon.block : undefined
+    const previous = c.block
+    c.block = mainBlock ?? offBlock
+    const max = c.block?.guardMax ?? 0
+    if (c.block !== previous) {
+        /* 换盾 / 装盾：格挡槽回满；卸盾：归零 */
+        c.guard = max
+    } else if (c.guard > max) {
+        c.guard = max
+    }
 }
 
 /**
@@ -147,53 +231,76 @@ export const setCombatEquipment = (
     c.defense = totalDefenseOf(baseDefense, resolvedArmor, resolvedLimb)
     c.attackBonus = totalAttackOf(resolvedArmor, resolvedLimb)
     c.moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
+    c.poiseMax = c.basePoiseMax + totalPoiseOf(resolvedArmor, resolvedLimb)
+    if (c.poise > c.poiseMax) c.poise = c.poiseMax
 }
 
-/** 创建初始化的战斗组件（武器运行时 + 阵营/倾向/血量） */
+/** 创建初始化的战斗组件（武器运行时 + 阵营/倾向/血量 + 韧性属性） */
 export const createCombatComponent = (
     runtime: WeaponRuntime,
     faction: Faction,
     attackTendency: AttackTendency,
     tendencyConfig: TendencyConfig,
     maxHealth: number,
-): CombatComponent => ({
-    weapon: runtime.weapon,
-    offhand: undefined,
-    attacks: runtime.attacks,
-    segmentCooldowns: new Map(),
-    activeSegment: undefined,
-    bufferedSegment: undefined,
-    attackActive: false,
-    attackTimer: 0,
-    attackDirX: 0,
-    attackDirZ: 1,
-    muzzleDirX: 0,
-    muzzleDirZ: 0,
-    attackedTargets: new Set(),
-    phaseIndex: 0,
-    phaseTimer: 0,
-    attackCharge: 0,
-    attackHolding: false,
-    pendingFlinch: false,
-    flinchImmunityTimer: 0,
-    lastHitDirX: 0,
-    lastHitDirZ: 0,
-    rollSkill: createRollSkillRuntime(),
-    invincibleTimer: 0,
-    faction,
-    attackTendency,
-    tendencyConfig,
-    health: maxHealth,
-    maxHealth,
-    isDead: false,
-    baseDefense: ZERO_PROFILE,
-    armor: {},
-    limb: {},
-    defense: ZERO_PROFILE,
-    attackBonus: ZERO_PROFILE,
-    moveSpeedMultiplier: 1,
-    damageModifiers: [],
-    onDamageTaken: null,
-    onDamageDealt: null,
-    onDeath: null,
-})
+    attrs: CombatAttributes = {},
+): CombatComponent => {
+    const basePoiseMax = attrs.poiseMax ?? DEFAULT_POISE_MAX
+    const combat: CombatComponent = {
+        weapon: runtime.weapon,
+        offhand: undefined,
+        attacks: runtime.attacks,
+        segmentCooldowns: new Map(),
+        activeSegment: undefined,
+        bufferedSegment: undefined,
+        attackActive: false,
+        attackTimer: 0,
+        attackDirX: 0,
+        attackDirZ: 1,
+        muzzleDirX: 0,
+        muzzleDirZ: 0,
+        attackedTargets: new Set(),
+        phaseIndex: 0,
+        phaseTimer: 0,
+        attackCharge: 0,
+        attackHolding: false,
+        pendingFlinch: false,
+        flinchDuration: FLINCH_DURATION,
+        flinchImmunityTimer: 0,
+        poise: basePoiseMax,
+        basePoiseMax,
+        poiseMax: basePoiseMax,
+        poiseRegenDelayTimer: 0,
+        poiseRegenDelay: attrs.poiseRegenDelay ?? DEFAULT_POISE_REGEN_DELAY,
+        poiseRegenPerSec: attrs.poiseRegenPerSec ?? DEFAULT_POISE_REGEN_PER_SEC,
+        knockdownDuration: attrs.knockdownDuration ?? DEFAULT_KNOCKDOWN_DURATION,
+        getUpDuration: attrs.getUpDuration ?? DEFAULT_GET_UP_DURATION,
+        pendingKnockdown: false,
+        hitImmunityTimer: 0,
+        lastHitDirX: 0,
+        lastHitDirZ: 0,
+        rollSkill: createRollSkillRuntime(),
+        invincibleTimer: 0,
+        faction,
+        attackTendency,
+        tendencyConfig,
+        health: maxHealth,
+        maxHealth,
+        isDead: false,
+        baseDefense: ZERO_PROFILE,
+        armor: {},
+        limb: {},
+        defense: ZERO_PROFILE,
+        attackBonus: ZERO_PROFILE,
+        moveSpeedMultiplier: 1,
+        block: undefined,
+        guard: 0,
+        blocking: false,
+        blockHeld: false,
+        damageModifiers: [],
+        onDamageTaken: null,
+        onDamageDealt: null,
+        onDeath: null,
+    }
+    updateShieldBlock(combat)
+    return combat
+}

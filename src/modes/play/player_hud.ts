@@ -36,6 +36,14 @@ export interface SkillTimerRowData {
 export interface PlayerHUDData {
     health: number
     maxHealth: number
+    /** 当前韧性值 */
+    poise: number
+    /** 韧性上界 */
+    poiseMax: number
+    /** 当前格挡槽值（仅持盾时有效） */
+    guard: number
+    /** 格挡槽上限（0 = 未持盾，隐藏格挡条） */
+    guardMax: number
     stateName: string
     stateTime: number
     timers: ReadonlyArray<TimerRowData>
@@ -83,6 +91,7 @@ const FILL_SUCCESS = 'var(--dc-success)'
 const FILL_WARNING = 'var(--dc-warning)'
 const FILL_DANGER = 'var(--dc-danger)'
 const FILL_ORANGE = 'var(--dc-orange-bright)'
+const FILL_INFO = 'var(--dc-info)'
 
 export const createPlayerHUD = (): PlayerHUD => {
     const el = document.createElement('div')
@@ -114,6 +123,40 @@ export const createPlayerHUD = (): PlayerHUD => {
     const hpText = document.createElement('div')
     hpText.style.cssText = 'text-align:right;font-size:12px;margin-bottom:6px'
     el.appendChild(hpText)
+
+    /* 韧性条：韧性归零会触发倒地（bump 受击硬直/破韧） */
+    const poiseLabel = document.createElement('div')
+    poiseLabel.className = 'dc-hint'
+    poiseLabel.style.cssText = 'margin-bottom:2px'
+    localizeText(poiseLabel, 'play.hud.poise')
+    el.appendChild(poiseLabel)
+
+    const poiseOuter = document.createElement('div')
+    poiseOuter.className = 'dc-bar'
+    poiseOuter.style.cssText = 'height:6px;margin-bottom:6px'
+    const poiseInner = document.createElement('div')
+    poiseInner.className = 'dc-bar__fill'
+    poiseInner.style.cssText = `height:100%;width:100%;background:${FILL_INFO};transition:background .15s`
+    poiseOuter.appendChild(poiseInner)
+    el.appendChild(poiseOuter)
+
+    /* 格挡槽条（仅持盾时显示）：格挡消耗、归零触发破防（guard_broken） */
+    const guardRow = document.createElement('div')
+    guardRow.style.cssText = 'display:none;margin-bottom:6px'
+    const guardLabel = document.createElement('div')
+    guardLabel.className = 'dc-hint'
+    guardLabel.style.cssText = 'margin-bottom:2px'
+    localizeText(guardLabel, 'play.hud.guard')
+    const guardOuter = document.createElement('div')
+    guardOuter.className = 'dc-bar'
+    guardOuter.style.cssText = 'height:6px'
+    const guardInner = document.createElement('div')
+    guardInner.className = 'dc-bar__fill'
+    guardInner.style.cssText = `height:100%;width:100%;background:${FILL_INFO};transition:background .15s`
+    guardOuter.appendChild(guardInner)
+    guardRow.appendChild(guardLabel)
+    guardRow.appendChild(guardOuter)
+    el.appendChild(guardRow)
 
     /* 蓄力条（仅蓄力时显示）：远程弓 / 投掷物的按住蓄力进度 */
     const chargeRow = document.createElement('div')
@@ -275,6 +318,17 @@ export const createPlayerHUD = (): PlayerHUD => {
         else if (pct > 0.25) barInner.style.background = FILL_WARNING
         else barInner.style.background = FILL_DANGER
         hpText.textContent = `${data.health} / ${data.maxHealth}`
+
+        const poisePct = data.poiseMax > 0 ? Math.max(0, Math.min(1, data.poise / data.poiseMax)) : 0
+        poiseInner.style.width = `${poisePct * 100}%`
+        poiseInner.style.background = poisePct > 0.25 ? FILL_INFO : FILL_DANGER
+
+        guardRow.style.display = data.guardMax > 0 ? '' : 'none'
+        if (data.guardMax > 0) {
+            const guardPct = Math.max(0, Math.min(1, data.guard / data.guardMax))
+            guardInner.style.width = `${guardPct * 100}%`
+            guardInner.style.background = guardPct > 0.25 ? FILL_INFO : FILL_DANGER
+        }
 
         stateEl.textContent = translate({key: 'play.hud.state', args: [data.stateName, data.stateTime.toFixed(2)]})
         loadoutEl.textContent = translate({key: 'play.hud.loadout', args: [data.weaponLabel, data.holdModeLabel]})

@@ -1,7 +1,7 @@
 import type {StateHandler} from '../types.ts'
 import {SLOPE_WALK_THRESHOLD} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
-import {FLINCH_DURATION, FLINCH_IMMUNITY_DURATION} from '../../combat/attack_phases.ts'
+import {FLINCH_IMMUNITY_DURATION} from '../../combat/attack_phases.ts'
 
 export const flinchingHandler: StateHandler = {
     enter: (entity) => {
@@ -29,27 +29,27 @@ export const flinchingHandler: StateHandler = {
         {
             to: 'walking',
             guard: (input, entity, ctx) =>
-                ctx.stateTime >= FLINCH_DURATION
+                ctx.stateTime >= entity.combat.flinchDuration
                 && Math.hypot(input.dx, input.dz) > 0.001
                 && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'idle',
             guard: (_input, entity, ctx) =>
-                ctx.stateTime >= FLINCH_DURATION
+                ctx.stateTime >= entity.combat.flinchDuration
                 && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'jumping',
             guard: (input, entity, ctx) =>
-                ctx.stateTime >= FLINCH_DURATION
+                ctx.stateTime >= entity.combat.flinchDuration
                 && input.jump
                 && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'falling',
             guard: (_input, entity, ctx) =>
-                ctx.stateTime >= FLINCH_DURATION
+                ctx.stateTime >= entity.combat.flinchDuration
                 && shouldFall(entity),
         },
     ],
