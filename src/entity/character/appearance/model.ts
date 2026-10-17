@@ -1,12 +1,12 @@
-import type {Group, Mesh} from 'three'
+import {Euler, type Group, type Mesh} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
 import {DEFAULT_HANDEDNESS, isHandedness, type Handedness} from '../../../character/handedness.ts'
 import type {CharacterModel, CharacterColorPalette, WeaponEquipConfig} from './types.ts'
 import type {ResolvedArmorLoadout, ResolvedLimbLoadout} from '../../../character/armor/types.ts'
 import {ARMOR_SLOTS, LIMB_SLOTS, type ArmorSlot, type LimbSlot} from '../../../character/armor/slots.ts'
-import {createWeaponMesh, type WeaponMeshConfig, type WeaponLocalHitBox} from './weapon_mesh.ts'
+import {createWeaponMesh, isShieldMeshId, WEAPON_MESH_GRIPS, type WeaponMeshConfig, type WeaponLocalHitBox} from './weapon_mesh.ts'
 import {createArmorMesh, createLimbMesh, ARMOR_BODY_PART_JOINTS, type ArmorBodyPart} from './armor_mesh.ts'
-import {SELECT_PALETTE} from './constants.ts'
+import {SELECT_PALETTE, SHIELD_STOW_TILT_X, WEAPON_GRIP_FLEX} from './constants.ts'
 import {recolorTwoFaceBoxPart, recolorHeadBoxPart, type TrackedBoxPart} from '../../../render/box_parts.ts'
 import {skeletonFromDefinition} from '../../../skeleton/anim/serialization.ts'
 import {createJointHierarchy} from '../../../skeleton/render/joint_hierarchy.ts'
@@ -125,6 +125,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         slot.gripY = 0
         slot.supportGripOffset = 0
         slot.meshConfig = undefined
+        /* 武器骨骼回到默认（无握持）角：未播放动画的静止姿态下空手不带动武器朝向 */
+        slot.mountJoint.rotation.set(0, 0, 0)
     }
 
     const equipSlot = (slot: WeaponSlot, meshConfig: WeaponMeshConfig | undefined): void => {
@@ -145,6 +147,9 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         /* 左撇子：武器网格跨矢状面镜像（仅 x 翻转；武器挂点本地系与 canonical 同向，故局部翻转 = 全局反射） */
         result.group.scale.set(mirrorScale(), 1, 1)
         slot.mountJoint.add(result.group)
+        /* 默认（未播放动画的静止姿态，如装备预览）：武器骨骼即为持械握持屈角，
+         * 与待机 / 行走等常规状态一致，避免武器贴合前臂穿模（有动画时由 clip 轨道覆盖） */
+        slot.mountJoint.rotation.set(WEAPON_GRIP_FLEX, 0, 0)
     }
 
     const removeWeapon = (): void => {
@@ -159,6 +164,11 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         if (group === null) return
         const target = stowed ? backWeaponMount : slot.mountJoint
         if (group.parent !== target) target.add(group)
+        /* 盾挂背：叠加绕武器本地 X 的倾角，使盾面法线水平、盾面竖直贴背；其余武器沿用固有握持角 */
+        const id = slot.meshConfig?.id
+        const grip = id !== undefined ? WEAPON_MESH_GRIPS[id] : undefined
+        const tilt = stowed && id !== undefined && isShieldMeshId(id) ? SHIELD_STOW_TILT_X : 0
+        group.quaternion.setFromEuler(new Euler((grip?.rx ?? 0) + tilt, grip?.ry ?? 0, grip?.rz ?? 0))
     }
 
     const equipWeapon = (equipConfig: WeaponEquipConfig): void => {

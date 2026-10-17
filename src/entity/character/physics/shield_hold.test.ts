@@ -189,4 +189,25 @@ describe('盾攻击键路由', () => {
         for (let i = 0; i < 30; i++) frame()
         expect(player()!.stateMachine.currentState).not.toBe('blocking')
     })
+
+    it('副手盾 + 双手共持：盾挂背、格挡来源清除，重击键出招而非格挡', () => {
+        spawnPlayer('long_sword', 'shield_small')
+        const p = player()!
+        /* 单持：副手盾提供格挡 */
+        expect(p.combat.block).toBeDefined()
+
+        expect(system.setHoldMode(p.id, 'two_handed')).toBe(true)
+        expect(p.holdMode).toBe('two_handed')
+        /* 副手盾挂背：不再计为可用盾 */
+        expect(p.combat.block).toBeUndefined()
+
+        /* 重击键不再被盾接管：长按不得进入格挡 */
+        system.beginPlayerAttackHold('heavy')
+        for (let i = 0; i < 30; i++) frame()
+        expect(p.stateMachine.currentState).not.toBe('blocking')
+
+        /* 切回单持：副手盾回手，格挡恢复 */
+        expect(system.setHoldMode(p.id, 'one_handed')).toBe(true)
+        expect(p.combat.block).toBeDefined()
+    })
 })

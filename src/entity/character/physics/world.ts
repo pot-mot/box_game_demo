@@ -9,7 +9,7 @@ import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
 import type {AttackResult} from '../../../character/combat/types.ts'
-import {createCombatComponent, setCombatEquipment, setCombatOffhand, setCombatWeapon} from '../../../character/combat/types.ts'
+import {createCombatComponent, setCombatEquipment, setCombatOffhand, setCombatWeapon, updateShieldBlock} from '../../../character/combat/types.ts'
 import {ZERO_PROFILE, type DefenseProfile} from '../../../character/combat/defense.ts'
 import type {ArmorLoadout, LimbLoadout} from '../../../character/armor/types.ts'
 import {resolveArmorLoadout, resolveLimbLoadout} from '../../../character/armor/catalog.ts'
@@ -890,8 +890,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const shieldHoldKeysOf = (player: CharacterEntity): readonly GroundAttackKey[] => {
         const main = player.combat.weapon
         if (main !== undefined && main.type === 'melee' && main.block !== undefined) return ['light', 'heavy']
+        /* 副手盾仅在单持 / 双持时握在手中；双手共持时挂背，不接管按键 */
         const off = player.combat.offhand
-        if (off !== undefined && off.weapon.type === 'melee' && off.weapon.block !== undefined) return ['heavy']
+        if (off !== undefined && player.holdMode !== 'two_handed'
+            && off.weapon.type === 'melee' && off.weapon.block !== undefined) return ['heavy']
         return []
     }
 
@@ -1202,11 +1204,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     ? phases[entity.combat.phaseIndex].name
                     : undefined
 
-                /* 持盾手：格挡姿态据此决定抬臂；主手盾优先（与 `updateShieldBlock` 的盾来源一致） */
+                /* 持盾手（可能双手各持一盾）：格挡姿态据此决定抬哪只手臂，基础姿态据此校正盾面朝向。
+                 * 双手共持时副手盾挂背、不计入（与 `updateShieldBlock` 的盾来源一致）。 */
                 const mainWeapon = entity.combat.weapon
-                const shieldHand: 'main' | 'off' | undefined = entity.combat.block === undefined
-                    ? undefined
-                    : mainWeapon.type === 'melee' && mainWeapon.block !== undefined ? 'main' : 'off'
+                const offWeapon = entity.combat.offhand
+                const shieldHands = {
+                    main: mainWeapon.type === 'melee' && mainWeapon.block !== undefined,
+                    off: entity.holdMode !== 'two_handed'
+                        && offWeapon !== undefined && offWeapon.weapon.type === 'melee' && offWeapon.weapon.block !== undefined,
+                }
 
                 sys.update(dt, model, entity.stateMachine.currentState, {
                     stateTime: entity.stateMachine.stateTime,
@@ -1221,7 +1227,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     attackCharge: entity.combat.attackCharge,
                     attackHolding: entity.combat.attackHolding,
                     weaponHeld: model.weaponMesh !== null,
-                    shieldHand,
+                    shieldHands,
                 })
 
                 const vx = entity.body.linvel().x
@@ -1714,7 +1720,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const supported = availableHoldModes(entity.combat.weapon, entity.combat.offhand?.weapon).includes(holdMode)
         const mode = supported ? holdMode : defaultHoldMode(entity.combat.weapon)
         if (entity.holdMode !== mode) {
-            setCombatWeapon(entity.combat, runtimeForHoldMode(entity.combat.weapon, mode))
+            setCombatWeapon(entity.combat, runtimeForHoldMode(entity.combat.weapon, mode), mode)
             entity.holdMode = mode
             entity.combat.activeSegment = undefined
             entity.combat.bufferedSegment = undefined
@@ -1802,6 +1808,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
             /* 持握模式重置为该武器支持的首个模式（面板随后可再显式 setHoldMode），清空段冷却与当前段 */
             entity.holdMode = defaultHoldMode(entity.combat.weapon)
+            /* 新模式可能使副手盾挂背（双手共持）：重解析盾来源 */
+            updateShieldBlock(entity.combat, entity.holdMode)
             entity.combat.activeSegment = undefined
             entity.combat.bufferedSegment = undefined
             entity.combat.segmentCooldowns.clear()

@@ -18,6 +18,7 @@ import {
     BLOCK_IDLE_ELBOW,
     BLOCKING_POSE_PERIOD,
     GUARD_BROKEN_POSE_DURATION,
+    SHIELD_FACE_NET_X,
 } from './constants.ts'
 import {FLINCH_DURATION} from '../../../character/combat/attack_phases.ts'
 import {DEFAULT_KNOCKDOWN_DURATION, DEFAULT_GET_UP_DURATION} from '../../../character/combat/constants.ts'
@@ -129,7 +130,7 @@ const walkingPose = (t: number, ctx: PoseContext): PoseState => {
 const CROUCH_END = 0.1
 const EXTEND_END = 0.3
 
-const jumpingPose = (t: number): PoseState => {
+const jumpingPose = (t: number, ctx: PoseContext): PoseState => {
     let hip = 0
     let knee = 0
     let armUp: number
@@ -150,17 +151,19 @@ const jumpingPose = (t: number): PoseState => {
         armUp = -0.8
         elbow = 0.15
     }
+    /* 持械时武器骨骼保持握持屈角，与待机 / 行走等常规状态一致（否则武器贴合前臂穿模） */
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
         rightArmShoulder: {rx: armUp, ry: 0, rz: 0},
         rightArmElbow: {rx: -elbow, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
-        rightWeaponMount: ZERO,
+        rightWeaponMount: grip,
         leftArmShoulder: {rx: armUp, ry: 0, rz: 0},
         leftArmElbow: {rx: -elbow, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
-        leftWeaponMount: ZERO,
+        leftWeaponMount: grip,
         rightLegHip: {rx: hip, ry: 0, rz: 0},
         rightLegKnee: {rx: knee, ry: 0, rz: 0},
         leftLegHip: {rx: hip, ry: 0, rz: 0},
@@ -171,21 +174,23 @@ const jumpingPose = (t: number): PoseState => {
     }
 }
 
-const fallingPose = (t: number, speed: number): PoseState => {
+const fallingPose = (t: number, ctx: PoseContext): PoseState => {
     const armZ = 0.3 + Math.sin(t * 0.8) * 0.1
     /* 腿随水平速度张开（与 master 一致：legSpread = min(speed,4) × 0.04） */
-    const legSpread = Math.min(speed, 4) * 0.04
+    const legSpread = Math.min(ctx.horizontalSpeed, 4) * 0.04
+    /* 持械时武器骨骼保持握持屈角，与待机 / 行走等常规状态一致 */
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
         rightArmShoulder: {rx: -1.2, ry: 0, rz: -armZ},
         rightArmElbow: {rx: -0.3, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
-        rightWeaponMount: ZERO,
+        rightWeaponMount: grip,
         leftArmShoulder: {rx: -1.2, ry: 0, rz: armZ},
         leftArmElbow: {rx: -0.3, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
-        leftWeaponMount: ZERO,
+        leftWeaponMount: grip,
         rightLegHip: {rx: -0.15 - legSpread, ry: 0, rz: 0},
         rightLegKnee: {rx: 0.1, ry: 0, rz: 0},
         leftLegHip: {rx: -0.15 + legSpread, ry: 0, rz: 0},
@@ -203,20 +208,22 @@ const FALL_END = 0.3
  * 倒下方向由死亡 state 依据最后受击的冲击方向决定，在世界层（`world.ts`）绕水平轴合成，
  * 以便放置 / 游玩模式按受击方向倒地（骨骼编辑器预览即直立姿态）。
  */
-const dyingPose = (t: number): PoseState => {
+const dyingPose = (t: number, ctx: PoseContext): PoseState => {
     const p = clamp01(t / FALL_END)
     const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2
+    /* 持械时武器骨骼保持握持屈角，与待机 / 行走等常规状态一致 */
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
         rightArmShoulder: {rx: eased * 0.4, ry: 0, rz: -eased * 0.6},
         rightArmElbow: {rx: -eased * 0.5, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
-        rightWeaponMount: ZERO,
+        rightWeaponMount: grip,
         leftArmShoulder: {rx: eased * 0.4, ry: 0, rz: eased * 0.6},
         leftArmElbow: {rx: -eased * 0.5, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
-        leftWeaponMount: ZERO,
+        leftWeaponMount: grip,
         rightLegHip: {rx: eased * 0.2, ry: 0, rz: 0},
         rightLegKnee: {rx: eased * 0.3, ry: 0, rz: 0},
         leftLegHip: {rx: eased * 0.2, ry: 0, rz: 0},
@@ -267,20 +274,22 @@ const rollingPose = (t: number, ctx: PoseContext): PoseState => {
     }
 }
 
-const flinchingPose = (t: number): PoseState => {
+const flinchingPose = (t: number, ctx: PoseContext): PoseState => {
     const p = clamp01(t / FLINCH_DURATION)
     const e = 1 - Math.pow(1 - p, 3)
+    /* 持械时武器骨骼保持握持屈角，与待机 / 行走等常规状态一致 */
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
         rightArmShoulder: {rx: -FLINCH_ARM_RAISE * e, ry: 0, rz: -FLINCH_ARM_SPREAD * e},
         rightArmElbow: {rx: FLINCH_ELBOW * e, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
-        rightWeaponMount: ZERO,
+        rightWeaponMount: grip,
         leftArmShoulder: {rx: -FLINCH_ARM_RAISE * e, ry: 0, rz: FLINCH_ARM_SPREAD * e},
         leftArmElbow: {rx: FLINCH_ELBOW * e, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
-        leftWeaponMount: ZERO,
+        leftWeaponMount: grip,
         rightLegHip: ZERO,
         rightLegKnee: ZERO,
         leftLegHip: ZERO,
@@ -335,23 +344,25 @@ const INTERACTION_ARM_SHOULDER = 1.05
 const INTERACTION_ARM_ELBOW = 0.45
 const INTERACTION_LEAN = 0.12
 
-const interactingPose = (t: number): PoseState => {
+const interactingPose = (t: number, ctx: PoseContext): PoseState => {
     const total = INTERACTION_DURATION
     const reach = t < INTERACTION_REACH_END
         ? clamp01(t / INTERACTION_REACH_END)
         : 1 - clamp01((t - INTERACTION_REACH_END) / Math.max(total - INTERACTION_REACH_END, 0.0001))
     const e = reach
+    /* 持械时武器骨骼保持握持屈角，与待机 / 行走等常规状态一致 */
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
         rightArmShoulder: {rx: -INTERACTION_ARM_SHOULDER * e, ry: 0, rz: 0},
         rightArmElbow: {rx: -(INTERACTION_ARM_ELBOW * e + 0.08), ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
-        rightWeaponMount: ZERO,
+        rightWeaponMount: grip,
         leftArmShoulder: {rx: -0.06 * e, ry: 0, rz: 0},
         leftArmElbow: {rx: -0.08, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
-        leftWeaponMount: ZERO,
+        leftWeaponMount: grip,
         rightLegHip: ZERO,
         rightLegKnee: ZERO,
         leftLegHip: ZERO,
@@ -413,19 +424,21 @@ const blockingPose = (t: number, ctx: PoseContext): PoseState => {
 }
 
 /** 破防：双臂脱力下垂、躯干后仰下沉（ease-out 到位后保持）。 */
-const guardBrokenPose = (t: number): PoseState => {
+const guardBrokenPose = (t: number, ctx: PoseContext): PoseState => {
     const e = 1 - Math.pow(1 - clamp01(t / GUARD_BROKEN_POSE_DURATION), 3)
+    /* 持械时武器骨骼保持握持屈角，与待机 / 行走等常规状态一致 */
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
         rightArmShoulder: {rx: 0.25 * e, ry: 0, rz: -0.25 * e},
         rightArmElbow: {rx: -0.45 * e, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
-        rightWeaponMount: ZERO,
+        rightWeaponMount: grip,
         leftArmShoulder: {rx: 0.25 * e, ry: 0, rz: 0.25 * e},
         leftArmElbow: {rx: -0.45 * e, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
-        leftWeaponMount: ZERO,
+        leftWeaponMount: grip,
         rightLegHip: {rx: -0.15 * e, ry: 0, rz: 0},
         rightLegKnee: {rx: 0.35 * e, ry: 0, rz: 0},
         leftLegHip: {rx: -0.15 * e, ry: 0, rz: 0},
@@ -440,16 +453,16 @@ const guardBrokenPose = (t: number): PoseState => {
 export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'interacting' | 'knockdown' | 'getting_up' | 'blocking' | 'guard_broken', PoseSampler> = {
     idle: (t, ctx) => idlePose(t, ctx),
     walking: (t, ctx) => walkingPose(t * WALK_CYCLE_FREQ, ctx),
-    jumping: (t) => jumpingPose(t),
-    falling: (t, ctx) => fallingPose(t, ctx.horizontalSpeed),
-    dying: (t) => dyingPose(t),
+    jumping: (t, ctx) => jumpingPose(t, ctx),
+    falling: (t, ctx) => fallingPose(t, ctx),
+    dying: (t, ctx) => dyingPose(t, ctx),
     rolling: (t, ctx) => rollingPose(t, ctx),
-    flinching: (t) => flinchingPose(t),
-    interacting: (t) => interactingPose(t),
+    flinching: (t, ctx) => flinchingPose(t, ctx),
+    interacting: (t, ctx) => interactingPose(t, ctx),
     knockdown: (t, ctx) => knockdownPose(t, ctx),
     getting_up: (t, ctx) => gettingUpPose(t, ctx),
     blocking: (t, ctx) => blockingPose(t, ctx),
-    guard_broken: (t) => guardBrokenPose(t),
+    guard_broken: (t, ctx) => guardBrokenPose(t, ctx),
 }
 
 /**
@@ -474,6 +487,27 @@ export const adjustArmsForHoldMode = (
         leftWristPivot: pose.rightWristPivot,
         leftWeaponMount: pose.rightWeaponMount,
     }
+}
+
+/**
+ * 盾面朝向校正：把持盾臂的武器骨骼 X 转角设为「净转角 = `SHIELD_FACE_NET_X`」的值，
+ * 使盾面法线（武器本地 +Y）水平指向角色前方。基础状态各关节仅绕 X 旋转，
+ * 故净转角 ≈ 肩 + 肘 + 武器骨骼 X 之和，直接反解武器骨骼角即可（不改变手臂姿态）。
+ * 应用于全部基础状态（待机 / 行走 / 格挡 / 瞬态），无论该臂是否处于持械戒备位。
+ */
+export const orientShieldArms = (
+    pose: PoseState,
+    shieldArms: readonly ('right' | 'left')[],
+): PoseState => {
+    if (shieldArms.length === 0) return pose
+    let next = pose
+    for (const arm of shieldArms) {
+        const shoulder = arm === 'right' ? next.rightArmShoulder : next.leftArmShoulder
+        const elbow = arm === 'right' ? next.rightArmElbow : next.leftArmElbow
+        const mount: JointEulerState = {rx: SHIELD_FACE_NET_X - (shoulder.rx + elbow.rx), ry: 0, rz: 0}
+        next = arm === 'right' ? {...next, rightWeaponMount: mount} : {...next, leftWeaponMount: mount}
+    }
+    return next
 }
 
 /** 各状态 clip 时长/循环（评审决议：循环 wrap / 非循环 clamp） */

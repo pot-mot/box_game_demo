@@ -6,7 +6,7 @@ import type {HoldMode} from '../../../../character/weapon/hold_mode.ts'
 import {DEFAULT_HANDEDNESS, type Handedness} from '../../../../character/handedness.ts'
 import {mirrorClip} from '../../../../skeleton/anim/mirror.ts'
 import {CLIP_SAMPLE_FPS} from '../constants.ts'
-import {BASE_CLIP_META, BASE_POSE_SAMPLERS, adjustArmsForHoldMode, type PoseState} from '../pose_fns.ts'
+import {BASE_CLIP_META, BASE_POSE_SAMPLERS, adjustArmsForHoldMode, orientShieldArms, type PoseState} from '../pose_fns.ts'
 import {
     MODEL_BASE_HEIGHT,
     MODEL_BASE_WIDTH,
@@ -54,6 +54,11 @@ export const BASE_LOCOMOTION_JOINTS: readonly CharacterJointId[] = [
 export const BASE_UPPER_JOINTS: readonly CharacterJointId[] = [
     'rightArmShoulder', 'rightArmElbow', 'rightHandPivot', 'rightWristPivot', 'rightWeaponMount',
     'leftArmShoulder', 'leftArmElbow', 'leftHandPivot', 'leftWristPivot', 'leftWeaponMount',
+]
+
+/** 底盘行走叠加层所用关节（格挡 / 蓄力攻击时仅覆盖双腿，双腿与上半身关节不重叠） */
+export const WALK_LEG_JOINTS: readonly CharacterJointId[] = [
+    'rightLegHip', 'rightLegKnee', 'leftLegHip', 'leftLegKnee',
 ]
 
 /* ── 关节静止局部位置（模型 Group 层级，相对父关节；由 render 比例常量推导）。
@@ -129,20 +134,22 @@ const buildBaseClipWithJoints = (
     weaponHeld: boolean,
     horizontalSpeed: number,
     holdMode: HoldMode | undefined,
-    blockArm: 'right' | 'left' | undefined = undefined,
+    shieldArms: readonly ('right' | 'left')[] = [],
     handedness: Handedness = DEFAULT_HANDEDNESS,
 ): BoneAnimationClip => {
     const meta = BASE_CLIP_META[state]
     const sampler = BASE_POSE_SAMPLERS[state]
+    /* 格挡举盾手：主手盾优先（与 `updateShieldBlock` 的盾来源一致） */
+    const blockArm: 'right' | 'left' | undefined = state !== 'blocking'
+        ? undefined
+        : shieldArms.includes('right') ? 'right' : shieldArms.includes('left') ? 'left' : undefined
     const frameCount = Math.max(2, Math.round(meta.duration * CLIP_SAMPLE_FPS) + 1)
     const tracks = jointIds.map(jointId => {
         const records: BoneJointKeyframeRecord[] = []
         for (let i = 0; i < frameCount; i++) {
             const t = meta.duration * i / (frameCount - 1)
-            const pose = adjustArmsForHoldMode(
-                sampler(t, {weaponHeld, horizontalSpeed, ...(blockArm !== undefined ? {blockArm} : {})}),
-                holdMode, weaponHeld, state,
-            )
+            const sampled = sampler(t, {weaponHeld, horizontalSpeed, ...(blockArm !== undefined ? {blockArm} : {})})
+            const pose = orientShieldArms(adjustArmsForHoldMode(sampled, holdMode, weaponHeld, state), shieldArms)
             const record = poseToRecord(pose).get(jointId)!
             records.push({time: t, position: record.position, rotation: record.rotation})
         }
@@ -173,7 +180,7 @@ export const buildBaseClip = (
     horizontalSpeed = 0,
     handedness: Handedness = DEFAULT_HANDEDNESS,
 ): BoneAnimationClip =>
-    buildBaseClipWithJoints(state, CHARACTER_JOINT_IDS, weaponHeld, horizontalSpeed, undefined, undefined, handedness)
+    buildBaseClipWithJoints(state, CHARACTER_JOINT_IDS, weaponHeld, horizontalSpeed, undefined, [], handedness)
 
 /** falling 腿张开速度档（legSpread = min(speed,4)×0.04，取整档避免频繁切 clip） */
 export const fallingSpeedTier = (horizontalSpeed: number): number =>
@@ -197,6 +204,21 @@ export const getBaseClip = (
     return clip
 }
 
+/* ── 底盘行走叠加 clip 缓存（格挡 / 蓄力攻击时用行走步态覆盖双腿；仅依赖惯用手） ── */
+const walkLegsClipCache = new Map<Handedness, BoneAnimationClip>()
+
+/**
+ * 腿部行走步态 clip（仅含 `WALK_LEG_JOINTS`）：格挡 / 蓄力攻击时与上半身姿态叠加，
+ * 使下半身按水平速度摆腿。进度的步频由调用方按 `walkSpeedScale` 累加，故此处按基准速度 0 烘焙。
+ */
+export const getWalkLegsClip = (handedness: Handedness = DEFAULT_HANDEDNESS): BoneAnimationClip => {
+    const cached = walkLegsClipCache.get(handedness)
+    if (cached !== undefined) return cached
+    const clip = buildBaseClipWithJoints('walking', WALK_LEG_JOINTS, false, 0, undefined, [], handedness)
+    walkLegsClipCache.set(handedness, clip)
+    return clip
+}
+
 /* ── 分层 clip 缓存（下半身与上半身分别缓存；上半身按持握模式） ── */
 const lowerClipCache = new Map<string, BoneAnimationClip>()
 const upperClipCache = new Map<string, BoneAnimationClip>()
@@ -206,7 +228,7 @@ const getLowerClip = (state: keyof typeof BASE_POSE_SAMPLERS, horizontalSpeed: n
     const key = `${handedness}:${state}${speedKey}`
     const cached = lowerClipCache.get(key)
     if (cached !== undefined) return cached
-    const clip = buildBaseClipWithJoints(state, BASE_LOCOMOTION_JOINTS, false, horizontalSpeed, undefined, undefined, handedness)
+    const clip = buildBaseClipWithJoints(state, BASE_LOCOMOTION_JOINTS, false, horizontalSpeed, undefined, [], handedness)
     lowerClipCache.set(key, clip)
     return clip
 }
@@ -221,7 +243,7 @@ const getUpperClip = (
     const key = `${handedness}:${state}:${weaponHeld ? holdMode ?? 'held' : 'n'}`
     const cached = upperClipCache.get(key)
     if (cached !== undefined) return cached
-    const clip = buildBaseClipWithJoints(state, BASE_UPPER_JOINTS, weaponHeld, horizontalSpeed, weaponHeld ? holdMode : undefined, undefined, handedness)
+    const clip = buildBaseClipWithJoints(state, BASE_UPPER_JOINTS, weaponHeld, horizontalSpeed, weaponHeld ? holdMode : undefined, [], handedness)
     upperClipCache.set(key, clip)
     return clip
 }
@@ -254,12 +276,12 @@ export const getBaseClipForHoldMode = (
     weaponHeld: boolean,
     holdMode: HoldMode,
     horizontalSpeed = 0,
-    blockArm: 'right' | 'left' | undefined = undefined,
+    shieldArms: readonly ('right' | 'left')[] = [],
     handedness: Handedness = DEFAULT_HANDEDNESS,
 ): BoneAnimationClip => {
     const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
-    const armKey = state === 'blocking' ? `:${blockArm ?? 'right'}` : ''
-    const key = `${handedness}:${state}:${weaponHeld ? holdMode : 'n'}${speedKey}${armKey}`
+    const shieldKey = shieldArms.length > 0 ? `:s${shieldArms.map(arm => arm[0]).join('')}` : ''
+    const key = `${handedness}:${state}:${weaponHeld ? holdMode : 'n'}${speedKey}${shieldKey}`
     const cached = holdClipCache.get(key)
     if (cached !== undefined) return cached
     const clip = buildBaseClipWithJoints(
@@ -268,7 +290,7 @@ export const getBaseClipForHoldMode = (
         weaponHeld,
         horizontalSpeed,
         weaponHeld ? holdMode : undefined,
-        blockArm,
+        shieldArms,
         handedness,
     )
     holdClipCache.set(key, clip)

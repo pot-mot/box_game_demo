@@ -92,4 +92,36 @@ test.describe('快捷键存档', () => {
         const download = await downloadPromise
         expect(download.suggestedFilename()).toContain('.json')
     })
+
+    test('编辑模式设置菜单「保存世界」触发存档下载', async ({page}) => {
+        await page.goto('/')
+        await page.waitForSelector('#startup-overlay', {timeout: 5000})
+        await page.locator('button', {hasText: '编辑模式'}).click()
+        await page.waitForTimeout(500)
+
+        await page.locator('#settings-btn').click()
+        const downloadPromise = page.waitForEvent('download', {timeout: 5000})
+        await page.locator('#settings-menu div', {hasText: '保存世界'}).click()
+        const download = await downloadPromise
+        expect(download.suggestedFilename()).toContain('.json')
+    })
+
+    test('游玩模式：设置菜单提供「保存世界」，Ctrl+S 不再触发存档下载', async ({page}) => {
+        await page.goto('/')
+        await page.waitForSelector('#startup-overlay', {timeout: 5000})
+        await page.locator('button', {hasText: '游玩模式'}).click()
+        await page.waitForTimeout(800)
+
+        // 菜单提供手动存档入口
+        await page.locator('#settings-btn').click()
+        await expect(page.locator('#settings-menu div', {hasText: '保存世界'})).toHaveCount(1)
+        await page.locator('#settings-btn').click()
+
+        // Ctrl+S 不再触发存档下载
+        let downloaded = false
+        page.on('download', () => { downloaded = true })
+        await page.keyboard.press('Control+S')
+        await page.waitForTimeout(800)
+        expect(downloaded).toBe(false)
+    })
 })

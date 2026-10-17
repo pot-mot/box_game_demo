@@ -70,6 +70,9 @@ export const WALK_ANIM_MAX_SPEED = 6.0
 /** 水平速度平滑系数（EMA 权重，0~1，越小越平滑）：抑制 coyote 吸附/弹跳导致的速度突变引起的动画频率抖动 */
 export const HORIZONTAL_SPEED_SMOOTHING = 0.3
 
+/** 格挡 / 蓄力期间叠加下半身行走动画的最低水平速度（m/s）：低于此值视为原地不动，腿保持静态姿态 */
+export const ENGAGED_WALK_MIN_SPEED = 0.3
+
 /** 身体朝向旋转速度（rad/s） */
 export const ROTATION_SPEED = 10
 
@@ -147,6 +150,7 @@ export const CLIP_SAMPLE_FPS = 60
 
 /** 举盾臂前抬角（rad，负值 = 前举；使盾牌护于身前） */
 export const BLOCK_SHOULDER = -0.35
+
 /** 举盾屈肘（rad，负值 = 前臂前折收盾于身前） */
 export const BLOCK_ELBOW = -1.35
 /** 格挡躯干前倾（rad） */
@@ -160,3 +164,15 @@ export const BLOCK_IDLE_SHOULDER = -0.05
 export const BLOCK_IDLE_ELBOW = -0.1
 /** 破防硬直姿态时长（秒；取最大盾档破防时长，仅用于编辑器预览与基础 clip 烘焙） */
 export const GUARD_BROKEN_POSE_DURATION = 1.2
+
+// ── 盾牌朝向校正 ──
+
+/**
+ * 盾面朝前时武器骨骼相对前臂链的**净 X 转角**（rad）：盾面法线为武器本地 +Y，
+ * 按住盾时前臂近似竖直，净转 π/2 使法线水平指向角色前方（+Z），盾面竖直平行于身体。
+ * 手臂各关节在基础状态仅绕 X 旋转，故净转角 ≈ 肩 + 肘 + 武器骨骼三者 X 之和。
+ */
+export const SHIELD_FACE_NET_X = Math.PI / 2
+
+/** 副手盾挂背时的额外倾角（rad，绕武器本地 X）：使盾面法线水平、盾面竖直贴于背部 */
+export const SHIELD_STOW_TILT_X = -Math.PI / 2

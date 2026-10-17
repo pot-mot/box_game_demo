@@ -349,7 +349,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             attackCharge: inCharging ? 1 : 0,
             attackHolding: inCharging,
             weaponHeld: model.weaponMesh !== null,
-            shieldHand: undefined,
+            shieldHands: {main: false, off: false},
         }
         system.update(dt, model, mode === 'idle' ? 'idle' : 'attacking', ctx)
 

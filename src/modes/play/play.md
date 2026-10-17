@@ -11,6 +11,7 @@
 
 - play 交互脉冲由 `modes/play/interaction/` 每帧读取，且 `interaction.update(dt)` **必须早于 `characterSystem.update(dt)`**，否则交互脉冲晚一帧、目标守卫失效。
 - 脱困不设快捷键，走右上角设置菜单「传送至最近存档点」（`setupSettingsPanel` 第三参，`hakoniwa.teleportToNearestSavePoint()`）。
+- **游玩模式不注册 Ctrl+S 存档**：Ctrl+S 会与「Ctrl 单独按下切换持握」冲突，故 `main.ts` 仅编辑模式注册 `save_world` 回调（绑定保留以继续遮蔽浏览器默认保存）。手动存档改走右上角设置菜单「保存世界」（`setupSettingsPanel` 第四参 → `exportSaveWorld`，编辑 / 游玩模式均可用）。
 - 装备模型预览独立 `WebGLRenderer` 必须惰性创建（见 `src/inventory/inventory.md`）。
 
 ## 相机
@@ -28,7 +29,7 @@
 ## 持握模式切换（「切换持握模式」绑定，默认 Ctrl）
 
 - 近战武器按 `availableHoldModes`（武器声明 ∩ 双持需副手同类近战）环切：单持 → 双手共持 → 双持 → 单持；`src/modes/control/player_control.ts` 的 `move()` 轮询输入动作 `cycle_hold_mode` 后调用 `characterSystem.cyclePlayerHoldMode()`。
-- 仅 Ctrl 单独按下时生效：`isActionActive('cycle_hold_mode')` 走最长组合遮蔽，Ctrl+S / Ctrl+O 按下时该动作被 `save_world` / `load_world` 遮蔽，不会误触发切换。
+- 仅 Ctrl 单独按下时生效：`isActionActive('cycle_hold_mode')` 走最长组合遮蔽，Ctrl+S / Ctrl+O 按下时该动作被 `save_world` / `load_world` 的绑定遮蔽，不会误触发切换（play 模式 `save_world` 无回调，见上文）。
 - 切换由 `world.ts` 的 `setHoldMode` 统一处理（重解析攻击链、清段冷却与当前段、同步副手挂背/回手）；HUD 装备行显示当前武器与持握模式。
 - 副手装备与持握模式的显式选择在编辑模式角色面板「装备」区（副手武器下拉 + 持握下拉），存档字段 `offhand` / `holdMode`（v6）。
 

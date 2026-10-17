@@ -74,10 +74,16 @@ const SEGMENT_META: Record<MeleeSegmentKey, {key: 'light' | 'heavy'; step: numbe
     heavy_2: {key: 'heavy', step: 2, heavy: true},
 }
 
+/** 重击蓄力保持期间的移速倍率：比不蓄力的 0.3 略快，仍显著慢于行走，配合下半身行走动画 */
+export const MELEE_CHARGE_MOVE_SPEED_MULTIPLIER = 0.5
+
 /** 段阶段时序：strike 动作段（ratio = 1） + recovery 恢复段（ratio 不参与计算，时长取段 recovery）；
- *  重击段的 strike 声明 `chargeable`，按住时冻结在起手帧蓄力。 */
+ *  重击段的 strike 声明 `chargeable`，按住时冻结在起手帧蓄力（移速改用 `MELEE_CHARGE_MOVE_SPEED_MULTIPLIER`）。 */
 const segmentPhases = (chargeable = false): readonly AttackPhase[] => [
-    {name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false, ...(chargeable ? {chargeable: true} : {})},
+    {
+        name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false,
+        ...(chargeable ? {chargeable: true, chargeMoveSpeedMultiplier: MELEE_CHARGE_MOVE_SPEED_MULTIPLIER} : {}),
+    },
     {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.35, cancellable: false},
 ]
 

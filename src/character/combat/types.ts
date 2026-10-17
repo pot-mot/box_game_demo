@@ -3,6 +3,7 @@ import type { AttackSegment, WeaponAttacks } from '../weapon/attack_chain.ts'
 import type { WeaponConfig } from '../weapon/catalog.ts'
 import type { WeaponRuntime } from '../weapon/weapon_runtime.ts'
 import type { ShieldBlockConfig } from '../weapon/constants.ts'
+import type { HoldMode } from '../weapon/hold_mode.ts'
 import type { ArmorLoadout, LimbLoadout } from '../armor/types.ts'
 import { resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf, totalPoiseOf } from '../armor/catalog.ts'
 import { createRollSkillRuntime, type RollSkillRuntime } from './roll_skill.ts'
@@ -178,17 +179,20 @@ export interface CombatComponent {
     onDeath: (() => void) | null
 }
 
-/** 换装/数值覆写变更：整体替换武器运行时（攻击链同步跟随） */
-export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime): void => {
+/**
+ * 换装/数值覆写变更：整体替换武器运行时（攻击链同步跟随）。
+ * `holdMode` 供盾牌来源重解析：双手共持时副手武器挂背、其盾不再计为可用盾。
+ */
+export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime, holdMode?: HoldMode): void => {
     c.weapon = runtime.weapon
     c.attacks = runtime.attacks
-    updateShieldBlock(c)
+    updateShieldBlock(c, holdMode)
 }
 
 /** 变更副手武器（undefined = 卸下；双持可用性判定见 world.ts 的 setHoldMode） */
-export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | undefined): void => {
+export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | undefined, holdMode?: HoldMode): void => {
     c.offhand = runtime
-    updateShieldBlock(c)
+    updateShieldBlock(c, holdMode)
 }
 
 /** 取当前盾牌格挡槽上限（无盾 = 0） */
@@ -197,11 +201,13 @@ export const guardMaxOf = (c: CombatComponent): number => c.block?.guardMax ?? 0
 /**
  * 解析当前装备的盾牌格挡配置（主手盾优先，其次副手盾）并写入 `c.block`，
  * 同时把 `guard` 夹到 `[0, 上限]`（卸下 / 换更小盾时安全收敛，无盾则归零）。
- * 装备（主手 / 副手）变更后必须调用，保证格挡状态与盾碰撞体读取到一致数据。
+ * 装备（主手 / 副手）或持握模式变更后必须调用，保证格挡状态与盾碰撞体读取到一致数据。
+ * `holdMode === 'two_handed'` 时副手武器挂背、其盾不参与格挡（仅主手盾仍有效）。
  */
-export const updateShieldBlock = (c: CombatComponent): void => {
+export const updateShieldBlock = (c: CombatComponent, holdMode?: HoldMode): void => {
     const mainBlock = c.weapon.type === 'melee' ? c.weapon.block : undefined
-    const offBlock = c.offhand !== undefined && c.offhand.weapon.type === 'melee' ? c.offhand.weapon.block : undefined
+    const offhandActive = holdMode !== 'two_handed'
+    const offBlock = offhandActive && c.offhand !== undefined && c.offhand.weapon.type === 'melee' ? c.offhand.weapon.block : undefined
     const previous = c.block
     c.block = mainBlock ?? offBlock
     const max = c.block?.guardMax ?? 0

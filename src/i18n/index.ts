@@ -49,6 +49,7 @@ type CoreLocale = {
     'settings.title': string
     'settings.return_home': string
     'settings.operations': string
+    'settings.save_world': string
     'settings.teleport_save': string
     'settings.language': string
 

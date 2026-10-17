@@ -157,10 +157,10 @@ export interface AnimationContext {
     /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
     readonly weaponHeld: boolean
     /**
-     * 当前持盾手（主手 / 副手）：`blocking` 姿态据此决定举起哪只手臂；
-     * 无盾 = undefined（其余状态不使用）。
+     * 各手持盾状态（主手 / 副手可能同时各持一盾，副手盾双手共持时挂背不计入）：
+     * `blocking` 姿态据此决定举起哪只手臂；基础姿态据此校正所持盾的盾面朝向。
      */
-    readonly shieldHand: 'main' | 'off' | undefined
+    readonly shieldHands: Readonly<{main: boolean; off: boolean}>
 }
 
 /** 单个状态的动画处理器 */

@@ -103,10 +103,14 @@ export const attackingHandler: StateHandler = {
 
         /* 默认阶段行为：moveSpeedMultiplier 缩放输入驱动的移动速度（攻击中推进/突进）。
          * 无限连段下 AI 长期驻留 attacking，若只衰减存量速度会衰减到 0 且永不补充，
-         * 导致攻击一段时间后站桩不动；无移动输入时才衰减残留速度（站桩出招） */
-        const moveMul = c.phaseIndex < phases.length
-            ? phases[c.phaseIndex].moveSpeedMultiplier
-            : 0.3
+         * 导致攻击一段时间后站桩不动；无移动输入时才衰减残留速度（站桩出招）。
+         * 蓄力保持期间（attackHolding）若阶段声明 chargeMoveSpeedMultiplier 则改用之
+         * （兼作下半身行走动画叠加的判定依据）。 */
+        const phase = c.phaseIndex < phases.length ? phases[c.phaseIndex] : undefined
+        const chargeMul = phase?.chargeMoveSpeedMultiplier
+        const moveMul = phase === undefined
+            ? 0.3
+            : c.attackHolding && chargeMul !== undefined ? chargeMul : phase.moveSpeedMultiplier
         const inputLen = Math.hypot(input.dx, input.dz)
         if (inputLen > 0.001) {
             const speed = moveSpeedOf(entity) * moveMul

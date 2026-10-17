@@ -73,6 +73,7 @@
   - `WEAPON_MESH_GRIPS` 增对应握持姿态。
   - 各 `gen` 显式声明 `WeaponLocalHitBox`（命中箱），该几何同时作为**遮挡体近似**。
 - 挂载经 `rightWeaponMount` / `leftWeaponMount`（`appearance/model.ts` 的 weapon slot 机制）。
+- **盾面朝向（实现补充）**：盾面法线为武器本地 +Y，`GRIP_NEUTRAL` 下需手臂姿态补足朝向。基础状态由 `pose_fns.ts` 的 `orientShieldArms` 反解持盾臂武器骨骼 X 转角（净转角 = `SHIELD_FACE_NET_X` = π/2），使盾面竖直、平行于身体（`base_clips.ts` 离线烘焙进基础 clip，`AnimationContext.shieldHands` 指明持盾臂，覆盖待机 / 行走 / 格挡 / 瞬态）。副手盾挂背时 `model.setOffhandStowed` 叠加绕武器本地 X 的 `SHIELD_STOW_TILT_X`，使盾面法线水平、盾面竖直贴背。
 
 ## 6. 格挡槽 / 破防机制
 
@@ -115,7 +116,7 @@
   - `blocking → rolling / dying / flinching`：既有转移接管（翻滚取消格挡并进入翻滚无敌帧）
   - `any → guard_broken`：`guard` 归零
   - `guard_broken → idle / walking`：计时结束
-- 格挡期间水平移速 × 盾的移速系数（状态内直接操作 `entity.body`，沿用现状态机做法）。
+- 格挡期间水平移速 × 盾的移速系数（状态内直接操作 `entity.body`，沿用现状态机做法）；移动时下半身叠加行走步态（仅覆盖双腿，上半身保持举盾姿态，见 [`appearance.md`](../../src/entity/character/appearance/appearance.md)）。
 - i18n：新增状态显示名文案键。
 
 ## 8. 判定路径
@@ -161,6 +162,7 @@
   - `endPlayerAttackHold(key, dt)`：若该手已格挡 → 仅放下（不触发攻击）；否则走原 `setPlayerAttack` → 触发盾击。
   - `cancelPlayerAttackHold` 扩参为 `cancelPlayerAttackHold(key)`；同步 `src/modes/play/index.ts` 中两个 cancel 回调。
 - `src/input`：`CharacterInput` 增 `block` 字段并扩展 `setInput`（供 AI 注入）。
+- **持握模式联动（实现补充）**：盾来源由 `updateShieldBlock(c, holdMode)` 解析（主手盾优先，其次副手盾）。**`holdMode === 'two_handed'` 时副手武器挂背、副手盾不计为可用盾**——`shieldHoldKeysOf` 不再让副手盾接管重击键、`combat.block` 置空（格挡状态 / 盾碰撞体 / AI 均读不到盾）、重击键回到原武器语义；切回单持 / 双持恢复。装备或持握模式变更后必须重解析。
 
 ## 10. AI 反应式格挡（最小实现）
 

@@ -40,6 +40,7 @@ export const localeZhCn: MainLocale = {
     'settings.title': '设置',
     'settings.return_home': '🏠 返回主页面',
     'settings.operations': '🎮 操作设置',
+    'settings.save_world': '保存世界',
     'settings.teleport_save': '🪄 传送至最近存档点',
     'settings.language': '🌐 语言',
 

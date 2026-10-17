@@ -12,10 +12,10 @@
 
 ## 陷阱
 
-- 角色动画肘一律前折（`elbow rx < 0`）、膝后折（`rx > 0`）；武器朝向由武器骨骼控制，握把模型坐标与固有握持在 `weapon_mesh.ts` 烘焙；`WEAPON_GRIP_FLEX`（武器⊥前臂）是戒备/待机握法，攻击打击帧要用武器骨骼（必要时腕）把刃/枪口转向打击方向。
+- 角色动画肘一律前折（`elbow rx < 0`）、膝后折（`rx > 0`）；武器朝向由武器骨骼控制，握把模型坐标与固有握持在 `weapon_mesh.ts` 烘焙；`WEAPON_GRIP_FLEX`（武器⊥前臂）是戒备/待机握法，攻击打击帧要用武器骨骼（必要时腕）把刃/枪口转向打击方向。**持械时全部非攻击状态（待机 / 行走 / 跳跃 / 下落 / 受击 / 交互等，含未播放动画的静止默认姿态）都保持该握持角**，只有攻击 / 蓄力 clip 按需转向——否则武器骨骼为 0 会贴合前臂穿模。
 - 攻击动画由基础关键帧资产 + 显式逐段姿势修订共同定义，`getAttackClipById` 惰性解析缓存；改姿势要校验修订关节/时间与基础轨道一致。
 - **远程蓄力（弓 + 投掷类）由三处数据配套声明**：`AttackPhase.chargeable`（冻结锚点阶段）+ `RangedWeaponClassConfig.charge`（`ProjectileChargeCurve`：`maxChargeMultiplier` / `maxChargeTime` + 初速/生命期缩放区间）+ 段 `chargeFullTime`（= `charge.maxChargeTime`，由 `rangedClass` 注入）。玩家按住攻击键冻结在该阶段**起始帧**并逐帧累积 `CombatComponent.attackCharge`（0~1），松开 `release` 发射，伤害按 `maxChargeMultiplier` 一次函数缩放。**AI 不蓄力**。调参覆盖链：武器模板默认 → 单武器 `WeaponModelConfig.charge` → 角色面板 `AttackConfig.charge`（`save_load`），覆写后由 `withChargeTuningMap` 重烘焙。
-- **近战重击蓄力（所有近战武器通用，内置）**：`MeleeWeaponClassConfig.heavyCharge`（`HeavyChargeConfig`，缺省 `DEFAULT_HEAVY_CHARGE`：满蓄力 1s → 200%、冷却 0.8s）→ `meleeClass` 把每个模式的重击段声明为可蓄力。玩家按下重击键即蓄力（`world.beginPlayerAttackHold('heavy')`）、松开出手；`melee_executor` 命中按 `1 + attackCharge × chargeDamageBonus` 放大；蓄力值 > 0 按 `chargeCooldown` 挂冷却。AI 只用轻击、`holdDuration` 恒 0，永不蓄力。蓄力动画按 `attackCharge` 定位专用 clip（`charge_melee_{holdMode}`，`charge_clip_data.ts` + `charge_pose_edits.ts`）。
+- **近战重击蓄力（所有近战武器通用，内置）**：`MeleeWeaponClassConfig.heavyCharge`（`HeavyChargeConfig`，缺省 `DEFAULT_HEAVY_CHARGE`：满蓄力 1s → 200%、冷却 0.8s）→ `meleeClass` 把每个模式的重击段声明为可蓄力。玩家按下重击键即蓄力（`world.beginPlayerAttackHold('heavy')`）、松开出手；`melee_executor` 命中按 `1 + attackCharge × chargeDamageBonus` 放大；蓄力值 > 0 按 `chargeCooldown` 挂冷却。AI 只用轻击、`holdDuration` 恒 0，永不蓄力。蓄力动画按 `attackCharge` 定位专用 clip（`charge_melee_{holdMode}`，`charge_clip_data.ts` + `charge_pose_edits.ts`）。蓄力保持期间的移速改用段 strike 的 `chargeMoveSpeedMultiplier`（`MELEE_CHARGE_MOVE_SPEED_MULTIPLIER = 0.5`，略快于不蓄力的 0.3），并叠加下半身行走动画（见 [`appearance.md`](../../entity/character/appearance/appearance.md)）。
 - **双持 / 双手共持**：单持 / 双手共持（支撑手 IK 到该武器 `supportGripOffset`；支撑侧 = 与主手相反侧，随 `handedness` 切换）/ 双持（需副手同类近战 `sameWeaponClass`，副手握自身武器、不走共享 IK，副手命中按副手数值结算）。双持命中事件按 `main` / `offhand` 分槽。双手副握点以主握把为原点沿武器本地 `+Y` 定位。**支撑臂链长仅约 0.36m**：双手段每个关键帧与插值路径都要让支撑肩→副握点 ≤ ~0.34m，否则 IK 截断、支撑手脱柄（`system.test.ts` 逐帧锁定副握残差 < 0.18m；新增双手段以巨剑双手链为模板族最稳妥）。
 - `world.ts` 的 `setHoldMode` 按 `availableHoldModes(weapon, offhand)` 校验，不可用时回退默认并返回 `false`，切换后重解析攻击链并同步外观（双手共持副手挂背 `backWeaponMount`、其余模式回左手）。
 
@@ -531,6 +531,7 @@ export const getAttackClipById = (clipId: string, handedness?: Handedness): Bone
 | `attackPhaseIndex` | `number` | 当前阶段索引（越界表示阶段已全部完成） |
 | `weaponHeld` | `boolean` | 是否持有武器（idle/walking 据此降低持械臂摆幅） |
 | `handedness` | `Handedness` | 惯用手（`'right'` 默认 / `'left'`）：决定 clip 取用时的镜像、武器/护甲/肢体网格挂点与镜像、双手 IK 支撑侧 |
+| `shieldHands` | `Readonly<{main: boolean; off: boolean}>` | 各手持盾状态（副手盾双手共持挂背时 `off = false`）：格挡姿态据此决定举盾臂；基础姿态据此校正所持盾的盾面朝向 |
 
 动画键（`system.ts` 的 `update`）：attacking 且 `attackSegment !== undefined` 时为 `attacking:{segment.id}`；基础状态为 `${state}:${weaponHeld?'w':'n'}`；falling 附加速度档 `falling:{tier}:{w|n}`。**键变化即触发一次 `onStateChange`**：抓取当前关节快照、按新段 id 取 clip 并 seek(0)，随后快照加权混合收敛（`STATE_BLEND_DURATION`），因此链段切换在视觉上是连续过渡而非硬切。
 
@@ -544,6 +545,8 @@ export const getAttackClipById = (clipId: string, handedness?: Handedness): Bone
 
 - `ShieldBlockConfig`：`guardMax` / `guardRegenPerSec` / `guardBreakDuration` / `blockDamageMultiplier` / `blockKnockbackMultiplier` / `poiseMultiplier` / `holdThreshold` / `moveSpeedMultiplier` / `blockHalfAngle` / `cover`（`ShieldCoverBox`，相对角色原点（脚底）的宽×高×厚 + `offsetY` / `offsetZ`）。
 - 盾模型 / 网格经 `weaponClassModelRegistry` 注册（`weapon_mesh.ts`），三档均 `GRIP_NEUTRAL`；盾击 / 盾撞姿态由 `attack_pose_edits.ts` 的 `shieldPoseEdits()` 提供（三档共用），基础举盾 / 破防姿态见 `pose_fns.ts`。
+- **盾面朝向**：盾面法线为武器本地 +Y，`GRIP_NEUTRAL` 下需手臂姿态补足朝向。基础状态由 `pose_fns.ts` 的 `orientShieldArms` 反解持盾臂武器骨骼 X 转角（净转角 = π/2），使盾面竖直平行于身体（烘焙进基础 clip）；副手盾挂背时由 `model.setOffhandStowed` 叠加绕本地 X 的倾角，使盾面竖直贴背。详见 [`appearance.md`](../../entity/character/appearance/appearance.md)。
+- **盾来源随持握模式**：`CombatComponent.block` 由 `updateShieldBlock(c, holdMode)` 解析（主手盾优先，其次副手盾）；**双手共持时副手武器挂背、副手盾不计为可用盾**（副手盾键不再接管、不再举盾）。
 - 攻防判定与输入路由不在本模块：短按盾击 / 长按格挡的按键路由见 [`physics.md`](../../entity/character/physics/physics.md) 与 [`control.md`](../../modes/control/control.md)，格挡状态与格挡槽见 [`state_machine.md`](../state_machine/state_machine.md) / [`combat.md`](../combat/combat.md)，子弹 / 近战盾判定见 [`projectile.md`](../../entity/character/projectile/projectile.md)。
 - 完整方案（数值表 / 判定路径 / 实施顺序）见 [`docs/design/shield_block.md`](../../../docs/design/shield_block.md)。
 
@@ -640,7 +643,7 @@ const phaseKey = c.phaseIndex < phases.length
 实现为**通用数据机制**，新增近战武器自动获得，无需逐武器接：
 
 1. **武器类配置**（`melee_weapon.ts` 的 `MeleeWeaponClassConfig.heavyCharge?`）：`{maxChargeMultiplier, maxChargeTime, cooldown, chargePoseId?}`（`HeavyChargeConfig extends ChargeTuning`），缺省 `DEFAULT_HEAVY_CHARGE = {maxChargeMultiplier: 200, maxChargeTime: 1, cooldown: 0.8}`（`melee_attacks.ts`）。`meleeClass` 把它注入每个模式的 `BuildMeleeAttacksOptions.heavyCharge`，并把解析后的 `heavyCharge` 暴露在武器配置上；**单武器（模型）可经 `WeaponModelConfig.charge` 覆盖，角色面板可经 `AttackConfig.charge` 覆盖**（`charge_tuning.ts` 的 `ChargeTuning` / `chargeDamageScale`）。
-2. **重击段声明可蓄力**（`melee_attacks.ts` 的 `buildMeleeAttacks`）：每个重击段设 `chargeFullTime = maxChargeTime`、strike 阶段 `chargeable`、`chargeDamageBonus = maxChargeMultiplier/100 − 1`、`chargeCooldown = cooldown`、`chargePoseId = heavyCharge.chargePoseId ?? meleeChargePoseId(holdMode)`。单武器 / 面板覆写后由 `withChargeTuningMap` 重烘焙这些字段。
+2. **重击段声明可蓄力**（`melee_attacks.ts` 的 `buildMeleeAttacks`）：每个重击段设 `chargeFullTime = maxChargeTime`、strike 阶段 `chargeable` + `chargeMoveSpeedMultiplier = MELEE_CHARGE_MOVE_SPEED_MULTIPLIER`、`chargeDamageBonus = maxChargeMultiplier/100 − 1`、`chargeCooldown = cooldown`、`chargePoseId = heavyCharge.chargePoseId ?? meleeChargePoseId(holdMode)`。单武器 / 面板覆写后由 `withChargeTuningMap` 重烘焙这些字段。
 3. **输入**：`modes/play/camera.ts`「重击」绑定（默认右键）按下 → `world.beginPlayerAttackHold('heavy')`（`attack_chain.ts` 的 `isChargeableKey` 判定该键起手段是否可蓄力）→ 进入 attacking 并冻结在 strike 起始帧；松开 → `endPlayerAttackHold('heavy', held)`（蓄力中则结束蓄力、进入出招）。失焦 / 拖拽 → `cancelPlayerAttackHold`。
 4. **伤害与冷却**：`melee_executor` 命中时 `damage = (基础伤害 + 加成) × damageMultiplier × (1 + attackCharge × chargeDamageBonus)`；蓄力值 > 0 时在 `attacking/index.ts` 释放瞬间按 `chargeCooldown` 挂冷却（短按不挂）。
 5. **蓄力姿势（参数化）**：`AnimationContext` 携带 `attackCharge` / `attackHolding`；`appearance/system.ts` 在按住时改用段 `chargePoseId` 的**专用蓄力姿势 clip**（`charge_clip_data.ts` + `charge_pose_edits.ts`，进度 0 = 持械戒备位 → 1 = 满蓄力后引位），并按 `attackCharge` 定位其进度；无专用 clip 的武器（远程）则定位到攻击 clip 前段。`animKey` 带 `:charging`，松开时触发状态混合，消除姿势跳变。
@@ -661,7 +664,7 @@ const phaseKey = c.phaseIndex < phases.length
 ## 9. 持握模式与段动作组合（HoldMode / SegmentPoseLayer）
 
 1. **持握模式**：三态常量 `HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`（`character/weapon/hold_mode.ts`）。角色实体持久化 `holdMode`（`CharacterEntity.holdMode`，存档字段 `CharacterSaveConfig.holdMode?`，非法值安全回退）；武器**类**用 `holdModes` 声明可支持模式，`attacks: HoldModeAttacks`（`Partial<Record<HoldMode, WeaponAttacks>>`）提供各模式连段，段 id 统一 `{classId}_{holdMode}_{模板键}`。切换入口 `CharacterEntitySystem.setHoldMode(id, mode)`：可用性 = `catalog.ts` 的 `availableHoldModes(weapon, offhand)`（武器声明 ∩ 双持需副手同类近战），不可用时回退默认模式并返回 `false`；切换后按新模式重解析 `attacks`、清空段冷却 / 当前段，并同步外观（副手在双手共持时挂背、其余模式回手）。
-2. **副手装备槽**：`CombatComponent.offhand?: WeaponRuntime`（存档 `CharacterSaveConfig.offhand?`，未知武器 id 安全丢弃）。单持 / 双持握在**副手**（`handedness` 决定左手或右手）、双手共持挂背（`backWeaponMount` + `CharacterModel.setOffhandStowed`，只换父节点不重建几何）。双持时 `melee_executor` 按槽取武器结算（副手命中用副手武器的伤害 / 击退 / 攻击类别）。play 模式 `Ctrl` 环切可用模式（输入动作 `cycle_hold_mode`，被 Ctrl+S / Ctrl+O 最长组合遮蔽）；edit 面板可显式选择副手与持握。
+2. **副手装备槽**：`CombatComponent.offhand?: WeaponRuntime`（存档 `CharacterSaveConfig.offhand?`，未知武器 id 安全丢弃）。单持 / 双持握在**副手**（`handedness` 决定左手或右手）、双手共持挂背（`backWeaponMount` + `CharacterModel.setOffhandStowed`，只换父节点不重建几何）；**副手盾挂背时经 `updateShieldBlock(c, holdMode)` 同步清除其格挡来源**（不再举盾）。双持时 `melee_executor` 按槽取武器结算（副手命中用副手武器的伤害 / 击退 / 攻击类别）。play 模式 `Ctrl` 环切可用模式（输入动作 `cycle_hold_mode`，被 Ctrl+S / Ctrl+O 最长组合遮蔽）；edit 面板可显式选择副手与持握。
 3. **动画上下文**：`AnimationContext.holdMode`（替代原 `twoHanded` 布尔）；双手共持 IK 判定 = `holdMode === 'two_handed'`（与是否装备副手无关，副手挂背不影响贴合）；双持不走共享 IK，两臂均由关键帧驱动。
 3. **段的动作组合**：`AttackSegment.poses: readonly SegmentPoseLayer[]`（`{poseId, weight, progressOffset?}`）。pose 资产以 `attack_clip_data.ts` 的基础关键帧为底，合并 `attack_pose_edits.ts` 的逐段姿势修订；播放器 `createComposedAnimationPlayer` 按主进度采样各层，再经 `composePoses` 按**关节归一化加权平均**合成。
 4. `detectBox`（AI 出招检测箱）与 `mesh`（程序化模型）必须填写，其余数值（`damage` / `knockbackForce` / `knockbackY` / `detectionRange`）按武器定位给定。
@@ -685,7 +688,7 @@ const phaseKey = c.phaseIndex < phases.length
 
 （可选）需要阶段专用逻辑时：创建 `StateHandler` 并在装配处调用 `registerPhaseHandler('attacking_{segmentId}_{phaseName}', handler)`（由 `states/attacking/index.ts` 导出）。**当前生产武器未注册任何阶段 handler，全部走默认行为**：
 
-- 有移动输入时按阶段 `moveSpeedMultiplier` 缩放 `entity.config.speed` 驱动移动（攻击中推进/突进，同 walking 的斜坡投影/吸附逻辑）；
+- 有移动输入时按阶段 `moveSpeedMultiplier` 缩放 `entity.config.speed` 驱动移动（攻击中推进/突进，同 walking 的斜坡投影/吸附逻辑）；蓄力保持（`attackHolding`）且阶段声明 `chargeMoveSpeedMultiplier` 时改用后者；
 - 无移动输入时衰减残留速度 + 斜坡防滑。注意不能只衰减存量速度：无限连段下 AI 长期驻留 attacking，速度会衰减到 0 且永不补充，导致攻击一段时间后站桩不动。
 - 动画无需专用文件：攻击动画是段 id 对应的显式骨骼关键帧（`attack_clip_data.ts`），在骨骼动画编辑器编辑后导出即可，无程序化参数。
 
@@ -730,7 +733,7 @@ const phaseKey = c.phaseIndex < phases.length
 |------|------|
 | `types.ts` | `CombatComponent`（`weapon` / `attacks` / `segmentCooldowns` / `activeSegment` / `bufferedSegment` / `attackTimer` / `phaseIndex` / `phaseTimer` / `attackedTargets` / `rollSkill` / `invincibleTimer` …）；`createCombatComponent`、`setCombatWeapon`（换装整体替换武器运行时） |
 | `attack_runtime.ts` | 段冷却读写与上下文构造：`segmentCooldownRemaining` / `armSegmentCooldown` / `tickSegmentCooldowns` / `attackContextOf` / `canStartAttack` |
-| `attack_phases.ts` | `ATTACK_PHASES` / `AttackPhaseName`、`AttackPhase`（仅时序/移速/可中断）、`resolvePhases`（未定义时回退单阶段）、`phaseDurationOf`、`FLINCH_DURATION` / `FLINCH_IMMUNITY_DURATION` |
+| `attack_phases.ts` | `ATTACK_PHASES` / `AttackPhaseName`、`AttackPhase`（仅时序/移速/可中断；可选 `chargeable` + `chargeMoveSpeedMultiplier` 蓄力锚点与蓄力期移速）、`resolvePhases`（未定义时回退单阶段）、`phaseDurationOf`、`FLINCH_DURATION` / `FLINCH_IMMUNITY_DURATION` |
 | `roll_skill.ts` | 翻滚（角色能力，非武器段）：`RollSkillConfig` / `RollSkillRuntime`、`ROLL_DURATION` / `ROLL_COOLDOWN` / `ROLL_IFRAME_START` / `ROLL_IFRAME_END`、`createRollSkillRuntime`、`rollSpinProgress`（world 根自转进度） |
 | `test_weapon.ts` | 测试武器：7 段守卫链夹具（蓄力 / 点按兜底 / 键组分离 / 方向变体 / 循环链 / 无链单发 / 非 0 冷却 / 空中单段），仅供单元测试 |
 | `executor.ts` / `damage.ts` / `explosion.ts` | 执行器接口与伤害结算（命中窗口由动画事件轨驱动） |

@@ -38,7 +38,7 @@ const makeCtx = (overrides: Partial<AnimationContext> = {}): AnimationContext =>
     attackCharge: 0,
     attackHolding: false,
     weaponHeld: false,
-    shieldHand: undefined,
+    shieldHands: {main: false, off: false},
     ...overrides,
 })
 
@@ -79,6 +79,45 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
         }
         /* 腿应摆动（sin(t)·0.5），非静止 0 */
         expect(Math.abs(model.rightLegHip.rotation.x)).toBeGreaterThan(1e-4)
+        model.dispose()
+    })
+
+    it('格挡时叠加下半身行走步态（水平移动 → 双腿摆动；静止 → 静态格挡腿姿）', () => {
+        const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        const sys = createAppearanceSystem()
+        /* 静止格挡：双腿保持静态格挡姿态（rightLegHip.rx = 0.06） */
+        for (let i = 0; i < 10; i++) sys.update(1 / 60, model, 'blocking', makeCtx({stateTime: i / 60, horizontalSpeed: 0}))
+        const staticHip = model.rightLegHip.rotation.x
+        /* 移动格挡：叠加行走步态覆盖双腿，髋角随步态相位摆动 */
+        let varied = false
+        for (let i = 0; i < 30; i++) {
+            sys.update(1 / 60, model, 'blocking', makeCtx({stateTime: i / 60, horizontalSpeed: 3.7}))
+            if (Math.abs(model.rightLegHip.rotation.x - staticHip) > 1e-3) varied = true
+        }
+        expect(varied).toBe(true)
+        model.dispose()
+    })
+
+    it('重击蓄力保持时叠加下半身行走步态（attackHolding + 移动 → 双腿摆动）', () => {
+        const preset = weaponPresetOrDefault('long_sword')
+        const seg = orderedSegments(weaponAttacksOf(preset, 'one_handed'))
+            .find(s => s.id === 'long_sword_one_handed_heavy_1')!
+        const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        model.equipWeapon({main: preset.mesh})
+        const sys = createAppearanceSystem()
+        let varied = false
+        for (let i = 0; i < 30; i++) {
+            sys.update(1 / 60, model, 'attacking', makeCtx({
+                stateTime: i / 60,
+                horizontalSpeed: 3.7,
+                attackSegment: seg,
+                attackPhase: 'strike',
+                attackHolding: true,
+                weaponHeld: true,
+            }))
+            if (Math.abs(model.rightLegHip.rotation.x) > 1e-3) varied = true
+        }
+        expect(varied).toBe(true)
         model.dispose()
     })
 
@@ -131,6 +170,43 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
                     expect(minElbowDy, `${seg.id}@${scale}× 左肘反关节`).toBeLessThan(-0.3)
                     model.dispose()
                 }
+            }
+        }
+    })
+
+    it('双手共持：待机 / 行走等非攻击持械状态也吸附副握点（问题 1 回归）', () => {
+        const ids = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer', 'longbow', 'crossbow', 'shotgun', 'staff']
+        for (const state of ['idle', 'walking'] as const) {
+            for (const id of ids) {
+                const preset = weaponPresetOrDefault(id)
+                const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+                model.equipWeapon({main: preset.mesh})
+                const sys = createAppearanceSystem()
+                let maxDist = 0
+                let minElbowDy = 1
+                for (let i = 0; i < 30; i++) {
+                    sys.update(1 / 60, model, state, makeCtx({
+                        stateTime: i / 60,
+                        horizontalSpeed: state === 'walking' ? 3.7 : 0,
+                        holdMode: 'two_handed',
+                        weaponHeld: true,
+                    }))
+                    model.group.updateMatrixWorld(true)
+                    const shoulder = model.leftArmShoulder.getWorldPosition(new Vector3())
+                    const elbow = model.leftArmElbow.getWorldPosition(new Vector3())
+                    const hand = model.leftWeaponMount.getWorldPosition(new Vector3())
+                    const supportGrip = model.weaponGroup!.localToWorld(new Vector3(0, model.weaponSupportGripOffset, 0))
+                    maxDist = Math.max(maxDist, hand.distanceTo(supportGrip))
+                    /* 肘在「肩→手」垂面上的方向：y 分量应为负（朝下，非反折朝上/后） */
+                    const axis = hand.clone().sub(shoulder).normalize()
+                    const elbowPerp = elbow.clone().sub(shoulder)
+                    elbowPerp.addScaledVector(axis, -elbowPerp.dot(axis)).normalize()
+                    minElbowDy = Math.min(minElbowDy, elbowPerp.y)
+                }
+                /* 待机 / 行走同样让副手吸附副握点，且左肘朝下（不生反关节） */
+                expect(maxDist, `${id}@${state} 副手未吸附副握点`).toBeLessThan(0.18)
+                expect(minElbowDy, `${id}@${state} 左肘反关节`).toBeLessThan(-0.3)
+                model.dispose()
             }
         }
     })

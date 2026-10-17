@@ -4,6 +4,7 @@
  * @param openOperations 打开操作设置面板（键盘 + 鼠标绑定）
  * @param onReturnHome 可选，覆盖“返回主页面”的默认 reload 行为（展示模式需优雅退出）
  * @param onTeleportToSave 可选，play 模式「传送至最近存档点」回调（脱困）
+ * @param onSaveWorld 可选，手动存档回调（编辑 / 游玩模式；游玩模式 Ctrl+S 已禁用，改由菜单触发）
  */
 import {getLocale, getLocales, setLocale, type LocalKeyParam} from '../i18n/index.ts'
 import {LOCALE_DISPLAY_NAMES, isLocale} from '../i18n/constants.ts'
@@ -14,6 +15,7 @@ export const setupSettingsPanel = (
     openOperations: () => void,
     onReturnHome?: () => void,
     onTeleportToSave?: () => void,
+    onSaveWorld?: () => void,
 ): void => {
     const btn = document.createElement('button')
     btn.id = 'settings-btn'
@@ -55,6 +57,13 @@ export const setupSettingsPanel = (
         close()
         openOperations()
     }))
+
+    if (onSaveWorld !== undefined) {
+        menu.appendChild(createItem('settings.save_world', () => {
+            close()
+            onSaveWorld()
+        }))
+    }
 
     if (onTeleportToSave !== undefined) {
         menu.appendChild(createItem('settings.teleport_save', () => {

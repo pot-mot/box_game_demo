@@ -25,6 +25,11 @@ export interface AttackPhase {
      * 段需同时声明 `chargeFullTime` 才具备蓄力；锚点应对应「射出前」的姿态阶段。
      */
     readonly chargeable?: boolean
+    /**
+     * 蓄力保持期间的移速倍率（可选）：仅当玩家按住攻击键（`attackHolding`）时覆盖
+     * `moveSpeedMultiplier`；未声明时保持后者（远程瞄准沿用各段自身的步进倍率）。
+     */
+    readonly chargeMoveSpeedMultiplier?: number
 }
 
 /** 受击硬直持续时间（秒） */

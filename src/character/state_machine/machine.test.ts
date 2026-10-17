@@ -595,6 +595,31 @@ describe('受击硬直与保护窗口', () => {
         expect(e.stateMachine.currentState).toBe('attacking')
     })
 
+    it('重击蓄力保持期间移速改用 chargeMoveSpeedMultiplier（0.5，而非 strike 的 0.3）', () => {
+        const e = makeMock(createWeaponRuntime('long_sword'))
+        /* 按住重击键进入 attacking，第二帧进入保持（attackHolding = true）并推移动方向 */
+        e.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0, true)
+        e.stateMachine.update(DT, e)
+        e.stateMachine.setInput(1, 0, false, false, false, 'heavy', 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.combat.attackHolding).toBe(true)
+        const b = getMockBody(e)
+        expect(b.linvel().x).toBeCloseTo(6 * 0.5, 5)
+    })
+
+    it('不蓄力的重击 strike 移速仍为 moveSpeedMultiplier（0.3）', () => {
+        const e = makeMock(createWeaponRuntime('long_sword'))
+        /* 第一帧进入 attacking（dx=0），第二帧推移动方向：不蓄力 → 6 × 0.3 */
+        e.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('attacking')
+        e.stateMachine.setInput(1, 0, false, false, false, 'heavy', 0)
+        e.stateMachine.update(DT, e)
+        expect(e.combat.attackHolding).toBe(false)
+        const b = getMockBody(e)
+        expect(b.linvel().x).toBeCloseTo(6 * 0.3, 5)
+    })
+
     it('攻击中被击中（pendingFlinch）立即进入 flinching 并中断攻击', () => {
         const e = makeMock()
         enterAttacking(e)

@@ -74,6 +74,12 @@ export const WEAPON_MESH_GRIPS: Record<WeaponMeshId, WeaponGripPose> = {
     throwing_dart: GRIP_NEUTRAL,
 }
 
+/** 盾牌网格 id 集合（挂背时需额外旋转使盾面竖直贴背；盾面法线为武器本地 +Y） */
+const SHIELD_MESH_IDS: readonly WeaponMeshId[] = ['shield_small', 'shield_medium', 'shield_large']
+
+/** 网格 id 是否为盾牌（盾面朝向校正 / 挂背旋转判定） */
+export const isShieldMeshId = (id: WeaponMeshId): boolean => SHIELD_MESH_IDS.includes(id)
+
 // ── 攻击判定箱（武器本地命中箱） ──
 
 /** 武器本地命中箱：每个武器在自己的 `gen` 中显式声明（不再由 `finish` 统一外扩），

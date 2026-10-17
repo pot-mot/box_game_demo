@@ -308,7 +308,7 @@ export const catalogModule: ShowcaseModule = {
                     attackCharge: 0,
                     attackHolding: false,
                     weaponHeld: model.weaponMesh !== null,
-                    shieldHand: undefined,
+                    shieldHands: {main: false, off: false},
                 }
                 system.update(dt, model, 'idle', ctx)
             } else {

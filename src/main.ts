@@ -338,8 +338,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     // --- UI ---
     const cameraInfoUpdate = mode === 'showcase' ? () => {} : setupCameraInfo(camera)
 
-    // --- 存档快捷键（展示模式无世界实体、骨骼动画模式走独立资产导入导出，均不注册） ---
-    if (mode !== 'showcase' && mode !== 'bone_edit') input.onActionDown('save_world', () => {
+    // --- 存档（保存后立即下载为文件）---
+    const exportSaveWorld = (): void => {
         const cached = loadCachedSaveData()
         const state = collectWorldState(
             systemsByType,
@@ -355,7 +355,12 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         }
         cacheSaveData(state)
         saveWorldToFile(state)
-    })
+    }
+
+    /* Ctrl+S 仅编辑模式生效：游玩模式与「Ctrl 单独按下切换持握」冲突，改由右上角菜单手动存档
+     * （绑定保留以使 Ctrl+S 组合继续遮蔽浏览器默认保存，但不再触发存档回调）。
+     * 展示模式无世界实体、骨骼动画模式走独立资产导入导出，均不注册。 */
+    if (mode === 'edit') input.onActionDown('save_world', exportSaveWorld)
 
     if (mode !== 'showcase' && mode !== 'bone_edit') input.onActionDown('load_world', () => {
         promptLoadFile((data) => {
@@ -382,6 +387,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         () => openOperationsPanel(mode),
         mode === 'showcase' ? () => showcaseMode?.exit() : undefined,
         mode === 'play' ? () => hakoniwa?.teleportToNearestSavePoint() : undefined,
+        mode === 'edit' || mode === 'play' ? exportSaveWorld : undefined,
     )
 
     // --- 单 RAF 循环 ---

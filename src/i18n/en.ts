@@ -40,6 +40,7 @@ export const localeEn: MainLocale = {
     'settings.title': 'Settings',
     'settings.return_home': '🏠 Back to Home',
     'settings.operations': '🎮 Controls',
+    'settings.save_world': 'Save World',
     'settings.teleport_save': '🪄 Teleport to Latest Save',
     'settings.language': '🌐 Language',
 

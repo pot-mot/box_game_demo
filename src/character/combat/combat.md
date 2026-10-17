@@ -28,6 +28,6 @@
 ## 盾格挡资源（guard）
 
 - `CombatComponent` 的盾格挡字段（`combat/types.ts`）：`block?: ShieldBlockConfig`（持盾武器必带，见 [`weapon.md`](../weapon/weapon.md)）、`guard`（当前格挡槽）、`blocking`（是否处于格挡态）、`blockHeld`（输入意图，每帧由 `machine.ts` 从 `stateMachine.setInput(..., block)` 同步）。
-- `guardMaxOf(c)` = `c.block?.guardMax ?? 0`；`updateShieldBlock(c)` 在未受击（`guardRegenDelayTimer <= 0`）时按 `guardRegenPerSec` 回充 `guard` 至上界，受击后延迟回充（由 `world.ts` 主循环驱动，与韧性回充并列）。
+- `guardMaxOf(c)` = `c.block?.guardMax ?? 0`；`updateShieldBlock(c, holdMode?)` 解析**盾来源**（主手盾优先，其次副手盾）写入 `c.block` 并把 `guard` 夹到上限——**双手共持（`holdMode === 'two_handed'`）时副手武器挂背、副手盾不计入格挡**（其余模式计入）。装备 / 持握模式变更后必须调用，保证格挡状态与盾碰撞体读取到一致数据。`guard` 回充（未受击（`guardRegenDelayTimer <= 0`）时按 `guardRegenPerSec`）由 `world.ts` 主循环驱动，与韧性回充并列。
 - 破防由状态机全局分支统一触发（`guard <= 0` → `guard_broken`，见 [`state_machine.md`](../state_machine/state_machine.md)），不在此模块。
 - **格挡减免结算**（近战 / 子弹命中举盾目标）：`伤害 → damage × blockDamageMultiplier`、`impact` 非 `knockdown` 时降一级（`downgradeImpact`）、`削韧 → poiseDamage × poiseMultiplier`、`guard -= blockedDamage`、击退 `× blockKnockbackMultiplier`；`knockdown` 击穿格挡不降级。爆炸 / AOE **完全无视盾**。判定路径见 [`projectile.md`](../../entity/character/projectile/projectile.md) 与 [`melee` 执行器](../../entity/character/combat/melee_executor.ts)。
