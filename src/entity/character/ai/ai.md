@@ -121,9 +121,9 @@ attack
   └→ inactive    (敌人超出检测范围)
 
 flee
-  ├→ attack      (fleeDuration 结束，有目标，burst 未耗尽)
-  ├→ inactive    (fleeDuration 结束，无目标或 burst 耗尽)
-  └→ inactive    (检测范围内无敌人)
+  ├→ attack      (fleeDuration 结束，目标在 detectionRange 内，burst 未耗尽)
+  ├→ inactive    (fleeDuration 结束，无目标 [脱战滞回范围外] 或 burst 耗尽)
+  └→ inactive    (脱战滞回范围 [detectionRange × 2] 内无敌人)
 ```
 
 ### 2.4 状态机类型定义
@@ -304,7 +304,9 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 
 **受击转战斗（仇恨）**（`notifyAIDamaged`，由 `world.ts` 的 `onDamageTaken` 回调调用）：被击中时清除接敌冷却并强制进入 combat 锁定攻击者，解决和平态被背后/视野外攻击不还手、冷却期内挨打不反应的问题。友军误伤（`attackTendency` 为 false）不强制开战；攻击者已死亡时不锁定（冷却仍被清除）。伤害回调签名透传 `DamageEvent`（`onDamageTaken(amount, event)`，`character/combat/damage.ts` + `targetable.ts`）。
 
-**脱战距离滞回**（`COMBAT_LOSE_RANGE_FACTOR`）：各战斗状态（chase/approach/attack/kite/volley）的"目标超距 → inactive"守卫阈值为 `detectionRange × 2`，与进入战斗用的 `detectionRange` 形成滞回：防止边界抖动、以及受击仇恨目标在侦测半径外（如远程狙击）时 combat 一闪即灭（表现为"被打仍处 peace"）。目标死亡/消失仍立即退出。
+**脱战距离滞回**（`COMBAT_LOSE_RANGE_FACTOR`）：各战斗状态（chase/approach/attack/kite/volley，以及 **flee**）的"目标超距 → inactive"守卫阈值为 `detectionRange × 2`，与进入战斗用的 `detectionRange` 形成滞回：防止边界抖动、以及受击仇恨目标在侦测半径外（如远程狙击）时 combat 一闪即灭（表现为"被打仍处 peace"）。目标死亡/消失仍立即退出。
+
+> **flee 的滞回**：`flee` 的"无目标 → 放弃"退出（含 `fleeDuration` 到期后的目标判定）用 `detectionRange × 2`；但 `flee → attack`（回头还击）仍用 `detectionRange`。否则怯懦 AI 逃到刚过 `detectionRange` 就被判"无敌人"退出战斗，和平巡逻下一帧又迈回半径内重新接敌，形成 **flee↔peace 逐帧抖动**（视觉上原地抖）。滞回后 AI 会持续逃跑直到目标超出 `detectionRange × 2` 或被追上进入 `detectionRange` 才回头还击。
 
 **相关常量**（`ai/constants.ts`）：
 
@@ -441,12 +443,18 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 
 持盾 AI 在满足条件时把 `block` 注入状态机（`ai/machine.ts` 在 `updateAI` 末尾统一 `setInput(..., block)`；`trackedSetInput` 缓存当帧参数，避免重复触发世界接触 / 导航处理）：
 
-| 常量 | 默认 | 含义 |
+| 常量 / 角色属性 | 默认 | 含义 |
 |------|------|------|
 | `AI_DEFEND_RANGE` | 3.5 | 进入威胁范围（目标在此距离内才考虑格挡） |
 | `AI_DEFEND_FACING_DOT` | 0.3 | 目标攻击方向与「目标 → 自身」朝向的最小点积（判定来袭是否朝向自己） |
+| `DEFAULT_AI_BLOCK_DURATION` / `CharacterEntity.aiBlockDuration` | 0.4 | 单次举盾窗口（秒）：举满即落盾；逐角色可配（面板「举盾窗口」） |
+| `DEFAULT_AI_BLOCK_COOLDOWN` / `CharacterEntity.aiBlockCooldown` | 1.2 | 两次举盾之间的最短间隔（秒）；逐角色可配（面板「举盾冷却」） |
 
 生效条件（全部满足）：自身装备盾（`combat.block !== undefined`）、`guard > 0`、未死亡、存在 `combatTargetId`、目标未死亡且 `attackActive`、目标距离 ≤ `AI_DEFEND_RANGE`、目标攻击方向与来袭方向点积 ≥ `AI_DEFEND_FACING_DOT`；仅在 `activeFsm === 'combat'` 时注入，其余帧注入 `block = false`。签发按钮不做别的处理（沿用玩家同一 `setInput` 通路）。
+
+**举盾是限时反应而非持续姿态**：威胁成立即按 `character.aiBlockDuration` 开启窗口（窗口内持续举盾，即使威胁中途消失）；窗口结束进入 `character.aiBlockCooldown` 冷却，冷却期内不发起新举盾。`combatBlockTimer` / `combatBlockCooldownTimer` 由 `updateAI` 逐帧递减。**必须限时**：`blocking` 在状态机中优先级高于 `attacking`（`idle`/`walking` 的转换顺序），若无窗口/冷却，持盾 AI 面对连续出手的敌人会永远举盾、从不出手（表现为"持盾不攻击"）。
+
+> 窗口时长与冷却为**逐角色属性**（与 `chaseLeashRadius` / `originInterval` 同性质）：`CharacterEntity.aiBlockDuration` / `aiBlockCooldown`，编辑面板可改、存档持久化（可选字段，旧档安全回退常量默认）。
 
 ---
 
@@ -462,6 +470,8 @@ combatStrategy: CombatSubStrategy   // 'tactical' | 'aggressive' | 'cowardly'
 originStrategy: OriginSubStrategy   // 'resident' | 'fighter' | 'hunter' | 'roamer'
 originInterval: number              // 漫游者原点更新间隔（秒，默认 20）
 chaseLeashRadius: number            // 追击活动半径（m，默认 20）
+aiBlockDuration: number             // 反应式举盾窗口（秒，默认 0.4）
+aiBlockCooldown: number             // 反应式举盾冷却（秒，默认 1.2）
 combat: CombatComponent             // 阵营、技能、血量等
 stateMachine: CharacterStateMachine // 角色动作 FSM
 ```

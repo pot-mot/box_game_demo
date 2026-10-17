@@ -76,6 +76,10 @@ export interface CharacterEntity {
     originInterval: number
     /** 追击活动半径（m，距行为原点超出即放弃追击；默认 20） */
     chaseLeashRadius: number
+    /** AI 反应式举盾单次窗口时长（秒，默认 0.4；仅非玩家 AI 有效）：对连续攻击的敌人举满即落盾 */
+    aiBlockDuration: number
+    /** AI 反应式举盾两次之间的最短冷却（秒，默认 1.2；仅非玩家 AI 有效）：冷却期不发起新举盾 */
+    aiBlockCooldown: number
 
     /** 死亡动画计时（非持久状态） */
     isDying: boolean

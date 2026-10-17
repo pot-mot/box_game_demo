@@ -37,7 +37,7 @@ const makeMock = (weaponId = 'shield_medium'): CharacterEntity => {
         groundNormal: {x: 0, y: 1, z: 0},
         groundKeepTimer: 0,
         airborneTime: 0, groundedTime: 0,
-        rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20,
+        rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
         isDying: false, dyingTimer: 0,
         dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
         knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,

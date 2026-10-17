@@ -43,7 +43,7 @@ import {createRapierLineOfSight, type LineOfSightChecker} from '../ai/line_of_si
 import {createRapierLosRayCaster, createRapierNavRayCaster} from './rapier_queries.ts'
 import {createAIMachine, notifyAIDamaged, updateAI} from '../ai/machine.ts'
 import {notifyAIKill, setOriginFromCharacter} from '../ai/origin.ts'
-import {DEFAULT_CHASE_LEASH_RADIUS} from '../ai/constants.ts'
+import {DEFAULT_AI_BLOCK_COOLDOWN, DEFAULT_AI_BLOCK_DURATION, DEFAULT_CHASE_LEASH_RADIUS} from '../ai/constants.ts'
 import {processNav} from '../ai/nav/machine.ts'
 import {createCharacterMesh, updateCharacterMesh} from '../render'
 import {COLLIDER_MESH_OPACITY} from '../render/constants.ts'
@@ -226,6 +226,10 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setOriginInterval: (id: number, seconds: number) => void
     /** 设置单个角色的追击活动半径（m） */
     setChaseLeashRadius: (id: number, radius: number) => void
+    /** 设置单个角色的 AI 反应式举盾窗口时长（秒） */
+    setAIBlockDuration: (id: number, seconds: number) => void
+    /** 设置单个角色的 AI 反应式举盾冷却（秒） */
+    setAIBlockCooldown: (id: number, seconds: number) => void
     /** 读取角色行为原点世界坐标（AI 未激活时返回 undefined；返回副本避免外部改写运行时状态） */
     getOrigin: (id: number) => {x: number; y: number; z: number} | undefined
     /** 设置角色当前韧性（自动夹取到 0..poiseMax，用于面板调节） */
@@ -546,6 +550,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         originStrategy: OriginSubStrategy = 'resident',
         originInterval: number = DEFAULT_ROAMER_INTERVAL,
         chaseLeashRadius: number = DEFAULT_CHASE_LEASH_RADIUS,
+        aiBlockDuration: number = DEFAULT_AI_BLOCK_DURATION,
+        aiBlockCooldown: number = DEFAULT_AI_BLOCK_COOLDOWN,
     ): CharacterEntity => {
         /* 武器运行时（武器预设 + 存档数值覆写）：外观武器模型、攻击链、血量档位都由它决定 */
         const runtime = weaponRuntimeOf(attack)
@@ -642,6 +648,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             originStrategy,
             originInterval,
             chaseLeashRadius,
+            aiBlockDuration,
+            aiBlockCooldown,
             isDying: false,
             dyingTimer: 0,
             dyingFallDirX: 0,
@@ -1865,7 +1873,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const offhandAttack = saveConfig.offhand !== undefined && isKnownWeaponId(saveConfig.offhand.weaponId)
             ? saveConfig.offhand
             : undefined
-        const entity = spawnEntity(cfg, saveConfig.attack, offhandAttack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true, saveConfig.originStrategy ?? 'resident', saveConfig.originInterval ?? DEFAULT_ROAMER_INTERVAL, saveConfig.chaseLeashRadius ?? DEFAULT_CHASE_LEASH_RADIUS)
+        const entity = spawnEntity(cfg, saveConfig.attack, offhandAttack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true, saveConfig.originStrategy ?? 'resident', saveConfig.originInterval ?? DEFAULT_ROAMER_INTERVAL, saveConfig.chaseLeashRadius ?? DEFAULT_CHASE_LEASH_RADIUS, saveConfig.aiBlockDuration ?? DEFAULT_AI_BLOCK_DURATION, saveConfig.aiBlockCooldown ?? DEFAULT_AI_BLOCK_COOLDOWN)
         /* 持握模式：存档支持时应用，武器不支持时 setHoldMode 回退默认模式（不抛错） */
         if (saveConfig.holdMode !== undefined) setHoldMode(entity.id, saveConfig.holdMode)
         /* 防御 / 攻击 / 护甲 / 肢体：旧档缺字段回退零防御零攻击空装备；未知 id 由 resolve*Loadout 安全剔除 */
@@ -2175,6 +2183,20 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.chaseLeashRadius = radius
     }
 
+    /** 设置 AI 反应式举盾窗口时长（逐角色属性，shouldReactiveBlock 触发时读取） */
+    const setAIBlockDuration = (id: number, seconds: number): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.aiBlockDuration = seconds
+    }
+
+    /** 设置 AI 反应式举盾冷却（逐角色属性，举盾窗口结束时读取） */
+    const setAIBlockCooldown = (id: number, seconds: number): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.aiBlockCooldown = seconds
+    }
+
     /** 读取角色行为原点（返回副本）：面板据此展示当前原点坐标，AI 未激活时为 undefined */
     const getOrigin = (id: number): {x: number; y: number; z: number} | undefined => {
         const ctx = aiMap.get(id)
@@ -2244,6 +2266,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setOriginStrategy,
         setOriginInterval,
         setChaseLeashRadius,
+        setAIBlockDuration,
+        setAIBlockCooldown,
         getOrigin,
         setPoise,
         registerBoxSpawner,

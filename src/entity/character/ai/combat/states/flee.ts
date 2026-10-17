@@ -1,7 +1,7 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
-import {COMBAT_SHOT_INTERVAL} from '../../constants.ts'
+import {COMBAT_LOSE_RANGE_FACTOR, COMBAT_SHOT_INTERVAL} from '../../constants.ts'
 import {aimAndFireAt} from '../aim.ts'
 
 const _fleeDir: RapVector3 = {x: 0, y: 0, z: 0}
@@ -34,7 +34,9 @@ export const fleeHandler: CombatStateHandler = {
     },
     update: (dt, ctx, character, allCharacters, setInput) => {
         const weapon = character.combat.weapon
-        const detRange = weapon.detectionRange
+        /* 目标存在判定用脱战滞回阈值（与 chase/approach/attack/kite/volley 一致）：
+         * 若与进入战斗的 detectionRange 同值，AI 会在侦测边界上 flee↔combat 逐帧抖动 */
+        const detRange = weapon.detectionRange * COMBAT_LOSE_RANGE_FACTOR
         const pos = character.body.translation()
 
         /* 检查是否有附近敌人：从敌人方向逃离（逃跑方向始终远离最近威胁） */
@@ -119,7 +121,7 @@ export const fleeHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 if (ctx.combatStateTime < ctx.combatConfig.fleeDuration) return false
                 if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
-                /* 需要有有效目标 */
+                /* 需要有有效目标（仍在侦测半径内才回头还击；边界滞回只用于「无目标→放弃」） */
                 const detRange = character.combat.weapon.detectionRange
                 const pos = character.body.translation()
                 for (const other of allCharacters) {
@@ -143,7 +145,7 @@ export const fleeHandler: CombatStateHandler = {
                 if (ctx.combatStateTime < ctx.combatConfig.fleeDuration) return false
                 if (ctx.combatBurstAttackCount < ctx.combatConfig.attackBurstCount) {
                     /* 若无可达目标，放弃 */
-                    const detRange = character.combat.weapon.detectionRange
+                    const detRange = character.combat.weapon.detectionRange * COMBAT_LOSE_RANGE_FACTOR
                     const pos = character.body.translation()
                     let hasTarget = false
                     for (const other of allCharacters) {
@@ -160,10 +162,10 @@ export const fleeHandler: CombatStateHandler = {
             },
         },
         {
-            /* 没有敌人在侦测范围内 → inactive */
+            /* 没有敌人在脱战滞回范围内（detectionRange × COMBAT_LOSE_RANGE_FACTOR）→ inactive */
             to: 'inactive',
             guard: (_ctx, character, allCharacters) => {
-                const detRange = character.combat.weapon.detectionRange
+                const detRange = character.combat.weapon.detectionRange * COMBAT_LOSE_RANGE_FACTOR
                 const pos = character.body.translation()
                 for (const other of allCharacters) {
                     if (other.id === character.id || other.combat.isDead) continue

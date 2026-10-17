@@ -100,7 +100,7 @@ export const makeChar = (
         combatStrategy: 'tactical',
         originStrategy: 'resident',
         originInterval: 20,
-        chaseLeashRadius: 20,
+        chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
         isDying: false,
         dyingTimer: 0,
         dyingFallDirX: 0,

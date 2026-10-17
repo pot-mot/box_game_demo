@@ -48,3 +48,9 @@ export const COMBAT_SHOT_INTERVAL = 1.0
 export const AI_DEFEND_RANGE = 3.5
 /** 目标攻击方向朝向我方的最小点积（cos 阈值，约 72°）：低于该值视为不构成正面威胁，不举盾 */
 export const AI_DEFEND_FACING_DOT = 0.3
+/** 单次举盾窗口时长默认值（秒）：举盾是「反应」而非持续姿态；对连续攻击的敌人举满该时长即落盾。
+ *  逐角色可经 `CharacterEntity.aiBlockDuration` 覆写。 */
+export const DEFAULT_AI_BLOCK_DURATION = 0.4
+/** 两次举盾之间最短间隔默认值（秒）：冷却期内不发起新举盾，保证 AI 在长时间对拼中仍能出手攻击。
+ *  逐角色可经 `CharacterEntity.aiBlockCooldown` 覆写。 */
+export const DEFAULT_AI_BLOCK_COOLDOWN = 1.2

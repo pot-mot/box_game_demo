@@ -845,6 +845,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     el.appendChild(chaseRadiusRow)
     const chaseRadiusInput = createLabeledNumberInput(chaseRadiusRow, 'character.chase_radius_label', {min: '0', step: '1', value: '20'})
 
+    /* AI 反应式举盾窗口 / 冷却（仅非玩家 AI） */
+    const blockReactionRow = document.createElement('div')
+    blockReactionRow.className = 'dc-row'
+    el.appendChild(blockReactionRow)
+    const aiBlockDurationInput = createLabeledNumberInput(blockReactionRow, 'character.ai_block_duration_label', {min: '0.1', step: '0.1', value: '0.4'})
+    const aiBlockCooldownInput = createLabeledNumberInput(blockReactionRow, 'character.ai_block_cooldown_label', {min: '0.1', step: '0.1', value: '1.2'})
+
     /* 导航感知开关 */
     const navRow = document.createElement('div')
     navRow.className = 'dc-row'
@@ -911,6 +918,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         originIntervalInput.parentElement!.style.display = (!isPlayer && originStrategy === 'roamer') ? '' : 'none'
         originCoordsTag.style.display = isPlayer ? 'none' : ''
         chaseRadiusInput.parentElement!.style.display = isPlayer ? 'none' : ''
+        blockReactionRow.style.display = isPlayer ? 'none' : ''
     }
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
@@ -1217,6 +1225,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         originSelect.value = sel.originStrategy
         originIntervalInput.value = formatNumber(sel.originInterval)
         chaseRadiusInput.value = formatNumber(sel.chaseLeashRadius)
+        aiBlockDurationInput.value = formatNumber(sel.aiBlockDuration)
+        aiBlockCooldownInput.value = formatNumber(sel.aiBlockCooldown)
         aiSection.style.display = sel.isPlayer ? 'none' : ''
         peaceRow.style.display = sel.isPlayer ? 'none' : ''
         combatRow.style.display = sel.isPlayer ? 'none' : ''
@@ -1275,6 +1285,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (!isNaN(originInterval) && originInterval > 0) ctx.setOriginInterval?.(cur.id, originInterval)
                 const chaseRadius = parseFloat(chaseRadiusInput.value)
                 if (!isNaN(chaseRadius) && chaseRadius > 0) ctx.setChaseLeashRadius?.(cur.id, chaseRadius)
+                const aiBlockDuration = parseFloat(aiBlockDurationInput.value)
+                if (!isNaN(aiBlockDuration) && aiBlockDuration > 0) ctx.setAIBlockDuration?.(cur.id, aiBlockDuration)
+                const aiBlockCooldown = parseFloat(aiBlockCooldownInput.value)
+                if (!isNaN(aiBlockCooldown) && aiBlockCooldown > 0) ctx.setAIBlockCooldown?.(cur.id, aiBlockCooldown)
                 /* 持久化建造配置：仅保留预设合法的条目（非法预设跳过，避免写入脏数据） */
                 if (peaceStrat === 'build') {
                     const boxTypes: BoxSpawnEntry[] = []

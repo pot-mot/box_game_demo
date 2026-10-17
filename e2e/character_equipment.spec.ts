@@ -194,6 +194,27 @@ test.describe('角色装备与属性面板', () => {
         await expect(coordsTag).toContainText(/当前原点: \(-?\d+\.\d{2}, -?\d+\.\d{2}, -?\d+\.\d{2}\)/)
     })
 
+    test('AI 反应式举盾窗口 / 冷却：默认值回显，修改 Apply 后持久化', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        const windowInput = panel.getByLabel(/^举盾窗口/)
+        const cooldownInput = panel.getByLabel(/^举盾冷却/)
+
+        /* 默认值 0.4 / 1.2 */
+        await expect(windowInput).toHaveValue('0.4')
+        await expect(cooldownInput).toHaveValue('1.2')
+
+        await windowInput.fill('0.7')
+        await cooldownInput.fill('2.5')
+        await panel.locator('button', {hasText: '应用'}).click()
+
+        /* 重新聚焦面板后回显已 Apply 的值 */
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel').getByLabel(/^举盾窗口/)).toHaveValue('0.7')
+        await expect(page.locator('#character-panel').getByLabel(/^举盾冷却/)).toHaveValue('2.5')
+    })
+
     test('生命 / 韧性状态行：当前值 / 最大值 | (基础值 + 逐项加成) × 乘区', async ({page}) => {
         await openCharacterPanel(page)
 

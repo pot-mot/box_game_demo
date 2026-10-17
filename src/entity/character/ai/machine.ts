@@ -156,6 +156,8 @@ export const createAIMachine = (
         combatRetargetTimer: 0,
         combatShotTimer: 0,
         combatAimActive: false,
+        combatBlockTimer: 0,
+        combatBlockCooldownTimer: 0,
 
         /* 和平 FSM 字段 */
         peaceState: 'patrol',
@@ -339,6 +341,15 @@ export const updateAI = (
     ctx.combatAimActive = false
     /* 远程开火节流计时递减（与武器冷却共同节流） */
     ctx.combatShotTimer = Math.max(0, ctx.combatShotTimer - dt)
+
+    /* 反应式举盾窗口 / 冷却递减：窗口结束进入冷却（时长取角色属性），冷却期不发起新举盾
+     * （避免连续举盾永不出手） */
+    if (ctx.combatBlockTimer > 0) {
+        ctx.combatBlockTimer = Math.max(0, ctx.combatBlockTimer - dt)
+        if (ctx.combatBlockTimer === 0) ctx.combatBlockCooldownTimer = character.aiBlockCooldown
+    } else if (ctx.combatBlockCooldownTimer > 0) {
+        ctx.combatBlockCooldownTimer = Math.max(0, ctx.combatBlockCooldownTimer - dt)
+    }
 
     /* 卡死放弃战斗后的重新接敌冷却递减 */
     ctx.combatReentryTimer = Math.max(0, ctx.combatReentryTimer - dt)

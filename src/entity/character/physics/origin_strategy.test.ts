@@ -75,42 +75,54 @@ describe('角色行为原点策略存档', () => {
         system = setupCharacterEntities(scene, shared)
     })
 
-    it('add 写入原点策略 / 漫游间隔 / 追击半径；旧档缺字段回退默认', () => {
+    it('add 写入原点策略 / 漫游间隔 / 追击半径 / AI 举盾窗口与冷却；旧档缺字段回退默认', () => {
         const custom = system.add({
             ...meleeSaveConfig(),
             originStrategy: 'roamer',
             originInterval: 12,
             chaseLeashRadius: 30,
+            aiBlockDuration: 0.7,
+            aiBlockCooldown: 2.5,
         }, 0, 0, 0)
         const e = system.getAll().find(c => c.id === custom.id)!
         expect(e.originStrategy).toBe('roamer')
         expect(e.originInterval).toBe(12)
         expect(e.chaseLeashRadius).toBe(30)
+        expect(e.aiBlockDuration).toBe(0.7)
+        expect(e.aiBlockCooldown).toBe(2.5)
 
         const legacy = system.add(meleeSaveConfig(), 1, 0, 0)
         const l = system.getAll().find(c => c.id === legacy.id)!
         expect(l.originStrategy).toBe('resident')
         expect(l.originInterval).toBe(20)
         expect(l.chaseLeashRadius).toBe(20)
+        expect(l.aiBlockDuration).toBe(0.4)
+        expect(l.aiBlockCooldown).toBe(1.2)
     })
 
-    it('setChaseLeashRadius / setOriginInterval / setOriginStrategy 更新实体字段', () => {
+    it('setChaseLeashRadius / setOriginInterval / setOriginStrategy / setAIBlock* 更新实体字段', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.setChaseLeashRadius(id, 8)
         system.setOriginInterval(id, 15)
         system.setOriginStrategy(id, 'hunter')
+        system.setAIBlockDuration(id, 0.9)
+        system.setAIBlockCooldown(id, 3)
         const e = system.getAll().find(c => c.id === id)!
         expect(e.chaseLeashRadius).toBe(8)
         expect(e.originInterval).toBe(15)
         expect(e.originStrategy).toBe('hunter')
+        expect(e.aiBlockDuration).toBe(0.9)
+        expect(e.aiBlockCooldown).toBe(3)
     })
 
-    it('序列化写出三个字段（往返保留）', () => {
+    it('序列化写出原点策略 / 间隔 / 追击半径 / AI 举盾参数（往返保留）', () => {
         system.add({
             ...meleeSaveConfig(),
             originStrategy: 'fighter',
             originInterval: 7,
             chaseLeashRadius: 25,
+            aiBlockDuration: 0.6,
+            aiBlockCooldown: 1.8,
         }, 0, 0, 0)
         const systems = new Map<string, EntityInfoSource>([['character', system]])
         const state = collectWorldState(systems, [], 'edit')
@@ -120,6 +132,8 @@ describe('角色行为原点策略存档', () => {
             expect(saved.config.originStrategy).toBe('fighter')
             expect(saved.config.originInterval).toBe(7)
             expect(saved.config.chaseLeashRadius).toBe(25)
+            expect(saved.config.aiBlockDuration).toBe(0.6)
+            expect(saved.config.aiBlockCooldown).toBe(1.8)
         }
     })
 })

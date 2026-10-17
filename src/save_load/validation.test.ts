@@ -418,22 +418,26 @@ describe('validateSaveData', () => {
         })
 
         for (const strategy of ['resident', 'fighter', 'hunter', 'roamer'] as const) {
-            const valid = validateSaveData(characterConfig({originStrategy: strategy, originInterval: 12, chaseLeashRadius: 30}))
+            const valid = validateSaveData(characterConfig({originStrategy: strategy, originInterval: 12, chaseLeashRadius: 30, aiBlockDuration: 0.6, aiBlockCooldown: 2}))
             const e = valid.entities[0]
             if (e.type === 'character') {
                 expect(e.config.originStrategy).toBe(strategy)
                 expect(e.config.originInterval).toBe(12)
                 expect(e.config.chaseLeashRadius).toBe(30)
+                expect(e.config.aiBlockDuration).toBe(0.6)
+                expect(e.config.aiBlockCooldown).toBe(2)
             }
         }
 
-        /* 非法值（未知策略 / 非正数）：单项回退 undefined，不抛错 */
-        const invalid = validateSaveData(characterConfig({originStrategy: 'nope', originInterval: 0, chaseLeashRadius: -5}))
+        /* 非法值（未知策略 / 非正数 / 冷却为 0 或负）：单项回退 undefined，不抛错 */
+        const invalid = validateSaveData(characterConfig({originStrategy: 'nope', originInterval: 0, chaseLeashRadius: -5, aiBlockDuration: 0, aiBlockCooldown: 0}))
         const e1 = invalid.entities[0]
         if (e1.type === 'character') {
             expect(e1.config.originStrategy).toBeUndefined()
             expect(e1.config.originInterval).toBeUndefined()
             expect(e1.config.chaseLeashRadius).toBeUndefined()
+            expect(e1.config.aiBlockDuration).toBeUndefined()
+            expect(e1.config.aiBlockCooldown).toBeUndefined()
         }
 
         /* 旧档缺字段：全部 undefined（运行时回退默认） */
@@ -443,6 +447,8 @@ describe('validateSaveData', () => {
             expect(e2.config.originStrategy).toBeUndefined()
             expect(e2.config.originInterval).toBeUndefined()
             expect(e2.config.chaseLeashRadius).toBeUndefined()
+            expect(e2.config.aiBlockDuration).toBeUndefined()
+            expect(e2.config.aiBlockCooldown).toBeUndefined()
         }
     })
 

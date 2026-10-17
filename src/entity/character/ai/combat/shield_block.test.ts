@@ -8,9 +8,10 @@ const BLOCK = {} as ShieldBlockConfig
 
 const ctx = (targetId?: number): AIContext => ({combatTargetId: targetId} as unknown as AIContext)
 
-const char = (partial: {block?: boolean; guard?: number; z?: number}): CharacterEntity => ({
+const char = (partial: {block?: boolean; guard?: number; z?: number; aiBlockDuration?: number}): CharacterEntity => ({
     combat: {block: partial.block === false ? undefined : BLOCK, guard: partial.guard ?? 10, isDead: false},
     body: {translation: () => ({x: 0, y: 0, z: partial.z ?? 0})},
+    aiBlockDuration: partial.aiBlockDuration ?? 0.4,
 } as unknown as CharacterEntity)
 
 const target = (partial: {z?: number; attackActive?: boolean; attackDirX?: number; attackDirZ?: number}): CharacterEntity => ({
@@ -48,5 +49,19 @@ describe('AI 反应式盾格挡', () => {
 
     it('无战斗目标 → 不举盾', () => {
         expect(shouldReactiveBlock(ctx(undefined), char({}), [target({})])).toBe(false)
+    })
+
+    it('首次威胁成立时开启举盾窗口', () => {
+        const fresh = {...ctx(2), combatBlockTimer: 0, combatBlockCooldownTimer: 0} as AIContext
+        expect(shouldReactiveBlock(fresh, char({}), [target({})])).toBe(true)
+        expect(fresh.combatBlockTimer).toBeGreaterThan(0)
+    })
+
+    it('举盾窗口内持续举盾（即使威胁消失），冷却期有威胁也不举盾', () => {
+        const inWindow = {...ctx(2), combatBlockTimer: 0.2, combatBlockCooldownTimer: 0} as AIContext
+        expect(shouldReactiveBlock(inWindow, char({}), [target({attackActive: false})])).toBe(true)
+
+        const cooling = {...ctx(2), combatBlockTimer: 0, combatBlockCooldownTimer: 1.0} as AIContext
+        expect(shouldReactiveBlock(cooling, char({}), [target({})])).toBe(false)
     })
 })

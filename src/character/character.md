@@ -19,5 +19,5 @@
 ## 行为原点策略 / 追击半径
 
 - 原点策略领域定义在 `ai_strategy/`：`types.ts` 的 `ORIGIN_SUB_STRATEGIES = ['resident', 'fighter', 'hunter', 'roamer']` / `OriginSubStrategy` / `OriginConfig` / `isOriginSubStrategy`；默认配置在 `origin.ts` 的 `DEFAULT_ORIGIN_CONFIGS`（`roamer.interval = DEFAULT_ROAMER_INTERVAL = 20`，其余 0）。
-- `CharacterEntity` 新增字段：`originStrategy`（默认 `resident`）、`originInterval`（漫游者原点更新间隔，秒，默认 20）、`chaseLeashRadius`（追击活动半径，m，默认 20）。
+- `CharacterEntity` 新增字段：`originStrategy`（默认 `resident`）、`originInterval`（漫游者原点更新间隔，秒，默认 20）、`chaseLeashRadius`（追击活动半径，m，默认 20）、`aiBlockDuration`（AI 反应式举盾窗口，秒，默认 0.4）、`aiBlockCooldown`（AI 反应式举盾冷却，秒，默认 1.2）。
 - 运行时语义（原点迁移、消费者、击杀钩子、复位规则）见 [`../entity/character/ai/ai.md`](../entity/character/ai/ai.md)；设计背景见 [`../../docs/design/ai_origin_strategy.md`](../../docs/design/ai_origin_strategy.md)。

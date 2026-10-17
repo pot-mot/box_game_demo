@@ -102,6 +102,14 @@ export interface AIContext {
      * world.ts 据此把朝向锁到战斗目标；为 false 时朝向跟随移动方向（逃跑时面朝逃跑方向）。
      */
     combatAimActive: boolean
+    /**
+     * 反应式举盾剩余窗口（秒）：> 0 表示本帧持续举盾。
+     * 举盾是「反应」而非持续姿态——对连续攻击的敌人举满 `CharacterEntity.aiBlockDuration` 即落盾，
+     * 否则 `blocking`（优先级高于 `attacking`）会让持盾 AI 永远不出手。
+     */
+    combatBlockTimer: number
+    /** 距下一次可发起反应式举盾的剩余冷却（秒）：窗口结束时置为 `CharacterEntity.aiBlockCooldown` */
+    combatBlockCooldownTimer: number
 
     /* ── 和平 FSM 状态 ── */
     peaceState: PeaceState

@@ -169,6 +169,8 @@ export type CharacterLocale = {
     'character.origin.interval': string
     'character.origin.current': string
     'character.chase_radius_label': string
+    'character.ai_block_duration_label': string
+    'character.ai_block_cooldown_label': string
     'character.field.preset': string
     'character.field.probability': string
     'character.field.min_w': string
@@ -351,6 +353,8 @@ export const characterZh: CharacterLocale = {
     'character.origin.interval': '更新间隔(秒)',
     'character.origin.current': '当前原点',
     'character.chase_radius_label': '追击半径',
+    'character.ai_block_duration_label': '举盾窗口(秒)',
+    'character.ai_block_cooldown_label': '举盾冷却(秒)',
     'character.field.preset': '特性预设',
     'character.field.probability': '概率',
     'character.field.min_w': '最小宽',
@@ -530,6 +534,8 @@ export const characterEn: CharacterLocale = {
     'character.origin.interval': 'Interval (s)',
     'character.origin.current': 'Current origin',
     'character.chase_radius_label': 'Chase radius',
+    'character.ai_block_duration_label': 'Block window (s)',
+    'character.ai_block_cooldown_label': 'Block cooldown (s)',
     'character.field.preset': 'Preset',
     'character.field.probability': 'Probability',
     'character.field.min_w': 'Min W',

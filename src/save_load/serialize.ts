@@ -219,6 +219,9 @@ export const collectWorldState = (
                     originStrategy: e.originStrategy,
                     originInterval: e.originInterval,
                     chaseLeashRadius: e.chaseLeashRadius,
+                    /* AI 反应式举盾窗口 / 冷却（写实际值；旧代码读到缺字段安全回退默认） */
+                    aiBlockDuration: e.aiBlockDuration,
+                    aiBlockCooldown: e.aiBlockCooldown,
                 },
                 health: e.combat.health,
                 position: [bodyPos.x, bodyPos.y - halfH, bodyPos.z],

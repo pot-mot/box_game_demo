@@ -18,7 +18,7 @@ const makeChar = (x: number, z: number, y = 0): {char: CharacterEntity; pos: {x:
         navEnabled: true,
         originStrategy: 'resident',
         originInterval: 20,
-        chaseLeashRadius: 20,
+        chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
     } as unknown as CharacterEntity
     return {char, pos}
 }

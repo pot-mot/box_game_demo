@@ -28,9 +28,10 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  * v13 起 5 种箱子变体（box/common、box/destruction、box/burning、box/magnet、box/elasticity）合并为统一 `box` 实体
  *  （`config` 携带可选特性对象），旧的 `box/*` 元素在加载时作为未知类型按元素粒度跳过；
  * v14 起 `area/water` 统一为 `area` 实体（`config` 携带几何 + 视觉材质 + 可选物理场），
- *  旧的 `area/water` 元素在加载时作为未知类型按元素粒度跳过。
+ *  旧的 `area/water` 元素在加载时作为未知类型按元素粒度跳过；
+ * v15 起 character 增加 AI 反应式举盾窗口 aiBlockDuration、举盾冷却 aiBlockCooldown（均可选，旧档安全回退默认）。
  */
-export const SAVE_FORMAT_VERSION = 14
+export const SAVE_FORMAT_VERSION = 15
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -187,6 +188,10 @@ export interface CharacterSaveConfig {
     originInterval?: number
     /** 追击活动半径（m）：缺省 = 20；旧存档无此字段时安全回退 */
     chaseLeashRadius?: number
+    /** AI 反应式举盾窗口时长（秒）：缺省 = 0.4；旧存档无此字段时安全回退 */
+    aiBlockDuration?: number
+    /** AI 反应式举盾冷却（秒）：缺省 = 1.2；旧存档无此字段时安全回退 */
+    aiBlockCooldown?: number
 }
 
 export interface SavableCharacter {

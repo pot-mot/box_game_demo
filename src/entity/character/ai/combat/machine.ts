@@ -47,6 +47,8 @@ export const initCombatContext = (
     ctx.combatRetargetTimer = COMBAT_RETARGET_INTERVAL
     ctx.combatShotTimer = 0
     ctx.combatAimActive = false
+    ctx.combatBlockTimer = 0
+    ctx.combatBlockCooldownTimer = 0
 }
 
 /** 运行战斗 FSM 一帧 */

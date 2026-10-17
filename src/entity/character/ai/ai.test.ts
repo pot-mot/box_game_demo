@@ -1,7 +1,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
-import {createCombatComponent} from '../../../character/combat/types.ts'
+import {createCombatComponent, setCombatOffhand} from '../../../character/combat/types.ts'
 import {type CombatConfig, DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_ORIGIN_CONFIGS} from '../../../character/ai_strategy/origin.ts'
@@ -35,11 +35,13 @@ const makeChar = (
         attackActive?: boolean
     },
     combatStrategy: CombatSubStrategy = 'tactical',
+    offhandWeaponId?: string,
 ): CharacterEntity => {
     /* 武器运行时替代原技能槽夹具：近战取长剑、远程取长弓（与旧预设数值一致） */
     const weaponRuntime = createWeaponRuntime(skillType === 'melee' ? 'long_sword' : 'longbow')
     /* 旧 cooldownTimer 覆写语义 = 轻击起手段冷却剩余（0 = 就绪） */
     const combat = createCombatComponent(weaponRuntime, faction, (a: number, b: number) => a !== b, {tendencyId: 'hostileExceptSelf'}, 15)
+    if (offhandWeaponId !== undefined) setCombatOffhand(combat, createWeaponRuntime(offhandWeaponId))
     const entryCooldown = overrides?.cooldownTimer ?? 0
     if (entryCooldown > 0) {
         combat.segmentCooldowns.set(weaponRuntime.attacks.chains.light.entries[0].segmentId, entryCooldown)
@@ -63,6 +65,8 @@ const makeChar = (
         originStrategy: 'resident' as const,
         originInterval: 20,
         chaseLeashRadius: 20,
+        aiBlockDuration: 0.4,
+        aiBlockCooldown: 1.2,
         isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
         stateMachine: null!,
     } as unknown as CharacterEntity
@@ -106,6 +110,8 @@ const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: numb
         combatRetargetTimer: 0,
         combatShotTimer: 0,
         combatAimActive: false,
+        combatBlockTimer: 0,
+        combatBlockCooldownTimer: 0,
         peaceState: 'patrol',
         peaceStateTime: 0,
         peaceConfig: DEFAULT_PEACE_CONFIGS.patrol,
@@ -363,7 +369,8 @@ describe('AI 状态转换 — flee', () => {
         const ctx = makeCtx('cowardly', undefined)
         ctx.combatState = 'flee'
         ctx.combatStateTime = 3
-        const enemies = [makeChar(2, 12, 0, 1, 'melee')]
+        /* 目标需超出脱战滞回范围（detectionRange × 2 = 16）才算「无目标」 */
+        const enemies = [makeChar(2, 17, 0, 1, 'melee')]
         const guard = fleeHandler.transitions.find(t => t.to === 'inactive')!
         expect(guard.guard(ctx, char, enemies)).toBe(true)
     })
@@ -376,6 +383,30 @@ describe('AI 状态转换 — flee', () => {
         const allInactive = fleeHandler.transitions.filter(t => t.to === 'inactive')
         const guard = allInactive[allInactive.length - 1]
         expect(guard.guard(ctx, char, [])).toBe(true)
+    })
+
+    it('目标仍在脱战滞回范围内（detRange..detRange×2）→ 不退出、不还击（避免边界逐帧抖动）', () => {
+        /* 长剑 detectionRange = 8，滞回阈值 = 16；目标在 12 → 既不退出也不回头攻击 */
+        const char = makeChar(1, 0, 0, 0, 'melee', undefined, 'cowardly')
+        const ctx = makeCtx('cowardly', undefined)
+        ctx.combatState = 'flee'
+        ctx.combatStateTime = 1
+        const enemies = [makeChar(2, 12, 0, 1, 'melee')]
+        for (const g of fleeHandler.transitions.filter(t => t.to === 'inactive')) {
+            expect(g.guard(ctx, char, enemies)).toBe(false)
+        }
+        const attack = fleeHandler.transitions.find(t => t.to === 'attack')!
+        expect(attack.guard(ctx, char, enemies)).toBe(false)
+    })
+
+    it('目标超出脱战滞回范围（> detRange×2）→ inactive', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee', undefined, 'cowardly')
+        const ctx = makeCtx('cowardly', undefined)
+        ctx.combatState = 'flee'
+        ctx.combatStateTime = 1
+        const allInactive = fleeHandler.transitions.filter(t => t.to === 'inactive')
+        const guard = allInactive[allInactive.length - 1]
+        expect(guard.guard(ctx, char, [makeChar(2, 17, 0, 1, 'melee')])).toBe(true)
     })
 })
 
@@ -407,6 +438,31 @@ describe('AI 顶层调度器', () => {
         updateAI(0.016, ctx, char, enemies, () => {})
         expect(ctx.activeFsm).toBe('combat')
         expect(ctx.combatState).toBe('flee')
+    })
+
+    it('持盾 AI 面对连续出手的敌人仍保留出手窗口（反应式举盾为限时窗口 + 冷却）', () => {
+        /* 敌人持续 attackActive；若无窗口/冷却，blocking（优先级高于 attacking）会让 AI 永不挥砍 */
+        const self = makeChar(1, 0, 0, 0, 'melee', undefined, 'tactical', 'shield_small')
+        const enemy = makeChar(2, 0, 1, 1, 'melee')
+        enemy.combat.attackActive = true
+        enemy.combat.attackDirX = 0
+        enemy.combat.attackDirZ = -1
+        const ctx = createAIMachine(self, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
+        let blockFrames = 0
+        let attackWindows = 0
+        for (let i = 0; i < 600; i++) {
+            let attack = false
+            let block = false
+            updateAI(1 / 60, ctx, self, [self, enemy], (_dx, _dz, a, _adx, _adz, b) => {
+                attack = a
+                block = b ?? false
+            })
+            if (block) blockFrames++
+            /* 攻击意图成立且未举盾 = 底层的出手窗口（blocking 不会抢走该帧） */
+            if (attack && !block) attackWindows++
+        }
+        expect(blockFrames).toBeGreaterThan(0)
+        expect(attackWindows).toBeGreaterThan(0)
     })
 })
 
