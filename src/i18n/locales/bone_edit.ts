@@ -73,6 +73,8 @@ export type BoneEditLocale = {
     'bone_edit.state.walking': string
     'bone_edit.state.jumping': string
     'bone_edit.state.falling': string
+    'bone_edit.state.swimming': string
+    'bone_edit.state.floating': string
     'bone_edit.state.dying': string
     'bone_edit.state.rolling': string
     'bone_edit.state.flinching': string
@@ -156,6 +158,8 @@ export const boneEditZh: BoneEditLocale = {
     'bone_edit.state.walking': '行走',
     'bone_edit.state.jumping': '跳跃',
     'bone_edit.state.falling': '下落',
+    'bone_edit.state.swimming': '游泳',
+    'bone_edit.state.floating': '漂浮',
     'bone_edit.state.dying': '死亡',
     'bone_edit.state.rolling': '翻滚',
     'bone_edit.state.flinching': '受击硬直',
@@ -239,6 +243,8 @@ export const boneEditEn: BoneEditLocale = {
     'bone_edit.state.walking': 'Walk',
     'bone_edit.state.jumping': 'Jump',
     'bone_edit.state.falling': 'Fall',
+    'bone_edit.state.swimming': 'Swim',
+    'bone_edit.state.floating': 'Float',
     'bone_edit.state.dying': 'Death',
     'bone_edit.state.rolling': 'Roll',
     'bone_edit.state.flinching': 'Flinch',

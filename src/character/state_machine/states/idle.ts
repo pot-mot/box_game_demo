@@ -1,6 +1,7 @@
 import type {StateHandler} from '../types.ts'
-import {GROUND_DAMPING, SLOPE_WALK_THRESHOLD, STATE_FLIP_MIN_TIME} from '../constants.ts'
+import {GROUND_DAMPING, SLOPE_WALK_THRESHOLD, STATE_FLIP_MIN_TIME, SWIM_ENTER_FLUID} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlope, applySlopeAntiGravity} from '../ground.ts'
+import {fluidFractionOf} from '../fluid.ts'
 import {canStartAttack} from '../../combat/attack_runtime.ts'
 
 export const idleHandler: StateHandler = {
@@ -18,6 +19,15 @@ export const idleHandler: StateHandler = {
     },
     exit: () => {},
     transitions: [
+        {
+            /* 入水：浸没时切换游泳 / 漂浮（对应 walking / idle），优先级最高 */
+            to: 'swimming',
+            guard: (input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID && Math.hypot(input.dx, input.dz) > 0.001,
+        },
+        {
+            to: 'floating',
+            guard: (_input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID,
+        },
         {
             to: 'interacting',
             guard: (input, entity) => input.interact && entity.interactTargetActive === true,

@@ -6,8 +6,10 @@ import {
     FALL_MAX_SPEED_MULTIPLIER,
     FALL_SLIDE_MIN_NY,
     STATE_FLIP_MIN_TIME,
+    SWIM_ENTER_FLUID,
 } from '../constants.ts'
 import {isSupportedOn, projectToSlope} from '../ground.ts'
+import {fluidFractionOf} from '../fluid.ts'
 import {v3Length} from '../../../physics/rapier_utils.ts'
 import {moveSpeedOf} from '../../types.ts'
 import {canStartAirAttack} from './air_attacking.ts'
@@ -45,6 +47,15 @@ export const fallingHandler: StateHandler = {
     },
     exit: () => {},
     transitions: [
+        {
+            /* 入水：浸没时切换游泳 / 漂浮（修复水体中永远 falling） */
+            to: 'swimming',
+            guard: (input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID && Math.hypot(input.dx, input.dz) > 0.001,
+        },
+        {
+            to: 'floating',
+            guard: (_input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID,
+        },
         {
             to: 'walking',
             guard: (input, entity) =>

@@ -259,6 +259,13 @@ const updateStallDetection = (
     attacking: boolean,
 ): void => {
     const pos = character.body.translation()
+    if ((character.environment?.fluidFraction ?? 0) > 0) {
+        /* 浸没于流体：游泳拖拽会显著压低水平速度，豁免卡死判定避免误重掷路点 / 绕行 */
+        ctx.stallTimer = 0
+        ctx.stallAnchorX = pos.x
+        ctx.stallAnchorZ = pos.z
+        return
+    }
     if (attacking) {
         /* 正在交火：面对面对峙位移为零属正常，重置检测基准 */
         ctx.stallTimer = 0

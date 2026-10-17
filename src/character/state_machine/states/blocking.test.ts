@@ -3,6 +3,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from '../machine.ts'
 import {createCombatComponent} from '../../combat/types.ts'
 import {createWeaponRuntime} from '../../weapon/weapon_runtime.ts'
+import {createBodyEnvironment} from '../../../physics/environment.ts'
 import {moveSpeedOf, type CharacterEntity} from '../../types.ts'
 
 const DT = 1 / 60
@@ -43,6 +44,7 @@ const makeMock = (weaponId = 'shield_medium'): CharacterEntity => {
         combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15),
         holdMode: runtime.holdMode,
         lockPoints: [],
+        environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),
     }
 }

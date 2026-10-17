@@ -9,6 +9,10 @@ export type EntityLocale = {
     'entity.burning_box': string
     'entity.magnet': string
     'entity.water_area': string
+    'entity.area_control': string
+    'entity.field_float': string
+    'entity.field_wind': string
+    'entity.field_gravity': string
     'entity.terrain_control': string
     'entity.fragment': string
     'entity.building_generator': string
@@ -37,6 +41,8 @@ export type EntityLocale = {
     'entity.state.walking': string
     'entity.state.jumping': string
     'entity.state.falling': string
+    'entity.state.swimming': string
+    'entity.state.floating': string
     'entity.state.attacking': string
     'entity.state.air_attacking': string
     'entity.state.dying': string
@@ -118,6 +124,8 @@ export type EntityLocale = {
     'skeleton.joint.leftLegHip': string
     'skeleton.joint.leftLegKnee': string
     'skeleton.joint.leftFoot': string
+    'skeleton.joint.lowerBodyCollider': string
+    'skeleton.joint.upperBodyCollider': string
 
     /* ── 交互物类型 / 破坏来源 / 提示 ── */
     'interactable.save_point': string
@@ -157,6 +165,9 @@ export type EntityLocale = {
     'material.rusty_iron': string
     'material.tile': string
     'material.cloth': string
+    'material.area_water': string
+    'material.area_air': string
+    'material.area_force_field': string
     'prop.door': string
     'prop.window': string
     'prop.fence': string
@@ -188,6 +199,10 @@ export const entityZh: EntityLocale = {
     'entity.burning_box': '燃烧方块',
     'entity.magnet': '磁力方块',
     'entity.water_area': '水体控制',
+    'entity.area_control': '区域控制',
+    'entity.field_float': '浮力场',
+    'entity.field_wind': '风场',
+    'entity.field_gravity': '重力场',
     'entity.terrain_control': '地形控制',
     'entity.fragment': '碎片',
     'entity.building_generator': '建筑生成器',
@@ -216,6 +231,8 @@ export const entityZh: EntityLocale = {
     'entity.state.walking': '行走',
     'entity.state.jumping': '跳跃',
     'entity.state.falling': '下落',
+    'entity.state.swimming': '游泳',
+    'entity.state.floating': '漂浮',
     'entity.state.attacking': '攻击',
     'entity.state.air_attacking': '空中攻击',
     'entity.state.dying': '死亡',
@@ -297,6 +314,8 @@ export const entityZh: EntityLocale = {
     'skeleton.joint.leftLegHip': '左髋',
     'skeleton.joint.leftLegKnee': '左膝',
     'skeleton.joint.leftFoot': '左脚',
+    'skeleton.joint.lowerBodyCollider': '下半身碰撞块',
+    'skeleton.joint.upperBodyCollider': '上半身碰撞块',
 
     /* ── 交互物类型 / 破坏来源 / 提示 ── */
     'interactable.save_point': '存档点',
@@ -336,6 +355,9 @@ export const entityZh: EntityLocale = {
     'material.rusty_iron': '锈铁',
     'material.tile': '瓷砖',
     'material.cloth': '布料',
+    'material.area_water': '水',
+    'material.area_air': '空气',
+    'material.area_force_field': '力场',
     'prop.door': '门',
     'prop.window': '窗',
     'prop.fence': '栅栏',
@@ -367,6 +389,10 @@ export const entityEn: EntityLocale = {
     'entity.burning_box': 'Burning Box',
     'entity.magnet': 'Magnet',
     'entity.water_area': 'Water Area Control',
+    'entity.area_control': 'Area Control',
+    'entity.field_float': 'Buoyancy Field',
+    'entity.field_wind': 'Wind Field',
+    'entity.field_gravity': 'Gravity Field',
     'entity.terrain_control': 'Terrain Control',
     'entity.fragment': 'Fragment',
     'entity.building_generator': 'Building Generator',
@@ -395,6 +421,8 @@ export const entityEn: EntityLocale = {
     'entity.state.walking': 'Walk',
     'entity.state.jumping': 'Jump',
     'entity.state.falling': 'Fall',
+    'entity.state.swimming': 'Swim',
+    'entity.state.floating': 'Float',
     'entity.state.attacking': 'Attack',
     'entity.state.air_attacking': 'Air Attack',
     'entity.state.dying': 'Death',
@@ -476,6 +504,8 @@ export const entityEn: EntityLocale = {
     'skeleton.joint.leftLegHip': 'Left Hip',
     'skeleton.joint.leftLegKnee': 'Left Knee',
     'skeleton.joint.leftFoot': 'Left Foot',
+    'skeleton.joint.lowerBodyCollider': 'Lower Collider',
+    'skeleton.joint.upperBodyCollider': 'Upper Collider',
 
     /* ── Interactable kinds / sources / prompts ── */
     'interactable.save_point': 'Save Point',
@@ -515,6 +545,9 @@ export const entityEn: EntityLocale = {
     'material.rusty_iron': 'Rusty Iron',
     'material.tile': 'Tile',
     'material.cloth': 'Cloth',
+    'material.area_water': 'Water',
+    'material.area_air': 'Air',
+    'material.area_force_field': 'Force Field',
     'prop.door': 'Door',
     'prop.window': 'Window',
     'prop.fence': 'Fence',

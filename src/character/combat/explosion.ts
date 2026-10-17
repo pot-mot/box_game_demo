@@ -4,9 +4,13 @@ import type {DamageType} from './damage_type.ts'
 import type {ImpactLevel} from './impact.ts'
 import type {WorldDamageTarget} from './world_targets.ts'
 import {applyDamage, isDamageImmune} from './damage.ts'
+import {sphereIntersectsHurt} from './shapes.ts'
 import {EXPLOSION_DEFAULT_IMPACT, EXPLOSION_DEFAULT_POISE_DAMAGE} from './constants.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
+
+/** 无受击子块时的兜底命中块 id */
+const FALLBACK_HURT_BLOCK: readonly string[] = ['body']
 
 /** 对爆炸半径内所有角色施加距离衰减伤害和径向击退（伤害类别继承所属武器） */
 export const applyExplosionDamage = (
@@ -31,10 +35,31 @@ export const applyExplosionDamage = (
 
         const tPos = target.body.translation()
         v3Set(_dir, tPos.x - centerX, tPos.y - centerY, tPos.z - centerZ)
-        const dist = v3Length(_dir)
-        if (dist > radius || dist < 0.0001) continue
+        /* 命中判定：有受击子块时按「爆炸球 × 任一子块」并记录命中块数组；无则回退身体中心距离 */
+        const blocks = target.hurtBlocks
+        let hitHurtBlocks: readonly string[]
+        let hitDist: number
+        if (blocks !== undefined && blocks.length > 0) {
+            let hit: string[] | undefined
+            let nearest = Infinity
+            for (const b of blocks) {
+                if (!sphereIntersectsHurt(centerX, centerY, centerZ, radius, b)) continue
+                if (hit === undefined) hit = []
+                hit.push(b.id)
+                const d = Math.hypot(b.center.x - centerX, b.center.y - centerY, b.center.z - centerZ)
+                if (d < nearest) nearest = d
+            }
+            if (hit === undefined) continue
+            hitHurtBlocks = hit
+            hitDist = nearest
+        } else {
+            const dist = v3Length(_dir)
+            if (dist > radius || dist < 0.0001) continue
+            hitHurtBlocks = FALLBACK_HURT_BLOCK
+            hitDist = dist
+        }
 
-        const falloff = 1 - dist / radius
+        const falloff = 1 - Math.min(hitDist, radius) / radius
         const dmg = Math.max(1, Math.ceil(damage * falloff))
         /* 冲击方向 = 爆心 → 目标（水平）：伤害事件携带（死亡倒向依据） */
         const hLen = Math.hypot(_dir.x, _dir.z)
@@ -48,10 +73,12 @@ export const applyExplosionDamage = (
             skillId: 'explosion',
             impact,
             poiseDamage,
+            hitHurtBlocks,
             ...(hasDir ? {dirX: _dir.x / hLen, dirZ: _dir.z / hLen} : {}),
         })
 
-        const lenInv = 1 / dist
+        const dist = v3Length(_dir)
+        const lenInv = 1 / Math.max(dist, 0.0001)
         target.body.applyImpulseAtPoint(
             {
                 x: _dir.x * lenInv * knockbackForce * falloff,

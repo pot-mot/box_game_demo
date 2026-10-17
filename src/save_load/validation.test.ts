@@ -42,6 +42,20 @@ describe('validateSaveData', () => {
         expect(result.skipped[0].type).toBe('invalid')
     })
 
+    it('旧 area/water 元素按未知类型跳过，不整档失败', () => {
+        const data = {
+            entities: [
+                {type: 'area/water', config: {width: 2, height: 2, depth: 2, density: 2}, position: [0, 0, 0], quaternion: [0, 0, 0, 1]},
+                makeValidSave().entities[0],
+            ],
+        }
+        const result = parseSaveData(data)
+        expect(result.data.entities).toHaveLength(1)
+        expect(result.data.entities[0].type).toBe('box')
+        expect(result.skipped).toHaveLength(1)
+        expect(result.skipped[0].type).toBe('area/water')
+    })
+
     it('非法配置参数：该元素被跳过，其余合法元素保留', () => {
         const data = {
             entities: [
@@ -74,7 +88,7 @@ describe('validateSaveData', () => {
                 burning: {health: 100},
                 elastic: {def: [0, 0, 0], vel: [0, 0, 0]},
             },
-            {type: 'area/water', config: {width: 2, height: 2, depth: 2, density: 2}},
+            {type: 'area', config: {shape: {kind: 'sphere', radius: 2}, material: 'air', fields: {wind: {speed: 8}}}},
             {type: 'terrain', config: {gridSize: 10, cellSize: 1, minHeight: 0, maxHeight: 5, friction: 0.3, generatorId: 'fbm'}, heights: [[0]]},
             {type: 'fragment/common', config: {mass: 0.1, friction: 0.3, lifetime: 5, maxLifetime: 5}, data: {renderVertices: [0, 0, 0, 1, 1, 1, 1, 0, 0], renderIndices: [0, 1, 2], hullVertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], hullFaces: [[0, 1, 2]], centroid: [0, 0, 0], massRatio: 1, boxSize: [1, 1, 1]}},
             {type: 'character', config: {
@@ -159,7 +173,7 @@ describe('validateSaveData', () => {
     it('最小合法存档 — 仅 type 通过校验', () => {
         const types = [
             'box',
-            'area/water',
+            'area',
             'terrain',
             'fragment/common',
             'character',

@@ -71,7 +71,7 @@ export const localeEn: MainLocale = {
 
     /* ── Spawn mode selector ── */
     'spawn.box': 'Common Box',
-    'spawn.area_water': 'Water',
+    'spawn.area': 'Area',
     'spawn.character': 'Character',
     'spawn.terrain': 'Terrain',
     'spawn.building': 'Building',
@@ -184,6 +184,16 @@ export const localeEn: MainLocale = {
     'panel.fragment_count': 'Fragments',
     'panel.material': 'Surface Material',
     'panel.traits': 'Traits',
+    'panel.shape': 'Shape',
+    'panel.shape_kind': 'Geometry',
+    'panel.shape.box': 'Box',
+    'panel.shape.sphere': 'Sphere',
+    'panel.shape.cylinder': 'Cylinder',
+    'panel.fields': 'Fields',
+    'panel.drag': 'Drag',
+    'panel.flow_speed': 'Flow Speed',
+    'panel.direction': 'Direction',
+    'panel.accel': 'Acceleration',
 
     /* ── Domain locale fragments ── */
     ...entityEn,

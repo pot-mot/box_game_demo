@@ -23,6 +23,8 @@ export interface DamageEvent {
      */
     readonly dirX?: number
     readonly dirZ?: number
+    /** 被命中的受击子块 id 列表（近战/远程可多块，范围伤害必然多块；用于受击/死亡事件记录） */
+    readonly hitHurtBlocks?: readonly string[]
 }
 
 /** 伤害修饰器：在防御结算前修改伤害值 */
@@ -54,7 +56,7 @@ export const applyDamage = (
         readonly hitImmunityTimer?: number
         readonly damageModifiers?: readonly DamageModifier[]
         onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
-        onDeath: ((sourceId?: number) => void) | null
+        onDeath: ((sourceId?: number, hitHurtBlocks?: readonly string[]) => void) | null
     },
     event: DamageEvent,
 ): DamageEvent => {
@@ -80,7 +82,7 @@ export const applyDamage = (
     target.onDamageTaken?.(finalEvent.finalAmount, finalEvent)
 
     if (target.health <= 0 && wasAlive) {
-        target.onDeath?.(finalEvent.sourceId)
+        target.onDeath?.(finalEvent.sourceId, finalEvent.hitHurtBlocks)
     }
     return finalEvent
 }

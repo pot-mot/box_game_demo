@@ -16,8 +16,13 @@ import {scaleBoxUVs} from '../../../render/texture.ts'
 import {TILE_SIZE} from '../../../render/constants.ts'
 import {BOX_BADGE_COLORS, BOX_DEFAULT_BADGE_COLOR} from '../../../entity/box/constants.ts'
 import type {BoxPresetId} from '../../../types/boxPreset.ts'
+import type {AreaPresetId} from '../../../types/areaPreset.ts'
 import {DEFAULT_GRID_COLOR} from '../../../render/constants.ts'
-import {WATER_COLOR_DEEP, WATER_COLOR_SHALLOW} from '../../../entity/area/water/render/constants.ts'
+import {
+    WATER_COLOR_DEEP, WATER_COLOR_SHALLOW,
+    AIR_COLOR, AIR_EDGE_COLOR,
+    FORCE_FIELD_COLOR, FORCE_FIELD_EDGE_COLOR,
+} from '../../../entity/area/render/constants.ts'
 import {ACTOR_JUMP_HEIGHT, ACTOR_SPEED, CATALOG_CAMERA_DISTANCE, CATALOG_CAMERA_TARGET_Y, CATALOG_CUBE_Y} from '../constants.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import {localizeText, localizeApply} from '../../../i18n/dom.ts'
@@ -45,15 +50,18 @@ const BOX_PRESET_PREVIEW: Record<BoxPresetId, {base: number; grid: number}> = {
     elastic: {base: hexToNum(BOX_BADGE_COLORS.elastic), grid: DEFAULT_GRID_COLOR},
 }
 
-/** 非箱子方块物品预览取色（水） */
-const BLOCK_PREVIEW: Record<string, {base: number; grid: number}> = {
-    'area/water': {base: WATER_COLOR_DEEP, grid: WATER_COLOR_SHALLOW},
+/** 非箱子方块物品预览取色（区域按预设取色） */
+const AREA_PRESET_PREVIEW: Record<AreaPresetId, {base: number; grid: number}> = {
+    water: {base: WATER_COLOR_DEEP, grid: WATER_COLOR_SHALLOW},
+    air: {base: AIR_COLOR, grid: AIR_EDGE_COLOR},
+    force_field: {base: FORCE_FIELD_COLOR, grid: FORCE_FIELD_EDGE_COLOR},
 }
 
-/** 方块物品预览取色：箱子按预设取色，其余按实体类型取色 */
+/** 方块物品预览取色：箱子按预设取色，区域按区域预设取色 */
 const blockPreviewOf = (def: ItemDef): {base: number; grid: number} | undefined => {
     if (def.boxPreset !== undefined) return BOX_PRESET_PREVIEW[def.boxPreset]
-    return def.blockType !== undefined ? BLOCK_PREVIEW[def.blockType] : undefined
+    if (def.areaPreset !== undefined) return AREA_PRESET_PREVIEW[def.areaPreset]
+    return undefined
 }
 
 const isEquipment = (def: ItemDef): boolean => def.category === 'weapon' || def.category === 'armor'
@@ -78,6 +86,7 @@ const subLineOf = (def: ItemDef): string => {
     const category = translate(ITEM_CATEGORY_LABELS[def.category])
     if (def.equipSlot !== undefined) return `${category} · ${translate(EQUIP_SLOT_LABELS[def.equipSlot])}`
     if (def.boxPreset !== undefined) return `${category} · ${def.boxPreset}`
+    if (def.areaPreset !== undefined) return `${category} · ${def.areaPreset}`
     if (def.blockType !== undefined) return `${category} · ${def.blockType}`
     return category
 }

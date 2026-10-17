@@ -1,9 +1,8 @@
 import {z} from 'zod'
 import {BoxConfigSchema, DEFAULT_BOX_CONFIG} from '../entity/box/validation.ts'
-import {WaterBlockConfigSchema} from '../entity/area/water/validation.ts'
+import {AreaConfigSchema, DEFAULT_AREA_CONFIG} from '../entity/area/validation.ts'
 import {BaseTerrainConfigSchema} from '../entity/terrain/base/validation.ts'
 import {FragmentConfigSchema} from '../entity/fragment/common/validation.ts'
-import {DEFAULT_WATER_CONFIG} from '../entity/area/water/validation.ts'
 import {DEFAULT_TERRAIN_CONFIG} from '../entity/terrain/base/validation.ts'
 import {DEFAULT_FRAGMENT_CONFIG} from '../entity/fragment/common/validation.ts'
 import {CHARACTER_CONFIG_DEFAULTS} from '../entity/character/constants.ts'
@@ -44,9 +43,10 @@ const SavableBox = z.object({
     }).optional(),
 })
 
-const SavableWaterBlock = z.object({
-    type: z.literal('area/water'),
-    config: WaterBlockConfigSchema.default(DEFAULT_WATER_CONFIG),
+/* 统一区域：config 携带几何 + 视觉材质 + 可选物理场；旧 `area/water` 作为未知类型逐元素跳过 */
+const SavableArea = z.object({
+    type: z.literal('area'),
+    config: AreaConfigSchema.default(DEFAULT_AREA_CONFIG),
     position: Vec3,
     quaternion: Quat,
 })
@@ -312,7 +312,7 @@ const SavableCharacter = z.object({
 
 const SavableEntity = z.discriminatedUnion('type', [
     SavableBox,
-    SavableWaterBlock,
+    SavableArea,
     SavableTerrain,
     SavableFragment,
     SavableBuildingGenerator,

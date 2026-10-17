@@ -71,7 +71,7 @@ export const localeZhCn: MainLocale = {
 
     /* ── 生成类型选择 ── */
     'spawn.box': '普通方块',
-    'spawn.area_water': '水体',
+    'spawn.area': '区域',
     'spawn.character': '角色',
     'spawn.terrain': '地形',
     'spawn.building': '建筑',
@@ -184,6 +184,16 @@ export const localeZhCn: MainLocale = {
     'panel.fragment_count': '碎裂块数',
     'panel.material': '表面材质',
     'panel.traits': '特性',
+    'panel.shape': '形状',
+    'panel.shape_kind': '几何',
+    'panel.shape.box': '盒体',
+    'panel.shape.sphere': '球体',
+    'panel.shape.cylinder': '柱体',
+    'panel.fields': '物理场',
+    'panel.drag': '阻尼',
+    'panel.flow_speed': '流速',
+    'panel.direction': '方向',
+    'panel.accel': '加速度',
 
     /* ── 各领域文案域 ── */
     ...entityZh,

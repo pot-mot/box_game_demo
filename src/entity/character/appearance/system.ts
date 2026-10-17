@@ -13,9 +13,9 @@ import {offHandSide} from '../../../character/handedness.ts'
 import {ENGAGED_WALK_MIN_SPEED, STATE_BLEND_DURATION, TWO_HAND_GRIP_OFFSET, walkSpeedScale} from './constants.ts'
 
 /** clip 驱动的状态（全部 14 状态；基础状态用基础生成器，attacking / air_attacking 用攻击生成器） */
-const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'dying', 'rolling', 'flinching', 'attacking', 'air_attacking', 'interacting', 'knockdown', 'getting_up', 'blocking', 'guard_broken']
+const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'dying', 'rolling', 'flinching', 'attacking', 'air_attacking', 'interacting', 'knockdown', 'getting_up', 'blocking', 'guard_broken']
 
-type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'attacking' | 'air_attacking' | 'interacting' | 'knockdown' | 'getting_up' | 'blocking' | 'guard_broken'
+type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'swimming' | 'floating' | 'dying' | 'rolling' | 'flinching' | 'attacking' | 'air_attacking' | 'interacting' | 'knockdown' | 'getting_up' | 'blocking' | 'guard_broken'
 
 const isClipState = (state: CharacterState): state is ClipState => CLIP_STATES.includes(state)
 
@@ -158,8 +158,8 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             )
             player = createComposedAnimationPlayer(bridge, [{clip, weight: 1}])
             player.play()
-            /* 行走：步频随水平速度变速 */
-            if (state === 'walking') {
+            /* 行走 / 游泳：步频随水平速度变速 */
+            if (state === 'walking' || state === 'swimming') {
                 player.setSpeed(walkSpeedScale(ctx.horizontalSpeed))
             }
         }
@@ -248,8 +248,8 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
                 player.seekProgress(ctx.attackCharge * chargingSeekScale)
             } else {
                 player.updater(dt)
-                /* 行走：步频随水平速度变速 */
-                if (state === 'walking') {
+                /* 行走 / 游泳：步频随水平速度变速 */
+                if (state === 'walking' || state === 'swimming') {
                     player.setSpeed(walkSpeedScale(ctx.horizontalSpeed))
                 }
             }

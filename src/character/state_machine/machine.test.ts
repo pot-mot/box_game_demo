@@ -10,6 +10,7 @@ import {createTestWeaponRuntime, TEST_WEAPON_CHARGE_HOLD} from '../combat/test_w
 import {orderedSegments} from '../weapon/attack_chain.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
 import {INTERACTION_DURATION} from '../interaction/types.ts'
+import {createBodyEnvironment} from '../../physics/environment.ts'
 import type {CharacterEntity} from '../types.ts'
 
 const DT = 1 / 60
@@ -62,6 +63,7 @@ const makeMock = (runtime: WeaponRuntime = createWeaponRuntime('long_sword')): C
         combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15),
         holdMode: runtime.holdMode,
         lockPoints: [],
+        environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),
     }
 }

@@ -254,8 +254,8 @@ export const inventoryModule: ShowcaseModule = {
         const followPoint = new Vector3(0, INVENTORY_CAMERA_TARGET_Y, PLAYER_SPAWN_Z)
         const playerControl = createPlayerControl(stage.camera, host.renderer.domElement, {
             getTarget: () => followPoint,
-            move: (dx, dz, jump, forwardX, forwardZ, roll) =>
-                characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll),
+            move: (dx, dz, jump, forwardX, forwardZ, roll, swimLift) =>
+                characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll, swimLift),
             pointerActions: MOUSE_ACTIONS_BY_MODE.showcase,
             initialYaw: 0,
             initialDistance: INVENTORY_CAMERA_DISTANCE,

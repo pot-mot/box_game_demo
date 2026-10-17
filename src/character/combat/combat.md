@@ -32,3 +32,12 @@
 - `guardMaxOf(c)` = `c.block?.guardMax ?? 0`；`updateShieldBlock(c, holdMode?)` 解析**盾来源**（主手盾优先，其次副手盾）写入 `c.block` 并把 `guard` 夹到上限——**双手共持（`holdMode === 'two_handed'`）时副手武器挂背、副手盾不计入格挡**（其余模式计入）。装备 / 持握模式变更后必须调用，保证格挡状态与盾碰撞体读取到一致数据。`guard` 回充（未受击（`guardRegenDelayTimer <= 0`）时按 `guardRegenPerSec`）由 `world.ts` 主循环驱动，与韧性回充并列。
 - 破防由状态机全局分支统一触发（`guard <= 0` → `guard_broken`，见 [`state_machine.md`](../state_machine/state_machine.md)），不在此模块。
 - **格挡减免结算**（近战 / 子弹命中举盾目标）：`伤害 → damage × blockDamageMultiplier`、`impact` 非 `knockdown` 时降一级（`downgradeImpact`）、`削韧 → poiseDamage × poiseMultiplier`、`guard -= blockedDamage`、击退 `× blockKnockbackMultiplier`；`knockdown` 击穿格挡不降级。爆炸 / AOE **完全无视盾**。判定路径见 [`projectile.md`](../../entity/character/projectile/projectile.md) 与 [`melee` 执行器](../../entity/character/combat/melee_executor.ts)。
+
+## 受击子块（hurt blocks）
+
+- 领域模型 `character/hurt_blocks.ts`：`HurtShape`（盒 / 球 / 柱）、`HurtBlock`/`HurtBlockProfile`、`worldizeHurtBlock`。人形清单 12 块（`entity/character/skeleton/hurt_blocks.ts`，id 对应骨骼）；挂在骨架预设上（为龙 / 马等非人形预留）。
+- 运行时 `CharacterEntity.hurtProfile` / `hurtBlocks`：`world.ts` 每帧在动画 + 根姿态后，用关节上的视觉部件矩阵 + 几何尺寸世界化（随骨骼段长度与粗细对齐）。
+- 命中检定统一改用受击子块（无子块时回退旧身体盒）：
+  - 近战 `entity/character/combat/shapes.ts` 的 `obbIntersectsHurt`（武器 OBB × 任一子块，可同时命中多块）；
+  - 远程 / 爆炸 `character/combat/shapes.ts` 的 `pointIntersectsHurt` / `sphereIntersectsHurt`。
+- `DamageEvent.hitHurtBlocks` 记录被命中的子块 id 数组；`onDeath(sourceId, hitHurtBlocks)` 一并携带（范围伤害可命中多块）。

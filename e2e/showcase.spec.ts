@@ -53,14 +53,14 @@ test.describe('展示模式（二级菜单 + 子模块）', () => {
         await expect(page.locator('.sch-ai-hud .sch-ai-row')).toHaveCount(10)
     })
 
-    test('选择「全物品图鉴」：格子形式列出全部 44 件物品', async ({page}) => {
+    test('选择「全物品图鉴」：格子形式列出全部 46 件物品', async ({page}) => {
         await enterShowcaseMenu(page)
         await page.locator('.sch-menu-card', {hasText: '全物品图鉴'}).click()
         await expect(page.locator('.sch-cat')).toBeVisible()
-        /* 全部武器 18（含 3 盾）+ 护甲 17 + 方块 6 + 其它 3 = 44 */
-        await expect(page.locator('.sch-cat .sch-cat-cell')).toHaveCount(44)
+        /* 全部武器 18（含 3 盾）+ 护甲 17 + 方块 8（5 箱 + 3 区域）+ 其它 3 = 46 */
+        await expect(page.locator('.sch-cat .sch-cat-cell')).toHaveCount(46)
         /* 每格显示该物品专属图标 */
-        await expect(page.locator('.sch-cat .sch-cat-cell svg.dc-icon')).toHaveCount(44)
+        await expect(page.locator('.sch-cat .sch-cat-cell svg.dc-icon')).toHaveCount(46)
     })
 
     test('选择「背包与格子交互」：复用背包 / 装备面板，含玩家 HUD', async ({page}) => {

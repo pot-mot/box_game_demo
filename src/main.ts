@@ -17,7 +17,7 @@ import {createPhysicsEnv} from './physics/env.ts'
 import {setupBoxes} from './entity/box/physics/world.ts'
 import {boxPresetConfig} from './entity/box/presets.ts'
 import {setupFragmentEntities} from './entity/fragment/common/physics/world.ts'
-import {setupWaterBlocks} from './entity/area/water/physics/world.ts'
+import {setupAreas} from './entity/area/physics/world.ts'
 import {setupTerrain} from './entity/terrain/common/physics/world.ts'
 import {setupBuildingGenerator} from './entity/building_generator/world.ts'
 import {setupInteractables} from './entity/interactable/index.ts'
@@ -103,7 +103,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const itemEntities = setupItemEntities(scene, shared)
     const characterSystem: CharacterEntitySystem = setupCharacterEntities(scene, shared)
     const boxes = setupBoxes(scene, shared, {fragmentCtx: fragments, velocitySnapshots, physicsEnv})
-    const water = setupWaterBlocks(scene, physicsEnv)
+    const areas = setupAreas(scene, physicsEnv)
 
     // 注册 body provider
     physicsEnv.bodyProviders.push(
@@ -115,8 +115,11 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         () => itemEntities.getAll().map(e => e.body),
     )
 
+    /* 环境场通道：角色注册自己的环境累加器，area 场据此绕开状态机速度覆写影响角色 */
+    physicsEnv.registerEnvironmentProvider((body) => characterSystem.getCharacterByBody(body)?.environment)
+
     // 按 type 索引
-    const systems: EntitySystem[] = [boxes, fragments, water, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem]
+    const systems: EntitySystem[] = [boxes, fragments, areas, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem]
     const systemsByType = new Map<string, EntityInfoSource>(
         systems.map(s => [s.type, s]),
     )
@@ -385,6 +388,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                     shared.eventBus.drain()
                 }
                 /* 交互物已在步进前 update，跳过其 preSync（避免二次推进） */
+                characterSystem.clearEnvironments()
                 for (const s of systems) { if (s !== interactables) s.preSync?.(delta, time) }
                 for (const s of systems) s.syncPositions()
             } else if (stepActive) {
@@ -395,6 +399,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 characterSystem.applySupportCarry(FIXED_TIME_STEP)
                 shared.world.step(shared.eventQueue)
                 shared.eventBus.drain()
+                characterSystem.clearEnvironments()
                 for (const s of systems) { if (s !== interactables) s.preSync?.(FIXED_TIME_STEP, time) }
                 for (const s of systems) s.syncPositions()
                 editMode?.execute.consumeStep()
@@ -429,8 +434,9 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             }
 
             if (mode !== 'showcase') {
-                // 双 Pass 渲染（水方块折射）
-                const waterMeshes: Mesh[] = water.getMeshes()
+                // 双 Pass 渲染（水材质区域折射）
+                areas.updateTime(time)
+                const waterMeshes: Mesh[] = areas.getRefractionMeshes()
                 renderFrame(waterMeshes)
             }
 

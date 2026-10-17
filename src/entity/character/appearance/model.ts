@@ -342,6 +342,9 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     return {
         group,
+        jointGroups: groups,
+        jointParts,
+        colliderMeshes: appearance.colliderMeshes,
         spine: requireGroup(groups, 'spine'),
         headNeck: requireGroup(groups, 'headNeck'),
         head: headMesh,

@@ -178,7 +178,7 @@ export interface CombatComponent {
 
     onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
     onDamageDealt: ((amount: number) => void) | null
-    onDeath: ((sourceId?: number) => void) | null
+    onDeath: ((sourceId?: number, hitHurtBlocks?: readonly string[]) => void) | null
 }
 
 /**

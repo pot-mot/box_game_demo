@@ -4,10 +4,11 @@ import {ALL_WEAPON_PRESETS} from '../character/weapon/catalog.ts'
 import {ALL_ARMOR_PRESETS} from '../character/armor/catalog.ts'
 import {ENTITY_TYPE_VALUES} from '../entity/constants.ts'
 import {BOX_PRESET_IDS} from '../types/boxPreset.ts'
+import {AREA_PRESET_IDS} from '../types/areaPreset.ts'
 import {ICON_NAMES} from '../ui/icons/sprite.ts'
 
 /** 方块实体类型（物品图鉴需覆盖全部方块类实体） */
-const BLOCK_ENTITY_TYPES = ['box', 'area/water'] as const
+const BLOCK_ENTITY_TYPES = ['box', 'area'] as const
 
 describe('物品目录完整性', () => {
     it('物品 id 唯一', () => {
@@ -50,6 +51,17 @@ describe('物品目录完整性', () => {
         }
         for (const item of presetItems) {
             expect(item.boxPreset, `箱型物品缺少预设：${item.id}`).toBeDefined()
+        }
+    })
+
+    it('每个区域预设都有对应方块物品（areaPreset 合法）', () => {
+        const presetItems = ITEM_DEFS.filter(def => def.category === 'block' && def.blockType === 'area')
+        for (const preset of AREA_PRESET_IDS) {
+            const item = presetItems.find(def => def.areaPreset === preset)
+            expect(item, `缺少区域物品：${preset}`).toBeDefined()
+        }
+        for (const item of presetItems) {
+            expect(item.areaPreset, `区域物品缺少预设：${item.id}`).toBeDefined()
         }
     })
 

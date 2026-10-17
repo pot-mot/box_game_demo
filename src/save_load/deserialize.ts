@@ -51,7 +51,7 @@ export const loadWorldFromData = (
         systems.get(key) as EntitySourceMap[K] | undefined
 
     const boxes = getSource('box')
-    const water = getSource('area/water')
+    const areas = getSource('area')
     const frag = getSource('fragment/common')
     const building = getSource('building_generator')
     const interactable = getSource('interactable')
@@ -107,8 +107,8 @@ export const loadWorldFromData = (
                     elastic: entity.elastic ? {def: entity.elastic.def, vel: entity.elastic.vel} : undefined,
                 })
                 break
-            case 'area/water':
-                water?.add(entity.config, x, y, z, quat)
+            case 'area':
+                areas?.add(entity.config, x, y, z, quat)
                 break
             case 'terrain': {
                 if (terrain) {

@@ -201,6 +201,56 @@ const fallingPose = (t: number, ctx: PoseContext): PoseState => {
     }
 }
 
+/** 漂浮（直立踩水）：双臂外张轻摆、双腿微屈、轻微起伏 */
+const floatingPose = (t: number, ctx: PoseContext): PoseState => {
+    const bob = Math.sin(t * 1.6) * 0.15
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
+    return {
+        rightArmShoulder: {rx: -0.2, ry: 0, rz: -0.7 + bob * 0.3},
+        rightArmElbow: {rx: -0.4, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: grip,
+        leftArmShoulder: {rx: -0.2, ry: 0, rz: 0.7 - bob * 0.3},
+        leftArmElbow: {rx: -0.4, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: grip,
+        rightLegHip: {rx: 0.3 + bob * 0.1, ry: 0, rz: 0},
+        rightLegKnee: {rx: 0.5, ry: 0, rz: 0},
+        leftLegHip: {rx: 0.3 - bob * 0.1, ry: 0, rz: 0},
+        leftLegKnee: {rx: 0.5, ry: 0, rz: 0},
+        headNeck: {rx: -0.1, ry: 0, rz: 0},
+        spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
+
+/** 游泳（俯卧由 world.ts 根姿态合成）：双臂交替划水、双腿打水 */
+const swimmingPose = (t: number, ctx: PoseContext): PoseState => {
+    const stroke = Math.sin(t * 2)
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
+    return {
+        rightArmShoulder: {rx: -Math.PI * 0.75 + stroke * 0.8, ry: 0, rz: -0.2},
+        rightArmElbow: {rx: -0.5, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: grip,
+        leftArmShoulder: {rx: -Math.PI * 0.75 - stroke * 0.8, ry: 0, rz: 0.2},
+        leftArmElbow: {rx: -0.5, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: grip,
+        rightLegHip: {rx: stroke * 0.4, ry: 0, rz: 0},
+        rightLegKnee: {rx: 0.2, ry: 0, rz: 0},
+        leftLegHip: {rx: -stroke * 0.4, ry: 0, rz: 0},
+        leftLegKnee: {rx: 0.2, ry: 0, rz: 0},
+        headNeck: {rx: 0.4, ry: 0, rz: 0},
+        spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
+
 const FALL_END = 0.3
 
 /**
@@ -450,11 +500,13 @@ const guardBrokenPose = (t: number, ctx: PoseContext): PoseState => {
 }
 
 /** 基础状态 → 姿态采样器（公式与旧 animators 一一对应；falling 腿张开随速度，行走步频由播放器变速） */
-export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'dying' | 'rolling' | 'flinching' | 'interacting' | 'knockdown' | 'getting_up' | 'blocking' | 'guard_broken', PoseSampler> = {
+export const BASE_POSE_SAMPLERS: Record<'idle' | 'walking' | 'jumping' | 'falling' | 'swimming' | 'floating' | 'dying' | 'rolling' | 'flinching' | 'interacting' | 'knockdown' | 'getting_up' | 'blocking' | 'guard_broken', PoseSampler> = {
     idle: (t, ctx) => idlePose(t, ctx),
     walking: (t, ctx) => walkingPose(t * WALK_CYCLE_FREQ, ctx),
     jumping: (t, ctx) => jumpingPose(t, ctx),
     falling: (t, ctx) => fallingPose(t, ctx),
+    swimming: (t, ctx) => swimmingPose(t, ctx),
+    floating: (t, ctx) => floatingPose(t, ctx),
     dying: (t, ctx) => dyingPose(t, ctx),
     rolling: (t, ctx) => rollingPose(t, ctx),
     flinching: (t, ctx) => flinchingPose(t, ctx),
@@ -478,7 +530,7 @@ export const adjustArmsForHoldMode = (
     state: keyof typeof BASE_POSE_SAMPLERS,
 ): PoseState => {
     if (!weaponHeld || holdMode === undefined || holdMode === 'one_handed') return pose
-    if (state !== 'idle' && state !== 'walking') return pose
+    if (state !== 'idle' && state !== 'walking' && state !== 'swimming' && state !== 'floating') return pose
     return {
         ...pose,
         leftArmShoulder: pose.rightArmShoulder,
@@ -516,6 +568,8 @@ export const BASE_CLIP_META: Record<keyof typeof BASE_POSE_SAMPLERS, {duration: 
     walking: {duration: (Math.PI * 2) / WALK_CYCLE_FREQ, loop: true},
     jumping: {duration: EXTEND_END, loop: false},
     falling: {duration: 1, loop: true},
+    swimming: {duration: (Math.PI * 2) / 4, loop: true},
+    floating: {duration: (Math.PI * 2) / 1.6, loop: true},
     dying: {duration: FALL_END, loop: false},
     rolling: {duration: ROLL_DURATION, loop: false},
     flinching: {duration: FLINCH_DURATION, loop: false},

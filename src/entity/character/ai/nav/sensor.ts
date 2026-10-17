@@ -88,7 +88,7 @@ const scanForward = (
 
 /**
  * 由射线后端构建导航感知传感器（mesh / Rapier 共用同一套分类逻辑）。
- * 命中目标统一为「地面 + 障碍（已排除 area/）」，与旧实现一致。
+ * 命中目标统一为「地面 + 障碍（已排除区域 area）」，与旧实现一致。
  */
 export const buildNavSensor = (caster: NavRayCaster): NavSensor => {
     const footOf = (entity: CharacterEntity): {x: number; y: number; z: number} => {
@@ -226,7 +226,7 @@ export const buildNavSensor = (caster: NavRayCaster): NavSensor => {
 /**
  * mesh 后端导航传感器（单测 / 无物理世界场景）：由障碍 / 地面 / 角色 mesh getter 驱动。
  *
- * obstacleMeshesGetter:   返回当前帧障碍物 mesh（箱子、碎片、地形等，排除 area/）
+ * obstacleMeshesGetter:   返回当前帧障碍物 mesh（箱子、碎片、地形等，排除区域 area）
  * groundMeshesGetter:     返回地形高度场 mesh（仅用于坑洞探针）
  * characterMeshesGetter:  返回其他角色的 mesh（命中时强制归为 blocked_wall，避免误判为可跳过）
  */

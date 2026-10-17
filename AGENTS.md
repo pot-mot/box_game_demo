@@ -115,7 +115,7 @@ src/
 │   ├── interactable/            # 交互物实体系统（行为 + 信号联动 + 可破坏 + 网格 + 编辑面板）
 │   ├── item/                    # 掉落物实体（sensor body 漂浮小立方体，拾取经交互）
 │   ├── building_generator/      # 建筑生成器（体素 / 结构原语 / 分块面剔除渲染 / 距离卸载 / trimesh 物理）
-│   ├── box/ fragment/ destroyed/ area/ terrain/   # 统一箱子（可组合特性）/ 碎片 / Voronoi 断裂 / 水 / Trimesh 地形
+│   ├── box/ fragment/ destroyed/ area/ terrain/   # 统一箱子（可组合特性）/ 碎片 / Voronoi 断裂 / 区域（几何+材质+物理场）/ Trimesh 地形
 ├── inventory/                   # 背包与物品领域模型（items 目录 / grid 俄罗斯方块布局 / 增删装备 / 存档转换）
 ├── modes/                       # control / bone_edit / edit / play / showcase
 ├── ui/                          # 面板（相机HUD、属性面板、列表侧栏、设置）
@@ -153,6 +153,7 @@ src/
 | 交互物 | [`src/entity/interactable/interactable.md`](src/entity/interactable/interactable.md) | 交互物行为、信号、可破坏 |
 | 掉落物 | [`src/entity/item/item.md`](src/entity/item/item.md) | 掉落物拾取 |
 | 箱子 | [`src/entity/box/box.md`](src/entity/box/box.md) | 统一箱子、可组合特性、预设 |
+| 区域 | [`src/entity/area/area.md`](src/entity/area/area.md) | 几何/视觉材质/物理场、角色环境通道 |
 | 地形 | [`src/entity/terrain/terrain.md`](src/entity/terrain/terrain.md) | Trimesh 地形、雕刻 |
 | 背包 | [`src/inventory/inventory.md`](src/inventory/inventory.md) | 背包/装备 UI 与持久化 |
 | 操作方案 | [`src/modes/control/control.md`](src/modes/control/control.md) | 相机/移动、翻滚/加速 |

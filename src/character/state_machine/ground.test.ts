@@ -3,6 +3,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import {isSupportedOn, shouldFall, projectToSlope, applySlopeAntiGravity} from './ground.ts'
 import {SLOPE_WALK_THRESHOLD} from './constants.ts'
 import {GRAVITY} from '../../physics/constants.ts'
+import {createBodyEnvironment} from '../../physics/environment.ts'
 import type {CharacterEntity} from '../types.ts'
 
 /** 构造最小 CharacterEntity mock */
@@ -25,7 +26,7 @@ const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterE
     airborneTime: 0, groundedTime: 0,
     rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20,
     isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
-    combat: null!, holdMode: 'one_handed', lockPoints: [], stateMachine: null!,
+    combat: null!, holdMode: 'one_handed', lockPoints: [], environment: createBodyEnvironment(), stateMachine: null!,
 })
 
 describe('isSupportedOn', () => {

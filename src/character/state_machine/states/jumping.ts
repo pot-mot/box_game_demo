@@ -1,6 +1,7 @@
 import type {StateHandler} from '../types.ts'
-import {AIR_DAMPING, AIR_CONTROL_FACTOR, SLOPE_WALK_THRESHOLD, JUMP_LAND_MIN_TIME} from '../constants.ts'
+import {AIR_DAMPING, AIR_CONTROL_FACTOR, SLOPE_WALK_THRESHOLD, JUMP_LAND_MIN_TIME, SWIM_ENTER_FLUID} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
+import {fluidFractionOf} from '../fluid.ts'
 import {moveSpeedOf} from '../../types.ts'
 import {canStartAirAttack} from './air_attacking.ts'
 
@@ -25,6 +26,15 @@ export const jumpingHandler: StateHandler = {
     },
     exit: () => {},
     transitions: [
+        {
+            /* 入水：浸没时切换游泳 / 漂浮 */
+            to: 'swimming',
+            guard: (input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID && Math.hypot(input.dx, input.dz) > 0.001,
+        },
+        {
+            to: 'floating',
+            guard: (_input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID,
+        },
         {
             to: 'falling',
             guard: (_, entity) => {

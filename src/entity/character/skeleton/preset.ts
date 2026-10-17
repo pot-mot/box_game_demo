@@ -39,6 +39,13 @@ export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
     const hipX = LEG_X_GAP
     const identity: readonly [number, number, number, number] = [0, 0, 0, 1]
 
+    /* 物理碰撞块拆分位置（上/下半身半胶囊中心）：与 CHARACTER_BASE_SIZE 的胶囊拆分一致 */
+    const colliderC = MODEL_BASE_HEIGHT / 2
+    const colliderR = MODEL_BASE_WIDTH / 2
+    const colliderN = colliderC - colliderR
+    const lowerColliderY = colliderC - colliderN / 2
+    const upperColliderY = colliderC + colliderN / 2
+
     return {
         joints: [
             {id: 'root', name: '根', position: [0, 0, 0], rotation: identity},
@@ -63,6 +70,9 @@ export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
             {id: 'leftLegHip', name: '左髋', parentId: 'root', position: [hipX, HIP_Y, 0], rotation: identity},
             {id: 'leftLegKnee', name: '左膝', parentId: 'leftLegHip', position: [0, -hipH, 0], rotation: identity},
             {id: 'leftFoot', name: '左脚', parentId: 'leftLegKnee', position: [0, -shinH, 0], rotation: identity},
+            /* 物理碰撞块节点（非动画关节）：控制上/下半身半胶囊碰撞体，随脊柱 / 根运动 */
+            {id: 'lowerBodyCollider', name: '下半身碰撞块', parentId: 'root', position: [0, lowerColliderY, 0], rotation: identity},
+            {id: 'upperBodyCollider', name: '上半身碰撞块', parentId: 'spine', position: [0, upperColliderY - HIP_Y, 0], rotation: identity},
         ],
         bones: [
             /* 躯干段沿脊柱向上（髋部 → 肩部）；头部段 = 颈根 → 头顶，与向上挂载的头部件同轴 */
@@ -105,6 +115,8 @@ const HUMANOID_JOINT_NAME_KEYS: Record<string, StringLocaleKey> = {
     leftLegHip: 'skeleton.joint.leftLegHip',
     leftLegKnee: 'skeleton.joint.leftLegKnee',
     leftFoot: 'skeleton.joint.leftFoot',
+    lowerBodyCollider: 'skeleton.joint.lowerBodyCollider',
+    upperBodyCollider: 'skeleton.joint.upperBodyCollider',
 }
 
 /** 人形关节本地化显示名（未知 id 回退原始名） */

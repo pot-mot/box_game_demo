@@ -3,6 +3,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import {applyExplosionDamage} from './explosion.ts'
 import {createCombatComponent} from './types.ts'
 import {createWeaponRuntime} from '../weapon/weapon_runtime.ts'
+import {createBodyEnvironment} from '../../physics/environment.ts'
 
 /** 构造最低限度 CharacterEntity mock（overrides：无敌帧计时 / 冲量回调） */
 const makeMock = (
@@ -43,6 +44,7 @@ const makeMock = (
         combat,
         holdMode: 'one_handed',
         lockPoints: [],
+        environment: createBodyEnvironment(),
         stateMachine: null!,
     }
 }

@@ -3,6 +3,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from '../machine.ts'
 import {createCombatComponent} from '../../combat/types.ts'
 import {createWeaponRuntime} from '../../weapon/weapon_runtime.ts'
+import {createBodyEnvironment} from '../../../physics/environment.ts'
 import type {CharacterEntity} from '../../types.ts'
 import {DYING_FALL_DURATION} from './dying.ts'
 
@@ -44,6 +45,7 @@ const makeMock = (yaw = 0): CharacterEntity => {
         combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15),
         holdMode: runtime.holdMode,
         lockPoints: [],
+        environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),
     }
 }

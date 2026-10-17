@@ -5,7 +5,7 @@ import {createIcon} from './icons/icon.ts'
 
 const MODES: SpawnMode[] = [
     'box',
-    'area/water',
+    'area',
     'character',
     'terrain',
     'building_generator',
@@ -13,7 +13,7 @@ const MODES: SpawnMode[] = [
 ]
 const MODE_LABELS: Record<SpawnMode, StringLocaleKey> = {
     'box': 'spawn.box',
-    'area/water': 'spawn.area_water',
+    'area': 'spawn.area',
     'character': 'spawn.character',
     'terrain': 'spawn.terrain',
     'building_generator': 'spawn.building',

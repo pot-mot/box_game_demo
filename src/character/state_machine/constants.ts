@@ -25,3 +25,17 @@ export const FALL_SLIDE_MIN_NY = 0.3
 export const FALL_MAX_SPEED_MULTIPLIER = 2
 /** 状态翻转防抖：walking/idle/falling 之间切换的最低驻留时间（秒），防止接触法线噪声/下坡弹跳导致抖动 */
 export const STATE_FLIP_MIN_TIME = 0.15
+
+/* ── 水（游泳 / 漂浮） ── */
+/** 浸没比例进入游泳/漂浮阈值（滞回上界：body AABB 浸没过半） */
+export const SWIM_ENTER_FLUID = 0.5
+/** 浸没比例退出游泳/漂浮阈值（滞回下界） */
+export const SWIM_EXIT_FLUID = 0.35
+/** 游泳水平速度倍率（相对陆地移速） */
+export const SWIM_SPEED_MULTIPLIER = 0.6
+/** 游泳/漂浮水平阻尼（每帧保留比例） */
+export const SWIM_H_DAMPING = 0.9
+/** 蹬水上浮冲量（按跳跃键触发的竖直速度，m/s） */
+export const SWIM_KICK_IMPULSE = 3.5
+/** 镜头俯仰驱动的上浮/下潜速度（m/s，乘 swimLift 分量） */
+export const SWIM_LIFT_SPEED = 3.5

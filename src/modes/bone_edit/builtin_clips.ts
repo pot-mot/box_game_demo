@@ -100,6 +100,8 @@ const BASE_STATE_LABELS: Record<BaseState, StringLocaleKey> = {
     walking: 'bone_edit.state.walking',
     jumping: 'bone_edit.state.jumping',
     falling: 'bone_edit.state.falling',
+    swimming: 'bone_edit.state.swimming',
+    floating: 'bone_edit.state.floating',
     dying: 'bone_edit.state.dying',
     rolling: 'bone_edit.state.rolling',
     flinching: 'bone_edit.state.flinching',
@@ -111,7 +113,7 @@ const BASE_STATE_LABELS: Record<BaseState, StringLocaleKey> = {
 }
 
 /** 基础状态展示顺序（待机 → 移动 → 受击/倒地） */
-const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'rolling', 'flinching', 'dying', 'knockdown', 'getting_up', 'interacting', 'blocking', 'guard_broken']
+const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'rolling', 'flinching', 'dying', 'knockdown', 'getting_up', 'interacting', 'blocking', 'guard_broken']
 
 /** 姿态公式区分持械/空手的状态（其余状态两种变体姿态相同，只列出一份） */
 const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']

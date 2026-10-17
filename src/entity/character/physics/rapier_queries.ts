@@ -8,7 +8,7 @@ import type {LosRayCaster} from '../ai/line_of_sight.ts'
 /** 把角色 mesh 解析为其物理刚体 handle（用于在射线查询中排除自身 / 战斗目标） */
 export type MeshBodyResolver = (mesh: Object3D | null) => number | undefined
 
-/* 导航感知排除水域（area/）与隐式基础地面（ground）——与旧 mesh 列表一致：
+/* 导航感知排除区域（area）与隐式基础地面（ground）——与旧 mesh 列表一致：
  * 旧障碍列表来自各实体 system（不含基础平面），基础平面的坑洞回退由 footY 判定承担 */
 const NAV_EXCLUDE_MASK = collisionCategoryMask(['area', 'ground'])
 

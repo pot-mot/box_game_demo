@@ -1,7 +1,11 @@
-import {Euler, type LineBasicMaterial, type Mesh, type Object3D, Quaternion, type Scene, Vector3} from 'three'
+import {Euler, type LineBasicMaterial, type Mesh, Matrix4, type Object3D, Quaternion, type Scene, Vector3} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
+import {createBodyEnvironment, resetBodyEnvironment} from '../../../physics/environment.ts'
+import {worldizeHurtBlock, zeroWorldHurtBlock, type WorldHurtBlock} from '../../../character/hurt_blocks.ts'
+import {HUMANOID_HURT_BLOCKS} from '../skeleton/hurt_blocks.ts'
+import {obbFromTransform, type OBB} from '../combat/obb.ts'
 import {type ContactTracker, createContactTracker, queryColliderContacts} from '../../../physics/contact_tracking.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
 import {moveSpeedOf} from '../../../character/types.ts'
@@ -65,7 +69,7 @@ import {ROLL_WORLD_DAMAGE} from '../../../character/combat/constants.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createMaterialEffects} from '../combat_vfx/material_effects.ts'
-import {type AttackHitBoxes, createAttackHitBoxes, syncWeaponDebugBox} from '../combat_vfx/hitbox_debug.ts'
+import {type AttackHitBoxes, createAttackHitBoxes, syncWeaponDebugBox, syncHurtDebugBox} from '../combat_vfx/hitbox_debug.ts'
 import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP} from '../ai/constants.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
@@ -103,6 +107,10 @@ const _rollYawQuat = new Quaternion()
 const _rollPivot = new Vector3()
 const _rollOffset = new Vector3()
 const _shieldQuat = new Quaternion()
+
+/** 游泳俯卧前倾角（绕本地 X 轴，face-down；60–75°）与合成复用对象 */
+const SWIM_PRONE_PITCH = Math.PI * 0.38
+const _swimPitchQuat = new Quaternion()
 
 /** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写；test_weapon 走测试专用链） */
 const weaponRuntimeOf = (attack: AttackConfig, holdMode?: HoldMode): WeaponRuntime => {
@@ -171,7 +179,7 @@ const factionBadgeColor = (faction: number, isPlayer: boolean): string => {
 export interface CharacterEntitySystem extends EntityInfoSource {
     markPlayer: (id: number) => void
     unmarkPlayer: () => void
-    setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean) => void
+    setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean, swimLift?: number) => void
     setPlayerAttack: (attackKey?: AttackKey, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
     /**
      * 玩家按下攻击键：可蓄力的远程武器进入蓄力（按住期间冻结在蓄力锚点阶段并累积力度）；
@@ -198,6 +206,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
      * **必须在 `world.step` 之前调用**（平台同级已瞬移到新位姿，乘客对齐后步进无穿透 → 无顶起抖动）。
      */
     applySupportCarry: (dt: number) => void
+    /** 每帧在 area 场写入前清零全部角色的环境场（供 area 通道使用） */
+    clearEnvironments: () => void
     setAIEnabled: (enabled: boolean) => void
     activateAI: () => void
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
@@ -347,6 +357,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let playerDz = 0
     let playerJump = false
     let playerRoll = false
+    let playerSwimLift = 0
     let playerForwardX = 0
     let playerForwardZ = 1
     /** 玩家交互脉冲与目标坐标（帧末与攻击脉冲一同归零；目标坐标供 interacting 朝向使用） */
@@ -446,6 +457,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         walking: 'entity.state.walking',
         jumping: 'entity.state.jumping',
         falling: 'entity.state.falling',
+        swimming: 'entity.state.swimming',
+        floating: 'entity.state.floating',
         attacking: 'entity.state.attacking',
         air_attacking: 'entity.state.air_attacking',
         dying: 'entity.state.dying',
@@ -572,13 +585,19 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
          * 圆滑底面无挂点；rapier3d-compat 0.19/0.20 的 FIX_INTERNAL_EDGES 已损坏（开启即穿透）不可用 */
         const capsuleRadius = (CHARACTER_BASE_SIZE.width * config.scale) / 2
         const capsuleHalfHeight = (CHARACTER_BASE_SIZE.height * config.scale) / 2 - capsuleRadius
-        const colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, capsuleRadius)
-            .setFriction(0)
-            /* 密度 0：质量完全由附加质量决定，与碰撞体尺寸（scale）解耦 */
-            .setDensity(0)
-            .setCollisionGroups(categoryCollisionGroups(CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, 'character'))
-            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
-        const mainCollider = createColliderForBody(world, colliderDesc, body)
+        /* 物理碰撞块拆为「上半身 / 下半身」两个半胶囊（竖直拼接等价原单胶囊）：
+         * 每个半胶囊的中间圆柱半高 = 原半高的一半，沿 Y 反向偏移拼合。 */
+        const halfCapsuleHalfHeight = capsuleHalfHeight / 2
+        const makeColliderDesc = (offsetY: number): RAPIER.ColliderDesc =>
+            RAPIER.ColliderDesc.capsule(halfCapsuleHalfHeight, capsuleRadius)
+                .setTranslation(0, offsetY, 0)
+                .setFriction(0)
+                /* 密度 0：质量完全由附加质量决定，与碰撞体尺寸（scale）解耦 */
+                .setDensity(0)
+                .setCollisionGroups(categoryCollisionGroups(CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, 'character'))
+                .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
+        const mainCollider = createColliderForBody(world, makeColliderDesc(-halfCapsuleHalfHeight), body)
+        const upperCollider = createColliderForBody(world, makeColliderDesc(halfCapsuleHalfHeight), body)
         /* 质量恒为 1（对齐 cannon-es master）：击退/磁力/浮力均按 mass=1 计算。
          * 不设置的话 Rapier 按密度 1 × 体积（≈0.04）计算，击退冲量会被放大 25 倍 */
         setBodyMass(body, 1)
@@ -608,6 +627,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             appearanceGroup: model.group,
             body,
             mainCollider,
+            upperCollider,
             isOnGround: true,
             groundNormal: { x: 0, y: 1, z: 0 },
             groundKeepTimer: 0,
@@ -636,6 +656,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             interactTargetActive: false,
             interactTargetX: 0,
             interactTargetZ: 0,
+            environment: createBodyEnvironment(),
+            hurtProfile: HUMANOID_HURT_BLOCKS,
+            hurtBlocks: HUMANOID_HURT_BLOCKS.map(b => zeroWorldHurtBlock(b.id)),
             stateMachine,
         }
 
@@ -815,6 +838,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             } else {
                 mat.opacity = opacity
             }
+            /* 上/下半身半胶囊可视化：仅编辑（碰撞可见）模式显示 */
+            const model = appearanceModels.get(entity.id)
+            if (model !== undefined) {
+                for (const m of model.colliderMeshes) m.visible = attackHitBoxVisible
+            }
             const hb = attackHitBoxes.get(entity.id)
             if (!hb) continue
             if (attackHitBoxVisible && entity.id === selectedId) {
@@ -886,11 +914,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const getEntityList = (): Array<{id: number; mesh: Mesh}> => characters.map(c => ({id: c.id, mesh: c.mesh}))
     const getAll = (): readonly CharacterEntity[] => characters
 
-    const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean): void => {
+    const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean, swimLift?: number): void => {
         playerDx = dx
         playerDz = dz
         playerJump = jump
         playerRoll = roll ?? false
+        playerSwimLift = swimLift ?? 0
         playerForwardX = forwardX
         playerForwardZ = forwardZ
     }
@@ -1075,6 +1104,127 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
     }
 
+    /** 每帧在 area 场写入前清零全部角色的环境场（main.ts 在每个 preSync 循环前调用） */
+    const clearEnvironments = (): void => {
+        for (const entity of characters) resetBodyEnvironment(entity.environment)
+    }
+
+    /**
+     * 环境场应用（状态机之后）：area 场（浮力 / 风 / 方向重力）写入的额外加速度与流速
+     * 在此叠加到速度。必须晚于 `stateMachine.update`——否则水平分量会被各 handler 的
+     * `setLinvel` 绝对覆写抹掉（这正是水此前对角色「无效」的根因）。
+     */
+    /* 受击子块世界化复用对象（闭包级，仅创建一次） */
+    const _hurtZero: {x: number; y: number; z: number} = {x: 0, y: 0, z: 0}
+    const _hurtHalf: {x: number; y: number; z: number} = {x: 0, y: 0, z: 0}
+
+    const copyOBBInto = (out: WorldHurtBlock, obb: OBB): void => {
+        out.kind = 'box'
+        out.center.x = obb.center.x; out.center.y = obb.center.y; out.center.z = obb.center.z
+        for (let a = 0; a < 3; a++) {
+            out.axes[a].x = obb.axes[a].x
+            out.axes[a].y = obb.axes[a].y
+            out.axes[a].z = obb.axes[a].z
+        }
+        out.half.x = obb.half.x; out.half.y = obb.half.y; out.half.z = obb.half.z
+        out.radius = 0; out.halfHeight = 0
+    }
+
+    const copyWorldInto = (out: WorldHurtBlock, src: WorldHurtBlock): void => {
+        out.kind = src.kind
+        out.center.x = src.center.x; out.center.y = src.center.y; out.center.z = src.center.z
+        for (let a = 0; a < 3; a++) {
+            out.axes[a].x = src.axes[a].x
+            out.axes[a].y = src.axes[a].y
+            out.axes[a].z = src.axes[a].z
+        }
+        out.half.x = src.half.x; out.half.y = src.half.y; out.half.z = src.half.z
+        out.radius = src.radius; out.halfHeight = src.halfHeight
+    }
+
+    /**
+     * 逐帧世界化受击子块（动画 + 根姿态之后调用）：
+     * 优先按关节上的视觉部件矩阵 + 几何尺寸（自动含骨骼段长度与粗细）；
+     * 无部件时退回关节矩阵 + 预设形状常量。
+     */
+    const refreshHurtBlocks = (entity: CharacterEntity, model: CharacterModel): void => {
+        const profile = entity.hurtProfile
+        const out = entity.hurtBlocks
+        if (profile === undefined || out === undefined) return
+        model.group.updateMatrixWorld(true)
+        for (let i = 0; i < profile.length && i < out.length; i++) {
+            const def = profile[i]
+            const part = model.jointParts.get(def.jointId)
+            if (part !== undefined) {
+                const params = part.geometry.parameters as unknown as {width: number; height: number; depth: number}
+                _hurtHalf.x = params.width / 2
+                _hurtHalf.y = params.height / 2
+                _hurtHalf.z = params.depth / 2
+                copyOBBInto(out[i], obbFromTransform(part.mesh.matrixWorld.elements, _hurtZero, _hurtHalf))
+                continue
+            }
+            const group = model.jointGroups.get(def.jointId)
+            if (group === undefined) continue
+            group.updateWorldMatrix(true, false)
+            copyWorldInto(out[i], worldizeHurtBlock(def, group.matrixWorld.elements))
+        }
+    }
+
+    /* 半胶囊碰撞体随碰撞节点（lowerBodyCollider / upperBodyCollider）相对模型根的变换同步。
+     * 关键：使用「节点相对模型根」的变换（排除模型根的朝向 / 姿势合成），
+     * 使静止时与竖直拼接完全等价、且随动画（如脊柱扭转）联动，不与翻滚/倒地根姿态耦合。 */
+    const _colliderPos = new Vector3()
+    const _colliderQuat = new Quaternion()
+    const _relMatrix = new Matrix4()
+    const _rootInv = new Matrix4()
+
+    const syncColliderFromNode = (
+        collider: RAPIER.Collider | undefined,
+        group: Object3D | undefined,
+        rootGroup: Object3D,
+        scale: number,
+        centerY: number,
+    ): void => {
+        if (collider === undefined || group === undefined) return
+        group.updateWorldMatrix(true, false)
+        rootGroup.updateWorldMatrix(true, false)
+        _rootInv.copy(rootGroup.matrixWorld).invert()
+        _relMatrix.multiplyMatrices(_rootInv, group.matrixWorld)
+        _colliderPos.setFromMatrixPosition(_relMatrix)
+        _colliderQuat.setFromRotationMatrix(_relMatrix)
+        /* 模型根（脚底）→ 刚体中心：Y 平移 -centerY；模型根均匀缩放 scale 需还原到节点局部 */
+        collider.setTranslationWrtParent({
+            x: _colliderPos.x * scale,
+            y: _colliderPos.y * scale - centerY,
+            z: _colliderPos.z * scale,
+        })
+        collider.setRotationWrtParent({x: _colliderQuat.x, y: _colliderQuat.y, z: _colliderQuat.z, w: _colliderQuat.w})
+    }
+
+    /** 用碰撞节点相对模型根的变换驱动上/下半身半胶囊（B2）；节点缺失时保留静态拼接。 */
+    const syncCollidersFromNodes = (entity: CharacterEntity, model: CharacterModel): void => {
+        const lower = model.jointGroups.get('lowerBodyCollider')
+        const upper = model.jointGroups.get('upperBodyCollider')
+        if (lower === undefined && upper === undefined) return
+        const scale = entity.config.scale
+        const centerY = originToCenterY(entity.config)
+        syncColliderFromNode(entity.mainCollider, lower, model.group, scale, centerY)
+        syncColliderFromNode(entity.upperCollider, upper, model.group, scale, centerY)
+    }
+
+    const applyEnvironment = (entity: CharacterEntity, dt: number): void => {
+        const env = entity.environment
+        const hasAccel = env.accel.x !== 0 || env.accel.y !== 0 || env.accel.z !== 0
+        if (!hasAccel && env.flowBlend <= 0) return
+        const blend = env.flowBlend > 0 ? Math.min(1, env.flowBlend * dt) : 0
+        const v = entity.body.linvel()
+        entity.body.setLinvel({
+            x: v.x + (env.flow.x - v.x) * blend + env.accel.x * dt,
+            y: v.y + (env.flow.y - v.y) * blend + env.accel.y * dt,
+            z: v.z + (env.flow.z - v.z) * blend + env.accel.z * dt,
+        }, true)
+    }
+
     const checkGround = (entity: CharacterEntity, dt: number): void => {
         const contacts = buildGroundContacts(entity)
         const next = resolveGroundState(contacts, entity.body.handle, {
@@ -1203,7 +1353,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     && !entity.combat.isDead
                     && entity.stateMachine.currentState !== 'guard_broken'
                     && playerShieldHoldTime >= block.holdThreshold
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerAttackHeld, playerInteractPending, playerBlockHeld)
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerAttackHeld, playerInteractPending, playerBlockHeld, playerSwimLift)
                 /* 攻击期间（含待起手帧）瞄准方向持续取相机前方：角色随之转向瞄准方向，
                  * 射击弹道再由武器实际朝向（muzzleDir）决定，避免背身射向目标 */
                 if (playerAttackPending || entity.combat.attackActive) {
@@ -1213,6 +1363,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
 
             entity.stateMachine.update(dt, entity)
+            /* 环境场（area）在状态机之后叠加，避免被状态机水平速度覆写抹掉 */
+            applyEnvironment(entity, dt)
             /* 翻滚无敌帧窗口内命中可破坏世界目标（按来源 roll 结算） */
             if (entity.isPlayer && entity.stateMachine.currentState === 'rolling'
                 && entity.combat.invincibleTimer > 0 && worldDamageTargets !== null) {
@@ -1372,12 +1524,34 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     _rollPivot.set(0, originToCenterY(entity.config), 0)
                     _rollOffset.copy(_rollPivot).applyQuaternion(model.group.quaternion)
                     model.group.position.add(_rollPivot).sub(_rollOffset)
+                } else if (entity.stateMachine.currentState === 'swimming') {
+                    /* 俯卧游泳：绕本地 X 轴前倾（face-down），绕身体中心做位置补偿（同翻滚） */
+                    _swimPitchQuat.setFromAxisAngle(_rollAxis, SWIM_PRONE_PITCH)
+                    _rollYawQuat.setFromAxisAngle(_upAxis, newAngle)
+                    model.group.quaternion.copy(_rollYawQuat).multiply(_swimPitchQuat)
+                    _rollPivot.set(0, originToCenterY(entity.config), 0)
+                    _rollOffset.copy(_rollPivot).applyQuaternion(model.group.quaternion)
+                    model.group.position.add(_rollPivot).sub(_rollOffset)
                 } else {
                     /* 运行时朝向仅绕 Y（清除编辑态可能残留的 X/Z 视觉倾斜） */
                     model.group.rotation.set(0, newAngle, 0)
                 }
                 /* 碰撞箱可视化同步跟随身体朝向 */
                 entity.mesh.rotation.set(0, newAngle, 0)
+
+                /* 俯卧游泳：让上/下半身碰撞节点前倾，使 B2 驱动的半胶囊随之俯卧（与视觉一致） */
+                {
+                    const swimPitch = entity.stateMachine.currentState === 'swimming' ? SWIM_PRONE_PITCH : 0
+                    const lowerNode = model.jointGroups.get('lowerBodyCollider')
+                    const upperNode = model.jointGroups.get('upperBodyCollider')
+                    if (lowerNode !== undefined) lowerNode.rotation.x = swimPitch
+                    if (upperNode !== undefined) upperNode.rotation.x = swimPitch
+                }
+
+                /* 受击子块世界化（动画 + 根姿态之后；命中检定读取 entity.hurtBlocks） */
+                refreshHurtBlocks(entity, model)
+                /* 上半身/下半身半胶囊碰撞箱随骨骼（碰撞节点）同步 */
+                syncCollidersFromNodes(entity, model)
 
                 /* 远程枪口世界朝向：武器本地 +Y = 枪口/弹道方向；在骨骼姿势与身体朝向写入后采样，
                  * 供 ranged_executor 在 release 帧作为弹道初始方向（角色朝向 + 出手动画共同决定） */
@@ -1421,12 +1595,28 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     const showDebug = attackHitBoxVisible && entity.id === selectedId
                     const bPos = entity.body.translation()
                     const yaw = facingAngles.get(entity.id) ?? 0
-                    const th = targetHitBoxHalves(entity.config.scale)
-                    hitBoxes.targetBox.position.set(bPos.x, bPos.y, bPos.z)
-                    hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
-                    /* 受击箱随身体朝向旋转（与判定的 OBB 几何一致） */
-                    hitBoxes.targetBox.rotation.y = yaw
-                    hitBoxes.targetBox.visible = showDebug
+                    /* 受击箱：有受击子块时逐块显示（与判定形状一致）；无则回退单一身体盒 */
+                    const hurtBlocks = entity.hurtBlocks
+                    if (showDebug && hurtBlocks !== undefined && hurtBlocks.length > 0) {
+                        hitBoxes.targetBox.visible = false
+                        for (let bi = 0; bi < hitBoxes.hurtBoxes.length; bi++) {
+                            const box = hitBoxes.hurtBoxes[bi]
+                            if (bi < hurtBlocks.length) {
+                                syncHurtDebugBox(box, hurtBlocks[bi])
+                                box.visible = true
+                            } else {
+                                box.visible = false
+                            }
+                        }
+                    } else {
+                        const th = targetHitBoxHalves(entity.config.scale)
+                        hitBoxes.targetBox.position.set(bPos.x, bPos.y, bPos.z)
+                        hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
+                        /* 受击箱随身体朝向旋转（与判定的 OBB 几何一致） */
+                        hitBoxes.targetBox.rotation.y = yaw
+                        hitBoxes.targetBox.visible = showDebug
+                        for (const box of hitBoxes.hurtBoxes) box.visible = false
+                    }
 
                     const debugWeapon = entity.combat.weapon
                     const meleeWeapon = debugWeapon.type === 'melee' ? debugWeapon : undefined
@@ -1804,16 +1994,21 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
 
             world.removeCollider(entity.mainCollider, true)
-            /* 胶囊参数与 spawnEntity 一致（随 scale 缩放） */
+            if (entity.upperCollider !== undefined) world.removeCollider(entity.upperCollider, true)
+            /* 胶囊参数与 spawnEntity 一致（随 scale 缩放）：两半胶囊竖直拼接 */
             const capsuleRadius = (CHARACTER_BASE_SIZE.width * entity.config.scale) / 2
             const capsuleHalfHeight = (CHARACTER_BASE_SIZE.height * entity.config.scale) / 2 - capsuleRadius
-            const colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, capsuleRadius)
-                .setFriction(0)
-                /* 密度 0：重建碰撞体不改变刚体质量（恒为 1） */
-                .setDensity(0)
-                .setCollisionGroups(categoryCollisionGroups(CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, 'character'))
-                .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
-            entity.mainCollider = createColliderForBody(world, colliderDesc, entity.body)
+            const halfCapsuleHalfHeight = capsuleHalfHeight / 2
+            const makeColliderDesc = (offsetY: number): RAPIER.ColliderDesc =>
+                RAPIER.ColliderDesc.capsule(halfCapsuleHalfHeight, capsuleRadius)
+                    .setTranslation(0, offsetY, 0)
+                    .setFriction(0)
+                    /* 密度 0：重建碰撞体不改变刚体质量（恒为 1） */
+                    .setDensity(0)
+                    .setCollisionGroups(categoryCollisionGroups(CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK, 'character'))
+                    .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS)
+            entity.mainCollider = createColliderForBody(world, makeColliderDesc(-halfCapsuleHalfHeight), entity.body)
+            entity.upperCollider = createColliderForBody(world, makeColliderDesc(halfCapsuleHalfHeight), entity.body)
             /* 重建后刷新总质量（碰撞体密度 0，质量仍为 1） */
             setBodyMass(entity.body, 1)
             entity.body.wakeUp()
@@ -2037,6 +2232,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         getCharacterByBody,
         update,
         applySupportCarry,
+        clearEnvironments,
         setAIEnabled,
         activateAI,
         add,

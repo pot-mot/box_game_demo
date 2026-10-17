@@ -854,9 +854,9 @@ describe('NavSensor 各类实体障碍检测', () => {
         expect(result.result).toBe('blocked_wall')
     })
 
-    it('30. area/water — 生产环境中被 world.ts 过滤，传感器不接收其 mesh → clear', () => {
-        /* 水域 mesh 不应出现在障碍物列表中（world.ts 的 setupAI 排除 area/ 类型）。
-         * 此测试验证：障碍物列表中不含水 mesh 时，前方返回 clear */
+    it('30. 区域（area）— 生产环境中被 world.ts 过滤，传感器不接收其 mesh → clear', () => {
+        /* 区域（area，含水体）mesh 不应出现在障碍物列表中（world.ts 的 setupAI 排除区域类型）。
+         * 此测试验证：障碍物列表中不含区域 mesh 时，前方返回 clear */
         /* 不向 obstacles 添加任何东西，模拟过滤后的列表 */
         const result = sensor.sense(entity, 1, 0, navConfig)
         expect(result.result).toBe('clear')

@@ -13,6 +13,8 @@ import {idleHandler} from './states/idle.ts'
 import {walkingHandler} from './states/walking.ts'
 import {jumpingHandler} from './states/jumping.ts'
 import {fallingHandler} from './states/falling.ts'
+import {swimmingHandler} from './states/swimming.ts'
+import {floatingHandler} from './states/floating.ts'
 import {attackingHandler} from './states/attacking/index.ts'
 import {airAttackingHandler} from './states/air_attacking.ts'
 import {dyingHandler} from './states/dying.ts'
@@ -30,6 +32,8 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     walking: walkingHandler,
     jumping: jumpingHandler,
     falling: fallingHandler,
+    swimming: swimmingHandler,
+    floating: floatingHandler,
     attacking: attackingHandler,
     air_attacking: airAttackingHandler,
     dying: dyingHandler,
@@ -47,7 +51,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     let previousState: CharacterState | null = null
     let stateTime = 0
     let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
-    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false, interact: false, block: false}
+    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false, interact: false, block: false, swimLift: 0}
 
     const makeContext = (entity?: CharacterEntity): MachineContext => {
         let attackPhase: string | undefined
@@ -67,7 +71,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         }
     }
 
-    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean): void => {
+    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean, swimLift?: number): void => {
         input.dx = dx
         input.dz = dz
         input.jump = jump
@@ -78,6 +82,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.attackHeld = attackHeld ?? false
         input.interact = interact ?? false
         input.block = block ?? false
+        input.swimLift = swimLift ?? 0
     }
 
     const update = (dt: number, entity: CharacterEntity): void => {
@@ -171,6 +176,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         input.attackHeld = false
         input.interact = false
         input.block = false
+        input.swimLift = 0
     }
 
     return {

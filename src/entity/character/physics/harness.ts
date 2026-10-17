@@ -16,6 +16,7 @@ import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {createCombatComponent} from '../../../character/combat/types.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
+import {createBodyEnvironment} from '../../../physics/environment.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {CHARACTER_BASE_SIZE, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
 
@@ -115,6 +116,7 @@ export const makeChar = (
         /* 测试专用最小 combat（真实组件，仅倾向设为无条件敌对；避免手写字段随组件结构漂移） */
         combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 100),
         holdMode: runtime.holdMode,
+        environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),
     }
 }

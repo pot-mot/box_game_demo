@@ -5,7 +5,7 @@ export const CHARACTER_ENTITY_TYPE = 'character' as const
 const ENTITY_TYPE_VALUES = [
     'box',
     'fragment/common',
-    'area/water',
+    'area',
     CHARACTER_ENTITY_TYPE,
     'terrain',
     'building_generator',

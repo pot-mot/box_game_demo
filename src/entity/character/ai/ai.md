@@ -634,3 +634,10 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 | 角色动作 FSM | `src/character/state_machine/` | 8 状态动作层 FSM |
 | 集成入口 | `src/entity/character/physics/world.ts` | AI 逐帧调用点 |
 | AI 测试 | `src/entity/character/ai/ai.test.ts` | FSM 转移测试 |
+
+## 水中行为（游泳 / 漂浮）
+
+- AI 与玩家共用动作层状态机：`entity.environment.fluidFraction > 0`（area `float` 场写入）时，`idle`/`walking`/`falling` 自动转入 `floating`/`swimming`（见 [`state_machine.md`](../../../character/state_machine/state_machine.md)）——**AI 无需改动 `AISetInput` 即自动游泳**；其水平意图照常被 swimming 状态消费。
+- AI 竖向无镜头：`swimLift` 恒为 0 → 竖直由浮力决定（上浮 / 下潜 / 悬浮），与玩家 floating 一致。
+- **卡死豁免**：`updateStallDetection`（`ai/machine.ts`）在 `fluidFraction > 0` 时重置计时并跳过——游泳拖拽压低水平速度，避免被误判卡死而频繁重掷路点 / 绕行（镜像 `attacking` 豁免）。
+- `nav` 仍排除 `area` 类别：AI 不绕湖、直接游过；nav 产出的障碍跳跃被 swimming 状态解释为蹬水上浮。

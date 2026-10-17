@@ -46,8 +46,8 @@ export interface CameraLockTarget {
 export interface PlayerControlOptions {
     /** 相机跟随目标（玩家身体中心等）；返回 undefined 时退化为自由飞行 */
     readonly getTarget: () => Vector3 | undefined
-    /** 移动输出：dx/dz 为相机水平基准方向上的合成输入，roll 为本次翻滚边沿 */
-    readonly move: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll: boolean) => void
+    /** 移动输出：dx/dz 为相机水平基准方向上的合成输入，roll 为本次翻滚边沿，swimLift 为游泳竖直意图（-1..1） */
+    readonly move: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll: boolean, swimLift: number) => void
     /** 持握模式切换（默认 Ctrl）回调；缺省不处理 */
     readonly cycleHoldMode?: () => void
     /** 攻击回调（含蓄力）；缺省 = 无战斗 */
@@ -248,11 +248,15 @@ export const createPlayerControl = (
         const rightZ = -Math.sin(yaw)
         let dx = 0
         let dz = 0
-        if (input.isActionActive('move_forward')) { dx += fwdX; dz += fwdZ }
-        if (input.isActionActive('move_backward')) { dx -= fwdX; dz -= fwdZ }
+        /** 前后输入（前 +1 / 后 -1）：用于把镜头俯仰分量折算为游泳上浮 / 下潜意图 */
+        let fwdInput = 0
+        if (input.isActionActive('move_forward')) { dx += fwdX; dz += fwdZ; fwdInput += 1 }
+        if (input.isActionActive('move_backward')) { dx -= fwdX; dz -= fwdZ; fwdInput -= 1 }
         if (input.isActionActive('move_left')) { dx -= rightX; dz -= rightZ }
         if (input.isActionActive('move_right')) { dx += rightX; dz += rightZ }
-        move(dx, dz, input.wasActionPressed('jump'), fwdX, fwdZ, input.wasActionPressed('roll'))
+        /* 镜头前向的垂直分量 = -sin(pitch)：抬头（pitch<0）为正 → 前游上浮、低头前游下潜 */
+        const swimLift = fwdInput * (-Math.sin(pitch))
+        move(dx, dz, input.wasActionPressed('jump'), fwdX, fwdZ, input.wasActionPressed('roll'), swimLift)
 
         /* 持握模式切换（默认 Ctrl）：isActionActive 走最长组合遮蔽，
          * Ctrl+S / Ctrl+O 按下时该动作被更长组合覆盖，不会误触发切换 */

@@ -14,7 +14,7 @@ type EntityGroup = typeof ENTITY_GROUPS[number]
 const TYPE_GROUPS: Record<EntityType, EntityGroup> = {
     character: 'character',
     'box': 'box',
-    'area/water': 'area',
+    'area': 'area',
     terrain: 'terrain',
     'building_generator': 'building',
     'fragment/common': 'fragment',

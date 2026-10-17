@@ -80,7 +80,7 @@ type CoreLocale = {
 
     /* ── 生成类型选择 ── */
     'spawn.box': string
-    'spawn.area_water': string
+    'spawn.area': string
     'spawn.character': string
     'spawn.terrain': string
     'spawn.building': string
@@ -193,6 +193,16 @@ type CoreLocale = {
     'panel.fragment_count': string
     'panel.material': string
     'panel.traits': string
+    'panel.shape': string
+    'panel.shape_kind': string
+    'panel.shape.box': string
+    'panel.shape.sphere': string
+    'panel.shape.cylinder': string
+    'panel.fields': string
+    'panel.drag': string
+    'panel.flow_speed': string
+    'panel.direction': string
+    'panel.accel': string
 }
 
 /** 完整语言表：核心键 + 各领域文案域（各域独立文件维护，避免单文件膨胀） */

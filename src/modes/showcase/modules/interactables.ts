@@ -96,8 +96,8 @@ export const interactablesModule: ShowcaseModule = {
         const followPoint = new Vector3(0, INTERACTABLE_CAMERA_TARGET_Y, PLAYER_SPAWN_Z)
         const playerControl = createPlayerControl(stage.camera, host.renderer.domElement, {
             getTarget: () => followPoint,
-            move: (dx, dz, jump, forwardX, forwardZ, roll) =>
-                characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll),
+            move: (dx, dz, jump, forwardX, forwardZ, roll, swimLift) =>
+                characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll, swimLift),
             pointerActions: MOUSE_ACTIONS_BY_MODE.showcase,
             initialYaw: 0,
             initialDistance: INTERACTABLE_CAMERA_DISTANCE,

@@ -8,6 +8,7 @@ import type {CombatComponent} from '../../../character/combat/types.ts'
 import type {ShieldCoverBox} from '../../../character/weapon/constants.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from './obb.ts'
+import {obbIntersectsHurt} from './shapes.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 import type {WeaponLocalHitBox} from '../appearance/weapon_mesh.ts'
 import type {MeleeDetectBox, MeleeWeaponConfig} from '../../../character/weapon/melee_weapon.ts'
@@ -132,6 +133,35 @@ export const testAttackDetect = (
 /** 命中回调：参数为命中点世界坐标（供顿帧/相机震动等打击感系统消费） */
 export type MeleeHitCallback = (x: number, y: number, z: number) => void
 
+/** 无受击子块时的兜底命中块 id */
+const FALLBACK_HURT_BLOCK: readonly string[] = ['body']
+
+/**
+ * 武器 OBB 命中的受击子块 id 列表（无命中 = undefined）。
+ * 有受击子块时逐块检定（可同时命中多块）；无子块时回退到旧的单一身体盒（返回 ['body']）。
+ */
+const hitHurtBlocksOf = (
+    weaponOBB: OBB,
+    target: CharacterEntity,
+    getFacingAngle: (id: number) => number,
+): readonly string[] | undefined => {
+    const blocks = target.hurtBlocks
+    if (blocks !== undefined && blocks.length > 0) {
+        let hit: string[] | undefined
+        for (const b of blocks) {
+            if (obbIntersectsHurt(weaponOBB, b)) {
+                if (hit === undefined) hit = []
+                hit.push(b.id)
+            }
+        }
+        return hit
+    }
+    const t = target.body.translation()
+    return obbIntersect(weaponOBB, targetHurtOBB(t, target.config.scale, getFacingAngle(target.id)))
+        ? FALLBACK_HURT_BLOCK
+        : undefined
+}
+
 /** 近战武器槽：主手 / 副手（双持）；命中窗口按槽独立开关 */
 export const MELEE_WEAPON_SLOTS = ['main', 'offhand'] as const
 export type MeleeWeaponSlot = typeof MELEE_WEAPON_SLOTS[number]
@@ -197,6 +227,7 @@ export const createMeleeExecutor = (
             /* matrixWorld 在渲染器绘制前可能滞后，先强制刷新武器子树变换 */
             group.updateMatrixWorld()
             const elements = group.matrixWorld.elements
+            const weaponOBB = obbFromTransform(elements, local.center, local.half)
             const wPos = group.getWorldPosition(_tmpVec3)
             const wx = wPos.x
             const wy = wPos.y
@@ -212,7 +243,8 @@ export const createMeleeExecutor = (
                 const tx = tTrans.x
                 const tz = tTrans.z
 
-                if (!testMeleeHit(elements, local.center, local.half, tTrans, target.config.scale, getFacingAngle(target.id))) continue
+                const hitBlocks = hitHurtBlocksOf(weaponOBB, target, getFacingAngle)
+                if (hitBlocks === undefined) continue
 
                 /* 翻滚无敌帧：不算命中 —— 不写 attackedTargets、不击退、不触发打击反馈（顿帧/震动）；
                  * 无敌结束后只要仍在命中窗口内，同一段仍可命中该目标 */
@@ -229,7 +261,7 @@ export const createMeleeExecutor = (
                 const block = target.combat.block
                 if (block !== undefined && target.combat.blocking && target.combat.guard > 0
                     && obbIntersect(
-                        obbFromTransform(elements, local.center, local.half),
+                        weaponOBB,
                         shieldCoverOBB(tTrans, target.config.scale, getFacingAngle(target.id), block.cover),
                     )) {
                     const blockedDamage = damage * block.blockDamageMultiplier
@@ -244,6 +276,7 @@ export const createMeleeExecutor = (
                         /* knockdown 击穿格挡不降级，其余降一级 */
                         impact: incomingImpact === 'knockdown' ? incomingImpact : downgradeImpact(incomingImpact),
                         poiseDamage: (segment?.poiseDamage ?? 0) * block.poiseMultiplier,
+                        hitHurtBlocks: hitBlocks,
                         ...(hasDir ? {dirX, dirZ} : {}),
                     })
                     target.combat.guard = Math.max(0, target.combat.guard - blockedDamage)
@@ -270,6 +303,7 @@ export const createMeleeExecutor = (
                     /* 冲击力 / 削韧来自当前攻击段（无段时按轻冲击、不削韧回退） */
                     impact: segment?.impact ?? 'light',
                     poiseDamage: segment?.poiseDamage ?? 0,
+                    hitHurtBlocks: hitBlocks,
                     ...(hasDir ? {dirX, dirZ} : {}),
                 })
                 combat.attackedTargets.add(target.id)
@@ -295,7 +329,7 @@ export const createMeleeExecutor = (
                     if (wt.dead) continue
                     if (combat.attackedTargets.has(wt.key)) continue
                     if (!obbIntersect(
-                        obbFromTransform(elements, local.center, local.half),
+                        weaponOBB,
                         yawOBB(wt.x, wt.y, wt.z, wt.hx, wt.hy, wt.hz, wt.yaw),
                     )) continue
 

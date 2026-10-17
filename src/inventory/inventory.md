@@ -31,8 +31,9 @@ export interface ItemDef {
     readonly weaponId?: string      // 可装备武器 → *_WEAPON_MODELS id
     readonly armorId?: string       // 可装备护甲 → 护甲预设 id
     readonly equipSlot?: EquipSlot  // 缺省由 armorId 解析
-    readonly blockType?: string     // block 类别 → 实体类型（'box' / 'area/water'）
+    readonly blockType?: string     // block 类别 → 实体类型（'box' / 'area'）
     readonly boxPreset?: BoxPresetId // 箱子物品 → 特性预设（common/destructible/burning/magnet/elastic）
+    readonly areaPreset?: AreaPresetId // 区域物品 → 材质 + 场预设（water/air/force_field）
     readonly dropSize: readonly [number, number, number]
     readonly description: string
 }

@@ -6,6 +6,7 @@ import type {SharedWorld} from '../../../physics/world.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {applyDamage, isDamageImmune} from '../../../character/combat/damage.ts'
 import {applyExplosionDamage} from '../../../character/combat/explosion.ts'
+import {segmentIntersectsHurt} from '../../../character/combat/shapes.ts'
 import {EXPLOSION_DEFAULT_IMPACT, EXPLOSION_DEFAULT_POISE_DAMAGE} from '../../../character/combat/constants.ts'
 import type {WorldDamageTarget} from '../../../character/combat/world_targets.ts'
 import {
@@ -28,6 +29,9 @@ import {
 
 /** 子弹恒不旋转的形状扫描用恒等旋转 */
 const IDENTITY_ROTATION: RapQuaternion = {x: 0, y: 0, z: 0, w: 1}
+
+/** 无受击子块时的兜底命中块 id */
+const FALLBACK_HURT_BLOCK: readonly string[] = ['body']
 
 /** 复用入参（避免逐帧分配） */
 const _sweepOrigin: RapVector3 = {x: 0, y: 0, z: 0}
@@ -412,7 +416,24 @@ export const createProjectileSystem = (
                         bulletPos.z - tp.z,
                     )
                     const dist = v3Length(_tmpVec)
-                    if (dist > PROJECTILE_HIT_RADIUS) continue
+
+                    /* 命中判定：有受击子块时按「本帧位移线段（prev→cur）× 任一子块」扫掠检测
+                     * （避免高速弹单点采样跨过较小的肢体受击块而漏判）；无则回退宽容半径 */
+                    const blocks = target.hurtBlocks
+                    let hitHurtBlocks: readonly string[] | undefined
+                    if (blocks !== undefined && blocks.length > 0) {
+                        let hit: string[] | undefined
+                        for (const b of blocks) {
+                            if (segmentIntersectsHurt(p.prevX, p.prevY, p.prevZ, bulletPos.x, bulletPos.y, bulletPos.z, b)) {
+                                if (hit === undefined) hit = []
+                                hit.push(b.id)
+                            }
+                        }
+                        hitHurtBlocks = hit
+                    } else if (dist <= PROJECTILE_HIT_RADIUS) {
+                        hitHurtBlocks = FALLBACK_HURT_BLOCK
+                    }
+                    if (hitHurtBlocks === undefined) continue
 
                     if (p.ownerAttackTendency(p.ownerFaction, target.combat.faction)) {
                         if (isDamageImmune(target.combat)) continue
@@ -478,6 +499,7 @@ export const createProjectileSystem = (
                                 skillId: 'ranged',
                                 impact: p.impact,
                                 poiseDamage: p.poiseDamage,
+                                hitHurtBlocks,
                                 ...(hasDir ? {dirX, dirZ} : {}),
                             })
 

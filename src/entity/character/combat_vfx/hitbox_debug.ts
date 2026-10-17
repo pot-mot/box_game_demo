@@ -8,6 +8,10 @@ import {
     ATTACK_DETECT_BOX_COLOR, VISION_FAN_COLOR,
 } from './constants.ts'
 import {VISION_FAN_RAY_COUNT} from '../ai/constants.ts'
+import type {WorldHurtBlock} from '../../../character/hurt_blocks.ts'
+
+/** 受击子块调试线框容量（人形 12 块，留余量） */
+const HURT_DEBUG_CAPACITY = 16
 
 /* 模块级共享的单位立方体棱线几何与材质（各实例通过 scale/matrix 调整尺寸，
  * 实体删除时只从场景移除，不销毁共享资源） */
@@ -49,6 +53,8 @@ export interface AttackHitBoxes {
     readonly offhandWeaponBox: LineSegments
     /** 受击箱线框（青）：中心 = body 位置，半长由角色 scale 决定，随朝向旋转 */
     readonly targetBox: LineSegments
+    /** 受击子块线框池（青）：按 entity.hurtBlocks 逐块摆位；容量 HURT_DEBUG_CAPACITY */
+    readonly hurtBoxes: LineSegments[]
     /** 攻击检测箱线框（橙）：与角色位置/朝向绑定，覆盖身前与两侧（仅近战） */
     readonly detectBox: LineSegments
     /** 远程射程圆环（橙）：半径 = weapon.range，与圆形距离出招门控同源（仅远程） */
@@ -75,6 +81,16 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
 
     const targetBox = new LineSegments(_unitEdges, _targetBoxMat)
     const detectBox = new LineSegments(_unitEdges, _detectBoxMat)
+
+    /* 受击子块线框池（青色，与 targetBox 同材质）：逐块矩阵驱动 */
+    const hurtBoxes: LineSegments[] = []
+    for (let i = 0; i < HURT_DEBUG_CAPACITY; i++) {
+        const box = new LineSegments(_unitEdges, _targetBoxMat)
+        box.matrixAutoUpdate = false
+        box.visible = false
+        scene.add(box)
+        hurtBoxes.push(box)
+    }
     /* 射程圆环与检测箱同为「AI 出招触发区」语义，共用橙色材质 */
     const rangeRing = new LineLoop(_ringGeo, _detectBoxMat)
 
@@ -103,6 +119,7 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
         weaponBox,
         offhandWeaponBox,
         targetBox,
+        hurtBoxes,
         detectBox,
         rangeRing,
         visionFan,
@@ -115,6 +132,7 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
             scene.remove(detectBox)
             scene.remove(rangeRing)
             scene.remove(visionFan)
+            for (const box of hurtBoxes) scene.remove(box)
             visionGeo.dispose()
         },
     }
@@ -134,4 +152,30 @@ export const syncWeaponDebugBox = (
     _localScale.set(localHalf.x * 2, localHalf.y * 2, localHalf.z * 2)
     _localMat.compose(_localPos, _identityQuat, _localScale)
     box.matrix.copy(matrixWorld).multiply(_localMat)
+}
+
+/**
+ * 用受击块世界变换（中心 + 三轴）装配单位棱线矩阵，使线框与判定形状一致（盒精确；球/柱用包围尺寸近似）。
+ * 设置 visible 由调用方在本帧统一处理（未使用到的线框由 world.ts 隐藏）。
+ */
+export const syncHurtDebugBox = (box: LineSegments, b: WorldHurtBlock): void => {
+    let sx: number
+    let sy: number
+    let sz: number
+    if (b.kind === 'box') {
+        sx = b.half.x * 2; sy = b.half.y * 2; sz = b.half.z * 2
+    } else if (b.kind === 'sphere') {
+        sx = b.radius * 2; sy = b.radius * 2; sz = b.radius * 2
+    } else {
+        sx = b.radius * 2; sy = b.halfHeight * 2; sz = b.radius * 2
+    }
+    const a0 = b.axes[0]
+    const a1 = b.axes[1]
+    const a2 = b.axes[2]
+    box.matrix.set(
+        a0.x * sx, a1.x * sy, a2.x * sz, b.center.x,
+        a0.y * sx, a1.y * sy, a2.y * sz, b.center.y,
+        a0.z * sx, a1.z * sy, a2.z * sz, b.center.z,
+        0, 0, 0, 1,
+    )
 }

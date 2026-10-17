@@ -1,6 +1,7 @@
 import type {StateHandler} from '../types.ts'
-import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY, STATE_FLIP_MIN_TIME} from '../constants.ts'
+import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY, STATE_FLIP_MIN_TIME, SWIM_ENTER_FLUID} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlopeAtSpeed, applySlopeSink} from '../ground.ts'
+import {fluidFractionOf} from '../fluid.ts'
 import {canStartAttack} from '../../combat/attack_runtime.ts'
 import {moveSpeedOf} from '../../types.ts'
 
@@ -28,6 +29,11 @@ export const walkingHandler: StateHandler = {
     },
     exit: () => {},
     transitions: [
+        {
+            /* 入水：浸没时切换游泳 */
+            to: 'swimming',
+            guard: (_input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID,
+        },
         {
             to: 'interacting',
             guard: (input, entity) => input.interact && entity.interactTargetActive === true,

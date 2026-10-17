@@ -1,4 +1,5 @@
 import type {Group, Mesh} from 'three'
+import {CapsuleGeometry, Mesh as ThreeMesh, MeshBasicMaterial} from 'three'
 import type {Skeleton} from '../../../skeleton/skeleton.ts'
 import {
     createHeadBoxPart,
@@ -10,11 +11,15 @@ import {
 import type {BonePartBinding, SkeletonAppearance} from '../../skeleton/appearance.ts'
 import {PRESET_PART_SIZES} from '../skeleton/preset.ts'
 import {HAND_HEIGHT_RATIO} from '../skeleton/constants.ts'
+import {MODEL_BASE_HEIGHT, MODEL_BASE_WIDTH} from '../../../render/constants.ts'
+import {COLLIDER_MESH_OPACITY} from '../render/constants.ts'
 
 /** 方块人外观装配结果：通用外观 + 关节 id → 部件（供模型字段暴露，如躯干/头/手） */
 export interface CharacterAppearance extends SkeletonAppearance {
     /** 关节 id → 该关节上挂载的部件（每个关节至多一个） */
     readonly jointParts: ReadonlyMap<string, TrackedBoxPart>
+    /** 上/下半身物理碰撞块的半胶囊可视化 mesh（edit 模式显示，随碰撞节点变换） */
+    readonly colliderMeshes: readonly Mesh[]
 }
 
 /**
@@ -79,12 +84,36 @@ export const assembleCharacterAppearance = (
     mount('leftLegHip', 'leftThigh', s.legW, s.thighH, s.legD, 'leg')
     mount('leftLegKnee', 'leftShin', s.legW * 0.85, s.shinH, s.legD * 0.85, 'leg')
 
+    /* 上/下半身物理碰撞块的半胶囊可视化（挂到碰撞节点组；仅调试层，play 模式由 world 隐藏） */
+    const colliderMeshes: Mesh[] = []
+    {
+        const radius = MODEL_BASE_WIDTH / 2
+        const halfHalfHeight = (MODEL_BASE_HEIGHT / 2 - radius) / 2
+        for (const jointId of ['lowerBodyCollider', 'upperBodyCollider']) {
+            const group = groups.get(jointId)
+            if (group === undefined) continue
+            const mesh = new ThreeMesh(
+                new CapsuleGeometry(radius, halfHalfHeight * 2, 6, 12),
+                new MeshBasicMaterial({color: 0x888888, transparent: true, opacity: COLLIDER_MESH_OPACITY, depthWrite: false}),
+            )
+            mesh.userData.colliderDebug = true
+            group.add(mesh)
+            colliderMeshes.push(mesh)
+        }
+    }
+
     const cleanup = (): void => {
         for (const {part} of parts) disposeBoxPart(part)
         parts.splice(0)
+        for (const mesh of colliderMeshes) {
+            mesh.removeFromParent()
+            mesh.geometry.dispose()
+            if (mesh.material instanceof MeshBasicMaterial) mesh.material.dispose()
+        }
+        colliderMeshes.length = 0
     }
 
-    return {boneParts, jointParts, partMeshes, cleanup}
+    return {boneParts, jointParts, partMeshes, colliderMeshes, cleanup}
 }
 
 /** 按骨骼段两端关节实际距离缩放部件（面板/IK/拖拽修改后调用）；零长段保留基准形态。

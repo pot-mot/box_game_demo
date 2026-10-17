@@ -51,7 +51,7 @@ const worldNormalY = (hit: Intersection<Object3D>): number => {
 
 /**
  * mesh 后端：把障碍 / 地面 / 角色 mesh 列表封装为 NavRayCaster（单测 / 无物理世界场景使用）。
- * 命中目标 = 地面 mesh + 障碍 mesh（调用方保证障碍列表已排除 area/）。
+ * 命中目标 = 地面 mesh + 障碍 mesh（调用方保证障碍列表已排除区域 area）。
  */
 export const createMeshNavRayCaster = (
     obstacleMeshesGetter: () => readonly Object3D[],

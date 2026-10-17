@@ -1,5 +1,5 @@
 import type {BoxConfig, BoxEntityContext, CollisionRecord} from '../entity/box/types'
-import type {WaterBlockConfig, WaterEntityContext} from '../entity/area/water/types'
+import type {AreaConfig, AreaEntityContext} from '../entity/area/types'
 import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/types'
 import type {BuildingGeneratorContext, BuildingWorldSaveData} from '../entity/building_generator/types/index.ts'
 import type {InteractableConfig, InteractableContext} from '../entity/interactable/types.ts'
@@ -26,8 +26,11 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  v11 起 character 增加行为原点策略 originStrategy、漫游间隔 originInterval、追击半径 chaseLeashRadius（均可选，旧档安全回退默认）；
  * v12 起 character 增加基础攻击加成 baseAttack（可选，旧档安全回退 0/0）；
  * v13 起 5 种箱子变体（box/common、box/destruction、box/burning、box/magnet、box/elasticity）合并为统一 `box` 实体
- *  （`config` 携带可选特性对象），旧的 `box/*` 元素在加载时作为未知类型按元素粒度跳过 */
-export const SAVE_FORMAT_VERSION = 13
+ *  （`config` 携带可选特性对象），旧的 `box/*` 元素在加载时作为未知类型按元素粒度跳过；
+ * v14 起 `area/water` 统一为 `area` 实体（`config` 携带几何 + 视觉材质 + 可选物理场），
+ *  旧的 `area/water` 元素在加载时作为未知类型按元素粒度跳过。
+ */
+export const SAVE_FORMAT_VERSION = 14
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -69,9 +72,9 @@ export interface SavableBox {
     }
 }
 
-export interface SavableWaterBlock {
-    type: 'area/water'
-    config: WaterBlockConfig
+export interface SavableArea {
+    type: 'area'
+    config: AreaConfig
     position: Vec3JSON
     quaternion: QuatJSON
 }
@@ -120,7 +123,7 @@ export interface SavableItem {
     quaternion: QuatJSON
 }
 
-export type SavableEntity = SavableBox | SavableWaterBlock | SavableTerrain
+export type SavableEntity = SavableBox | SavableArea | SavableTerrain
     | SavableFragment | SavableBuildingGenerator | SavableInteractable | SavableItem | SavableCharacter
 
 // ── 角色 ──
@@ -253,7 +256,7 @@ export interface SaveLoadSource {
 /** EntityType → 具体 Context 类型的强类型映射 */
 export type EntitySourceMap = {
     'box': BoxEntityContext
-    'area/water': WaterEntityContext
+    'area': AreaEntityContext
     'fragment/common': FragmentEntityContext
     'character': CharacterEntitySystem
     'terrain': TerrainContext

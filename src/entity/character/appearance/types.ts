@@ -1,5 +1,6 @@
 import type {Group, Mesh} from 'three'
 import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
+import type {TrackedBoxPart} from '../../../render/box_parts.ts'
 import type {AttackPhaseName} from '../../../character/combat/attack_phases.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
@@ -23,6 +24,13 @@ export interface WeaponEquipConfig {
 /** 方块人外观模型，暴露所有关节 pivot 供动画系统直接操纵 */
 export interface CharacterModel {
     readonly group: Group
+
+    /** 关节 id → 关节 Group（骨骼层级，含未挂部件的挂点 / 未来受击/物理节点） */
+    readonly jointGroups: ReadonlyMap<string, Group>
+    /** 关节 id → 该关节上挂载的部件（受击块按部件实际尺寸对齐） */
+    readonly jointParts: ReadonlyMap<string, TrackedBoxPart>
+    /** 上/下半身碰撞块的半胶囊可视化（edit 模式显示；play 模式隐藏） */
+    readonly colliderMeshes: readonly Mesh[]
 
     /** 躯干关节（髋部 pivot）：旋转带动 躯干+双臂+头（拧腰/前倾动力链） */
     readonly spine: Group

@@ -19,3 +19,10 @@
 ## 文档
 
 - [bone_animation/待机.md](./bone_animation/待机.md)、[bone_animation/受击硬直.md](./bone_animation/受击硬直.md)
+
+## 水（游泳 / 漂浮）
+
+- 新增状态 `swimming`（对应 walking）/ `floating`（对应 idle），由 `entity.environment.fluidFraction`（area 的 `float` 场逐帧写入）滞回判定：`SWIM_ENTER_FLUID` 进、`SWIM_EXIT_FLUID` 出。`idle`/`walking`/`jumping`/`falling` 的转换守卫**置顶**入水转换（有输入→swimming，无→floating），彻底消除水体中因流体拖拽悬空而永续 `falling`。
+- `floating`：水平阻尼趋零、**竖直保留**（由浮力场 / 拖拽决定上浮 / 下潜 / 悬浮，与 AI 一致）。`swimming`：水平沿输入以 `SWIM_SPEED_MULTIPLIER × moveSpeedOf` 游动；竖直取镜头俯仰意图 `swimLift`（玩家，经 `setPlayerMove`/`CharacterInput` 透传）或跳跃蹬水冲量，AI 传 0（回退浮力）。
+- 俯卧视觉由 `entity/character/physics/world.ts` 的根姿态分支合成（绕本地 X 轴前倾 `SWIM_PRONE_PITCH`，绕身体中心补偿），并同步让上/下半身碰撞节点前倾 → 半胶囊碰撞箱随之俯卧。
+- 水中禁战斗 / 翻滚（swimming/floating 无 attack/roll 转换）。动画：`pose_fns.ts` 的 `floatingPose`（直立踩水）/ `swimmingPose`（俯卧划水）+ `CLIP_STATES`/`CHARACTER_STATE_KEYS` + i18n。

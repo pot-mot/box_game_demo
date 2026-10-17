@@ -52,8 +52,8 @@ export const setupPlayMode = (
             cameraTarget.set(t.x, t.y, t.z)
             return cameraTarget
         },
-        move: (dx, dz, jump, forwardX, forwardZ, roll) =>
-            characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll),
+        move: (dx, dz, jump, forwardX, forwardZ, roll, swimLift) =>
+            characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll, swimLift),
         cycleHoldMode: () => characterSystem.cyclePlayerHoldMode(),
         combat: {
             onLightAttackStart: () => characterSystem.beginPlayerAttackHold('light'),

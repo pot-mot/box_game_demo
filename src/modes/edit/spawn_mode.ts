@@ -3,7 +3,7 @@ import {getInputRegistry} from '../../input/registry.ts'
 
 const SPAWN_MODES: SpawnMode[] = [
     'box',
-    'area/water',
+    'area',
     'character',
     'terrain',
     'building_generator',

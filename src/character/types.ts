@@ -1,5 +1,7 @@
 import type {Mesh, Group, LineSegments} from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
+import type {BodyEnvironment} from '../physics/environment.ts'
+import type {HurtBlockProfile, WorldHurtBlock} from './hurt_blocks.ts'
 import type {CharacterStateMachine} from './state_machine/types.ts'
 import type { CombatComponent } from './combat/types.ts'
 import type { HoldMode } from './weapon/hold_mode.ts'
@@ -41,6 +43,8 @@ export interface CharacterEntity {
     appearanceGroup: Group
     body: RAPIER.RigidBody
     mainCollider: RAPIER.Collider
+    /** 上半身半胶囊碰撞体（下半身即 mainCollider）；两半竖直拼接等价原单胶囊 */
+    upperCollider?: RAPIER.Collider
     isOnGround: boolean
     /** 地面接触法线（从地面指向角色，已归一化）。无地面接触时回退为 (0, 1, 0) */
     groundNormal: { readonly x: number; readonly y: number; readonly z: number }
@@ -107,6 +111,17 @@ export interface CharacterEntity {
     /** 交互目标世界坐标（交互时转身朝向用；无目标时保持上次值） */
     interactTargetX?: number
     interactTargetZ?: number
+
+    /**
+     * 环境场累加器：由 area 场（float / wind / gravity）逐帧写入，
+     * 由角色物理在状态机之后消费（绕开状态机的水平速度覆写）。每帧开头清零。
+     */
+    environment: BodyEnvironment
+
+    /** 受击子块定义（骨架预设提供，随角色固定；缺省 = 无子块，命中检定回退到身体盒） */
+    hurtProfile?: HurtBlockProfile
+    /** 逐帧世界化的受击子块（与 hurtProfile 等长，就地刷新；命中检定读取） */
+    hurtBlocks?: WorldHurtBlock[]
 
     stateMachine: CharacterStateMachine
 }

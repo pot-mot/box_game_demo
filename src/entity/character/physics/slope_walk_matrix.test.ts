@@ -17,6 +17,7 @@ import type {GroundState} from './ground_state.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
 import {PLAYER_CAMERA_SMOOTH_FACTOR as CAMERA_SMOOTH_FACTOR} from '../../../modes/control/constants.ts'
 import type {CharacterModel} from '../appearance/types.ts'
+import type {TrackedBoxPart} from '../../../render/box_parts.ts'
 
 const FRAMES_3600 = 3600
 const TIMEOUT = 120000
@@ -71,6 +72,9 @@ const makeJoint = (): Group => new Group()
 
 const makeModelMock = (): CharacterModel => ({
     group: new Group(),
+    jointGroups: new Map<string, Group>(),
+    jointParts: new Map<string, TrackedBoxPart>(),
+    colliderMeshes: [],
     spine: new Group(),
     headNeck: makeJoint(),
     head: new Mesh(),

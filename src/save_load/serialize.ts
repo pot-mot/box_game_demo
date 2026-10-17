@@ -102,12 +102,12 @@ export const collectWorldState = (
         }
     }
 
-    // 水体
-    const water = getSource('area/water')
-    if (water?.getAll) {
-        for (const e of water.getAll()) {
+    // 区域（几何 + 视觉材质 + 物理场；无刚体，用自身 transform）
+    const areas = getSource('area')
+    if (areas?.getAll) {
+        for (const e of areas.getAll()) {
             entities.push({
-                type: 'area/water',
+                type: 'area',
                 config: e.config,
                 position: [e.transform.x, e.transform.y, e.transform.z],
                 quaternion: [e.transform.qx, e.transform.qy, e.transform.qz, e.transform.qw],
