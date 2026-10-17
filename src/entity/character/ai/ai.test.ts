@@ -4,6 +4,7 @@ import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {createCombatComponent} from '../../../character/combat/types.ts'
 import {type CombatConfig, DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
+import {DEFAULT_ORIGIN_CONFIGS} from '../../../character/ai_strategy/origin.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {AIContext, AISetInput} from './types.ts'
@@ -59,6 +60,9 @@ const makeChar = (
         navEnabled: true,
         peaceStrategy: 'patrol' as const,
         combatStrategy,
+        originStrategy: 'resident' as const,
+        originInterval: 20,
+        chaseLeashRadius: 20,
         isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
         stateMachine: null!,
     } as unknown as CharacterEntity
@@ -69,6 +73,10 @@ const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: numb
     return {
         characterId: 0,
         spawnPoint: {x: 0, y: 0, z: 0},
+        origin: {x: 0, y: 0, z: 0},
+        originStrategy: 'resident',
+        originConfig: DEFAULT_ORIGIN_CONFIGS.resident,
+        originTimer: 0,
         losChecker: null,
         nav: createNavRunContext(true),
         navSensor: null,

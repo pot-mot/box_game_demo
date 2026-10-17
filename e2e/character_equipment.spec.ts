@@ -167,4 +167,113 @@ test.describe('角色装备与属性面板', () => {
         await expect(boxTypesLabel).toBeHidden()
         await expect(addBoxTypeBtn).toBeHidden()
     })
+
+    test('原点策略与更新间隔同排，漫游者显示间隔，下方展示当前原点坐标', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        const originSelect = panel.getByLabel(/^原点/)
+        const intervalInput = panel.getByLabel(/^更新间隔/)
+        const coordsTag = panel.locator('#origin-coords')
+
+        /* 默认居民：更新间隔隐藏，当前原点坐标行位于策略下方（AI 未激活时为空） */
+        await expect(originSelect).toHaveValue('resident')
+        await expect(intervalInput).toBeHidden()
+        await expect(coordsTag).toHaveCount(1)
+        await expect(coordsTag).toBeEmpty()
+
+        /* 切到漫游者：更新间隔与原点策略同排显示（两控件纵向中心对齐） */
+        await originSelect.selectOption('roamer')
+        await expect(intervalInput).toBeVisible()
+        const originBox = await originSelect.boundingBox()
+        const intervalBox = await intervalInput.boundingBox()
+        expect(originBox && intervalBox && Math.abs(originBox.y - intervalBox.y)).toBeLessThan(30)
+
+        /* 进入执行世界：AI 激活后原点坐标显示实际数值 */
+        await page.locator('#execute-panel button').first().click()
+        await expect(coordsTag).toContainText(/当前原点: \(-?\d+\.\d{2}, -?\d+\.\d{2}, -?\d+\.\d{2}\)/)
+    })
+
+    test('生命 / 韧性状态行：当前值 / 最大值 | (基础值 + 逐项加成) × 乘区', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        const poiseRow = panel.locator('.dc-row').filter({hasText: '基础韧性'})
+
+        /* 默认：基础韧性 20、当前韧性 20、无装备加成 → 最大值 20 */
+        await expect(panel.getByLabel(/^基础韧性/)).toHaveValue('20')
+        await expect(panel.getByLabel(/^当前韧性/)).toHaveValue('20')
+        await expect(poiseRow).toContainText(/\/ 20 \| \(基础韧性\s*\)/)
+
+        /* 装备铁盔（韧性 +2）→ 结果 22，且逐项列出来源「+ 铁盔 2」 */
+        await panel.locator('label', {hasText: '头盔'}).locator('select').selectOption('iron_helmet')
+        await expect(poiseRow).toContainText(/\/ 22 \| \(基础韧性\s+\+ 铁盔 2\s*\)/)
+
+        /* 提高基础上界（30）→ 结果 30 + 2 = 32；当前值设 12 后 Apply 回显 */
+        await panel.getByLabel(/^基础韧性/).fill('30')
+        await expect(poiseRow).toContainText(/\/ 32 \| \(基础韧性\s+\+ 铁盔 2\s*\)/)
+        await panel.getByLabel(/^当前韧性/).fill('12')
+        await panel.locator('button', {hasText: '应用'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel').getByLabel(/^基础韧性/)).toHaveValue('30')
+        await expect(page.locator('#character-panel').getByLabel(/^当前韧性/)).toHaveValue('12')
+        await expect(page.locator('#character-panel .dc-row').filter({hasText: '基础韧性'})).toContainText(/\/ 32 \| \(基础韧性\s+\+ 铁盔 2\s*\)/)
+    })
+
+    test('当前韧性超过有效上界时被夹取（不再出现基础 20 / 当前 30）', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        /* 铁盔 +2 → 有效上界 22；基础值仍为 20 */
+        await panel.locator('label', {hasText: '头盔'}).locator('select').selectOption('iron_helmet')
+        await panel.locator('button', {hasText: '应用'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+
+        await page.locator('#character-panel').getByLabel(/^当前韧性/).fill('30')
+        await page.locator('#character-panel button', {hasText: '应用'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel').getByLabel(/^基础韧性/)).toHaveValue('20')
+        await expect(page.locator('#character-panel').getByLabel(/^当前韧性/)).toHaveValue('22')
+    })
+
+    test('攻击属性行：结果 | (基础值 + 主手武器伤害 + 装备攻击加成)', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        const atkPhysRow = panel.locator('.dc-row').filter({hasText: '基础物攻'})
+
+        /* 默认长剑（dmg 3）+ 基础物攻 0 → 结果 3，逐项列出武器来源 */
+        await expect(atkPhysRow).toContainText(/3 \| \(基础物攻\s+\+ 长剑 3\s*\)/)
+
+        /* 改基础物攻为 1 → 结果 4 */
+        await panel.getByLabel(/^基础物攻/).fill('1')
+        await expect(atkPhysRow).toContainText(/4 \| \(基础物攻\s+\+ 长剑 3\s*\)/)
+
+        /* 战臂甲提供物攻 +2 → 结果 6，追加装备来源；Apply 后回显基础物攻 */
+        await panel.locator('label', {hasText: '臂甲'}).locator('select').selectOption('battle_bracers')
+        await expect(atkPhysRow).toContainText(/6 \| \(基础物攻\s+\+ 长剑 3\s+\+ 战臂甲 2\s*\)/)
+        await panel.locator('button', {hasText: '应用'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel').getByLabel(/^基础物攻/)).toHaveValue('1')
+    })
+
+    test('执行期间动态字段实时刷新：面板内聚焦不再冻结坐标更新', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        /* 位置 X 为面板首个数值输入 */
+        const posX = panel.locator('input.dc-input').first()
+        const before = await posX.inputValue()
+
+        /* 将焦点置于面板内另一输入框：旧实现会因焦点在面板内而冻结全部实时刷新 */
+        await panel.getByLabel(/^当前韧性/).click()
+        /* 程序化触发 Execute（不改变焦点，焦点仍留在面板内） */
+        await page.evaluate(() => {
+            const btn = document.querySelector<HTMLButtonElement>('#execute-panel button')
+            btn?.click()
+        })
+
+        /* AI 巡逻 + 重力使坐标变化 → 面板输入实时跟随 */
+        await expect.poll(async () => posX.inputValue(), {timeout: 8000}).not.toBe(before)
+    })
 })

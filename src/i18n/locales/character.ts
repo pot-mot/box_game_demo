@@ -85,9 +85,9 @@ export type CharacterLocale = {
     'character.section.ai': string
     'character.section.build': string
     'character.facing': string
-    'character.speed': string
-    'character.jump_height': string
-    'character.scale': string
+    'character.base_move_speed': string
+    'character.base_jump_height': string
+    'character.base_scale': string
     'character.handedness': string
     'character.faction': string
     'character.tendency': string
@@ -103,13 +103,16 @@ export type CharacterLocale = {
     'character.bullet_speed': string
     'character.bullet_knockback': string
     'character.bullet_life': string
-    'character.max_hp': string
+    'character.base_hp': string
     'character.cur_hp': string
-    'character.poise': string
+    'character.base_poise': string
+    'character.cur_poise': string
     'character.poise_regen_delay': string
     'character.poise_regen_rate': string
     'character.knockdown_duration': string
     'character.get_up_duration': string
+    'character.base_atk_phys': string
+    'character.base_atk_magic': string
     'character.base_def_phys': string
     'character.base_def_magic': string
     'character.build_interval': string
@@ -140,9 +143,6 @@ export type CharacterLocale = {
     'character.tag.atk_magic': (n: string) => string
     'character.tag.move_speed': (n: string) => string
     'character.armor_desc': (name: string, tags: string) => string
-    'character.preview_defense': (phys: string, magic: string) => string
-    'character.preview_attack': (phys: string, magic: string) => string
-    'character.preview_move': (total: string, base: string, equip: string) => string
     'character.idle': string
     'character.tendency.hostile_all': string
     'character.tendency.hostile_except_self': string
@@ -156,6 +156,14 @@ export type CharacterLocale = {
     'character.combat.tactical': string
     'character.combat.aggressive': string
     'character.combat.cowardly': string
+    'character.origin_label': string
+    'character.origin.resident': string
+    'character.origin.fighter': string
+    'character.origin.hunter': string
+    'character.origin.roamer': string
+    'character.origin.interval': string
+    'character.origin.current': string
+    'character.chase_radius_label': string
     'character.field.entity_type': string
     'character.field.probability': string
     'character.field.min_w': string
@@ -260,9 +268,9 @@ export const characterZh: CharacterLocale = {
     'character.section.ai': 'AI 策略',
     'character.section.build': '建造配置',
     'character.facing': '朝向°',
-    'character.speed': '速度',
-    'character.jump_height': '跳跃高',
-    'character.scale': '体型',
+    'character.base_move_speed': '基础移速',
+    'character.base_jump_height': '基础跳跃高',
+    'character.base_scale': '基础体型',
     'character.handedness': '惯用手',
     'character.faction': '阵营',
     'character.tendency': '倾向',
@@ -278,13 +286,16 @@ export const characterZh: CharacterLocale = {
     'character.bullet_speed': '弹速',
     'character.bullet_knockback': '击退',
     'character.bullet_life': '存活',
-    'character.max_hp': '最大生命',
+    'character.base_hp': '基础生命',
     'character.cur_hp': '当前生命',
-    'character.poise': '韧性',
+    'character.base_poise': '基础韧性',
+    'character.cur_poise': '当前韧性',
     'character.poise_regen_delay': '韧性延迟',
     'character.poise_regen_rate': '韧性回复',
     'character.knockdown_duration': '倒地时长',
     'character.get_up_duration': '起身时长',
+    'character.base_atk_phys': '基础物攻',
+    'character.base_atk_magic': '基础魔攻',
     'character.base_def_phys': '基础物防',
     'character.base_def_magic': '基础魔防',
     'character.build_interval': '间隔(秒)',
@@ -315,9 +326,6 @@ export const characterZh: CharacterLocale = {
     'character.tag.atk_magic': (n) => `魔攻+${n}`,
     'character.tag.move_speed': (n) => `移速×${n}`,
     'character.armor_desc': (name, tags) => `${name}（${tags}）`,
-    'character.preview_defense': (phys, magic) => `有效防御：物 ${phys} / 魔 ${magic}`,
-    'character.preview_attack': (phys, magic) => `攻击加成：物 ${phys} / 魔 ${magic}`,
-    'character.preview_move': (total, base, equip) => `有效移速：${total}（基础 ${base} × 装备 ${equip}）`,
     'character.idle': '待机',
     'character.tendency.hostile_all': '敌对全部',
     'character.tendency.hostile_except_self': '敌对除自身外',
@@ -331,6 +339,14 @@ export const characterZh: CharacterLocale = {
     'character.combat.tactical': '战术（默认）',
     'character.combat.aggressive': '激进',
     'character.combat.cowardly': '怯懦',
+    'character.origin_label': '原点策略',
+    'character.origin.resident': '居民',
+    'character.origin.fighter': '战斗者',
+    'character.origin.hunter': '狩猎者',
+    'character.origin.roamer': '漫游者',
+    'character.origin.interval': '更新间隔(秒)',
+    'character.origin.current': '当前原点',
+    'character.chase_radius_label': '追击半径',
     'character.field.entity_type': '实体类型',
     'character.field.probability': '概率',
     'character.field.min_w': '最小宽',
@@ -432,9 +448,9 @@ export const characterEn: CharacterLocale = {
     'character.section.ai': 'AI Strategy',
     'character.section.build': 'Build Config',
     'character.facing': 'Facing°',
-    'character.speed': 'Speed',
-    'character.jump_height': 'JumpH',
-    'character.scale': 'Scale',
+    'character.base_move_speed': 'Base Spd',
+    'character.base_jump_height': 'Base JumpH',
+    'character.base_scale': 'Base Scale',
     'character.handedness': 'Handed',
     'character.faction': 'Faction',
     'character.tendency': 'Tendency',
@@ -450,13 +466,16 @@ export const characterEn: CharacterLocale = {
     'character.bullet_speed': 'BulSpd',
     'character.bullet_knockback': 'BulKnock',
     'character.bullet_life': 'BulLife',
-    'character.max_hp': 'MaxHP',
+    'character.base_hp': 'BaseHP',
     'character.cur_hp': 'CurHP',
-    'character.poise': 'Poise',
+    'character.base_poise': 'BasePoise',
+    'character.cur_poise': 'CurPoise',
     'character.poise_regen_delay': 'PoiseDelay',
     'character.poise_regen_rate': 'PoiseRegen',
     'character.knockdown_duration': 'Knockdown(s)',
     'character.get_up_duration': 'GetUp(s)',
+    'character.base_atk_phys': 'Base Phys Atk',
+    'character.base_atk_magic': 'Base Magic Atk',
     'character.base_def_phys': 'Base Phys Def',
     'character.base_def_magic': 'Base Magic Def',
     'character.build_interval': 'Interval(s)',
@@ -487,9 +506,6 @@ export const characterEn: CharacterLocale = {
     'character.tag.atk_magic': (n) => `MAtk+${n}`,
     'character.tag.move_speed': (n) => `Spd×${n}`,
     'character.armor_desc': (name, tags) => `${name} (${tags})`,
-    'character.preview_defense': (phys, magic) => `Effective defense: phys ${phys} / magic ${magic}`,
-    'character.preview_attack': (phys, magic) => `Attack bonus: phys ${phys} / magic ${magic}`,
-    'character.preview_move': (total, base, equip) => `Effective speed: ${total} (base ${base} × gear ${equip})`,
     'character.idle': 'Idle',
     'character.tendency.hostile_all': 'Hostile All',
     'character.tendency.hostile_except_self': 'Hostile Except Self',
@@ -503,6 +519,14 @@ export const characterEn: CharacterLocale = {
     'character.combat.tactical': 'Tactical (default)',
     'character.combat.aggressive': 'Aggressive',
     'character.combat.cowardly': 'Cowardly',
+    'character.origin_label': 'Origin',
+    'character.origin.resident': 'Resident',
+    'character.origin.fighter': 'Fighter',
+    'character.origin.hunter': 'Hunter',
+    'character.origin.roamer': 'Roamer',
+    'character.origin.interval': 'Interval (s)',
+    'character.origin.current': 'Current origin',
+    'character.chase_radius_label': 'Chase radius',
     'character.field.entity_type': 'EntityType',
     'character.field.probability': 'Probability',
     'character.field.min_w': 'Min W',

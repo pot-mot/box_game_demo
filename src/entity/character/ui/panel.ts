@@ -16,11 +16,12 @@ import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.t
 import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {ARMOR_SLOTS, ARMOR_SLOT_LABELS, LIMB_SLOTS, LIMB_SLOT_LABELS, type ArmorSlot, type LimbSlot} from '../../../character/armor/slots.ts'
-import {armorPiecesOfSlot, armorPieceDisplayName, findArmorPreset, findLimbPreset, limbPiecesOfSlot, resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf} from '../../../character/armor/catalog.ts'
+import {armorPiecesOfSlot, armorPieceDisplayName, attackTermsOf, defenseTermsOf, findArmorPreset, findLimbPreset, limbPiecesOfSlot, moveSpeedTermsOf, poiseTermsOf, resolveArmorLoadout, resolveLimbLoadout, type StatTerm} from '../../../character/armor/catalog.ts'
 import type {ArmorLoadout, ArmorPieceConfig, LimbLoadout, LimbPieceConfig} from '../../../character/armor/types.ts'
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
+import type {DamageType, DamageTypeProfile} from '../../../character/combat/damage_type.ts'
 import {DAMAGE_TYPE_LABELS} from '../../../character/combat/damage_type.ts'
-import {isPeaceSubStrategy, isCombatSubStrategy, PEACE_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType} from '../../../character/ai_strategy/types.ts'
+import {isPeaceSubStrategy, isCombatSubStrategy, isOriginSubStrategy, PEACE_SUB_STRATEGIES, ORIGIN_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType, type OriginSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {LockPointConfig} from '../../../character/lock_point.ts'
 import {CHARACTER_JOINT_IDS} from '../appearance/clips/base_clips.ts'
 import {buildCharacterSkeletonDefinition, humanoidJointDisplayName} from '../skeleton/preset.ts'
@@ -57,6 +58,14 @@ const WEAPON_GROUP_LABEL_MELEE: StringLocaleKey = 'character.weapon_group_melee'
 const WEAPON_GROUP_LABEL_SHIELD: StringLocaleKey = 'character.weapon_group_shield'
 /** 远程武器名（optgroup 标签） */
 const WEAPON_GROUP_LABEL_RANGED: StringLocaleKey = 'character.weapon_group_ranged'
+
+/** 行为原点策略 → 下拉项文案 */
+const ORIGIN_LABELS: Record<OriginSubStrategy, StringLocaleKey> = {
+    resident: 'character.origin.resident',
+    fighter: 'character.origin.fighter',
+    hunter: 'character.origin.hunter',
+    roamer: 'character.origin.roamer',
+}
 
 /** 武器预设 → 下拉项文案（远程附带模式标记，便于区分特殊弹道） */
 const describeWeapon = (w: WeaponConfig): string => {
@@ -133,6 +142,40 @@ interface AttackFields {
 
 /** 数字转输入框文本（避免 3.0000000000000004 之类的浮点尾巴） */
 const formatNumber = (value: number): string => String(Number(value.toFixed(4)))
+
+/** 逐项数值来源文本（`名称 数值`） */
+const renderStatTerm = (term: StatTerm): string => `${term.name} ${formatNumber(term.value)}`
+
+/**
+ * 属性 / 状态行的公式登记：基础值输入 + 加值 / 乘区取值 + 只读文本节点。
+ * 展示形态「结果 | (基础值 + 逐项加值) × 逐项乘区」：结果在前，公式拆解逐项列出来源。
+ */
+interface StatFormula {
+    readonly base: HTMLInputElement
+    /** 加值项来源（防御 / 攻击 / 韧性等，逐项列出） */
+    readonly addends: () => readonly StatTerm[]
+    /** 乘区项来源（移速乘数等，逐项列出） */
+    readonly multipliers: () => readonly StatTerm[]
+    /** 结果文本（属性行 = 最终值；状态行 = 最大值） */
+    readonly head: HTMLElement
+    /** 加值文本节点（` + 名称 数值 …`，无来源时为空） */
+    readonly addendSpan: HTMLElement
+    /** 乘区文本节点（` × 名称 数值 …`，无来源时为空） */
+    readonly mulSpan: HTMLElement
+}
+
+/** 渲染一行只读公式：结果 + `(基础值 + 逐项加值) × 逐项乘区`（前缀括号 / 分隔符由行内静态文本提供） */
+const renderStatFormula = (entry: StatFormula): void => {
+    const addends = entry.addends()
+    const multipliers = entry.multipliers()
+    const base = parseFloat(entry.base.value)
+    let result = isNaN(base) ? 0 : base
+    for (const term of addends) result += term.value
+    for (const term of multipliers) result *= term.value
+    entry.head.textContent = formatNumber(result)
+    entry.addendSpan.textContent = addends.length > 0 ? ` + ${addends.map(renderStatTerm).join(' + ')}` : ''
+    entry.mulSpan.textContent = multipliers.length > 0 ? ` × ${multipliers.map(renderStatTerm).join(' × ')}` : ''
+}
 
 /** 装备（护甲 / 肢体）预设 → 下拉项文案：列出非零的防御 / 攻击加成与移速修正（无修正时只显示名称） */
 const describeArmorPiece = (piece: ArmorPieceConfig | LimbPieceConfig): string => {
@@ -247,9 +290,6 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const facingDeg = createLabeledNumberInput(el, 'character.facing', {min: '0', max: '360', step: '1', value: '0'})
 
     el.appendChild(createSection('panel.config'))
-    const speed = createLabeledNumberInput(el, 'character.speed', {min: '0.1', step: '0.1', value: '6'})
-    const jumpH = createLabeledNumberInput(el, 'character.jump_height', {min: '0.1', step: '0.1', value: '2'})
-    const scale = createLabeledNumberInput(el, 'character.scale', {min: '0.1', step: '0.1', value: '1'})
 
     /* 惯用手：右撇子（默认）/ 左撇子（主副手槽位互换 + 动作与外观镜像） */
     const handednessLabel = document.createElement('label')
@@ -447,29 +487,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         el.appendChild(row)
     }
 
-    /* 属性模块：生命、基础防御与装备数值预览（有效防御 / 攻击加成 / 有效移速） */
+    /* 属性模块：状态类（生命 / 韧性）与属性类（攻击 / 防御 / 移速 / 跳跃高度 / 体型）排成公式行。
+       展示形态「结果 | (基础值 + 逐项加值) × 逐项乘区」：结果在前，公式拆解逐项列出来源（如装备名）。
+       每行只可编辑「当前值 / 基础值」输入框，加值 / 乘区 / 结果均为基于当前装备选择实时计算的只读文本。 */
     el.appendChild(createSection('character.section.attributes'))
-    const maxHP = createLabeledNumberInput(el, 'character.max_hp', {min: '1', step: '1', value: '15'})
-    const curHP = createLabeledNumberInput(el, 'character.cur_hp', {min: '0', step: '1', value: '15'})
-    const baseDefPhys = createLabeledNumberInput(el, 'character.base_def_phys', {min: '0', step: '1', value: '0'})
-    const baseDefMagic = createLabeledNumberInput(el, 'character.base_def_magic', {min: '0', step: '1', value: '0'})
-    /* 韧性 / 倒地属性：上界基础值 + 受击后延迟回充参数 + 倒地/起身时长。
-       逐项包在块级容器内——`createLabeledNumberInput` 追加的是行内 `label`，若连续直接挂在
-       面板根上会排成一行，其宽度之和会撑大面板（属性段原有 4 项已接近满宽，再加 5 项会遮住左侧实体列表）。 */
-    const blockRow = (): HTMLDivElement => {
-        const row = document.createElement('div')
-        el.appendChild(row)
-        return row
-    }
-    const poiseMaxInput = createLabeledNumberInput(blockRow(), 'character.poise', {min: '1', step: '1', value: '20'})
-    const poiseRegenDelayInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_delay', {min: '0', step: '0.1', value: '1'})
-    const poiseRegenRateInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_rate', {min: '0', step: '1', value: '8'})
-    const knockdownDurationInput = createLabeledNumberInput(blockRow(), 'character.knockdown_duration', {min: '0', step: '0.1', value: '0.7'})
-    const getUpDurationInput = createLabeledNumberInput(blockRow(), 'character.get_up_duration', {min: '0', step: '0.1', value: '0.6'})
-    const equipmentPreviewTag = document.createElement('div')
-    equipmentPreviewTag.className = 'dc-hint'
-    equipmentPreviewTag.style.cssText = 'margin-bottom:4px;white-space:pre-line'
-    el.appendChild(equipmentPreviewTag)
 
     /** 读取当前护甲选择（空 value = 空槽） */
     const readArmorLoadout = (): ArmorLoadout => {
@@ -491,36 +512,167 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         return loadout
     }
 
+    /* 当前选择解析后的护甲 / 肢体（公式的加值取值口径，与运行时 setCombatEquipment 一致） */
+    const resolvedArmor = (): ReturnType<typeof resolveArmorLoadout> => resolveArmorLoadout(readArmorLoadout())
+    const resolvedLimb = (): ReturnType<typeof resolveLimbLoadout> => resolveLimbLoadout(readLimbLoadout())
+
+    /** 主手武器对指定攻击类别的加值项（武器伤害仅计入其固有攻击类别） */
+    const weaponAttackTerms = (category: DamageType): StatTerm[] => {
+        const weapon = selectedWeaponOf(weaponSelect)
+        if (weapon === undefined || weapon.damageType !== category || weapon.damage <= 0) return []
+        return [{name: weaponDisplayName(weapon.id, weapon.name), value: weapon.damage}]
+    }
+
+    /** 属性 / 状态行公式登记表 */
+    const statFormulas: StatFormula[] = []
+    /* 每个数值组独立成块级行：行内 `label` 连排会撑宽面板遮住左侧实体列表；允许换行以适配窄面板 */
+    const formulaRow = (): HTMLDivElement => {
+        const row = document.createElement('div')
+        row.className = 'dc-row'
+        row.style.cssText = 'flex-wrap:wrap'
+        el.appendChild(row)
+        return row
+    }
+    /** 在行内追加只读文本片段（公式括号 / 分隔符等），与输入框同字号 / 同前景色 */
+    const formulaText = (row: HTMLElement, text: string): HTMLSpanElement => {
+        const span = document.createElement('span')
+        span.className = 'dc-formula'
+        span.textContent = text
+        row.appendChild(span)
+        return span
+    }
+    /** 追加只读空文本节点（结果 / 加值 / 乘区），内容由 renderStatFormula 填充 */
+    const formulaSlot = (row: HTMLElement): HTMLSpanElement => {
+        const span = document.createElement('span')
+        span.className = 'dc-formula'
+        row.appendChild(span)
+        return span
+    }
+    /** 属性类行前缀：结果槽 + ` | (`（随后由 createLabeledNumberInput 追加基础值输入） */
+    const openAttributeRow = (row: HTMLElement): HTMLSpanElement => {
+        const head = formulaSlot(row)
+        formulaText(row, ' | (')
+        return head
+    }
+    /** 状态类行前缀：` / ` + 最大值结果槽 + ` | (` */
+    const openStateRow = (row: HTMLElement): HTMLSpanElement => {
+        formulaText(row, ' / ')
+        const head = formulaSlot(row)
+        formulaText(row, ' | (')
+        return head
+    }
+    /** 行后缀：加值槽 + `)` + 乘区槽（置于基础值输入之后） */
+    const closeFormulaRow = (row: HTMLElement): {addendSpan: HTMLSpanElement; mulSpan: HTMLSpanElement} => {
+        const addendSpan = formulaSlot(row)
+        formulaText(row, ')')
+        const mulSpan = formulaSlot(row)
+        return {addendSpan, mulSpan}
+    }
+    /** 登记一行公式：装备 / 武器 / 基础值变更时重算；语言切换自动重译（来源名随语言更新） */
+    const registerFormula = (
+        row: HTMLElement,
+        base: HTMLInputElement,
+        addends: () => readonly StatTerm[],
+        multipliers: () => readonly StatTerm[],
+        head: HTMLElement,
+        tail: {addendSpan: HTMLElement; mulSpan: HTMLElement},
+    ): void => {
+        const entry: StatFormula = {base, addends, multipliers, head, addendSpan: tail.addendSpan, mulSpan: tail.mulSpan}
+        statFormulas.push(entry)
+        localizeApply(row, () => { renderStatFormula(entry) })
+    }
+
+    /* 生命：当前值 / 最大值 | (基础值 + 加值) × 乘区（角色暂无装备生命加成：加值 / 乘区为空） */
+    const hpRow = formulaRow()
+    const curHP = createLabeledNumberInput(hpRow, 'character.cur_hp', {min: '0', step: '1', value: '15'})
+    const hpHead = openStateRow(hpRow)
+    const maxHP = createLabeledNumberInput(hpRow, 'character.base_hp', {min: '1', step: '1', value: '15'})
+    registerFormula(hpRow, maxHP, () => [], () => [], hpHead, closeFormulaRow(hpRow))
+
+    /* 韧性：当前值 / 最大值 | (基础值 + 装备韧性加值) × 乘区 */
+    const poiseRow = formulaRow()
+    const poiseInput = createLabeledNumberInput(poiseRow, 'character.cur_poise', {min: '0', step: '1', value: '20'})
+    const poiseHead = openStateRow(poiseRow)
+    const poiseMaxInput = createLabeledNumberInput(poiseRow, 'character.base_poise', {min: '1', step: '1', value: '20'})
+    registerFormula(poiseRow, poiseMaxInput, () => poiseTermsOf(resolvedArmor(), resolvedLimb()), () => [], poiseHead, closeFormulaRow(poiseRow))
+
+    /* 攻击：结果 | (基础值 + 主手武器伤害 + 装备攻击加成) × 乘区（逐类别一行） */
+    const atkPhysRow = formulaRow()
+    const atkPhysHead = openAttributeRow(atkPhysRow)
+    const baseAtkPhys = createLabeledNumberInput(atkPhysRow, 'character.base_atk_phys', {min: '0', step: '1', value: '0'})
+    registerFormula(atkPhysRow, baseAtkPhys, () => [...weaponAttackTerms('physical'), ...attackTermsOf('physical', resolvedArmor(), resolvedLimb())], () => [], atkPhysHead, closeFormulaRow(atkPhysRow))
+    const atkMagicRow = formulaRow()
+    const atkMagicHead = openAttributeRow(atkMagicRow)
+    const baseAtkMagic = createLabeledNumberInput(atkMagicRow, 'character.base_atk_magic', {min: '0', step: '1', value: '0'})
+    registerFormula(atkMagicRow, baseAtkMagic, () => [...weaponAttackTerms('magic'), ...attackTermsOf('magic', resolvedArmor(), resolvedLimb())], () => [], atkMagicHead, closeFormulaRow(atkMagicRow))
+
+    /* 防御：结果 | (基础值 + 装备防御加值) × 乘区（逐类别一行） */
+    const defPhysRow = formulaRow()
+    const defPhysHead = openAttributeRow(defPhysRow)
+    const baseDefPhys = createLabeledNumberInput(defPhysRow, 'character.base_def_phys', {min: '0', step: '1', value: '0'})
+    registerFormula(defPhysRow, baseDefPhys, () => defenseTermsOf('physical', resolvedArmor(), resolvedLimb()), () => [], defPhysHead, closeFormulaRow(defPhysRow))
+    const defMagicRow = formulaRow()
+    const defMagicHead = openAttributeRow(defMagicRow)
+    const baseDefMagic = createLabeledNumberInput(defMagicRow, 'character.base_def_magic', {min: '0', step: '1', value: '0'})
+    registerFormula(defMagicRow, baseDefMagic, () => defenseTermsOf('magic', resolvedArmor(), resolvedLimb()), () => [], defMagicHead, closeFormulaRow(defMagicRow))
+
+    /* 移速：结果 | (基础值) × 装备移速乘区（装备为乘数而非加值） */
+    const speedRow = formulaRow()
+    const speedHead = openAttributeRow(speedRow)
+    const speed = createLabeledNumberInput(speedRow, 'character.base_move_speed', {min: '0.1', step: '0.1', value: '6'})
+    registerFormula(speedRow, speed, () => [], () => moveSpeedTermsOf(resolvedArmor(), resolvedLimb()), speedHead, closeFormulaRow(speedRow))
+
+    /* 跳跃高度 / 体型：结果 = 基础值（无加值 / 乘区） */
+    const jumpRow = formulaRow()
+    const jumpHead = openAttributeRow(jumpRow)
+    const jumpH = createLabeledNumberInput(jumpRow, 'character.base_jump_height', {min: '0.1', step: '0.1', value: '2'})
+    registerFormula(jumpRow, jumpH, () => [], () => [], jumpHead, closeFormulaRow(jumpRow))
+    const scaleRow = formulaRow()
+    const scaleHead = openAttributeRow(scaleRow)
+    const scale = createLabeledNumberInput(scaleRow, 'character.base_scale', {min: '0.1', step: '0.1', value: '1'})
+    registerFormula(scaleRow, scale, () => [], () => [], scaleHead, closeFormulaRow(scaleRow))
+
+    /** 重算所有公式行的只读文本（装备 / 武器选择 / 基础值输入变更时调用） */
+    const refreshStatFormulas = (): void => {
+        for (const entry of statFormulas) renderStatFormula(entry)
+    }
+
+    /* 韧性 / 倒地属性：受击后延迟回充参数 + 倒地/起身时长（逐项独立成块级行，避免行内连排撑宽面板） */
+    const blockRow = (): HTMLDivElement => {
+        const row = document.createElement('div')
+        el.appendChild(row)
+        return row
+    }
+    const poiseRegenDelayInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_delay', {min: '0', step: '0.1', value: '1'})
+    const poiseRegenRateInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_rate', {min: '0', step: '1', value: '8'})
+    const knockdownDurationInput = createLabeledNumberInput(blockRow(), 'character.knockdown_duration', {min: '0', step: '0.1', value: '0.7'})
+    const getUpDurationInput = createLabeledNumberInput(blockRow(), 'character.get_up_duration', {min: '0', step: '0.1', value: '0.6'})
+
+    /* 装备 / 武器下拉与基础值输入变更即时重算公式（武器决定攻击行的加值项） */
+    for (const slot of ARMOR_SLOTS) armorSelects[slot].onchange = refreshStatFormulas
+    for (const slot of LIMB_SLOTS) limbSelects[slot].onchange = refreshStatFormulas
+    weaponSelect.addEventListener('change', refreshStatFormulas)
+    offhandSelect.addEventListener('change', refreshStatFormulas)
+    for (const entry of statFormulas) entry.base.addEventListener('input', refreshStatFormulas)
+
     /** 读取基础防御（负值/空值安全回退 0） */
     const readBaseDefense = (): DefenseProfile => ({
         physical: Math.max(0, parseFloat(baseDefPhys.value) || 0),
         magic: Math.max(0, parseFloat(baseDefMagic.value) || 0),
     })
 
-    /** 装备数值预览：复用目录汇总函数（与运行时 setCombatEquipment 同一口径）：有效防御 / 攻击加成 / 有效移速 */
-    const buildEquipmentPreview = (): string => {
-        const resolvedArmor = resolveArmorLoadout(readArmorLoadout())
-        const resolvedLimb = resolveLimbLoadout(readLimbLoadout())
-        const defense = totalDefenseOf(readBaseDefense(), resolvedArmor, resolvedLimb)
-        const attack = totalAttackOf(resolvedArmor, resolvedLimb)
-        const moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
-        const baseSpeed = parseFloat(speed.value) || 0
-        return [
-            translate({key: 'character.preview_defense', args: [formatNumber(defense.physical), formatNumber(defense.magic)]}),
-            translate({key: 'character.preview_attack', args: [formatNumber(attack.physical), formatNumber(attack.magic)]}),
-            translate({key: 'character.preview_move', args: [formatNumber(baseSpeed * moveSpeedMultiplier), formatNumber(baseSpeed), formatNumber(moveSpeedMultiplier)]}),
-        ].join('\n')
+    /** 读取基础攻击加成（负值/空值安全回退 0） */
+    const readBaseAttack = (): DamageTypeProfile => ({
+        physical: Math.max(0, parseFloat(baseAtkPhys.value) || 0),
+        magic: Math.max(0, parseFloat(baseAtkMagic.value) || 0),
+    })
+
+    /* 动态字段（坐标 / 朝向 / 当前生命 / 当前韧性）：逐帧实时同步运行时状态；
+       用户一旦编辑即标记为「待应用」，在 Apply 或重新渲染前跳过刷新，避免覆盖尚未提交的输入 */
+    const dirtyDynamic = new Set<HTMLInputElement>()
+    for (const input of [posX, posY, posZ, facingDeg, curHP, poiseInput]) {
+        input.addEventListener('input', () => dirtyDynamic.add(input))
     }
-    const updateEquipmentPreview = (): void => {
-        equipmentPreviewTag.textContent = buildEquipmentPreview()
-    }
-    /* 预览文本随语言切换重译（复用同一计算口径） */
-    localizeApply(equipmentPreviewTag, el => { el.textContent = buildEquipmentPreview() })
-    for (const slot of ARMOR_SLOTS) armorSelects[slot].onchange = updateEquipmentPreview
-    for (const slot of LIMB_SLOTS) limbSelects[slot].onchange = updateEquipmentPreview
-    baseDefPhys.oninput = updateEquipmentPreview
-    baseDefMagic.oninput = updateEquipmentPreview
-    speed.oninput = updateEquipmentPreview
 
     /* 锁定点区：默认身体中心点（不可编辑）+ 可增删改的关节锁定点（关节 id + 关节本地偏移） */
     el.appendChild(createSection('character.section.lock_points'))
@@ -645,6 +797,40 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     combatRow.appendChild(combatLabel)
     el.appendChild(combatRow)
 
+    /* 行为原点策略下拉框 + 漫游者更新间隔（同处一行） */
+    const originRow = document.createElement('div')
+    originRow.className = 'dc-row'
+    const originLabel = document.createElement('label')
+    originLabel.className = 'dc-label'
+    appendLocalizedText(originLabel, 'character.origin_label')
+    originLabel.appendChild(document.createTextNode(' '))
+    const originSelect = document.createElement('select')
+    originSelect.className = 'dc-select'
+    for (const s of ORIGIN_SUB_STRATEGIES) {
+        const o = document.createElement('option')
+        o.value = s
+        localizeText(o, ORIGIN_LABELS[s])
+        originSelect.appendChild(o)
+    }
+    originLabel.appendChild(originSelect)
+    originRow.appendChild(originLabel)
+    /* 更新间隔与原点策略同排（仅 roamer 策略可见，隐藏时仅收起该 label 而非整行） */
+    const originIntervalInput = createLabeledNumberInput(originRow, 'character.origin.interval', {min: '1', step: '1', value: '20'})
+    el.appendChild(originRow)
+
+    /* 当前行为原点坐标（只读展示：随策略迁移实时刷新） */
+    const originCoordsTag = document.createElement('div')
+    originCoordsTag.id = 'origin-coords'
+    originCoordsTag.className = 'dc-hint'
+    originCoordsTag.style.cssText = 'margin-bottom:4px;white-space:pre-line'
+    el.appendChild(originCoordsTag)
+
+    /* 追击活动半径输入 */
+    const chaseRadiusRow = document.createElement('div')
+    chaseRadiusRow.className = 'dc-row'
+    el.appendChild(chaseRadiusRow)
+    const chaseRadiusInput = createLabeledNumberInput(chaseRadiusRow, 'character.chase_radius_label', {min: '0', step: '1', value: '20'})
+
     /* 导航感知开关 */
     const navRow = document.createElement('div')
     navRow.className = 'dc-row'
@@ -705,11 +891,23 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         if (!show) detailPanel.style.display = 'none'
     }
 
+    /* 原点策略区显隐：玩家隐藏整组；漫游者间隔仅 roamer 策略展示；原点坐标随之显隐 */
+    const applyOriginVisibility = (originStrategy: string, isPlayer: boolean): void => {
+        originRow.style.display = isPlayer ? 'none' : ''
+        originIntervalInput.parentElement!.style.display = (!isPlayer && originStrategy === 'roamer') ? '' : 'none'
+        originCoordsTag.style.display = isPlayer ? 'none' : ''
+        chaseRadiusInput.parentElement!.style.display = isPlayer ? 'none' : ''
+    }
+
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
 
     peaceSelect.onchange = () => {
         applyBuildVisibility(peaceSelect.value, playerCheck.checked)
+    }
+
+    originSelect.onchange = () => {
+        applyOriginVisibility(originSelect.value, playerCheck.checked)
     }
 
     /** 远程弹道数值仅在所选武器为远程时显示（近战打击距离由武器几何驱动） */
@@ -891,22 +1089,40 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         refreshBoxTypeList()
     }
 
-    /** 仅刷新位置/朝向字段（gizmo 拖拽/物理模拟后调用） */
-    const refreshPositionValues = (): void => {
-        /* 输入框聚焦中不刷新，避免覆盖用户输入 */
-        if (el.contains(document.activeElement)) return
+    /** 刷新当前行为原点坐标展示（玩家或 AI 未激活时留空） */
+    const refreshOriginValue = (sel: CharacterEntity | undefined): void => {
+        const origin = sel ? ctx.getOrigin?.(sel.id) : undefined
+        originCoordsTag.textContent = origin
+            ? `${translate('character.origin.current')}: (${origin.x.toFixed(2)}, ${origin.y.toFixed(2)}, ${origin.z.toFixed(2)})`
+            : ''
+    }
+
+    /** 逐帧刷新动态字段：仅跳过当前聚焦的输入框，其余实时同步运行时状态（坐标 / 朝向 / 当前生命 / 当前韧性 / 原点） */
+    const refreshLiveValues = (): void => {
         const sel = getSelected()
-        if (!sel) return
-        posX.value = sel.mesh.position.x.toFixed(2)
-        posY.value = sel.mesh.position.y.toFixed(2)
-        posZ.value = sel.mesh.position.z.toFixed(2)
-        facingDeg.value = String(Math.round(ctx.getFacing?.(sel.id) ?? 0))
+        if (!sel) {
+            originCoordsTag.textContent = ''
+            return
+        }
+        const focus = document.activeElement
+        const setIfUnfocused = (input: HTMLInputElement, value: string): void => {
+            if (input !== focus && !dirtyDynamic.has(input)) input.value = value
+        }
+        setIfUnfocused(posX, sel.mesh.position.x.toFixed(2))
+        setIfUnfocused(posY, sel.mesh.position.y.toFixed(2))
+        setIfUnfocused(posZ, sel.mesh.position.z.toFixed(2))
+        setIfUnfocused(facingDeg, String(Math.round(ctx.getFacing?.(sel.id) ?? 0)))
+        setIfUnfocused(curHP, formatNumber(sel.combat.health))
+        setIfUnfocused(poiseInput, formatNumber(sel.combat.poise))
+        refreshOriginValue(sel)
     }
 
     /** 刷新全部配置字段（仅 render 时调用一次） */
     const refreshFullConfig = (): void => {
         const sel = getSelected()
         if (!sel) return
+        /* 重新回显即清除「待应用」标记：面板显示值与运行时状态重新对齐 */
+        dirtyDynamic.clear()
 
         speed.value = String(sel.config.speed)
         jumpH.value = String(sel.config.jumpHeight)
@@ -958,12 +1174,15 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         }
         baseDefPhys.value = formatNumber(sel.combat.baseDefense.physical)
         baseDefMagic.value = formatNumber(sel.combat.baseDefense.magic)
+        baseAtkPhys.value = formatNumber(sel.combat.baseAttack.physical)
+        baseAtkMagic.value = formatNumber(sel.combat.baseAttack.magic)
         poiseMaxInput.value = formatNumber(sel.combat.basePoiseMax)
+        poiseInput.value = formatNumber(sel.combat.poise)
         poiseRegenDelayInput.value = formatNumber(sel.combat.poiseRegenDelay)
         poiseRegenRateInput.value = formatNumber(sel.combat.poiseRegenPerSec)
         knockdownDurationInput.value = formatNumber(sel.combat.knockdownDuration)
         getUpDurationInput.value = formatNumber(sel.combat.getUpDuration)
-        updateEquipmentPreview()
+        refreshStatFormulas()
 
         /* 额外锁定点回显（默认身体中心点固定，不在此列表） */
         cachedLockPoints = sel.lockPoints.map((point): LockPointEditRow => ({
@@ -976,11 +1195,16 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         peaceSelect.value = sel.peaceStrategy
         combatSelect.value = sel.combatStrategy
         navCheck.checked = sel.navEnabled
+        originSelect.value = sel.originStrategy
+        originIntervalInput.value = formatNumber(sel.originInterval)
+        chaseRadiusInput.value = formatNumber(sel.chaseLeashRadius)
         aiSection.style.display = sel.isPlayer ? 'none' : ''
         peaceRow.style.display = sel.isPlayer ? 'none' : ''
         combatRow.style.display = sel.isPlayer ? 'none' : ''
         navRow.style.display = sel.isPlayer ? 'none' : ''
         applyBuildVisibility(sel.peaceStrategy, sel.isPlayer)
+        applyOriginVisibility(sel.originStrategy, sel.isPlayer)
+        refreshOriginValue(sel)
         showRanged()
         showCharge()
     }
@@ -992,7 +1216,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             container.appendChild(el)
             el.style.display = 'block'
 
-            refreshPositionValues()
+            refreshLiveValues()
             refreshFullConfig()
 
             const onApply = () => {
@@ -1013,6 +1237,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 combatRow.style.display = isPlayer ? 'none' : ''
                 navRow.style.display = isPlayer ? 'none' : ''
                 applyBuildVisibility(peaceSelect.value, isPlayer)
+                applyOriginVisibility(originSelect.value, isPlayer)
                 ctx.setNavEnabled?.(cur.id, navCheck.checked)
                 const peaceStrat = peaceSelect.value
                 if (isPeaceSubStrategy(peaceStrat)) {
@@ -1022,6 +1247,15 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (isCombatSubStrategy(combatStrat)) {
                     ctx.setCombatStrategy?.(cur.id, combatStrat)
                 }
+                /* 行为原点策略：切换时按策略复位原点（见 world.setOriginStrategy） */
+                const originStrat = originSelect.value
+                if (isOriginSubStrategy(originStrat)) {
+                    ctx.setOriginStrategy?.(cur.id, originStrat)
+                }
+                const originInterval = parseFloat(originIntervalInput.value)
+                if (!isNaN(originInterval) && originInterval > 0) ctx.setOriginInterval?.(cur.id, originInterval)
+                const chaseRadius = parseFloat(chaseRadiusInput.value)
+                if (!isNaN(chaseRadius) && chaseRadius > 0) ctx.setChaseLeashRadius?.(cur.id, chaseRadius)
                 /* 持久化建造配置 */
                 if (peaceStrat === 'build') {
                     const boxTypes = cachedBoxTypes
@@ -1082,6 +1316,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 /* 副手武器：空选择 = 卸下（null）；否则按所选武器（数值取预设，可后续扩展覆写） */
                 const selectedOffhand = selectedOffhandWeapon()
                 const newOffhand: AttackConfig | null = selectedOffhand === undefined ? null : {weaponId: selectedOffhand.id}
+                /* 护甲 / 肢体装备在本次 Apply 中读取一次，供防御重算与韧性上界换算共用 */
+                const armorLoadout = readArmorLoadout()
+                const limbLoadout = readLimbLoadout()
                 /* 韧性属性（可选）：非法输入不写入，保留运行时原值 */
                 const poiseCfg: Partial<CharacterConfig> = {}
                 const parseOpt = (v: string): number | undefined => {
@@ -1107,9 +1344,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     ...poiseCfg,
                 }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
                     baseDefense: readBaseDefense(),
-                    armor: readArmorLoadout(),
-                    limb: readLimbLoadout(),
+                    baseAttack: readBaseAttack(),
+                    armor: armorLoadout,
+                    limb: limbLoadout,
                 }, newOffhand)
+                /* 当前韧性：0..最大韧性（换装导致上界变化时由 setPoise 夹取） */
+                const poiseValue = parseFloat(poiseInput.value)
+                if (!isNaN(poiseValue)) ctx.setPoise?.(cur.id, poiseValue)
                 /* 持握模式：换装重置为默认后再按面板选择显式设置（不可用时 setHoldMode 回退默认模式） */
                 const holdValue = holdModeSelect.value
                 if (isHoldMode(holdValue)) ctx.setHoldMode?.(cur.id, holdValue)
@@ -1126,7 +1367,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (updated) {
                     maxHP.value = String(updated.combat.maxHealth)
                     curHP.value = String(updated.combat.health)
+                    baseAtkPhys.value = formatNumber(updated.combat.baseAttack.physical)
+                    baseAtkMagic.value = formatNumber(updated.combat.baseAttack.magic)
+                    poiseMaxInput.value = formatNumber(updated.combat.basePoiseMax)
+                    poiseInput.value = formatNumber(updated.combat.poise)
+                    refreshStatFormulas()
                 }
+                /* 应用后清除「待应用」标记，动态字段恢复逐帧实时刷新 */
+                dirtyDynamic.clear()
             }
 
             const onDelete = () => {
@@ -1139,6 +1387,6 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         destroy: () => {
             el.remove()
         },
-        update: refreshPositionValues,
+        update: refreshLiveValues,
     }
 }

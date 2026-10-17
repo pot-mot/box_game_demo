@@ -1,7 +1,12 @@
 import {describe, it, expect} from 'vitest'
 import {
+    attackTermsOf,
+    defenseTermsOf,
     findArmorPreset,
+    moveSpeedTermsOf,
+    poiseTermsOf,
     resolveArmorLoadout,
+    resolveLimbLoadout,
     totalAttackOf,
     totalDefenseOf,
     totalMoveSpeedOf,
@@ -83,5 +88,52 @@ describe('totalAttackOf / totalMoveSpeedOf', () => {
         })
         expect(totalMoveSpeedOf(heavy)).toBeLessThan(1)
         expect(totalMoveSpeedOf(resolveArmorLoadout({legs: 'wind_boots'}))).toBeGreaterThan(1)
+    })
+})
+
+describe('逐项数值来源（StatTerm）', () => {
+    it('防御加值仅列出非零项并带本地化名称', () => {
+        const resolved = resolveArmorLoadout({head: 'iron_helmet', chest: 'iron_plate'})
+        expect(defenseTermsOf('physical', resolved)).toEqual([
+            {name: '铁盔', value: 2},
+            {name: '铁胸甲', value: 3},
+        ])
+        /* 铁盔 / 铁胸甲均无魔法防御 → 空列表 */
+        expect(defenseTermsOf('magic', resolved)).toEqual([])
+    })
+
+    it('攻击加值按类别筛选（法师兜帽仅魔法、战臂甲仅物理）', () => {
+        const resolved = resolveArmorLoadout({head: 'mage_hood', arms: 'battle_bracers'})
+        expect(attackTermsOf('physical', resolved)).toEqual([{name: '战臂甲', value: 2}])
+        expect(attackTermsOf('magic', resolved)).toEqual([{name: '法师兜帽', value: 1}])
+    })
+
+    it('移速乘区仅列出非 1 的装备', () => {
+        const resolved = resolveArmorLoadout({chest: 'iron_plate', legs: 'swift_boots'})
+        expect(moveSpeedTermsOf(resolved)).toEqual([
+            {name: '铁胸甲', value: 0.9},
+            {name: '疾行靴', value: 1.15},
+        ])
+    })
+
+    it('肢体与护甲共用同一来源汇总（防御 / 移速 / 韧性）', () => {
+        const resolved = resolveArmorLoadout({head: 'iron_helmet'})
+        const limbs = resolveLimbLoadout({head: 'orc_head'})
+        expect(poiseTermsOf(resolved, limbs)).toEqual([{name: '铁盔', value: 2}])
+        expect(defenseTermsOf('physical', resolved, limbs)).toEqual([
+            {name: '铁盔', value: 2},
+            {name: '兽人头颅', value: 2},
+        ])
+        expect(moveSpeedTermsOf(resolved, limbs)).toEqual([
+            {name: '铁盔', value: 0.98},
+            {name: '兽人头颅', value: 0.98},
+        ])
+    })
+
+    it('空装备表返回空列表', () => {
+        expect(defenseTermsOf('physical', resolveArmorLoadout(undefined))).toEqual([])
+        expect(attackTermsOf('physical', {})).toEqual([])
+        expect(moveSpeedTermsOf({})).toEqual([])
+        expect(poiseTermsOf({})).toEqual([])
     })
 })

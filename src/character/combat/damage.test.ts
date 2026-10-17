@@ -126,6 +126,46 @@ describe('applyDamage 防御结算', () => {
     })
 })
 
+describe('applyDamage 击杀钩子', () => {
+    it('存活 → 死亡跳变时触发 onDeath 并携带 sourceId', () => {
+        const deaths: Array<number | undefined> = []
+        const target = {
+            health: 5,
+            maxHealth: 100,
+            onDamageTaken: null,
+            onDeath: (sourceId?: number) => { deaths.push(sourceId) },
+        }
+        applyDamage(target, makeEvent({sourceId: 42, baseAmount: 10, finalAmount: 10}))
+        expect(target.health).toBe(0)
+        expect(deaths).toEqual([42])
+    })
+
+    it('已死目标再次受击不重复触发 onDeath（wasAlive 守卫）', () => {
+        let deathCount = 0
+        const target = {
+            health: 0,
+            maxHealth: 100,
+            onDamageTaken: null,
+            onDeath: () => { deathCount++ },
+        }
+        applyDamage(target, makeEvent())
+        expect(deathCount).toBe(0)
+    })
+
+    it('未致死的一击不触发 onDeath', () => {
+        let deathCount = 0
+        const target = {
+            health: 50,
+            maxHealth: 100,
+            onDamageTaken: null,
+            onDeath: () => { deathCount++ },
+        }
+        applyDamage(target, makeEvent({baseAmount: 3, finalAmount: 3}))
+        expect(target.health).toBe(47)
+        expect(deathCount).toBe(0)
+    })
+})
+
 describe('防御工具函数', () => {
     it('addDamageProfiles 逐类别求和且不修改入参', () => {
         const a = {physical: 1, magic: 2}

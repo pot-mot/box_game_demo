@@ -54,7 +54,7 @@ export const applyDamage = (
         readonly hitImmunityTimer?: number
         readonly damageModifiers?: readonly DamageModifier[]
         onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
-        onDeath: (() => void) | null
+        onDeath: ((sourceId?: number) => void) | null
     },
     event: DamageEvent,
 ): DamageEvent => {
@@ -74,11 +74,13 @@ export const applyDamage = (
             finalAmount: reduceByDefense(finalEvent.finalAmount, target.defense[finalEvent.damageType]),
         }
     }
+    /* 击杀判定只在「存活 → 死亡」跳变时触发一次：尸体再次受击不重复回调 */
+    const wasAlive = target.health > 0
     target.health = Math.max(0, target.health - finalEvent.finalAmount)
     target.onDamageTaken?.(finalEvent.finalAmount, finalEvent)
 
-    if (target.health <= 0) {
-        target.onDeath?.()
+    if (target.health <= 0 && wasAlive) {
+        target.onDeath?.(finalEvent.sourceId)
     }
     return finalEvent
 }

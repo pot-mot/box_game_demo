@@ -19,7 +19,7 @@ export const initPeaceContext = (
     ctx.peaceState = 'patrol'
     ctx.peaceStateTime = 0
     ctx.peaceConfig = config
-    ctx.waypoint = {x: ctx.spawnPoint.x, y: ctx.spawnPoint.y, z: ctx.spawnPoint.z}
+    ctx.waypoint = {x: ctx.origin.x, y: ctx.origin.y, z: ctx.origin.z}
     ctx.waitTimer = 0
     ctx.buildTimer = isBuildConfig(config) ? config.buildInterval : 0
 }

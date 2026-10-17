@@ -122,6 +122,7 @@
   - 激活 `.dc-btn--active` / `.is-active`：`--dc-orange` 底或橙描边 + 金文字。
   - 禁用 `:disabled`：`--dc-text-disabled` + 降透明度，无悬停效果。
 - **输入** `.dc-input` / **下拉** `.dc-select`：`--dc-bg-3` 底、`--dc-border` 描边，聚焦时 `--dc-gold` 描边 + 微光。
+- **只读提示** `.dc-hint`：`--dc-text-mute` + 小字号；**只读公式** `.dc-formula`：与 `.dc-input` 同字号（`--dc-fs-13`）+ `--dc-text` 前景色，用于属性行结果 / 加值 / 乘区 / 括号，便于与输入值并排核对。
 - **勾选** `.dc-check`：方形、金色选中。
 - **徽章** `.dc-badge`（`--info/--warn/--danger`）：小字号、描边式，用于状态标签。
 - **列表行** `.dc-row`：悬停 `--dc-bg-3`，选中态橙描边 + `--dc-hairline`。

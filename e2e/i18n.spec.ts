@@ -79,11 +79,11 @@ test.describe('国际化', () => {
         expect(await page.locator('#character-panel select').count()).toBe(selectsBefore)
         await expect(page.locator('#character-panel label', {hasText: /^Head/}).locator('select')).toHaveCount(1)
 
-        /* 选项文案 / 装备预览 / 列表行「物·魔」短名 均随语言切换更新 */
+        /* 选项文案 / 属性公式行 / 列表行「物·魔」短名 均随语言切换更新 */
         await expect(page.locator('#character-panel #offhand-weapon-select option', {hasText: 'Long Sword'})).toHaveCount(1)
         await expect(page.locator('#character-panel option', {hasText: 'Cloth Cap'})).toHaveCount(1)
         await expect(page.locator('#character-panel option', {hasText: 'Hostile All'})).toHaveCount(1)
-        await expect(page.locator('#character-panel')).toContainText('Effective defense')
+        await expect(page.locator('#character-panel')).toContainText('Base Phys Atk')
         await expect(page.locator('#element-list-panel [data-id][data-type="character"]')).toContainText('def:Phys')
     })
 

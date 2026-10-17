@@ -11,6 +11,7 @@ import {resolveTendency} from '../../../character/faction.ts'
 import type {AttackResult} from '../../../character/combat/types.ts'
 import {createCombatComponent, setCombatEquipment, setCombatOffhand, setCombatWeapon, updateShieldBlock} from '../../../character/combat/types.ts'
 import {ZERO_PROFILE, type DefenseProfile} from '../../../character/combat/defense.ts'
+import type {DamageTypeProfile} from '../../../character/combat/damage_type.ts'
 import type {ArmorLoadout, LimbLoadout} from '../../../character/armor/types.ts'
 import {resolveArmorLoadout, resolveLimbLoadout} from '../../../character/armor/catalog.ts'
 import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/attack_runtime.ts'
@@ -28,14 +29,17 @@ import {isAirborneAttackState} from '../../../character/state_machine/states/air
 import type {CharacterState} from '../../../character/state_machine/types.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext, CombatState, PeaceState, SpawnBoxCallback} from '../ai/types.ts'
-import type {CombatSubStrategy, PeaceSubStrategy} from '../../../character/ai_strategy/types.ts'
+import type {CombatSubStrategy, PeaceSubStrategy, OriginSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
+import {DEFAULT_ORIGIN_CONFIGS, DEFAULT_ROAMER_INTERVAL} from '../../../character/ai_strategy/origin.ts'
 import {createRapierNavSensor, type NavSensor} from '../ai/nav/sensor.ts'
 import {createRapierLineOfSight, type LineOfSightChecker} from '../ai/line_of_sight.ts'
 import {createRapierLosRayCaster, createRapierNavRayCaster} from './rapier_queries.ts'
 import {createAIMachine, notifyAIDamaged, updateAI} from '../ai/machine.ts'
+import {notifyAIKill, setOriginFromCharacter} from '../ai/origin.ts'
+import {DEFAULT_CHASE_LEASH_RADIUS} from '../ai/constants.ts'
 import {processNav} from '../ai/nav/machine.ts'
 import {createCharacterMesh, updateCharacterMesh} from '../render'
 import {COLLIDER_MESH_OPACITY} from '../render/constants.ts'
@@ -199,13 +203,23 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
     getAll: () => readonly CharacterEntity[]
     setTransform: (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}) => void
-    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null) => void
+    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; baseAttack?: DamageTypeProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null) => void
     /** 设置单个角色的和平策略 */
     setPeaceStrategy: (id: number, strategy: PeaceSubStrategy) => void
     /** 设置单个角色的和平策略配置 */
     setPeaceConfig: (id: number, config: PeaceConfig) => void
     /** 设置单个角色的战斗策略 */
     setCombatStrategy: (id: number, strategy: CombatSubStrategy) => void
+    /** 设置单个角色的行为原点更新策略（切换时按策略复位原点） */
+    setOriginStrategy: (id: number, strategy: OriginSubStrategy) => void
+    /** 设置单个角色的漫游者原点更新间隔（秒） */
+    setOriginInterval: (id: number, seconds: number) => void
+    /** 设置单个角色的追击活动半径（m） */
+    setChaseLeashRadius: (id: number, radius: number) => void
+    /** 读取角色行为原点世界坐标（AI 未激活时返回 undefined；返回副本避免外部改写运行时状态） */
+    getOrigin: (id: number) => {x: number; y: number; z: number} | undefined
+    /** 设置角色当前韧性（自动夹取到 0..poiseMax，用于面板调节） */
+    setPoise: (id: number, value: number) => void
     /** 注册箱子生成回调（供 builder AI 使用） */
     registerBoxSpawner: (fn: SpawnBoxCallback) => void
     /** 设置碰撞体可视化 mesh 与攻击判定箱调试线框的可见性 */
@@ -516,6 +530,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         peaceStrategy: PeaceSubStrategy = 'patrol',
         combatStrategy: CombatSubStrategy = 'tactical',
         navEnabled: boolean = true,
+        originStrategy: OriginSubStrategy = 'resident',
+        originInterval: number = DEFAULT_ROAMER_INTERVAL,
+        chaseLeashRadius: number = DEFAULT_CHASE_LEASH_RADIUS,
     ): CharacterEntity => {
         /* 武器运行时（武器预设 + 存档数值覆写）：外观武器模型、攻击链、血量档位都由它决定 */
         const runtime = weaponRuntimeOf(attack)
@@ -602,6 +619,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             navEnabled,
             peaceStrategy,
             combatStrategy,
+            originStrategy,
+            originInterval,
+            chaseLeashRadius,
             isDying: false,
             dyingTimer: 0,
             dyingFallDirX: 0,
@@ -668,6 +688,20 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (aiCtx && entity.combat.health > 0) {
                 notifyAIDamaged(aiCtx, entity, characters, event.sourceId)
             }
+        }
+
+        /* 击杀钩子（行为原点策略）：存活 → 死亡跳变时触发一次，按击杀者原点策略迁移原点。
+         * 边界：非伤害来源 / 自伤 / 击杀者缺失或已死 / 友军误伤 → 全部跳过 */
+        entity.combat.onDeath = (sourceId) => {
+            if (sourceId === undefined || sourceId === entity.id) return
+            const killer = characters.find(c => c.id === sourceId)
+            if (!killer || killer.combat.isDead) return
+            if (!killer.combat.attackTendency(killer.combat.faction, entity.combat.faction)) return
+            const killerCtx = aiMap.get(killer.id)
+            if (!killerCtx) return
+            const vp = entity.body.translation()
+            const victimFootY = vp.y - (CHARACTER_BASE_SIZE.height * entity.config.scale) / 2
+            notifyAIKill(killerCtx, killer, {x: vp.x, y: victimFootY, z: vp.z})
         }
 
         /* 行文本占位：紧接的 refreshPlayerLabel() 会写入本地化文本并提供按需重算的 rowTextOf */
@@ -1571,9 +1605,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         for (const entity of characters) {
             if (!entity.isPlayer && !aiMap.has(entity.id)) {
                 const pos = entity.body.translation()
+                /* 原点/出生锚点统一取脚底 Y（与 origin.ts 的 setOriginFromCharacter 同源），避免策略迁移后 Y 语义不一致 */
+                const originY = pos.y - originToCenterY(entity.config)
                 const ctx = createAIMachine(
                     entity,
-                    pos.x, pos.y, pos.z,
+                    pos.x, originY, pos.z,
                     losChecker,
                     DEFAULT_PEACE_CONFIGS[entity.peaceStrategy],
                     entity.combatStrategy,
@@ -1593,6 +1629,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     },
                     /* 视线扇形门控用的实时朝向（findNearestEnemy 每帧读取） */
                     () => facingAngles.get(entity.id) ?? 0,
+                    entity.originStrategy,
+                    entity.originInterval,
                 )
                 if (boxSpawner) ctx.spawnBox = boxSpawner
                 if (navSensor) ctx.navSensor = navSensor
@@ -1637,11 +1675,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const offhandAttack = saveConfig.offhand !== undefined && isKnownWeaponId(saveConfig.offhand.weaponId)
             ? saveConfig.offhand
             : undefined
-        const entity = spawnEntity(cfg, saveConfig.attack, offhandAttack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true)
+        const entity = spawnEntity(cfg, saveConfig.attack, offhandAttack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true, saveConfig.originStrategy ?? 'resident', saveConfig.originInterval ?? DEFAULT_ROAMER_INTERVAL, saveConfig.chaseLeashRadius ?? DEFAULT_CHASE_LEASH_RADIUS)
         /* 持握模式：存档支持时应用，武器不支持时 setHoldMode 回退默认模式（不抛错） */
         if (saveConfig.holdMode !== undefined) setHoldMode(entity.id, saveConfig.holdMode)
-        /* 防御 / 护甲 / 肢体：旧档缺字段回退零防御空装备；未知 id 由 resolve*Loadout 安全剔除 */
-        setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {}, saveConfig.limb ?? {})
+        /* 防御 / 攻击 / 护甲 / 肢体：旧档缺字段回退零防御零攻击空装备；未知 id 由 resolve*Loadout 安全剔除 */
+        setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {}, saveConfig.limb ?? {}, saveConfig.baseAttack ?? ZERO_PROFILE)
         /* 载入即回满韧性（poiseMax 已含装备汇总） */
         entity.combat.poise = entity.combat.poiseMax
         /* 额外锁定点：旧档缺字段回退仅默认身体中心点；非法条目由 sanitizeLockPoints 安全剔除 */
@@ -1749,7 +1787,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.lockPoints = sanitizeLockPoints(points)
     }
 
-    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null): void => {
+    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; baseAttack?: DamageTypeProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
         if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
@@ -1854,12 +1892,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.combat.tendencyConfig = newTendencyConfig
         }
         if (newEquipment) {
-            /* 基础防御 / 护甲 / 肢体变更：重算防御、攻击加成与移速并同步外观（未传项保持原值） */
+            /* 基础防御 / 基础攻击 / 护甲 / 肢体变更：重算防御、攻击加成与移速并同步外观（未传项保持原值） */
             setCombatEquipment(
                 entity.combat,
                 newEquipment.baseDefense ?? entity.combat.baseDefense,
                 newEquipment.armor ?? entity.combat.armor,
                 newEquipment.limb,
+                newEquipment.baseAttack,
             )
             const model = appearanceModels.get(entity.id)
             if (model) {
@@ -1903,6 +1942,56 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             ctx.combatConfig = DEFAULT_COMBAT_CONFIGS[strategy]
             ctx.combatBurstAttackCount = 0
         }
+    }
+
+    /** 切换行为原点策略并复位原点：roamer → 当前位置；resident / fighter / hunter → 初始锚点 */
+    const setOriginStrategy = (id: number, strategy: OriginSubStrategy): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.originStrategy = strategy
+        const ctx = aiMap.get(id)
+        if (!ctx) return
+        ctx.originStrategy = strategy
+        ctx.originConfig = DEFAULT_ORIGIN_CONFIGS[strategy]
+        ctx.originTimer = entity.originInterval > 0 ? entity.originInterval : ctx.originConfig.interval
+        if (strategy === 'roamer') {
+            setOriginFromCharacter(ctx, entity)
+        } else {
+            ctx.origin.x = ctx.spawnPoint.x
+            ctx.origin.y = ctx.spawnPoint.y
+            ctx.origin.z = ctx.spawnPoint.z
+        }
+    }
+
+    const setOriginInterval = (id: number, seconds: number): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.originInterval = seconds
+        const ctx = aiMap.get(id)
+        if (!ctx) return
+        /* 复制而非原地改共享默认对象，避免污染 DEFAULT_ORIGIN_CONFIGS */
+        ctx.originConfig = {...ctx.originConfig, interval: seconds}
+        ctx.originTimer = seconds
+    }
+
+    const setChaseLeashRadius = (id: number, radius: number): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.chaseLeashRadius = radius
+    }
+
+    /** 读取角色行为原点（返回副本）：面板据此展示当前原点坐标，AI 未激活时为 undefined */
+    const getOrigin = (id: number): {x: number; y: number; z: number} | undefined => {
+        const ctx = aiMap.get(id)
+        if (!ctx) return undefined
+        return {x: ctx.origin.x, y: ctx.origin.y, z: ctx.origin.z}
+    }
+
+    /** 设置角色当前韧性：夹取到 0..poiseMax（受击 / 回充仍由战斗系统驱动） */
+    const setPoise = (id: number, value: number): void => {
+        const entity = characters.find(c => c.id === id)
+        if (!entity) return
+        entity.combat.poise = Math.max(0, Math.min(value, entity.combat.poiseMax))
     }
 
     const setCollisionVisible = (visible: boolean): void => {
@@ -1956,6 +2045,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setPeaceStrategy,
         setPeaceConfig,
         setCombatStrategy,
+        setOriginStrategy,
+        setOriginInterval,
+        setChaseLeashRadius,
+        getOrigin,
+        setPoise,
         registerBoxSpawner,
         setCollisionVisible,
         getFacing,

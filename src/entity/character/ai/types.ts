@@ -1,5 +1,6 @@
 import type {CombatSubStrategy, CombatConfig} from '../../../character/ai_strategy/combat.ts'
 import type {PeaceConfig, PeaceSubStrategy} from '../../../character/ai_strategy/peace.ts'
+import type {OriginConfig, OriginSubStrategy} from '../../../character/ai_strategy/origin.ts'
 import type {BoxSpawnEntry} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
@@ -9,6 +10,7 @@ import type {NavRunContext, NavSensor} from './nav/types.ts'
 
 export type {CombatSubStrategy, CombatConfig}
 export type {PeaceSubStrategy, PeaceConfig}
+export type {OriginSubStrategy, OriginConfig}
 export type {CombatState}
 export type {PeaceState}
 
@@ -24,7 +26,16 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 /** AI 运行时上下文（扁平化，combat / peace 字段前缀区分） */
 export interface AIContext {
     characterId: number
+    /** 不可变初始锚点（创建时位置）：居民策略原点与策略复位用 */
     spawnPoint: {x: number; y: number; z: number}
+    /** 实时行为原点：巡逻范围 / 逃跑兜底 / 追击半径判定读它 */
+    origin: {x: number; y: number; z: number}
+    /** 行为原点更新策略 */
+    originStrategy: OriginSubStrategy
+    /** 原点策略配置（漫游者间隔） */
+    originConfig: OriginConfig
+    /** 漫游者距下次原点更新的剩余时间（秒）；和平与战斗期都递减 */
+    originTimer: number
 
     /** 共享 */
     losChecker: LineOfSightChecker | null

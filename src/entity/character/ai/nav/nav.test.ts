@@ -89,6 +89,9 @@ const createCharEntity = (
         navEnabled: true,
         peaceStrategy: 'patrol' as const,
         combatStrategy: 'tactical' as const,
+        originStrategy: 'resident' as const,
+        originInterval: 20,
+        chaseLeashRadius: 20,
         isDying: false,
         dyingTimer: 0,
         dyingFallDirX: 0,
@@ -547,6 +550,7 @@ const createCharOnBox = (boxTopY: number): CharacterEntity => {
         airborneTime: 0, groundedTime: 0, rowText: 'OnBox',
         isPlayer: false, navEnabled: true,
         peaceStrategy: 'patrol' as const, combatStrategy: 'tactical' as const,
+        originStrategy: 'resident' as const, originInterval: 20, chaseLeashRadius: 20,
         isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
         combat: createCombatStub(),
         stateMachine: {

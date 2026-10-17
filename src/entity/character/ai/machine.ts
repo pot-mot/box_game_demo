@@ -3,12 +3,15 @@ import type {CombatSubStrategy} from '../../../character/ai_strategy/combat.ts'
 import {DEFAULT_COMBAT_CONFIGS} from '../../../character/ai_strategy/combat.ts'
 import type {PeaceConfig} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
+import type {OriginSubStrategy} from '../../../character/ai_strategy/origin.ts'
+import {DEFAULT_ORIGIN_CONFIGS} from '../../../character/ai_strategy/origin.ts'
 import type {AIContext, AISetInput, AttackDetectChecker} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
-import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, VISION_FAN_RECAST_INTERVAL, VISION_FAN_ROTATE_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, CHASE_LEASH_RADIUS, COMBAT_STALL_MAX_RETRIES, COMBAT_STALL_DETOUR_DURATION, COMBAT_RETARGET_INTERVAL} from './constants.ts'
+import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, VISION_FAN_RECAST_INTERVAL, VISION_FAN_ROTATE_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, COMBAT_STALL_MAX_RETRIES, COMBAT_STALL_DETOUR_DURATION, COMBAT_RETARGET_INTERVAL} from './constants.ts'
 import {CHARACTER_BASE_SIZE} from '../constants.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
+import {updateOrigin} from './origin.ts'
 import {fleeHandler} from './combat/states/flee.ts'
 import {shouldReactiveBlock} from './combat/shield_block.ts'
 import {rerollWaypoint} from './peace/states/patrol.ts'
@@ -105,10 +108,17 @@ export const createAIMachine = (
     combatStrategy: CombatSubStrategy = 'tactical',
     attackDetectChecker?: AttackDetectChecker,
     getFacingAngle?: () => number,
+    originStrategy: OriginSubStrategy = 'resident',
+    originInterval: number = 0,
 ): AIContext => {
+    const originConfig = DEFAULT_ORIGIN_CONFIGS[originStrategy]
     const ctx: AIContext = {
         characterId: character.id,
         spawnPoint: {x: spawnX, y: spawnY, z: spawnZ},
+        origin: {x: spawnX, y: spawnY, z: spawnZ},
+        originStrategy,
+        originConfig,
+        originTimer: originInterval > 0 ? originInterval : originConfig.interval,
         losChecker,
         attackDetectChecker,
         getFacingAngle,
@@ -315,6 +325,9 @@ export const updateAI = (
 ): void => {
     if (character.combat.isDead) return
 
+    /* 行为原点更新（漫游者脱战后迁移原点；其余策略不动作） */
+    updateOrigin(dt, ctx, character)
+
     /* 每帧重置「站定瞄准」标记：战斗状态在瞄准/开火时重新置位，其余时刻朝向跟随移动方向 */
     ctx.combatAimActive = false
     /* 远程开火节流计时递减（与武器冷却共同节流） */
@@ -386,11 +399,11 @@ export const updateAI = (
     }
 
     if (ctx.activeFsm === 'combat') {
-        /* 追击活动半径：被同速目标拖离出生点过远时放弃，防止平行追到无限远 */
+        /* 追击活动半径：被同速目标拖离行为原点过远时放弃，防止平行追到无限远 */
         if (ctx.combatState === 'chase') {
             const pos = character.body.translation()
-            const leash = Math.hypot(pos.x - ctx.spawnPoint.x, pos.z - ctx.spawnPoint.z)
-            if (leash > CHASE_LEASH_RADIUS) {
+            const leash = Math.hypot(pos.x - ctx.origin.x, pos.z - ctx.origin.z)
+            if (leash > character.chaseLeashRadius) {
                 ctx.activeFsm = 'peace'
                 ctx.peaceState = 'patrol'
                 ctx.peaceStateTime = 0

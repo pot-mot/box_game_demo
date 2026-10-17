@@ -20,8 +20,9 @@ export const STALL_CHECK_TRAVEL = 0.5
 export const STALL_TIMEOUT = 2.0
 /** 战斗卡死强制放弃后的重新接敌冷却（秒），防止超时→peace→立即回 chase 的空转循环 */
 export const COMBAT_REENTRY_COOLDOWN = 3.0
-/** 追击活动半径（m）：距出生点超过该值时放弃追击，防止同速目标把角色拖向无限远 */
-export const CHASE_LEASH_RADIUS = 20
+/** 追击活动半径默认值（m）：角色属性 `CharacterEntity.chaseLeashRadius` 的默认来源，
+ * 距行为原点超过该值时放弃追击，防止同速目标把角色拖向无限远 */
+export const DEFAULT_CHASE_LEASH_RADIUS = 20
 /** combat 卡死横向绕行重试的最大次数：达到后仍卡死才放弃战斗 */
 export const COMBAT_STALL_MAX_RETRIES = 3
 /** combat 卡死重试的绕行时长（秒）：偏转方向侧向移动，打破贴脸顶牛/正面被堵 */

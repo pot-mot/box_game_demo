@@ -195,6 +195,13 @@ textarea {
     font-size: var(--dc-fs-11);
 }
 
+/* 只读公式文本（结果 / 括号 / 加值 / 乘区）：与输入框同字号、同前景色，便于核对数值 */
+.dc-formula {
+    color: var(--dc-text);
+    font-size: var(--dc-fs-13);
+    white-space: nowrap;
+}
+
 /* ══ 组件：按钮 ══ */
 
 .dc-btn {

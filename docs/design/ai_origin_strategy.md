@@ -1,6 +1,6 @@
 # AI 行为原点策略 + 可配置追击半径 设计
 
-> 状态：**设计已定案，尚未实现**。本文档是完整实施方案，落地前请先通读；实现时按「§13 实施顺序」推进，并同步更新相关模块同名文档（重点 `src/entity/character/ai/ai.md`、`src/character/character.md`、`src/save_load/save_load.md`）。
+> 状态：**已实现**（存档 v11）。本文档保留为设计决策记录；实现细节以代码与模块文档（[`src/entity/character/ai/ai.md`](../../src/entity/character/ai/ai.md)、[`src/character/character.md`](../../src/character/character.md)、[`src/save_load/save_load.md`](../../src/save_load/save_load.md)）为准。
 >
 > 面向读者：AI / 角色领域 / 战斗伤害链路 / 存档 / UI 面板 / i18n / 展示模式 相关实现者。
 
@@ -366,8 +366,8 @@ if (leash > character.chaseLeashRadius) { /* 放弃追击 → peace + 接敌冷�
 9. 测试夹具补全与新增用例。
 10. 更新 `ai.md` / `character.md` / `save_load.md` 并移除本设计文档的「尚未实现」标记（或保留归档说明）。
 
-## 13. 待办与未决
+## 13. 落地结果与未决
 
-- 命名最终确认：`hunter` / 狩猎者（备选：掠食者 / 征服者 / 拾荒者）。
-- `CHASE_LEASH_RADIUS` 常量是否更名 `DEFAULT_CHASE_LEASH_RADIUS`（仅作默认值来源）。
-- 面板数值输入的取值范围 / 步进（建议：间隔 ≥1s 步进 1；追击半径 ≥0 步进 1）。
+- 命名最终采用：`hunter` / 狩猎者。
+- `CHASE_LEASH_RADIUS` 已更名为 `DEFAULT_CHASE_LEASH_RADIUS`（仅作角色属性默认值来源）。
+- 面板数值输入：漫游间隔 `min=1 step=1`（仅接受 > 0），追击半径 `min=0 step=1`（仅接受 > 0）。

@@ -219,6 +219,37 @@ describe('validateSaveData', () => {
         }
     })
 
+    it('character 基础攻击加成 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    attack: {weaponId: 'long_sword', damage: 3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        const valid = validateSaveData(characterConfig({baseAttack: {physical: 2, magic: 1}}))
+        const e0 = valid.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.config.baseAttack).toEqual({physical: 2, magic: 1})
+        }
+
+        /* 负值 / 非对象结构：整体回退 undefined，不抛错 */
+        expect(() => validateSaveData(characterConfig({baseAttack: {physical: -1, magic: 0}}))).not.toThrow()
+        expect(() => validateSaveData(characterConfig({baseAttack: 5}))).not.toThrow()
+        const invalid = validateSaveData(characterConfig({baseAttack: 5}))
+        const e1 = invalid.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.baseAttack).toBeUndefined()
+        }
+    })
+
     it('character 肢体组件 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
         const characterConfig = (extra: Record<string, unknown>) => ({
             entities: [{
@@ -339,6 +370,50 @@ describe('validateSaveData', () => {
         if (e2.type === 'character') {
             expect(e2.config.poiseMax).toBeUndefined()
             expect(e2.config.getUpDuration).toBeUndefined()
+        }
+    })
+
+    it('character 行为原点策略 / 漫游间隔 / 追击半径 — 可选字段：合法值保留，非法值安全回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    attack: {weaponId: 'long_sword', damage: 3},
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        for (const strategy of ['resident', 'fighter', 'hunter', 'roamer'] as const) {
+            const valid = validateSaveData(characterConfig({originStrategy: strategy, originInterval: 12, chaseLeashRadius: 30}))
+            const e = valid.entities[0]
+            if (e.type === 'character') {
+                expect(e.config.originStrategy).toBe(strategy)
+                expect(e.config.originInterval).toBe(12)
+                expect(e.config.chaseLeashRadius).toBe(30)
+            }
+        }
+
+        /* 非法值（未知策略 / 非正数）：单项回退 undefined，不抛错 */
+        const invalid = validateSaveData(characterConfig({originStrategy: 'nope', originInterval: 0, chaseLeashRadius: -5}))
+        const e1 = invalid.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.originStrategy).toBeUndefined()
+            expect(e1.config.originInterval).toBeUndefined()
+            expect(e1.config.chaseLeashRadius).toBeUndefined()
+        }
+
+        /* 旧档缺字段：全部 undefined（运行时回退默认） */
+        const legacy = validateSaveData(characterConfig({}))
+        const e2 = legacy.entities[0]
+        if (e2.type === 'character') {
+            expect(e2.config.originStrategy).toBeUndefined()
+            expect(e2.config.originInterval).toBeUndefined()
+            expect(e2.config.chaseLeashRadius).toBeUndefined()
         }
     })
 

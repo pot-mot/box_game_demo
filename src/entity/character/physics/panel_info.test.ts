@@ -153,6 +153,29 @@ describe('角色 panelInfo 同步', () => {
         expect(entity.combat.moveSpeedMultiplier).toBeCloseTo(0.97 * 1.15, 6)
     })
 
+    it('add() 带基础攻击加成：有效攻击加成 = 基础攻击 + 装备加成', () => {
+        const {id} = system.add(meleeSaveConfig({
+            baseAttack: {physical: 2, magic: 3},
+            armor: {arms: 'battle_bracers'},
+        }), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+        expect(entity.combat.baseAttack).toEqual({physical: 2, magic: 3})
+        /* 战臂甲物攻 +2 → 有效物攻 2 + 2 = 4；魔法无装备加成 → 3 */
+        expect(entity.combat.attackBonus).toEqual({physical: 4, magic: 3})
+    })
+
+    it('updateCharacterConfig 修改基础攻击：写入战斗组件并与装备加成汇总', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        const entity = system.getAll().find(e => e.id === id)!
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            baseAttack: {physical: 1, magic: 4},
+            armor: {head: 'mage_hood'},
+        })
+        expect(entity.combat.baseAttack).toEqual({physical: 1, magic: 4})
+        /* 法师兜帽魔攻 +1 → 有效魔法攻击 4 + 1 = 5 */
+        expect(entity.combat.attackBonus).toEqual({physical: 1, magic: 5})
+    })
+
     it('updateCharacterConfig 装备护甲后立即重算有效防御并同步 panelInfo', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {

@@ -5,19 +5,19 @@ import {isPatrolConfig, isBuildConfig} from '../../../../../character/ai_strateg
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
-/** 重掷巡逻路点：出生点周边 patrolRadius × 0.8 半径内（建造策略用固定半径 4）。
+/** 重掷巡逻路点：行为原点周边 patrolRadius × 0.8 半径内（建造策略用固定半径 4）。
  * patrol enter / 等待换点 / 卡死恢复三处共用 */
 export const rerollWaypoint = (ctx: AIContext): void => {
     const r = isPatrolConfig(ctx.peaceConfig) ? ctx.peaceConfig.patrolRadius * 0.8 : 4
-    ctx.waypoint.x = ctx.spawnPoint.x + (Math.random() - 0.5) * r * 2
-    ctx.waypoint.z = ctx.spawnPoint.z + (Math.random() - 0.5) * r * 2
+    ctx.waypoint.x = ctx.origin.x + (Math.random() - 0.5) * r * 2
+    ctx.waypoint.z = ctx.origin.z + (Math.random() - 0.5) * r * 2
 }
 
 export const patrolHandler: PeaceStateHandler = {
     enter: (ctx, _character) => {
         const cfg = ctx.peaceConfig
         if (isPatrolConfig(cfg)) {
-            ctx.waypoint.y = ctx.spawnPoint.y
+            ctx.waypoint.y = ctx.origin.y
             rerollWaypoint(ctx)
             ctx.waitTimer = 0
         } else if (isBuildConfig(cfg)) {

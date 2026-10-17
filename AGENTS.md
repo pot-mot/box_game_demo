@@ -163,6 +163,6 @@ src/
 | 全局 i18n | [`docs/i18n.md`](docs/i18n.md) | 文案 |
 | 全局动作规范 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 调动作 |
 | 盾牌 / 格挡（设计） | [`docs/design/shield_block.md`](docs/design/shield_block.md) | 实现盾牌 / 格挡前 |
-| AI 行为原点策略（设计） | [`docs/design/ai_origin_strategy.md`](docs/design/ai_origin_strategy.md) | 实现原点策略 / 可配置追击半径前 |
+| AI 行为原点策略（设计记录，已实现） | [`docs/design/ai_origin_strategy.md`](docs/design/ai_origin_strategy.md) | 调整原点策略 / 追击半径设计前 |
 
 **扩展 AI 功能时**：阅读 [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。

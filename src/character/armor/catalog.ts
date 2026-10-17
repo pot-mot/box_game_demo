@@ -1,5 +1,5 @@
 import {addDamageProfiles, ZERO_PROFILE} from '../combat/defense.ts'
-import type {DamageTypeProfile} from '../combat/damage_type.ts'
+import type {DamageType, DamageTypeProfile} from '../combat/damage_type.ts'
 import type {DefenseProfile} from '../combat/defense.ts'
 import {ARMOR_PRESETS} from './armor_pieces.ts'
 import {LIMB_PRESETS} from './limb_pieces.ts'
@@ -21,6 +21,14 @@ import type {
 
 export {ARMOR_PRESETS} from './armor_pieces.ts'
 export {LIMB_PRESETS} from './limb_pieces.ts'
+
+/** 逐项数值来源（本地化显示名 + 该项贡献值）：供面板公式拆解逐项展示 */
+export interface StatTerm {
+    /** 来源显示名（装备名等，已本地化） */
+    readonly name: string
+    /** 该项贡献值（加值项为加成量，乘区项为乘数） */
+    readonly value: number
+}
 
 /** 护甲 / 肢体预设 id → 本地化名称键（未知 id 回退预设数据 `name`） */
 const ARMOR_NAME_KEYS: Record<string, StringLocaleKey> = {
@@ -181,3 +189,60 @@ export const totalPoiseOf = (
     }
     return total
 }
+
+/** 已装备的护甲与肢体（按槽位顺序），供逐项数值来源展示 */
+const equippedPieces = (
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): readonly (ArmorPieceConfig | LimbPieceConfig)[] => {
+    const pieces: (ArmorPieceConfig | LimbPieceConfig)[] = []
+    for (const slot of ARMOR_SLOTS) {
+        const piece = resolved[slot]
+        if (piece !== undefined) pieces.push(piece)
+    }
+    if (resolvedLimbs !== undefined) {
+        for (const slot of LIMB_SLOTS) {
+            const piece = resolvedLimbs[slot]
+            if (piece !== undefined) pieces.push(piece)
+        }
+    }
+    return pieces
+}
+
+/** 逐项防御加值来源（仅列出非零项，名称已本地化） */
+export const defenseTermsOf = (
+    category: DamageType,
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): StatTerm[] =>
+    equippedPieces(resolved, resolvedLimbs)
+        .map(piece => ({name: armorPieceDisplayName(piece), value: piece.defense[category]}))
+        .filter(term => term.value > 0)
+
+/** 逐项攻击加成来源（仅列出非零项，名称已本地化） */
+export const attackTermsOf = (
+    category: DamageType,
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): StatTerm[] =>
+    equippedPieces(resolved, resolvedLimbs)
+        .map(piece => ({name: armorPieceDisplayName(piece), value: piece.attack[category]}))
+        .filter(term => term.value > 0)
+
+/** 逐项韧性加成来源（仅列出非零项，名称已本地化） */
+export const poiseTermsOf = (
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): StatTerm[] =>
+    equippedPieces(resolved, resolvedLimbs)
+        .map(piece => ({name: armorPieceDisplayName(piece), value: piece.poise ?? 0}))
+        .filter(term => term.value > 0)
+
+/** 逐项移速乘数来源（仅列出非 1 项，名称已本地化） */
+export const moveSpeedTermsOf = (
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): StatTerm[] =>
+    equippedPieces(resolved, resolvedLimbs)
+        .map(piece => ({name: armorPieceDisplayName(piece), value: piece.moveSpeedMultiplier}))
+        .filter(term => term.value !== 1)

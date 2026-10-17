@@ -15,6 +15,7 @@ import type {AttackConfig} from '../character/archetypes.ts'
 import type {HoldMode} from '../character/weapon/hold_mode.ts'
 import type {Handedness} from '../character/handedness.ts'
 import type {DefenseProfile} from '../character/combat/defense.ts'
+import type {DamageTypeProfile} from '../character/combat/damage_type.ts'
 import type {ArmorLoadout, LimbLoadout} from '../character/armor/types.ts'
 import type {LockPointConfig} from '../character/lock_point.ts'
 
@@ -25,8 +26,10 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  v7 起 character 增加肢体组件装备 limb；
  *  v7 起新增 building_generator 实体（显式压缩体素 block 数据，均为可选字段，旧档加载时安全回退默认）；
  *  v8 起新增 interactable / item 实体与 play 背包 inventory、传送点 teleports（modeInfo.play），均为可选，旧档安全回退；
- *  v10 起 character 增加惯用手 handedness（可选，旧档安全回退右撇子） */
-export const SAVE_FORMAT_VERSION = 10
+ *  v10 起 character 增加惯用手 handedness（可选，旧档安全回退右撇子）；
+ *  v11 起 character 增加行为原点策略 originStrategy、漫游间隔 originInterval、追击半径 chaseLeashRadius（均可选，旧档安全回退默认）；
+ *  v12 起 character 增加基础攻击加成 baseAttack（可选，旧档安全回退 0/0） */
+export const SAVE_FORMAT_VERSION = 12
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -175,6 +178,8 @@ export interface CharacterSaveConfig {
     maxHealth: number
     /** 基础防御（逐攻击类别固定减伤；缺省 = 0/0，旧存档无此字段时安全回退） */
     defense?: DefenseProfile
+    /** 基础攻击加成（逐攻击类别，角色固有；缺省 = 0/0，旧存档无此字段时安全回退） */
+    baseAttack?: DamageTypeProfile
     /** 护甲装备（槽位 → 护甲 id；缺省 / 未知 id = 空槽，不抛错） */
     armor?: ArmorLoadout
     /** 肢体组件装备（槽位 → 肢体 id；缺省 / 未知 id = 默认人类肢体，不抛错） */
@@ -193,6 +198,15 @@ export interface CharacterSaveConfig {
     getUpDuration?: number
     isPlayer: boolean
     navEnabled?: boolean
+    /**
+     * 行为原点更新策略（持久化）：缺省 = resident（恒以初始原点为准）；
+     * 旧存档无此字段时安全回退，非法值加载时安全丢弃。
+     */
+    originStrategy?: 'resident' | 'fighter' | 'hunter' | 'roamer'
+    /** 漫游者原点更新间隔（秒）：缺省 = 20；旧存档无此字段时安全回退 */
+    originInterval?: number
+    /** 追击活动半径（m）：缺省 = 20；旧存档无此字段时安全回退 */
+    chaseLeashRadius?: number
 }
 
 export interface SavableCharacter {

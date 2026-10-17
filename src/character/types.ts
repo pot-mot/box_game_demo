@@ -7,8 +7,9 @@ import type { Handedness } from './handedness.ts'
 import type {LockPointConfig} from './lock_point.ts'
 import type {PeaceSubStrategy} from './ai_strategy/types.ts'
 import type {CombatSubStrategy} from './ai_strategy/types.ts'
+import type {OriginSubStrategy} from './ai_strategy/types.ts'
 
-export type {PeaceSubStrategy, CombatSubStrategy}
+export type {PeaceSubStrategy, CombatSubStrategy, OriginSubStrategy}
 
 export interface CharacterConfig {
     speed: number
@@ -65,6 +66,12 @@ export interface CharacterEntity {
     peaceStrategy: PeaceSubStrategy
     /** 战斗策略（仅非玩家角色有效，默认 tactical） */
     combatStrategy: CombatSubStrategy
+    /** 行为原点更新策略（仅非玩家角色有效，默认 resident） */
+    originStrategy: OriginSubStrategy
+    /** 漫游者原点更新间隔（秒，仅 originStrategy === 'roamer' 时有意义，默认 20） */
+    originInterval: number
+    /** 追击活动半径（m，距行为原点超出即放弃追击；默认 20） */
+    chaseLeashRadius: number
 
     /** 死亡动画计时（非持久状态） */
     isDying: boolean

@@ -7,5 +7,5 @@ export interface Damageable {
     readonly maxHealth: number
     isDead: boolean
     onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
-    onDeath: (() => void) | null
+    onDeath: ((sourceId?: number) => void) | null
 }

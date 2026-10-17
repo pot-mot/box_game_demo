@@ -1,6 +1,6 @@
 # 角色 AI 系统文档（寻路 / 索敌）
 
-> **设计中（尚未实现）**：行为原点策略（居民 / 战斗者 / 狩猎者 / 漫游者）与可配置追击半径详见 [`docs/design/ai_origin_strategy.md`](../../../../docs/design/ai_origin_strategy.md)。实现前以该设计文档为准。
+> 行为原点策略（居民 / 战斗者 / 狩猎者 / 漫游者）与可配置追击半径的设计背景见 [`docs/design/ai_origin_strategy.md`](../../../../docs/design/ai_origin_strategy.md)（已实现）。
 
 ## 约定
 
@@ -133,6 +133,9 @@ flee
 ```ts
 activeFsm: 'peace' | 'combat'
 characterId, spawnPoint, losChecker, spawnBox
+
+// 行为原点（巡逻范围 / 逃跑兜底 / 追击半径判定共用）
+origin, originStrategy, originConfig, originTimer  // spawnPoint 为不可变初始锚点
 
 // 战斗字段
 combatState, combatStateTime, combatTargetId
@@ -286,7 +289,18 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 
 **重新接敌冷却**（`combatReentryTimer`）：卡死放弃战斗后，冷却（`COMBAT_REENTRY_COOLDOWN`）耗尽前即使检测到敌人也不进入 combat，同时根治"超时 → peace → 下帧立刻回 chase"的空转循环。aggressive 的 `chaseTimeout = 0`（永不放弃追击）依赖此兜底而不会死锁。
 
-**追击活动半径**（`CHASE_LEASH_RADIUS`）：`chase` 状态下每帧检查距出生点的水平距离，超出半径即放弃战斗并进入接敌冷却。防止同速目标永远追不上时把角色拖向无限远（平行走到天边的根因之一）。
+**追击活动半径**（角色属性 `CharacterEntity.chaseLeashRadius`，默认常量 `DEFAULT_CHASE_LEASH_RADIUS`）：`chase` 状态下每帧检查距**行为原点**（`ctx.origin`）的水平距离，超出半径即放弃战斗并进入接敌冷却。防止同速目标永远追不上时把角色拖向无限远（平行走到天边的根因之一）。半径支持编辑面板逐角色配置与存档持久化。
+
+**行为原点策略**（`OriginSubStrategy`，`character/ai_strategy/`：`types.ts` / `origin.ts`；运行时 `ai/origin.ts`）：原点（`ctx.origin`）是巡逻范围、逃跑兜底方向、追击半径判定的中心，由角色属性 `originStrategy` 决定其迁移规则，独立于和平 / 战斗策略：
+
+| 策略 | 原点迁移规则 | 触发时机 |
+|------|------|------|
+| `resident`（居民，默认） | 恒为初始锚点 `spawnPoint`，不迁移 | — |
+| `fighter`（战斗者） | 击杀瞬间取**击杀者自身**脚底位置（`notifyAIKill`） | 每次成功击杀 |
+| `hunter`（狩猎者） | 击杀瞬间取**被击杀者**脚底位置 | 每次成功击杀 |
+| `roamer`（漫游者） | 取当前位置 | 脱战后首个和平帧（`originTimer` 到期时；战斗期冻结） |
+
+漫游者的 `originTimer` 在和平与战斗期**都持续倒数**，但原点写入只在 `activeFsm === 'peace'` 时发生：若战斗期间到期，脱战后首个和平帧立即以当前位置更新原点（间隔取自 `CharacterEntity.originInterval`）。击杀钩子经伤害链路的 `onDeath(sourceId)` 触发（`character/combat/damage.ts` 仅在存活 → 死亡跳变时回调一次），由 `world.ts` 校验来源（非伤害来源 / 自伤 / 击杀者已死 / 友军误伤均跳过）。切换原点策略时按规则复位原点（`world.setOriginStrategy`：resident/fighter/hunter → `spawnPoint`，roamer → 当前位置）。编辑面板中「原点策略」下拉与「更新间隔」输入同排展示（间隔仅 roamer 可见），其下方只读展示当前行为原点坐标（经 `CharacterEntitySystem.getOrigin` 读取，随策略迁移实时刷新）。
 
 **受击转战斗（仇恨）**（`notifyAIDamaged`，由 `world.ts` 的 `onDamageTaken` 回调调用）：被击中时清除接敌冷却并强制进入 combat 锁定攻击者，解决和平态被背后/视野外攻击不还手、冷却期内挨打不反应的问题。友军误伤（`attackTendency` 为 false）不强制开战；攻击者已死亡时不锁定（冷却仍被清除）。伤害回调签名透传 `DamageEvent`（`onDamageTaken(amount, event)`，`character/combat/damage.ts` + `targetable.ts`）。
 
@@ -300,7 +314,7 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 | `STALL_CHECK_TRAVEL` | `0.5` | 视为"在动"的位移阈值（m） |
 | `STALL_TIMEOUT` | `2.0` | 静止恢复触发时长（秒） |
 | `COMBAT_REENTRY_COOLDOWN` | `3.0` | 战斗放弃后重新接敌冷却（秒） |
-| `CHASE_LEASH_RADIUS` | `20` | 追击活动半径（m），距出生点超出则放弃追击 |
+| `DEFAULT_CHASE_LEASH_RADIUS` | `20` | 追击活动半径默认值（m），距行为原点超出则放弃追击；可被角色属性 `chaseLeashRadius` 覆盖 |
 | `COMBAT_STALL_MAX_RETRIES` | `3` | combat 卡死横向绕行重试上限，达上限才放弃战斗 |
 | `COMBAT_STALL_DETOUR_DURATION` | `1.0` | 卡死重试绕行脉冲时长（秒） |
 | `COMBAT_LOSE_RANGE_FACTOR` | `2` | 脱战距离滞回系数（放弃阈值 = detectionRange × 系数） |
@@ -443,9 +457,12 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 **文件**：`src/character/types.ts:40-43`
 
 ```ts
-peaceStrategy: PeaceSubStrategy   // 'patrol' | 'build'
-combatStrategy: CombatSubStrategy // 'tactical' | 'aggressive' | 'cowardly'
-combat: CombatComponent           // 阵营、技能、血量等
+peaceStrategy: PeaceSubStrategy     // 'patrol' | 'build'
+combatStrategy: CombatSubStrategy   // 'tactical' | 'aggressive' | 'cowardly'
+originStrategy: OriginSubStrategy   // 'resident' | 'fighter' | 'hunter' | 'roamer'
+originInterval: number              // 漫游者原点更新间隔（秒，默认 20）
+chaseLeashRadius: number            // 追击活动半径（m，默认 20）
+combat: CombatComponent             // 阵营、技能、血量等
 stateMachine: CharacterStateMachine // 角色动作 FSM
 ```
 

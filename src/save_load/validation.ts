@@ -249,6 +249,12 @@ const DefenseProfileSchema = z.object({
     magic: z.number().min(0).default(0),
 }).optional().catch(undefined)
 
+/* 基础攻击加成：逐攻击类别（负值非法）；非法结构整体回退 undefined（运行时零加成），不抛错 */
+const BaseAttackProfileSchema = z.object({
+    physical: z.number().min(0).default(0),
+    magic: z.number().min(0).default(0),
+}).optional().catch(undefined)
+
 /* 护甲装备表：槽位 → 护甲 id；非法结构整体回退 undefined（运行时空护甲），未知 id 由运行时回退空槽 */
 const ArmorLoadoutSchema = z.object({
     head: z.string().optional(),
@@ -292,6 +298,7 @@ const CharacterConfigInner = z.object({
     faction: z.number().default(0),
     maxHealth: z.number().positive().default(100),
     defense: DefenseProfileSchema,
+    baseAttack: BaseAttackProfileSchema,
     armor: ArmorLoadoutSchema,
     limb: LimbLoadoutSchema,
     lockPoints: LockPointsSchema,
@@ -303,6 +310,10 @@ const CharacterConfigInner = z.object({
     getUpDuration: z.number().min(0).optional().catch(undefined),
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),
+    /* 行为原点策略 / 间隔 / 追击半径：非法值安全回退 undefined（运行时用默认），不抛错 */
+    originStrategy: z.enum(['resident', 'fighter', 'hunter', 'roamer']).optional().catch(undefined),
+    originInterval: z.number().positive().optional().catch(undefined),
+    chaseLeashRadius: z.number().positive().optional().catch(undefined),
 })
 
 /** character config 默认值（供外层 .default() 使用） */

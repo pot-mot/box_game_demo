@@ -10,9 +10,9 @@ export const fleeHandler: CombatStateHandler = {
     enter: (ctx, character) => {
         const pos = character.body.translation()
 
-        /* 使用 spawn 中心作为备用逃离方向 */
-        const dx = pos.x - ctx.spawnPoint.x
-        const dz = pos.z - ctx.spawnPoint.z
+        /* 使用行为原点作为备用逃离方向 */
+        const dx = pos.x - ctx.origin.x
+        const dz = pos.z - ctx.origin.z
         const fallbackLen = Math.hypot(dx, dz)
         if (fallbackLen > 0.001) {
             v3Set(_fleeDir, dx / fallbackLen, 0, dz / fallbackLen)

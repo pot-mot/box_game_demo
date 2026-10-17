@@ -8,7 +8,7 @@ import type { ArmorLoadout, LimbLoadout } from '../armor/types.ts'
 import { resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf, totalPoiseOf } from '../armor/catalog.ts'
 import { createRollSkillRuntime, type RollSkillRuntime } from './roll_skill.ts'
 import type { DamageEvent, DamageModifier } from './damage.ts'
-import { ZERO_PROFILE, type DefenseProfile } from './defense.ts'
+import { addDamageProfiles, ZERO_PROFILE, type DefenseProfile } from './defense.ts'
 import type { DamageTypeProfile } from './damage_type.ts'
 import { FLINCH_DURATION } from './attack_phases.ts'
 import {
@@ -147,13 +147,15 @@ export interface CombatComponent {
 
     /** 基础防御（角色固有，存档持久化） */
     baseDefense: DefenseProfile
+    /** 基础攻击加成（角色固有，存档持久化；逐类别，攻击时与武器类别匹配才计入伤害） */
+    baseAttack: DamageTypeProfile
     /** 装备的护甲（槽位 → 护甲 id；缺省 = 空槽） */
     armor: ArmorLoadout
     /** 装备的肢体组件（槽位 → 肢体 id；缺省 = 默认人类肢体，纯外观 + 数值） */
     limb: LimbLoadout
     /** 有效防御 = 基础防御 + 各护甲与肢体之和；`setCombatEquipment` 统一重算，applyDamage 按伤害事件类别取用 */
     defense: DefenseProfile
-    /** 装备提供的攻击加成（逐类别；攻击时与武器类别匹配才计入伤害） */
+    /** 有效攻击加成 = 基础攻击 + 各护甲与肢体之和（攻击时与武器类别匹配才计入伤害） */
     attackBonus: DamageTypeProfile
     /** 装备提供的移速乘数（多件相乘，1 = 无修正；`moveSpeedOf` 与基础移速相乘） */
     moveSpeedMultiplier: number
@@ -176,7 +178,7 @@ export interface CombatComponent {
 
     onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
     onDamageDealt: ((amount: number) => void) | null
-    onDeath: (() => void) | null
+    onDeath: ((sourceId?: number) => void) | null
 }
 
 /**
@@ -220,22 +222,24 @@ export const updateShieldBlock = (c: CombatComponent, holdMode?: HoldMode): void
 }
 
 /**
- * 变更基础防御 / 护甲 / 肢体：校验装备表并重算有效防御、攻击加成与移速乘数
- * （未知 id 安全回退空槽，不抛错）。肢体缺省（undefined）表示保持原肢体不变。
+ * 变更基础防御 / 基础攻击 / 护甲 / 肢体：校验装备表并重算有效防御、有效攻击加成与移速乘数
+ * （未知 id 安全回退空槽，不抛错）。肢体 / 基础攻击缺省（undefined）表示保持原值不变。
  */
 export const setCombatEquipment = (
     c: CombatComponent,
     baseDefense: DefenseProfile,
     armor: ArmorLoadout,
     limb?: LimbLoadout,
+    baseAttack?: DamageTypeProfile,
 ): void => {
     c.baseDefense = baseDefense
     c.armor = armor
     if (limb !== undefined) c.limb = limb
+    if (baseAttack !== undefined) c.baseAttack = baseAttack
     const resolvedArmor = resolveArmorLoadout(c.armor)
     const resolvedLimb = resolveLimbLoadout(c.limb)
     c.defense = totalDefenseOf(baseDefense, resolvedArmor, resolvedLimb)
-    c.attackBonus = totalAttackOf(resolvedArmor, resolvedLimb)
+    c.attackBonus = addDamageProfiles(c.baseAttack, totalAttackOf(resolvedArmor, resolvedLimb))
     c.moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
     c.poiseMax = c.basePoiseMax + totalPoiseOf(resolvedArmor, resolvedLimb)
     if (c.poise > c.poiseMax) c.poise = c.poiseMax
@@ -293,6 +297,7 @@ export const createCombatComponent = (
         maxHealth,
         isDead: false,
         baseDefense: ZERO_PROFILE,
+        baseAttack: ZERO_PROFILE,
         armor: {},
         limb: {},
         defense: ZERO_PROFILE,

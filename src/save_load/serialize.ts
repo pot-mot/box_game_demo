@@ -243,8 +243,9 @@ export const collectWorldState = (
                     tendency: e.combat.tendencyConfig,
                     faction: e.combat.faction,
                     maxHealth: e.combat.maxHealth,
-                    /* 基础防御 + 护甲 + 肢体装备（旧代码读到缺字段安全回退零防御空装备） */
+                    /* 基础防御 + 基础攻击 + 护甲 + 肢体装备（旧代码读到缺字段安全回退零防御零攻击空装备） */
                     defense: e.combat.baseDefense,
+                    baseAttack: e.combat.baseAttack,
                     armor: e.combat.armor,
                     limb: e.combat.limb,
                     /* 额外锁定点（拷贝为 JSON-safe 元组；缺省 = 仅默认身体中心点） */
@@ -260,6 +261,10 @@ export const collectWorldState = (
                     getUpDuration: e.combat.getUpDuration,
                     isPlayer: e.isPlayer,
                     navEnabled: e.navEnabled,
+                    /* 行为原点策略 / 间隔 / 追击半径（写实际值；旧代码读到缺字段安全回退默认） */
+                    originStrategy: e.originStrategy,
+                    originInterval: e.originInterval,
+                    chaseLeashRadius: e.chaseLeashRadius,
                 },
                 health: e.combat.health,
                 position: [bodyPos.x, bodyPos.y - halfH, bodyPos.z],

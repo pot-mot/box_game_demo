@@ -153,7 +153,7 @@ export const applyDamage = (
         readonly invincibleTimer?: number
         readonly damageModifiers?: readonly DamageModifier[]
         onDamageTaken: ((amount: number, event: DamageEvent) => void) | null
-        onDeath: (() => void) | null
+        onDeath: ((sourceId?: number) => void) | null
     },
     event: DamageEvent,
 ): DamageEvent => {
@@ -172,9 +172,11 @@ export const applyDamage = (
             finalAmount: reduceByDefense(finalEvent.finalAmount, target.defense[finalEvent.damageType]),
         }
     }
+    /* 击杀判定只在「存活 → 死亡」跳变时触发一次，并携带伤害来源（`sourceId` 可选，非伤害来源为 undefined） */
+    const wasAlive = target.health > 0
     target.health = Math.max(0, target.health - finalEvent.finalAmount)
     target.onDamageTaken?.(finalEvent.finalAmount, finalEvent)
-    if (target.health <= 0) target.onDeath?.()
+    if (target.health <= 0 && wasAlive) target.onDeath?.(finalEvent.sourceId)
     return finalEvent
 }
 ```
@@ -188,20 +190,22 @@ export const applyDamage = (
 | 有效属性 | 公式 | 说明 |
 |----------|------|------|
 | 防御 `defense` | 基础防御（存档持久化）+ 各槽位护甲防御之和 | `applyDamage` 按事件类别取用 |
-| 攻击加成 `attackBonus` | 各槽位护甲攻击加成之和（无基础项） | 攻击时仅与武器类别匹配的项计入伤害 |
+| 攻击加成 `attackBonus` | 基础攻击加成（存档持久化）+ 各槽位护甲与肢体攻击加成之和 | 攻击时仅与武器类别匹配的项计入伤害 |
 | 移速乘数 `moveSpeedMultiplier` | 各槽位护甲移速乘数之积（空装备 = 1） | 状态机经 `moveSpeedOf(entity)` 读取 |
 | 韧性上界 `poiseMax` | 基础上界（`CharacterConfig.poiseMax` / `basePoiseMax`）+ 各槽位护甲与肢体 `poise` 之和 | 受击削韧至 0 → 倒地；见 [`combat.md`](../combat/combat.md) |
 
-`CombatComponent`（`character/combat/types.ts`）新增五字段：
+`CombatComponent`（`character/combat/types.ts`）相关字段：
 
 ```ts
 /** 基础防御（角色固有，存档持久化） */
 baseDefense: DefenseProfile
+/** 基础攻击加成（角色固有，存档持久化） */
+baseAttack: DamageTypeProfile
 /** 装备的护甲（槽位 → 护甲 id；缺省 = 空槽） */
 armor: ArmorLoadout
 /** 有效防御 = 基础防御 + 各护甲之和；applyDamage 按事件类别取用 */
 defense: DefenseProfile
-/** 装备攻击加成（逐类别，与武器类别匹配才计入） */
+/** 有效攻击加成 = 基础攻击加成 + 装备攻击加成（逐类别，与武器类别匹配才计入） */
 attackBonus: DamageTypeProfile
 /** 装备移速乘数（多件相乘，1 = 无修正） */
 moveSpeedMultiplier: number
@@ -210,24 +214,29 @@ moveSpeedMultiplier: number
 统一入口（与 `setCombatWeapon` 同风格）：
 
 ```ts
-/** 变更基础防御 / 护甲：校验并重算防御、攻击加成与移速乘数（未知护甲 id 安全回退空槽，不抛错） */
+/** 变更基础防御 / 护甲 / 肢体 / 基础攻击：校验并重算防御、攻击加成、移速与韧性上界（未知 id 安全回退空槽，不抛错） */
 export const setCombatEquipment = (
     c: CombatComponent,
     baseDefense: DefenseProfile,
     armor: ArmorLoadout,
+    limb?: LimbLoadout,
+    baseAttack?: DamageTypeProfile,
 ): void => {
     c.baseDefense = baseDefense
     c.armor = armor
-    const resolved = resolveArmorLoadout(armor)
-    c.defense = totalDefenseOf(baseDefense, resolved)
-    c.attackBonus = totalAttackOf(resolved)
-    c.moveSpeedMultiplier = totalMoveSpeedOf(resolved)
-    c.poiseMax = c.basePoiseMax + totalPoiseOf(resolved)
+    if (limb !== undefined) c.limb = limb
+    if (baseAttack !== undefined) c.baseAttack = baseAttack
+    const resolvedArmor = resolveArmorLoadout(c.armor)
+    const resolvedLimb = c.limb ? resolveLimbLoadout(c.limb) : undefined
+    c.defense = totalDefenseOf(baseDefense, resolvedArmor, resolvedLimb)
+    c.attackBonus = addDamageProfiles(c.baseAttack, totalAttackOf(resolvedArmor, resolvedLimb))
+    c.moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
+    c.poiseMax = c.basePoiseMax + totalPoiseOf(resolvedArmor, resolvedLimb)
     if (c.poise > c.poiseMax) c.poise = c.poiseMax
 }
 ```
 
-- `createCombatComponent` 初始化为 `ZERO_PROFILE` / `{}` / `ZERO_PROFILE` / `ZERO_PROFILE` / `1`。
+- `createCombatComponent` 初始化为 `ZERO_PROFILE` / `ZERO_PROFILE` / `{}` / `ZERO_PROFILE` / `ZERO_PROFILE` / `1`。
 - 移速统一入口（`character/types.ts`）：
 
 ```ts
@@ -492,38 +501,44 @@ const ARMOR_SLOT_JOINTS: Record<ArmorSlot, readonly string[]> = {
 | 左列：头盔 / 臂甲 / 胸甲 / 护腿 | 四个 `<select>`（首项「无」= 空槽；选项文案由 `describeArmorPiece` 生成，列出非零的防御 / 攻击加成 / 移速修正） | 读取 `armorPiecesOfSlot(slot)` |
 | 右列：肢体（标签文案「肢体·`LIMB_SLOT_LABELS[slot]`」，如「肢体·头部」） | 四个 `<select>`（首项「无」= 默认人类肢体；选项 = 骷髅 / 兽人 / 精灵） | 读取 `limbPiecesOfSlot(slot)` |
 
-**属性模块**：生命、基础防御与装备数值预览。
+**属性模块**：状态类（生命 / 韧性）与属性类（攻击 / 防御 / 移速 / 跳跃高度 / 体型）排成「公式行」，展示形态 `结果 | (基础值 + 逐项加值) × 逐项乘区`（结果在前，公式拆解逐项列出来源）——仅「当前值 / 基础值」为可编辑数字输入，结果 / 加值 / 乘区均为只读文本，装备 / 武器选择、基础值变化即时刷新。
 
 | 控件 | 类型 | 行为 |
 |------|------|------|
-| MaxHP / CurHP | 两个数字输入 | 对应 `combat.maxHealth` / `combat.health` |
-| 基础防御（物理 / 魔法） | 两个数字输入 | 对应 `combat.baseDefense` |
-| 数值预览 | 只读多行标签 | 选择 / 基础防御 / 基础移速变化即时刷新：有效防御、攻击加成、有效移速（基础 × 装备乘数）；复用 `resolveArmorLoadout` / `resolveLimbLoadout` 与目录汇总函数，与运行时 `setCombatEquipment` 同一口径 |
+| 生命 / 韧性（状态行） | `当前值 [输入] / 结果 | (基础值 [输入] + 逐项加值) × 逐项乘区` | 当前值 → `combat.health` / `setPoise`（夹取 `0..poiseMax`）；结果（最大值）与基础值 → `combat.maxHealth` / `CharacterConfig.poiseMax`（`basePoiseMax`）；加值 = 装备韧性来源 |
+| 攻击（物理 / 魔法，各一行） | `结果 | (基础值 [输入] + 逐项加值) × 逐项乘区` | 基础值 → `combat.baseAttack`；加值 = 主手武器伤害（仅计入其固有类别）+ 装备护甲 / 肢体攻击加成，逐项列出名称；结果 = 有效攻击加成（`weapon.damage + attackBonus`） |
+| 防御（物理 / 魔法，各一行） | 同上 | 基础值 → `combat.baseDefense`；加值 = 各装备防御来源；结果 = `defense` |
+| 移速 / 跳跃高度 / 体型 | 同上 | 移速乘区 = 各装备移速乘数来源（结果 = `moveSpeedOf`）；跳跃高度 / 体型无加值 / 乘区（结果 = 基础值） |
 
-- `refreshFullConfig` 回显八个下拉（护甲 + 肢体；无效 / 槽位不匹配的存档 id 显示「无」）、基础防御输入与数值预览。
-- `onApply` 组装 `ArmorLoadout` / `LimbLoadout`（空 value → 省略该槽）与 `DefenseProfile`，随 `updateCharacterConfig` 提交。
+- 公式逐项来源经 `armor/catalog.ts` 的 `defenseTermsOf` / `attackTermsOf` / `poiseTermsOf` / `moveSpeedTermsOf` 取（`StatTerm = {name, value}`，名称已本地化、仅列出非零 / 非 1 项），复用与运行时 `setCombatEquipment` 同一 `resolveArmorLoadout` / `resolveLimbLoadout` 口径。
+- `refreshStatFormulas()` 重算各行结果 / 加值 / 乘区文本；`weaponSelect` / `offhandSelect` change 与各基础值 input 均触发（武器决定攻击行的加值项）。
+- 移速 / 跳跃高度 / 体型（原属「配置」区）已迁入「属性」区公式行，配置区不再单独列出。
+- `refreshFullConfig` 回显八个下拉（护甲 + 肢体；无效 / 槽位不匹配的存档 id 显示「无」）、基础防御 / 基础攻击输入与各公式行。
+- `onApply` 组装 `ArmorLoadout` / `LimbLoadout`（空 value → 省略该槽）、`DefenseProfile` 与 `baseAttack`，随 `updateCharacterConfig` 提交。
 - 武器标签（`weaponTag`）附带攻击类别（`· 物理` / `· 魔法`），便于对照当前武器的攻击加成与目标防御。
 
 ---
 
 ## 五、存档与兼容
 
-`CharacterSaveConfig`（`save_load/types.ts`）新增三个**可选**字段：
+`CharacterSaveConfig`（`save_load/types.ts`）新增四个**可选**字段：
 
 ```ts
 /** 基础防御（逐类别固定减伤；缺省 = 0/0，旧档安全回退） */
 defense?: {physical: number; magic: number}
+/** 基础攻击加成（逐类别；缺省 = 0/0，旧档安全回退） */
+baseAttack?: {physical: number; magic: number}
 /** 护甲装备（槽位 → 护甲 id；缺省 / 未知 id = 空槽，不抛错） */
 armor?: {head?: string; chest?: string; arms?: string; legs?: string}
 /** 肢体组件装备（槽位 → 肢体 id；缺省 / 未知 id = 默认人类肢体，不抛错） */
 limb?: {head?: string; arms?: string; body?: string; legs?: string}
 ```
 
-- `SAVE_FORMAT_VERSION` 3 → 4（防御 + 护甲）→ 5（锁定点）→ 6（副手 / 持握）→ **7（肢体 `limb`）**（此后 8 / 9 / 10 与本模块无关，见 [`save_load.md`](../../save_load/save_load.md)）；旧档缺字段由校验层回退默认，**无迁移逻辑**（v1 脚底原点迁移保持原样）。
-- `validation.ts`：`DefenseProfileSchema`（`z.number().min(0).default(0)`，整体 `.optional().catch(undefined)`）；`ArmorLoadoutSchema`（`head`/`chest`/`arms`/`legs`）；`LimbLoadoutSchema`（`head`/`arms`/`body`/`legs`），均整体 `.optional().catch(undefined)`。
-- `serialize.ts`：写出 `defense: e.combat.baseDefense`、`armor: e.combat.armor` 与 `limb: e.combat.limb`（攻击加成 / 移速由预设重算，不入档）。
+- `SAVE_FORMAT_VERSION` 3 → 4（防御 + 护甲）→ 5（锁定点）→ 6（副手 / 持握）→ **7（肢体 `limb`）→ … → 12（基础攻击 `baseAttack`）**（8 / 9 / 10 / 11 与本模块无关，见 [`save_load.md`](../../save_load/save_load.md)）；旧档缺字段由校验层回退默认，**无迁移逻辑**（v1 脚底原点迁移保持原样）。
+- `validation.ts`：`DefenseProfileSchema`（`z.number().min(0).default(0)`，整体 `.optional().catch(undefined)`）、`BaseAttackProfileSchema`（同构）、`ArmorLoadoutSchema`（`head`/`chest`/`arms`/`legs`）、`LimbLoadoutSchema`（`head`/`arms`/`body`/`legs`），均整体 `.optional().catch(undefined)`。
+- `serialize.ts`：写出 `defense: e.combat.baseDefense`、`baseAttack: e.combat.baseAttack`、`armor: e.combat.armor` 与 `limb: e.combat.limb`（装备攻击加成 / 移速由运行时重算，不入档）。
 - `deserialize.ts`：无需特判，config 原样传入 `add()`。
-- 非法数据安全回退链路：`armor` / `limb` 非对象 → 空装备表；未知 id / 槽位与 id 不符 → 该槽空；`defense` 非法 → 0/0；肢体 `null` / 缺失 → 默认人类肢体。
+- 非法数据安全回退链路：`armor` / `limb` 非对象 → 空装备表；未知 id / 槽位与 id 不符 → 该槽空；`defense` / `baseAttack` 非法 / 负值 → 0/0；肢体 `null` / 缺失 → 默认人类肢体。
 
 ---
 
@@ -558,7 +573,7 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 | `src/character/combat/constants.ts` | `MIN_DAMAGE` |
 | `src/character/combat/damage.ts` | `DamageEvent.damageType` + 防御结算 |
 | `src/character/combat/explosion.ts` | `damageType` 参数 |
-| `src/character/combat/types.ts` | `baseDefense` / `armor` / `defense` / `attackBonus` / `moveSpeedMultiplier` + `setCombatEquipment` |
+| `src/character/combat/types.ts` | `baseDefense` / `baseAttack` / `armor` / `defense` / `attackBonus` / `moveSpeedMultiplier` + `setCombatEquipment` |
 | `src/character/types.ts` | `moveSpeedOf`（有效移速统一入口） |
 | `src/character/state_machine/states/` | `walking` / `jumping` / `falling` / `rolling` / `attacking` 改读 `moveSpeedOf` |
 | `src/character/weapon/melee_weapon.ts` / `ranged_weapon.ts` | 全部预设补 `damageType` |
@@ -566,7 +581,7 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 | `src/entity/character/appearance/types.ts` / `model.ts` | `equipArmor` / `removeArmor` / `equipLimbs` / `removeLimbs` + 护甲&肢体槽位关节映射 + `refreshHiddenBodyParts` 统一顶替 |
 | `src/entity/character/appearance/armor_mesh.ts` | 关节基座补肩/手、`LimbMeshConfig` + `createLimbMesh` |
 | `src/entity/character/physics/world.ts` | spawn/add/面板提交接线（含 limb）、行文本（def + 有效移速） |
-| `src/entity/character/ui/panel.ts` | 装备区一行两列（左护甲 / 右肢体）+ 防御/攻击/移速预览 |
+| `src/entity/character/ui/panel.ts` | 装备区一行两列（左护甲 / 右肢体）+ 属性区状态 / 属性「公式行」（基础值可编辑，加成 / 系数 / 最终值只读实时刷新） |
 | `src/save_load/types.ts` / `validation.ts` / `serialize.ts` | 存档字段与 v7（limb） |
 | 测试夹具 | `physics/harness.ts`、`ai/ai.test.ts`、`ai/nav/nav.test.ts` 补 combat 字段；`physics/death_fall.test.ts`、`combat_vfx/material_effects.test.ts` 等补伤害事件 `damageType` |
 | `src/character/weapon/weapon.md`、`AGENTS.md` | 实施收尾同步（第五节伤害链路、结构/陷阱/文档表） |
@@ -626,9 +641,9 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 | 单测 | `appearance/mesh_builder.test.ts` | 几何工厂类型、`add` 组装（位置 / 旋转 / 阴影）、`faceBox` 六面材质、`dispose` 清空 group、实例隔离 |
 | 单测 | `appearance/armor_mesh.test.ts` | 各槽位部件挂到正确关节（含臂部 / 靴白名单）、尺寸外扩大于身体部件、脚尖条前伸、`cleanup` 释放几何/材质；`hideBodyParts` 不影响几何；身体部位 → 关节映射完备（指向预设骨架关节） |
 | 单测 | `state_machine/machine.test.ts` | 装备移速乘数生效：walking 速度 = 基础 × 乘数 |
-| 单测 | `save_load/validation.test.ts` | 旧档缺 `armor`/`defense` 回退默认；非法值回退；armor 含四槽位 roundtrip |
-| 单测 | `physics/panel_info.test.ts` | `add()` 带护甲时防御 / 攻击加成 / 移速乘数正确；未知护甲 id 不抛错；行文本 def 与有效移速格式；换装不残留外观部件；`hideBodyParts` 装备隐藏 / 卸下还原（靴只隐藏小腿、大腿保持可见）；肢体装备顶替人类部位并计入数值、卸下还原；护甲与肢体顶替互不干扰 |
-| e2e | `e2e/character_equipment.spec.ts` | 编辑模式生成角色 → 面板选择护甲 / 基础防御 / 肢体 → 防御、攻击加成与有效移速预览及列表行同步更新 |
+| 单测 | `save_load/validation.test.ts` | 旧档缺 `armor`/`defense`/`baseAttack` 回退默认；非法值回退；armor 含四槽位 roundtrip |
+| 单测 | `physics/panel_info.test.ts` | `add()` 带护甲时防御 / 攻击加成 / 移速乘数正确；带基础攻击时有效攻击加成 = 基础 + 装备；未知护甲 id 不抛错；行文本 def 与有效移速格式；换装不残留外观部件；`hideBodyParts` 装备隐藏 / 卸下还原（靴只隐藏小腿、大腿保持可见）；肢体装备顶替人类部位并计入数值、卸下还原；护甲与肢体顶替互不干扰 |
+| e2e | `e2e/character_equipment.spec.ts` | 编辑模式生成角色 → 面板选择护甲 / 基础防御 / 肢体 → 状态 / 属性公式行（当前 / 基础 / 加成 / 系数 / 最终值）与列表行同步更新；当前韧性夹取到基础上界 + 装备加成 |
 
 ---
 

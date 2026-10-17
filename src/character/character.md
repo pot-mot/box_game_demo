@@ -15,3 +15,9 @@
 
 - `CharacterConfig` 新增 5 个**可选**韧性字段（供面板 / 存档覆写，缺省走 `combat/constants.ts` 默认值）：`poiseMax`（上界基础值，叠加护甲/肢体 `poise`）、`poiseRegenDelay`、`poiseRegenPerSec`、`knockdownDuration`、`getUpDuration`；经 `spawnEntity` 汇总进 `CombatComponent`（`basePoiseMax` 等），受击结算与状态机语义见 [`combat/combat.md`](combat/combat.md) 与 [`state_machine.md`](state_machine/state_machine.md)。
 - `CharacterEntity` 新增倒地字段：`knockdownFallDirX/Z`（倒向水平单位向量，进入 `knockdown` 时按 `combat.lastHitDirX/Z` 写入，无记录则向后倒）与 `knockdownFallAngle`（缓动角度，`world.ts` 据此合成根旋转，与死亡倒地同模式）。
+
+## 行为原点策略 / 追击半径
+
+- 原点策略领域定义在 `ai_strategy/`：`types.ts` 的 `ORIGIN_SUB_STRATEGIES = ['resident', 'fighter', 'hunter', 'roamer']` / `OriginSubStrategy` / `OriginConfig` / `isOriginSubStrategy`；默认配置在 `origin.ts` 的 `DEFAULT_ORIGIN_CONFIGS`（`roamer.interval = DEFAULT_ROAMER_INTERVAL = 20`，其余 0）。
+- `CharacterEntity` 新增字段：`originStrategy`（默认 `resident`）、`originInterval`（漫游者原点更新间隔，秒，默认 20）、`chaseLeashRadius`（追击活动半径，m，默认 20）。
+- 运行时语义（原点迁移、消费者、击杀钩子、复位规则）见 [`../entity/character/ai/ai.md`](../entity/character/ai/ai.md)；设计背景见 [`../../docs/design/ai_origin_strategy.md`](../../docs/design/ai_origin_strategy.md)。

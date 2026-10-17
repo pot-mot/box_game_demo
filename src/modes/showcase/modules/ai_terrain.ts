@@ -8,6 +8,7 @@ import type {EntityInfoSource} from '../../../entity/box/base/types/entity_info.
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
+import type {OriginSubStrategy} from '../../../character/ai_strategy/origin.ts'
 import {createFixedStepStepper} from '../../../physics/fixed_step.ts'
 import {localizeText} from '../../../i18n/dom.ts'
 import {
@@ -36,18 +37,20 @@ type SteppableSystem = EntityInfoSource & {readonly preSync?: (dt: number, time:
 interface UnitSpec {
     readonly attack: AttackConfig
     readonly strategy: CombatSubStrategy
+    readonly origin: OriginSubStrategy
 }
 
 /**
  * 单阵营单位配置：近战 / 远程混合，覆盖三档战斗策略（aggressive / tactical / cowardly），
  * 用于展示不同 AI 在同一复杂地形中的寻路、跳跃与面向敌对阵营的攻击行为。
+ * 原点策略覆盖四档（居民 / 战斗者 / 狩猎者 / 漫游者），观察领地迁移差异。
  */
 const AI_UNITS: readonly UnitSpec[] = [
-    {attack: {weaponId: 'short_sword', damage: 4}, strategy: 'aggressive'},
-    {attack: {weaponId: 'war_hammer', damage: 6}, strategy: 'aggressive'},
-    {attack: {weaponId: 'spear', damage: 5}, strategy: 'tactical'},
-    {attack: {weaponId: 'longbow', damage: 3, ranged: {range: 12, bulletSpeed: 22, bulletKnockback: 3, bulletLifetime: 3}}, strategy: 'tactical'},
-    {attack: {weaponId: 'staff', damage: 4, ranged: {range: 10, bulletSpeed: 16, bulletKnockback: 2, bulletLifetime: 2.5}}, strategy: 'cowardly'},
+    {attack: {weaponId: 'short_sword', damage: 4}, strategy: 'aggressive', origin: 'resident'},
+    {attack: {weaponId: 'war_hammer', damage: 6}, strategy: 'aggressive', origin: 'fighter'},
+    {attack: {weaponId: 'spear', damage: 5}, strategy: 'tactical', origin: 'hunter'},
+    {attack: {weaponId: 'longbow', damage: 3, ranged: {range: 12, bulletSpeed: 22, bulletKnockback: 3, bulletLifetime: 3}}, strategy: 'tactical', origin: 'roamer'},
+    {attack: {weaponId: 'staff', damage: 4, ranged: {range: 10, bulletSpeed: 16, bulletKnockback: 2, bulletLifetime: 2.5}}, strategy: 'cowardly', origin: 'resident'},
 ]
 
 const makeConfig = (faction: number, unit: UnitSpec): CharacterSaveConfig => ({
@@ -60,6 +63,7 @@ const makeConfig = (faction: number, unit: UnitSpec): CharacterSaveConfig => ({
     maxHealth: AI_CHARACTER_MAX_HEALTH,
     combatStrategy: unit.strategy,
     peaceStrategy: 'patrol',
+    originStrategy: unit.origin,
     isPlayer: false,
     navEnabled: true,
 })
