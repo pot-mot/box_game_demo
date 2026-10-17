@@ -2,7 +2,7 @@ import {type SpawnMode} from '../../types/spawnMode.ts'
 import {getInputRegistry} from '../../input/registry.ts'
 
 const SPAWN_MODES: SpawnMode[] = [
-    'box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity',
+    'box',
     'area/water',
     'character',
     'terrain',

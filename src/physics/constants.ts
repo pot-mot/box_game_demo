@@ -11,7 +11,7 @@ export const GROUND_Y = 0
 // --- 碰撞组 ---
 // Rapier setCollisionGroups(membership, filter) 使用与 cannon-es 相同的 bitmask 语义：
 //   (groupA & maskB) !== 0 && (groupB & maskA) !== 0 时才产生碰撞对。
-// 组 1 — 场景默认组（地面、common、destructed、其他 box）
+// 组 1 — 场景默认组（地面、箱子、其他实体）
 // 组 2 — 碎片（只与组 1、4、8 碰撞，碎片间不互撞）
 // 组 4 — 地形（只与组 1、2 碰撞，地形间不互碰）
 // 组 8 — 建筑体素（只与组 1、2 碰撞，建筑间不互碰）

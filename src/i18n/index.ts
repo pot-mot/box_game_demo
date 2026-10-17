@@ -45,6 +45,12 @@ type CoreLocale = {
     'startup.has_cache': string
     'startup.clear': string
 
+    /* ── 存档加载提示 ── */
+    'save.skipped_title': string
+    'save.skipped_message': (count: number) => string
+    'save.skipped_entry': (index: number, type: string) => string
+    'save.skipped_unknown_type': string
+
     /* ── 设置菜单 ── */
     'settings.title': string
     'settings.return_home': string
@@ -73,11 +79,7 @@ type CoreLocale = {
     'element.group.other': string
 
     /* ── 生成类型选择 ── */
-    'spawn.box_common': string
-    'spawn.box_destruction': string
-    'spawn.box_burning': string
-    'spawn.box_magnet': string
-    'spawn.box_elasticity': string
+    'spawn.box': string
     'spawn.area_water': string
     'spawn.character': string
     'spawn.terrain': string
@@ -188,6 +190,9 @@ type CoreLocale = {
     'panel.stiffness': string
     'panel.damping': string
     'panel.max_deform': string
+    'panel.fragment_count': string
+    'panel.material': string
+    'panel.traits': string
 }
 
 /** 完整语言表：核心键 + 各领域文案域（各域独立文件维护，避免单文件膨胀） */

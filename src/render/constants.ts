@@ -18,6 +18,11 @@ export const DEFAULT_BASE_COLOR = 0x777777
 /** 默认网格线颜色 */
 export const DEFAULT_GRID_COLOR = 0x999999
 
+/** 箱子 / 碎片表面网格线颜色（烘焙进表面材质纹理） */
+export const SURFACE_GRID_COLOR = 0x999999
+/** 箱子 / 碎片轮廓线颜色 */
+export const SURFACE_EDGE_COLOR = 0x333333
+
 /** 无限网格单元尺寸 */
 export const GRID_CELL_SIZE = 1
 /** 无限网格有效渲染半径（超出此距离完全透明） */

@@ -21,7 +21,8 @@ import type {ArmorLoadout, ArmorPieceConfig, LimbLoadout, LimbPieceConfig} from 
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
 import type {DamageType, DamageTypeProfile} from '../../../character/combat/damage_type.ts'
 import {DAMAGE_TYPE_LABELS} from '../../../character/combat/damage_type.ts'
-import {isPeaceSubStrategy, isCombatSubStrategy, isOriginSubStrategy, PEACE_SUB_STRATEGIES, ORIGIN_SUB_STRATEGIES, BUILDABLE_BOX_TYPES, type BuildableBoxType, type OriginSubStrategy} from '../../../character/ai_strategy/types.ts'
+import {isPeaceSubStrategy, isCombatSubStrategy, isOriginSubStrategy, PEACE_SUB_STRATEGIES, ORIGIN_SUB_STRATEGIES, type BoxSpawnEntry, type OriginSubStrategy} from '../../../character/ai_strategy/types.ts'
+import {BOX_PRESET_IDS, isBoxPresetId, type BoxPresetId} from '../../../types/boxPreset.ts'
 import type {LockPointConfig} from '../../../character/lock_point.ts'
 import {CHARACTER_JOINT_IDS} from '../appearance/clips/base_clips.ts'
 import {buildCharacterSkeletonDefinition, humanoidJointDisplayName} from '../skeleton/preset.ts'
@@ -38,6 +39,19 @@ const JOINT_LOCK_POINT_OPTIONS: ReadonlyArray<{readonly id: string; readonly nam
 const OFFSET_AXIS_LABELS: readonly StringLocaleKey[] = ['panel.x', 'panel.y', 'panel.z']
 /** 新增锁定点的默认关节（髋部：接近身体中心，便于调整） */
 const LOCK_POINT_DEFAULT_JOINT = 'spine'
+
+/** 建造配置的箱型预设显示名键 */
+const BOX_PRESET_LABEL_KEYS: Record<BoxPresetId, StringLocaleKey> = {
+    common: 'character.preset.common',
+    destructible: 'character.preset.destructible',
+    burning: 'character.preset.burning',
+    magnet: 'character.preset.magnet',
+    elastic: 'character.preset.elastic',
+}
+
+/** 预设标识 → 本地化显示名（非法标识原样回显） */
+const presetDisplayName = (preset: string): string =>
+    isBoxPresetId(preset) ? translate(BOX_PRESET_LABEL_KEYS[preset]) : preset
 
 /** 锁定点编辑缓存行（偏移为输入框原值字符串，Apply 时解析） */
 interface LockPointEditRow {
@@ -997,17 +1011,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         holdModeHint.style.display = (main !== undefined && main.type === 'melee' && !dualAvailable) ? '' : 'none'
     }
 
-    /* 运行时箱型配置缓存 */
+    /* 运行时箱型配置缓存（preset 为字符串，提交时经 isBoxPresetId 校验） */
     let cachedBoxTypes: Array<{
-        entityType: string
+        preset: string
         probability: string
         minWidth: string; maxWidth: string
         minHeight: string; maxHeight: string
         minDepth: string; maxDepth: string
         mass: string; friction: string
-        maxHealth?: string
-        attractionRadius?: string; attractionStrength?: string
-        stiffness?: string; dampingRatio?: string; maxDeformFraction?: string
     }> = []
 
     const refreshBoxTypeList = (): void => {
@@ -1017,7 +1028,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             const row = document.createElement('div')
             row.className = 'dc-row'
             row.style.cssText = 'gap:4px;font-size:11px;padding:2px 0;cursor:pointer'
-            row.textContent = `${bt.entityType} (${bt.probability}) ${bt.minWidth}-${bt.maxWidth}×${bt.minHeight}-${bt.maxHeight}×${bt.minDepth}-${bt.maxDepth}`
+            row.textContent = `${presetDisplayName(bt.preset)} (${bt.probability}) ${bt.minWidth}-${bt.maxWidth}×${bt.minHeight}-${bt.maxHeight}×${bt.minDepth}-${bt.maxDepth}`
             row.title = translate('character.detail_hint')
             const delBtn = document.createElement('button')
             delBtn.className = 'dc-list-del'
@@ -1033,8 +1044,29 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const showDetail = (idx: number): void => {
         if (idx < 0 || idx >= cachedBoxTypes.length) { detailPanel.style.display = 'none'; return }
         const bt = cachedBoxTypes[idx]
-        detailTitle.textContent = translate({key: 'character.detail_edit_title', args: [bt.entityType]})
+        detailTitle.textContent = translate({key: 'character.detail_edit_title', args: [presetDisplayName(bt.preset)]})
         detailFields.innerHTML = ''
+        /* 特性预设下拉：选项为全部预设；非法 / 未知值不预选 */
+        const presetRow = document.createElement('div')
+        presetRow.className = 'dc-row'
+        presetRow.style.cssText = 'gap:4px;margin:2px 0'
+        const presetLbl = document.createElement('span')
+        presetLbl.textContent = translate('character.field.preset')
+        presetLbl.className = 'dc-label'
+        presetLbl.style.cssText = 'font-size:11px;width:100px'
+        const presetSel = document.createElement('select')
+        presetSel.className = 'dc-select'
+        presetSel.style.cssText = 'font-size:11px'
+        for (const preset of BOX_PRESET_IDS) {
+            const opt = document.createElement('option')
+            opt.value = preset
+            localizeText(opt, BOX_PRESET_LABEL_KEYS[preset])
+            presetSel.appendChild(opt)
+        }
+        presetSel.value = isBoxPresetId(bt.preset) ? bt.preset : ''
+        presetSel.onchange = () => { bt.preset = presetSel.value; refreshBoxTypeList() }
+        presetRow.appendChild(presetLbl); presetRow.appendChild(presetSel)
+        detailFields.appendChild(presetRow)
         const addField = (labelKey: StringLocaleKey, key: keyof typeof bt): void => {
             const div = document.createElement('div')
             div.className = 'dc-row'
@@ -1050,25 +1082,12 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             div.appendChild(lbl); div.appendChild(inp)
             detailFields.appendChild(div)
         }
-        addField('character.field.entity_type', 'entityType')
         addField('character.field.probability', 'probability')
         addField('character.field.min_w', 'minWidth'); addField('character.field.max_w', 'maxWidth')
         addField('character.field.min_h', 'minHeight'); addField('character.field.max_h', 'maxHeight')
         addField('character.field.min_d', 'minDepth'); addField('character.field.max_d', 'maxDepth')
         addField('character.field.mass', 'mass')
         addField('character.field.friction', 'friction')
-        if (bt.entityType === 'box/destruction' || bt.entityType === 'box/burning') {
-            addField('character.field.max_health', 'maxHealth')
-        }
-        if (bt.entityType === 'box/magnet') {
-            addField('character.field.attr_radius', 'attractionRadius')
-            addField('character.field.attr_strength', 'attractionStrength')
-        }
-        if (bt.entityType === 'box/elasticity') {
-            addField('character.field.stiffness', 'stiffness')
-            addField('character.field.damping_ratio', 'dampingRatio')
-            addField('character.field.max_deform', 'maxDeformFraction')
-        }
         const closeBtn = document.createElement('button')
         closeBtn.className = 'dc-btn'
         closeBtn.textContent = translate('character.done')
@@ -1080,7 +1099,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     addBoxTypeBtn.onclick = () => {
         cachedBoxTypes.push({
-            entityType: 'box/common', probability: '0',
+            preset: 'common', probability: '0',
             minWidth: '0.5', maxWidth: '2',
             minHeight: '0.5', maxHeight: '2',
             minDepth: '0.5', maxDepth: '2',
@@ -1256,12 +1275,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (!isNaN(originInterval) && originInterval > 0) ctx.setOriginInterval?.(cur.id, originInterval)
                 const chaseRadius = parseFloat(chaseRadiusInput.value)
                 if (!isNaN(chaseRadius) && chaseRadius > 0) ctx.setChaseLeashRadius?.(cur.id, chaseRadius)
-                /* 持久化建造配置 */
+                /* 持久化建造配置：仅保留预设合法的条目（非法预设跳过，避免写入脏数据） */
                 if (peaceStrat === 'build') {
-                    const boxTypes = cachedBoxTypes
-                        .filter(bt => BUILDABLE_BOX_TYPES.includes(bt.entityType as BuildableBoxType))
-                        .map(bt => ({
-                            entityType: bt.entityType as BuildableBoxType,
+                    const boxTypes: BoxSpawnEntry[] = []
+                    for (const bt of cachedBoxTypes) {
+                        if (!isBoxPresetId(bt.preset)) continue
+                        boxTypes.push({
+                            preset: bt.preset,
                             probability: parseFloat(bt.probability) || 0,
                             minWidth: parseFloat(bt.minWidth) || 0.5,
                             maxWidth: parseFloat(bt.maxWidth) || 2,
@@ -1271,17 +1291,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                             maxDepth: parseFloat(bt.maxDepth) || 2,
                             mass: parseFloat(bt.mass) || 1,
                             friction: parseFloat(bt.friction) || 0.3,
-                            ...(bt.entityType === 'box/destruction' || bt.entityType === 'box/burning' ? {maxHealth: parseFloat(bt.maxHealth ?? '0') || 10} : {}),
-                            ...(bt.entityType === 'box/magnet' ? {
-                                attractionRadius: parseFloat(bt.attractionRadius ?? '0') || 5,
-                                attractionStrength: parseFloat(bt.attractionStrength ?? '0') || 10,
-                            } : {}),
-                            ...(bt.entityType === 'box/elasticity' ? {
-                                stiffness: parseFloat(bt.stiffness ?? '0') || 100,
-                                dampingRatio: parseFloat(bt.dampingRatio ?? '0') || 0.3,
-                                maxDeformFraction: parseFloat(bt.maxDeformFraction ?? '0') || 0.2,
-                            } : {}),
-                        }))
+                        })
+                    }
                     ctx.setPeaceConfig?.(cur.id, {
                         buildInterval: parseFloat(buildIntervalInput.value) || 3,
                         boxTypes,

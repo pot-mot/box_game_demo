@@ -1,17 +1,8 @@
 import {z} from 'zod'
-import {CommonBoxConfigSchema} from '../entity/box/common/validation.ts'
-import {DestructibleConfigSchema} from '../entity/box/destructed/validation.ts'
-import {BurningBoxConfigSchema} from '../entity/box/burning/validation.ts'
-import {MagnetBoxConfigSchema} from '../entity/box/magnet/validation.ts'
-import {ElasticBoxConfigSchema} from '../entity/box/elasticity/validation.ts'
+import {BoxConfigSchema, DEFAULT_BOX_CONFIG} from '../entity/box/validation.ts'
 import {WaterBlockConfigSchema} from '../entity/area/water/validation.ts'
 import {BaseTerrainConfigSchema} from '../entity/terrain/base/validation.ts'
 import {FragmentConfigSchema} from '../entity/fragment/common/validation.ts'
-import {DEFAULT_COMMON_CONFIG} from '../entity/box/common/validation.ts'
-import {DEFAULT_DESTRUCTIBLE_CONFIG} from '../entity/box/destructed/validation.ts'
-import {DEFAULT_BURNING_CONFIG} from '../entity/box/burning/validation.ts'
-import {DEFAULT_MAGNET_CONFIG} from '../entity/box/magnet/validation.ts'
-import {DEFAULT_ELASTIC_CONFIG} from '../entity/box/elasticity/validation.ts'
 import {DEFAULT_WATER_CONFIG} from '../entity/area/water/validation.ts'
 import {DEFAULT_TERRAIN_CONFIG} from '../entity/terrain/base/validation.ts'
 import {DEFAULT_FRAGMENT_CONFIG} from '../entity/fragment/common/validation.ts'
@@ -25,52 +16,32 @@ import {BREAKABLE_SOURCES} from '../entity/interactable/kinds.ts'
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0])
 const Quat = z.tuple([z.number(), z.number(), z.number(), z.number()]).default([0, 0, 0, 1])
 
-const SavableCommonBox = z.object({
-    type: z.literal('box/common'),
-    config: CommonBoxConfigSchema.default(DEFAULT_COMMON_CONFIG),
-    position: Vec3,
-    quaternion: Quat,
-})
-
 const CollisionRecordSchema = z.object({
     contactPoint: z.tuple([z.number(), z.number(), z.number()]),
     normal: z.tuple([z.number(), z.number(), z.number()]),
     relativeVelocity: z.number(),
 })
 
-const SavableDestructibleBox = z.object({
-    type: z.literal('box/destruction'),
-    config: DestructibleConfigSchema.default(DEFAULT_DESTRUCTIBLE_CONFIG),
+/* 统一箱子：config 携带可选特性对象（存在即启用）；各特性运行态分别可选，
+   旧档 / 缺省安全回退。特性对象非法时由外层逐元素跳过（不整档失败）。 */
+const SavableBox = z.object({
+    type: z.literal('box'),
+    config: BoxConfigSchema.default(DEFAULT_BOX_CONFIG),
     position: Vec3,
     quaternion: Quat,
-    health: z.number().default(DEFAULT_DESTRUCTIBLE_CONFIG.maxHealth),
-    collisions: z.array(CollisionRecordSchema).optional(),
-    collisionHistory: z.array(CollisionRecordSchema).optional(),
-    cooldowns: z.array(z.tuple([z.number(), z.number()])).optional(),
-})
-
-const SavableBurningBox = z.object({
-    type: z.literal('box/burning'),
-    config: BurningBoxConfigSchema.default(DEFAULT_BURNING_CONFIG),
-    position: Vec3,
-    quaternion: Quat,
-    health: z.number().default(DEFAULT_BURNING_CONFIG.maxHealth),
-})
-
-const SavableMagnetBox = z.object({
-    type: z.literal('box/magnet'),
-    config: MagnetBoxConfigSchema.default(DEFAULT_MAGNET_CONFIG),
-    position: Vec3,
-    quaternion: Quat,
-})
-
-const SavableElasticBox = z.object({
-    type: z.literal('box/elasticity'),
-    config: ElasticBoxConfigSchema.default(DEFAULT_ELASTIC_CONFIG),
-    position: Vec3,
-    quaternion: Quat,
-    def: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
-    vel: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+    destructible: z.object({
+        health: z.number().optional(),
+        collisions: z.array(CollisionRecordSchema).optional(),
+        collisionHistory: z.array(CollisionRecordSchema).optional(),
+        cooldowns: z.array(z.tuple([z.number(), z.number()])).optional(),
+    }).optional(),
+    burning: z.object({
+        health: z.number().optional(),
+    }).optional(),
+    elastic: z.object({
+        def: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+        vel: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+    }).optional(),
 })
 
 const SavableWaterBlock = z.object({
@@ -340,11 +311,7 @@ const SavableCharacter = z.object({
 })
 
 const SavableEntity = z.discriminatedUnion('type', [
-    SavableCommonBox,
-    SavableDestructibleBox,
-    SavableBurningBox,
-    SavableMagnetBox,
-    SavableElasticBox,
+    SavableBox,
     SavableWaterBlock,
     SavableTerrain,
     SavableFragment,
@@ -373,14 +340,69 @@ const ModeInfo = z.object({
     }).optional(),
 })
 
-const SaveDataSchema = z.object({
+/* 顶层壳：entities 以 unknown 保留原数组下标，逐元素安全解析后再收集，
+   使单个无法解析（未知 type / 字段非法）的元素被跳过而非导致整档校验失败。 */
+const SaveDataShellSchema = z.object({
     /** 格式版本（缺省 1 = 旧档：character 位置为身体中心，加载时迁移到脚底原点） */
     version: z.number().int().positive().default(1),
-    entities: z.array(SavableEntity),
+    entities: z.array(z.unknown()),
     modeInfo: ModeInfo.optional(),
 })
 
-export type ValidatedSaveData = z.infer<typeof SaveDataSchema>
+/** 逐元素跳过时记录的信息：原数组下标 + 原 `type` 字段（若有）+ 首条校验错误摘要 */
+export interface SkippedEntity {
+    readonly index: number
+    readonly type: string | undefined
+    readonly reason: string
+}
 
+/** 逐元素安全解析的结果：合法实体 + 被跳过的元素清单 */
+export interface ParsedSaveData {
+    readonly data: ValidatedSaveData
+    readonly skipped: readonly SkippedEntity[]
+}
+
+export interface ValidatedSaveData {
+    version: number
+    entities: Array<z.infer<typeof SavableEntity>>
+    modeInfo?: z.infer<typeof ModeInfo>
+}
+
+/** 安全读取元素的 `type` 字段（非对象 / 缺字段 / 非字符串均返回 undefined） */
+const entityTypeOf = (raw: unknown): string | undefined => {
+    if (typeof raw !== 'object' || raw === null) return undefined
+    if (!('type' in raw)) return undefined
+    const value: unknown = raw.type
+    return typeof value === 'string' ? value : undefined
+}
+
+/**
+ * 校验存档并按元素粒度收集非法项：
+ * 顶层 / `entities` 非数组仍抛错（结构性失败）；单个元素无法解析则记入 `skipped` 并跳过。
+ */
+export const parseSaveData = (input: unknown): ParsedSaveData => {
+    const shell = SaveDataShellSchema.parse(input)
+    const entities: Array<z.infer<typeof SavableEntity>> = []
+    const skipped: SkippedEntity[] = []
+    shell.entities.forEach((raw, index) => {
+        const result = SavableEntity.safeParse(raw)
+        if (result.success) {
+            entities.push(result.data)
+            return
+        }
+        const issue = result.error.issues[0]
+        skipped.push({
+            index,
+            type: entityTypeOf(raw),
+            reason: issue === undefined ? 'invalid' : `${issue.path.join('.')}: ${issue.message}`,
+        })
+    })
+    return {
+        data: {version: shell.version, entities, modeInfo: shell.modeInfo},
+        skipped,
+    }
+}
+
+/** 校验并存档：返回合法实体，跳过非法元素（如需跳过明细请用 `parseSaveData`） */
 export const validateSaveData = (data: unknown): ValidatedSaveData =>
-    SaveDataSchema.parse(data)
+    parseSaveData(data).data

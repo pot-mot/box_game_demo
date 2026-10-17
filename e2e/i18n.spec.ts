@@ -52,7 +52,7 @@ test.describe('国际化', () => {
         await enterEditMode(page)
         await page.waitForTimeout(400)
         /* 生成类型切到「角色」后生成并选中，弹出角色面板（含大量 select / input） */
-        for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown')
+        for (let i = 0; i < 2; i++) await page.keyboard.press('ArrowDown')
         await page.mouse.move(600, 400)
         await page.keyboard.down('Control')
         await page.mouse.down({button: 'left'})

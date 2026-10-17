@@ -126,7 +126,7 @@ export interface InteractableBehavior {
 | `gate` | 交互 | 垂直闸门沿 +Y 移动 `travel`；信号驱动；移动中的闸门碰撞体随视觉同步（kinematic body `setNextKinematicTranslation`）；关闭到位时实体挡路。提示「开启/关闭闸门」。 |
 | `chest` | 交互 | 打开**双栏容器 UI**（玩家背包 ↔ 箱子，均为俄罗斯方块网格）：拖拽跨栏存取、双击快速转移；盖子开合动画。提示「打开箱子」。 |
 | `elevator` | 交互 | 平台在两高度间往返（kinematic body）；乘客由角色系统按**物理接触**携带（平台把自身速度注册进 `SharedWorld.movingSupports`，角色系统对被支撑角色叠加支撑速度并随旋转 `ω·dt` 跟随）；**F 语义**：运行中→就地停止、已暂停→继续、停在端点→反向并运行。提示「上升/下降/停止/运行」。信号驱动设 `target` 并清除暂停。 |
-| `breakable` | 无 | 不可交互；受攻击来源在 `breakableBy` 内时扣血；归零后播放碎裂（复用 `box/destruction` 的碎片系统或缩放消失），`despawn` 并掉落配置物资。 |
+| `breakable` | 无 | 不可交互；受攻击来源在 `breakableBy` 内时扣血；归零后播放碎裂（复用 `box` 可破坏特性的碎片系统或缩放消失），`despawn` 并掉落配置物资。 |
 
 **信号总线**：`SignalBus` 是系统内 `Map<string, boolean>`；`switch`/`save_point` 可发布，门/闸门/升降梯订阅。同通道多个订阅者同时响应。加载存档后重建信号状态。
 

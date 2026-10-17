@@ -1,1 +1,1 @@
-export type SpawnMode = 'box/common' | 'box/destruction' | 'box/burning' | 'box/magnet' | 'box/elasticity' | 'area/water' | 'character' | 'terrain' | 'building_generator' | 'interactable'
+export type SpawnMode = 'box' | 'area/water' | 'character' | 'terrain' | 'building_generator' | 'interactable'

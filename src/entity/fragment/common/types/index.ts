@@ -4,6 +4,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import type {BaseEntity, XYZ} from '../../../box/base/types'
 import type {EntityInfoSource} from '../../../box/base/types/entity_info'
 import type {FragmentData} from '../../../destroyed/types'
+import type {SurfaceMaterialId} from '../../../../render/materials/ids.ts'
 import {FragmentConfigSchema} from '../validation.ts'
 
 export type FragmentConfig = z.infer<typeof FragmentConfigSchema>
@@ -19,7 +20,14 @@ export interface Fragment extends BaseEntity<FragmentConfig> {
 }
 
 export interface FragmentEntityContext extends EntityInfoSource {
-    add: (data: FragmentData, label: string, pos: {x: number; y: number; z: number}, quat: {x: number; y: number; z: number; w: number}, impulse?: {x: number; y: number; z: number}) => Fragment
+    add: (
+        data: FragmentData,
+        label: string,
+        pos: {x: number; y: number; z: number},
+        quat: {x: number; y: number; z: number; w: number},
+        impulse?: {x: number; y: number; z: number},
+        material?: SurfaceMaterialId,
+    ) => Fragment
     getSelected: () => Fragment | undefined
     getAll: () => Fragment[]
     updateConfig: (id: number, partial: Partial<FragmentConfig>) => void

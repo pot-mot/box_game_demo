@@ -13,7 +13,7 @@ export const DEFAULT_PEACE_CONFIGS: Record<PeaceSubStrategy, PeaceConfig> = {
         buildInterval: 3,
         boxTypes: [
             {
-                entityType: 'box/common',
+                preset: 'common',
                 probability: 1,
                 minWidth: 0.5, maxWidth: 2,
                 minHeight: 0.5, maxHeight: 2,

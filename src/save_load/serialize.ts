@@ -76,74 +76,28 @@ export const collectWorldState = (
     const getSource = <K extends EntityType>(key: K): EntitySourceMap[K] | undefined =>
         systems.get(key) as EntitySourceMap[K] | undefined
 
-    // 普通箱子
-    const common = getSource('box/common')
-    if (common?.getAll) {
-        for (const e of common.getAll()) {
+    // 箱子（统一类型：刚体配置 + 各特性可选运行态）
+    const boxes = getSource('box')
+    if (boxes?.getAll) {
+        for (const e of boxes.getAll()) {
+            const dest = e.runtime.destructible
+            const burn = e.runtime.burning
+            const elastic = e.runtime.elastic
             entities.push({
-                type: 'box/common',
+                type: 'box',
                 config: e.config,
                 position: vec3ToTuple(e.body.translation()),
                 quaternion: quatToTuple(e.body.rotation()),
-            })
-        }
-    }
-
-    // 可破坏箱子
-    const dest = getSource('box/destruction')
-    if (dest?.getAll) {
-        for (const e of dest.getAll()) {
-            entities.push({
-                type: 'box/destruction',
-                config: e.config,
-                position: vec3ToTuple(e.body.translation()),
-                quaternion: quatToTuple(e.body.rotation()),
-                health: e.health,
-                collisions: e._collisions,
-                collisionHistory: e._collisionHistory,
-                cooldowns: Array.from(e._cooldowns.entries()),
-            })
-        }
-    }
-
-    // 燃烧箱子
-    const burn = getSource('box/burning')
-    if (burn?.getAll) {
-        for (const e of burn.getAll()) {
-            entities.push({
-                type: 'box/burning',
-                config: e.config,
-                position: vec3ToTuple(e.body.translation()),
-                quaternion: quatToTuple(e.body.rotation()),
-                health: e.health,
-            })
-        }
-    }
-
-    // 磁铁箱子
-    const magnet = getSource('box/magnet')
-    if (magnet?.getAll) {
-        for (const e of magnet.getAll()) {
-            entities.push({
-                type: 'box/magnet',
-                config: e.config,
-                position: vec3ToTuple(e.body.translation()),
-                quaternion: quatToTuple(e.body.rotation()),
-            })
-        }
-    }
-
-    // 弹性箱子
-    const elastic = getSource('box/elasticity')
-    if (elastic?.getAll) {
-        for (const e of elastic.getAll()) {
-            entities.push({
-                type: 'box/elasticity',
-                config: e.config,
-                position: vec3ToTuple(e.body.translation()),
-                quaternion: quatToTuple(e.body.rotation()),
-                def: e.def,
-                vel: e.vel,
+                ...(dest !== undefined && !dest.destroyed
+                    ? {destructible: {
+                        health: dest.health,
+                        ...(dest.collisions.length > 0 ? {collisions: dest.collisions} : {}),
+                        ...(dest.collisionHistory.length > 0 ? {collisionHistory: dest.collisionHistory} : {}),
+                        ...(dest.cooldowns.size > 0 ? {cooldowns: Array.from(dest.cooldowns.entries())} : {}),
+                    }}
+                    : {}),
+                ...(burn !== undefined ? {burning: {health: burn.health}} : {}),
+                ...(elastic !== undefined ? {elastic: {def: elastic.def, vel: elastic.vel}} : {}),
             })
         }
     }

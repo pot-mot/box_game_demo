@@ -1,5 +1,5 @@
-import type {SaveData} from './types.ts'
-import {validateSaveData} from './validation.ts'
+import type {ParsedSaveData} from './validation.ts'
+import {parseSaveData} from './validation.ts'
 
 const CACHE_KEY = 'box_demo_save'
 
@@ -11,12 +11,13 @@ export const cacheSaveData = (data: unknown): void => {
     }
 }
 
-export const loadCachedSaveData = (): SaveData | undefined => {
+/** 读取本地缓存存档并校验；返回值含被跳过元素的明细（无缓存时 undefined） */
+export const loadCachedSaveData = (): ParsedSaveData | undefined => {
     try {
         const raw = localStorage.getItem(CACHE_KEY)
         if (!raw) return undefined
         const parsed = JSON.parse(raw)
-        return validateSaveData(parsed)
+        return parseSaveData(parsed)
     } catch {
         return undefined
     }

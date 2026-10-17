@@ -3,9 +3,9 @@ import {test, expect, type Page} from '@playwright/test'
 /**
  * 角色装备与属性面板：进入编辑模式 → 把生成类型切到「角色」→ Ctrl+左键生成并选中角色 →
  * 在角色面板选择护甲 / 基础防御 → Apply → 列表行防御数值更新。
- * 生成类型顺序见 `src/modes/edit/spawn_mode.ts`（角色 = 第 7 项，ArrowDown = 循环下一项）。
+ * 生成类型顺序见 `src/modes/edit/spawn_mode.ts`（角色 = 第 3 项，ArrowDown = 循环下一项）。
  */
-const CHARACTER_SPAWN_CYCLES = 6
+const CHARACTER_SPAWN_CYCLES = 2
 
 const openCharacterPanel = async (page: Page): Promise<void> => {
     await page.goto('/')

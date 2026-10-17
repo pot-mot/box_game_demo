@@ -49,14 +49,14 @@ describe('元素列表面板：Delete 删除', () => {
     })
 
     it('删除当前选中的元素', () => {
-        const {source, removed} = createFakeSource('box/common', 7)
+        const {source, removed} = createFakeSource('box', 7)
         setupElementListPanel([source])
         pressDelete()
         expect(removed).toEqual([7])
     })
 
     it('跨多个来源删除唯一被选中的元素', () => {
-        const box = createFakeSource('box/common')
+        const box = createFakeSource('box')
         const terrain = createFakeSource('terrain', 3)
         setupElementListPanel([box.source, terrain.source])
         pressDelete()
@@ -65,7 +65,7 @@ describe('元素列表面板：Delete 删除', () => {
     })
 
     it('无选中且无悬停时不删除任何元素', () => {
-        const {source, removed} = createFakeSource('box/common')
+        const {source, removed} = createFakeSource('box')
         setupElementListPanel([source])
         pressDelete()
         expect(removed).toEqual([])

@@ -13,11 +13,7 @@ type EntityGroup = typeof ENTITY_GROUPS[number]
 /** 实体类型 → 列表分组的映射 */
 const TYPE_GROUPS: Record<EntityType, EntityGroup> = {
     character: 'character',
-    'box/common': 'box',
-    'box/destruction': 'box',
-    'box/burning': 'box',
-    'box/magnet': 'box',
-    'box/elasticity': 'box',
+    'box': 'box',
     'area/water': 'area',
     terrain: 'terrain',
     'building_generator': 'building',

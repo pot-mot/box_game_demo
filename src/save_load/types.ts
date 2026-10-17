@@ -1,8 +1,4 @@
-import type {CommonBoxConfig, CommonEntityContext} from '../entity/box/common/types'
-import type {DestructibleConfig, DestructionEntityContext, CollisionRecord} from '../entity/box/destructed/types'
-import type {BurningBoxConfig, BurningEntityContext} from '../entity/box/burning/types'
-import type {MagnetBoxConfig, MagnetEntityContext} from '../entity/box/magnet/types'
-import type {ElasticBoxConfig, ElasticEntityContext} from '../entity/box/elasticity/types'
+import type {BoxConfig, BoxEntityContext, CollisionRecord} from '../entity/box/types'
 import type {WaterBlockConfig, WaterEntityContext} from '../entity/area/water/types'
 import type {BaseTerrainConfig, TerrainContext} from '../entity/terrain/base/types'
 import type {BuildingGeneratorContext, BuildingWorldSaveData} from '../entity/building_generator/types/index.ts'
@@ -28,8 +24,10 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  v8 起新增 interactable / item 实体与 play 背包 inventory、传送点 teleports（modeInfo.play），均为可选，旧档安全回退；
  *  v10 起 character 增加惯用手 handedness（可选，旧档安全回退右撇子）；
  *  v11 起 character 增加行为原点策略 originStrategy、漫游间隔 originInterval、追击半径 chaseLeashRadius（均可选，旧档安全回退默认）；
- *  v12 起 character 增加基础攻击加成 baseAttack（可选，旧档安全回退 0/0） */
-export const SAVE_FORMAT_VERSION = 12
+ * v12 起 character 增加基础攻击加成 baseAttack（可选，旧档安全回退 0/0）；
+ * v13 起 5 种箱子变体（box/common、box/destruction、box/burning、box/magnet、box/elasticity）合并为统一 `box` 实体
+ *  （`config` 携带可选特性对象），旧的 `box/*` 元素在加载时作为未知类型按元素粒度跳过 */
+export const SAVE_FORMAT_VERSION = 13
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -49,46 +47,26 @@ export interface FragmentDataJSON {
 
 // ── 各实体类型的存档格式 ──
 
-export interface SavableCommonBox {
-    type: 'box/common'
-    config: CommonBoxConfig
+/** 统一箱子存档：刚体配置 + 各特性可选运行态（存在即该特性启用） */
+export interface SavableBox {
+    type: 'box'
+    config: BoxConfig
     position: Vec3JSON
     quaternion: QuatJSON
-}
-
-export interface SavableDestructibleBox {
-    type: 'box/destruction'
-    config: DestructibleConfig
-    position: Vec3JSON
-    quaternion: QuatJSON
-    health: number
-    collisions?: CollisionRecord[]
-    collisionHistory?: CollisionRecord[]
-    cooldowns?: [number, number][]
-}
-
-export interface SavableBurningBox {
-    type: 'box/burning'
-    config: BurningBoxConfig
-    position: Vec3JSON
-    quaternion: QuatJSON
-    health: number
-}
-
-export interface SavableMagnetBox {
-    type: 'box/magnet'
-    config: MagnetBoxConfig
-    position: Vec3JSON
-    quaternion: QuatJSON
-}
-
-export interface SavableElasticBox {
-    type: 'box/elasticity'
-    config: ElasticBoxConfig
-    position: Vec3JSON
-    quaternion: QuatJSON
-    def: [number, number, number]
-    vel: [number, number, number]
+    /** 可破坏特性运行态（生命 / 碰撞恢复数据） */
+    destructible?: {
+        health?: number
+        collisions?: CollisionRecord[]
+        collisionHistory?: CollisionRecord[]
+        cooldowns?: [number, number][]
+    }
+    /** 燃烧特性运行态（生命） */
+    burning?: {health?: number}
+    /** 弹性特性运行态（形变 / 形变速度） */
+    elastic?: {
+        def: [number, number, number]
+        vel: [number, number, number]
+    }
 }
 
 export interface SavableWaterBlock {
@@ -142,8 +120,7 @@ export interface SavableItem {
     quaternion: QuatJSON
 }
 
-export type SavableEntity = SavableCommonBox | SavableDestructibleBox | SavableBurningBox
-    | SavableMagnetBox | SavableElasticBox | SavableWaterBlock | SavableTerrain
+export type SavableEntity = SavableBox | SavableWaterBlock | SavableTerrain
     | SavableFragment | SavableBuildingGenerator | SavableInteractable | SavableItem | SavableCharacter
 
 // ── 角色 ──
@@ -275,11 +252,7 @@ export interface SaveLoadSource {
 
 /** EntityType → 具体 Context 类型的强类型映射 */
 export type EntitySourceMap = {
-    'box/common': CommonEntityContext
-    'box/destruction': DestructionEntityContext
-    'box/burning': BurningEntityContext
-    'box/magnet': MagnetEntityContext
-    'box/elasticity': ElasticEntityContext
+    'box': BoxEntityContext
     'area/water': WaterEntityContext
     'fragment/common': FragmentEntityContext
     'character': CharacterEntitySystem

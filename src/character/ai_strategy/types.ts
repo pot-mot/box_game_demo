@@ -1,3 +1,5 @@
+import type {BoxPresetId} from '../../types/boxPreset.ts'
+
 /** 战斗子策略 */
 export const COMBAT_SUB_STRATEGIES = ['tactical', 'aggressive', 'cowardly'] as const
 export type CombatSubStrategy = typeof COMBAT_SUB_STRATEGIES[number]
@@ -22,13 +24,9 @@ export interface OriginConfig {
     interval: number
 }
 
-/** 可建造的箱型列表 */
-export const BUILDABLE_BOX_TYPES = ['box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity'] as const
-export type BuildableBoxType = typeof BUILDABLE_BOX_TYPES[number]
-
-/** 单个箱型的建造参数 */
+/** 单个箱型的建造参数（特性由 preset 决定，此处仅留尺寸 / 质量 / 摩擦与概率） */
 export interface BoxSpawnEntry {
-    entityType: BuildableBoxType
+    preset: BoxPresetId
     /** 被选中的概率（0~1，所有 entry 的 probability 之和应 <= 1） */
     probability: number
     minWidth: number
@@ -39,15 +37,6 @@ export interface BoxSpawnEntry {
     maxDepth: number
     mass: number
     friction: number
-    /** 可破坏/燃烧箱子专用 */
-    maxHealth?: number
-    /** 磁力箱子专用 */
-    attractionRadius?: number
-    attractionStrength?: number
-    /** 弹性箱子专用 */
-    stiffness?: number
-    dampingRatio?: number
-    maxDeformFraction?: number
 }
 
 /** 建造策略配置 */

@@ -1,10 +1,10 @@
 import {describe, it, expect} from 'vitest'
-import {validateSaveData} from './validation.ts'
+import {validateSaveData, parseSaveData} from './validation.ts'
 
 const makeValidSave = () => ({
     entities: [
         {
-            type: 'box/common' as const,
+            type: 'box' as const,
             config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3},
             position: [0, 0.5, 0] as [number, number, number],
             quaternion: [0, 0, 0, 1] as [number, number, number, number],
@@ -17,7 +17,7 @@ describe('validateSaveData', () => {
         const data = makeValidSave()
         const result = validateSaveData(data)
         expect(result.entities).toHaveLength(1)
-        expect(result.entities[0].type).toBe('box/common')
+        expect(result.entities[0].type).toBe('box')
     })
 
     it('校验通过空实体列表', () => {
@@ -31,30 +31,49 @@ describe('validateSaveData', () => {
         expect(result.modeInfo).toBeUndefined()
     })
 
-    it('拒绝错误的实体 type 字面量', () => {
+    it('未知实体 type：整档不失败，该元素被跳过并记录明细', () => {
         const data = {
             entities: [{...makeValidSave().entities[0], type: 'invalid'}],
         }
-        expect(() => validateSaveData(data)).toThrow()
+        const result = parseSaveData(data)
+        expect(result.data.entities).toHaveLength(0)
+        expect(result.skipped).toHaveLength(1)
+        expect(result.skipped[0].index).toBe(0)
+        expect(result.skipped[0].type).toBe('invalid')
     })
 
-    it('拒绝非法的配置参数', () => {
+    it('非法配置参数：该元素被跳过，其余合法元素保留', () => {
         const data = {
-            entities: [{
-                ...makeValidSave().entities[0],
-                config: {width: -1, height: 1, depth: 1, mass: 1, friction: 0.3},
-            }],
+            entities: [
+                {
+                    ...makeValidSave().entities[0],
+                    config: {width: -1, height: 1, depth: 1, mass: 1, friction: 0.3},
+                },
+                makeValidSave().entities[0],
+            ],
         }
-        expect(() => validateSaveData(data)).toThrow()
+        const result = parseSaveData(data)
+        expect(result.data.entities).toHaveLength(1)
+        expect(result.skipped).toHaveLength(1)
+        expect(result.skipped[0].index).toBe(0)
     })
 
     it('校验通过所有实体类型', () => {
         const types = [
-            {type: 'box/common', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3}},
-            {type: 'box/destruction', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, maxHealth: 100}, health: 100},
-            {type: 'box/burning', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, maxHealth: 100}, health: 100},
-            {type: 'box/magnet', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, attractionRadius: 5, attractionStrength: 10}},
-            {type: 'box/elasticity', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3, stiffness: 100, dampingRatio: 0.5, maxDeformFraction: 0.3}, def: [0, 0, 0], vel: [0, 0, 0]},
+            {type: 'box', config: {width: 1, height: 1, depth: 1, mass: 1, friction: 0.3}},
+            {
+                type: 'box',
+                config: {
+                    width: 1, height: 1, depth: 1, mass: 1, friction: 0.3,
+                    destructible: {maxHealth: 100},
+                    burning: {maxHealth: 100},
+                    magnet: {attractionRadius: 5, attractionStrength: 3},
+                    elastic: {stiffness: 30, dampingRatio: 0.5, maxDeformFraction: 0.3},
+                },
+                destructible: {health: 100},
+                burning: {health: 100},
+                elastic: {def: [0, 0, 0], vel: [0, 0, 0]},
+            },
             {type: 'area/water', config: {width: 2, height: 2, depth: 2, density: 2}},
             {type: 'terrain', config: {gridSize: 10, cellSize: 1, minHeight: 0, maxHeight: 5, friction: 0.3, generatorId: 'fbm'}, heights: [[0]]},
             {type: 'fragment/common', config: {mass: 0.1, friction: 0.3, lifetime: 5, maxLifetime: 5}, data: {renderVertices: [0, 0, 0, 1, 1, 1, 1, 0, 0], renderIndices: [0, 1, 2], hullVertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], hullFaces: [[0, 1, 2]], centroid: [0, 0, 0], massRatio: 1, boxSize: [1, 1, 1]}},
@@ -139,11 +158,7 @@ describe('validateSaveData', () => {
 
     it('最小合法存档 — 仅 type 通过校验', () => {
         const types = [
-            'box/common',
-            'box/destruction',
-            'box/burning',
-            'box/magnet',
-            'box/elasticity',
+            'box',
             'area/water',
             'terrain',
             'fragment/common',
@@ -496,16 +511,16 @@ describe('validateSaveData', () => {
         if (e1.type === 'character') {
             expect(e1.facing).toBeUndefined()
         }
-        expect(() => validateSaveData({entities: [{type: 'character', facing: 400}]})).toThrow()
-        expect(() => validateSaveData({entities: [{type: 'character', facing: -1}]})).toThrow()
+        expect(parseSaveData({entities: [{type: 'character', facing: 400}]}).skipped).toHaveLength(1)
+        expect(parseSaveData({entities: [{type: 'character', facing: -1}]}).skipped).toHaveLength(1)
     })
 
-    it('最小合法存档 — box/common 各字段取默认值', () => {
-        const data = {entities: [{type: 'box/common'}]}
+    it('最小合法存档 — box 各字段取默认值', () => {
+        const data = {entities: [{type: 'box'}]}
         const result = validateSaveData(data)
         expect(result.entities).toHaveLength(1)
-        expect(result.entities[0].type).toBe('box/common')
-        if (result.entities[0].type === 'box/common') {
+        expect(result.entities[0].type).toBe('box')
+        if (result.entities[0].type === 'box') {
             expect(result.entities[0].config.width).toBe(1)
             expect(result.entities[0].config.height).toBe(1)
             expect(result.entities[0].config.depth).toBe(1)
@@ -546,7 +561,7 @@ describe('validateSaveData', () => {
     it('存档含未知多余字段通过校验（静默丢弃）', () => {
         const data = {
             entities: [{
-                type: 'box/common',
+                type: 'box',
                 config: {width: 2, height: 2, depth: 2, mass: 1, friction: 0.3},
                 position: [0, 0, 0],
                 quaternion: [0, 0, 0, 1],

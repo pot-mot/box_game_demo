@@ -7,6 +7,9 @@
 const SURFACE_MATERIAL_IDS = ['rock', 'soil', 'brick', 'wood', 'rusty_iron', 'tile', 'cloth'] as const
 type SurfaceMaterialId = typeof SURFACE_MATERIAL_IDS[number]
 
+/** 未指定材质时的默认表面材质（箱子 / 碎片共用） */
+const DEFAULT_SURFACE_MATERIAL: SurfaceMaterialId = 'rock'
+
 /** 材质 id → 体素存储索引（0 保留为空，故从 1 起） */
 const SURFACE_MATERIAL_INDEX: Record<SurfaceMaterialId, number> = {
     rock: 1,
@@ -24,5 +27,5 @@ const MATERIAL_INDEX_TO_ID: ReadonlyArray<SurfaceMaterialId | undefined> = [
     ...SURFACE_MATERIAL_IDS,
 ]
 
-export {SURFACE_MATERIAL_IDS, SURFACE_MATERIAL_INDEX, MATERIAL_INDEX_TO_ID}
+export {SURFACE_MATERIAL_IDS, SURFACE_MATERIAL_INDEX, MATERIAL_INDEX_TO_ID, DEFAULT_SURFACE_MATERIAL}
 export type {SurfaceMaterialId}

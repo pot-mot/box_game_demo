@@ -1,7 +1,7 @@
-import type {SaveData} from './types.ts'
+import type {ParsedSaveData} from './validation.ts'
 
-/** 弹出文件选择框，读取并校验存档后回调 */
-export const promptLoadFile = (onLoad: (data: SaveData) => void): void => {
+/** 弹出文件选择框，读取并校验存档后回调（含被跳过元素的明细） */
+export const promptLoadFile = (onLoad: (parsed: ParsedSaveData) => void): void => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.json'
@@ -13,10 +13,9 @@ export const promptLoadFile = (onLoad: (data: SaveData) => void): void => {
             try {
                 if (typeof reader.result !== 'string') return
                 const raw = JSON.parse(reader.result) as unknown
-                import('./validation.ts').then(({validateSaveData}) => {
+                import('./validation.ts').then(({parseSaveData}) => {
                     try {
-                        const validated = validateSaveData(raw)
-                        onLoad(validated)
+                        onLoad(parseSaveData(raw))
                     } catch (err) {
                         console.warn('存档加载失败:', err)
                     }

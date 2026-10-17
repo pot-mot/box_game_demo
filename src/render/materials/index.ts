@@ -1,7 +1,7 @@
-import {MeshStandardMaterial, type Texture} from 'three'
+import {MeshStandardMaterial, CanvasTexture, type Texture} from 'three'
 import {SURFACE_MATERIAL_DEFS} from './defs.ts'
 import {SURFACE_MATERIAL_IDS, SURFACE_MATERIAL_INDEX, type SurfaceMaterialId} from './ids.ts'
-import {buildSurfaceTexture} from './textures.ts'
+import {buildSurfaceTexture, buildSurfaceGridTexture} from './textures.ts'
 
 export {SURFACE_MATERIAL_IDS, SURFACE_MATERIAL_INDEX, MATERIAL_INDEX_TO_ID} from './ids.ts'
 export type {SurfaceMaterialId} from './ids.ts'
@@ -32,13 +32,33 @@ export const getSurfaceMaterials = (): MeshStandardMaterial[] => {
 export const getSurfaceMaterial = (id: SurfaceMaterialId): MeshStandardMaterial =>
     getSurfaceMaterials()[SURFACE_MATERIAL_INDEX[id] - 1]
 
+let _gridTextures: Map<SurfaceMaterialId, CanvasTexture> | undefined
+
+/**
+ * 箱子 / 碎片专用表面纹理单例（材质图案 + 每格网格线）。
+ * 与建筑共用的 `buildSurfaceTexture` 分开缓存，避免把网格线带进建筑体素。
+ */
+export const getSurfaceGridTexture = (id: SurfaceMaterialId): CanvasTexture => {
+    if (_gridTextures === undefined) _gridTextures = new Map()
+    const cached = _gridTextures.get(id)
+    if (cached !== undefined) return cached
+    const tex = buildSurfaceGridTexture(id)
+    _gridTextures.set(id, tex)
+    return tex
+}
+
 /** 释放共享材质与纹理（仅测试 / 销毁渲染器时调用） */
 export const disposeSurfaceMaterials = (): void => {
-    if (_materials === undefined) return
-    for (const material of _materials) {
-        const map = material.map as Texture | null
-        map?.dispose()
-        material.dispose()
+    if (_materials !== undefined) {
+        for (const material of _materials) {
+            const map = material.map as Texture | null
+            map?.dispose()
+            material.dispose()
+        }
+        _materials = undefined
     }
-    _materials = undefined
+    if (_gridTextures !== undefined) {
+        for (const tex of _gridTextures.values()) tex.dispose()
+        _gridTextures = undefined
+    }
 }

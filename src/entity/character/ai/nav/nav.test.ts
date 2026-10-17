@@ -812,7 +812,7 @@ describe('NavSensor 各类实体障碍检测', () => {
         navConfig = {checkRadius: 0.5, checkDistance: 1.5, stuckTimeout: 2}
     })
 
-    it('25. box/common（1x3x1）在前方 → blocked_wall', () => {
+    it('25. 普通箱（1x3x1）在前方 → blocked_wall', () => {
         /* 普通箱子：默认尺寸 1x1x1 低于跳跃高度，用高箱测试 */
         const box = createBoxMesh(1.2, 1.5, 0, 1, 3, 1)
         obstacles.push(box)
@@ -821,7 +821,7 @@ describe('NavSensor 各类实体障碍检测', () => {
         expect(result.result).toBe('blocked_wall')
     })
 
-    it('26. box/destruction（1x1x1 可破坏箱）在前方 → blocked_low（矮于跳跃高度）', () => {
+    it('26. 可破坏箱（1x1x1 可破坏箱）在前方 → blocked_low（矮于跳跃高度）', () => {
         const box = createBoxMesh(1.2, 0.5, 0, 1, 1, 1)
         obstacles.push(box)
 
@@ -830,7 +830,7 @@ describe('NavSensor 各类实体障碍检测', () => {
         expect(result.result).toBe('blocked_low')
     })
 
-    it('27. box/burning（1x3x1 燃烧箱）在前方 → blocked_wall', () => {
+    it('27. 燃烧箱（1x3x1 燃烧箱）在前方 → blocked_wall', () => {
         const box = createBoxMesh(1.2, 1.5, 0, 1, 3, 1)
         obstacles.push(box)
 
@@ -838,7 +838,7 @@ describe('NavSensor 各类实体障碍检测', () => {
         expect(result.result).toBe('blocked_wall')
     })
 
-    it('28. box/magnet（1x3x1 磁力箱）在前方 → blocked_wall', () => {
+    it('28. 磁力箱（1x3x1 磁力箱）在前方 → blocked_wall', () => {
         const box = createBoxMesh(1.2, 1.5, 0, 1, 3, 1)
         obstacles.push(box)
 
@@ -846,7 +846,7 @@ describe('NavSensor 各类实体障碍检测', () => {
         expect(result.result).toBe('blocked_wall')
     })
 
-    it('29. box/elasticity（1x3x1 弹性箱）在前方 → blocked_wall', () => {
+    it('29. 弹性箱（1x3x1 弹性箱）在前方 → blocked_wall', () => {
         const box = createBoxMesh(1.2, 1.5, 0, 1, 3, 1)
         obstacles.push(box)
 
@@ -871,7 +871,7 @@ describe('NavSensor 各类实体障碍检测', () => {
         expect(result.result).toBe('blocked_low')
     })
 
-    it('32. 前方同时有 box/common 和 box/burning → 均命中返回 blocked_wall', () => {
+    it('32. 前方同时有 普通箱 和 燃烧箱 → 均命中返回 blocked_wall', () => {
         const common = createBoxMesh(1.2, 1.5, 0, 1, 3, 1)
         const burning = createBoxMesh(1.3, 1.5, 0.2, 1, 3, 1)
         obstacles.push(common, burning)
@@ -904,7 +904,7 @@ describe('NavFSM 各类实体障碍行为', () => {
         navCtx.config = navConfig
     })
 
-    it('34. box/common 高墙 + 左侧通 → steering 绕行', () => {
+    it('34. 普通箱 高墙 + 左侧通 → steering 绕行', () => {
         const wall = createBoxMesh(1.3, 2.0, 0, 0.3, 5, 0.3)
         obstacles.push(wall)
 
@@ -918,7 +918,7 @@ describe('NavFSM 各类实体障碍行为', () => {
         expect(navCtx.state).not.toBe('stuck')
     })
 
-    it('35. box/destruction 矮箱 + nav → 触发跳跃', () => {
+    it('35. 可破坏箱 矮箱 + nav → 触发跳跃', () => {
         const box = createBoxMesh(1.2, 0.5, 0, 1, 1, 1)
         obstacles.push(box)
 
@@ -927,7 +927,7 @@ describe('NavFSM 各类实体障碍行为', () => {
         expect(navCtx.state).toBe('jumping')
     })
 
-    it('36. box/elasticity 高箱 + 左右堵 → stuck → idle', () => {
+    it('36. 弹性箱 高箱 + 左右堵 → stuck → idle', () => {
         /* 弹性箱前方 + 左右均堵 */
         obstacles.push(
             createBoxMesh(1.3, 2.0, 0, 1, 4, 2.5),

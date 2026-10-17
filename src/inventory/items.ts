@@ -1,4 +1,5 @@
 import type {EquipSlot} from './types.ts'
+import type {BoxPresetId} from '../types/boxPreset.ts'
 import {translate, type StringLocaleKey} from '../i18n/index.ts'
 import type {IconName} from '../ui/icons/sprite.ts'
 
@@ -17,7 +18,7 @@ export const ITEM_CATEGORY_LABELS: Record<ItemCategory, StringLocaleKey> = {
 /**
  * 物品定义：`shape` 为俄罗斯方块形状（每行一个字符串，`#` 为占格；行数 = 高度，最长行 = 宽度）。
  * `weaponId` / `armorId` 指向既有武器模型 / 护甲预设，实现背包装备；
- * `blockType` 指向实体类型（`ENTITY_TYPE_VALUES` 中的方块类），用于方块物品（图鉴 / 放置）。
+ * `blockType` 为放置时生成的实体类型（箱子恒为 `box`，水为 `area/water`），`boxPreset` 为箱子特性预设。
  */
 export interface ItemDef {
     readonly id: string
@@ -30,8 +31,10 @@ export interface ItemDef {
     readonly weaponId?: string
     readonly armorId?: string
     readonly equipSlot?: EquipSlot
-    /** 方块物品对应的实体类型（`box/common` / `area/water` 等；仅 `block` 类别） */
+    /** 方块物品放置时生成的实体类型（`box` / `area/water`；仅 `block` 类别） */
     readonly blockType?: string
+    /** 箱子特性预设（仅 `blockType === 'box'` 的方块物品） */
+    readonly boxPreset?: BoxPresetId
     readonly dropSize: readonly [number, number, number]
     readonly description: string
 }
@@ -62,7 +65,7 @@ const armor = (id: string, name: string, shape: readonly string[], armorId: stri
     description: `${name}（${effect}）`,
 })
 
-const block = (id: string, name: string, shape: readonly string[], blockType: string, description: string, icon: IconName): ItemDef => ({
+const block = (id: string, name: string, shape: readonly string[], blockType: string, description: string, icon: IconName, boxPreset?: BoxPresetId): ItemDef => ({
     id,
     name,
     category: 'block',
@@ -70,6 +73,7 @@ const block = (id: string, name: string, shape: readonly string[], blockType: st
     shape,
     maxStack: 99,
     blockType,
+    boxPreset,
     dropSize: [0.4, 0.4, 0.4],
     description: `${name}（${description}）`,
 })
@@ -119,11 +123,11 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     armor('armor_swift_boots', '疾行靴', ['#', '#'], 'swift_boots', 'legs', '提升移速', 'item-swift-boots'),
     armor('armor_wind_boots', '疾风靴', ['#', '#'], 'wind_boots', 'legs', '大幅提升移速', 'item-wind-boots'),
     /* ── 方块 ── */
-    block('block_common', '普通方块', ['#'], 'box/common', '基础物理方块', 'item-block'),
-    block('block_destruction', '可破坏方块', ['#'], 'box/destruction', '受击碎裂', 'item-block-destruction'),
-    block('block_burning', '燃烧方块', ['#'], 'box/burning', '受击燃烧', 'item-block-burning'),
-    block('block_magnet', '磁力方块', ['#'], 'box/magnet', '吸引金属物', 'item-block-magnet'),
-    block('block_elasticity', '弹性方块', ['#'], 'box/elasticity', '受力形变', 'item-block-elasticity'),
+    block('block_common', '普通方块', ['#'], 'box', '基础物理方块', 'item-block', 'common'),
+    block('block_destruction', '可破坏方块', ['#'], 'box', '受击碎裂', 'item-block-destruction', 'destructible'),
+    block('block_burning', '燃烧方块', ['#'], 'box', '受击燃烧', 'item-block-burning', 'burning'),
+    block('block_magnet', '磁力方块', ['#'], 'box', '吸引金属物', 'item-block-magnet', 'magnet'),
+    block('block_elasticity', '弹性方块', ['#'], 'box', '受力形变', 'item-block-elasticity', 'elastic'),
     block('block_water', '水方块', ['#'], 'area/water', '液面折射', 'item-block-water'),
     /* ── 消耗品 / 材料 / 钥匙 ── */
     {

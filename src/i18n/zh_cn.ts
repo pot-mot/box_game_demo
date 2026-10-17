@@ -36,6 +36,12 @@ export const localeZhCn: MainLocale = {
     'startup.has_cache': '存在上次的存档',
     'startup.clear': '清除',
 
+    /* ── 存档加载提示 ── */
+    'save.skipped_title': '存档加载提示',
+    'save.skipped_message': (count) => `有 ${count} 个元素无法加载，已跳过：`,
+    'save.skipped_entry': (index, type) => `#${index} ${type}`,
+    'save.skipped_unknown_type': '（未知类型）',
+
     /* ── 设置菜单 ── */
     'settings.title': '设置',
     'settings.return_home': '🏠 返回主页面',
@@ -64,11 +70,7 @@ export const localeZhCn: MainLocale = {
     'element.group.other': '其它',
 
     /* ── 生成类型选择 ── */
-    'spawn.box_common': '普通方块',
-    'spawn.box_destruction': '可破坏方块',
-    'spawn.box_burning': '燃烧方块',
-    'spawn.box_magnet': '磁力方块',
-    'spawn.box_elasticity': '弹性方块',
+    'spawn.box': '普通方块',
     'spawn.area_water': '水体',
     'spawn.character': '角色',
     'spawn.terrain': '地形',
@@ -179,6 +181,9 @@ export const localeZhCn: MainLocale = {
     'panel.stiffness': '刚度',
     'panel.damping': '阻尼',
     'panel.max_deform': '最大形变',
+    'panel.fragment_count': '碎裂块数',
+    'panel.material': '表面材质',
+    'panel.traits': '特性',
 
     /* ── 各领域文案域 ── */
     ...entityZh,

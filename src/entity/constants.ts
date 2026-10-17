@@ -3,7 +3,7 @@ export const CHARACTER_ENTITY_TYPE = 'character' as const
 
 /** 实体类型枚举值列表 */
 const ENTITY_TYPE_VALUES = [
-    'box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity',
+    'box',
     'fragment/common',
     'area/water',
     CHARACTER_ENTITY_TYPE,

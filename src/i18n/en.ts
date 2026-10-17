@@ -36,6 +36,12 @@ export const localeEn: MainLocale = {
     'startup.has_cache': 'Previous save found',
     'startup.clear': 'Clear',
 
+    /* ── Save load notice ── */
+    'save.skipped_title': 'Save Load Notice',
+    'save.skipped_message': (count) => `${count} element(s) could not be loaded and were skipped:`,
+    'save.skipped_entry': (index, type) => `#${index} ${type}`,
+    'save.skipped_unknown_type': '(unknown type)',
+
     /* ── Settings menu ── */
     'settings.title': 'Settings',
     'settings.return_home': '🏠 Back to Home',
@@ -64,11 +70,7 @@ export const localeEn: MainLocale = {
     'element.group.other': 'Other',
 
     /* ── Spawn mode selector ── */
-    'spawn.box_common': 'Common Box',
-    'spawn.box_destruction': 'Destructible Box',
-    'spawn.box_burning': 'Burning Box',
-    'spawn.box_magnet': 'Magnet Box',
-    'spawn.box_elasticity': 'Elastic Box',
+    'spawn.box': 'Common Box',
     'spawn.area_water': 'Water',
     'spawn.character': 'Character',
     'spawn.terrain': 'Terrain',
@@ -179,6 +181,9 @@ export const localeEn: MainLocale = {
     'panel.stiffness': 'Stiffness',
     'panel.damping': 'Damping',
     'panel.max_deform': 'Max Δ',
+    'panel.fragment_count': 'Fragments',
+    'panel.material': 'Surface Material',
+    'panel.traits': 'Traits',
 
     /* ── Domain locale fragments ── */
     ...entityEn,

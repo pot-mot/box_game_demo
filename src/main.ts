@@ -14,13 +14,10 @@ import {createVelocitySnapshots} from './physics/velocity_snapshots.ts'
 import {setupInfiniteGrid} from './render/grid.ts'
 import {setupRefractionPass} from './render/refraction_pass.ts'
 import {createPhysicsEnv} from './physics/env.ts'
-import {setupCommonBoxes} from './entity/box/common/physics/world.ts'
-import {setupDestructibleBoxes} from './entity/box/destructed/physics/world.ts'
+import {setupBoxes} from './entity/box/physics/world.ts'
+import {boxPresetConfig} from './entity/box/presets.ts'
 import {setupFragmentEntities} from './entity/fragment/common/physics/world.ts'
 import {setupWaterBlocks} from './entity/area/water/physics/world.ts'
-import {setupBurningBoxes} from './entity/box/burning/physics/world.ts'
-import {setupMagnetBoxes} from './entity/box/magnet/physics/world.ts'
-import {setupElasticBoxes} from './entity/box/elasticity/physics/world.ts'
 import {setupTerrain} from './entity/terrain/common/physics/world.ts'
 import {setupBuildingGenerator} from './entity/building_generator/world.ts'
 import {setupInteractables} from './entity/interactable/index.ts'
@@ -29,6 +26,7 @@ import {setupHakoniwa} from './modes/play/hakoniwa.ts'
 import type {PlaySaveData} from './modes/play/save.ts'
 import {setupCharacterEntities} from './entity/character/physics/world.ts'
 import type {CharacterEntitySystem} from './entity/character/physics/world.ts'
+import type {SpawnBoxCallback} from './entity/character/ai/types.ts'
 import type {CharacterEntity} from './character/types.ts'
 import {setupCameraInfo} from './ui/camera_info.ts'
 import {installIconSprite} from './ui/icons/sprite.ts'
@@ -46,6 +44,7 @@ import {collectWorldState, saveWorldToFile} from './save_load/serialize.ts'
 import {loadWorldFromData, clearAllEntities, type LoadWorldResult} from './save_load/deserialize.ts'
 import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
 import {promptLoadFile} from './save_load/actions.ts'
+import {showSkippedEntitiesNotice} from './ui/components/message_dialog.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
 import {createInputRegistry} from './input/registry.ts'
 import {openOperationsPanel} from './input/operations_panel.ts'
@@ -92,7 +91,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
      * （与 cannon-es 每内部步清力的语义一致，属有意取舍） */
     shared.eventBus.onStepEnd(() => clearAllForces(shared.world))
 
-    /* 撞击前速度快照（单例）：destruction / elasticity 共用，每子步结束自动刷新 */
+    /* 撞击前速度快照（单例）：箱子可破坏 / 弹性特性共用，每子步结束自动刷新 */
     const velocitySnapshots = createVelocitySnapshots(shared.eventBus, () => physicsEnv.getAllBodies())
 
     // --- Entity 子系统（按依赖顺序初始化）---
@@ -103,29 +102,21 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const interactables = setupInteractables(scene, shared)
     const itemEntities = setupItemEntities(scene, shared)
     const characterSystem: CharacterEntitySystem = setupCharacterEntities(scene, shared)
-    const common = setupCommonBoxes(scene, shared)
-    const destruction = setupDestructibleBoxes(scene, shared, fragments, velocitySnapshots)
+    const boxes = setupBoxes(scene, shared, {fragmentCtx: fragments, velocitySnapshots, physicsEnv})
     const water = setupWaterBlocks(scene, physicsEnv)
-    const burning = setupBurningBoxes(scene, shared)
-    const magnet = setupMagnetBoxes(scene, shared, physicsEnv)
-    const elastic = setupElasticBoxes(scene, shared, velocitySnapshots)
 
     // 注册 body provider
     physicsEnv.bodyProviders.push(
         () => fragments.getAll().map(f => f.body),
         () => characterSystem.getAll().map((e: CharacterEntity) => e.body),
-        () => common.getAll().map(e => e.body),
-        () => destruction.getAll().map(e => e.body),
-        () => burning.getAll().map(e => e.body),
-        () => magnet.getAll().map(e => e.body),
-        () => elastic.getAll().map(e => e.body),
+        () => boxes.getAll().map(e => e.body),
         () => terrainSource.getAll().map(e => e.body),
         () => interactables.getAll().map(e => e.body),
         () => itemEntities.getAll().map(e => e.body),
     )
 
     // 按 type 索引
-    const systems: EntitySystem[] = [common, destruction, fragments, water, burning, magnet, elastic, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem]
+    const systems: EntitySystem[] = [boxes, fragments, water, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem]
     const systemsByType = new Map<string, EntityInfoSource>(
         systems.map(s => [s.type, s]),
     )
@@ -142,41 +133,10 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         clearAllEntities(systemsByType, allTerrainSources)
     }
 
-    /* 箱子生成回调（供 builder AI 使用） */
-    const boxSpawner = (entry: {entityType: string; mass: number; friction: number; maxHealth?: number; attractionRadius?: number; attractionStrength?: number; stiffness?: number; dampingRatio?: number; maxDeformFraction?: number}, x: number, y: number, z: number, size: {width: number; height: number; depth: number}): void => {
+    /* 箱子生成回调（供 builder AI 使用）：特性由 preset 决定，质量 = 单位质量 × 体积 */
+    const boxSpawner: SpawnBoxCallback = (entry, x, y, z, size): void => {
         const mass = entry.mass * size.width * size.height * size.depth
-        switch (entry.entityType) {
-            case 'box/common':
-                common.add({...size, mass, friction: entry.friction}, x, y, z)
-                break
-            case 'box/destruction':
-                destruction.add({
-                    ...size, mass, friction: entry.friction,
-                    maxHealth: entry.maxHealth ?? 10,
-                }, x, y, z)
-                break
-            case 'box/burning':
-                burning.add({
-                    ...size, mass, friction: entry.friction,
-                    maxHealth: entry.maxHealth ?? 10,
-                }, x, y, z)
-                break
-            case 'box/magnet':
-                magnet.add({
-                    ...size, mass, friction: entry.friction,
-                    attractionRadius: entry.attractionRadius ?? 5,
-                    attractionStrength: entry.attractionStrength ?? 10,
-                }, x, y, z)
-                break
-            case 'box/elasticity':
-                elastic.add({
-                    ...size, mass, friction: entry.friction,
-                    stiffness: entry.stiffness ?? 100,
-                    dampingRatio: entry.dampingRatio ?? 0.3,
-                    maxDeformFraction: entry.maxDeformFraction ?? 0.2,
-                }, x, y, z)
-                break
-        }
+        boxes.add(boxPresetConfig(entry.preset, {...size, mass, friction: entry.friction}), x, y, z)
     }
 
     characterSystem.registerBoxSpawner(boxSpawner)
@@ -187,7 +147,11 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     let savedPlay: PlaySaveData | undefined
     /* 展示/骨骼动画模式为独立干净场景，不加载存档元素 */
     if (mode === 'edit' || mode === 'play') {
-        const dataToLoad = saveData ?? loadCachedSaveData()
+        /* 启动屏已解析的存档直接使用；否则（无导入）回退到缓存，缓存解析结果携带跳过明细。
+         * 启动屏路径的跳过提示已在启动屏弹出，此处不重复。 */
+        const cachedParsed = saveData === undefined ? loadCachedSaveData() : undefined
+        const dataToLoad: SaveData | undefined = saveData ?? cachedParsed?.data
+        if (cachedParsed !== undefined) void showSkippedEntitiesNotice(cachedParsed.skipped)
         if (dataToLoad) {
             if (mode === 'play' && dataToLoad.modeInfo?.play !== undefined) {
                 savedPlay = {
@@ -347,7 +311,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             mode,
             camera.position,
             camera.rotation,
-            cached?.modeInfo,
+            cached?.data.modeInfo,
         )
         /* play 模式的背包 / 传送点数据并入 modeInfo.play */
         if (mode === 'play' && hakoniwa !== undefined) {
@@ -363,7 +327,9 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     if (mode === 'edit') input.onActionDown('save_world', exportSaveWorld)
 
     if (mode !== 'showcase' && mode !== 'bone_edit') input.onActionDown('load_world', () => {
-        promptLoadFile((data) => {
+        promptLoadFile((parsed) => {
+            const data = parsed.data
+            void showSkippedEntitiesNotice(parsed.skipped)
             cacheSaveData(data)
             /* 载入新世界：连同执行期子弹一起清空，避免旧子弹飞入新世界 */
             clearWorld()

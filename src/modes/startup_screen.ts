@@ -1,9 +1,11 @@
 import type {GameMode} from './constants.ts'
 import type {SaveData} from '../save_load/types.ts'
+import type {ParsedSaveData} from '../save_load/validation.ts'
 import {cacheSaveData, loadCachedSaveData, clearCachedSaveData} from '../save_load/cache.ts'
 import {getLocale, getLocales, setLocale, translate, type LocalKeyParam} from '../i18n/index.ts'
 import {LOCALE_DISPLAY_NAMES, isLocale} from '../i18n/constants.ts'
 import {localizeText, localizeApply} from '../i18n/dom.ts'
+import {showSkippedEntitiesNotice} from '../ui/components/message_dialog.ts'
 
 export interface StartupHandlers {
     onStart: (mode: GameMode, saveData?: SaveData) => void
@@ -131,7 +133,8 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
         const cached = loadCachedSaveData()
         if (cached) {
             cacheRow.style.display = ''
-            cachedData = cached
+            cachedParsed = cached
+            void showSkippedEntitiesNotice(cached.skipped)
         } else {
             cacheRow.style.display = 'none'
         }
@@ -139,12 +142,12 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
 
     clearCacheBtn.addEventListener('click', () => {
         clearCachedSaveData()
-        cachedData = undefined
+        cachedParsed = undefined
         cacheRow.style.display = 'none'
     })
 
-    let importedData: SaveData | undefined
-    let cachedData: SaveData | undefined
+    let importedParsed: ParsedSaveData | undefined
+    let cachedParsed: ParsedSaveData | undefined
 
     showCache()
 
@@ -158,11 +161,12 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
             try {
                 if (typeof reader.result !== 'string') return
                 const raw = JSON.parse(reader.result) as unknown
-                import('../save_load/validation.ts').then(({validateSaveData}) => {
+                import('../save_load/validation.ts').then(({parseSaveData}) => {
                     try {
-                        const validated = validateSaveData(raw)
-                        importedData = validated
-                        cacheSaveData(validated)
+                        const parsed = parseSaveData(raw)
+                        importedParsed = parsed
+                        cacheSaveData(parsed.data)
+                        void showSkippedEntitiesNotice(parsed.skipped)
                         cacheRow.style.display = 'none'
                         importLabel.textContent = translate({key: 'startup.imported', args: [file.name]})
                         importLabel.className = 'dc-text-success'
@@ -184,7 +188,7 @@ export const setupStartupScreen = (handlers: StartupHandlers): void => {
         /* 展示/骨骼动画模式为独立干净场景，不加载存档元素 */
         const saveData = mode === 'showcase' || mode === 'bone_edit'
             ? undefined
-            : importedData ?? cachedData
+            : importedParsed?.data ?? cachedParsed?.data
         handlers.onStart(mode, saveData)
     }
 

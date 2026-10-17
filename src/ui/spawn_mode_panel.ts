@@ -4,7 +4,7 @@ import {localizeText} from '../i18n/dom.ts'
 import {createIcon} from './icons/icon.ts'
 
 const MODES: SpawnMode[] = [
-    'box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity',
+    'box',
     'area/water',
     'character',
     'terrain',
@@ -12,11 +12,7 @@ const MODES: SpawnMode[] = [
     'interactable',
 ]
 const MODE_LABELS: Record<SpawnMode, StringLocaleKey> = {
-    'box/common': 'spawn.box_common',
-    'box/destruction': 'spawn.box_destruction',
-    'box/burning': 'spawn.box_burning',
-    'box/magnet': 'spawn.box_magnet',
-    'box/elasticity': 'spawn.box_elasticity',
+    'box': 'spawn.box',
     'area/water': 'spawn.area_water',
     'character': 'spawn.character',
     'terrain': 'spawn.terrain',

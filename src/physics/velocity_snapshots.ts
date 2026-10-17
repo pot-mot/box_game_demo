@@ -8,7 +8,7 @@ import type {CollisionEventBus} from './collision_events.ts'
  * 完成冲量求解，事件回调里读到的 linvel 已是撞击后的速度（约等于 0），
  * 无法用它计算冲击强度。
  *
- * 单例创建（main.ts），destruction / elasticity 共用，避免重复扫描全部刚体。
+ * 单例创建（main.ts），箱子可破坏 / 弹性特性共用，避免重复扫描全部刚体。
  */
 export interface VelocitySnapshots {
     get(handle: number): RapVector3 | undefined

@@ -1,8 +1,12 @@
 import type {ShowcaseModule} from '../module.ts'
 import {setupShowcaseScene} from '../scene.ts'
 import {createSharedWorld} from '../../../physics/world.ts'
+import {createPhysicsEnv} from '../../../physics/env.ts'
+import {createVelocitySnapshots} from '../../../physics/velocity_snapshots.ts'
 import {setupTerrain} from '../../../entity/terrain/common/physics/world.ts'
-import {setupCommonBoxes} from '../../../entity/box/common/physics/world.ts'
+import {setupBoxes} from '../../../entity/box/physics/world.ts'
+import {boxPresetConfig} from '../../../entity/box/presets.ts'
+import {setupFragmentEntities} from '../../../entity/fragment/common/physics/world.ts'
 import {setupCharacterEntities} from '../../../entity/character/physics/world.ts'
 import type {EntityInfoSource} from '../../../entity/box/base/types/entity_info.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
@@ -162,6 +166,8 @@ export const aiTerrainModule: ShowcaseModule = {
     setup: host => {
         const sceneCtx = setupShowcaseScene(host.renderer)
         const shared = createSharedWorld()
+        const physicsEnv = createPhysicsEnv()
+        const velocitySnapshots = createVelocitySnapshots(shared.eventBus, () => physicsEnv.getAllBodies())
 
         const terrain = setupTerrain(sceneCtx.scene, shared, () => [])
         terrain.add(
@@ -177,21 +183,23 @@ export const aiTerrainModule: ShowcaseModule = {
         )
 
         /* 中央低墙：高度低于跳跃高度，用于触发导航跳跃（blocked_low） */
-        const common = setupCommonBoxes(sceneCtx.scene, shared)
+        const fragments = setupFragmentEntities(sceneCtx.scene, shared)
+        const boxes = setupBoxes(sceneCtx.scene, shared, {fragmentCtx: fragments, velocitySnapshots, physicsEnv})
+        physicsEnv.bodyProviders.push(() => boxes.getAll().map(e => e.body))
         const wallBaseY = terrain.getHeightAt(0, 0, 20) ?? 0
-        common.add(
-            {
+        boxes.add(
+            boxPresetConfig('common', {
                 width: AI_OBSTACLE_WALL_THICKNESS,
                 height: AI_OBSTACLE_WALL_HEIGHT,
                 depth: AI_OBSTACLE_WALL_DEPTH,
                 mass: 0,
                 friction: 0.5,
-            },
+            }),
             0, wallBaseY + AI_OBSTACLE_WALL_HEIGHT / 2, 0,
         )
 
         const characterSystem = setupCharacterEntities(sceneCtx.scene, shared)
-        const systems: SteppableSystem[] = [common, terrain, characterSystem]
+        const systems: SteppableSystem[] = [boxes, terrain, characterSystem]
 
         const spawned: number[] = []
         const spawnAll = (): void => {

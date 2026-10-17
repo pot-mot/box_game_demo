@@ -14,11 +14,9 @@ import {EQUIP_SLOT_LABELS} from '../../../inventory/types.ts'
 import {createGridBoxMaterial} from '../../../render/gridMaterial.ts'
 import {scaleBoxUVs} from '../../../render/texture.ts'
 import {TILE_SIZE} from '../../../render/constants.ts'
-import {BASE_COLOR as COMMON_BASE, GRID_COLOR as COMMON_GRID} from '../../../entity/box/common/render/constants.ts'
-import {BASE_COLOR as DESTRUCTION_BASE, GRID_COLOR as DESTRUCTION_GRID} from '../../../entity/box/destructed/render/constants.ts'
-import {BASE_COLOR as MAGNET_BASE, GRID_COLOR as MAGNET_GRID} from '../../../entity/box/magnet/render/constants.ts'
-import {BASE_COLOR as ELASTICITY_BASE, GRID_COLOR as ELASTICITY_GRID} from '../../../entity/box/elasticity/render/constants.ts'
-import {DEFAULT_BASE_COLOR, DEFAULT_GRID_COLOR} from '../../../render/constants.ts'
+import {BOX_BADGE_COLORS, BOX_DEFAULT_BADGE_COLOR} from '../../../entity/box/constants.ts'
+import type {BoxPresetId} from '../../../types/boxPreset.ts'
+import {DEFAULT_GRID_COLOR} from '../../../render/constants.ts'
 import {WATER_COLOR_DEEP, WATER_COLOR_SHALLOW} from '../../../entity/area/water/render/constants.ts'
 import {ACTOR_JUMP_HEIGHT, ACTOR_SPEED, CATALOG_CAMERA_DISTANCE, CATALOG_CAMERA_TARGET_Y, CATALOG_CUBE_Y} from '../constants.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
@@ -35,14 +33,27 @@ const CATEGORY_COLORS: Record<ItemCategory, number> = {
     key: 0xd4af37,
 }
 
-/** 方块物品预览取色（复用各方块渲染模块的底色 / 网格色，避免颜色漂移） */
+/** 十六进制色串（`#rrggbb`）→ 数值（供预览材质取色） */
+const hexToNum = (hex: string): number => parseInt(hex.slice(1), 16)
+
+/** 箱型预设预览取色（复用箱子徽章底色，避免颜色漂移） */
+const BOX_PRESET_PREVIEW: Record<BoxPresetId, {base: number; grid: number}> = {
+    common: {base: hexToNum(BOX_DEFAULT_BADGE_COLOR), grid: DEFAULT_GRID_COLOR},
+    destructible: {base: hexToNum(BOX_BADGE_COLORS.destructible), grid: DEFAULT_GRID_COLOR},
+    burning: {base: hexToNum(BOX_BADGE_COLORS.burning), grid: DEFAULT_GRID_COLOR},
+    magnet: {base: hexToNum(BOX_BADGE_COLORS.magnet), grid: DEFAULT_GRID_COLOR},
+    elastic: {base: hexToNum(BOX_BADGE_COLORS.elastic), grid: DEFAULT_GRID_COLOR},
+}
+
+/** 非箱子方块物品预览取色（水） */
 const BLOCK_PREVIEW: Record<string, {base: number; grid: number}> = {
-    'box/common': {base: COMMON_BASE, grid: COMMON_GRID},
-    'box/destruction': {base: DESTRUCTION_BASE, grid: DESTRUCTION_GRID},
-    'box/burning': {base: DEFAULT_BASE_COLOR, grid: DEFAULT_GRID_COLOR},
-    'box/magnet': {base: MAGNET_BASE, grid: MAGNET_GRID},
-    'box/elasticity': {base: ELASTICITY_BASE, grid: ELASTICITY_GRID},
     'area/water': {base: WATER_COLOR_DEEP, grid: WATER_COLOR_SHALLOW},
+}
+
+/** 方块物品预览取色：箱子按预设取色，其余按实体类型取色 */
+const blockPreviewOf = (def: ItemDef): {base: number; grid: number} | undefined => {
+    if (def.boxPreset !== undefined) return BOX_PRESET_PREVIEW[def.boxPreset]
+    return def.blockType !== undefined ? BLOCK_PREVIEW[def.blockType] : undefined
 }
 
 const isEquipment = (def: ItemDef): boolean => def.category === 'weapon' || def.category === 'armor'
@@ -66,6 +77,7 @@ const applyItemToModel = (model: ReturnType<typeof createCharacterModel>, def: I
 const subLineOf = (def: ItemDef): string => {
     const category = translate(ITEM_CATEGORY_LABELS[def.category])
     if (def.equipSlot !== undefined) return `${category} · ${translate(EQUIP_SLOT_LABELS[def.equipSlot])}`
+    if (def.boxPreset !== undefined) return `${category} · ${def.boxPreset}`
     if (def.blockType !== undefined) return `${category} · ${def.blockType}`
     return category
 }
@@ -193,7 +205,7 @@ export const catalogModule: ShowcaseModule = {
                 clearCube()
                 return
             }
-            const blockColors = def.blockType !== undefined ? BLOCK_PREVIEW[def.blockType] : undefined
+            const blockColors = blockPreviewOf(def)
             if (blockColors !== undefined) {
                 showCube(blockColors.base, blockColors.grid, 0.6)
             } else {

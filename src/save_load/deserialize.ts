@@ -50,11 +50,7 @@ export const loadWorldFromData = (
     const getSource = <K extends EntityType>(key: K): EntitySourceMap[K] | undefined =>
         systems.get(key) as EntitySourceMap[K] | undefined
 
-    const common = getSource('box/common')
-    const dest = getSource('box/destruction')
-    const burn = getSource('box/burning')
-    const magnet = getSource('box/magnet')
-    const elastic = getSource('box/elasticity')
+    const boxes = getSource('box')
     const water = getSource('area/water')
     const frag = getSource('fragment/common')
     const building = getSource('building_generator')
@@ -99,29 +95,16 @@ export const loadWorldFromData = (
         const rawQuat = 'quaternion' in entity ? entity.quaternion : undefined
         const quat = rawQuat ? {x: rawQuat[0], y: rawQuat[1], z: rawQuat[2], w: rawQuat[3]} : undefined
         switch (entity.type) {
-            case 'box/common':
-                common?.add(entity.config, x, y, z, quat)
-                break
-            case 'box/destruction':
-                dest?.add(entity.config, x, y, z, quat, {
-                    health: entity.health,
-                    collisions: entity.collisions,
-                    collisionHistory: entity.collisionHistory,
-                    cooldowns: entity.cooldowns ? new Map(entity.cooldowns) : undefined,
-                })
-                break
-            case 'box/burning':
-                burn?.add(entity.config, x, y, z, quat, {
-                    health: entity.health,
-                })
-                break
-            case 'box/magnet':
-                magnet?.add(entity.config, x, y, z, quat)
-                break
-            case 'box/elasticity':
-                elastic?.add(entity.config, x, y, z, quat, {
-                    def: entity.def,
-                    vel: entity.vel,
+            case 'box':
+                boxes?.add(entity.config, x, y, z, quat, {
+                    destructible: entity.destructible ? {
+                        health: entity.destructible.health,
+                        collisions: entity.destructible.collisions,
+                        collisionHistory: entity.destructible.collisionHistory,
+                        cooldowns: entity.destructible.cooldowns ? new Map(entity.destructible.cooldowns) : undefined,
+                    } : undefined,
+                    burning: entity.burning ? {health: entity.burning.health} : undefined,
+                    elastic: entity.elastic ? {def: entity.elastic.def, vel: entity.elastic.vel} : undefined,
                 })
                 break
             case 'area/water':

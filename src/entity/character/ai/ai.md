@@ -500,7 +500,9 @@ interface CombatConfig {
 ```ts
 const PEACE_SUB_STRATEGIES = ['patrol', 'build'] as const
 const COMBAT_SUB_STRATEGIES = ['tactical', 'aggressive', 'cowardly'] as const
-const BUILDABLE_BOX_TYPES = ['box/common', 'box/destruction', 'box/burning', 'box/magnet', 'box/elasticity'] as const
+/* 可建造箱型 = 全部箱子特性预设（src/types/boxPreset.ts 的 BOX_PRESET_IDS） */
+/* 建造条目按预设决定特性：{preset, probability, 尺寸范围, mass, friction} */
+interface BoxSpawnEntry { preset: BoxPresetId; probability: number; /* ...尺寸/质量/摩擦 */ }
 ```
 
 ### 5.5 `LineOfSightChecker` 与视线扇形

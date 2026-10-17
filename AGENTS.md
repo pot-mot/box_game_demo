@@ -32,7 +32,7 @@
 
 1. **无占位实现** — 不提交 TODO、空实现或调试用 `console.log`；未完成的能力要么不合并，要么在对应模块文档中记录设计方案。
 2. **改动完整** — 功能改动必须同时补齐类型、测试（按改动性质选单测或 e2e）、相关模块的同名文档，以及根 AGENTS.md 中受影响的结构/约定描述。
-3. **兼容性** — 存档格式（`save_load/`）与本地存储（如键位绑定 `localStorage`）变更必须考虑旧数据：校验层需安全回退到默认值，不得抛错崩溃。
+3. **兼容性** — 存档格式（`save_load/`）与本地存储（如键位绑定 `localStorage`）变更必须考虑旧数据：校验层需安全回退到默认值，不得抛错崩溃。**无法解析的单个实体元素按元素粒度跳过**（`parseSaveData` 返回 `skipped: {index, type, reason}[]`，仅结构性失败才抛错），并经 `ui/components/message_dialog.ts` 的 `showSkippedEntitiesNotice` 弹出对话框列出全部被跳过的 `index + type`；禁止因单元素非法而整档失败。见 [`src/save_load/save_load.md`](src/save_load/save_load.md)。
 4. **性能** — 帧内逻辑避免无谓分配（复用向量与临时对象），更新路径中禁止创建 DOM；纹理、材质、几何体按需单例复用。
 5. **玩家可读性** — 面向玩家的 UI 文案、代码注释与文档一律中文；标识符沿用既有英文命名习惯。**UI 文案禁止硬编码**：一律经 `src/i18n/` 的 `translate` / `localizeText` / `localizeTitle` / `localizePlaceholder` 取用（详见 [`docs/i18n.md`](docs/i18n.md)）；数据名称经 `weaponDisplayName` / `armorPieceDisplayName` / `itemDisplayName` 等映射，序列化字段（如骨架关节名）不改数据、仅显示层翻译。
 6. **UI 风格统一** — 全部模式 / 面板 / HUD 遵循 [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)；样式只走 `src/assets/theme.css` 的 `--dc-*` 令牌与 `.dc-*` 组件类（**禁止硬编码颜色/字体/圆角/间距**），功能滚动容器统一 `scrollbar-gutter:stable`（`.dc-scroll`），装饰用 SVG 图标（`src/ui/icons/`，**禁止 Unicode/emoji 图标**）；编码规则见 [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md)。迁移存量 UI 必须保留既有 `id` / 语义类名 / `data-*` / i18n 文案（e2e 与单测依赖）。详见 [`src/ui/ui.md`](src/ui/ui.md)。
@@ -115,7 +115,7 @@ src/
 │   ├── interactable/            # 交互物实体系统（行为 + 信号联动 + 可破坏 + 网格 + 编辑面板）
 │   ├── item/                    # 掉落物实体（sensor body 漂浮小立方体，拾取经交互）
 │   ├── building_generator/      # 建筑生成器（体素 / 结构原语 / 分块面剔除渲染 / 距离卸载 / trimesh 物理）
-│   ├── box/ fragment/ destroyed/ area/ terrain/   # 箱子变体 / 碎片 / Voronoi 断裂 / 水 / Trimesh 地形
+│   ├── box/ fragment/ destroyed/ area/ terrain/   # 统一箱子（可组合特性）/ 碎片 / Voronoi 断裂 / 水 / Trimesh 地形
 ├── inventory/                   # 背包与物品领域模型（items 目录 / grid 俄罗斯方块布局 / 增删装备 / 存档转换）
 ├── modes/                       # control / bone_edit / edit / play / showcase
 ├── ui/                          # 面板（相机HUD、属性面板、列表侧栏、设置）
@@ -152,7 +152,7 @@ src/
 | 建筑 | [`src/entity/building_generator/building_generator.md`](src/entity/building_generator/building_generator.md) | 体素、渲染、物理、笔刷、结构原语 |
 | 交互物 | [`src/entity/interactable/interactable.md`](src/entity/interactable/interactable.md) | 交互物行为、信号、可破坏 |
 | 掉落物 | [`src/entity/item/item.md`](src/entity/item/item.md) | 掉落物拾取 |
-| 箱子 | [`src/entity/box/box.md`](src/entity/box/box.md) | 箱子尺寸与纹理 |
+| 箱子 | [`src/entity/box/box.md`](src/entity/box/box.md) | 统一箱子、可组合特性、预设 |
 | 地形 | [`src/entity/terrain/terrain.md`](src/entity/terrain/terrain.md) | Trimesh 地形、雕刻 |
 | 背包 | [`src/inventory/inventory.md`](src/inventory/inventory.md) | 背包/装备 UI 与持久化 |
 | 操作方案 | [`src/modes/control/control.md`](src/modes/control/control.md) | 相机/移动、翻滚/加速 |

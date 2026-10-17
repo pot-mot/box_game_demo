@@ -1,4 +1,4 @@
-import {type Scene, MeshBasicMaterial, LineBasicMaterial} from 'three'
+import {type Scene, MeshStandardMaterial, LineBasicMaterial} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import {createColliderForBody, setBodyMass} from '../../../../physics/rapier_utils.ts'
 import type {SharedWorld} from '../../../../physics/world.ts'
@@ -9,7 +9,8 @@ import type {FragmentData} from '../../../destroyed/types'
 import type {XYZ} from '../../../box/base/types'
 import type {EntityPanelInfo} from '../../../box/base/types/entity_info'
 import {createEmitter, type EntityEventMap, type SourceEventMap} from '../../../box/base/types/event_emitter'
-import {createFragmentFromData, syncFragmentToMesh} from '../render'
+import {createFragmentFromData, syncFragmentToMesh, updateFragmentMaterial} from '../render'
+import type {SurfaceMaterialId} from '../../../../render/materials/ids.ts'
 import {createWireframe, cleanupWireframe} from '../../../box/base/render'
 import {formatRowText, createFragmentPanel} from '../ui'
 
@@ -53,11 +54,16 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         pos: {x: number; y: number; z: number},
         quat: {x: number; y: number; z: number; w: number},
         impulse?: {x: number; y: number; z: number},
+        material?: SurfaceMaterialId,
     ): Fragment => {
         const id = nextId++
-        const cfg: FragmentConfig = {...DEFAULT_FRAGMENT_CONFIG}
+        /* 默认沿用生成方的表面材质（箱子裂开时传原箱子材质），未指定则回退默认 */
+        const cfg: FragmentConfig = {
+            ...DEFAULT_FRAGMENT_CONFIG,
+            ...(material !== undefined ? {material} : {}),
+        }
 
-        const {mesh, edges} = createFragmentFromData(data)
+        const {mesh, edges} = createFragmentFromData(data, cfg.material)
         scene.add(mesh)
 
         const flatVerts = new Float32Array(data.hullVertices.length * 3)
@@ -125,7 +131,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         cleanupWireframe(f)
         scene.remove(f.mesh)
         f.mesh.geometry.dispose()
-        ;(f.mesh.material as MeshBasicMaterial).dispose()
+        ;(f.mesh.material as MeshStandardMaterial).dispose()
         f.mesh.remove(f.edges)
         f.edges.geometry.dispose()
         ;(f.edges.material as LineBasicMaterial).dispose()
@@ -165,6 +171,9 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         if (!f) return
         const old = f.config
         const cfg: FragmentConfig = {...old, ...partial}
+        if (partial.material !== undefined && partial.material !== old.material) {
+            updateFragmentMaterial(f, cfg.material)
+        }
         const changedMass = partial.mass !== undefined && partial.mass !== old.mass
         if (changedMass) {
             if (cfg.mass === 0) {
@@ -203,7 +212,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
                 cleanupWireframe(f)
                 scene.remove(f.mesh)
                 f.mesh.geometry.dispose()
-                ;(f.mesh.material as MeshBasicMaterial).dispose()
+        ;(f.mesh.material as MeshStandardMaterial).dispose()
                 f.mesh.remove(f.edges)
                 f.edges.geometry.dispose()
                 ;(f.edges.material as LineBasicMaterial).dispose()

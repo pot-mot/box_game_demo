@@ -151,6 +151,11 @@ export type CharacterLocale = {
     'character.tendency.pacifist': string
     'character.peace.patrol': string
     'character.peace.build': string
+    'character.preset.common': string
+    'character.preset.destructible': string
+    'character.preset.burning': string
+    'character.preset.magnet': string
+    'character.preset.elastic': string
     'character.peace_label': string
     'character.combat_label': string
     'character.combat.tactical': string
@@ -164,7 +169,7 @@ export type CharacterLocale = {
     'character.origin.interval': string
     'character.origin.current': string
     'character.chase_radius_label': string
-    'character.field.entity_type': string
+    'character.field.preset': string
     'character.field.probability': string
     'character.field.min_w': string
     'character.field.max_w': string
@@ -174,12 +179,6 @@ export type CharacterLocale = {
     'character.field.max_d': string
     'character.field.mass': string
     'character.field.friction': string
-    'character.field.max_health': string
-    'character.field.attr_radius': string
-    'character.field.attr_strength': string
-    'character.field.stiffness': string
-    'character.field.damping_ratio': string
-    'character.field.max_deform': string
 }
 
 export const characterZh: CharacterLocale = {
@@ -334,6 +333,11 @@ export const characterZh: CharacterLocale = {
     'character.tendency.pacifist': '和平',
     'character.peace.patrol': '巡逻',
     'character.peace.build': '建造',
+    'character.preset.common': '普通',
+    'character.preset.destructible': '可破坏',
+    'character.preset.burning': '燃烧',
+    'character.preset.magnet': '磁力',
+    'character.preset.elastic': '弹性',
     'character.peace_label': '和平',
     'character.combat_label': '战斗',
     'character.combat.tactical': '战术（默认）',
@@ -347,7 +351,7 @@ export const characterZh: CharacterLocale = {
     'character.origin.interval': '更新间隔(秒)',
     'character.origin.current': '当前原点',
     'character.chase_radius_label': '追击半径',
-    'character.field.entity_type': '实体类型',
+    'character.field.preset': '特性预设',
     'character.field.probability': '概率',
     'character.field.min_w': '最小宽',
     'character.field.max_w': '最大宽',
@@ -357,12 +361,6 @@ export const characterZh: CharacterLocale = {
     'character.field.max_d': '最大深',
     'character.field.mass': '质量',
     'character.field.friction': '摩擦',
-    'character.field.max_health': '最大生命',
-    'character.field.attr_radius': '吸引半径',
-    'character.field.attr_strength': '吸引强度',
-    'character.field.stiffness': '刚度',
-    'character.field.damping_ratio': '阻尼比',
-    'character.field.max_deform': '最大形变',
 }
 
 export const characterEn: CharacterLocale = {
@@ -514,6 +512,11 @@ export const characterEn: CharacterLocale = {
     'character.tendency.pacifist': 'Pacifist',
     'character.peace.patrol': 'Patrol',
     'character.peace.build': 'Build',
+    'character.preset.common': 'Common',
+    'character.preset.destructible': 'Breakable',
+    'character.preset.burning': 'Burning',
+    'character.preset.magnet': 'Magnet',
+    'character.preset.elastic': 'Elastic',
     'character.peace_label': 'Peace',
     'character.combat_label': 'Combat',
     'character.combat.tactical': 'Tactical (default)',
@@ -527,7 +530,7 @@ export const characterEn: CharacterLocale = {
     'character.origin.interval': 'Interval (s)',
     'character.origin.current': 'Current origin',
     'character.chase_radius_label': 'Chase radius',
-    'character.field.entity_type': 'EntityType',
+    'character.field.preset': 'Preset',
     'character.field.probability': 'Probability',
     'character.field.min_w': 'Min W',
     'character.field.max_w': 'Max W',
@@ -537,10 +540,4 @@ export const characterEn: CharacterLocale = {
     'character.field.max_d': 'Max D',
     'character.field.mass': 'Mass',
     'character.field.friction': 'Friction',
-    'character.field.max_health': 'MaxHealth',
-    'character.field.attr_radius': 'AttrRadius',
-    'character.field.attr_strength': 'AttrStrength',
-    'character.field.stiffness': 'Stiffness',
-    'character.field.damping_ratio': 'DampingRatio',
-    'character.field.max_deform': 'MaxDeformFr',
 }
