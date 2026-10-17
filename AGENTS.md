@@ -87,6 +87,7 @@
 4. **常量集中** — 各分包的 magic number 必须提取到对应的 `constants.ts`，禁止散落在函数体内。
 5. **状态机驱动角色** — `entity/character/physics/world.ts` 每帧调用 `stateMachine.update(dt, entity)` → 状态直接操作 `entity.body`（`setLinvel` 等）→ 随后 `syncPositions()` 同步 body→mesh。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/control/player_control.ts` 的 `move()` 每帧读取动作并调用 `characterSystem.setPlayerMove()` → `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。详见 [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md)。
 6. **两套操作方案** — 所有具备操作能力的模式只归入 `modes/control/` 的两套共享方案（玩家主控 `createPlayerControl` / 纯摄像机 `createCameraControl`），新增模式不得另写相机/移动逻辑。详见 [`src/modes/control/control.md`](src/modes/control/control.md)。
+7. **惯用手 canonical 右撇子** — 骨架与全部动作数据（含存档姿势）恒定表示右撇子（主手 = 解剖右 = `-X`、副手/支撑手 = 解剖左 = `+X`）；左撇子（`CharacterConfig.handedness = 'left'`）只是**取用时镜像**视图：clip 经 `skeleton/anim/mirror.ts` 的 `mirrorClip` 派生（缓存键含 handedness，逐帧零开销）、武器/护甲/肢体挂点与网格（`scale.x=-1`）随 `mainHandSide`/`offHandSide` 切换、双手 IK 支撑侧换到相反侧。**禁止**新增左撇子专有动作数据或按「屏幕左右」写死关节映射。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md)。
 
 ## 高危红线（跨模块，必须遵守）
 
@@ -107,7 +108,7 @@ src/
 ├── render/                      # Three.js 渲染（materials/ 为基础表面材质库）
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/）
-├── character/                   # 角色领域模型：ai_strategy / interaction / weapon / combat / armor / state_machine
+├── character/                   # 角色领域模型：ai_strategy / interaction / weapon / combat / armor / state_machine / handedness
 ├── entity/
 │   ├── character/               # 角色实体（skeleton / appearance / combat / projectile / physics / ai / combat_vfx / ui）
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（人形无关，预设外部注入）
@@ -136,7 +137,7 @@ src/
 | 输入 | [`src/input/input.md`](src/input/input.md) | 键位/鼠标绑定、新增输入动作 |
 | 存档 | [`src/save_load/save_load.md`](src/save_load/save_load.md) | 存档结构/版本/兼容 |
 | UI 面板 | [`src/ui/ui.md`](src/ui/ui.md) | 面板样式、图标、迁移 |
-| 角色领域（lock_point/faction/原型） | [`src/character/character.md`](src/character/character.md) | 锁定点、阵营 |
+| 角色领域（lock_point/faction/原型/惯用手） | [`src/character/character.md`](src/character/character.md) | 锁定点、阵营、惯用手 |
 | 武器 | [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) | 武器类/模型、持握、攻击段、蓄力、空中攻击、动作 |
 | 战斗运行时 | [`src/character/combat/combat.md`](src/character/combat/combat.md) | 伤害类别、防御、无敌帧 |
 | 护甲 / 肢体 | [`src/character/armor/armor.md`](src/character/armor/armor.md) | 护甲槽位、防御/加成 |

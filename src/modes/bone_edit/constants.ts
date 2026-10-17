@@ -84,6 +84,11 @@ export const WEAPON_SELECT_ID = 'bone-weapon-select'
 /** 左手贴合开关按钮 DOM id（默认关；开启后仅在播放预览时求解） */
 export const GRIP_TOGGLE_ID = 'bone-grip-toggle'
 
+// ── 惯用手预览（聚焦骨架整体镜像）──
+
+/** 惯用手预览下拉 DOM id（e2e 断言面） */
+export const HANDEDNESS_SELECT_ID = 'bone-handedness-select'
+
 /** 武器下拉：自动（跟随当前动画所属武器） */
 export const ANIM_OPTION_WEAPON_AUTO = 'auto'
 

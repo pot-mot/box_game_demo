@@ -24,11 +24,11 @@ const READY = {
 
 /** 满蓄力后引（举械后摆至最大幅度；沿用单持重击起手帧） */
 const WINDUP = {
-    rightArmShoulder: [-1.919, 0.266, 1.473],
+    rightArmShoulder: [-1.919, -0.266, -1.473],
     rightArmElbow: [-1.027, 0, 0],
     rightWristPivot: [0.014, 0, 0],
     rightWeaponMount: [3.012, 0, 0],
-    leftArmShoulder: [0.35, 0, -0.45],
+    leftArmShoulder: [0.35, 0, 0.45],
     leftArmElbow: [-0.7, 0, 0],
 } as const satisfies Readonly<Record<string, JointPose>>
 

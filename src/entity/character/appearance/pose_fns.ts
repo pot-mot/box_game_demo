@@ -176,12 +176,12 @@ const fallingPose = (t: number, speed: number): PoseState => {
     /* 腿随水平速度张开（与 master 一致：legSpread = min(speed,4) × 0.04） */
     const legSpread = Math.min(speed, 4) * 0.04
     return {
-        rightArmShoulder: {rx: -1.2, ry: 0, rz: armZ},
+        rightArmShoulder: {rx: -1.2, ry: 0, rz: -armZ},
         rightArmElbow: {rx: -0.3, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
-        leftArmShoulder: {rx: -1.2, ry: 0, rz: -armZ},
+        leftArmShoulder: {rx: -1.2, ry: 0, rz: armZ},
         leftArmElbow: {rx: -0.3, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
@@ -207,12 +207,12 @@ const dyingPose = (t: number): PoseState => {
     const p = clamp01(t / FALL_END)
     const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2
     return {
-        rightArmShoulder: {rx: eased * 0.4, ry: 0, rz: eased * 0.6},
+        rightArmShoulder: {rx: eased * 0.4, ry: 0, rz: -eased * 0.6},
         rightArmElbow: {rx: -eased * 0.5, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
-        leftArmShoulder: {rx: eased * 0.4, ry: 0, rz: -eased * 0.6},
+        leftArmShoulder: {rx: eased * 0.4, ry: 0, rz: eased * 0.6},
         leftArmElbow: {rx: -eased * 0.5, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
@@ -247,12 +247,12 @@ const rollingPose = (t: number, ctx: PoseContext): PoseState => {
     /* 持械时武器骨骼回到垂直握持，避免蜷缩时武器穿身 */
     const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
-        rightArmShoulder: {rx: -1.35 * e, ry: 0, rz: 0.2 * e},
+        rightArmShoulder: {rx: -1.35 * e, ry: 0, rz: -0.2 * e},
         rightArmElbow: {rx: -1.7 * e, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: grip,
-        leftArmShoulder: {rx: -1.35 * e, ry: 0, rz: -0.2 * e},
+        leftArmShoulder: {rx: -1.35 * e, ry: 0, rz: 0.2 * e},
         leftArmElbow: {rx: -1.7 * e, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
@@ -271,12 +271,12 @@ const flinchingPose = (t: number): PoseState => {
     const p = clamp01(t / FLINCH_DURATION)
     const e = 1 - Math.pow(1 - p, 3)
     return {
-        rightArmShoulder: {rx: -FLINCH_ARM_RAISE * e, ry: 0, rz: FLINCH_ARM_SPREAD * e},
+        rightArmShoulder: {rx: -FLINCH_ARM_RAISE * e, ry: 0, rz: -FLINCH_ARM_SPREAD * e},
         rightArmElbow: {rx: FLINCH_ELBOW * e, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
-        leftArmShoulder: {rx: -FLINCH_ARM_RAISE * e, ry: 0, rz: -FLINCH_ARM_SPREAD * e},
+        leftArmShoulder: {rx: -FLINCH_ARM_RAISE * e, ry: 0, rz: FLINCH_ARM_SPREAD * e},
         leftArmElbow: {rx: FLINCH_ELBOW * e, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
@@ -301,12 +301,12 @@ const downedPose = (e: number, ctx: PoseContext): PoseState => {
     /* 持械时武器骨骼回到垂直握持，避免倒地时武器穿身 */
     const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
-        rightArmShoulder: {rx: -0.9 * e, ry: 0, rz: 0.5 * e},
+        rightArmShoulder: {rx: -0.9 * e, ry: 0, rz: -0.5 * e},
         rightArmElbow: {rx: -0.6 * e, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: grip,
-        leftArmShoulder: {rx: -0.9 * e, ry: 0, rz: -0.5 * e},
+        leftArmShoulder: {rx: -0.9 * e, ry: 0, rz: 0.5 * e},
         leftArmElbow: {rx: -0.6 * e, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
@@ -416,12 +416,12 @@ const blockingPose = (t: number, ctx: PoseContext): PoseState => {
 const guardBrokenPose = (t: number): PoseState => {
     const e = 1 - Math.pow(1 - clamp01(t / GUARD_BROKEN_POSE_DURATION), 3)
     return {
-        rightArmShoulder: {rx: 0.25 * e, ry: 0, rz: 0.25 * e},
+        rightArmShoulder: {rx: 0.25 * e, ry: 0, rz: -0.25 * e},
         rightArmElbow: {rx: -0.45 * e, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: ZERO,
-        leftArmShoulder: {rx: 0.25 * e, ry: 0, rz: -0.25 * e},
+        leftArmShoulder: {rx: 0.25 * e, ry: 0, rz: 0.25 * e},
         leftArmElbow: {rx: -0.45 * e, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,

@@ -3,6 +3,7 @@ import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
 import type {AttackPhaseName} from '../../../character/combat/attack_phases.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
+import type {Handedness} from '../../../character/handedness.ts'
 import type {ResolvedArmorLoadout, ResolvedLimbLoadout} from '../../../character/armor/types.ts'
 import type {BoxPartPalette} from '../../../render/box_parts.ts'
 
@@ -70,6 +71,12 @@ export interface CharacterModel {
     /** 副手武器挂背 / 回手（仅换父节点，不重建几何；无副手武器时空操作） */
     setOffhandStowed: (stowed: boolean) => void
 
+    /**
+     * 切换惯用手：主 / 副手槽位内容互换、重挂武器挂点并重设非对称网格镜像。
+     * 动作镜像由 clip 层按 handedness 处理（模型本身不播放动画）。
+     */
+    setHandedness: (handedness: Handedness) => void
+
     /** 移除全部武器 */
     removeWeapon: () => void
 
@@ -128,6 +135,8 @@ export interface AnimationContext {
     readonly horizontalSpeed: number
     /** 当前持握模式（决定上半身姿态组合与双手/双持 IK 分支） */
     readonly holdMode: HoldMode
+    /** 惯用手（决定主 / 副手槽位、动作镜像与双手 IK 支撑侧；缺省 = 右撇子） */
+    readonly handedness: Handedness
     /**
      * 当前攻击段（仅 attacking 状态有效）—— 武器模组拥有的段定义：
      * id 作为动画键（段切换触发姿态混合）、时长/恢复/阶段/tilt 供攻击 clip 生成器使用。

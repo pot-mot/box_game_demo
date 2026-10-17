@@ -6,19 +6,24 @@ import {DEFAULT_IK_MAX_ITERATIONS, DEFAULT_IK_TOLERANCE} from '../../../skeleton
 
 /**
  * 双手共持 IK（生产角色与骨骼编辑器共用）：
- * 左肩为 IK 根，左手链末端被求解到武器轴上的副握点，使左手真正「握住」武器。
+ * 支撑肩（与主手相反的一侧）为 IK 根，支撑手链末端被求解到武器轴上的副握点，使支撑手真正「握住」武器。
+ * 右撇子支撑侧 = 左臂、左撇子支撑侧 = 右臂（由 `supportSide` 指定）。
  *
- * - 末端关节解析（`leftGripJointId`）兼容生产（只有 `leftHandPivot`）、
- *   预设/编辑器（`leftWristPivot` + `leftWeaponMount`）与自定义骨架；
- * - 副握点优先取武器本地 +Y（握把→刃尖）偏移，无武器 Group 时回退「右腕 + 右肘方向 × offset」。
+ * - 末端关节解析（`gripJointId`）兼容生产（只有 `*HandPivot`）、
+ *   预设/编辑器（`*WristPivot` + `*WeaponMount`）与自定义骨架；
+ * - 副握点优先取武器本地 +Y（握把→刃尖）偏移，无武器 Group 时回退「主手腕 + 主手肘方向 × offset」。
  */
 
-/** 左手链末端候选（按优先级）：左手武器挂点 → 左腕 → 左手 */
-const LEFT_GRIP_JOINT_CANDIDATES = ['leftWeaponMount', 'leftWristPivot', 'leftHandPivot'] as const
+/** 某一侧的链末端候选（按优先级）：该侧武器挂点 → 该侧腕 → 该侧手 */
+const gripJointCandidates = (side: 'left' | 'right'): readonly [string, string, string] =>
+    [`${side}WeaponMount`, `${side}WristPivot`, `${side}HandPivot`]
 
-/** 左手链末端关节 id：按候选优先级取首个存在的关节（都不存在时回退左手） */
-export const leftGripJointId = (skeleton: Skeleton): string =>
-    LEFT_GRIP_JOINT_CANDIDATES.find(id => skeleton.findJoint(id) !== undefined) ?? 'leftHandPivot'
+/** 某一侧的链末端关节 id：按候选优先级取首个存在的关节（都不存在时回退该侧手） */
+export const gripJointId = (skeleton: Skeleton, side: 'left' | 'right'): string =>
+    gripJointCandidates(side).find(id => skeleton.findJoint(id) !== undefined) ?? `${side}HandPivot`
+
+/** 左手链末端关节 id（右撇子双手共持的支撑链；保留以兼容既有调用与测试） */
+export const leftGripJointId = (skeleton: Skeleton): string => gripJointId(skeleton, 'left')
 
 /** 根对象世界矩阵的逆（换算回骨架空间用；模块级复用避免逐帧分配） */
 const _rootInverse = new Matrix4()
@@ -27,7 +32,7 @@ const _rootInverse = new Matrix4()
  * 副握点坐标（写入 out）：
  * - 有武器 Group → 武器模型原点沿本地 +Y 偏移 offset（沿武器轴，握把→刃尖）；
  *   调用方传武器模型原点对齐主握把后的副握距离；
- * - 无武器 Group → 右腕 + （右肘 − 右腕）方向 × offset（生产回退）。
+ * - 无武器 Group → 主手腕 + （主手肘 − 主手腕）方向 × offset（生产回退）。
  *
  * `rootObject` = 骨架根对应的场景对象（角色为 `model.group`）：传入时把世界目标换算回
  * **骨架空间**（未缩放、未旋转）——领域骨架 FK 不含根 Group 的缩放，而武器 `matrixWorld`
@@ -40,6 +45,7 @@ export const computeTwoHandGripTarget = (
     offset: number,
     out: Vector3,
     rootObject?: Object3D,
+    mainSide: 'left' | 'right' = 'right',
 ): Vector3 | undefined => {
     if (weaponGroup !== undefined) {
         /* 更新祖先与自身的世界矩阵：姿态刚写回 Group，matrixWorld 可能尚未刷新 */
@@ -58,8 +64,8 @@ export const computeTwoHandGripTarget = (
         }
         return out
     }
-    const wristWorld = skeleton.getWorldPosition('rightWristPivot') ?? skeleton.getWorldPosition('rightHandPivot')
-    const elbowWorld = skeleton.getWorldPosition('rightArmElbow')
+    const wristWorld = skeleton.getWorldPosition(`${mainSide}WristPivot`) ?? skeleton.getWorldPosition(`${mainSide}HandPivot`)
+    const elbowWorld = skeleton.getWorldPosition(`${mainSide}ArmElbow`)
     if (wristWorld === undefined || elbowWorld === undefined) return undefined
     return out.copy(wristWorld).add(elbowWorld.clone().sub(wristWorld).normalize().multiplyScalar(offset))
 }
@@ -105,6 +111,8 @@ const applyElbowPole = (
 export interface TwoHandGripOptions {
     /** IK 根（肩）关节 id，默认 `leftArmShoulder` */
     readonly shoulderId?: string
+    /** 支撑侧（与主手相反的手臂），默认 `left`（右撇子）；决定末端候选与肘极向参考肩 */
+    readonly supportSide?: 'left' | 'right'
     /** 副握点沿武器轴的偏移（米） */
     readonly offset: number
     /** 骨架根对应的场景对象（角色为 `model.group`；传入后目标换算回骨架空间，见 `computeTwoHandGripTarget`） */
@@ -122,14 +130,16 @@ export const solveTwoHandedGrip = (
     weaponGroup: Object3D | undefined,
     options: TwoHandGripOptions,
 ): boolean => {
-    const shoulderId = options.shoulderId ?? 'leftArmShoulder'
+    const supportSide = options.supportSide ?? 'left'
+    const mainSide = supportSide === 'left' ? 'right' : 'left'
+    const shoulderId = options.shoulderId ?? `${supportSide}ArmShoulder`
     const shoulder = skeleton.findJoint(shoulderId)
-    const endJoint = skeleton.findJoint(leftGripJointId(skeleton))
+    const endJoint = skeleton.findJoint(gripJointId(skeleton, supportSide))
     if (shoulder === undefined || endJoint === undefined) return false
 
     skeleton.updateWorldTransforms()
     const target = new Vector3()
-    if (computeTwoHandGripTarget(skeleton, weaponGroup, options.offset, target, options.rootObject) === undefined) return false
+    if (computeTwoHandGripTarget(skeleton, weaponGroup, options.offset, target, options.rootObject, mainSide) === undefined) return false
 
     shoulder.ikRootLevel = 0
     const chain = resolveIkChain(endJoint)
@@ -158,13 +168,13 @@ export const solveTwoHandedGrip = (
     })
     skeleton.updateWorldTransforms()
 
-    /* 肘极向：把左肘摆到「下 + 角色外侧」，消除反关节（远程武器/恢复段尤其明显） */
+    /* 肘极向：把支撑肘摆到「下 + 角色外侧」，消除反关节（远程武器/恢复段尤其明显） */
     if (chain.length >= 3) {
         const poleWorld = new Vector3(0, -1, 0)
-        const leftShoulder = skeleton.getWorldPosition(shoulderId)
-        const rightShoulder = skeleton.getWorldPosition('rightArmShoulder')
-        if (leftShoulder !== undefined && rightShoulder !== undefined) {
-            const outward = leftShoulder.clone().sub(rightShoulder)
+        const supportShoulder = skeleton.getWorldPosition(shoulderId)
+        const mainShoulder = skeleton.getWorldPosition(`${mainSide}ArmShoulder`)
+        if (supportShoulder !== undefined && mainShoulder !== undefined) {
+            const outward = supportShoulder.clone().sub(mainShoulder)
             if (outward.lengthSq() > 1e-8) poleWorld.addScaledVector(outward.normalize(), 0.5).normalize()
         }
         applyElbowPole(skeleton, chain[0], chain[1], chain[chain.length - 1], poleWorld)

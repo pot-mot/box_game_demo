@@ -1,6 +1,7 @@
 import type {Skeleton} from '../../skeleton/skeleton.ts'
 import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, supportsHoldMode, weaponDisplayName, type WeaponConfig} from '../../character/weapon/catalog.ts'
 import type {HoldMode} from '../../character/weapon/hold_mode.ts'
+import {DEFAULT_HANDEDNESS, offHandSide, type Handedness} from '../../character/handedness.ts'
 import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
 import {clearTwoHandGripRoot, solveTwoHandedGrip} from '../../entity/character/appearance/two_handed_ik.ts'
 import {
@@ -23,9 +24,10 @@ import {
  * 骨骼动画编辑器武器控制：「武器占两个骨骼位」的装载与贴合。
  *
  * - 下拉三态：**自动**（跟随当前动画来源：选中内置攻击动作即装备该武器）/ **无武器** / 手动指定某把武器；
- * - 装载：武器网格挂 `rightWeaponMount`（右手武器挂点，随右手动画）；
- * - 双手贴合：武器 `twoHanded` 为真时，左肩设为 IK 根并每次姿态应用后把左手链 CCD 求解到
- *   武器轴上的副握点（与生产共用 `entity/character/appearance/two_handed_ik.ts`）。
+ * - 装载：武器网格挂**主手武器挂点**（右撇子 = `rightWeaponMount`，左撇子 = `leftWeaponMount`，随主手动画）；
+ * - 双手贴合：武器 `twoHanded` 为真时，**支撑肩**（与主手相反侧）设为 IK 根并每次姿态应用后把支撑手链
+ *   CCD 求解到武器轴上的副握点（与生产共用 `entity/character/appearance/two_handed_ik.ts`）；
+ * - 惯用手（`setHandedness`）决定主手挂点侧与双手 IK 支撑侧（右撇子支撑左手、左撇子支撑右手）。
  */
 
 /** 当前动画的来源信息（用于「自动」模式选武器） */
@@ -95,6 +97,10 @@ export interface BoneEditWeaponControl {
     /** 左手贴合开关（默认关）：关闭时两只手完全独立，互不牵扯 */
     readonly isGripAssist: () => boolean
     readonly setGripAssist: (on: boolean) => void
+    /** 当前惯用手（决定主手挂点侧与双手 IK 支撑侧） */
+    readonly getHandedness: () => Handedness
+    /** 切换惯用手：改挂主手挂点侧并重装武器（动作数据不变） */
+    readonly setHandedness: (next: Handedness) => void
     /** 当前装备武器 id（DOM 可测试面：data-weapon） */
     readonly currentWeaponId: () => string | undefined
     /** 当前装备武器是否双手（DOM 可测试面：data-two-handed） */
@@ -153,13 +159,24 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
     /** 左手贴合开关（默认关：编辑器里两只手完全独立，互不牵扯） */
     let gripAssist = false
     let gripSolved = false
+    /** 惯用手：决定主手挂点侧与双手 IK 支撑侧 */
+    let handedness: Handedness = DEFAULT_HANDEDNESS
 
     const focusSkeleton = (): Skeleton | undefined => world.getFocus()?.skeleton
 
-    /** 释放当前武器并清除左手 IK 根（回到由 clip 驱动左手） */
+    /** 副手（支撑）肩关节 id：右撇子 = 左肩、左撇子 = 右肩 */
+    const supportShoulderId = (): string => `${offHandSide(handedness)}ArmShoulder`
+
+    /** 清除两侧肩的 IK 根（切换惯用手时旧支撑侧也要解除） */
+    const clearGripRoot = (skeleton: Skeleton): void => {
+        clearTwoHandGripRoot(skeleton, 'leftArmShoulder')
+        clearTwoHandGripRoot(skeleton, 'rightArmShoulder')
+    }
+
+    /** 释放当前武器并清除双手 IK 根（回到由 clip 驱动支撑臂） */
     const unequip = (): void => {
         const skeleton = focusSkeleton()
-        if (skeleton !== undefined) clearTwoHandGripRoot(skeleton)
+        if (skeleton !== undefined) clearGripRoot(skeleton)
         equipped?.dispose()
         equipped = undefined
         gripSolved = false
@@ -178,7 +195,7 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
         if (spec === undefined) return
         const groups = world.getFocus()?.visuals.groups
         if (groups === undefined) return
-        equipped = equipSkeletonWeapon(groups, spec)
+        equipped = equipSkeletonWeapon(groups, spec, handedness)
         if (equipped !== undefined) lastSpec = spec
         /* 注意：装载本身不求解左手（贴合只在播放预览且开关打开时进行）——
          * 保证编辑（暂停）状态下拖任意关节都不会牵扯另一只手 */
@@ -195,9 +212,10 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
     })
 
     /**
-     * 左手贴合求解（仅在贴合开关打开 + 双手武器 + 播放预览时由 timeline 调用）：
-     * 左肩为 IK 根，链末端为左手武器挂点，目标为武器轴上的副握点（共享求解器）。
-     * 关闭贴合时立即清除 IK 根（左臂回到 clip 姿态），不做任何跨手干预。
+     * 双手贴合求解（仅在贴合开关打开 + 双手武器 + 播放预览时由 timeline 调用）：
+     * **支撑肩**（右撇子 = 左肩、左撇子 = 右肩）为 IK 根，链末端为支撑侧武器挂点，
+     * 目标为武器轴上的副握点（共享求解器）。
+     * 关闭贴合时立即清除 IK 根（支撑臂回到 clip 姿态），不做任何跨手干预。
      */
     const solveGrip = (): void => {
         const focus = world.getFocus()
@@ -207,12 +225,13 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
             return
         }
         if (!gripAssist || equipped === undefined || !equipped.spec.twoHanded) {
-            if (!gripAssist) clearTwoHandGripRoot(skeleton)
+            if (!gripAssist) clearGripRoot(skeleton)
             gripSolved = false
             return
         }
         gripSolved = solveTwoHandedGrip(skeleton, equipped.weaponGroup, {
-            shoulderId: 'leftArmShoulder',
+            shoulderId: supportShoulderId(),
+            supportSide: offHandSide(handedness),
             /* 武器根节点已对齐主握把；按该武器沿柄身分配的间距定位副握点 */
             offset: equipped.supportGripOffset + TWO_HAND_GRIP_OFFSET,
             /* 与生产同源：目标换算回骨架空间（编辑器骨架若带根缩放也保持一致） */
@@ -230,12 +249,21 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
     const setGripAssist = (on: boolean): void => {
         gripAssist = on
         if (!on) {
-            /* 关闭：立刻解除左手 IK 根并清状态（由 timeline 重新应用 clip 姿态） */
+            /* 关闭：立刻解除支撑臂 IK 根并清状态（由 timeline 重新应用 clip 姿态） */
             const skeleton = focusSkeleton()
-            if (skeleton !== undefined) clearTwoHandGripRoot(skeleton)
+            if (skeleton !== undefined) clearGripRoot(skeleton)
             gripSolved = false
         }
         refreshGripToggleLabel()
+    }
+
+    /** 切换惯用手：解除旧支撑侧 IK 根并按新主手挂点侧重装武器（动作数据由 timeline 侧镜像） */
+    const setHandedness = (next: Handedness): void => {
+        if (next === handedness) return
+        handedness = next
+        const skeleton = focusSkeleton()
+        if (skeleton !== undefined) clearGripRoot(skeleton)
+        reload()
     }
 
     gripToggle.addEventListener('click', () => {
@@ -250,6 +278,8 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
         solveGrip,
         isGripAssist: () => gripAssist,
         setGripAssist,
+        getHandedness: () => handedness,
+        setHandedness,
         currentWeaponId: () => equipped?.spec.weaponId,
         isTwoHanded: () => equipped?.spec.twoHanded === true,
         isGripSolved: () => gripSolved,

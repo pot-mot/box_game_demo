@@ -155,6 +155,14 @@ test.describe('骨骼动画编辑模式', () => {
         await page.selectOption('#bone-weapon-select', 'war_hammer')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'war_hammer')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-two-handed', 'false')
+
+        /* 惯用手预览：默认右撇子；切左撇子后预览镜像（data-handedness 变化，武器不变） */
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-handedness', 'right')
+        await page.selectOption('#bone-handedness-select', 'left')
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-handedness', 'left')
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'war_hammer')
+        await page.selectOption('#bone-handedness-select', 'right')
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-handedness', 'right')
     })
 
     test('导出资产触发下载', async ({page}) => {

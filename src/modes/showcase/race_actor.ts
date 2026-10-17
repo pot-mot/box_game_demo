@@ -4,6 +4,7 @@ import {createCharacterModel} from '../../entity/character/appearance/model.ts'
 import {createAppearanceSystem} from '../../entity/character/appearance/system.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/system.ts'
 import type {AnimationContext, CharacterModel} from '../../entity/character/appearance/types.ts'
+import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
 import {resolveLimbLoadout, resolveArmorLoadout} from '../../character/armor/catalog.ts'
 import type {LimbLoadout, ArmorLoadout} from '../../character/armor/types.ts'
 import {ACTOR_JUMP_HEIGHT, ACTOR_SCALE, ACTOR_SPEED, DIMMED_OPACITY, RACE_SHOWCASE_HOLD_SECONDS} from './constants.ts'
@@ -78,6 +79,7 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
             horizontalSpeed: currentState === 'walking' ? ACTOR_SPEED : 0,
             /* 空手：持握模式对基础姿态无影响（无武器），取单持 */
             holdMode: 'one_handed',
+            handedness: DEFAULT_HANDEDNESS,
             attackSegment: undefined,
             attackPhase: undefined,
             attackPhaseProgress: 0,

@@ -1,6 +1,8 @@
 import type {BoneAnimationClip} from '../../../../skeleton/anim/types.ts'
 import {Euler, Quaternion} from 'three'
 import {clipFromJSON, type ClipJSON} from '../../../../skeleton/anim/serialization.ts'
+import {mirrorClip} from '../../../../skeleton/anim/mirror.ts'
+import {DEFAULT_HANDEDNESS, type Handedness} from '../../../../character/handedness.ts'
 import {ATTACK_CLIP_JSON} from '../../../../character/weapon/attack_clip_data.ts'
 import {ATTACK_POSE_EDITS} from '../../../../character/weapon/attack_pose_edits.ts'
 import {CHARGE_CLIP_JSON} from '../../../../character/weapon/charge_clip_data.ts'
@@ -44,23 +46,28 @@ const applyPoseEdits = (clipId: string, raw: ClipJSON, edits: readonly PoseEdit[
 
 const resolveClip = (
     clipId: string,
+    handedness: Handedness,
     source: Readonly<Record<string, ClipJSON>>,
     edits: Readonly<Record<string, readonly PoseEdit[]>>,
     missingMessage: string,
 ): BoneAnimationClip => {
-    const cached = cache.get(clipId)
+    /* 缓存键含惯用手：canonical（右撇子）原始 clip 与镜像变体分别缓存 */
+    const key = handedness === DEFAULT_HANDEDNESS ? clipId : `${handedness}:${clipId}`
+    const cached = cache.get(key)
     if (cached !== undefined) return cached
     const raw = source[clipId]
     if (raw === undefined) throw new Error(missingMessage)
-    const clip = clipFromJSON(applyPoseEdits(clipId, raw, edits[clipId]))
-    cache.set(clipId, clip)
+    const base = clipFromJSON(applyPoseEdits(clipId, raw, edits[clipId]))
+    /* 左撇子：对 canonical clip 施加矢状面反射（左右关节互换 + 旋转共轭），离线烘焙零运行时开销 */
+    const clip = handedness === DEFAULT_HANDEDNESS ? base : mirrorClip(base)
+    cache.set(key, clip)
     return clip
 }
 
 /** 取段 id 对应的攻击动画 clip；数据缺失时抛错（表示烘焙数据与武器段不同步） */
-export const getAttackClipById = (clipId: string): BoneAnimationClip =>
-    resolveClip(clipId, ATTACK_CLIP_JSON, ATTACK_POSE_EDITS, `攻击动画数据缺失：${clipId}（段 id 必须在 attack_clip_data.ts 中有对应关键帧）`)
+export const getAttackClipById = (clipId: string, handedness: Handedness = DEFAULT_HANDEDNESS): BoneAnimationClip =>
+    resolveClip(clipId, handedness, ATTACK_CLIP_JSON, ATTACK_POSE_EDITS, `攻击动画数据缺失：${clipId}（段 id 必须在 attack_clip_data.ts 中有对应关键帧）`)
 
 /** 取专用蓄力姿势 clip；数据缺失时抛错 */
-export const getChargeClipById = (clipId: string): BoneAnimationClip =>
-    resolveClip(clipId, CHARGE_CLIP_JSON, CHARGE_POSE_EDITS, `蓄力姿势数据缺失：${clipId}（必须在 charge_clip_data.ts 中有对应关键帧）`)
+export const getChargeClipById = (clipId: string, handedness: Handedness = DEFAULT_HANDEDNESS): BoneAnimationClip =>
+    resolveClip(clipId, handedness, CHARGE_CLIP_JSON, CHARGE_POSE_EDITS, `蓄力姿势数据缺失：${clipId}（必须在 charge_clip_data.ts 中有对应关键帧）`)

@@ -8,6 +8,7 @@
 - 三态 `HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`（`hold_mode.ts`）；全部近战类支持三模式、默认单持，每模式独立连段（`attacks: HoldModeAttacks`，`catalog.ts` 的 `weaponAttacksOf(weapon, holdMode?)`）。
 - **攻击动作归属**：武器的段（时长 / 恢复 / 阶段时序 / 伤害倍率 / 冷却 / 连段拓扑）一律写在本模块（`melee_attacks.ts`、`ranged_attacks.ts`）；段通过 `poses`（`SegmentPoseLayer[]`）引用显式骨骼关键帧，基础轨道在 `attack_clip_data.ts`、逐段修订在 `attack_pose_edits.ts`；**不得增加程序化阶段或每帧动画器**。
 - **近战段三段式**：t=0 起手/蓄力 → 中帧（动作段结束）= 打击完成 → 末帧 = 持械戒备（肩 `-0.45` / 肘 `-0.85` / 挂点 `1.7`，与 idle 一致）；挥砍平面与枪口朝向由武器骨骼承担（收招帧回 `WEAPON_GRIP_FLEX`），命中窗口 on ≈ 0.5×动作时间 / off ≈ 0.95×动作时间。
+- **惯用手（左撇子）**：角色属性 `handedness`（`'right'` 默认 / `'left'`，`character/handedness.ts`；随存档持久化，缺失安全回退 `'right'`）。canonical 骨架为右撇子；左撇子变体在**取用时镜像**——攻击 / 蓄力 / 基础 clip 一律经 `getAttackClipById(id, handedness)` / `getChargeClipById(id, handedness)` / `getBaseClip(..., handedness)` 按 handedness 施加 `skeleton/anim/mirror.ts` 的 `mirrorClip`（左右轨互换 + 反射共轭；缓存键含 handedness，逐帧零开销）；武器挂点、非对称网格与双手 IK 支撑侧随之切换（见 [`appearance.md`](../../entity/character/appearance/appearance.md)）。
 
 ## 陷阱
 
@@ -15,7 +16,7 @@
 - 攻击动画由基础关键帧资产 + 显式逐段姿势修订共同定义，`getAttackClipById` 惰性解析缓存；改姿势要校验修订关节/时间与基础轨道一致。
 - **远程蓄力（弓 + 投掷类）由三处数据配套声明**：`AttackPhase.chargeable`（冻结锚点阶段）+ `RangedWeaponClassConfig.charge`（`ProjectileChargeCurve`：`maxChargeMultiplier` / `maxChargeTime` + 初速/生命期缩放区间）+ 段 `chargeFullTime`（= `charge.maxChargeTime`，由 `rangedClass` 注入）。玩家按住攻击键冻结在该阶段**起始帧**并逐帧累积 `CombatComponent.attackCharge`（0~1），松开 `release` 发射，伤害按 `maxChargeMultiplier` 一次函数缩放。**AI 不蓄力**。调参覆盖链：武器模板默认 → 单武器 `WeaponModelConfig.charge` → 角色面板 `AttackConfig.charge`（`save_load`），覆写后由 `withChargeTuningMap` 重烘焙。
 - **近战重击蓄力（所有近战武器通用，内置）**：`MeleeWeaponClassConfig.heavyCharge`（`HeavyChargeConfig`，缺省 `DEFAULT_HEAVY_CHARGE`：满蓄力 1s → 200%、冷却 0.8s）→ `meleeClass` 把每个模式的重击段声明为可蓄力。玩家按下重击键即蓄力（`world.beginPlayerAttackHold('heavy')`）、松开出手；`melee_executor` 命中按 `1 + attackCharge × chargeDamageBonus` 放大；蓄力值 > 0 按 `chargeCooldown` 挂冷却。AI 只用轻击、`holdDuration` 恒 0，永不蓄力。蓄力动画按 `attackCharge` 定位专用 clip（`charge_melee_{holdMode}`，`charge_clip_data.ts` + `charge_pose_edits.ts`）。
-- **双持 / 双手共持**：单持 / 双手共持（左手 IK 到该武器 `supportGripOffset`）/ 双持（需副手同类近战 `sameWeaponClass`，左手握自身武器、不走共享 IK，副手命中按副手数值结算）。双持命中事件按 `main` / `offhand` 分槽。双手副握点以主握把为原点沿武器本地 `+Y` 定位。**左臂链长仅约 0.36m**：双手段每个关键帧与插值路径都要让左肩→副握点 ≤ ~0.34m，否则 IK 截断、左手脱柄（`system.test.ts` 逐帧锁定副握残差 < 0.18m；新增双手段以巨剑双手链为模板族最稳妥）。
+- **双持 / 双手共持**：单持 / 双手共持（支撑手 IK 到该武器 `supportGripOffset`；支撑侧 = 与主手相反侧，随 `handedness` 切换）/ 双持（需副手同类近战 `sameWeaponClass`，副手握自身武器、不走共享 IK，副手命中按副手数值结算）。双持命中事件按 `main` / `offhand` 分槽。双手副握点以主握把为原点沿武器本地 `+Y` 定位。**支撑臂链长仅约 0.36m**：双手段每个关键帧与插值路径都要让支撑肩→副握点 ≤ ~0.34m，否则 IK 截断、支撑手脱柄（`system.test.ts` 逐帧锁定副握残差 < 0.18m；新增双手段以巨剑双手链为模板族最稳妥）。
 - `world.ts` 的 `setHoldMode` 按 `availableHoldModes(weapon, offhand)` 校验，不可用时回退默认并返回 `false`，切换后重解析攻击链并同步外观（双手共持副手挂背 `backWeaponMount`、其余模式回左手）。
 
 ## 一、整体架构
@@ -484,8 +485,8 @@ character/weapon/
 entity/character/appearance/
 ├── pose_fns.ts            ← 基础状态姿态纯函数（固定频率采样）
 ├── clips/
-│   ├── base_clips.ts      ← 基础状态 clip 生成器（60fps 烘焙，循环 wrap/非循环 clamp，weaponHeld 变体）
-│   ├── attack_clips.ts    ← 攻击 clip 解析（段 id → clipFromJSON，惰性缓存）
+│   ├── base_clips.ts      ← 基础状态 clip 生成器（60fps 烘焙，循环 wrap/非循环 clamp，weaponHeld 变体；按 handedness 镜像，缓存键含 handedness）
+│   ├── attack_clips.ts    ← 攻击 clip 解析（段 id → clipFromJSON，惰性缓存；按 handedness 镜像，缓存键含 handedness）
 │   └── *.test.ts
 ├── skeleton_bridge.ts     ← 角色模型 Group ↔ 骨架桥接（领域 FK 缓存为唯一世界变换源）
 └── system.ts              ← clip 调度器（动画键 → 播放器 → 快照加权混合）
@@ -498,7 +499,7 @@ entity/character/appearance/
 - **动画键**：基础状态 `${state}:${weaponHeld?'w':'n'}`；attacking 用当前段 id（`attacking:${segment.id}`），链段切换即触发快照混合。
 - **快照加权混合**：状态/键切换瞬间抓取全部关节快照，新 clip 采样输出 × w + 快照 × (1−w)（w 三次 ease-out，`STATE_BLEND_DURATION`）。
 - **桥接**：模型关节经 `createCharacterSkeletonBridge`（Group 层级自动建连）绑定为骨架，播放器 `applyPose` 写骨架 → 桥接写回 Group（场景图级联）。
-- **三种持握模式**：单持（左手反摆；副手武器握在左手）/ 双手共持（attacking 且 `holdMode === 'two_handed'` 时，左肩 IK 根 → 左手链每帧 `solveCcd` 追模型指定的 `supportGripOffset`；副手武器挂背）/ 双持（主/副手为同类近战：左手握持自身武器，不走共享 IK，左右手分别由关键帧驱动）。
+- **三种持握模式**：单持（副手武器握在副手，主手持主武器；副手反摆）/ 双手共持（attacking 且 `holdMode === 'two_handed'` 时，**支撑肩** IK 根 → 支撑手链每帧 `solveCcd` 追模型指定的 `supportGripOffset`；副手武器挂背。支撑肩/手 = 与主手相反侧，由 `handedness` 决定——右撇子为左肩/左手，左撇子为右肩/右手）/ 双持（主/副手为同类近战：两手持各自武器，不走共享 IK，左右手分别由关键帧驱动）。
 - **双持命中窗口按槽分组**：攻击 clip 事件带 `params.weapon: 'main' | 'offhand'`，`melee_executor.setHitWindow(active, weapon?)` 分别开关左右命中箱；副手命中按**副手武器**的伤害 / 击退 / 攻击类别结算（每段每目标仍只结算一次）。
 
 ### 6.3 攻击动画数据（attack_clip_data.ts / attack_pose_edits.ts）
@@ -507,10 +508,10 @@ entity/character/appearance/
 
 ```ts
 /* entity/character/appearance/clips/attack_clips.ts */
-export const getAttackClipById = (clipId: string): BoneAnimationClip => {}
+export const getAttackClipById = (clipId: string, handedness?: Handedness): BoneAnimationClip => {}
 ```
 
-- **关键帧时间** = 0 与各阶段边界（`phaseDurationOf` 累加）；姿态是显式关节旋转/位置，修订只覆盖基础轨道里已存在的关键时刻。**三段式约定**：t=0 起手/蓄力 → 中帧（动作段结束）= 打击完成姿态（刃/枪口位于打击平面内、双手副握点在左臂臂展内）→ 末帧 = 持械戒备（与 idle 一致）。挥砍平面与刃面朝向由武器骨骼（`rightWeaponMount` / `leftWeaponMount`）承担，收招帧回到 `WEAPON_GRIP_FLEX`。双持副手相位由原有关键帧表达。
+- **关键帧时间** = 0 与各阶段边界（`phaseDurationOf` 累加）；姿态是显式关节旋转/位置，修订只覆盖基础轨道里已存在的关键时刻。**三段式约定**：t=0 起手/蓄力 → 中帧（动作段结束）= 打击完成姿态（刃/枪口位于打击平面内、双手副握点在支撑臂臂展内）→ 末帧 = 持械戒备（与 idle 一致）。挥砍平面与刃面朝向由武器骨骼（主手 `rightWeaponMount` / 副手 `leftWeaponMount`；左撇子由 clip 镜像落到相反侧）承担，收招帧回到 `WEAPON_GRIP_FLEX`。双持副手相位由原有关键帧表达。
 - **事件轨**：`hitbox_on` ≈ 0.5×动作时间、`hitbox_off` ≈ 0.95×动作时间（对齐打击帧；驱动 `melee_executor.setHitWindow`，按 `params.weapon` 分主/副手）。
 - **数据校验**：`attack_pose_edits.ts` 引用的关节轨道和时间必须在基础 clip 中存在；`getAttackClipById` 对缺失段 id 抛错（数据与武器段不同步）。事件轨和 clip 时长不受姿势修订影响。
 
@@ -529,6 +530,7 @@ export const getAttackClipById = (clipId: string): BoneAnimationClip => {}
 | `attackTotalProgress` | `number` | 段总进度 0-1（`attackTimer / (duration + recovery)`） |
 | `attackPhaseIndex` | `number` | 当前阶段索引（越界表示阶段已全部完成） |
 | `weaponHeld` | `boolean` | 是否持有武器（idle/walking 据此降低持械臂摆幅） |
+| `handedness` | `Handedness` | 惯用手（`'right'` 默认 / `'left'`）：决定 clip 取用时的镜像、武器/护甲/肢体网格挂点与镜像、双手 IK 支撑侧 |
 
 动画键（`system.ts` 的 `update`）：attacking 且 `attackSegment !== undefined` 时为 `attacking:{segment.id}`；基础状态为 `${state}:${weaponHeld?'w':'n'}`；falling 附加速度档 `falling:{tier}:{w|n}`。**键变化即触发一次 `onStateChange`**：抓取当前关节快照、按新段 id 取 clip 并 seek(0)，随后快照加权混合收敛（`STATE_BLEND_DURATION`），因此链段切换在视觉上是连续过渡而非硬切。
 
@@ -659,8 +661,8 @@ const phaseKey = c.phaseIndex < phases.length
 ## 9. 持握模式与段动作组合（HoldMode / SegmentPoseLayer）
 
 1. **持握模式**：三态常量 `HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`（`character/weapon/hold_mode.ts`）。角色实体持久化 `holdMode`（`CharacterEntity.holdMode`，存档字段 `CharacterSaveConfig.holdMode?`，非法值安全回退）；武器**类**用 `holdModes` 声明可支持模式，`attacks: HoldModeAttacks`（`Partial<Record<HoldMode, WeaponAttacks>>`）提供各模式连段，段 id 统一 `{classId}_{holdMode}_{模板键}`。切换入口 `CharacterEntitySystem.setHoldMode(id, mode)`：可用性 = `catalog.ts` 的 `availableHoldModes(weapon, offhand)`（武器声明 ∩ 双持需副手同类近战），不可用时回退默认模式并返回 `false`；切换后按新模式重解析 `attacks`、清空段冷却 / 当前段，并同步外观（副手在双手共持时挂背、其余模式回手）。
-2. **副手装备槽**：`CombatComponent.offhand?: WeaponRuntime`（存档 `CharacterSaveConfig.offhand?`，未知武器 id 安全丢弃）。单持 / 双持握在左手、双手共持挂背（`backWeaponMount` + `CharacterModel.setOffhandStowed`，只换父节点不重建几何）。双持时 `melee_executor` 按槽取武器结算（副手命中用副手武器的伤害 / 击退 / 攻击类别）。play 模式 `Ctrl` 环切可用模式（输入动作 `cycle_hold_mode`，被 Ctrl+S / Ctrl+O 最长组合遮蔽）；edit 面板可显式选择副手与持握。
-3. **动画上下文**：`AnimationContext.holdMode`（替代原 `twoHanded` 布尔）；双手共持 IK 判定 = `holdMode === 'two_handed'`（与是否装备副手无关，副手挂背不影响贴合）；双持不走共享 IK，左臂由关键帧驱动。
+2. **副手装备槽**：`CombatComponent.offhand?: WeaponRuntime`（存档 `CharacterSaveConfig.offhand?`，未知武器 id 安全丢弃）。单持 / 双持握在**副手**（`handedness` 决定左手或右手）、双手共持挂背（`backWeaponMount` + `CharacterModel.setOffhandStowed`，只换父节点不重建几何）。双持时 `melee_executor` 按槽取武器结算（副手命中用副手武器的伤害 / 击退 / 攻击类别）。play 模式 `Ctrl` 环切可用模式（输入动作 `cycle_hold_mode`，被 Ctrl+S / Ctrl+O 最长组合遮蔽）；edit 面板可显式选择副手与持握。
+3. **动画上下文**：`AnimationContext.holdMode`（替代原 `twoHanded` 布尔）；双手共持 IK 判定 = `holdMode === 'two_handed'`（与是否装备副手无关，副手挂背不影响贴合）；双持不走共享 IK，两臂均由关键帧驱动。
 3. **段的动作组合**：`AttackSegment.poses: readonly SegmentPoseLayer[]`（`{poseId, weight, progressOffset?}`）。pose 资产以 `attack_clip_data.ts` 的基础关键帧为底，合并 `attack_pose_edits.ts` 的逐段姿势修订；播放器 `createComposedAnimationPlayer` 按主进度采样各层，再经 `composePoses` 按**关节归一化加权平均**合成。
 4. `detectBox`（AI 出招检测箱）与 `mesh`（程序化模型）必须填写，其余数值（`damage` / `knockbackForce` / `knockbackY` / `detectionRange`）按武器定位给定。
 5. 该武器各攻击段的**动画关键帧**由 `attack_clip_data.ts` 的基础资产与 `attack_pose_edits.ts` 的逐段姿势修订共同提供。
@@ -746,16 +748,16 @@ const phaseKey = c.phaseIndex < phases.length
 | `src/character/state_machine/states/rolling.ts` | 翻滚状态 handler：锁定方向位移 + 中段无敌帧写入 `invincibleTimer`（exit 清零），结束转 walking/idle/falling |
 | `src/character/state_machine/states/flinching.ts` | 受击硬直状态 handler（enter 清 `bufferedSegment` 与阶段计时，exit 挂免疫窗口） |
 | `src/character/archetypes.ts` | 存档 / 面板的攻击配置：`AttackConfig = {weaponId, damage?, cooldown?, ranged?}`（只有武器与数值覆写）、`ATTACK_PRESETS` |
-| `src/save_load/types.ts` | `CharacterSaveConfig.attack: AttackConfig` + `offhand?: AttackConfig` + `holdMode?`（当前 `SAVE_FORMAT_VERSION = 6`，原 `attackSlot` 已删除） |
+| `src/save_load/types.ts` | `CharacterSaveConfig.attack: AttackConfig` + `offhand?: AttackConfig` + `holdMode?` + `handedness?`（缺失安全回退 `'right'`；版本号见 [`save_load.md`](../../save_load/save_load.md)，原 `attackSlot` 已删除） |
 
 ### 9.4 实体表现与调试
 
 | 文件 | 内容 |
 |------|------|
-| `src/entity/character/appearance/types.ts` | `CharacterModel`（`weaponGroup` / `weaponHitBox` / `weaponGripY` / `offhandWeaponGroup` / `setOffhandStowed` / `backWeaponMount`）；`AnimationContext`（`stateTime` / `horizontalSpeed` / `holdMode` / `attackSegment` / `attackPhase` / `attackPhaseProgress` / `attackTotalProgress` / `attackPhaseIndex` / `weaponHeld`） |
-| `src/entity/character/appearance/system.ts` | clip 调度器：动画键（attacking 用 `attacking:{segment.id}`）→ 取 clip + 快照加权混合；双手共持左腕 IK（`ctx.holdMode === 'two_handed'`，副手挂背不影响） |
-| `src/entity/character/appearance/clips/attack_clips.ts` | 攻击 clip 解析：`getAttackClipById(段 id)`（`attack_clip_data.ts` → `clipFromJSON`，惰性缓存） |
-| `src/entity/character/appearance/clips/base_clips.ts` | 基础状态 clip 生成器（`getBaseClip` / `fallingSpeedTier` / `CHARACTER_JOINT_IDS`） |
+| `src/entity/character/appearance/types.ts` | `CharacterModel`（`weaponGroup` / `weaponHitBox` / `weaponGripY` / `offhandWeaponGroup` / `setOffhandStowed` / `backWeaponMount` / `setHandedness`）；`AnimationContext`（`stateTime` / `horizontalSpeed` / `holdMode` / `handedness` / `attackSegment` / `attackPhase` / `attackPhaseProgress` / `attackTotalProgress` / `attackPhaseIndex` / `weaponHeld`） |
+| `src/entity/character/appearance/system.ts` | clip 调度器：动画键（attacking 用 `attacking:{segment.id}`）→ 取 clip（按 `ctx.handedness` 镜像）+ 快照加权混合；双手共持支撑手 IK（`ctx.holdMode === 'two_handed'`，支撑侧 = `offHandSide(ctx.handedness)`，副手挂背不影响） |
+| `src/entity/character/appearance/clips/attack_clips.ts` | 攻击 clip 解析：`getAttackClipById(段 id, handedness?)`（`attack_clip_data.ts` → `clipFromJSON`，按 handedness 镜像，缓存键含 handedness） |
+| `src/entity/character/appearance/clips/base_clips.ts` | 基础状态 clip 生成器（`getBaseClip` / `fallingSpeedTier` / `CHARACTER_JOINT_IDS`；按 handedness 镜像，缓存键含 handedness） |
 | `src/entity/character/appearance/weapon_mesh.ts` | 武器本地命中箱 `WeaponLocalHitBox`（近战武器显式打击部位盒） |
 | `src/entity/character/combat/melee_executor.ts` | 伤害判定：武器命中箱 OBB × 受击箱 OBB（`testMeleeHit`）；伤害 = `weapon.damage × activeSegment.damageMultiplier`；攻击检测箱 `attackDetectOBB` / `testAttackDetect` |
 | `src/entity/character/combat/obb.ts` | OBB 类型 + `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |

@@ -1,5 +1,6 @@
 import type {Group, Mesh} from 'three'
 import type {CharacterConfig} from '../../../character/types.ts'
+import {DEFAULT_HANDEDNESS, isHandedness, type Handedness} from '../../../character/handedness.ts'
 import type {CharacterModel, CharacterColorPalette, WeaponEquipConfig} from './types.ts'
 import type {ResolvedArmorLoadout, ResolvedLimbLoadout} from '../../../character/armor/types.ts'
 import {ARMOR_SLOTS, LIMB_SLOTS, type ArmorSlot, type LimbSlot} from '../../../character/armor/slots.ts'
@@ -102,6 +103,17 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
     const rightSlot = createSlot(rightWeaponMount)
     const leftSlot = createSlot(leftWeaponMount)
 
+    /* 惯用手：决定主 / 副手槽位（主手武器挂点）与非对称网格镜像；缺省 / 非法值 = 右撇子 */
+    let currentHandedness: Handedness = isHandedness(config.handedness) ? config.handedness : DEFAULT_HANDEDNESS
+
+    /** 当前主手槽（右撇子 = 右挂点槽、左撇子 = 左挂点槽） */
+    const mainSlot = (): WeaponSlot => currentHandedness === 'left' ? leftSlot : rightSlot
+    /** 当前副手槽（与主手相反） */
+    const offSlot = (): WeaponSlot => currentHandedness === 'left' ? rightSlot : leftSlot
+
+    /** 非对称网格镜像系数：左撇子 = -1（跨矢状面反射；Three.js 按矩阵行列式自动翻转绕序，法线由法线矩阵保持） */
+    const mirrorScale = (): number => currentHandedness === 'left' ? -1 : 1
+
     const clearSlot = (slot: WeaponSlot): void => {
         if (slot.group !== null) slot.mountJoint.remove(slot.group)
         slot.cleanup?.()
@@ -130,6 +142,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         slot.gripY = result.gripY
         slot.supportGripOffset = result.supportGripOffset
         slot.meshConfig = meshConfig
+        /* 左撇子：武器网格跨矢状面镜像（仅 x 翻转；武器挂点本地系与 canonical 同向，故局部翻转 = 全局反射） */
+        result.group.scale.set(mirrorScale(), 1, 1)
         slot.mountJoint.add(result.group)
     }
 
@@ -138,18 +152,19 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         clearSlot(leftSlot)
     }
 
-    /** 副手武器挂背 / 回手：只换父节点，不重建几何（双手共持时挂背，其余模式握在左手） */
+    /** 副手武器挂背 / 回手：只换父节点，不重建几何（双手共持时挂背，其余模式握在副手） */
     const setOffhandStowed = (stowed: boolean): void => {
-        const group = leftSlot.group
+        const slot = offSlot()
+        const group = slot.group
         if (group === null) return
-        const target = stowed ? backWeaponMount : leftWeaponMount
+        const target = stowed ? backWeaponMount : slot.mountJoint
         if (group.parent !== target) target.add(group)
     }
 
     const equipWeapon = (equipConfig: WeaponEquipConfig): void => {
-        equipSlot(rightSlot, equipConfig.main)
-        equipSlot(leftSlot, equipConfig.offhand)
-        /* 缺省 = 握在左手；显式 offhandStowed = 挂背（双手共持） */
+        equipSlot(mainSlot(), equipConfig.main)
+        equipSlot(offSlot(), equipConfig.offhand)
+        /* 缺省 = 握在副手；显式 offhandStowed = 挂背（双手共持） */
         setOffhandStowed(equipConfig.offhandStowed === true)
     }
 
@@ -210,6 +225,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
                 const joint = groups.get(jointId)
                 if (joint === undefined) continue
                 const result = createArmorMesh(piece.mesh, jointId)
+                result.group.scale.x = mirrorScale()
                 joint.add(result.group)
                 mountedArmor.push({group: result.group, cleanup: result.cleanup})
             }
@@ -233,11 +249,43 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
                 const joint = groups.get(jointId)
                 if (joint === undefined) continue
                 const result = createLimbMesh(piece.mesh, jointId, currentPalette)
+                result.group.scale.x = mirrorScale()
                 joint.add(result.group)
                 mountedLimbs.push({group: result.group, cleanup: result.cleanup})
             }
         }
         refreshHiddenBodyParts()
+    }
+
+    /** 交换两个挂点槽的全部内容（挂点固定、内容迁移；换手时武器网格不重建） */
+    const swapSlotContents = (a: WeaponSlot, b: WeaponSlot): void => {
+        const g = a.group; a.group = b.group; b.group = g
+        const h = a.hitCenter; a.hitCenter = b.hitCenter; b.hitCenter = h
+        const t = a.tip; a.tip = b.tip; b.tip = t
+        const hb = a.hitBox; a.hitBox = b.hitBox; b.hitBox = hb
+        const c = a.cleanup; a.cleanup = b.cleanup; b.cleanup = c
+        const gy = a.gripY; a.gripY = b.gripY; b.gripY = gy
+        const s = a.supportGripOffset; a.supportGripOffset = b.supportGripOffset; b.supportGripOffset = s
+        const mc = a.meshConfig; a.meshConfig = b.meshConfig; b.meshConfig = mc
+    }
+
+    /**
+     * 切换惯用手：主 / 副手内容在左右挂点槽间迁移，并重挂到对应武器挂点 +
+     * 重设全部非对称网格（武器 / 护甲 / 肢体）的镜像；副手挂背状态保持不变。
+     * 动作镜像由 clip 层（`getBaseClipForHoldMode` 等）按 handedness 处理，此处不动。
+     */
+    const setHandedness = (handedness: Handedness): void => {
+        if (handedness === currentHandedness) return
+        const offStowed = offSlot().group?.parent === backWeaponMount
+        swapSlotContents(rightSlot, leftSlot)
+        currentHandedness = handedness
+        for (const slot of [rightSlot, leftSlot]) {
+            if (slot.group === null) continue
+            slot.mountJoint.add(slot.group)
+            slot.group.scale.x = mirrorScale()
+        }
+        for (const part of [...mountedArmor, ...mountedLimbs]) part.group.scale.x = mirrorScale()
+        setOffhandStowed(offStowed)
     }
 
     /* 部件 mesh 引用（recolor 用；躯干/头/手为无骨骼段绑定部件，故从 jointParts 取） */
@@ -313,23 +361,24 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
         leftShin: leftShinMesh,
         equipWeapon,
         setOffhandStowed,
+        setHandedness,
         removeWeapon,
         equipArmor,
         removeArmor,
         equipLimbs,
         removeLimbs,
         recolor,
-        get weaponMesh() { return rightSlot.hitCenter },
-        get weaponTip() { return rightSlot.tip },
-        get weaponGroup() { return rightSlot.group },
-        get weaponHitBox() { return rightSlot.hitBox },
-        get weaponGripY() { return rightSlot.gripY },
-        get weaponSupportGripOffset() { return rightSlot.supportGripOffset },
-        get offhandWeaponMesh() { return leftSlot.hitCenter },
-        get offhandWeaponTip() { return leftSlot.tip },
-        get offhandWeaponGroup() { return leftSlot.group },
-        get offhandWeaponHitBox() { return leftSlot.hitBox },
-        get offhandWeaponGripY() { return leftSlot.gripY },
+        get weaponMesh() { return mainSlot().hitCenter },
+        get weaponTip() { return mainSlot().tip },
+        get weaponGroup() { return mainSlot().group },
+        get weaponHitBox() { return mainSlot().hitBox },
+        get weaponGripY() { return mainSlot().gripY },
+        get weaponSupportGripOffset() { return mainSlot().supportGripOffset },
+        get offhandWeaponMesh() { return offSlot().hitCenter },
+        get offhandWeaponTip() { return offSlot().tip },
+        get offhandWeaponGroup() { return offSlot().group },
+        get offhandWeaponHitBox() { return offSlot().hitBox },
+        get offhandWeaponGripY() { return offSlot().gripY },
         dispose,
     }
 }

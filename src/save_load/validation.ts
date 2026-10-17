@@ -17,6 +17,7 @@ import {DEFAULT_TERRAIN_CONFIG} from '../entity/terrain/base/validation.ts'
 import {DEFAULT_FRAGMENT_CONFIG} from '../entity/fragment/common/validation.ts'
 import {CHARACTER_CONFIG_DEFAULTS} from '../entity/character/constants.ts'
 import {HOLD_MODES} from '../character/weapon/hold_mode.ts'
+import {HANDEDNESS} from '../character/handedness.ts'
 import {SURFACE_MATERIAL_IDS} from '../render/materials/ids.ts'
 import {BUILDING_PROP_KINDS} from '../entity/building_generator/props/kinds.ts'
 import {BREAKABLE_SOURCES} from '../entity/interactable/kinds.ts'
@@ -283,6 +284,8 @@ const CharacterConfigInner = z.object({
     combatStrategy: z.enum(['tactical', 'aggressive', 'cowardly']).optional(),
     /* 持握模式：非法值安全回退 undefined（由运行时按武器默认模式处理），不抛错 */
     holdMode: z.enum(HOLD_MODES).optional().catch(undefined),
+    /* 惯用手：非法值安全回退 undefined（运行时按右撇子处理），不抛错 */
+    handedness: z.enum(HANDEDNESS).optional().catch(undefined),
     attack: AttackConfigSchema.default(CHARACTER_SAVE_ATTACK_DEFAULT),
     offhand: OffhandConfigSchema,
     tendency: TendencyConfigSchema.default(CHARACTER_SAVE_TENDENCY_DEFAULT),

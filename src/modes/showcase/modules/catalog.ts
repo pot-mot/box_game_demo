@@ -6,6 +6,7 @@ import {createCharacterModel} from '../../../entity/character/appearance/model.t
 import {createAppearanceSystem} from '../../../entity/character/appearance/system.ts'
 import type {AnimationContext} from '../../../entity/character/appearance/types.ts'
 import {weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
+import {DEFAULT_HANDEDNESS} from '../../../character/handedness.ts'
 import {resolveArmorLoadout} from '../../../character/armor/catalog.ts'
 import {ITEM_DEFS, ITEM_CATEGORIES, ITEM_CATEGORY_LABELS, itemDisplayName, itemDisplayDescription} from '../../../inventory/items.ts'
 import type {ItemCategory, ItemDef} from '../../../inventory/items.ts'
@@ -298,6 +299,7 @@ export const catalogModule: ShowcaseModule = {
                     stateTime,
                     horizontalSpeed: 0,
                     holdMode: 'one_handed',
+                    handedness: DEFAULT_HANDEDNESS,
                     attackSegment: undefined,
                     attackPhase: undefined,
                     attackPhaseProgress: 0,

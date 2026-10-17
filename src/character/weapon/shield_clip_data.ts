@@ -12,17 +12,17 @@ import {MELEE_HEAVY_DURATION, MELEE_HEAVY_RECOVERY, MELEE_LIGHT_DURATION, MELEE_
 
 /** 参与盾击动作的关节静止局部位置（与预设骨架定义同源，顺序与真实近战段轨道一致） */
 const JOINT_REST: Readonly<Record<string, readonly [number, number, number]>> = {
-    rightArmShoulder: [0.145, 0.36, 0],
+    rightArmShoulder: [-0.145, 0.36, 0],
     rightArmElbow: [0, -0.18, 0],
     rightWristPivot: [0, 0, 0],
     rightWeaponMount: [0, 0, 0],
-    leftArmShoulder: [-0.145, 0.36, 0],
+    leftArmShoulder: [0.145, 0.36, 0],
     leftArmElbow: [0, -0.18, 0],
     leftWristPivot: [0, 0, 0],
     leftWeaponMount: [0, 0, 0],
-    rightLegHip: [0.04, 0.5, 0],
+    rightLegHip: [-0.04, 0.5, 0],
     rightLegKnee: [0, -0.25, 0],
-    leftLegHip: [-0.04, 0.5, 0],
+    leftLegHip: [0.04, 0.5, 0],
     leftLegKnee: [0, -0.25, 0],
     headNeck: [0, 0.36, 0],
     spine: [0, 0.5, 0],

@@ -1,13 +1,15 @@
 import type {Group} from 'three'
 import {createWeaponMesh, type WeaponMeshConfig} from '../../entity/character/appearance/weapon_mesh.ts'
+import {DEFAULT_HANDEDNESS, mainHandSide, offHandSide, type Handedness} from '../../character/handedness.ts'
 
 /**
  * 骨骼编辑器武器装载：「武器占两个骨骼位」的落地——
- * - **右手武器挂点**（`rightWeaponMount`）：武器主体挂其下，随右手动画（武器跟随手部）；
- * - **左手武器挂点**（`leftWeaponMount`）：双手武器的副握点，由左手链 IK 贴合武器（见 weapon_control.ts）。
+ * - **主手武器挂点**（右撇子 = `rightWeaponMount`，左撇子 = `leftWeaponMount`）：武器主体挂其下，随主手动画；
+ * - **副手武器挂点**（与主手相反侧）：双手武器的副握点，由副手臂链 IK 贴合武器（见 weapon_control.ts）。
  *
  * 武器模型复用生产装配（`createWeaponMesh`，已自带固有握持），直接挂在武器骨骼关节下；
- * 朝向由骨骼动画（`rightWeaponMount` / `leftWeaponMount` 轨道）控制，与游戏内一致。
+ * 左撇子时与生产一致：改挂副手侧挂点并对**非对称武器网格**施加矢状面镜像（`scale.x = -1`）。
+ * 朝向由骨骼动画（武器挂点关节轨道）控制，与游戏内一致。
  * 放在 modes/ 而非 entity/skeleton/：编辑器专用行为，避免 entity 之间相互引用。
  */
 export interface SkeletonWeaponSpec {
@@ -51,25 +53,36 @@ export const RIGHT_WEAPON_MOUNT_JOINT = 'rightWeaponMount'
 /** 左手武器挂点关节 id（缺省回退左腕，兼容自定义骨架） */
 export const LEFT_WEAPON_MOUNT_JOINT = 'leftWeaponMount'
 
+/** 某侧武器挂点关节 id */
+const mountIdOf = (side: 'left' | 'right'): string =>
+    side === 'left' ? LEFT_WEAPON_MOUNT_JOINT : RIGHT_WEAPON_MOUNT_JOINT
+/** 某侧腕关节 id（缺挂点时的回退） */
+const wristIdOf = (side: 'left' | 'right'): string => `${side}WristPivot`
+
 /**
- * 装载武器到右手挂点关节下；找不到挂点关节（自定义骨架）时回退右腕关节。
+ * 装载武器到主手挂点关节下；找不到挂点关节（自定义骨架）时回退主手腕关节。
+ * 左撇子（`handedness === 'left'`）与生产一致：改挂副手侧挂点并对非对称武器网格施加矢状面镜像。
  * 返回 undefined 表示骨架缺少可用挂点。
  */
 export const equipSkeletonWeapon = (
     groups: ReadonlyMap<string, Group>,
     spec: SkeletonWeaponSpec,
+    handedness: Handedness = DEFAULT_HANDEDNESS,
 ): SkeletonWeapon | undefined => {
-    const parent = groups.get(RIGHT_WEAPON_MOUNT_JOINT) ?? groups.get('rightWristPivot')
+    const mirrorScaleX = handedness === 'left' ? -1 : 1
+    const parent = groups.get(mountIdOf(mainHandSide(handedness))) ?? groups.get(wristIdOf(mainHandSide(handedness)))
     if (parent === undefined) return undefined
     const result = createWeaponMesh(spec.meshConfig)
+    result.group.scale.x = mirrorScaleX
     parent.add(result.group)
 
-    /* 双持：副手武器挂左手武器挂点（缺挂点回退左腕） */
+    /* 双持：副手武器挂副手侧武器挂点（缺挂点回退副手侧腕） */
     let offhand: SkeletonWeaponOffhand | undefined
     if (spec.offhandMeshConfig !== undefined) {
-        const offhandParent = groups.get(LEFT_WEAPON_MOUNT_JOINT) ?? groups.get('leftWristPivot')
+        const offhandParent = groups.get(mountIdOf(offHandSide(handedness))) ?? groups.get(wristIdOf(offHandSide(handedness)))
         if (offhandParent !== undefined) {
             const offResult = createWeaponMesh(spec.offhandMeshConfig)
+            offResult.group.scale.x = mirrorScaleX
             offhandParent.add(offResult.group)
             offhand = {
                 weaponGroup: offResult.group,

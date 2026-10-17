@@ -1,7 +1,7 @@
 import {BoxGeometry, Group, Mesh, MeshBasicMaterial} from 'three'
 import {sampleClip} from '../../skeleton/anim/sampling.ts'
+import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
 import type {SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
-import type {AnimationStore} from './animation_store.ts'
 import {ONION_SKIN_JOINT_SIZE, ONION_SKIN_STEP} from './constants.ts'
 
 /** 洋葱皮：聚焦骨架前后帧的半透明关节副本 */
@@ -16,7 +16,8 @@ export interface OnionSkin {
 
 export const setupOnionSkin = (
     world: SkeletonEntitiesContext,
-    store: AnimationStore,
+    /** 当前预览 clip（已按惯用手镜像）；返回 undefined 表示无动画 */
+    getClip: () => BoneAnimationClip | undefined,
     getPlayhead: () => number,
 ): OnionSkin => {
     let enabled = false
@@ -59,7 +60,7 @@ export const setupOnionSkin = (
 
     const update = (): void => {
         if (!enabled) return
-        const clip = store.current
+        const clip = getClip()
         if (onionGroup === undefined || clip === undefined) return
         const playhead = getPlayhead()
         /* 前后帧采样：把采样 pose 应用到洋葱皮 Group 层级（层次与骨架同构，写局部即可） */

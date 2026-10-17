@@ -238,6 +238,8 @@ export const collectWorldState = (
                         : {}),
                     /* 持握模式（持久化；换武器时重置为武器默认模式） */
                     holdMode: e.holdMode,
+                    /* 惯用手（持久化；缺省 = 右撇子） */
+                    handedness: e.config.handedness,
                     tendency: e.combat.tendencyConfig,
                     faction: e.combat.faction,
                     maxHealth: e.combat.maxHealth,

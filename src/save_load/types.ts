@@ -13,6 +13,7 @@ import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/com
 import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
 import type {AttackConfig} from '../character/archetypes.ts'
 import type {HoldMode} from '../character/weapon/hold_mode.ts'
+import type {Handedness} from '../character/handedness.ts'
 import type {DefenseProfile} from '../character/combat/defense.ts'
 import type {ArmorLoadout, LimbLoadout} from '../character/armor/types.ts'
 import type {LockPointConfig} from '../character/lock_point.ts'
@@ -23,8 +24,9 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  v6 起 character 增加副手武器 offhand；
  *  v7 起 character 增加肢体组件装备 limb；
  *  v7 起新增 building_generator 实体（显式压缩体素 block 数据，均为可选字段，旧档加载时安全回退默认）；
- *  v8 起新增 interactable / item 实体与 play 背包 inventory、传送点 teleports（modeInfo.play），均为可选，旧档安全回退 */
-export const SAVE_FORMAT_VERSION = 9
+ *  v8 起新增 interactable / item 实体与 play 背包 inventory、传送点 teleports（modeInfo.play），均为可选，旧档安全回退；
+ *  v10 起 character 增加惯用手 handedness（可选，旧档安全回退右撇子） */
+export const SAVE_FORMAT_VERSION = 10
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -161,6 +163,10 @@ export interface CharacterSaveConfig {
      * 武器不支持时由 `setHoldMode` 回退默认模式（不抛错）。
      */
     holdMode?: HoldMode
+    /**
+     * 惯用手（持久化）：缺省 = 右撇子（canonical 骨架）；旧存档无此字段时安全回退右撇子，非法值加载时安全丢弃。
+     */
+    handedness?: Handedness
     tendency: {
         tendencyId: 'hostileAll' | 'hostileExceptSelf' | 'hostileTo' | 'hostileExcept' | 'pacifist'
         targetFactions?: number[]

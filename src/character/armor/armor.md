@@ -14,6 +14,7 @@
 
 - `armor` / `limb`（槽位 → 装备 id）与 `defense`（基础逐类别防御）是存档可选字段，未知 id / 槽位不匹配一律回退空槽（肢体空 / undefined / null = 默认人类肢体）。
 - 护甲 / 肢体件是关节下的纯视觉子节点，不建碰撞体、不进 `getMeshes()`，不影响受击箱 / 视线 / 导航。
+- **惯用手镜像**：非对称护甲 / 肢体网格在副手或左撇子（`handedness='left'`）下按 `scale.x=-1` 镜像，由 `model.ts` 槽位装配统一处理；护甲领域数据（`ArmorMeshConfig` / `LimbMeshConfig`）不感知 handedness，勿在 `gen` 内写死左右。
 
 ## 一、目标与范围
 
@@ -518,7 +519,7 @@ armor?: {head?: string; chest?: string; arms?: string; legs?: string}
 limb?: {head?: string; arms?: string; body?: string; legs?: string}
 ```
 
-- `SAVE_FORMAT_VERSION` 3 → 4（防御 + 护甲）→ 5（锁定点）→ 6（副手 / 持握）→ **7（肢体 `limb`）**；旧档缺字段由校验层回退默认，**无迁移逻辑**（v1 脚底原点迁移保持原样）。
+- `SAVE_FORMAT_VERSION` 3 → 4（防御 + 护甲）→ 5（锁定点）→ 6（副手 / 持握）→ **7（肢体 `limb`）**（此后 8 / 9 / 10 与本模块无关，见 [`save_load.md`](../../save_load/save_load.md)）；旧档缺字段由校验层回退默认，**无迁移逻辑**（v1 脚底原点迁移保持原样）。
 - `validation.ts`：`DefenseProfileSchema`（`z.number().min(0).default(0)`，整体 `.optional().catch(undefined)`）；`ArmorLoadoutSchema`（`head`/`chest`/`arms`/`legs`）；`LimbLoadoutSchema`（`head`/`arms`/`body`/`legs`），均整体 `.optional().catch(undefined)`。
 - `serialize.ts`：写出 `defense: e.combat.baseDefense`、`armor: e.combat.armor` 与 `limb: e.combat.limb`（攻击加成 / 移速由预设重算，不入档）。
 - `deserialize.ts`：无需特判，config 原样传入 `add()`。

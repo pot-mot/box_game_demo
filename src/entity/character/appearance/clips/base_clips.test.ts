@@ -157,11 +157,14 @@ describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
         bridge.applyPose(pose)
         expect(model.rightArmShoulder.rotation.x).toBeCloseTo(-0.9)
         expect(model.rightArmShoulder.rotation.z).toBeCloseTo(0.4)
-        /* 场景图级联：手部 Group 随肩旋转 */
+        /* 场景图级联：手部 Group 随肩旋转（比较相对肩的偏移，不依赖肩的绝对左右坐标） */
         model.group.updateMatrixWorld(true)
         const wristWorld = new Vector3()
+        const shoulderWorld = new Vector3()
         model.rightWristPivot.getWorldPosition(wristWorld)
-        expect(wristWorld.x).not.toBeCloseTo(0)
+        model.rightArmShoulder.getWorldPosition(shoulderWorld)
+        const wristOffset = wristWorld.sub(shoulderWorld)
+        expect(wristOffset.x).not.toBeCloseTo(0)
         model.dispose()
     })
 

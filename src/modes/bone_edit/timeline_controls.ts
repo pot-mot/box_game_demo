@@ -1,4 +1,5 @@
-import {ANIM_SELECT_ID, TIMELINE_MAX_HEIGHT, TIMELINE_MIN_HEIGHT} from './constants.ts'
+import {ANIM_SELECT_ID, HANDEDNESS_SELECT_ID, TIMELINE_MAX_HEIGHT, TIMELINE_MIN_HEIGHT} from './constants.ts'
+import {HANDEDNESS, HANDEDNESS_LABELS} from '../../character/handedness.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import {localizeText, localizeTitle} from '../../i18n/dom.ts'
 import {createIcon} from '../../ui/icons/icon.ts'
@@ -28,6 +29,8 @@ export interface TimelineControls {
     readonly exportBtn: HTMLButtonElement
     readonly importBtn: HTMLButtonElement
     readonly skeletonSelect: HTMLSelectElement
+    /** 惯用手预览下拉（左撇子 = 聚焦骨架整体镜像；行为由时间轴主装配绑定） */
+    readonly handednessSelect: HTMLSelectElement
     /** 当前面板高度（px，拖拽顶边改变） */
     readonly getHeight: () => number
 }
@@ -154,18 +157,33 @@ export const createTimelineControls = (
     skeletonSelect.className = 'dc-select'
     skeletonSelect.style.cssText = 'max-width:140px'
 
+    /* 惯用手预览下拉：右撇子 = 原样；左撇子 = 聚焦骨架整体镜像（与游戏内镜像结果一致） */
+    const handednessSelect = document.createElement('select')
+    handednessSelect.id = HANDEDNESS_SELECT_ID
+    handednessSelect.className = 'dc-select'
+    localizeTitle(handednessSelect, 'bone_edit.handedness.select_title')
+    handednessSelect.style.cssText = 'max-width:100px'
+    for (const value of HANDEDNESS) {
+        const option = document.createElement('option')
+        option.value = value
+        localizeText(option, HANDEDNESS_LABELS[value])
+        handednessSelect.appendChild(option)
+    }
+
     const durationLabel = document.createElement('span')
     localizeText(durationLabel, 'bone_edit.timeline.duration')
     const speedLabel = document.createElement('span')
     localizeText(speedLabel, 'bone_edit.timeline.speed')
     const skeletonLabel = document.createElement('span')
     localizeText(skeletonLabel, 'bone_edit.timeline.skeleton')
+    const handednessLabel = document.createElement('span')
+    localizeText(handednessLabel, 'bone_edit.handedness')
 
     for (const el of [
         playBtn, stopBtn, loopCheck, animSelect, newAnimBtn, renameAnimBtn, delAnimBtn,
         durationLabel, durationInput, speedLabel, speedInput,
         addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn, onionBtn, ikBtn, undoBtn, redoBtn,
-        exportBtn, importBtn, skeletonLabel, skeletonSelect,
+        exportBtn, importBtn, skeletonLabel, skeletonSelect, handednessLabel, handednessSelect,
     ]) {
         bar.appendChild(el)
     }
@@ -174,7 +192,7 @@ export const createTimelineControls = (
         bar,
         playBtn, stopBtn, loopInput, animSelect, newAnimBtn, renameAnimBtn, delAnimBtn,
         durationInput, speedInput, addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn,
-        onionBtn, ikBtn, undoBtn, redoBtn, exportBtn, importBtn, skeletonSelect,
+        onionBtn, ikBtn, undoBtn, redoBtn, exportBtn, importBtn, skeletonSelect, handednessSelect,
         getHeight: () => panelHeight,
     }
 }

@@ -7,6 +7,8 @@ export type CharacterLocale = {
     'hold_mode.one_handed': string
     'hold_mode.two_handed': string
     'hold_mode.dual_wield': string
+    'handedness.right': string
+    'handedness.left': string
     'damage.physical': string
     'damage.magic': string
     'impact.light': string
@@ -86,6 +88,7 @@ export type CharacterLocale = {
     'character.speed': string
     'character.jump_height': string
     'character.scale': string
+    'character.handedness': string
     'character.faction': string
     'character.tendency': string
     'character.target_factions': string
@@ -176,6 +179,8 @@ export const characterZh: CharacterLocale = {
     'hold_mode.one_handed': '单持',
     'hold_mode.two_handed': '双手共持',
     'hold_mode.dual_wield': '双持',
+    'handedness.right': '右撇子',
+    'handedness.left': '左撇子',
     'damage.physical': '物理',
     'damage.magic': '魔法',
     'impact.light': '轻',
@@ -258,6 +263,7 @@ export const characterZh: CharacterLocale = {
     'character.speed': '速度',
     'character.jump_height': '跳跃高',
     'character.scale': '体型',
+    'character.handedness': '惯用手',
     'character.faction': '阵营',
     'character.tendency': '倾向',
     'character.target_factions': '目标阵营',
@@ -293,7 +299,7 @@ export const characterZh: CharacterLocale = {
     'character.mark_player': '标记为玩家',
     'character.enable_nav': '启用导航感知',
     'character.hold_mode_hint': '双持需副手装备同类近战武器',
-    'character.offhand_tip': '副手武器：单持时左手持握、双手共持时挂背；与主手同类近战可双持',
+    'character.offhand_tip': '副手武器：单持时副手持握、双手共持时挂背；与主手同类近战可双持',
     'character.hold_tip': '持握模式：单持 / 双手共持 / 双持（双持需副手装备同类近战武器）',
     'character.limb_tip': '肢体组件（骷髅 / 兽人 / 精灵）：装备后默认顶替该部位的人类肢体，颜色随阵营变化；空 = 默认人类肢体',
     'character.weapon_group_melee': '近战武器',
@@ -348,6 +354,8 @@ export const characterEn: CharacterLocale = {
     'hold_mode.one_handed': 'One-handed',
     'hold_mode.two_handed': 'Two-handed',
     'hold_mode.dual_wield': 'Dual wield',
+    'handedness.right': 'Right-handed',
+    'handedness.left': 'Left-handed',
     'damage.physical': 'Physical',
     'damage.magic': 'Magic',
     'impact.light': 'Light',
@@ -427,6 +435,7 @@ export const characterEn: CharacterLocale = {
     'character.speed': 'Speed',
     'character.jump_height': 'JumpH',
     'character.scale': 'Scale',
+    'character.handedness': 'Handed',
     'character.faction': 'Faction',
     'character.tendency': 'Tendency',
     'character.target_factions': 'TargetFactions',
@@ -462,7 +471,7 @@ export const characterEn: CharacterLocale = {
     'character.mark_player': 'Mark as Player',
     'character.enable_nav': 'Enable Nav Sensing',
     'character.hold_mode_hint': 'Dual wield needs an offhand melee weapon of the same class',
-    'character.offhand_tip': 'Offhand weapon: held in left hand when one-handed, stowed on back when two-handed; dual wield needs the same melee class as the main hand',
+    'character.offhand_tip': 'Offhand weapon: held in the off hand when one-handed, stowed on back when two-handed; dual wield needs the same melee class as the main hand',
     'character.hold_tip': 'Hold mode: one-handed / two-handed / dual wield (dual wield needs an offhand melee weapon of the same class)',
     'character.limb_tip': 'Limb parts (skeleton / orc / elf): equipping replaces the human limb of that part, color follows faction; empty = default human limb',
     'character.weapon_group_melee': 'Melee Weapons',

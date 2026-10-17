@@ -9,11 +9,11 @@ import type {ClipJSON} from '../../skeleton/anim/serialization.ts'
  * 其余关节（脊柱 / 下肢 / 根）保留骨架当前值。
  */
 const JOINT_POSITION: Readonly<Record<string, readonly [number, number, number]>> = {
-    rightArmShoulder: [0.145, 0.36, 0],
+    rightArmShoulder: [-0.145, 0.36, 0],
     rightArmElbow: [0, -0.18, 0],
     rightWristPivot: [0, 0, 0],
     rightWeaponMount: [0, 0, 0],
-    leftArmShoulder: [-0.145, 0.36, 0],
+    leftArmShoulder: [0.145, 0.36, 0],
     leftArmElbow: [0, -0.18, 0],
     leftWristPivot: [0, 0, 0],
     leftWeaponMount: [0, 0, 0],

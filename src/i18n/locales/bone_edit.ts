@@ -53,6 +53,10 @@ export type BoneEditLocale = {
     'bone_edit.grip.on_title': string
     'bone_edit.grip.off_title': string
 
+    /* ── 惯用手预览 ── */
+    'bone_edit.handedness': string
+    'bone_edit.handedness.select_title': string
+
     /* ── 动画库 / 导入导出 ── */
     'bone_edit.anim.edited_group': string
     'bone_edit.anim.builtin_suffix': string
@@ -127,10 +131,14 @@ export const boneEditZh: BoneEditLocale = {
     'bone_edit.weapon.none': '武器：无',
     'bone_edit.weapon.group_melee': '近战武器',
     'bone_edit.weapon.group_ranged': '远程武器',
-    'bone_edit.grip.on': '左手贴合：开',
-    'bone_edit.grip.off': '左手贴合：关',
-    'bone_edit.grip.on_title': '播放预览时把左手链求解到武器副握点（关闭后两只手互不牵扯）',
-    'bone_edit.grip.off_title': '左手贴合已关闭：编辑与预览时两只手完全独立',
+    'bone_edit.grip.on': '支撑手贴合：开',
+    'bone_edit.grip.off': '支撑手贴合：关',
+    'bone_edit.grip.on_title': '播放预览时把支撑手臂链求解到武器副握点（关闭后两只手互不牵扯）',
+    'bone_edit.grip.off_title': '支撑手贴合已关闭：编辑与预览时两只手完全独立',
+
+    /* ── 惯用手预览 ── */
+    'bone_edit.handedness': '惯用手',
+    'bone_edit.handedness.select_title': '预览惯用手：左撇子 = 聚焦骨架整体镜像（与游戏内镜像结果一致）',
 
     /* ── 动画库 / 导入导出 ── */
     'bone_edit.anim.edited_group': '编辑动画',
@@ -206,10 +214,14 @@ export const boneEditEn: BoneEditLocale = {
     'bone_edit.weapon.none': 'Weapon: None',
     'bone_edit.weapon.group_melee': 'Melee',
     'bone_edit.weapon.group_ranged': 'Ranged',
-    'bone_edit.grip.on': 'Left Grip: On',
-    'bone_edit.grip.off': 'Left Grip: Off',
-    'bone_edit.grip.on_title': 'Solve the left arm chain to the weapon support grip during preview playback (off = hands stay independent)',
-    'bone_edit.grip.off_title': 'Left grip off: hands are fully independent while editing and previewing',
+    'bone_edit.grip.on': 'Support Grip: On',
+    'bone_edit.grip.off': 'Support Grip: Off',
+    'bone_edit.grip.on_title': 'Solve the support arm chain to the weapon support grip during preview playback (off = hands stay independent)',
+    'bone_edit.grip.off_title': 'Support grip off: hands are fully independent while editing and previewing',
+
+    /* ── Handedness preview ── */
+    'bone_edit.handedness': 'Handed',
+    'bone_edit.handedness.select_title': 'Preview handedness: left = mirror the focused skeleton as a whole (matches the in-game mirror result)',
 
     /* ── Animation library / import-export ── */
     'bone_edit.anim.edited_group': 'Edited Animations',

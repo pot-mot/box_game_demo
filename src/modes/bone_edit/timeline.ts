@@ -8,6 +8,10 @@ import {createTimelineControls} from './timeline_controls.ts'
 import {setupTrackView} from './timeline_tracks.ts'
 import {setupTimelineLibrary} from './timeline_library.ts'
 import {createBoneEditWeaponControl, type ClipWeaponSource} from './weapon_control.ts'
+import {DEFAULT_HANDEDNESS, isHandedness} from '../../character/handedness.ts'
+import {mirrorClip} from '../../skeleton/anim/mirror.ts'
+import {captureBoneRoll, captureJointPose, captureSourceId} from './mirror_capture.ts'
+import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
 import {round, upsertJointTrack, upsertBoneTrack, type KeyframeSelection, type TimelineRuntime} from './timeline_ops.ts'
 import {setupCurveEditor} from './curve_editor.ts'
 import {setupOnionSkin} from './onion_skin.ts'
@@ -124,7 +128,7 @@ export const setupTimelinePanel = (
         getSelection: () => selection,
         history,
     })
-    const onion = setupOnionSkin(world, store, () => playhead)
+    const onion = setupOnionSkin(world, () => previewClip(store.current), () => playhead)
 
     /* 洋葱皮 / IK 为开合切换按钮：登记计算型本地化，语言切换时按当前开关状态重译（不覆盖开合态） */
     localizeApply(controls.onionBtn, el => {
@@ -166,9 +170,13 @@ export const setupTimelinePanel = (
         weaponControl.syncForClip(source)
     }
 
+    /** 预览用 clip：左撇子时施加矢状面镜像（左右轨互换 + 反射共轭）；右撇子原样返回（不拷贝） */
+    const previewClip = (clip: BoneAnimationClip | undefined): BoneAnimationClip | undefined =>
+        clip === undefined ? undefined : (weaponControl.getHandedness() === 'left' ? mirrorClip(clip) : clip)
+
     const rebuildPlayer = (): void => {
         player?.pause()
-        const clip = store.current
+        const clip = previewClip(store.current)
         const skeleton = world.getFocus()?.skeleton
         if (clip === undefined || skeleton === undefined) {
             player = undefined
@@ -209,30 +217,36 @@ export const setupTimelinePanel = (
         const skeleton = world.getFocus()?.skeleton
         if (clip === undefined || skeleton === undefined) return
         history.startEdit()
-        const targets = selection.size > 0
+        /* 写入的 canonical 轨道 id：左撇子预览下骨架关节 id 承载的是镜像轨道，故需先映射回 canonical。
+         * 读取关节与姿势反射由 mirror_capture 统一处理（见其说明）。 */
+        const mirrored = weaponControl.getHandedness() === 'left'
+        const canonicalIds = selection.size > 0
             ? [...selection.keys()]
-            : [...skeleton.joints.keys(), ...skeleton.bones.keys()]
+            : [...skeleton.joints.keys(), ...skeleton.bones.keys()].map(id => captureSourceId(id, mirrored))
         store.updateCurrent(current => {
             let next = current
-            for (const targetId of targets) {
-                if (skeleton.findJoint(targetId) !== undefined) {
-                    next = upsertJointTrack(next, targetId)
-                    const joint = skeleton.findJoint(targetId)!
+            for (const writeId of canonicalIds) {
+                const readId = captureSourceId(writeId, mirrored)
+                const joint = skeleton.findJoint(readId)
+                if (joint !== undefined) {
+                    next = upsertJointTrack(next, writeId)
+                    const pose = captureJointPose(joint.position, joint.rotation, mirrored)
                     next = {
                         ...next,
-                        jointTracks: next.jointTracks.map(track => track.targetId === targetId
-                            ? {...track, records: [...track.records.filter(r => r.time !== round(t)), {time: round(t), position: joint.position.clone(), rotation: joint.rotation.clone()}]}
+                        jointTracks: next.jointTracks.map(track => track.targetId === writeId
+                            ? {...track, records: [...track.records.filter(r => r.time !== round(t)), {time: round(t), position: pose.position, rotation: pose.rotation}]}
                             : track),
                     }
-                } else if (skeleton.findBone(targetId) !== undefined) {
-                    next = upsertBoneTrack(next, targetId)
-                    const bone = skeleton.findBone(targetId)!
-                    next = {
-                        ...next,
-                        boneTracks: next.boneTracks.map(track => track.targetId === targetId
-                            ? {...track, records: [...track.records.filter(r => r.time !== round(t)), {time: round(t), roll: bone.roll}]}
-                            : track),
-                    }
+                    continue
+                }
+                const bone = skeleton.findBone(readId)
+                if (bone === undefined) continue
+                next = upsertBoneTrack(next, writeId)
+                next = {
+                    ...next,
+                    boneTracks: next.boneTracks.map(track => track.targetId === writeId
+                        ? {...track, records: [...track.records.filter(r => r.time !== round(t)), {time: round(t), roll: captureBoneRoll(bone.roll, mirrored)}]}
+                        : track),
                 }
             }
             return next
@@ -485,6 +499,13 @@ export const setupTimelinePanel = (
         trackView.renderList()
         trackView.renderCanvas()
     })
+    /* 惯用手预览：左撇子 = 播放时镜像 clip + 武器改挂副手挂点 + 双手 IK 支撑换侧；canonical 动作数据（存档）不变 */
+    controls.handednessSelect.addEventListener('change', () => {
+        const value = controls.handednessSelect.value
+        weaponControl.setHandedness(isHandedness(value) ? value : DEFAULT_HANDEDNESS)
+        rebuildPlayer()
+        onion.update()
+    })
 
     /* ── 键盘（面板聚焦时）：Ctrl+Z / Ctrl+Shift+Z / Ctrl+C / Ctrl+V / Delete ── */
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -538,6 +559,7 @@ export const setupTimelinePanel = (
         container.dataset.twoHanded = String(weaponControl.isTwoHanded())
         container.dataset.gripAssist = weaponControl.isGripAssist() ? 'on' : 'off'
         container.dataset.gripSolved = String(weaponControl.isGripSolved())
+        container.dataset.handedness = weaponControl.getHandedness()
     }
 
     const edit = (fn: () => void): void => {

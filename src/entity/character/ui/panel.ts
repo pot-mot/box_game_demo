@@ -11,6 +11,7 @@ import {createIcon} from '../../../ui/icons/icon.ts'
 import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.ts'
 import {ALL_WEAPON_PRESETS, availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, isHoldMode} from '../../../character/weapon/hold_mode.ts'
+import {HANDEDNESS, HANDEDNESS_LABELS, isHandedness} from '../../../character/handedness.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
@@ -249,6 +250,23 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const speed = createLabeledNumberInput(el, 'character.speed', {min: '0.1', step: '0.1', value: '6'})
     const jumpH = createLabeledNumberInput(el, 'character.jump_height', {min: '0.1', step: '0.1', value: '2'})
     const scale = createLabeledNumberInput(el, 'character.scale', {min: '0.1', step: '0.1', value: '1'})
+
+    /* 惯用手：右撇子（默认）/ 左撇子（主副手槽位互换 + 动作与外观镜像） */
+    const handednessLabel = document.createElement('label')
+    handednessLabel.className = 'dc-label'
+    appendLocalizedText(handednessLabel, 'character.handedness')
+    handednessLabel.appendChild(document.createTextNode(' '))
+    const handednessSelect = document.createElement('select')
+    handednessSelect.id = 'handedness-select'
+    handednessSelect.className = 'dc-select'
+    for (const value of HANDEDNESS) {
+        const o = document.createElement('option')
+        o.value = value
+        localizeText(o, HANDEDNESS_LABELS[value])
+        handednessSelect.appendChild(o)
+    }
+    handednessLabel.appendChild(handednessSelect)
+    el.appendChild(handednessLabel)
 
     el.appendChild(createSection('panel.faction'))
     const faction = createLabeledNumberInput(el, 'character.faction', {min: '0', step: '1', value: '0'})
@@ -893,6 +911,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         speed.value = String(sel.config.speed)
         jumpH.value = String(sel.config.jumpHeight)
         scale.value = String(sel.config.scale)
+        handednessSelect.value = sel.config.handedness ?? 'right'
 
         maxHP.value = String(sel.combat.maxHealth)
         curHP.value = String(sel.combat.health)
@@ -1079,10 +1098,12 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (knockdownValue !== undefined) poiseCfg.knockdownDuration = knockdownValue
                 const getUpValue = parseOpt(getUpDurationInput.value)
                 if (getUpValue !== undefined) poiseCfg.getUpDuration = getUpValue
+                const handednessValue = handednessSelect.value
                 ctx.updateCharacterConfig?.(cur.id, {
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
                     scale: parseFloat(scale.value),
+                    ...(isHandedness(handednessValue) ? {handedness: handednessValue} : {}),
                     ...poiseCfg,
                 }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
                     baseDefense: readBaseDefense(),

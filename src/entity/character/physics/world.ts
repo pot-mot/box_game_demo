@@ -19,6 +19,7 @@ import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../..
 import {availableHoldModes, defaultHoldMode, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
+import {DEFAULT_HANDEDNESS, isHandedness} from '../../../character/handedness.ts'
 import type {ShieldBlockConfig} from '../../../character/weapon/constants.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
 import {segmentTotalDuration, isChargeableKey, type AttackKey, type GroundAttackKey} from '../../../character/weapon/attack_chain.ts'
@@ -1211,6 +1212,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
                     holdMode: entity.holdMode,
+                    handedness: entity.config.handedness ?? DEFAULT_HANDEDNESS,
                     attackSegment: inAttacking ? activeSegment : undefined,
                     attackPhase: ctxPhaseName,
                     attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
@@ -1616,6 +1618,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             speed: saveConfig.speed,
             jumpHeight: saveConfig.jumpHeight,
             scale: saveConfig.scale,
+            /* 惯用手：非法 / 缺省安全回退 undefined（运行时按右撇子处理） */
+            ...(isHandedness(saveConfig.handedness) ? {handedness: saveConfig.handedness} : {}),
             /* 韧性 / 倒地属性：旧档缺字段回退默认（createCombatComponent 内 clamp 默认值） */
             ...(saveConfig.poiseMax !== undefined ? {poiseMax: saveConfig.poiseMax} : {}),
             ...(saveConfig.poiseRegenDelay !== undefined ? {poiseRegenDelay: saveConfig.poiseRegenDelay} : {}),
@@ -1781,6 +1785,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 entity.mesh.add(newWire)
                 entity.wireframe = newWire
             }
+        }
+        if (charCfg.handedness !== undefined) {
+            /* 惯用手切换：主 / 副手槽位与网格镜像迁移（武器网格不重建）；动作镜像由 clip 层随 ctx 生效 */
+            entity.config.handedness = charCfg.handedness
+            appearanceModels.get(entity.id)?.setHandedness(charCfg.handedness)
         }
         if (newAttackSlot || newOffhand !== undefined) {
             if (newAttackSlot) {

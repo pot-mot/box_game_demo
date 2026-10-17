@@ -12,6 +12,7 @@ import {resolvePhases, phaseDurationOf} from '../../character/combat/attack_phas
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
 import {weaponAttacksOf} from '../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
+import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
 import {translate} from '../../i18n/index.ts'
 import type {WeaponConfig} from '../../character/weapon/catalog.ts'
 import {
@@ -334,6 +335,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             /* 展示场景站立攻击：速度恒 0（生产为物理体实时速度） */
             horizontalSpeed: 0,
             holdMode,
+            handedness: DEFAULT_HANDEDNESS,
             /* 蓄力前置同样携带 attackSegment（外观据此取专用蓄力姿势 clip） */
             attackSegment: (inAttacking || inCharging) ? segment : undefined,
             attackPhase: ctxPhaseName,

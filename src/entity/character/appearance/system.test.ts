@@ -29,6 +29,7 @@ const makeCtx = (overrides: Partial<AnimationContext> = {}): AnimationContext =>
     stateTime: 0,
     horizontalSpeed: 0,
     holdMode: 'one_handed',
+    handedness: 'right',
     attackSegment: undefined,
     attackPhase: undefined,
     attackPhaseProgress: 0,
@@ -132,6 +133,22 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
                 }
             }
         }
+    })
+
+    it('切换惯用手后重建 clip（同动画键下镜像到左手持械姿势）', () => {
+        const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        const sys = createAppearanceSystem()
+        const idle = (handedness: 'right' | 'left', i: number): AnimationContext =>
+            makeCtx({stateTime: i / 60, handedness, weaponHeld: true, holdMode: 'one_handed'})
+        /* 右撇子：主手（解剖右）持械抬肩（WEAPON_READY_SHOULDER ≈ -0.45），副手垂摆 */
+        for (let i = 0; i < 30; i++) sys.update(1 / 60, model, 'idle', idle('right', i))
+        expect(model.rightArmShoulder.rotation.x).toBeLessThan(-0.3)
+        expect(Math.abs(model.leftArmShoulder.rotation.x)).toBeLessThan(0.15)
+        /* 切到左撇子：动画键（idle:one_handed）不变，但 handedness 变化须触发重解析为镜像 clip */
+        for (let i = 30; i < 90; i++) sys.update(1 / 60, model, 'idle', idle('left', i))
+        expect(model.leftArmShoulder.rotation.x).toBeLessThan(-0.3)
+        expect(Math.abs(model.rightArmShoulder.rotation.x)).toBeLessThan(0.15)
+        model.dispose()
     })
 
     it('falling 腿张开随水平速度（速度 0 vs 高速档，动画键切换生成不同 clip）', () => {

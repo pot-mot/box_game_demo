@@ -5,6 +5,7 @@
 - 阵营定义在 `faction.ts`（涂色入口为 `entity/character/appearance/constants.ts` 的 `factionColorOf`，见对应模块文档）。
 - 角色原型配置在 `archetypes.ts`。
 - 锁定点领域定义在 `lock_point.ts`。
+- 惯用手领域定义在 `handedness.ts`：`HANDEDNESS = ['right', 'left']`、`Handedness`、`DEFAULT_HANDEDNESS = 'right'`、`HANDEDNESS_LABELS`、`isHandedness`、`mainHandSide(handedness)` / `offHandSide(handedness)`。canonical 骨架与动作数据恒为右撇子，左撇子为**取用时镜像**视图（见根 AGENTS.md「架构规则」7 与 [`weapon.md`](weapon/weapon.md) / [`appearance.md`](../entity/character/appearance/appearance.md)）。
 
 ## 陷阱
 

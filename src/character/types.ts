@@ -3,6 +3,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import type {CharacterStateMachine} from './state_machine/types.ts'
 import type { CombatComponent } from './combat/types.ts'
 import type { HoldMode } from './weapon/hold_mode.ts'
+import type { Handedness } from './handedness.ts'
 import type {LockPointConfig} from './lock_point.ts'
 import type {PeaceSubStrategy} from './ai_strategy/types.ts'
 import type {CombatSubStrategy} from './ai_strategy/types.ts'
@@ -14,6 +15,8 @@ export interface CharacterConfig {
     jumpHeight: number
     /** 整体缩放（碰撞箱和模型等比缩放） */
     scale: number
+    /** 惯用手（缺省 = 右撇子）：决定主 / 副手槽位与动作镜像 */
+    handedness?: Handedness
     /** 韧性上限基础值（缺省 = 常量 `DEFAULT_POISE_MAX`；有效上限再叠加装备加成） */
     poiseMax?: number
     /** 受击后韧性停止回充的延迟（秒，缺省 = 常量 `DEFAULT_POISE_REGEN_DELAY`） */
