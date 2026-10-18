@@ -1,7 +1,13 @@
 import {describe, it, expect} from 'vitest'
-import {DEFAULT_PROJECTILE_GRAVITY_SCALE, RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from './ranged_weapon.ts'
-import {MELEE_WEAPON_PRESETS} from './melee_weapon.ts'
+import {DEFAULT_PROJECTILE_GRAVITY_SCALE, type RangedWeaponConfig} from './ranged_weapon.ts'
+import {allWeaponPresets, findWeaponPreset} from './catalog.ts'
 
+/* 全部已注册远程武器（含各体形） */
+const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = Object.fromEntries(
+    allWeaponPresets()
+        .filter((w): w is RangedWeaponConfig => w.type === 'ranged')
+        .map(w => [w.id, w]),
+)
 const presets = Object.entries(RANGED_WEAPON_PRESETS) as [string, RangedWeaponConfig][]
 const presetIds = presets.map(([key]) => key)
 
@@ -18,7 +24,7 @@ describe('RANGED_WEAPON_PRESETS 关系不变量', () => {
     })
 
     it('远程侦测范围大于近战', () => {
-        const meleeDet = MELEE_WEAPON_PRESETS.long_sword.detectionRange
+        const meleeDet = findWeaponPreset('long_sword')?.detectionRange ?? 0
         for (const [, w] of presets) {
             expect(w.detectionRange).toBeGreaterThanOrEqual(meleeDet)
         }

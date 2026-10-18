@@ -3,7 +3,8 @@ import {Group} from 'three'
 import {testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor, shieldCoverOBB} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
 import type {CharacterModel} from '../appearance/types.ts'
-import {MELEE_WEAPON_PRESETS, type MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
+import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
+import {findWeaponPreset} from '../../../character/weapon/catalog.ts'
 import {SHIELD_BLOCK_MEDIUM} from '../../../character/weapon/constants.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
@@ -13,6 +14,15 @@ import type {ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
+import {HUMANOID_BODY_FORM} from '../body_form/index.ts'
+
+/** 目标受击箱半长夹具（人形体形）：testMeleeHit 现按目标体形 `size` 取半长 */
+const TARGET_HALVES = {
+    x: HUMANOID_BODY_FORM.size.width / 2,
+    y: HUMANOID_BODY_FORM.size.height / 2,
+    z: HUMANOID_BODY_FORM.size.depth / 2,
+}
+
 
 /* 攻击检测箱夹具（与 long_sword / spear 预设一致）：前缘 = offset.z + size.z/2 */
 const swordDetectBox: MeleeDetectBox = {size: {x: 0.45, y: 1.1, z: 1.3}, offset: {x: 0, y: 0, z: 0.45}}
@@ -37,20 +47,20 @@ const localHalf = {x: 0.15, y: 0.5, z: 0.15}
 describe('testMeleeHit（武器 OBB × 受击箱 OBB）', () => {
     it('武器箱与受击箱重叠时命中，远离时不命中', () => {
         /* yaw=0：本地盒中心落于世界 (0, 0.5, 0.2)，z 覆盖 0.05–0.35 */
-        expect(testMeleeHit(yawMatrix(0, 0, 0, 0), localCenter, localHalf, {x: 0, y: 0, z: 0.2}, 1, 0)).toBe(true)
-        expect(testMeleeHit(yawMatrix(0, 0, 0, 0), localCenter, localHalf, {x: 0, y: 0, z: -0.5}, 1, 0)).toBe(false)
+        expect(testMeleeHit(yawMatrix(0, 0, 0, 0), localCenter, localHalf, {x: 0, y: 0, z: 0.2}, TARGET_HALVES, 0)).toBe(true)
+        expect(testMeleeHit(yawMatrix(0, 0, 0, 0), localCenter, localHalf, {x: 0, y: 0, z: -0.5}, TARGET_HALVES, 0)).toBe(false)
     })
 
     it('高度方向分离时不命中', () => {
         /* 武器箱 y 覆盖 0–1.0；目标抬高后受击箱 y 覆盖 1.5–2.5 */
-        expect(testMeleeHit(yawMatrix(0, 0, 0, 0), localCenter, localHalf, {x: 0, y: 2, z: 0.2}, 1, 0)).toBe(false)
+        expect(testMeleeHit(yawMatrix(0, 0, 0, 0), localCenter, localHalf, {x: 0, y: 2, z: 0.2}, TARGET_HALVES, 0)).toBe(false)
     })
 
     it('判定箱随武器姿态旋转：转 90° 后命中区从 +Z 转到 +X', () => {
         /* yaw=π/2：本地 +Z 偏移转为世界 +X，盒中心落于 (0.2, 0.5, 0) */
-        expect(testMeleeHit(yawMatrix(0, 0, 0, Math.PI / 2), localCenter, localHalf, {x: 0.25, y: 0, z: 0}, 1, 0)).toBe(true)
+        expect(testMeleeHit(yawMatrix(0, 0, 0, Math.PI / 2), localCenter, localHalf, {x: 0.25, y: 0, z: 0}, TARGET_HALVES, 0)).toBe(true)
         /* 原 +Z 方向的目标转出覆盖区 */
-        expect(testMeleeHit(yawMatrix(0, 0, 0, Math.PI / 2), localCenter, localHalf, {x: 0, y: 0, z: 0.25}, 1, 0)).toBe(false)
+        expect(testMeleeHit(yawMatrix(0, 0, 0, Math.PI / 2), localCenter, localHalf, {x: 0, y: 0, z: 0.25}, TARGET_HALVES, 0)).toBe(false)
     })
 
     it('受击箱随目标朝向旋转：同一武器位姿，目标转 90° 后命中状态翻转', () => {
@@ -59,8 +69,8 @@ describe('testMeleeHit（武器 OBB × 受击箱 OBB）', () => {
         const sideBoxCenter = {x: 0.2, y: 0.5, z: 0}
         const sideBoxHalf = {x: 0.1, y: 0.5, z: 0.1}
         const m = yawMatrix(0, 0, 0, 0)
-        expect(testMeleeHit(m, sideBoxCenter, sideBoxHalf, {x: 0, y: 0, z: 0}, 1, 0)).toBe(true)
-        expect(testMeleeHit(m, sideBoxCenter, sideBoxHalf, {x: 0, y: 0, z: 0}, 1, Math.PI / 2)).toBe(false)
+        expect(testMeleeHit(m, sideBoxCenter, sideBoxHalf, {x: 0, y: 0, z: 0}, TARGET_HALVES, 0)).toBe(true)
+        expect(testMeleeHit(m, sideBoxCenter, sideBoxHalf, {x: 0, y: 0, z: 0}, TARGET_HALVES, Math.PI / 2)).toBe(false)
     })
 })
 
@@ -87,7 +97,9 @@ describe('武器命中箱 reach（命中箱前伸量几何属性）', () => {
     it.each(['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer'] as const)(
         '%s 的本地命中箱覆盖柄（柄相交也判定命中）',
         (id) => {
-            const mesh = createWeaponMesh(MELEE_WEAPON_PRESETS[id].mesh)
+            const preset = findWeaponPreset(id)
+            if (preset === undefined) throw new Error(`${id} 未注册`)
+            const mesh = createWeaponMesh(preset.mesh)
             const {center, half, reach} = mesh.hitBox
             const low = center.y - half.y
             const high = center.y + half.y
@@ -118,31 +130,31 @@ describe('attackDetectOBB / testAttackDetect（攻击检测箱由武器 detectBo
     })
 
     it('身前目标命中，超出检测箱前缘未命中', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.0}, 1, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.4}, 1, 0)).toBe(false)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.0}, TARGET_HALVES, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.4}, TARGET_HALVES, 0)).toBe(false)
     })
 
     it('身后覆盖由 offset - size/2 决定（少量贴背余量）', () => {
         /* 后缘 = 0.45 - 0.65 = -0.2 */
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.15}, 1, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.4}, 1, 0)).toBe(false)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.15}, TARGET_HALVES, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.4}, TARGET_HALVES, 0)).toBe(false)
     })
 
     it('侧面覆盖由 size.x 决定', () => {
         /* 侧向半宽 0.225 + 目标半宽 0.125 → x=0.3 命中，x=0.4 未命中 */
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0.3, y: 0, z: 0}, 1, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0.4, y: 0, z: 0}, 1, 0)).toBe(false)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0.3, y: 0, z: 0}, TARGET_HALVES, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0.4, y: 0, z: 0}, TARGET_HALVES, 0)).toBe(false)
     })
 
     it('深度随武器 detectBox 变化（长枪显著远于短刃）', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, spearDetectBox, 1, 0, {x: 0, y: 0, z: 1.8}, 1, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.8}, 1, 0)).toBe(false)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, spearDetectBox, 1, 0, {x: 0, y: 0, z: 1.8}, TARGET_HALVES, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.8}, TARGET_HALVES, 0)).toBe(false)
     })
 
     it('检测箱随角色朝向旋转：转 90° 后前方由 +Z 变为 +X', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 1.0, y: 0, z: 0}, 1, 0)).toBe(true)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 1.0, y: 0, z: 0}, TARGET_HALVES, 0)).toBe(true)
         /* 原 +Z 方向变为侧方，超出侧向半宽 */
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 0, y: 0, z: 1.0}, 1, 0)).toBe(false)
+        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 0, y: 0, z: 1.0}, TARGET_HALVES, 0)).toBe(false)
     })
 })
 
@@ -485,7 +497,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const cover = block.cover
         const scale = 2
         const bodyY = 5
-        const obb = shieldCoverOBB({x: 1, y: bodyY, z: -3}, scale, 0, cover)
+        const obb = shieldCoverOBB({x: 1, y: bodyY, z: -3}, {speed: 3, jumpHeight: 2, scale}, 0, cover)
         expect(obb.half.x).toBeCloseTo(cover.width * scale / 2, 6)
         expect(obb.half.y).toBeCloseTo(cover.height * scale / 2, 6)
         expect(obb.half.z).toBeCloseTo(cover.depth * scale / 2, 6)
@@ -498,7 +510,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
 
     it('shieldCoverOBB：yaw=π/2 时 offsetZ 沿 +X 方向偏移（盾随朝向旋转）', () => {
         const cover = SHIELD_BLOCK_MEDIUM.cover
-        const obb = shieldCoverOBB({x: 0, y: 0, z: 0}, 1, Math.PI / 2, cover)
+        const obb = shieldCoverOBB({x: 0, y: 0, z: 0}, {speed: 3, jumpHeight: 2, scale: 1}, Math.PI / 2, cover)
         expect(obb.center.x).toBeCloseTo(cover.offsetZ, 6)
         expect(obb.center.z).toBeCloseTo(0, 6)
     })

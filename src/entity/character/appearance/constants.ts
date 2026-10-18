@@ -1,5 +1,6 @@
 import type {CharacterColorPalette} from './types.ts'
 import {darkenColor, lightenColor} from '../../../render/constants.ts'
+import type {CharacterMaterialId} from '../../../render/character_materials.ts'
 
 /** 6 套基础调色板，按 faction % 6 选取 */
 const BASE_PALETTES: readonly CharacterColorPalette[] = [
@@ -123,6 +124,31 @@ export const STATE_BLEND_DURATION = 0.15
 
 /** 护甲外扩边距（米）：包裹对应身体部件且不产生明显穿模 */
 export const ARMOR_PAD = 0.03
+
+/**
+ * 护甲**材质厚度系数**（宽 / 深 = 身体对应部件尺寸 × 该系数）：布料最薄、皮、鳞、铁、石依次增厚。
+ * 材质越厚，护甲离身体越远；未知材质回退 `ARMOR_DEFAULT_THICKNESS`。
+ */
+export const ARMOR_MATERIAL_THICKNESS: Readonly<Partial<Record<CharacterMaterialId, number>>> = {
+    cloth: 1.05,
+    leather: 1.1,
+    scale: 1.15,
+    metal: 1.2,
+    stone: 1.25,
+}
+
+/** 未知材质的护甲厚度回退值 */
+export const ARMOR_DEFAULT_THICKNESS = 1.1
+
+/** 取某材质对应的护甲厚度系数 */
+export const armorThicknessOf = (material: CharacterMaterialId): number =>
+    ARMOR_MATERIAL_THICKNESS[material] ?? ARMOR_DEFAULT_THICKNESS
+
+/**
+ * 护甲顶缘相对身体部件顶面的**额外上探量**（米）：躯干类护甲（布衣 / 皮甲 / 法袍等）顶端
+ * **不得只与身体顶面对齐**——共面会 z-fighting / 穿模。顶缘须高出身体顶面至少 1 个该单位。
+ */
+export const ARMOR_TOP_OVERLAP = ARMOR_PAD
 
 // ── 受击硬直 ──
 

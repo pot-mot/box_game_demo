@@ -39,7 +39,7 @@ export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
     const hipX = LEG_X_GAP
     const identity: readonly [number, number, number, number] = [0, 0, 0, 1]
 
-    /* 物理碰撞块拆分位置（上/下半身半胶囊中心）：与 CHARACTER_BASE_SIZE 的胶囊拆分一致 */
+    /* 物理碰撞块拆分位置（上/下半身半胶囊中心）：与人形体形 `colliderLayout` 的胶囊拆分一致 */
     const colliderC = MODEL_BASE_HEIGHT / 2
     const colliderR = MODEL_BASE_WIDTH / 2
     const colliderN = colliderC - colliderR
@@ -93,7 +93,7 @@ export const buildCharacterSkeletonDefinition = (): SkeletonDefinition => {
 }
 
 /** 人形预设关节 id → 本地化名称键（自定义关节回退原始名） */
-const HUMANOID_JOINT_NAME_KEYS: Record<string, StringLocaleKey> = {
+export const HUMANOID_JOINT_NAME_KEYS: Record<string, StringLocaleKey> = {
     root: 'skeleton.joint.root',
     spine: 'skeleton.joint.spine',
     headNeck: 'skeleton.joint.headNeck',

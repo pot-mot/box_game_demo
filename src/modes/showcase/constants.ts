@@ -139,9 +139,44 @@ export const RACE_SHOWCASE_ROSTER: readonly ShowcaseExtraEntry[] = [
     },
 ]
 
+/**
+ * 体形展示条目：非人形体形（狼 / 马 / 双足飞龙 wyvern）——循环播放对应体形的 idle ↔ walking 动画。
+ * 名称文案键取自体形计划（`body_form.*`），副名为「体形」。
+ */
+export interface CreatureShowcaseEntry {
+    /** 体形 id（`BodyForm.id`） */
+    readonly bodyFormId: string
+    /** 展示名文案键（面板 / 头顶标签，经 `translate` 解析） */
+    readonly name: StringLocaleKey
+}
+
+export const CREATURE_SHOWCASE_ROSTER: readonly CreatureShowcaseEntry[] = [
+    {bodyFormId: 'wolf', name: 'body_form.wolf'},
+    {bodyFormId: 'horse', name: 'body_form.horse'},
+    {bodyFormId: 'wyvern', name: 'body_form.wyvern'},
+]
+
+/** 外观图鉴：整套护甲展示条目（以整套为整体预览，不单件展示） */
+export interface ArmorSetShowcase {
+    /** 整套名文案键 */
+    readonly nameKey: StringLocaleKey
+    /** 四槽护甲 id（head / chest / arms / legs） */
+    readonly armor: Readonly<Partial<Record<ArmorSlot, string>>>
+    readonly faction: number
+}
+
+/** 整套护甲展示清单（布 / 皮 / 铁 / 鳞 / 石 / 法师，各自完整成套） */
+export const ARMOR_SET_SHOWCASE: readonly ArmorSetShowcase[] = [
+    {nameKey: 'showcase.set.cloth', armor: {head: 'cloth_cap', chest: 'cloth_vest', arms: 'cloth_bracers', legs: 'cloth_pants'}, faction: 3},
+    {nameKey: 'showcase.set.leather', armor: {head: 'leather_cap', chest: 'leather_armor', arms: 'leather_bracers', legs: 'leather_legs'}, faction: 4},
+    {nameKey: 'showcase.set.iron', armor: {head: 'iron_helmet', chest: 'iron_plate', arms: 'iron_bracers', legs: 'iron_greaves'}, faction: 5},
+    {nameKey: 'showcase.set.scale', armor: {head: 'scale_helm', chest: 'scale_mail', arms: 'scale_bracers', legs: 'scale_legs'}, faction: 0},
+    {nameKey: 'showcase.set.stone', armor: {head: 'stone_helm', chest: 'stone_plate', arms: 'stone_bracers', legs: 'stone_legs'}, faction: 1},
+    {nameKey: 'showcase.set.mage', armor: {head: 'mage_hood', chest: 'mage_robe', arms: 'mage_wraps', legs: 'mage_leggings'}, faction: 2},
+]
+
 /** 外观图鉴行角色间距（m） */
 export const SHOWCASE_APPEARANCE_SPACING = 3.0
-
 /** 外观图鉴行间距（m） */
 export const SHOWCASE_APPEARANCE_ROW_SPACING = 3.4
 

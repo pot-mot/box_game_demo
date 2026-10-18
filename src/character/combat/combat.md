@@ -35,7 +35,7 @@
 
 ## 受击子块（hurt blocks）
 
-- 领域模型 `character/hurt_blocks.ts`：`HurtShape`（盒 / 球 / 柱）、`HurtBlock`/`HurtBlockProfile`、`worldizeHurtBlock`。人形清单 12 块（`entity/character/skeleton/hurt_blocks.ts`，id 对应骨骼）；挂在骨架预设上（为龙 / 马等非人形预留）。
+- 领域模型 `character/hurt_blocks.ts`：`HurtShape`（盒 / 球 / 柱）、`HurtBlock`/`HurtBlockProfile`、`worldizeHurtBlock`。人形清单 12 块（`entity/character/skeleton/hurt_blocks.ts`，id 对应骨骼）；挂在骨架预设上（为 wyvern / 马等非人形预留）。
 - 运行时 `CharacterEntity.hurtProfile` / `hurtBlocks`：`world.ts` 每帧在动画 + 根姿态后，用关节上的视觉部件矩阵 + 几何尺寸世界化（随骨骼段长度与粗细对齐）。
 - 命中检定统一改用受击子块（无子块时回退旧身体盒）：
   - 近战 `entity/character/combat/shapes.ts` 的 `obbIntersectsHurt`（武器 OBB × 任一子块，可同时命中多块）；

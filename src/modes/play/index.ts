@@ -177,7 +177,7 @@ export const setupPlayMode = (
                 stateTime: player.stateMachine.stateTime,
                 timers,
                 skillTimers,
-                weaponLabel: weaponDisplayName(player.combat.weapon.id, player.combat.weapon.name),
+                weaponLabel: weaponDisplayName(player.combat.weapon),
                 holdModeLabel: translate(HOLD_MODE_LABELS[player.holdMode]),
                 charge: player.combat.attackCharge,
                 charging: player.combat.attackHolding || player.combat.attackCharge > 0,

@@ -1,7 +1,8 @@
 import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
 import {getAttackClipById, getBaseClip} from '../../entity/character/appearance/builtin_catalog.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
-import {ALL_WEAPON_PRESETS, weaponAttacksOf, weaponDisplayName} from '../../character/weapon/catalog.ts'
+import {weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../character/weapon/catalog.ts'
+import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
@@ -163,14 +164,16 @@ const buildAttackSource = (segment: AttackSegment): BoneAnimationClip =>
  * 多模式武器（近战）标签带持握模式名以保持全库唯一；单段武器（远程）标签只用武器名。
  */
 const buildAttackEntries = (): BuiltinClipEntry[] =>
-    ALL_WEAPON_PRESETS.flatMap(weapon => {
+    weaponsOfForm(HUMANOID_BODY_FORM_ID).flatMap(weapon => {
+        /* 天然武器（空手 / 撕咬 / 吐息…）无可视模型且动画由体形分包提供，不入人形动作库 */
+        if (weapon.natural === true) return []
         const multiMode = weapon.holdModes.length > 1
         return weapon.holdModes.flatMap(holdMode => {
             const segments = orderedSegments(weaponAttacksOf(weapon, holdMode))
             return segments.map(segment => {
                 const labelOf = (): string => segments.length > 1
-                    ? `${weaponDisplayName(weapon.id, weapon.name)} · ${multiMode ? `${translate(HOLD_MODE_LABELS[holdMode])} · ` : ''}${segmentDisplayName(segment)}`
-                    : weaponDisplayName(weapon.id, weapon.name)
+                    ? `${weaponDisplayName(weapon)} · ${multiMode ? `${translate(HOLD_MODE_LABELS[holdMode])} · ` : ''}${segmentDisplayName(segment)}`
+                    : weaponDisplayName(weapon)
                 return entryOf(
                     segment.id,
                     weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,

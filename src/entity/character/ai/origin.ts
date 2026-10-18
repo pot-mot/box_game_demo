@@ -1,11 +1,11 @@
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {AIContext} from './types.ts'
-import {CHARACTER_BASE_SIZE} from '../constants.ts'
+import {formCenterOffsetY} from '../body_form/geometry.ts'
 
-/** 由角色物理体反算脚底原点 Y（body 中心 - 半高）写入 `ctx.origin` */
+/** 由角色物理体反算脚底原点 Y（body 中心 - 体形中心偏移）写入 `ctx.origin` */
 export const setOriginFromCharacter = (ctx: AIContext, character: CharacterEntity): void => {
     const pos = character.body.translation()
-    const footY = pos.y - (CHARACTER_BASE_SIZE.height * character.config.scale) / 2
+    const footY = pos.y - formCenterOffsetY(character.config)
     ctx.origin.x = pos.x
     ctx.origin.y = footY
     ctx.origin.z = pos.z

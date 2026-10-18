@@ -1,8 +1,9 @@
 import {
-    BoxGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial,
-    SphereGeometry, type BufferGeometry, type Texture,
+    BoxGeometry, CapsuleGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshStandardMaterial,
+    SphereGeometry, type BufferGeometry, type Object3D, type Texture,
 } from 'three'
 import {createTwoFaceBoxPart} from '../../../render/box_parts.ts'
+import {createCharacterMaterial, type CharacterMaterialId} from '../../../render/character_materials.ts'
 
 /**
  * 程序化网格构建器：统一登记几何 / 材质 / 网格的生命周期，消除各模型重复的样板代码。
@@ -14,8 +15,10 @@ import {createTwoFaceBoxPart} from '../../../render/box_parts.ts'
 export interface MeshBuilder {
     /** 模型根 Group：收拢全部可见部件与隐藏标记 */
     readonly group: Group
-    /** 创建并登记标准材质（单色，金属/布料质感由粗糙度 / 金属度表达） */
-    readonly material: (color: number, roughness?: number, metalness?: number) => MeshStandardMaterial
+    /** 创建并登记标准材质（单色，金属/布料质感由粗糙度 / 金属度表达；flatShading = 低多面体棱面） */
+    readonly material: (color: number, roughness?: number, metalness?: number, flatShading?: boolean) => MeshStandardMaterial
+    /** 按统一材质库 id 创建并登记逐实例材质（可选 color 覆盖基色） */
+    readonly materialById: (id: CharacterMaterialId, color?: number) => MeshStandardMaterial
     /** 创建并登记盒几何 */
     readonly box: (w: number, h: number, d: number) => BoxGeometry
     /** 创建并登记圆柱 / 圆锥台几何 */
@@ -24,7 +27,21 @@ export interface MeshBuilder {
     readonly sphere: (radius: number, widthSegments?: number, heightSegments?: number) => SphereGeometry
     /** 创建并登记圆锥几何 */
     readonly cone: (radius: number, height: number, segments?: number) => ConeGeometry
-    /** 以几何 + 材质组装网格并挂到 group，返回该网格（可继续调整 visible 等属性） */
+    /**
+     * 创建并登记**低多面体棱台**几何：4 边方柱（绕 Y 转 45° 对齐）沿纵轴上下底面不等大，
+     * 宽沿 X、深 = 宽 × depthRatio 沿 Z；用于躯干 / 四肢的折线曲线轮廓。
+     */
+    readonly frustum: (wTop: number, wBottom: number, height: number, depthRatio?: number) => BufferGeometry
+    /**
+     * 创建并登记**圆润锥管**几何：多边圆柱（默认 12 边）上下底面不等大并沿 Z 以 depthRatio 压成椭圆截面，
+     * 用于半写实躯干 / 颈 / 四肢的流线形体。
+     */
+    readonly tube: (rTop: number, rBottom: number, height: number, sides?: number, depthRatio?: number) => BufferGeometry
+    /** 创建并登记**椭球**几何（三轴半径不等），用于躯干 / 头颅 / 爪掌等圆润体块 */
+    readonly ellipsoid: (rx: number, ry: number, rz: number, widthSegments?: number, heightSegments?: number) => BufferGeometry
+    /** 创建并登记**胶囊**几何（沿 Y，含两端半球），用于肢体 / 颈段 */
+    readonly capsule: (radius: number, cylinderHeight: number, capSegments?: number, radialSegments?: number) => BufferGeometry
+    /** 以几何 + 材质组装网格并挂到 parent（缺省 = 本组 group），返回该网格（可继续调整 visible 等属性） */
     readonly add: (
         geometry: BufferGeometry,
         material: MeshStandardMaterial,
@@ -34,6 +51,7 @@ export interface MeshBuilder {
         rx?: number,
         ry?: number,
         rz?: number,
+        parent?: Object3D,
     ) => Mesh
     /** 六面明暗方块部件（与方块人身体同一风格），直接挂到 group 并登记 */
     readonly faceBox: (w: number, h: number, d: number, color: number, x: number, y: number, z: number) => Mesh
@@ -41,6 +59,8 @@ export interface MeshBuilder {
     readonly trackMaterial: (material: MeshStandardMaterial) => void
     /** 登记外部创建的纹理（如 CanvasTexture 脸部贴图）：`dispose` 时释放 */
     readonly trackTexture: (texture: Texture) => void
+    /** 登记外部创建的几何（如自定义翅膜）：`dispose` 时与内部几何一并释放 */
+    readonly trackGeometry: (geometry: BufferGeometry) => void
     /** 释放全部登记的几何 / 材质 / 纹理并清空 group */
     readonly dispose: () => void
 }
@@ -52,8 +72,14 @@ export const createMeshBuilder = (): MeshBuilder => {
     const materials: MeshStandardMaterial[] = []
     const textures: Texture[] = []
 
-    const material = (color: number, roughness = 0.5, metalness = 0.2): MeshStandardMaterial => {
-        const m = new MeshStandardMaterial({color, roughness, metalness})
+    const material = (color: number, roughness = 0.5, metalness = 0.2, flatShading = false): MeshStandardMaterial => {
+        const m = new MeshStandardMaterial({color, roughness, metalness, flatShading})
+        materials.push(m)
+        return m
+    }
+
+    const materialById = (id: CharacterMaterialId, color?: number): MeshStandardMaterial => {
+        const m = createCharacterMaterial(id, color)
         materials.push(m)
         return m
     }
@@ -82,6 +108,35 @@ export const createMeshBuilder = (): MeshBuilder => {
         return g
     }
 
+    const frustum = (wTop: number, wBottom: number, height: number, depthRatio = 1): BufferGeometry => {
+        /* 4 边圆柱（半径 = 半宽 × √2）绕 Y 转 45° 后截面为方，再以 scale.z 压成矩形 */
+        const g = new CylinderGeometry(wTop / Math.SQRT2, wBottom / Math.SQRT2, height, 4)
+        g.rotateY(Math.PI / 4)
+        if (depthRatio !== 1) g.scale(1, 1, depthRatio)
+        geometries.push(g)
+        return g
+    }
+
+    const tube = (rTop: number, rBottom: number, height: number, sides = 12, depthRatio = 1): BufferGeometry => {
+        const g = new CylinderGeometry(rTop, rBottom, height, sides)
+        if (depthRatio !== 1) g.scale(1, 1, depthRatio)
+        geometries.push(g)
+        return g
+    }
+
+    const ellipsoid = (rx: number, ry: number, rz: number, widthSegments = 12, heightSegments = 8): BufferGeometry => {
+        const g = new SphereGeometry(1, widthSegments, heightSegments)
+        g.scale(rx, ry, rz)
+        geometries.push(g)
+        return g
+    }
+
+    const capsule = (radius: number, cylinderHeight: number, capSegments = 6, radialSegments = 12): BufferGeometry => {
+        const g = new CapsuleGeometry(radius, cylinderHeight, capSegments, radialSegments)
+        geometries.push(g)
+        return g
+    }
+
     const add = (
         geometry: BufferGeometry,
         material: MeshStandardMaterial,
@@ -91,12 +146,13 @@ export const createMeshBuilder = (): MeshBuilder => {
         rx = 0,
         ry = 0,
         rz = 0,
+        parent: Object3D = group,
     ): Mesh => {
         const m = new Mesh(geometry, material)
         m.position.set(x, y, z)
         m.rotation.set(rx, ry, rz)
         m.castShadow = true
-        group.add(m)
+        parent.add(m)
         return m
     }
 
@@ -117,6 +173,10 @@ export const createMeshBuilder = (): MeshBuilder => {
         textures.push(t)
     }
 
+    const trackGeometry = (g: BufferGeometry): void => {
+        geometries.push(g)
+    }
+
     const dispose = (): void => {
         group.clear()
         for (const g of geometries) g.dispose()
@@ -127,5 +187,5 @@ export const createMeshBuilder = (): MeshBuilder => {
         textures.length = 0
     }
 
-    return {group, material, box, cylinder, sphere, cone, add, faceBox, trackMaterial, trackTexture, dispose}
+    return {group, material, materialById, box, cylinder, sphere, cone, frustum, tube, ellipsoid, capsule, add, faceBox, trackMaterial, trackTexture, trackGeometry, dispose}
 }

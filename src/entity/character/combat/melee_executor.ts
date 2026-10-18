@@ -5,11 +5,12 @@ import type {SkillExecutor, ExecutorContext} from '../../../character/combat/exe
 import {applyDamage, isDamageImmune} from '../../../character/combat/damage.ts'
 import {downgradeImpact} from '../../../character/combat/impact.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
+import type {CharacterConfig} from '../../../character/types.ts'
 import type {ShieldCoverBox} from '../../../character/weapon/constants.ts'
-import {CHARACTER_BASE_SIZE} from '../constants.ts'
+import {formCenterOffsetY, formHurtHalf} from '../body_form/geometry.ts'
 import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from './obb.ts'
 import {obbIntersectsHurt} from './shapes.ts'
-import type {CharacterModel} from '../appearance/types.ts'
+import type {CreatureModel} from '../appearance/types.ts'
 import type {WeaponLocalHitBox} from '../appearance/weapon_mesh.ts'
 import type {MeleeDetectBox, MeleeWeaponConfig} from '../../../character/weapon/melee_weapon.ts'
 import type {WorldDamageTarget} from '../../../character/combat/world_targets.ts'
@@ -24,22 +25,15 @@ export interface HitBoxHalves {
     readonly z: number
 }
 
-/** 目标受击箱半长：与碰撞箱同尺寸（竖直胶囊包围盒），随身体朝向旋转 */
-export const targetHitBoxHalves = (scale: number): HitBoxHalves => ({
-    x: CHARACTER_BASE_SIZE.width * scale / 2,
-    y: CHARACTER_BASE_SIZE.height * scale / 2,
-    z: CHARACTER_BASE_SIZE.depth * scale / 2,
-})
+/** 目标受击箱半长：来自目标**体形** `size`（竖直包围盒），随身体朝向旋转 */
+export const targetHitBoxHalves = (config: CharacterConfig): HitBoxHalves => formHurtHalf(config)
 
 /** 目标受击箱 OBB（中心 = body 位置，随身体朝向 yaw 旋转） */
 export const targetHurtOBB = (
     pos: Vec3Like,
-    scale: number,
+    halves: HitBoxHalves,
     yaw: number,
-): OBB => {
-    const th = targetHitBoxHalves(scale)
-    return yawOBB(pos.x, pos.y, pos.z, th.x, th.y, th.z, yaw)
-}
+): OBB => yawOBB(pos.x, pos.y, pos.z, halves.x, halves.y, halves.z, yaw)
 
 /**
  * 盾遮挡体 OBB（世界空间）：由角色位置（body 中心）+ 朝向 + 盾 `cover` 几何 / 偏移计算，
@@ -48,13 +42,14 @@ export const targetHurtOBB = (
  */
 export const shieldCoverOBB = (
     pos: Vec3Like,
-    scale: number,
+    config: CharacterConfig,
     yaw: number,
     cover: ShieldCoverBox,
 ): OBB => {
+    const scale = config.scale
     const offsetZ = cover.offsetZ * scale
     const offsetY = cover.offsetY * scale
-    const originY = pos.y - (CHARACTER_BASE_SIZE.height * scale) / 2
+    const originY = pos.y - formCenterOffsetY(config)
     const sin = Math.sin(yaw)
     const cos = Math.cos(yaw)
     return yawOBB(
@@ -79,12 +74,12 @@ export const testMeleeHit = (
     localCenter: Vec3Like,
     localHalf: Vec3Like,
     targetPos: Vec3Like,
-    targetScale: number,
+    targetHalves: HitBoxHalves,
     targetYaw: number,
 ): boolean =>
     obbIntersect(
         obbFromTransform(weaponMatrixElements, localCenter, localHalf),
-        targetHurtOBB(targetPos, targetScale, targetYaw),
+        targetHurtOBB(targetPos, targetHalves, targetYaw),
     )
 
 /**
@@ -122,12 +117,12 @@ export const testAttackDetect = (
     scale: number,
     yaw: number,
     targetPos: Vec3Like,
-    targetScale: number,
+    targetHalves: HitBoxHalves,
     targetYaw: number,
 ): boolean =>
     obbIntersect(
         attackDetectOBB(charPos, detectBox, scale, yaw),
-        targetHurtOBB(targetPos, targetScale, targetYaw),
+        targetHurtOBB(targetPos, targetHalves, targetYaw),
     )
 
 /** 命中回调：参数为命中点世界坐标（供顿帧/相机震动等打击感系统消费） */
@@ -157,7 +152,7 @@ const hitHurtBlocksOf = (
         return hit
     }
     const t = target.body.translation()
-    return obbIntersect(weaponOBB, targetHurtOBB(t, target.config.scale, getFacingAngle(target.id)))
+    return obbIntersect(weaponOBB, targetHurtOBB(t, targetHitBoxHalves(target.config), getFacingAngle(target.id)))
         ? FALLBACK_HURT_BLOCK
         : undefined
 }
@@ -174,7 +169,7 @@ export interface MeleeExecutor extends SkillExecutor {
 
 export const createMeleeExecutor = (
     getAllCharacters: () => readonly CharacterEntity[],
-    getModel: (id: number) => CharacterModel | undefined,
+    getModel: (id: number) => CreatureModel | undefined,
     getFacingAngle: (id: number) => number,
     onHit?: MeleeHitCallback,
     getWorldTargets?: () => readonly WorldDamageTarget[],
@@ -262,7 +257,7 @@ export const createMeleeExecutor = (
                 if (block !== undefined && target.combat.blocking && target.combat.guard > 0
                     && obbIntersect(
                         weaponOBB,
-                        shieldCoverOBB(tTrans, target.config.scale, getFacingAngle(target.id), block.cover),
+                        shieldCoverOBB(tTrans, target.config, getFacingAngle(target.id), block.cover),
                     )) {
                     const blockedDamage = damage * block.blockDamageMultiplier
                     const incomingImpact = segment?.impact ?? 'light'

@@ -93,7 +93,7 @@ const block = (
 
 /**
  * 物品目录（生产物品；未知 defId 由运行时丢弃）。
- * 覆盖**全部武器模型**（近战 6 + 盾牌 3 + 远程 9）、**全部护甲预设**（17）与**全部方块实体**（5 类箱子 + 水方块）；
+ * 覆盖**全部武器模型**（近战 6 + 盾牌 3 + 远程 9）、**全部护甲预设**（27）与**全部方块实体**（5 类箱子 + 水方块）；
  * 由 `items.test.ts` 对照武器 / 护甲目录与实体类型锁定完整性，新增武器 / 护甲 / 方块须同步补条目。
  */
 export const ITEM_DEFS: readonly ItemDef[] = [
@@ -135,6 +135,16 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     armor('armor_mage_leggings', '法师护腿', ['#', '#'], 'mage_leggings', 'legs', '魔法防御', 'item-mage-leggings'),
     armor('armor_swift_boots', '疾行靴', ['#', '#'], 'swift_boots', 'legs', '提升移速', 'item-swift-boots'),
     armor('armor_wind_boots', '疾风靴', ['#', '#'], 'wind_boots', 'legs', '大幅提升移速', 'item-wind-boots'),
+    armor('armor_leather_cap', '皮帽', ['#'], 'leather_cap', 'head', '物理防御', 'item-leather-cap'),
+    armor('armor_leather_bracers', '皮护腕', ['#', '#'], 'leather_bracers', 'arms', '物理防御', 'item-leather-bracers'),
+    armor('armor_leather_legs', '皮护腿', ['#', '#'], 'leather_legs', 'legs', '物理防御', 'item-leather-legs'),
+    armor('armor_scale_helm', '鳞盔', ['#'], 'scale_helm', 'head', '复合防御', 'item-scale-helm'),
+    armor('armor_scale_bracers', '鳞护腕', ['#', '#'], 'scale_bracers', 'arms', '复合防御', 'item-scale-bracers'),
+    armor('armor_scale_legs', '鳞护腿', ['#', '#'], 'scale_legs', 'legs', '复合防御', 'item-scale-legs'),
+    armor('armor_stone_helm', '石盔', ['#'], 'stone_helm', 'head', '重型防御', 'item-stone-helm'),
+    armor('armor_stone_plate', '石胸甲', ['##', '##'], 'stone_plate', 'chest', '重型防御', 'item-stone-plate'),
+    armor('armor_stone_bracers', '石护腕', ['#', '#'], 'stone_bracers', 'arms', '重型防御', 'item-stone-bracers'),
+    armor('armor_stone_legs', '石护腿', ['#', '#'], 'stone_legs', 'legs', '重型防御', 'item-stone-legs'),
     /* ── 方块 ── */
     block('block_common', '普通方块', ['#'], 'box', '基础物理方块', 'item-block', {box: 'common'}),
     block('block_destruction', '可破坏方块', ['#'], 'box', '受击碎裂', 'item-block-destruction', {box: 'destructible'}),

@@ -3,8 +3,9 @@ import type {Object3D, Scene, WebGLRenderer} from 'three'
 import {setupShowcaseScene} from './scene.ts'
 import type {ShowcaseScene} from './scene.ts'
 import type {ShowcaseActorHandle} from './actor_handle.ts'
+import {SHOWCASE_DEBUG_KINDS, type ShowcaseDebugKind} from './actor_debug.ts'
 import {createPanel} from './panel.ts'
-import type {PanelRowInfo} from './panel.ts'
+import type {PanelRowInfo, PanelTab} from './panel.ts'
 import type {ShowcaseModuleRuntime} from './module.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
 import {getInputRegistry} from '../../input/registry.ts'
@@ -19,35 +20,70 @@ import {
     STEP_DT,
 } from './constants.ts'
 
-/**
- * 展示角色舞台选项：由各「以展示角色为主体」的子模块（动作 / 外观）提供。
- * `populate` 在场景就绪后同步调用，通过 `register` 登记角色与其面板静态行信息。
- */
-export interface ActorStageOptions {
-    readonly titleKey: StringLocaleKey
-    readonly subtitleKey: StringLocaleKey
-    /** 填充展示角色：`register(actor, info)` 登记角色 + 面板行；`onDirty` 供角色按需触发面板刷新 */
+/** 展示舞台的一个 Tab：一组展示角色 + 面板行信息 */
+export interface ActorStageTab {
+    readonly key: string
+    readonly labelKey: StringLocaleKey
+    /** 填充该 Tab 的展示角色：`register(actor, info)` 登记角色 + 面板行 */
     readonly populate: (scene: Scene, register: (actor: ShowcaseActorHandle, info: PanelRowInfo) => void) => void
 }
 
 /**
- * 展示角色舞台：把「独立场景 + 键盘相机 + 多展示角色 + 聚焦环 + 拾取 + 暂停/单步/变速 + 信息面板」
- * 这套通用逻辑集中一处，供动作 / 外观等子模块复用（避免每模块重复 ~120 行）。
+ * 展示角色舞台选项：由各「以展示角色为主体」的子模块（攻击模组 / 外观）提供。
+ * `tabs` 提供一组 Tab（单 Tab 时不显示 Tab 栏）；每个 Tab 的 `populate` 在场景就绪后同步调用。
+ */
+export interface ActorStageOptions {
+    readonly titleKey: StringLocaleKey
+    readonly subtitleKey: StringLocaleKey
+    readonly tabs: readonly ActorStageTab[]
+}
+
+/**
+ * 展示角色舞台：把「独立场景 + 键盘相机 + 多展示角色 + 多 Tab + 聚焦环 + 拾取 + 暂停/单步/变速 +
+ * 调试箱开关 + 信息面板」这套通用逻辑集中一处，供攻击模组 / 外观等子模块复用。
  *
  * 与生产代码的关系：角色动画仍由各 `ShowcaseActorHandle` 驱动器镜像 `world.ts` 注入，
- * 舞台只负责编排（时间倍率、聚焦、渲染、面板刷新），不含任何角色动画逻辑。
+ * 舞台只负责编排（时间倍率、Tab 切换、聚焦、调试箱开关、渲染、面板刷新），不含任何角色动画逻辑。
  */
 export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOptions): ShowcaseModuleRuntime => {
     const sceneCtx: ShowcaseScene = setupShowcaseScene(renderer)
 
-    const actors: ShowcaseActorHandle[] = []
-    const panelInfos: PanelRowInfo[] = []
     const anchorToActor = new Map<Object3D, ShowcaseActorHandle>()
-    options.populate(sceneCtx.scene, (actor, info) => {
-        actors.push(actor)
-        panelInfos.push(info)
-        anchorToActor.set(actor.anchor, actor)
+    interface TabData {
+        readonly key: string
+        readonly actors: ShowcaseActorHandle[]
+        readonly infos: PanelRowInfo[]
+    }
+    const tabDatas: TabData[] = options.tabs.map(tab => {
+        const actors: ShowcaseActorHandle[] = []
+        const infos: PanelRowInfo[] = []
+        tab.populate(sceneCtx.scene, (actor, info) => {
+            actors.push(actor)
+            infos.push(info)
+            anchorToActor.set(actor.anchor, actor)
+        })
+        return {key: tab.key, actors, infos}
     })
+    const allActors = tabDatas.flatMap(tab => tab.actors)
+    let activeTab = 0
+
+    /* —— 调试箱状态（物理碰撞箱 / 受击箱 / 攻击箱；默认全关） —— */
+    const debugState: Record<ShowcaseDebugKind, boolean> = {collision: false, hurt: false, attack: false}
+    const applyDebugTo = (actors: readonly ShowcaseActorHandle[]): void => {
+        for (const actor of actors) {
+            for (const kind of SHOWCASE_DEBUG_KINDS) actor.setDebugVisible?.(kind, debugState[kind])
+        }
+    }
+    const clearDebug = (actors: readonly ShowcaseActorHandle[]): void => {
+        for (const actor of actors) {
+            for (const kind of SHOWCASE_DEBUG_KINDS) actor.setDebugVisible?.(kind, false)
+        }
+    }
+
+    /* 非激活 Tab 的角色隐藏 */
+    for (let i = 1; i < tabDatas.length; i++) {
+        for (const actor of tabDatas[i].actors) actor.anchor.visible = false
+    }
 
     /* 聚焦高亮环（脚下呼吸光环） */
     const ringGeometry = new RingGeometry(FOCUS_RING_INNER, FOCUS_RING_OUTER, 48)
@@ -72,7 +108,7 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
     const setFocus = (next: ShowcaseActorHandle | null): void => {
         if (focusActor === next) return
         focusActor = next
-        for (const actor of actors) {
+        for (const actor of allActors) {
             actor.setDimmed(next !== null && actor !== next)
         }
         if (next !== null) {
@@ -85,7 +121,20 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
         }
     }
 
-    const panel = createPanel(panelInfos, {
+    const panelTabs: PanelTab[] = options.tabs.map(tab => ({key: tab.key, labelKey: tab.labelKey}))
+    const switchTab = (index: number): void => {
+        if (index < 0 || index === activeTab) return
+        clearDebug(tabDatas[activeTab]?.actors ?? [])
+        for (const actor of tabDatas[activeTab]?.actors ?? []) actor.anchor.visible = false
+        activeTab = index
+        setFocus(null)
+        const tab = tabDatas[activeTab]
+        for (const actor of tab.actors) actor.anchor.visible = true
+        panel.setInfos(tab.infos, tab.key)
+        applyDebugTo(tab.actors)
+    }
+
+    const panel = createPanel(tabDatas[0]?.infos ?? [], {
         onTogglePause: () => { playing = !playing },
         onStep: () => {
             if (playing) playing = false
@@ -97,9 +146,15 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
                 setFocus(null)
                 return
             }
-            setFocus(actors.find(a => a.id === actorId) ?? null)
+            setFocus(allActors.find(a => a.id === actorId) ?? null)
         },
-    }, {titleKey: options.titleKey, subtitleKey: options.subtitleKey})
+        onDebugToggle: (kind: ShowcaseDebugKind, on: boolean) => {
+            debugState[kind] = on
+            applyDebugTo(tabDatas[activeTab]?.actors ?? [])
+        },
+        onTab: (key: string) => switchTab(tabDatas.findIndex(tab => tab.key === key)),
+    }, {titleKey: options.titleKey, subtitleKey: options.subtitleKey, tabs: panelTabs})
+    panel.setInfos(tabDatas[0]?.infos ?? [], tabDatas[0]?.key)
 
     /* 点击拾取：按下位移小于阈值视为点击（区分拖拽旋转），命中子网格向上回溯到角色锚点 */
     const raycaster = new Raycaster()
@@ -115,7 +170,6 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
     }, {signal: events.signal})
     renderer.domElement.addEventListener('mouseup', (e: MouseEvent) => {
         if (!input.matchesMouseButton('showcase_focus', e.button)) return
-        /* 聚焦键被本模式「修饰键+鼠标」的其它动作覆盖时让位 */
         if (input.isMouseButtonOverridden(e.button, MOUSE_ACTIONS_BY_MODE.showcase, 'showcase_focus')) return
         if (Math.hypot(e.clientX - downX, e.clientY - downY) > CLICK_SLOP_PX) return
 
@@ -124,7 +178,7 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
             -(e.clientY / window.innerHeight) * 2 + 1,
         )
         raycaster.setFromCamera(pointerNdc, sceneCtx.camera)
-        const hits = raycaster.intersectObjects([...anchorToActor.keys()], true)
+        const hits = raycaster.intersectObjects([...tabDatas[activeTab]?.actors.map(a => a.anchor) ?? []], true)
         for (const hit of hits) {
             let node: Object3D | null = hit.object
             while (node !== null && !anchorToActor.has(node)) {
@@ -149,7 +203,9 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
     }, {signal: events.signal})
 
     const advance = (dt: number): void => {
+        const actors = tabDatas[activeTab]?.actors ?? []
         for (const actor of actors) actor.update(dt)
+        for (const actor of actors) actor.debugTick?.()
     }
 
     let elapsed = 0
@@ -171,18 +227,20 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
         }
 
         renderer.render(sceneCtx.scene, sceneCtx.camera)
+        const actors = tabDatas[activeTab]?.actors ?? []
         panel.refresh(
             actors.flatMap(actor => actor.status === undefined ? [] : [actor.status()]),
             playing,
             speed,
             focusActor?.id ?? null,
+            debugState,
         )
     }
 
     const dispose = (): void => {
         events.abort()
         sceneCtx.dispose()
-        for (const actor of actors) actor.dispose()
+        for (const actor of allActors) actor.dispose()
         sceneCtx.scene.remove(focusRing)
         ringGeometry.dispose()
         ringMaterial.dispose()

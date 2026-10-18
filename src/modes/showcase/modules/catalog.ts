@@ -108,6 +108,8 @@ export const catalogModule: ShowcaseModule = {
         /* —— 预览：展示人体（装备）+ 代表方块（方块 / 其它） —— */
         const model = createCharacterModel({speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: 1}, 0)
         sceneCtx.scene.add(model.group)
+        /* 图鉴预览不展示物理碰撞箱（半胶囊可视化） */
+        for (const m of model.colliderMeshes) m.visible = false
         const system = createAppearanceSystem()
 
         const cubeGroup = new Group()

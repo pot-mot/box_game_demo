@@ -4,7 +4,7 @@ import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {EntityType} from '../entity/constants.ts'
 import type {SaveData, FragmentDataJSON, EntitySourceMap, SavableEntity} from './types.ts'
-import {CHARACTER_BASE_SIZE} from '../entity/character/constants.ts'
+import {bodyFormOf} from '../entity/character/body_form/index.ts'
 
 /** JSON-safe 格式 → FragmentData */
 const jsonToFragmentData = (j: FragmentDataJSON): FragmentData => ({
@@ -128,8 +128,8 @@ export const loadWorldFromData = (
                 break
             }
             case 'character': {
-                /* 旧档迁移：身体中心 Y → 脚底原点 Y */
-                const halfH = (CHARACTER_BASE_SIZE.height * entity.config.scale) / 2
+                /* 旧档迁移：身体中心 Y → 脚底原点 Y（按体形计划的中心偏移；缺省 humanoid） */
+                const halfH = bodyFormOf(entity.config.bodyFormId).centerOffsetY * entity.config.scale
                 const feetY = legacyCharacterPos ? y - halfH : y
                 const spawned = character?.add(entity.config, x, feetY, z, quat, {health: entity.health})
                 /* 朝向恢复（旧存档无 facing 字段时保持缺省 0） */

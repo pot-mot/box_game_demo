@@ -10,8 +10,7 @@ import {SELECT_PALETTE, SHIELD_STOW_TILT_X, WEAPON_GRIP_FLEX} from './constants.
 import {recolorTwoFaceBoxPart, recolorHeadBoxPart, type TrackedBoxPart} from '../../../render/box_parts.ts'
 import {skeletonFromDefinition} from '../../../skeleton/anim/serialization.ts'
 import {createJointHierarchy} from '../../../skeleton/render/joint_hierarchy.ts'
-import {buildCharacterSkeletonDefinition} from '../skeleton/preset.ts'
-import {assembleCharacterAppearance} from './assemble.ts'
+import {bodyFormOf, type BodyForm} from '../body_form/index.ts'
 
 /** 单个武器槽（主手/副手各一）：武器骨骼挂点 + 武器网格状态 */
 interface WeaponSlot {
@@ -55,7 +54,7 @@ const LIMB_SLOT_JOINTS: Readonly<Record<LimbSlot, readonly string[]>> = {
     head: ['headNeck'],
     arms: ['rightArmShoulder', 'rightArmElbow', 'rightHandPivot', 'leftArmShoulder', 'leftArmElbow', 'leftHandPivot'],
     body: ['spine'],
-    legs: ['leftLegHip', 'rightLegHip', 'leftLegKnee', 'rightLegKnee'],
+    legs: ['leftLegHip', 'rightLegHip', 'leftLegKnee', 'rightLegKnee', 'leftFoot', 'rightFoot'],
 }
 
 /** 肢体槽位 → 顶替（隐藏）的人类身体部位：装备肢体即 replace，缺省保留人类肢体 */
@@ -78,19 +77,23 @@ interface MountedArmorPart {
  * 武器挂点（rightWeaponMount / leftWeaponMount / backWeaponMount）是独立关节，不并入手部骨骼：
  * 主手武器挂右腕，副手武器平时握左手、双手共持时挂背（`setOffhandStowed`）。
  */
-export const createCharacterModel = (config: CharacterConfig, faction: number): CharacterModel => {
-    /* 当前调色板（换阵营时更新）：肢体颜色随阵营调色板重建；阵营色统一走 `factionColorOf` */
-    let currentPalette = SELECT_PALETTE(faction)
+export const createCharacterModel = (config: CharacterConfig, faction: number, bodyForm?: BodyForm): CharacterModel => {
+    /* 体形计划（骨架 / 外观装配来源；缺省 = 人形） */
+    const plan = bodyForm ?? bodyFormOf(config.bodyFormId)
+    /* 当前调色板（换阵营时更新）：肢体颜色随阵营调色板重建；阵营色统一走 `factionColorOf`。
+     * 体形计划声明固定调色板时，外观不随阵营变化。 */
+    const fixedPalette = plan.palette
+    let currentPalette = fixedPalette ?? SELECT_PALETTE(faction)
 
-    /* 关节 Group 层级 = 预设骨架定义的唯一映射（含手部 rightHandPivot/leftHandPivot 与武器挂点） */
-    const scaffold = skeletonFromDefinition(buildCharacterSkeletonDefinition())
+    /* 关节 Group 层级 = 体形骨架定义的唯一映射（含手部 rightHandPivot/leftHandPivot 与武器挂点） */
+    const scaffold = skeletonFromDefinition(plan.buildSkeleton())
     const hierarchy = createJointHierarchy(scaffold)
     const groups = hierarchy.groups
     const group = requireGroup(groups, 'root')
     group.scale.set(config.scale, config.scale, config.scale)
 
-    /* 模型层：方块人外观部件（与骨骼编辑器同一构建器），手部部件挂手部关节 */
-    const appearance = assembleCharacterAppearance(groups, currentPalette)
+    /* 模型层：体形外观部件（与骨骼编辑器同一构建器），手部部件挂手部关节 */
+    const appearance = plan.assemble(groups, currentPalette)
     const jointParts = appearance.jointParts
 
     const rightWeaponMount = requireGroup(groups, 'rightWeaponMount')
@@ -314,6 +317,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number): 
 
     /** 根据新调色板原地更新所有部位材质颜色（不重建几何体）；已装备肢体随阵营重建外观 */
     const recolor = (newPalette: CharacterColorPalette): void => {
+        /* 固定调色板体形：外观不随阵营重着色 */
+        if (fixedPalette !== undefined) return
         currentPalette = newPalette
         for (const mesh of [
             bodyMesh, rightUpperArmMesh, rightForearmMesh,

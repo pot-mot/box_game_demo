@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest'
-import {MELEE_WEAPON_PRESETS} from './melee_weapon.ts'
+import {weaponAttacksOf, weaponsOfForm} from './catalog.ts'
+import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 import {orderedSegments} from './attack_chain.ts'
-import {weaponAttacksOf} from './catalog.ts'
 import {getChargeClipById} from '../../entity/character/appearance/clips/attack_clips.ts'
 
 /**
@@ -10,7 +10,7 @@ import {getChargeClipById} from '../../entity/character/appearance/clips/attack_
  */
 describe('近战专用蓄力姿势 clip', () => {
     it('各武器 × 持握模式的蓄力重击段 chargePoseId 均可解析', () => {
-        for (const weapon of Object.values(MELEE_WEAPON_PRESETS)) {
+        for (const weapon of weaponsOfForm(HUMANOID_BODY_FORM_ID)) {
             for (const mode of weapon.holdModes) {
                 for (const segment of orderedSegments(weaponAttacksOf(weapon, mode))) {
                     if (segment.chargePoseId === undefined) continue

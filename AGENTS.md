@@ -88,6 +88,7 @@
 5. **状态机驱动角色** — `entity/character/physics/world.ts` 每帧调用 `stateMachine.update(dt, entity)` → 状态直接操作 `entity.body`（`setLinvel` 等）→ 随后 `syncPositions()` 同步 body→mesh。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/control/player_control.ts` 的 `move()` 每帧读取动作并调用 `characterSystem.setPlayerMove()` → `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。详见 [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md)。
 6. **两套操作方案** — 所有具备操作能力的模式只归入 `modes/control/` 的两套共享方案（玩家主控 `createPlayerControl` / 纯摄像机 `createCameraControl`），新增模式不得另写相机/移动逻辑。详见 [`src/modes/control/control.md`](src/modes/control/control.md)。
 7. **惯用手 canonical 右撇子** — 骨架与全部动作数据（含存档姿势）恒定表示右撇子（主手 = 解剖右 = `-X`、副手/支撑手 = 解剖左 = `+X`）；左撇子（`CharacterConfig.handedness = 'left'`）只是**取用时镜像**视图：clip 经 `skeleton/anim/mirror.ts` 的 `mirrorClip` 派生（缓存键含 handedness，逐帧零开销）、武器/护甲/肢体挂点与网格（`scale.x=-1`）随 `mainHandSide`/`offHandSide` 切换、双手 IK 支撑侧换到相反侧。**禁止**新增左撇子专有动作数据或按「屏幕左右」写死关节映射。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md)。
+8. **武器按体形分包** — 每个武器**只属于一种体形**（`WeaponModelConfig.formId`），数据声明在 `forms/<form>/weapons.ts`（只复用 `appearance/weapon_mesh.ts` 的网格生成器）；体形 `BodyForm.weapons` 暴露其武器表，`body_form/index.ts` 装配时经 `catalog.ts` 的 `registerFormWeapons` 注册。**禁止**跨体形直接复用武器条目；切体形一律落到新体形 `defaultWeaponId`。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md)。
 
 ## 高危红线（跨模块，必须遵守）
 
@@ -95,7 +96,7 @@
 
 - **每帧瞬态施力 / 单一步进器** — Rapier `addForce` 不在 `step` 后自动清除。任何自建 `SharedWorld` 必须逐物理子步 `clearAllForces`；**独立持世界一律经 `physics/fixed_step.ts` 的 `createFixedStepStepper`**，严禁手写 `world.step` / `eventBus.drain` 子步循环（曾因漏清力导致角色跳跃后无限升空）。见 [`src/physics/physics.md`](src/physics/physics.md)。
 - **地面接触法线** — 必须经 `physics/contact_tracking.ts` 的 `queryColliderContacts` 取，禁止直接用 `Collider.contactCollider`（同时接触地面与箱/交互物会返回被污染法线）。
-- **角色 collider 是竖直胶囊（非 cuboid）**；地形一律 `RAPIER.ColliderDesc.trimesh`；**heightfield 与 `FIX_INTERNAL_EDGES` 禁用**。
+- **角色主碰撞体是胶囊（禁用平底 cuboid 触地）**；补形碰撞体可用横胶囊 / 悬空盒（平底 cuboid 跨 trimesh 棱线会被幽灵法线卡死）；地形一律 `RAPIER.ColliderDesc.trimesh`；**heightfield 与 `FIX_INTERNAL_EDGES` 禁用**。
 - **碰撞类别 fail-closed** — 新增碰撞体必须显式 `setCollisionGroups` 并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注类别；未声明者 membership 全 1 会被解析为 `ground` 并挡下子弹。
 - **存档兼容** — 改存档结构必须同步 `save_load/types.ts` / `validation.ts` / `serialize.ts`，可选字段旧档缺失一律安全回退默认、未知 id 安全丢弃，不得抛错。见 [`src/save_load/save_load.md`](src/save_load/save_load.md)。
 
@@ -110,7 +111,7 @@ src/
 ├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/）
 ├── character/                   # 角色领域模型：ai_strategy / interaction / weapon / combat / armor / state_machine / handedness
 ├── entity/
-│   ├── character/               # 角色实体（skeleton / appearance / combat / projectile / physics / ai / combat_vfx / ui）
+│   ├── character/               # 角色实体（body_form / skeleton / appearance / combat / projectile / physics / ai / combat_vfx / ui）
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（人形无关，预设外部注入）
 │   ├── interactable/            # 交互物实体系统（行为 + 信号联动 + 可破坏 + 网格 + 编辑面板）
 │   ├── item/                    # 掉落物实体（sensor body 漂浮小立方体，拾取经交互）
@@ -133,7 +134,7 @@ src/
 | 模块 / 主题 | 文档 | 何时读 |
 |---|---|---|
 | 物理（shared） | [`src/physics/physics.md`](src/physics/physics.md) | 碰撞体、力、接触、步进 |
-| 渲染 | [`src/render/render.md`](src/render/render.md) | 材质/纹理单例、拾取、颜色常量 |
+| 渲染 | [`src/render/render.md`](src/render/render.md) | 材质/纹理单例、角色统一材质库、拾取、颜色常量 |
 | 输入 | [`src/input/input.md`](src/input/input.md) | 键位/鼠标绑定、新增输入动作 |
 | 存档 | [`src/save_load/save_load.md`](src/save_load/save_load.md) | 存档结构/版本/兼容 |
 | UI 面板 | [`src/ui/ui.md`](src/ui/ui.md) | 面板样式、图标、迁移 |
@@ -146,6 +147,7 @@ src/
 | 骨骼动画 | [`src/skeleton/skeleton.md`](src/skeleton/skeleton.md) | 骨骼/IK/组合动画 |
 | 角色 AI | [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) | 寻路索敌、导航避障、朝向 |
 | 方块人外观 | [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md) | 模型构建、挂点、武器/护甲/肢体网格、种族 |
+| 体形计划 | [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md) | 基础模组（骨架/碰撞布局/受击子块/装备槽/武器策略）、运行时切换 |
 | 弹丸 | [`src/entity/character/projectile/projectile.md`](src/entity/character/projectile/projectile.md) | 弹丸物理/视觉/对象池 |
 | 角色物理 | [`src/entity/character/physics/physics.md`](src/entity/character/physics/physics.md) | body/mesh 同步、移动平台载客 |
 | 角色战斗特效 | [`src/entity/character/combat_vfx/combat_vfx.md`](src/entity/character/combat_vfx/combat_vfx.md) | 受击/无敌材质效果 |

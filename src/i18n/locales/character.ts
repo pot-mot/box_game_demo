@@ -18,6 +18,10 @@ export type CharacterLocale = {
     'attack_key.light': string
     'attack_key.heavy': string
     'attack_key.air': string
+    'body_form.humanoid': string
+    'body_form.wolf': string
+    'body_form.horse': string
+    'body_form.wyvern': string
     'character.segment_name': (keyLabel: string, step: string) => string
     'armor_slot.head': string
     'armor_slot.chest': string
@@ -33,6 +37,19 @@ export type CharacterLocale = {
     'weapon.spear': string
     'weapon.dual_axe': string
     'weapon.war_hammer': string
+    'weapon.unarmed': string
+    'weapon.bite': string
+    'weapon.claw': string
+    'weapon.kick': string
+    'weapon.breath': string
+    'weapon.wolf_bite': string
+    'weapon.wolf_short_sword': string
+    'weapon.wolf_long_sword': string
+    'weapon.horse_kick': string
+    'weapon.horse_spear': string
+    'weapon.horse_throwing_axe': string
+    'weapon.wyvern_claw': string
+    'weapon.wyvern_breath': string
     'weapon.shield_small': string
     'weapon.shield_medium': string
     'weapon.shield_large': string
@@ -63,6 +80,16 @@ export type CharacterLocale = {
     'armor.mage_leggings': string
     'armor.swift_boots': string
     'armor.wind_boots': string
+    'armor.leather_cap': string
+    'armor.leather_bracers': string
+    'armor.leather_legs': string
+    'armor.scale_helm': string
+    'armor.scale_bracers': string
+    'armor.scale_legs': string
+    'armor.stone_helm': string
+    'armor.stone_plate': string
+    'armor.stone_bracers': string
+    'armor.stone_legs': string
     'limb.skeleton_head': string
     'limb.skeleton_arms': string
     'limb.skeleton_body': string
@@ -89,6 +116,7 @@ export type CharacterLocale = {
     'character.base_jump_height': string
     'character.base_scale': string
     'character.handedness': string
+    'character.body_form': string
     'character.faction': string
     'character.tendency': string
     'character.target_factions': string
@@ -199,6 +227,10 @@ export const characterZh: CharacterLocale = {
     'attack_key.light': '轻击',
     'attack_key.heavy': '重击',
     'attack_key.air': '空中攻击',
+    'body_form.humanoid': '人形',
+    'body_form.wolf': '狼',
+    'body_form.horse': '马',
+    'body_form.wyvern': '双足飞龙',
     'character.segment_name': (keyLabel, step) => {
         const numerals: Record<string, string> = {'1': '一', '2': '二', '3': '三', '4': '四', '5': '五', '6': '六'}
         return `${keyLabel}${numerals[step] ?? step}段`
@@ -217,6 +249,19 @@ export const characterZh: CharacterLocale = {
     'weapon.spear': '长枪',
     'weapon.dual_axe': '战斧',
     'weapon.war_hammer': '战锤',
+    'weapon.unarmed': '空手',
+    'weapon.bite': '撕咬',
+    'weapon.claw': '爪击',
+    'weapon.kick': '踢击',
+    'weapon.breath': '吐息',
+    'weapon.wolf_bite': '撕咬',
+    'weapon.wolf_short_sword': '口含短剑',
+    'weapon.wolf_long_sword': '口含长剑',
+    'weapon.horse_kick': '踢击',
+    'weapon.horse_spear': '长枪',
+    'weapon.horse_throwing_axe': '飞斧',
+    'weapon.wyvern_claw': '爪击',
+    'weapon.wyvern_breath': '吐息',
     'weapon.shield_small': '小盾',
     'weapon.shield_medium': '中盾',
     'weapon.shield_large': '大盾',
@@ -247,6 +292,16 @@ export const characterZh: CharacterLocale = {
     'armor.mage_leggings': '法师护腿',
     'armor.swift_boots': '疾行靴',
     'armor.wind_boots': '疾风靴',
+    'armor.leather_cap': '皮帽',
+    'armor.leather_bracers': '皮护腕',
+    'armor.leather_legs': '皮护腿',
+    'armor.scale_helm': '鳞盔',
+    'armor.scale_bracers': '鳞护腕',
+    'armor.scale_legs': '鳞护腿',
+    'armor.stone_helm': '石盔',
+    'armor.stone_plate': '石胸甲',
+    'armor.stone_bracers': '石护腕',
+    'armor.stone_legs': '石护腿',
     'limb.skeleton_head': '骷髅头颅',
     'limb.skeleton_arms': '骷髅臂骨',
     'limb.skeleton_body': '骷髅躯干',
@@ -273,6 +328,7 @@ export const characterZh: CharacterLocale = {
     'character.base_jump_height': '基础跳跃高',
     'character.base_scale': '基础体型',
     'character.handedness': '惯用手',
+    'character.body_form': '基础模组',
     'character.faction': '阵营',
     'character.tendency': '倾向',
     'character.target_factions': '目标阵营',
@@ -383,6 +439,10 @@ export const characterEn: CharacterLocale = {
     'attack_key.light': 'Light',
     'attack_key.heavy': 'Heavy',
     'attack_key.air': 'Air',
+    'body_form.humanoid': 'Humanoid',
+    'body_form.wolf': 'Wolf',
+    'body_form.horse': 'Horse',
+    'body_form.wyvern': 'Wyvern',
     'character.segment_name': (keyLabel, step) => `${keyLabel} ${step}`,
     'armor_slot.head': 'Head',
     'armor_slot.chest': 'Chest',
@@ -398,6 +458,19 @@ export const characterEn: CharacterLocale = {
     'weapon.spear': 'Spear',
     'weapon.dual_axe': 'Battle Axe',
     'weapon.war_hammer': 'War Hammer',
+    'weapon.unarmed': 'Unarmed',
+    'weapon.bite': 'Bite',
+    'weapon.claw': 'Claw',
+    'weapon.kick': 'Kick',
+    'weapon.breath': 'Breath',
+    'weapon.wolf_bite': 'Bite',
+    'weapon.wolf_short_sword': 'Mouthed Short Sword',
+    'weapon.wolf_long_sword': 'Mouthed Long Sword',
+    'weapon.horse_kick': 'Kick',
+    'weapon.horse_spear': 'Spear',
+    'weapon.horse_throwing_axe': 'Throwing Axe',
+    'weapon.wyvern_claw': 'Claw',
+    'weapon.wyvern_breath': 'Breath',
     'weapon.shield_small': 'Small Shield',
     'weapon.shield_medium': 'Medium Shield',
     'weapon.shield_large': 'Large Shield',
@@ -428,6 +501,16 @@ export const characterEn: CharacterLocale = {
     'armor.mage_leggings': 'Mage Leggings',
     'armor.swift_boots': 'Swift Boots',
     'armor.wind_boots': 'Wind Boots',
+    'armor.leather_cap': 'Leather Cap',
+    'armor.leather_bracers': 'Leather Bracers',
+    'armor.leather_legs': 'Leather Leggings',
+    'armor.scale_helm': 'Scale Helm',
+    'armor.scale_bracers': 'Scale Bracers',
+    'armor.scale_legs': 'Scale Greaves',
+    'armor.stone_helm': 'Stone Helm',
+    'armor.stone_plate': 'Stone Plate',
+    'armor.stone_bracers': 'Stone Bracers',
+    'armor.stone_legs': 'Stone Greaves',
     'limb.skeleton_head': 'Skeleton Skull',
     'limb.skeleton_arms': 'Skeleton Arm Bones',
     'limb.skeleton_body': 'Skeleton Torso',
@@ -454,6 +537,7 @@ export const characterEn: CharacterLocale = {
     'character.base_jump_height': 'Base JumpH',
     'character.base_scale': 'Base Scale',
     'character.handedness': 'Handed',
+    'character.body_form': 'Body plan',
     'character.faction': 'Faction',
     'character.tendency': 'Tendency',
     'character.target_factions': 'TargetFactions',

@@ -1,81 +1,74 @@
 import type {MeleeWeaponConfig} from './melee_weapon.ts'
-import {MELEE_WEAPON_CLASSES, MELEE_WEAPON_MODELS, MELEE_WEAPON_PRESETS} from './melee_weapon.ts'
 import type {RangedWeaponConfig} from './ranged_weapon.ts'
-import {RANGED_WEAPON_CLASSES, RANGED_WEAPON_MODELS, RANGED_WEAPON_PRESETS} from './ranged_weapon.ts'
 import type {HoldMode} from './hold_mode.ts'
 import {HOLD_MODES} from './hold_mode.ts'
 import type {WeaponAttacks} from './attack_chain.ts'
 import {attacksForHoldMode} from './attack_chain.ts'
-import {translate, type StringLocaleKey} from '../../i18n/index.ts'
+import {translate} from '../../i18n/index.ts'
 
 /**
  * 武器目录：近战 + 远程统一查询入口。
  * 角色实体只持有「装备的武器 + 数值覆写」，武器固有属性（含攻击链）一律由此查询。
- * 武器类 / 模型分层见 `weapon_class.ts`：玩法数据属于武器类，模型只提供外观与名称。
+ *
+ * **体形归属**：武器数据由各体形的 `forms/<form>/weapons.ts` 声明，`BodyForm.weapons` 暴露；
+ * 注册表在 `body_form/index.ts` 装配 `BODY_FORMS` 时经 `registerFormWeapons` 填充。
+ * 每个武器只属于一种体形（`weapon.formId === form.id`）。
  */
 export type WeaponConfig = MeleeWeaponConfig | RangedWeaponConfig
 export type WeaponType = WeaponConfig['type']
 
-/** 默认武器（存档/面板给出未知 id 时的回退，保持既有行为） */
+/** 体形默认武器 id（存档 / 面板给出未知 id 且该体形无更合适回退时的最后兜底） */
 export const DEFAULT_WEAPON_ID = 'long_sword'
 
-/** 武器 id → 本地化名称键（未知 id 回退模型数据 `name`） */
-const WEAPON_NAME_KEYS: Record<string, StringLocaleKey> = {
-    short_sword: 'weapon.short_sword',
-    long_sword: 'weapon.long_sword',
-    heavy_sword: 'weapon.heavy_sword',
-    spear: 'weapon.spear',
-    dual_axe: 'weapon.dual_axe',
-    war_hammer: 'weapon.war_hammer',
-    shield_small: 'weapon.shield_small',
-    shield_medium: 'weapon.shield_medium',
-    shield_large: 'weapon.shield_large',
-    longbow: 'weapon.longbow',
-    crossbow: 'weapon.crossbow',
-    shotgun: 'weapon.shotgun',
-    staff: 'weapon.staff',
-    magic_wand: 'weapon.magic_wand',
-    throwing_axe: 'weapon.throwing_axe',
-    grenade: 'weapon.grenade',
-    molotov: 'weapon.molotov',
-    throwing_dart: 'weapon.throwing_dart',
-    test_weapon: 'weapon.test_weapon',
-}
+/* ── 注册表（由体形装配时填充） ── */
 
-/** 武器本地化显示名（未知 id 回退传入的模型名） */
-export const weaponDisplayName = (id: string, fallback: string): string => {
-    const key = WEAPON_NAME_KEYS[id]
-    return key === undefined ? fallback : translate(key)
-}
+const WEAPONS_BY_FORM = new Map<string, WeaponConfig[]>()
+const WEAPON_BY_ID = new Map<string, WeaponConfig>()
 
-/**
- * 额外武器注册表（测试专用武器用，如 test_weapon）：
- * 参与 `findWeaponPreset` 查询，但**不进入** `ALL_WEAPON_PRESETS`（面板下拉只列生产武器）。
- */
+/** 额外武器注册表（测试专用武器，如 test_weapon）：参与 `findWeaponPreset`，不进入体形武器表 */
 const EXTRA_WEAPON_PRESETS = new Map<string, WeaponConfig>()
 
-/** 注册额外武器预设（同 id 覆盖；测试夹具在构造运行时前显式调用） */
+/** 注册某体形的武器表（`body_form/index.ts` 装配时调用；同 id 覆盖，列表按体形归并） */
+export const registerFormWeapons = (formId: string, weapons: readonly WeaponConfig[]): void => {
+    const list = WEAPONS_BY_FORM.get(formId) ?? []
+    for (const weapon of weapons) {
+        WEAPON_BY_ID.set(weapon.id, weapon)
+        list.push(weapon)
+    }
+    WEAPONS_BY_FORM.set(formId, list)
+}
+
+/** 注册额外武器预设（测试夹具用；同 id 覆盖） */
 export const registerWeaponPreset = (preset: WeaponConfig): void => {
     EXTRA_WEAPON_PRESETS.set(preset.id, preset)
 }
 
-/** 全部生产武器预设（近战在前、远程在后；面板下拉与校验用） */
-export const ALL_WEAPON_PRESETS: readonly WeaponConfig[] = [
-    ...Object.values(MELEE_WEAPON_PRESETS),
-    ...Object.values(RANGED_WEAPON_PRESETS),
-]
+/** 某体形的全部武器（面板下拉 / 存档校验用） */
+export const weaponsOfForm = (formId: string): readonly WeaponConfig[] => WEAPONS_BY_FORM.get(formId) ?? []
 
-/** 按 id 查武器预设（近战 → 远程 → 额外注册，如测试武器） */
+/** 全部已注册武器（近战在前、远程在后按体形注册顺序） */
+export const allWeaponPresets = (): readonly WeaponConfig[] => [...WEAPON_BY_ID.values()]
+
+/** 按 id 查武器（体形注册表 → 额外注册表） */
 export const findWeaponPreset = (weaponId: string): WeaponConfig | undefined =>
-    MELEE_WEAPON_PRESETS[weaponId] ?? RANGED_WEAPON_PRESETS[weaponId] ?? EXTRA_WEAPON_PRESETS.get(weaponId)
+    WEAPON_BY_ID.get(weaponId) ?? EXTRA_WEAPON_PRESETS.get(weaponId)
 
-/** 按 id 查武器预设，未知 id 回退默认武器（存档/面板容错） */
-export const weaponPresetOrDefault = (weaponId: string | undefined): WeaponConfig =>
-    (weaponId !== undefined ? findWeaponPreset(weaponId) : undefined) ?? MELEE_WEAPON_PRESETS[DEFAULT_WEAPON_ID]
+/** 按 id 查武器，未知 id 回退默认武器（存档 / 面板容错） */
+export const weaponPresetOrDefault = (weaponId: string | undefined): WeaponConfig => {
+    const found = weaponId !== undefined ? findWeaponPreset(weaponId) : undefined
+    if (found !== undefined) return found
+    const fallback = findWeaponPreset(DEFAULT_WEAPON_ID)
+    if (fallback !== undefined) return fallback
+    const first = WEAPON_BY_ID.values().next().value
+    if (first !== undefined) return first
+    throw new Error('武器目录为空：未注册任何体形武器（body_form/index.ts 是否已装配？）')
+}
 
-/** 武器是否属于存在的武器类（模型注册表与类注册表一致性的校验入口） */
-export const isKnownWeaponClass = (classId: string): boolean =>
-    MELEE_WEAPON_CLASSES[classId] !== undefined || RANGED_WEAPON_CLASSES[classId] !== undefined
+/** 武器本地化显示名（经武器自带 `nameKey` 取用；键缺失 / 空值时回退模型名） */
+export const weaponDisplayName = (weapon: WeaponConfig): string => {
+    const name = translate(weapon.nameKey)
+    return typeof name === 'string' && name.length > 0 ? name : weapon.name
+}
 
 /* ── 武器类 / 模型查询 ── */
 
@@ -125,11 +118,16 @@ export const weaponAttacksOf = (weapon: WeaponConfig, holdMode?: HoldMode): Weap
     return attacks
 }
 
-/** 武器类 / 模型注册表一致性校验（近战 + 远程；测试与目录完整性检查用） */
+/** 武器类 / 模型注册表快照（目录完整性检查用） */
 export const weaponClassModelRegistry = (): {
     readonly classes: Readonly<Record<string, unknown>>
     readonly models: Readonly<Record<string, unknown>>
-} => ({
-    classes: {...MELEE_WEAPON_CLASSES, ...RANGED_WEAPON_CLASSES},
-    models: {...MELEE_WEAPON_MODELS, ...RANGED_WEAPON_MODELS},
-})
+} => {
+    const classes: Record<string, unknown> = {}
+    const models: Record<string, unknown> = {}
+    for (const weapon of allWeaponPresets()) {
+        classes[weapon.classId] = weapon
+        models[weapon.id] = weapon
+    }
+    return {classes, models}
+}

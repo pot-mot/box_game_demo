@@ -37,6 +37,7 @@ export type ShowcaseLocale = {
 
     /* ── 角色状态（列表行） ── */
     'showcase.status.idle': string
+    'showcase.status.blocking': string
     'showcase.status.charging': string
     'showcase.status.shooting': string
     'showcase.status.stand_walk': string
@@ -44,6 +45,7 @@ export type ShowcaseLocale = {
 
     /* ── 聚焦详情卡 ── */
     'showcase.detail.status_idle': string
+    'showcase.detail.status_blocking': string
     'showcase.detail.status_charging': string
     'showcase.detail.combo': (current: number, total: number) => string
     'showcase.detail.ranged': string
@@ -66,6 +68,16 @@ export type ShowcaseLocale = {
     'showcase.weapon.ranged': string
     'showcase.extra.race_limb': string
     'showcase.extra.armor_set': string
+    'showcase.extra.body_form': string
+    /* ── 攻击模组展示 Tab / 调试开关 ── */
+    'showcase.tab.humanoid': string
+    'showcase.tab.wyvern': string
+    'showcase.tab.horse': string
+    'showcase.tab.wolf': string
+    'showcase.debug.title': string
+    'showcase.debug.collision': string
+    'showcase.debug.hurt': string
+    'showcase.debug.attack': string
 
     /* ── 种族 / 套装展示名（`constants.ts` 的本地常量） ── */
     'showcase.race.skeleton': string
@@ -74,6 +86,13 @@ export type ShowcaseLocale = {
     'showcase.armor_set.iron': string
     'showcase.armor_set.mage': string
     'showcase.armor_set.wind': string
+    /* ── 整套护甲展示名（外观图鉴以整套预览） ── */
+    'showcase.set.cloth': string
+    'showcase.set.leather': string
+    'showcase.set.iron': string
+    'showcase.set.scale': string
+    'showcase.set.stone': string
+    'showcase.set.mage': string
 
     /* ── 外观图鉴 ── */
     'showcase.appearance.armor_stat': (slot: string, physical: string, magic: string, speed: string) => string
@@ -119,7 +138,7 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.menu.title': '展示模式',
     'showcase.menu.subtitle': '选择要展示的子系统',
     'showcase.back_menu': '返回展示菜单',
-    'showcase.module.actions.title': '动作展示',
+    'showcase.module.actions.title': '攻击模组展示',
     'showcase.module.actions.desc': '全武器攻击动作 / 连段 / 蓄力与持握模式时序复现',
     'showcase.module.appearance.title': '装备与外观',
     'showcase.module.appearance.desc': '种族肢体与全护甲件图鉴（站立 / 行走）',
@@ -149,6 +168,7 @@ export const showcaseZh: ShowcaseLocale = {
 
     /* ── 角色状态（列表行） ── */
     'showcase.status.idle': '待机',
+    'showcase.status.blocking': '格挡',
     'showcase.status.charging': '蓄力',
     'showcase.status.shooting': '射击',
     'showcase.status.stand_walk': '站立/行走',
@@ -156,6 +176,7 @@ export const showcaseZh: ShowcaseLocale = {
 
     /* ── 聚焦详情卡 ── */
     'showcase.detail.status_idle': '状态：待机',
+    'showcase.detail.status_blocking': '状态：格挡（举盾）',
     'showcase.detail.status_charging': '状态：满蓄力前置',
     'showcase.detail.combo': (current, total) => `连段第 ${current}/${total} 击`,
     'showcase.detail.ranged': '远程射击序列',
@@ -178,6 +199,15 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.weapon.ranged': '远程武器',
     'showcase.extra.race_limb': '种族肢体',
     'showcase.extra.armor_set': '护甲套装',
+    'showcase.extra.body_form': '体形',
+    'showcase.tab.humanoid': '人',
+    'showcase.tab.wyvern': '龙',
+    'showcase.tab.horse': '马',
+    'showcase.tab.wolf': '狼',
+    'showcase.debug.title': '调试：',
+    'showcase.debug.collision': '碰撞箱',
+    'showcase.debug.hurt': '受击箱',
+    'showcase.debug.attack': '攻击箱',
 
     /* ── 种族 / 套装展示名（`constants.ts` 的本地常量） ── */
     'showcase.race.skeleton': '骷髅',
@@ -186,6 +216,12 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.armor_set.iron': '铁甲套装',
     'showcase.armor_set.mage': '法袍套装',
     'showcase.armor_set.wind': '疾风皮甲',
+    'showcase.set.cloth': '布衣套装',
+    'showcase.set.leather': '皮甲套装',
+    'showcase.set.iron': '铁甲套装',
+    'showcase.set.scale': '鳞甲套装',
+    'showcase.set.stone': '石甲套装',
+    'showcase.set.mage': '法师套装',
 
     /* ── 外观图鉴 ── */
     'showcase.appearance.armor_stat': (slot, physical, magic, speed) => `${slot} · 物防${physical} 魔防${magic} 速${speed}`,
@@ -231,7 +267,7 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.menu.title': 'Showcase',
     'showcase.menu.subtitle': 'Select a subsystem to display',
     'showcase.back_menu': 'Back to menu',
-    'showcase.module.actions.title': 'Actions',
+    'showcase.module.actions.title': 'Attack Modules',
     'showcase.module.actions.desc': 'All-weapon attack actions / combos / charge and hold-mode timing',
     'showcase.module.appearance.title': 'Equipment & Look',
     'showcase.module.appearance.desc': 'Race limbs and full armor-piece codex (stand / walk)',
@@ -261,6 +297,7 @@ export const showcaseEn: ShowcaseLocale = {
 
     /* ── Actor status (list rows) ── */
     'showcase.status.idle': 'Idle',
+    'showcase.status.blocking': 'Block',
     'showcase.status.charging': 'Charging',
     'showcase.status.shooting': 'Shooting',
     'showcase.status.stand_walk': 'Stand/Walk',
@@ -268,6 +305,7 @@ export const showcaseEn: ShowcaseLocale = {
 
     /* ── Focus detail card ── */
     'showcase.detail.status_idle': 'Status: Idle',
+    'showcase.detail.status_blocking': 'Status: Blocking',
     'showcase.detail.status_charging': 'Status: Full-charge stance',
     'showcase.detail.combo': (current, total) => `Combo hit ${current}/${total}`,
     'showcase.detail.ranged': 'Ranged fire sequence',
@@ -290,6 +328,15 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.weapon.ranged': 'Ranged Weapon',
     'showcase.extra.race_limb': 'Race Limbs',
     'showcase.extra.armor_set': 'Armor Set',
+    'showcase.extra.body_form': 'Body Form',
+    'showcase.tab.humanoid': 'Human',
+    'showcase.tab.wyvern': 'Dragon',
+    'showcase.tab.horse': 'Horse',
+    'showcase.tab.wolf': 'Wolf',
+    'showcase.debug.title': 'Debug:',
+    'showcase.debug.collision': 'Collision',
+    'showcase.debug.hurt': 'Hurt',
+    'showcase.debug.attack': 'Attack',
 
     /* ── Race / armor-set display names (local constants in `constants.ts`) ── */
     'showcase.race.skeleton': 'Skeleton',
@@ -298,6 +345,12 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.armor_set.iron': 'Iron Set',
     'showcase.armor_set.mage': 'Mage Robe Set',
     'showcase.armor_set.wind': 'Wind Leather',
+    'showcase.set.cloth': 'Cloth Set',
+    'showcase.set.leather': 'Leather Set',
+    'showcase.set.iron': 'Iron Set',
+    'showcase.set.scale': 'Scale Set',
+    'showcase.set.stone': 'Stone Set',
+    'showcase.set.mage': 'Mage Set',
 
     /* ── Appearance codex ── */
     'showcase.appearance.armor_stat': (slot, physical, magic, speed) => `${slot} · phys ${physical} magic ${magic} spd ${speed}`,

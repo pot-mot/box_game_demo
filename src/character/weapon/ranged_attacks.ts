@@ -84,6 +84,16 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
             {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
+    /* 马投掷飞斧：复用投掷斧动作时序（武器数据由 horse 体形拥有，仅复用动作模板） */
+    horse_throwing_axe: {
+        segmentId: 'horse_throwing_axe_hurl',
+        duration: 0.5,
+        cooldown: 0,
+        phases: [
+            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: false, chargeable: true},
+            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
+        ],
+    },
     grenade: {
         segmentId: 'grenade_throw',
         duration: 0.8,
@@ -109,6 +119,16 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
         phases: [
             /* 单阶段：按住时冻结在甩出起始帧（不发射），松开才甩出 */
             {name: 'release', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false, chargeable: true},
+        ],
+    },
+    /* 天然吐息（wyvern）：昂首蓄势 → 喷吐（在 release 首帧发射锥形弹幕） */
+    wyvern_breath: {
+        segmentId: 'wyvern_breath_blast',
+        duration: 0.5,
+        cooldown: 0,
+        phases: [
+            {name: 'aim', durationRatio: 0.4, moveSpeedMultiplier: 0.2, cancellable: false},
+            {name: 'release', durationRatio: 0.6, moveSpeedMultiplier: 0.2, cancellable: false},
         ],
     },
 }

@@ -1,9 +1,10 @@
-import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest'
+﻿import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest'
 import {Scene} from 'three'
 import {createShowcaseActor} from './actor.ts'
-import {MELEE_WEAPON_PRESETS} from '../../character/weapon/melee_weapon.ts'
-import {weaponAttacksOf} from '../../character/weapon/catalog.ts'
+import {findWeaponPreset, weaponAttacksOf} from '../../character/weapon/catalog.ts'
 import {orderedSegments} from '../../character/weapon/attack_chain.ts'
+
+const longSwordPreset = findWeaponPreset('long_sword')!
 
 /** happy-dom 不支持 canvas 2d，注入最小 2d 上下文桩（模型脸部纹理用） */
 const canvasCtxStub = (): Record<string, unknown> => ({
@@ -28,7 +29,7 @@ describe('展示模式：近战重击满蓄力前置', () => {
 
     it('重击段播放前先定格满蓄力姿势（charging），随后进入同一段的 attacking', () => {
         const scene = new Scene()
-        const weapon = MELEE_WEAPON_PRESETS.long_sword
+        const weapon = longSwordPreset
         const actor = createShowcaseActor({
             id: 1, scene, weapon, holdMode: 'one_handed', faction: 0, x: 0, z: 0, weaponName: weapon.name,
         })
@@ -55,7 +56,7 @@ describe('展示模式：近战重击满蓄力前置', () => {
 
     it('满蓄力前置时长 = 武器模板的最长蓄力时间（覆写为 2s ≈ 120 帧）', () => {
         const scene = new Scene()
-        const base = MELEE_WEAPON_PRESETS.long_sword
+        const base = longSwordPreset
         const weapon = {...base, heavyCharge: {maxChargeMultiplier: 300, maxChargeTime: 2, cooldown: 0.8}}
         const actor = createShowcaseActor({
             id: 2, scene, weapon, holdMode: 'one_handed', faction: 0, x: 0, z: 0, weaponName: weapon.name,

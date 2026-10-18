@@ -8,7 +8,7 @@ import {
     RAY_HORIZONTAL_ANGLES, RAY_PITCH_ANGLES, SIDE_SCAN_ANGLES,
     WALKABLE_NORMAL_MIN_Y,
 } from './constants.ts'
-import {CHARACTER_BASE_SIZE} from '../../constants.ts'
+import {formCenterOffsetY} from '../../body_form/geometry.ts'
 
 /** 坑洞探针向下投射的最大距离：只需判断最近命中是否在跳跃高度内 */
 const PROBE_MAX_TOI = 1000
@@ -92,9 +92,8 @@ const scanForward = (
  */
 export const buildNavSensor = (caster: NavRayCaster): NavSensor => {
     const footOf = (entity: CharacterEntity): {x: number; y: number; z: number} => {
-        const bh = CHARACTER_BASE_SIZE.height * entity.config.scale
         const pos = entity.body.translation()
-        return {x: pos.x, y: pos.y - bh / 2 + 0.1, z: pos.z}
+        return {x: pos.x, y: pos.y - formCenterOffsetY(entity.config) + 0.1, z: pos.z}
     }
 
     /** 前方扇面 + 坑洞探针（不含侧向扫描）：`sense` 与 `isForwardClear` 共用，避免重复射线 */

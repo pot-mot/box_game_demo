@@ -19,19 +19,90 @@ export interface WeaponEquipConfig {
     readonly offhand?: WeaponMeshConfig
     /** 副手是否挂背（双手共持 = true；缺省 = 握在左手） */
     readonly offhandStowed?: boolean
+    /** 主手武器挂点关节 id 覆盖（生物体形用；缺省 = 模型默认主挂点） */
+    readonly mainMountJointId?: string
+    /** 副手武器挂点关节 id 覆盖（生物体形用；缺省 = 模型默认副挂点） */
+    readonly offMountJointId?: string
 }
 
-/** 方块人外观模型，暴露所有关节 pivot 供动画系统直接操纵 */
-export interface CharacterModel {
+/**
+ * 体形渲染模型门面（**跨体形公共契约**）：世界主循环 / 近战执行器 / 动画系统只依赖这些成员，
+ * 不感知具体体形。人形专属关节 getter 见 `CharacterModel`（人形分包）；狼 / 马 / wyvern 各自实现本接口。
+ */
+export interface CreatureModel {
     readonly group: Group
 
-    /** 关节 id → 关节 Group（骨骼层级，含未挂部件的挂点 / 未来受击/物理节点） */
+    /** 关节 id → 关节 Group（骨骼层级，含武器挂点 / 受击 / 物理节点） */
     readonly jointGroups: ReadonlyMap<string, Group>
     /** 关节 id → 该关节上挂载的部件（受击块按部件实际尺寸对齐） */
     readonly jointParts: ReadonlyMap<string, TrackedBoxPart>
-    /** 上/下半身碰撞块的半胶囊可视化（edit 模式显示；play 模式隐藏） */
+    /** 物理碰撞块的半胶囊可视化 mesh（edit 模式显示；play 模式隐藏） */
     readonly colliderMeshes: readonly Mesh[]
 
+    /** 装配武器（主手 + 可选副手，会先移除旧武器；offhandStowed = 副手挂背） */
+    equipWeapon: (config: WeaponEquipConfig) => void
+
+    /** 副手武器挂背 / 回手（仅换父节点，不重建几何；无副手武器时空操作） */
+    setOffhandStowed: (stowed: boolean) => void
+
+    /**
+     * 切换惯用手：主 / 副手槽位内容互换、重挂武器挂点并重设非对称网格镜像。
+     * 动作镜像由 clip 层按 handedness 处理（模型本身不播放动画）。无副手 / 单手体形可为空操作。
+     */
+    setHandedness: (handedness: Handedness) => void
+
+    /** 移除全部武器 */
+    removeWeapon: () => void
+
+    /** 装备护甲（会先移除旧护甲；空槽 = 移除该槽；无护甲体形可为空操作） */
+    equipArmor: (loadout: ResolvedArmorLoadout) => void
+
+    /** 移除全部护甲 */
+    removeArmor: () => void
+
+    /** 装备肢体组件（会先移除旧肢体；空槽 = 回退默认；无肢体体形可为空操作） */
+    equipLimbs: (loadout: ResolvedLimbLoadout) => void
+
+    /** 移除全部肢体组件 */
+    removeLimbs: () => void
+
+    /** 当前武器命中检测标记点（null = 未装备），供 melee_executor 使用 */
+    readonly weaponMesh: Mesh | null
+
+    /** 当前武器刀尖采样点（null = 未装备），供刀光轨迹使用 */
+    readonly weaponTip: Mesh | null
+
+    /** 当前武器模型根节点（null = 未装备），命中箱 OBB 的世界变换来源 */
+    readonly weaponGroup: Group | null
+
+    /** 当前武器攻击判定箱本地盒参数（null = 未装备），略大于武器模型 */
+    readonly weaponHitBox: WeaponLocalHitBox | null
+
+    /** 原始几何中的主握把 Y 坐标（未装备 = 0），用于检视实际模型握点 */
+    readonly weaponGripY: number
+    /** 武器模型原点对齐主握把后，副握点沿本地 +Y 相对主握点的距离 */
+    readonly weaponSupportGripOffset: number
+
+    /** 副手武器命中检测标记点（null = 无副手） */
+    readonly offhandWeaponMesh: Mesh | null
+    /** 副手武器刀尖采样点（null = 无副手） */
+    readonly offhandWeaponTip: Mesh | null
+    /** 副手武器模型根节点（null = 无副手） */
+    readonly offhandWeaponGroup: Group | null
+    /** 副手武器攻击判定箱本地盒参数（null = 无副手） */
+    readonly offhandWeaponHitBox: WeaponLocalHitBox | null
+    /** 副手握把中心在武器本地 Y 轴上的坐标（无副手 = 0） */
+    readonly offhandWeaponGripY: number
+
+    /** 根据新调色板原地更新所有部位材质颜色（不重建几何体） */
+    recolor: (palette: CharacterColorPalette) => void
+
+    /** 释放所有几何体和材质 */
+    dispose: () => void
+}
+
+/** 人形外观模型：在公共契约之上暴露全部人形关节 pivot 供人形动画系统直接操纵 */
+export interface CharacterModel extends CreatureModel {
     /** 躯干关节（髋部 pivot）：旋转带动 躯干+双臂+头（拧腰/前倾动力链） */
     readonly spine: Group
 
@@ -72,68 +143,6 @@ export interface CharacterModel {
     readonly leftThigh: Mesh
     readonly leftLegKnee: Group
     readonly leftShin: Mesh
-
-    /** 装配武器（主手 + 可选副手，会先移除旧武器；offhandStowed = 副手挂背） */
-    equipWeapon: (config: WeaponEquipConfig) => void
-
-    /** 副手武器挂背 / 回手（仅换父节点，不重建几何；无副手武器时空操作） */
-    setOffhandStowed: (stowed: boolean) => void
-
-    /**
-     * 切换惯用手：主 / 副手槽位内容互换、重挂武器挂点并重设非对称网格镜像。
-     * 动作镜像由 clip 层按 handedness 处理（模型本身不播放动画）。
-     */
-    setHandedness: (handedness: Handedness) => void
-
-    /** 移除全部武器 */
-    removeWeapon: () => void
-
-    /** 装备护甲（四槽，会先移除旧护甲；空槽 = 移除该槽） */
-    equipArmor: (loadout: ResolvedArmorLoadout) => void
-
-    /** 移除全部护甲 */
-    removeArmor: () => void
-
-    /** 装备肢体组件（四槽，会先移除旧肢体；空槽 = 回退默认人类肢体；颜色随阵营调色板） */
-    equipLimbs: (loadout: ResolvedLimbLoadout) => void
-
-    /** 移除全部肢体组件（回退默认人类肢体） */
-    removeLimbs: () => void
-
-    /** 当前武器命中检测标记点（null = 未装备），供 melee_executor 使用 */
-    readonly weaponMesh: Mesh | null
-
-    /** 当前武器刀尖采样点（null = 未装备），供刀光轨迹使用 */
-    readonly weaponTip: Mesh | null
-
-    /** 当前武器模型根节点（null = 未装备），命中箱 OBB 的世界变换来源 */
-    readonly weaponGroup: Group | null
-
-    /** 当前武器攻击判定箱本地盒参数（null = 未装备），略大于武器模型 */
-    readonly weaponHitBox: WeaponLocalHitBox | null
-
-    /** 原始几何中的主握把 Y 坐标（未装备 = 0），用于检视实际模型握点 */
-    readonly weaponGripY: number
-    /** 武器模型原点对齐主握把后，左手副握点沿本地 +Y 相对主握点的距离 */
-    readonly weaponSupportGripOffset: number
-
-    /** 副手（左手）武器命中检测标记点（null = 无双持） */
-    readonly offhandWeaponMesh: Mesh | null
-    /** 副手武器刀尖采样点（null = 无双持） */
-    readonly offhandWeaponTip: Mesh | null
-    /** 副手武器模型根节点（null = 无双持） */
-    readonly offhandWeaponGroup: Group | null
-    /** 副手武器攻击判定箱本地盒参数（null = 无双持） */
-    readonly offhandWeaponHitBox: WeaponLocalHitBox | null
-
-    /** 副手握把中心在武器本地 Y 轴上的坐标（无双持 = 0） */
-    readonly offhandWeaponGripY: number
-
-    /** 根据新调色板原地更新所有部位材质颜色（不重建几何体） */
-    recolor: (palette: CharacterColorPalette) => void
-
-    /** 释放所有几何体和材质 */
-    dispose: () => void
 }
 
 /** 动画上下文，由 animation system 每帧传入（horizontalSpeed 用于行走步频变速与下落腿张开的体态随速度） */
@@ -171,9 +180,9 @@ export interface AnimationContext {
     readonly shieldHands: Readonly<{main: boolean; off: boolean}>
 }
 
-/** 单个状态的动画处理器 */
+/** 单个状态的动画处理器（按体形自定义；参数为跨体形公共模型契约） */
 export interface AnimationHandler {
-    enter: (model: CharacterModel, ctx: AnimationContext) => void
-    update: (dt: number, model: CharacterModel, ctx: AnimationContext) => void
-    exit: (model: CharacterModel, ctx: AnimationContext) => void
+    enter: (model: CreatureModel, ctx: AnimationContext) => void
+    update: (dt: number, model: CreatureModel, ctx: AnimationContext) => void
+    exit: (model: CreatureModel, ctx: AnimationContext) => void
 }

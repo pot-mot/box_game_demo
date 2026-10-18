@@ -18,6 +18,8 @@ export interface CharacterConfig {
     jumpHeight: number
     /** 整体缩放（碰撞箱和模型等比缩放） */
     scale: number
+    /** 体形计划 id（基础模组，缺省 = humanoid）：决定骨架 / 外观 / 碰撞布局 / 受击子块 / 装备槽 / 武器策略 */
+    bodyFormId?: string
     /** 惯用手（缺省 = 右撇子）：决定主 / 副手槽位与动作镜像 */
     handedness?: Handedness
     /** 韧性上限基础值（缺省 = 常量 `DEFAULT_POISE_MAX`；有效上限再叠加装备加成） */
@@ -42,9 +44,10 @@ export interface CharacterEntity {
     /** 方块人外观 Group */
     appearanceGroup: Group
     body: RAPIER.RigidBody
+    /** 主碰撞体（= colliders[0]）：地面 / 分离等物理交互的主引用 */
     mainCollider: RAPIER.Collider
-    /** 上半身半胶囊碰撞体（下半身即 mainCollider）；两半竖直拼接等价原单胶囊 */
-    upperCollider?: RAPIER.Collider
+    /** 体形全部碰撞体（按体形计划 colliderLayout 顺序；质量由附加质量统一决定） */
+    colliders: RAPIER.Collider[]
     isOnGround: boolean
     /** 地面接触法线（从地面指向角色，已归一化）。无地面接触时回退为 (0, 1, 0) */
     groundNormal: { readonly x: number; readonly y: number; readonly z: number }

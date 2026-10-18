@@ -7,7 +7,7 @@
 
 ## 碰撞箱（两半胶囊）与受击子块
 
-- 角色物理碰撞体拆为**上/下半身两个半胶囊**（竖直拼接等价原单胶囊）：`mainCollider`（下半身，地面/分离沿用）+ `upperCollider`（上半身），均 density 0、类别 `character`；改 scale 时同步重建两个。
+- 角色物理碰撞体由**体形计划**（`entity/character/body_form/`）的 `colliderLayout` 声明：人形 = 上/下半身两个半胶囊（竖直拼接等价原单胶囊），均 density 0、类别 `character`。实体持有 `colliders: RAPIER.Collider[]`（`mainCollider = colliders[0]`，地面/分离沿用首个）；改 scale 或换体形时按 `colliderLayout` 重建。
 - 每帧在动画 + 根姿态之后，`syncCollidersFromNodes(entity, model)` 用碰撞节点 `lowerBodyCollider` / `upperBodyCollider` **相对模型根**的变换（`inv(rootWorld)·nodeWorld`，排除模型根朝向/姿势，静止与竖直拼接等价、随动画联动、不与翻滚/倒地耦合）写 `collider.setTranslationWrtParent/setRotationWrtParent`；俯卧游泳时由 `world.ts` 让两节点前倾 → 碰撞箱俯卧。
 - **受击子块**（纯数学，不建物理体）：`refreshHurtBlocks` 按 `entity.hurtProfile`（人形 12 块）用关节上的视觉部件矩阵 + 几何尺寸世界化到 `entity.hurtBlocks`（随骨骼段长度 + 粗细对齐）；供近战 OBB / 远程点 / 爆炸球检定（见 [`../../combat/combat.md`](../../combat/combat.md)）。
 - 区域（area）重叠采样取刚体全部碰撞体的世界 AABB 并集（兼容多碰撞体）。

@@ -90,6 +90,9 @@ export const BONE_IVORY_COLOR = 0xf0ead0
 /** 日式精灵金发（精灵种族专属发色，不随阵营调色板变化） */
 export const ELF_GOLDEN_HAIR_COLOR = 0xf2cf6b
 
+/** 日式精灵裹胸 / 裹胯的素色亚麻布（配色固定，不随阵营变化） */
+export const ELF_CLOTH_COLOR = 0xd6c9a8
+
 /** 骷髅骨腔阴影色（眼窝 / 鼻腔 / 胸腔内部镂空的暗部） */
 export const SKELETON_HOLLOW_COLOR = 0x2b2822
 

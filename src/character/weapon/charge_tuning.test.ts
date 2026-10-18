@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {chargeDamageBonusOf, chargeDamageScale} from './charge_tuning.ts'
 import {createWeaponRuntime} from './weapon_runtime.ts'
-import {MELEE_WEAPON_MODELS, resolveMeleeWeapon} from './melee_weapon.ts'
+import {meleeClass, resolveMeleeWeapon} from './melee_weapon.ts'
 
 /**
  * 蓄力调参：`maxChargeMultiplier`（%）与 `maxChargeTime`（s）成一次函数——
@@ -18,12 +18,17 @@ describe('蓄力调参（一次函数）', () => {
     })
 
     it('单武器（模型）覆盖模板默认，并重烘焙攻击链可蓄力段', () => {
-        const overridden = resolveMeleeWeapon({
-            ...MELEE_WEAPON_MODELS.long_sword,
+        const weaponClass = meleeClass({
+            id: 'x', type: 'melee', damageType: 'physical', holdModes: ['one_handed'],
+            damage: 1, knockbackForce: 0, knockbackY: 0, detectionRange: 1,
+            detectBox: {size: {x: 0.1, y: 0.1, z: 0.1}, offset: {x: 0, y: 0, z: 0}},
+        }, {one_handed: {}})
+        const overridden = resolveMeleeWeapon(weaponClass, {
+            id: 'x', classId: 'x', formId: 'humanoid', name: 'x', nameKey: 'weapon.unarmed', mesh: {id: 'none'},
             charge: {maxChargeMultiplier: 300, maxChargeTime: 2},
         })
 
-        const segment = overridden.attacks.one_handed!.segments['long_sword_one_handed_heavy_1']
+        const segment = overridden.attacks.one_handed!.segments['x_one_handed_heavy_1']
         expect(segment.chargeFullTime).toBe(2)
         expect(segment.chargeDamageBonus).toBeCloseTo(2, 6)
     })

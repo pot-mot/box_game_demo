@@ -3,12 +3,13 @@
 ## 约定
 
 - **统一模型构建器**：骨架定义 `skeleton/preset.ts` 的 `buildCharacterSkeletonDefinition()` 为唯一真相源；`model.ts` 的 `createCharacterModel`（游玩/展示）与 `modes/bone_edit`（编辑器）都经 `skeleton/render/joint_hierarchy.ts` 的 `createJointHierarchy` 建 Group 层级、再用 `assemble.ts` 的 `assembleCharacterAppearance` 装配部件（**含手部模型**）。
-- **程序化网格构建器**：`mesh_builder.ts` 的 `createMeshBuilder()` 提供几何/材质工厂（`box` / `cylinder` / `sphere` / `cone` / `material`）与 `add` / `faceBox`，统一登记并 `dispose`。`weapon_mesh` 与 `armor_mesh` 的每个模型是独立参数化 `gen` 函数，派发表只做 id → gen 映射；护甲 gen 尺寸来自 `PRESET_PART_SIZES`，武器 gen 参数来自自身 `WeaponMeshConfig`。**新增/修改武器或护甲外观只改对应 gen**。
+- **程序化网格构建器**：`mesh_builder.ts` 的 `createMeshBuilder()` 提供几何/材质工厂（`box` / `cylinder` / `sphere` / `cone` / **`frustum`（低多面体棱台）** / `material` / **`materialById`**）与 `add`（可指定父节点）/ `faceBox`，统一登记并 `dispose`。武器 / 护甲 / 种族肢体与生物部件都经它构建：**低多面体风格**由 `frustum` + 低分段 `cylinder`/`cone`/`sphere` + 统一材质库 `materialById`（`render/character_materials.ts`，默认 `flatShading`）表达。`weapon_mesh`、`armor_mesh` 的每个模型是独立参数化 `gen` 函数，派发表只做 id → gen 映射；护甲尺寸来自 `PRESET_PART_SIZES`，武器 gen 参数来自自身 `WeaponMeshConfig`。**新增/修改外观只改对应 gen**。
 - **惯用手（handedness）**：`character/handedness.ts` 定义 `Handedness`（`'right'` 默认 / `'left'`，`mainHandSide` / `offHandSide`）；`AnimationContext.handedness` 由 `world.ts` 每帧装配。canonical 骨架与动作数据是右撇子（主手 = 解剖右 = `-X`）。左撇子**不额外烘焙**：clip 取用时经 `skeleton/anim/mirror.ts` 的 `mirrorClip` 镜像（左右轨互换 + 反射共轭；缓存键含 handedness）、槽位（`mainSlot()` / `offSlot()`）与非对称网格镜像随之切换。详见下文专节。
 - **格挡 / 蓄力下半身行走叠加**：每个状态由播放器（`system.ts`）驱动，按关节集叠加**互不重叠**的层（`skeleton/anim/composition.ts` 的 `applyComposedPose`，未被层覆盖的关节保留当前姿态）。**格挡中或蓄力攻击中（`attacking` + `attackHolding`）且水平移动时**，在播放器写完（含双手 IK）之后用 `base_clips.ts` 的 `getWalkLegsClip(handedness)`（仅 `WALK_LEG_JOINTS` 双腿关节）覆盖下半身，使脚步随速度摆动、**上半身（举盾 / 拉弓 / 后引）姿态不变**；相位 `engagedWalkPhase` 按 `walkSpeedScale(horizontalSpeed)` 累积，水平速度低于 `ENGAGED_WALK_MIN_SPEED` 视为原地不动（腿保持静态姿态）。蓄力时播放器定格（`seekProgress` 不推进），故该叠加层独立推进相位。
 
 ## 陷阱
 
+- **躯干 / 头部护甲顶端不得与身体顶面共面**（`armor_mesh.ts` 的 `genVest` / `genRobe` / `genCap` / `genHood`）：顶缘与身体部件顶面对齐会 z-fighting / 穿模，必须**高出至少 `ARMOR_TOP_OVERLAP`（= `ARMOR_PAD`）**；宽度也须 ≥ 身体对应尺寸（上收窄会让身体从衣身上缘穿出）。
 - 手部 `rightHandPivot` / `leftHandPivot` 与武器挂点 `rightWeaponMount` / `leftWeaponMount` 是**不同关节**：手部模型挂手部关节，武器模型直接挂腕下的武器挂点；`backWeaponMount` 为背部视觉挂点（双手共持时副手武器挂背，无 clip 轨道）。自定义骨架缺关节时自动回退同名手腕关节。
 - **武器骨骼握持角（持械恒为 `WEAPON_GRIP_FLEX`）**：`pose_fns.ts` 的基础状态下，只要 `ctx.weaponHeld`，武器骨骼即用 `GRIP_BONE_POSE`（含待机 / 行走 + 跳跃 / 下落 / 死亡 / 受击 / 交互 / 破防等瞬态；攻击态由攻击 clip 覆盖）。**未播放动画的静止默认姿态**（装备预览 `modes/play/equipment_ui/preview.ts` 等）亦由 `model.ts` 的 `equipSlot` 在装配时把武器挂点本地 X 旋转设为 `WEAPON_GRIP_FLEX`、`clearSlot` 复位为 0；否则武器会贴合前臂穿模。
 - **主手 = 解剖右 = `rightWeaponMount`、副手 = 解剖左 = `leftWeaponMount`**（canonical 为右撇子）。`handedness='left'` 时武器实际位置由 clip 镜像 + `model.setHandedness`（槽位互换 + 网格 `scale.x=-1`）决定，**勿在装配期另行手写左右映射**。

@@ -8,7 +8,7 @@ import {DEFAULT_ORIGIN_CONFIGS} from '../../../character/ai_strategy/origin.ts'
 import type {AIContext, AISetInput, AttackDetectChecker} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
 import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP, VISION_FAN_RECAST_INTERVAL, VISION_FAN_ROTATE_STEP, STALL_INPUT_EPS, STALL_CHECK_TRAVEL, STALL_TIMEOUT, COMBAT_REENTRY_COOLDOWN, COMBAT_STALL_MAX_RETRIES, COMBAT_STALL_DETOUR_DURATION, COMBAT_RETARGET_INTERVAL} from './constants.ts'
-import {CHARACTER_BASE_SIZE} from '../constants.ts'
+import {formBodyRadius, formEyeHeight} from '../body_form/geometry.ts'
 import {initCombatContext, updateCombatFSM} from './combat/machine.ts'
 import {initPeaceContext, updatePeaceFSM} from './peace/machine.ts'
 import {updateOrigin} from './origin.ts'
@@ -36,8 +36,8 @@ const findNearestEnemy = (
     const detRange = character.combat.weapon.detectionRange
     const los = ctx.losChecker
     const facing = ctx.getFacingAngle?.() ?? 0
-    /* 扫描射线起点取眼部高度（与 debug 可视化同源） */
-    const eyeY = pos.y + CHARACTER_BASE_SIZE.height * character.config.scale * 0.4
+    /* 扫描射线起点取体形眼部高度（与 debug 可视化同源） */
+    const eyeY = pos.y + formEyeHeight(character.config)
 
     /* 扇形重扫节流：非全向模式下每帧递减，帧间复用缓存射线结果 */
     if (!ignoreFacing) ctx.visionFanCooldown = Math.max(0, ctx.visionFanCooldown - 1)
@@ -68,7 +68,7 @@ const findNearestEnemy = (
         if (los && d > 0.001) {
             if (ignoreFacing) {
                 if (!blockersReady) { los.collectBlockers(); blockersReady = true }
-                const targetY = op.y + CHARACTER_BASE_SIZE.height * other.config.scale * 0.4
+                const targetY = op.y + formEyeHeight(other.config)
                 if (!los.hasLOSPrepared(pos.x, eyeY, pos.z, op.x, targetY, op.z, other.mesh, character.mesh)) continue
             } else {
                 /* 扇形射线遮挡：懒投射（有候选才投），按 RECAST_INTERVAL 节流 + 逐次旋转偏移。
@@ -88,7 +88,7 @@ const findNearestEnemy = (
                 const fanDiff = normalizeAngle(bearing - ctx.visionFanYaw)
                 const idx = Math.round((fanDiff + VISION_FAN_HALF_ANGLE) / VISION_FAN_RAY_STEP)
                 const clamped = Math.max(0, Math.min(VISION_FAN_RAY_COUNT - 1, idx))
-                const bodyRadius = CHARACTER_BASE_SIZE.width * other.config.scale / 2
+                const bodyRadius = formBodyRadius(other.config)
                 if (ctx.visionFanDists[clamped] < d - bodyRadius - 0.05) continue
             }
         }

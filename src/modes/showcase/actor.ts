@@ -1,9 +1,9 @@
 import {Group, Vector3, Mesh, Sprite} from 'three'
 import type {Material, Scene} from 'three'
-import {createCharacterModel} from '../../entity/character/appearance/model.ts'
-import {createAppearanceSystem} from '../../entity/character/appearance/system.ts'
-import type {AnimationContext, CharacterModel} from '../../entity/character/appearance/types.ts'
+import {bodyFormOf} from '../../entity/character/body_form/index.ts'
+import type {AnimationContext, CreatureModel} from '../../entity/character/appearance/types.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/system.ts'
+import {createActorDebug} from './actor_debug.ts'
 import type {ShowcaseActorHandle} from './actor_handle.ts'
 import type {WeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
@@ -76,6 +76,8 @@ export interface ActorStatus {
     /** 当前持握模式中文名（单持 / 双手共持 / 双持） */
     readonly holdModeLabel: string
     readonly isMelee: boolean
+    /** 是否正在演示格挡姿态（盾牌待机时举盾） */
+    readonly isBlocking: boolean
     /** 'charging' = 近战重击前的满蓄力前置表现（定格满蓄力姿势） */
     readonly mode: 'idle' | 'charging' | 'attacking'
     /** 当前段（1 起，idle 时为下一段的段号） */
@@ -109,6 +111,8 @@ export interface ShowcaseActorInit {
     readonly x: number
     readonly z: number
     readonly weaponName: string
+    /** 体形 id（缺省 = 人形；龙 / 马 / 狼等展示其天然 / 允许武器攻击模组） */
+    readonly bodyFormId?: string
 }
 
 /** 刀尖世界坐标复用向量（逐角色顺序调用，无并发） */
@@ -144,6 +148,8 @@ interface MaterialSnapshot {
 export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     const {id, scene, faction, x, z, weaponName, holdMode} = init
     const isMelee = init.weapon.type === 'melee'
+    /** 盾牌（声明 block）：攻击模组之外，待机时改为演示**格挡姿态** */
+    const isShield = isMelee && init.weapon.block !== undefined
     /** 近战重击前的满蓄力前置保持时长 = 武器（模板）的最长蓄力时间（缺省回退 `CHARGE_HOLD_DURATION`） */
     const chargeHoldDuration = init.weapon.type === 'melee'
         ? (init.weapon.heavyCharge?.maxChargeTime ?? CHARGE_HOLD_DURATION)
@@ -160,23 +166,27 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     /** 链间停顿位置：脚本内首个重段之前（-1/-2 等负值 = 无重段，恒不停顿） */
     const pauseAfterPos = segments.findIndex(segment => segment.key === 'heavy') - 1
 
-    const model: CharacterModel = createCharacterModel(
+    const model: CreatureModel = bodyFormOf(init.bodyFormId).createModel(
         {speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: ACTOR_SCALE},
         faction,
     )
+    const hurtProfile = bodyFormOf(init.bodyFormId).hurtProfile
     /* 近战三模式分开展示副手：
      * - 单持：不装备副手武器（单持模组本身即主手单手使用）；
      * - 双持：同类武器握在左手；
      * - 双手共持：副手挂背（展示挂背逻辑），双手 IK 仍贴合主手武器。
      * 远程无副手。 */
+    /* 天然武器可指定专属挂点（如马踢击挂前蹄 / 飞龙爪击挂翼爪） */
+    const mainMount = init.weapon.mountJointId !== undefined ? {mainMountJointId: init.weapon.mountJointId} : {}
     if (isMelee && holdMode !== 'one_handed') {
         model.equipWeapon({
             main: init.weapon.mesh,
             offhand: init.weapon.mesh,
             offhandStowed: holdMode === 'two_handed',
+            ...mainMount,
         })
     } else {
-        model.equipWeapon({main: init.weapon.mesh})
+        model.equipWeapon({main: init.weapon.mesh, ...mainMount})
     }
 
     const anchor = new Group()
@@ -184,7 +194,10 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     anchor.add(model.group)
     scene.add(anchor)
 
-    const system: AppearanceSystem = createAppearanceSystem()
+    /* 调试箱（物理碰撞箱 / 受击箱 / 攻击箱）：默认全隐 */
+    const debug = createActorDebug(scene, model, hurtProfile)
+
+    const system: AppearanceSystem = bodyFormOf(init.bodyFormId).createAnimation({})
     /* 远程角色同样创建刀光 —— 对齐生产 world.ts：远程 release 阶段的拖尾同样存在，
      * 激活门控已在 applyAnimation 中按 strike/release/spin 阶段判断 */
     const trail: WeaponTrail = createWeaponTrail(scene)
@@ -349,9 +362,10 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             attackCharge: inCharging ? 1 : 0,
             attackHolding: inCharging,
             weaponHeld: model.weaponMesh !== null,
-            shieldHands: {main: false, off: false},
+            /* 盾牌：待机时举盾（主手盾），演示格挡姿态；攻击时交回攻击 clip */
+            shieldHands: {main: isShield && mode === 'idle', off: false},
         }
-        system.update(dt, model, mode === 'idle' ? 'idle' : 'attacking', ctx)
+        system.update(dt, model, mode === 'idle' ? (isShield ? 'blocking' : 'idle') : 'attacking', ctx)
 
         const tip = model.weaponTip
         if (tip !== null) {
@@ -389,6 +403,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             weaponName,
             holdModeLabel: translate(HOLD_MODE_LABELS[holdMode]),
             isMelee,
+            isBlocking: isShield && mode === 'idle',
             mode,
             hitNumber: scriptPos + 1,
             totalHits,
@@ -458,11 +473,15 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
 
     const dispose = (): void => {
         setDimmed(false)
+        debug.dispose()
         trail.dispose()
         labelDispose?.()
         model.dispose()
         scene.remove(anchor)
     }
 
-    return {id, anchor, weaponName, holdModeLabel: translate(HOLD_MODE_LABELS[holdMode]), factionColor: faction, update, status, attachLabel, setDimmed, dispose}
+    return {id, anchor, weaponName, holdModeLabel: translate(HOLD_MODE_LABELS[holdMode]), factionColor: faction, update, status, attachLabel, setDimmed, dispose,
+        setDebugVisible: (kind, on) => debug.setVisible(kind, on),
+        debugTick: () => debug.tick(),
+    }
 }

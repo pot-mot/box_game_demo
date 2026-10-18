@@ -18,7 +18,8 @@ import {createCombatComponent} from '../../../character/combat/types.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {createBodyEnvironment} from '../../../physics/environment.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
-import {CHARACTER_BASE_SIZE, CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
+import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
+import {HUMANOID_BODY_FORM} from '../body_form/index.ts'
 
 /** 测试固定时间步长（与游戏物理循环一致） */
 export const DT = FIXED_TIME_STEP
@@ -63,10 +64,13 @@ export const makeChar = (
     )
     const mainCollider = createColliderForBody(
         hw.shared.world,
-        /* 胶囊（竖直）：总高 = 2×halfHeight + 2×radius = 1.0，半径 = 原碰撞箱半宽 0.125。
+        /* 胶囊（竖直，人形体形）：总高 = 2×halfHeight + 2×radius = size.height，半径 = size.width/2。
          * 平底 cuboid 跨过 trimesh 网格顶点线时会被内部棱幽灵水平法线卡死（上坡原地卡住），
          * 圆滑底面无挂点；rapier3d-compat 0.19/0.20 的 FIX_INTERNAL_EDGES 已损坏（开启即穿透）不可用 */
-        RAPIER.ColliderDesc.capsule(0.375, 0.125)
+        RAPIER.ColliderDesc.capsule(
+            HUMANOID_BODY_FORM.size.height / 2 - HUMANOID_BODY_FORM.size.width / 2,
+            HUMANOID_BODY_FORM.size.width / 2,
+        )
             .setFriction(0)
             /* 密度 0（与生产一致） */
             .setDensity(0)
@@ -87,6 +91,7 @@ export const makeChar = (
         appearanceGroup: null!,
         body,
         mainCollider,
+        colliders: [mainCollider],
         isOnGround: true,
         groundNormal: {x: 0, y: 1, z: 0},
         groundKeepTimer: 0,
@@ -333,7 +338,7 @@ export const tickMulti = (
         if (separated.has(key)) continue
         separated.add(key)
 
-        const maxHalf = Math.max(CHARACTER_BASE_SIZE.width, CHARACTER_BASE_SIZE.depth) / 2
+        const maxHalf = Math.max(HUMANOID_BODY_FORM.size.width, HUMANOID_BODY_FORM.size.depth) / 2
         const aPos = bodyA.translation()
         const bPos = bodyB.translation()
         const sep = computeSeparation({

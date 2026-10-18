@@ -8,7 +8,7 @@ import type {NavSensor, NavRunContext, NavConfig} from './types.ts'
 import type {CharacterEntity} from '../../../../character/types.ts'
 import {createWeaponRuntime} from '../../../../character/weapon/weapon_runtime.ts'
 import {createCombatComponent, type CombatComponent} from '../../../../character/combat/types.ts'
-import {CHARACTER_BASE_SIZE} from '../../constants.ts'
+import {HUMANOID_BODY_FORM} from '../../body_form/index.ts'
 
 const FIXED_DT = 1 / 60
 
@@ -54,9 +54,9 @@ const createCharEntity = (
     jumpHeightVal: number = 2,
 ): CharacterEntity => {
     const scale = scaleVal
-    const bw = CHARACTER_BASE_SIZE.width * scale
-    const bh = CHARACTER_BASE_SIZE.height * scale
-    const bd = CHARACTER_BASE_SIZE.depth * scale
+    const bw = HUMANOID_BODY_FORM.size.width * scale
+    const bh = HUMANOID_BODY_FORM.size.height * scale
+    const bd = HUMANOID_BODY_FORM.size.depth * scale
 
     const mesh = new Mesh(
         new BoxGeometry(bw, bh, bd),
@@ -524,9 +524,9 @@ describe('NavFSM 导航状态机', () => {
 
 const createCharOnBox = (boxTopY: number): CharacterEntity => {
     const scale = 1
-    const bh = CHARACTER_BASE_SIZE.height * scale
-    const bw = CHARACTER_BASE_SIZE.width * scale
-    const bd = CHARACTER_BASE_SIZE.depth * scale
+    const bh = HUMANOID_BODY_FORM.size.height * scale
+    const bw = HUMANOID_BODY_FORM.size.width * scale
+    const bd = HUMANOID_BODY_FORM.size.depth * scale
     const bodyY = boxTopY + bh / 2
 
     const mesh = new Mesh(new BoxGeometry(bw, bh, bd), new MeshBasicMaterial({visible: false}))

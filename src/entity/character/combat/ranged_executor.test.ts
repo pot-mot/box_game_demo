@@ -6,7 +6,8 @@ import {createColliderForBody} from '../../../physics/rapier_utils.ts'
 import {DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../physics/constants.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {createRangedExecutor} from './ranged_executor.ts'
-import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import {findWeaponPreset} from '../../../character/weapon/catalog.ts'
 import {resolvePhases} from '../../../character/combat/attack_phases.ts'
 import {defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
@@ -26,8 +27,10 @@ const noopCtx: ExecutorContext = {fireProjectile: () => {}}
 
 /** 测试武器：长弓 + 数值覆写（固定伤害 5 / 无击退 / 平射），便于断言 */
 const makeWeaponRuntime = (weaponOverrides: Partial<RangedWeaponConfig> = {}, damage = 5): WeaponRuntime => {
+    const longbow = findWeaponPreset('longbow')
+    if (longbow === undefined || longbow.type !== 'ranged') throw new Error('longbow 未注册')
     const weapon: RangedWeaponConfig = {
-        ...RANGED_WEAPON_PRESETS.longbow,
+        ...longbow,
         damage,
         knockbackForce: 0,
         ...weaponOverrides,
@@ -363,9 +366,12 @@ describe('投掷物可穿过类别', () => {
             const lv = body!.linvel()
             return Math.hypot(lv.x, lv.z)
         }
-        const bow = RANGED_WEAPON_PRESETS.longbow
-        expect(speedOf(true, 1)).toBeCloseTo(bow.projectileSpeed * bow.charge!.maxSpeedScale, 3)
-        expect(speedOf(true, 0)).toBeCloseTo(bow.projectileSpeed * bow.charge!.minSpeedScale, 3)
+        const bowPreset = findWeaponPreset('longbow')
+        if (bowPreset === undefined || bowPreset.type !== 'ranged' || bowPreset.charge === undefined) throw new Error('longbow 未注册 / 无蓄力')
+        const bow = bowPreset
+        const charge = bowPreset.charge
+        expect(speedOf(true, 1)).toBeCloseTo(bow.projectileSpeed * charge.maxSpeedScale, 3)
+        expect(speedOf(true, 0)).toBeCloseTo(bow.projectileSpeed * charge.minSpeedScale, 3)
         /* AI（非玩家）不套用蓄力曲线 */
         expect(speedOf(false, 1)).toBeCloseTo(bow.projectileSpeed, 3)
     })

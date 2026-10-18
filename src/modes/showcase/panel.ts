@@ -1,4 +1,5 @@
 import type {ActorStatus, SkillTimerStatus} from './actor.ts'
+import {SHOWCASE_DEBUG_KINDS, type ShowcaseDebugKind} from './actor_debug.ts'
 import {SPEED_OPTIONS} from './constants.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import {localizeText, localizeApply} from '../../i18n/dom.ts'
@@ -10,6 +11,10 @@ export interface PanelCallbacks {
     readonly onStep: () => void
     readonly onSpeed: (speed: number) => void
     readonly onFocus: (actorId: number | null) => void
+    /** 切换调试箱可见（物理碰撞箱 / 受击箱 / 攻击箱） */
+    readonly onDebugToggle: (kind: ShowcaseDebugKind, on: boolean) => void
+    /** 切换 Tab（仅多 Tab 舞台提供） */
+    readonly onTab?: (key: string) => void
 }
 
 /** 建行所需的静态信息 */
@@ -23,17 +28,39 @@ export interface PanelRowInfo {
     readonly colorHex: string
 }
 
+/** Tab 条目 */
+export interface PanelTab {
+    readonly key: string
+    readonly labelKey: StringLocaleKey
+}
+
 export interface ShowcasePanel {
+    /** 重建角色列表与聚焦下拉（切换 Tab 时调用） */
+    setInfos: (infos: readonly PanelRowInfo[], activeTabKey?: string) => void
     /** 每帧刷新列表/详情/控件状态（内部做脏检查，避免无谓 DOM 写入） */
-    refresh: (statuses: readonly ActorStatus[], playing: boolean, speed: number, focusedId: number | null) => void
+    refresh: (
+        statuses: readonly ActorStatus[],
+        playing: boolean,
+        speed: number,
+        focusedId: number | null,
+        debug: Readonly<Record<ShowcaseDebugKind, boolean>>,
+    ) => void
     /** 移除全部面板 DOM 与注入样式（退出展示模式时调用） */
     dispose: () => void
 }
 
-/** 面板标题 / 副标题文案键（不同子模块可自定义；缺省沿用攻击动作展示台文案） */
+/** 面板标题 / 副标题 / Tab 文案键（不同子模块可自定义；缺省沿用攻击动作展示台文案） */
 export interface PanelOptions {
     readonly titleKey?: StringLocaleKey
     readonly subtitleKey?: StringLocaleKey
+    readonly tabs?: readonly PanelTab[]
+}
+
+/** 调试开关文案键 */
+const DEBUG_LABEL_KEYS: Readonly<Record<ShowcaseDebugKind, StringLocaleKey>> = {
+    collision: 'showcase.debug.collision',
+    hurt: 'showcase.debug.hurt',
+    attack: 'showcase.debug.attack',
 }
 
 /** 一次性注入面板样式（返回 style 元素供 dispose 移除） */
@@ -50,7 +77,16 @@ const injectStyles = (): HTMLStyleElement => {
 }
 .sch-title { font-family: var(--dc-font-display); font-size: 16px; font-weight: 700; color: var(--dc-gold); letter-spacing: 1px; }
 .sch-sub { color: var(--dc-text-dim); font-size: 11px; margin: 2px 0 10px; }
-.sch-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.sch-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.sch-tab {
+    background: var(--dc-bg-3); color: var(--dc-text-dim); border: 1px solid var(--dc-border);
+    border-radius: var(--dc-radius); padding: 3px 10px; cursor: pointer; font: inherit; font-size: 12px;
+}
+.sch-tab:hover { background: var(--dc-bg-2); border-color: var(--dc-border-strong); }
+.sch-tab.active { background: var(--dc-bg-3); border-color: var(--dc-orange); color: var(--dc-gold-bright); }
+.sch-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+.sch-debug { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.sch-debug .sch-debug-label { color: var(--dc-text-dim); font-size: 11px; }
 .sch-btn {
     background: var(--dc-bg-3); color: var(--dc-text); border: 1px solid var(--dc-border);
     border-radius: var(--dc-radius); padding: 4px 10px; cursor: pointer; font: inherit;
@@ -130,8 +166,7 @@ interface RowRefs {
     readonly fill: HTMLElement
 }
 
-export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCallbacks, options?: PanelOptions): ShowcasePanel => {
-    const infoById = new Map(infos.map(info => [info.id, info]))
+export const createPanel = (initialInfos: readonly PanelRowInfo[], callbacks: PanelCallbacks, options?: PanelOptions): ShowcasePanel => {
     const style = injectStyles()
 
     /* —— 主面板（左上） —— */
@@ -147,6 +182,26 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     sub.className = 'sch-sub'
     localizeText(sub, options?.subtitleKey ?? 'showcase.subtitle')
     panel.appendChild(sub)
+
+    /* Tab 栏（多 Tab 时显示） */
+    const tabButtons = new Map<string, HTMLButtonElement>()
+    if (options?.tabs !== undefined && options.tabs.length > 1) {
+        const tabsBar = document.createElement('div')
+        tabsBar.className = 'sch-tabs'
+        for (const tab of options.tabs) {
+            const btn = document.createElement('button')
+            btn.type = 'button'
+            btn.className = 'sch-tab'
+            localizeText(btn, tab.labelKey)
+            btn.addEventListener('click', () => {
+                callbacks.onTab?.(tab.key)
+                btn.blur()
+            })
+            tabsBar.appendChild(btn)
+            tabButtons.set(tab.key, btn)
+        }
+        panel.appendChild(tabsBar)
+    }
 
     /* 控件行 */
     const controls = document.createElement('div')
@@ -190,20 +245,6 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
     const focusSelect = document.createElement('select')
     focusSelect.className = 'sch-select'
-    const noneOption = document.createElement('option')
-    noneOption.value = ''
-    localizeText(noneOption, 'showcase.focus_none')
-    focusSelect.appendChild(noneOption)
-    for (const info of infos) {
-        const opt = document.createElement('option')
-        opt.value = String(info.id)
-        localizeApply(opt, el => {
-            const name = info.nameOf()
-            const sub = info.subOf()
-            el.textContent = sub.length > 0 ? `${name} · ${sub}` : name
-        })
-        focusSelect.appendChild(opt)
-    }
     focusSelect.addEventListener('change', () => {
         callbacks.onFocus(focusSelect.value === '' ? null : Number(focusSelect.value))
         focusSelect.blur()
@@ -211,56 +252,123 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
     controls.appendChild(focusSelect)
     panel.appendChild(controls)
 
-    /* 角色列表 */
+    /* 调试开关行（碰撞箱 / 受击箱 / 攻击箱，默认全关） */
+    const debugBar = document.createElement('div')
+    debugBar.className = 'sch-debug'
+    const debugLabel = document.createElement('span')
+    debugLabel.className = 'sch-debug-label'
+    localizeText(debugLabel, 'showcase.debug.title')
+    debugBar.appendChild(debugLabel)
+    const debugButtons = new Map<ShowcaseDebugKind, HTMLButtonElement>()
+    for (const kind of SHOWCASE_DEBUG_KINDS) {
+        const btn = document.createElement('button')
+        btn.type = 'button'
+        btn.className = 'sch-btn'
+        localizeText(btn, DEBUG_LABEL_KEYS[kind])
+        btn.addEventListener('click', () => {
+            callbacks.onDebugToggle(kind, !btn.classList.contains('active'))
+            btn.blur()
+        })
+        debugBar.appendChild(btn)
+        debugButtons.set(kind, btn)
+    }
+    panel.appendChild(debugBar)
+
+    /* 角色列表（内容随 Tab 重建） */
     const list = document.createElement('div')
     list.className = 'sch-list'
-    const rows = new Map<number, RowRefs>()
-    for (const info of infos) {
-        const root = document.createElement('div')
-        root.className = 'sch-row'
-        root.addEventListener('click', () => callbacks.onFocus(info.id))
-
-        const dot = document.createElement('span')
-        dot.className = 'sch-dot'
-        dot.style.background = info.colorHex
-        root.appendChild(dot)
-
-        const names = document.createElement('div')
-        names.className = 'sch-names'
-        const skillSpan = document.createElement('span')
-        skillSpan.className = 'sch-skill'
-        localizeApply(skillSpan, el => { el.textContent = info.nameOf() })
-        const weaponSpan = document.createElement('span')
-        weaponSpan.className = 'sch-weapon'
-        const holdSpan = document.createElement('span')
-        holdSpan.className = 'sch-hold'
-        localizeApply(holdSpan, el => { el.textContent = info.subOf() })
-        names.appendChild(skillSpan)
-        names.appendChild(weaponSpan)
-        names.appendChild(holdSpan)
-        root.appendChild(names)
-
-        const mid = document.createElement('div')
-        mid.className = 'sch-mid'
-        const hit = document.createElement('div')
-        const phase = document.createElement('span')
-        phase.className = 'sch-phase'
-        mid.appendChild(hit)
-        mid.appendChild(phase)
-        root.appendChild(mid)
-
-        const bar = document.createElement('div')
-        bar.className = 'sch-rowbar'
-        const fill = document.createElement('div')
-        fill.className = 'sch-rowfill'
-        bar.appendChild(fill)
-        root.appendChild(bar)
-
-        list.appendChild(root)
-        rows.set(info.id, {root, hit, phase, fill})
-    }
     panel.appendChild(list)
     document.body.appendChild(panel)
+
+    let infos: readonly PanelRowInfo[] = initialInfos
+    let infoById = new Map<number, PanelRowInfo>()
+    let rows = new Map<number, RowRefs>()
+
+    const rebuildList = (): void => {
+        list.replaceChildren()
+        rows = new Map()
+        infoById = new Map(infos.map(info => [info.id, info]))
+        for (const info of infos) {
+            const root = document.createElement('div')
+            root.className = 'sch-row'
+            root.addEventListener('click', () => callbacks.onFocus(info.id))
+
+            const dot = document.createElement('span')
+            dot.className = 'sch-dot'
+            dot.style.background = info.colorHex
+            root.appendChild(dot)
+
+            const names = document.createElement('div')
+            names.className = 'sch-names'
+            const skillSpan = document.createElement('span')
+            skillSpan.className = 'sch-skill'
+            localizeApply(skillSpan, el => { el.textContent = info.nameOf() })
+            const weaponSpan = document.createElement('span')
+            weaponSpan.className = 'sch-weapon'
+            const holdSpan = document.createElement('span')
+            holdSpan.className = 'sch-hold'
+            localizeApply(holdSpan, el => { el.textContent = info.subOf() })
+            names.appendChild(skillSpan)
+            names.appendChild(weaponSpan)
+            names.appendChild(holdSpan)
+            root.appendChild(names)
+
+            const mid = document.createElement('div')
+            mid.className = 'sch-mid'
+            const hit = document.createElement('div')
+            const phase = document.createElement('span')
+            phase.className = 'sch-phase'
+            mid.appendChild(hit)
+            mid.appendChild(phase)
+            root.appendChild(mid)
+
+            const bar = document.createElement('div')
+            bar.className = 'sch-rowbar'
+            const fill = document.createElement('div')
+            fill.className = 'sch-rowfill'
+            bar.appendChild(fill)
+            root.appendChild(bar)
+
+            list.appendChild(root)
+            rows.set(info.id, {root, hit, phase, fill})
+        }
+    }
+
+    const rebuildFocusSelect = (): void => {
+        focusSelect.replaceChildren()
+        const noneOption = document.createElement('option')
+        noneOption.value = ''
+        localizeText(noneOption, 'showcase.focus_none')
+        focusSelect.appendChild(noneOption)
+        for (const info of infos) {
+            const opt = document.createElement('option')
+            opt.value = String(info.id)
+            localizeApply(opt, el => {
+                const name = info.nameOf()
+                const sub = info.subOf()
+                el.textContent = sub.length > 0 ? `${name} · ${sub}` : name
+            })
+            focusSelect.appendChild(opt)
+        }
+    }
+
+    let activeTabKey: string | undefined
+    const setInfos = (next: readonly PanelRowInfo[], tabKey?: string): void => {
+        infos = next
+        activeTabKey = tabKey
+        rebuildList()
+        rebuildFocusSelect()
+        timerBuiltFor = null
+        if (tabKey !== undefined) {
+            for (const [key, btn] of tabButtons) {
+                const active = key === tabKey
+                if (btn.classList.contains('active') !== active) btn.classList.toggle('active', active)
+            }
+        }
+    }
+
+    rebuildList()
+    rebuildFocusSelect()
 
     /* —— 聚焦详情卡（右上） —— */
     const detail = document.createElement('div')
@@ -374,13 +482,20 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         playing: boolean,
         speed: number,
         focusedId: number | null,
+        debug: Readonly<Record<ShowcaseDebugKind, boolean>>,
     ): void => {
+        void activeTabKey
         setText(pauseLabel, translate(playing ? 'showcase.pause' : 'showcase.resume'))
         pauseIconPause.style.display = playing ? '' : 'none'
         pauseIconPlay.style.display = playing ? 'none' : ''
 
         for (const {option, btn} of speedBtns) {
             const active = option === speed
+            if (btn.classList.contains('active') !== active) btn.classList.toggle('active', active)
+        }
+
+        for (const [kind, btn] of debugButtons) {
+            const active = debug[kind]
             if (btn.classList.contains('active') !== active) btn.classList.toggle('active', active)
         }
 
@@ -410,13 +525,15 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
 
             if (focused) focusedStatus = st
 
-            setText(refs.hit, st.mode === 'idle'
-                ? translate('showcase.status.idle')
-                : st.mode === 'charging'
-                    ? translate('showcase.status.charging')
-                    : st.isMelee
-                        ? translate({key: 'showcase.status.hit', args: [st.hitNumber, st.totalHits]})
-                        : translate('showcase.status.shooting'))
+            setText(refs.hit, st.isBlocking
+                ? translate('showcase.status.blocking')
+                : st.mode === 'idle'
+                    ? translate('showcase.status.idle')
+                    : st.mode === 'charging'
+                        ? translate('showcase.status.charging')
+                        : st.isMelee
+                            ? translate({key: 'showcase.status.hit', args: [st.hitNumber, st.totalHits]})
+                            : translate('showcase.status.shooting'))
             const phaseText = st.phaseName === 'idle' ? 'idle' : st.phaseName === 'done' ? 'done' : st.phaseName === 'charging' ? translate('showcase.status.charging') : st.phaseName
             setText(refs.phase, ` ${phaseText}`)
             const doneClass = st.phaseName === 'done' || st.phaseName === 'idle'
@@ -437,13 +554,15 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
             setText(detailTitle, info === undefined
                 ? `${st.weaponName} · ${st.holdModeLabel}`
                 : `${info.nameOf()} · ${info.subOf()}`)
-            setText(detailHit, st.mode === 'idle'
-                ? translate('showcase.detail.status_idle')
-                : st.mode === 'charging'
-                    ? translate('showcase.detail.status_charging')
-                    : st.isMelee
-                        ? translate({key: 'showcase.detail.combo', args: [st.hitNumber, st.totalHits]})
-                        : translate('showcase.detail.ranged'))
+            setText(detailHit, st.isBlocking
+                ? translate('showcase.detail.status_blocking')
+                : st.mode === 'idle'
+                    ? translate('showcase.detail.status_idle')
+                    : st.mode === 'charging'
+                        ? translate('showcase.detail.status_charging')
+                        : st.isMelee
+                            ? translate({key: 'showcase.detail.combo', args: [st.hitNumber, st.totalHits]})
+                            : translate('showcase.detail.ranged'))
             const detailPercent = (st.phaseProgress * 100).toFixed(0)
             setText(detailPhase, st.mode === 'idle'
                 ? translate('showcase.detail.phase_none')
@@ -480,5 +599,5 @@ export const createPanel = (infos: readonly PanelRowInfo[], callbacks: PanelCall
         style.remove()
     }
 
-    return {refresh, dispose}
+    return {setInfos, refresh, dispose}
 }

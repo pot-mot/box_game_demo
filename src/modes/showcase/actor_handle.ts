@@ -1,6 +1,7 @@
 import type {Group} from 'three'
 import type {NameLabel} from './label.ts'
 import type {ActorStatus} from './actor.ts'
+import type {ShowcaseDebugKind} from './actor_debug.ts'
 
 /**
  * 展示角色驱动器通用接口：武器攻击展示（`actor.ts`）与种族 / 套装展示（`race_actor.ts`）
@@ -19,6 +20,10 @@ export interface ShowcaseActorHandle {
     update: (dt: number) => void
     /** 攻击状态快照（仅武器攻击角色提供；种族 / 套装展示角色为 undefined） */
     readonly status?: () => ActorStatus
+    /** 切换调试箱可见（物理碰撞箱 / 受击箱 / 攻击箱；缺省不支持） */
+    readonly setDebugVisible?: (kind: ShowcaseDebugKind, on: boolean) => void
+    /** 逐帧同步调试箱（在动画写完之后调用；缺省不支持） */
+    readonly debugTick?: () => void
     /** 挂载头顶名称标签（label 资源句柄由本驱动器持有，随 dispose 统一回收） */
     attachLabel: (label: NameLabel) => void
     /** 聚焦模式下变暗/恢复（遍历材质透明度，含武器、标签与刀光） */

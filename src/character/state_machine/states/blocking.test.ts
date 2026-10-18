@@ -33,6 +33,7 @@ const makeMock = (weaponId = 'shield_medium'): CharacterEntity => {
         appearanceGroup: {rotation: {y: 0}} as unknown as CharacterEntity['appearanceGroup'],
         body: mockBody as unknown as CharacterEntity['body'],
         mainCollider: undefined as unknown as RAPIER.Collider,
+        colliders: [],
         isOnGround: true,
         groundNormal: {x: 0, y: 1, z: 0},
         groundKeepTimer: 0,

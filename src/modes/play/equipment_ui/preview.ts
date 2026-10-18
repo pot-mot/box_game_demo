@@ -42,6 +42,8 @@ export const createEquipmentPreview = (): EquipmentPreview => {
 
     const model: CharacterModel = createCharacterModel({speed: 3, jumpHeight: 2, scale: 1}, 0)
     scene.add(model.group)
+    /* 装备预览不展示物理碰撞箱（半胶囊可视化） */
+    for (const m of model.colliderMeshes) m.visible = false
 
     let yaw = 0
     let distance = 3.1

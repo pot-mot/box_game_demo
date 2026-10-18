@@ -4,7 +4,12 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createHarnessWorld, initRapier, makeChar, makeStaticBox, stepWorld, DT} from '../physics/harness.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
-import {RANGED_WEAPON_PRESETS, type RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+import {allWeaponPresets} from '../../../character/weapon/catalog.ts'
+import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+
+const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = Object.fromEntries(
+    allWeaponPresets().filter((w): w is RangedWeaponConfig => w.type === 'ranged').map(w => [w.id, w]),
+)
 import {SHIELD_BLOCK_MEDIUM} from '../../../character/weapon/constants.ts'
 import {createProjectileSystem} from './system.ts'
 

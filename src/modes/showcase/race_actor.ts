@@ -4,6 +4,8 @@ import {createCharacterModel} from '../../entity/character/appearance/model.ts'
 import {createAppearanceSystem} from '../../entity/character/appearance/system.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/system.ts'
 import type {AnimationContext, CharacterModel} from '../../entity/character/appearance/types.ts'
+import {HUMANOID_HURT_BLOCKS} from '../../entity/character/skeleton/hurt_blocks.ts'
+import {createActorDebug} from './actor_debug.ts'
 import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
 import {resolveLimbLoadout, resolveArmorLoadout} from '../../character/armor/catalog.ts'
 import type {LimbLoadout, ArmorLoadout} from '../../character/armor/types.ts'
@@ -65,6 +67,9 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
     anchor.position.set(x, 0, z)
     anchor.add(model.group)
     scene.add(anchor)
+
+    /* 调试箱（物理碰撞箱 / 受击箱 / 攻击箱）：默认全隐，由面板开关控制 */
+    const debug = createActorDebug(scene, model, HUMANOID_HURT_BLOCKS)
 
     const system: AppearanceSystem = createAppearanceSystem()
 
@@ -136,6 +141,7 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
 
     const dispose = (): void => {
         setDimmed(false)
+        debug.dispose()
         labelDispose?.()
         model.dispose()
         scene.remove(anchor)
@@ -144,6 +150,8 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
     return {
         id, anchor, weaponName: name, holdModeLabel: subtitle, factionColor: faction,
         update, attachLabel, setDimmed, dispose,
+        setDebugVisible: (kind, on) => debug.setVisible(kind, on),
+        debugTick: () => debug.tick(),
         get state() { return currentState },
     }
 }

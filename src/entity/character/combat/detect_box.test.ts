@@ -1,9 +1,18 @@
 import {describe, it, expect} from 'vitest'
-import {MELEE_WEAPON_PRESETS, type MeleeWeaponConfig} from '../../../character/weapon/melee_weapon.ts'
+import {weaponsOfForm} from '../../../character/weapon/catalog.ts'
+import type {MeleeWeaponConfig} from '../../../character/weapon/melee_weapon.ts'
 import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
+import {HUMANOID_BODY_FORM_ID} from '../body_form/index.ts'
 
 /** 检测箱前缘 = 盒中心 z + 半深（身体中心沿朝向到前方的距离，scale=1） */
 const frontEdge = (box: MeleeDetectBox): number => box.offset.z + box.size.z / 2
+
+/* 人形近战武器（生物武器检测箱按体形语义，不参与人形范围序断言） */
+const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = Object.fromEntries(
+    weaponsOfForm(HUMANOID_BODY_FORM_ID)
+        .filter((w): w is MeleeWeaponConfig => w.type === 'melee')
+        .map(w => [w.id, w]),
+)
 
 const presets = Object.entries(MELEE_WEAPON_PRESETS) as [string, MeleeWeaponConfig][]
 

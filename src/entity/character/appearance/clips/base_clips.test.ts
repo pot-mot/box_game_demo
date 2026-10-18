@@ -166,8 +166,11 @@ describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
     it('绑定全部可动画关节（含 rightHandPivot + leftHandPivot 手部骨骼，Group 层级自动建连）', () => {
         const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const bridge = createCharacterSkeletonBridge(model)
-        /* CHARACTER_JOINT_IDS 已含手部关节（rightHandPivot / leftHandPivot） */
-        expect(bridge.joints.size).toBe(CHARACTER_JOINT_IDS.length)
+        /* 桥接绑定模型的全部关节（jointGroups）；可动画关节集 CHARACTER_JOINT_IDS 是其中子集 */
+        expect(bridge.joints.size).toBe(model.jointGroups.size)
+        for (const jointId of CHARACTER_JOINT_IDS) {
+            expect(bridge.findJoint(jointId), jointId).toBeDefined()
+        }
         expect(bridge.findJoint('rightHandPivot')).toBeDefined()
         expect(bridge.findJoint('leftHandPivot')).toBeDefined()
         /* Group 层级 → 骨架树一致：spine 的父是 root */

@@ -164,6 +164,11 @@ export interface BuildMeleeAttacksOptions {
     /** 逐段冲击力 / 削韧覆写（键 = 模板键，地面与空中段共用命名空间） */
     readonly impact?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, SegmentImpactOverride>>
     /**
+     * pose 引用重映射（空手 / 天然武器复用既有段动画，避免为每类武器重复烘焙关键帧）：
+     * 入参为本武器自己的段 id，返回实际 clip id（缺省 = 恒等，指向本段自烘焙关键帧）。
+     */
+    readonly poseRef?: (ownPoseId: string) => string
+    /**
      * 重击蓄力配置：提供后，本模式的重击段声明为可蓄力（`chargeFullTime` + strike `chargeable`），
      * 按住攻击键即冻结在重击起手帧蓄力、松开出手；伤害按蓄力值连续缩放，蓄力值 > 0 时挂冷却。
      */
@@ -199,6 +204,7 @@ export const buildMeleeAttacks = (
     const usedKeys = MELEE_SEGMENT_KEYS.filter(key => chains.light.steps.includes(key) || chains.heavy.steps.includes(key))
 
     const heavyCharge = options.heavyCharge
+    const poseRef = options.poseRef ?? ((ownPoseId: string): string => ownPoseId)
 
     const make = (segmentKey: MeleeSegmentKey): AttackSegment => {
         const meta = SEGMENT_META[segmentKey]
@@ -215,7 +221,7 @@ export const buildMeleeAttacks = (
             recovery: heavy ? MELEE_HEAVY_RECOVERY : MELEE_LIGHT_RECOVERY,
             phases: segmentPhases(chargeable),
             /* 动作组合：默认单层（段 id 即 pose 资产 id），可继续追加分层 pose 与权重 */
-            poses: [{poseId: id, weight: 1}],
+            poses: [{poseId: poseRef(id), weight: 1}],
             damageMultiplier: heavy ? MELEE_HEAVY_DAMAGE_MULTIPLIER : 1,
             impact: impactOverride?.impact ?? (heavy ? MELEE_HEAVY_IMPACT : MELEE_LIGHT_IMPACT),
             poiseDamage: impactOverride?.poiseDamage ?? (heavy ? MELEE_HEAVY_POISE_DAMAGE : MELEE_LIGHT_POISE_DAMAGE),
@@ -259,7 +265,7 @@ export const buildMeleeAttacks = (
             duration: MELEE_AIR_DURATION,
             recovery: MELEE_AIR_RECOVERY,
             phases: airSegmentPhases(),
-            poses: [{poseId: meleeSegmentId(classId, holdMode, poseKey), weight: 1}],
+            poses: [{poseId: poseRef(meleeSegmentId(classId, holdMode, poseKey)), weight: 1}],
             damageMultiplier: MELEE_AIR_DAMAGE_MULTIPLIER,
             impact: impactOverride?.impact ?? MELEE_AIR_IMPACT,
             poiseDamage: impactOverride?.poiseDamage ?? MELEE_AIR_POISE_DAMAGE,

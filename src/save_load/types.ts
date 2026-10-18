@@ -29,9 +29,10 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  （`config` 携带可选特性对象），旧的 `box/*` 元素在加载时作为未知类型按元素粒度跳过；
  * v14 起 `area/water` 统一为 `area` 实体（`config` 携带几何 + 视觉材质 + 可选物理场），
  *  旧的 `area/water` 元素在加载时作为未知类型按元素粒度跳过；
- * v15 起 character 增加 AI 反应式举盾窗口 aiBlockDuration、举盾冷却 aiBlockCooldown（均可选，旧档安全回退默认）。
+ * v15 起 character 增加 AI 反应式举盾窗口 aiBlockDuration、举盾冷却 aiBlockCooldown（均可选，旧档安全回退默认）；
+ * v16 起 character 增加体形计划 bodyFormId（可选，缺省 / 未知 id 安全回退 humanoid）。
  */
-export const SAVE_FORMAT_VERSION = 15
+export const SAVE_FORMAT_VERSION = 16
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -133,6 +134,8 @@ export interface CharacterSaveConfig {
     speed: number
     jumpHeight: number
     scale: number
+    /** 体形计划 id（基础模组）：缺省 / 未知 id 加载时安全回退 humanoid */
+    bodyFormId?: string
     peaceStrategy?: 'patrol' | 'build'
     combatStrategy?: 'tactical' | 'aggressive' | 'cowardly'
     /** 攻击配置：装备武器 + 数值覆写（动作/时长/动画由武器模组的攻击链决定） */

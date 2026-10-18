@@ -5,6 +5,7 @@
 ## 约定
 
 - **武器类 / 模型分层**：玩法数据 `*_WEAPON_CLASSES`，模型 `*_WEAPON_MODELS`（id / classId / 名称 / 网格）；`resolveMeleeWeapon` / `resolveRangedWeapon` 合并为运行时武器配置（带 `classId`）。段 id 统一 `{classId}_{holdMode}_{模板键}`（远程单模式沿用 `{classId}_{动作}`）。
+- **近战模型低多面体化**：近战 `gen*`（`weapon_mesh.ts`）用统一材质库 `b.materialById('metal'|'dark_metal'|'leather'|'wood', color)` + `frustum`/低分段 `cylinder`/`cone` 拼装（`flatShading` 棱面），几何外包覆与各 gen 内显式声明的 `WeaponLocalHitBox` 保持一致；`WeaponLocalHitBox.reach` = `center.y + half.y − gripY`，AI 出招盒 `MeleeDetectBox`（`melee_weapon.ts`）按该 `reach` 反推并保持「短剑<长剑<巨剑<长枪、长枪最远、战锤/战斧>短剑」的范围序。
 - 三态 `HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`（`hold_mode.ts`）；全部近战类支持三模式、默认单持，每模式独立连段（`attacks: HoldModeAttacks`，`catalog.ts` 的 `weaponAttacksOf(weapon, holdMode?)`）。
 - **攻击动作归属**：武器的段（时长 / 恢复 / 阶段时序 / 伤害倍率 / 冷却 / 连段拓扑）一律写在本模块（`melee_attacks.ts`、`ranged_attacks.ts`）；段通过 `poses`（`SegmentPoseLayer[]`）引用显式骨骼关键帧，基础轨道在 `attack_clip_data.ts`、逐段修订在 `attack_pose_edits.ts`；**不得增加程序化阶段或每帧动画器**。
 - **近战段三段式**：t=0 起手/蓄力 → 中帧（动作段结束）= 打击完成 → 末帧 = 持械戒备（肩 `-0.45` / 肘 `-0.85` / 挂点 `1.7`，与 idle 一致）；挥砍平面与枪口朝向由武器骨骼承担（收招帧回 `WEAPON_GRIP_FLEX`），命中窗口 on ≈ 0.5×动作时间 / off ≈ 0.95×动作时间。
@@ -431,7 +432,7 @@ idle/walking ──→ attacking (段子状态机)
 
 ### 5.2 受击箱
 
-与身体碰撞箱同尺寸（竖直胶囊包围盒 = `CHARACTER_BASE_SIZE` × `scale`），中心 = body 位置，随身体朝向 yaw 旋转（`targetHurtOBB`）。攻击判定与 AI 攻击检测共用同一受击箱。
+与身体碰撞箱同尺寸（竖直包围盒 = 目标**体形** `BodyForm.size` × `scale`，经 `body_form/geometry.ts` 的 `formHurtHalf` 读取），中心 = body 位置，随身体朝向 yaw 旋转（`targetHurtOBB`）。攻击判定与 AI 攻击检测共用同一受击箱。
 
 ### 5.3 命中结算
 
@@ -657,7 +658,7 @@ const phaseKey = c.phaseIndex < phases.length
 
 ### 8.4 新增近战武器
 
-1. 在 `src/character/weapon/melee_weapon.ts` 的 `MELEE_WEAPON_CLASSES` 中用 `meleeClass({...}, modeChains)` 添加武器类，并在 `MELEE_WEAPON_MODELS` 添加其默认模型（`{id, classId, name, mesh}`；`name` 为武器中文名）——它同时驱动角色属性面板的武器下拉、展示场景的头顶标签与骨骼动画内置动作库的分组名。
+1. 在**所属体形**的 `src/entity/character/forms/<form>/weapons.ts` 中用 `meleeClass({...}, modeChains)` 添加武器类，并在同文件的模型表添加其模型（`{id, classId, formId, name, nameKey, mesh}`；`id` 全局唯一、`formId` = 该体形、`nameKey` 为本地化键）。**武器只属于一种体形**——需要相同外观的其它体形各自声明独立条目、只复用 `weapon_mesh.ts` 的网格生成器。该表同时驱动属性面板武器下拉、展示场景头顶标签与骨骼动画内置动作库分组名。
 2. 填写 `holdModes: readonly HoldMode[]`（可支持的单持 / 双手共持 / 双持，**首个为默认模式**；生产近战默认单持）与各模式链编排 `modeChains`（未声明的模式由 `weaponAttacksOf` 回退默认模式）。
 3. 攻击链由 `meleeClass` 自动调用 `buildMeleeAttacks(classId, holdMode, options)` 注入到 `attacks[holdMode]`（`attacks` 为「持握模式 → 攻击链」map，段 id 自动带 `{classId}_{holdMode}_` 前缀）；该模式若需要特殊链长/变体，把对应 `options` 传入（见 8.2 / 8.3）。
 
@@ -673,7 +674,7 @@ const phaseKey = c.phaseIndex < phases.length
 ### 8.5 新增远程武器
 
 1. 在 `src/character/weapon/ranged_attacks.ts` 的 `RANGED_ATTACK_SPECS` 中添加该武器的段规格（`segmentId` / `duration` / `cooldown` / `phases`）。**阶段必须有**（阶段名取自 `ATTACK_PHASES`，远程常用 `draw` / `aim` / `release` / `windup`），动作比例之和应为 1；`aim` 类阶段建议 `cancellable: true` 以便瞄准期被翻滚打断。
-2. 在 `src/character/weapon/ranged_weapon.ts` 的 `RANGED_WEAPON_PRESETS` 中用 `rangedPreset({...})` 添加预设（`name` 中文名必填，弹道数值、`detectionRange` / `idealRange` / `retreatRange` 按定位给定）；攻击链由 `buildRangedAttacks(base.id)` 自动注入。
+2. 在**所属体形**的 `forms/<form>/weapons.ts` 中用 `rangedClass({...})` 添加武器类与模型（含 `formId` / `nameKey`；弹道数值、`detectionRange` / `idealRange` / `retreatRange` 按定位给定），并在 `ranged_attacks.ts` 的 `RANGED_ATTACK_SPECS` 以该武器 id 为键添加段规格；攻击链由 `rangedClass` 调 `buildRangedAttacks(base.id)` 自动注入。
 3. 远程目前是**单段**（`next: []`、`heavy` 空链）：需要多段（三连射、蓄力-释放）时在 `RANGED_ATTACK_SPECS` 里加段并在 `buildRangedAttacks` 中填写 `next`/`steps`（与近战同构：`entries` 决定起手、`steps` 决定清单与顺序、`next` 决定推进）。
 
 ### 8.6 用 `next` 与起手守卫表达条件（速查）
@@ -722,10 +723,10 @@ const phaseKey = c.phaseIndex < phases.length
 | `charge_clip_data.ts` / `charge_pose_edits.ts` | 近战专用蓄力姿势 clip（进度 0 = 持械戒备 → 1 = 满蓄力后引）与其欧拉修订；由 `appearance/clips/attack_clips.ts` 的 `getChargeClipById` 合并解析 |
 | `attack_clip_data.ts` / `attack_pose_edits.ts` | 攻击动画基础稀疏关键帧与逐段局部姿势修订（`getAttackClipById` 合并解析） |
 | `ranged_attacks.ts` | 远程段规格（9 把武器，单段）：`RANGED_ATTACK_SPECS`、`rangedSegmentIdOf`、`buildRangedAttacks(weaponId, charge?)`（charge 提供时注入段 `chargeFullTime`） |
-| `catalog.ts` | 武器目录统一查询：`WeaponConfig` / `WeaponType`、`DEFAULT_WEAPON_ID`、`ALL_WEAPON_PRESETS`、`findWeaponPreset`、`weaponPresetOrDefault`、额外预设注册 `registerWeaponPreset`（测试武器） |
+| `catalog.ts` | 武器目录统一查询（**注册表由体形装配时填充**）：`WeaponConfig` / `WeaponType`、`DEFAULT_WEAPON_ID`、`registerFormWeapons` / `weaponsOfForm` / `allWeaponPresets`、`findWeaponPreset`、`weaponPresetOrDefault`、额外预设注册 `registerWeaponPreset`（测试武器）；武器名经自带 `nameKey` 由 `weaponDisplayName(weapon)` 取用 |
 | `weapon_runtime.ts` | `createWeaponRuntime(weaponId, overrides)` → `{weapon, attacks}`：伤害覆写、起手段冷却覆写（`isEntrySegment` 判定）、远程弹道覆写、蓄力调参覆写（`charge` → `withChargeTuningMap` 重烘焙段字段）；动作/时长/阶段不可覆写；`isKnownWeaponId` |
-| `melee_weapon.ts` | `MeleeWeaponConfig`（含 `detectBox` / `heavyCharge` 调参 / `attacks`）与 6 个近战预设；`meleeClass` 注入攻击链与默认 `heavyCharge`，`resolveMeleeWeapon` 合并 `WeaponModelConfig.charge` 单武器覆写 |
-| `ranged_weapon.ts` | `RangedWeaponConfig`（含 `passThroughCategories` / `projectile` 视觉规格 / `projectileGravityScale` / `charge`（`ProjectileChargeCurve extends ChargeTuning` + 初速/生命期缩放）与 `attacks`）与 9 个远程预设；`DEFAULT_BULLET_PASS_THROUGH_CATEGORIES = ['area']`；`projectile_visual.ts` 定义 `ProjectileVisualSpec` / `ExplosionStyle` |
+| `melee_weapon.ts` | 类型与构建器（**数据已下沉到各体形 `forms/<form>/weapons.ts`**）：`MeleeWeaponClassConfig`（含 `detectBox` / `natural` / `mountJointId` / `heavyCharge` / `airAttack` / `block`）、`MeleeWeaponConfig`（+ `classId` / `formId` / `name` / `nameKey` / `mesh`）；`meleeClass({...}, modeChains)` 注入攻击链与默认 `heavyCharge`，`resolveMeleeWeapon(weaponClass, model)` 合并 `WeaponModelConfig.charge` 单武器覆写 |
+| `ranged_weapon.ts` | 类型与构建器（数据在 `forms/<form>/weapons.ts`）：`RangedWeaponClassConfig`（含 `natural` / `mountJointId` / `passThroughCategories` / `projectile` / `projectileGravityScale` / `charge`）、`RangedWeaponConfig`（+ `formId` / `nameKey` / `mesh`）；`rangedClass({...})` 注入单段开火链，`resolveRangedWeapon(weaponClass, model)` 合并单武器覆写；`DEFAULT_BULLET_PASS_THROUGH_CATEGORIES = ['area']`；`projectile_visual.ts` 定义 `ProjectileVisualSpec` / `ExplosionStyle` |
 
 ### 9.2 战斗运行时（`src/character/combat/`）
 

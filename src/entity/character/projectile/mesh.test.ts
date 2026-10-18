@@ -1,6 +1,11 @@
 import {describe, it, expect} from 'vitest'
 import {Scene} from 'three'
-import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
+import {allWeaponPresets} from '../../../character/weapon/catalog.ts'
+import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
+
+const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = Object.fromEntries(
+    allWeaponPresets().filter((w): w is RangedWeaponConfig => w.type === 'ranged').map(w => [w.id, w]),
+)
 import {
     buildProjectileVisual, createProjectileVisualPool, projectileColorOf, projectileVisualSignature,
 } from './mesh.ts'

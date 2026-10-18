@@ -3,10 +3,9 @@ import {Vector3} from 'three'
 import {BUILTIN_CLIP_GROUP_ORDER, BASE_STATE_ENTRY_COUNT, findBuiltinClip, getBuiltinClips} from './builtin_clips.ts'
 import {buildCharacterSkeletonDefinition} from '../../entity/character/skeleton/preset.ts'
 import {sampleClip} from '../../skeleton/anim/sampling.ts'
-import {MELEE_WEAPON_PRESETS} from '../../character/weapon/melee_weapon.ts'
-import {RANGED_WEAPON_PRESETS} from '../../character/weapon/ranged_weapon.ts'
 import {orderedSegments} from '../../character/weapon/attack_chain.ts'
-import {weaponAttacksOf, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {weaponAttacksOf, weaponsOfForm, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 import type {BuiltinClipEntry} from './builtin_clips.ts'
 
 const entriesOf = (group: string): readonly BuiltinClipEntry[] =>
@@ -18,8 +17,13 @@ const segmentIdsOf = (weapons: readonly WeaponConfig[]): ReadonlySet<string> =>
         weapon.holdModes.flatMap(mode => orderedSegments(weaponAttacksOf(weapon, mode)).map(segment => segment.id)),
     ))
 
+/** 人形动作库覆盖人形武器；天然武器（空手）无可视模型与关键帧，不入人形动作库 */
+const HUMANOID_WEAPONS = weaponsOfForm(HUMANOID_BODY_FORM_ID)
+const MELEE_PRESETS = HUMANOID_WEAPONS.filter(weapon => weapon.type === 'melee' && weapon.natural !== true)
+const RANGED_PRESETS = HUMANOID_WEAPONS.filter(weapon => weapon.type === 'ranged' && weapon.natural !== true)
+
 /** 近战武器全部攻击段总数（6 武器 × 3 模式；巨剑/长枪双手链各多一段） */
-const MELEE_SEGMENT_COUNT = Object.values(MELEE_WEAPON_PRESETS)
+const MELEE_SEGMENT_COUNT = MELEE_PRESETS
     .reduce((sum, weapon) => sum + weapon.holdModes
         .reduce((modeSum, mode) => modeSum + orderedSegments(weaponAttacksOf(weapon, mode)).length, 0), 0)
 
@@ -31,12 +35,12 @@ const presetPositions = (): ReadonlyMap<string, Vector3> => {
 describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
     it('覆盖全部基础状态与全部武器的攻击段（含全部持握模式）', () => {
         const library = getBuiltinClips()
-        /* 基础状态条目（含 idle/walking 变体）+ 近战全模式段 + 远程 9 */
-        expect(library.length).toBe(BASE_STATE_ENTRY_COUNT + MELEE_SEGMENT_COUNT + 9)
+        /* 基础状态条目（含 idle/walking 变体）+ 近战全模式段 + 远程（非天然） */
+        expect(library.length).toBe(BASE_STATE_ENTRY_COUNT + MELEE_SEGMENT_COUNT + RANGED_PRESETS.length)
         const meleeIds = new Set(entriesOf('近战攻击').map(entry => entry.id))
         const rangedIds = new Set(entriesOf('远程攻击').map(entry => entry.id))
-        expect(meleeIds).toEqual(segmentIdsOf(Object.values(MELEE_WEAPON_PRESETS)))
-        expect(rangedIds).toEqual(segmentIdsOf(Object.values(RANGED_WEAPON_PRESETS)))
+        expect(meleeIds).toEqual(segmentIdsOf(MELEE_PRESETS))
+        expect(rangedIds).toEqual(segmentIdsOf(RANGED_PRESETS))
     })
 
     it('分组按展示顺序排列，且每项都归属已知分组', () => {
@@ -108,8 +112,8 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
 
     it('攻击条目带 hitbox_on / hitbox_off 事件轨（on 早于 off 且落在时长内）', () => {
         const attacks = [...entriesOf('近战攻击'), ...entriesOf('远程攻击')]
-        /* 全部武器 × 全部持握模式的攻击段 */
-        expect(attacks.length).toBe(MELEE_SEGMENT_COUNT + 9)
+        /* 全部非天然武器 × 全部持握模式的攻击段 */
+        expect(attacks.length).toBe(MELEE_SEGMENT_COUNT + RANGED_PRESETS.length)
         for (const entry of attacks) {
             const records = entry.clip.eventTracks[0]?.records ?? []
             const names = records.map(record => record.eventName)

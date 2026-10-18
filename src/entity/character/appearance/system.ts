@@ -1,6 +1,6 @@
 import type {CharacterState} from '../../../character/state_machine/types.ts'
 import {Group} from 'three'
-import type {CharacterModel, AnimationContext} from './types.ts'
+import type {CreatureModel, AnimationContext} from './types.ts'
 import {createComposedAnimationPlayer, type ComposedAnimationPlayer, type ComposedPlayerLayer} from '../../../skeleton/anim/composed_player.ts'
 import {applyComposedPose} from '../../../skeleton/anim/composition.ts'
 import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
@@ -34,17 +34,13 @@ interface JointSnapshot {
     readonly pz: number
 }
 
-/** 收集模型全部可动画关节（顺序固定，与 CHARACTER_JOINT_IDS 一致） */
-const snapshotJoints = (model: CharacterModel): JointSnapshot[] => [
-    model.rightArmShoulder, model.rightArmElbow, model.rightHandPivot, model.rightWristPivot, model.rightWeaponMount,
-    model.leftArmShoulder, model.leftArmElbow, model.leftHandPivot, model.leftWristPivot, model.leftWeaponMount,
-    model.rightLegHip, model.rightLegKnee, model.leftLegHip, model.leftLegKnee,
-    model.headNeck, model.spine, model.group,
-].map(joint => ({
-    joint,
-    rx: joint.rotation.x, ry: joint.rotation.y, rz: joint.rotation.z,
-    px: joint.position.x, py: joint.position.y, pz: joint.position.z,
-}))
+/** 收集模型全部关节（跨体形：遍历 jointGroups，含根；顺序稳定） */
+const snapshotJoints = (model: CreatureModel): JointSnapshot[] =>
+    [...model.jointGroups.values()].map(joint => ({
+        joint,
+        rx: joint.rotation.x, ry: joint.rotation.y, rz: joint.rotation.z,
+        px: joint.position.x, py: joint.position.y, pz: joint.position.z,
+    }))
 
 export interface AppearanceSystemOptions {
     /** 攻击动画事件回调（hitbox_on/off → 近战命中窗口开关） */
@@ -52,8 +48,8 @@ export interface AppearanceSystemOptions {
 }
 
 export interface AppearanceSystem {
-    onStateChange: (from: CharacterState | null, to: CharacterState, model: CharacterModel, ctx: AnimationContext) => void
-    update: (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext) => void
+    onStateChange: (from: CharacterState | null, to: CharacterState, model: CreatureModel, ctx: AnimationContext) => void
+    update: (dt: number, model: CreatureModel, state: CharacterState, ctx: AnimationContext) => void
 }
 
 /** 无专用蓄力 clip 时，蓄力进度映射到攻击 clip 前段的比例上限（0.5 ≈ 动作中段/满蓄力位） */
@@ -82,7 +78,7 @@ const SHIELD_ARM_KEY_SUFFIXES = new Map<readonly ('right' | 'left')[], string>([
 export const createAppearanceSystem = (options?: AppearanceSystemOptions): AppearanceSystem => {
     const onAttackEvent = options?.onAttackEvent
     let currentState: CharacterState | null = null
-    let currentModel: CharacterModel | null = null
+    let currentModel: CreatureModel | null = null
     /* 动画键：state + attacking 时的技能 id + weaponHeld 变体（attacking 恒持械不加后缀） */
     let currentAnimKey: string | null = null
     /* 状态切换瞬间的关节快照：新状态动画输出向快照混合，消除关节角突跳 */
@@ -117,7 +113,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         }))
     }
 
-    const setupClip = (state: ClipState, model: CharacterModel, ctx: AnimationContext): void => {
+    const setupClip = (state: ClipState, model: CreatureModel, ctx: AnimationContext): void => {
         teardownClip()
         bridge = createCharacterSkeletonBridge(model)
         /* 双手共持：支撑肩设为 IK 根（持械且持握模式为双手时，攻击态与全部非攻击持械状态），
@@ -166,7 +162,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     }
 
     /** 双手武器 IK（applyPose 先写、IK 后写覆盖支撑臂链）：支撑手链追武器轴上的副握点 */
-    const applyTwoHandedIk = (ctx: AnimationContext, model: CharacterModel): void => {
+    const applyTwoHandedIk = (ctx: AnimationContext, model: CreatureModel): void => {
         if (bridge === undefined || player === undefined) return
         /* 双持：副手握持自身武器，不做共享 IK */
         if (ctx.holdMode !== 'two_handed') return
@@ -202,7 +198,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         applyComposedPose(bridge, [{clip, weight: 1, progress: engagedWalkPhase / clip.duration}])
     }
 
-    const onStateChange = (from: CharacterState | null, to: CharacterState, model: CharacterModel, ctx: AnimationContext): void => {
+    const onStateChange = (from: CharacterState | null, to: CharacterState, model: CreatureModel, ctx: AnimationContext): void => {
         /* 在旧动画归零之前抓取当前关节姿态，作为混合起点 */
         if (from !== null && currentModel === model) {
             blendFrom = snapshotJoints(model)
@@ -225,7 +221,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         }
     }
 
-    const update = (dt: number, model: CharacterModel, state: CharacterState, ctx: AnimationContext): void => {
+    const update = (dt: number, model: CreatureModel, state: CharacterState, ctx: AnimationContext): void => {
         /* 动画键：attacking 用当前段 id（段切换触发混合）；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
         const weaponKey = ctx.weaponHeld ? `:${ctx.holdMode}` : ':n'
         const shieldKey = SHIELD_ARM_KEY_SUFFIXES.get(shieldArmsOf(ctx)) ?? ''

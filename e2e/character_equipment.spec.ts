@@ -113,6 +113,59 @@ test.describe('角色装备与属性面板', () => {
         await expect(page.locator('#character-panel label', {hasText: '肢体'}).first().locator('select')).toHaveValue('orc_head')
     })
 
+    test('基础模组：切到狼后隐藏装备区域并回显，切回人形恢复', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        const bodyFormSelect = panel.locator('#body-form-select')
+        const headLimb = panel.locator('label', {hasText: '肢体'}).first()
+
+        /* 人形：肢体装备区域可见 */
+        await expect(bodyFormSelect).toHaveValue('humanoid')
+        await expect(headLimb).toBeVisible()
+
+        /* 切到狼（无护甲 / 肢体槽）→ 装备区域隐藏；Apply 后回显 */
+        await bodyFormSelect.selectOption('wolf')
+        await panel.locator('button', {hasText: '应用'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel #body-form-select')).toHaveValue('wolf')
+        await expect(page.locator('#character-panel').locator('label', {hasText: '肢体'}).first()).toBeHidden()
+
+        /* 切回人形 → 肢体区域恢复显示 */
+        await page.locator('#character-panel #body-form-select').selectOption('humanoid')
+        await page.locator('#character-panel').locator('button', {hasText: '应用'}).click()
+        await expect(page.locator('#character-panel').locator('label', {hasText: '肢体'}).first()).toBeVisible()
+    })
+
+    test('基础模组：切到狼后武器仅限口含短剑/长剑，切到双足飞龙武器仅爪击/吐息', async ({page}) => {
+        await openCharacterPanel(page)
+
+        const panel = page.locator('#character-panel')
+        const bodyPlanSelect = panel.locator('#body-form-select')
+        const weaponValues = async (): Promise<string[]> =>
+            panel.locator('label', {hasText: '武器'}).locator('option').evaluateAll(opts => opts.map(o => (o as HTMLOptionElement).value))
+
+        /* 狼：武器表为 wolf_bite / wolf_short_sword / wolf_long_sword（生物武器用独立 id） */
+        await bodyPlanSelect.selectOption('wolf')
+        await panel.locator('button', {hasText: '应用'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        const wolfWeapons = await weaponValues()
+        expect(wolfWeapons).toContain('wolf_bite')
+        expect(wolfWeapons).toContain('wolf_short_sword')
+        expect(wolfWeapons).toContain('wolf_long_sword')
+        expect(wolfWeapons).not.toContain('spear')
+
+        /* 双足飞龙：wyvern_claw / wyvern_breath */
+        await page.locator('#character-panel #body-form-select').selectOption('wyvern')
+        await page.locator('#character-panel').locator('button', {hasText: '应用'}).click()
+        await page.locator('#element-list-panel [data-id][data-type="character"]').click()
+        await expect(page.locator('#character-panel #body-form-select')).toHaveValue('wyvern')
+        const wyvernWeapons = await weaponValues()
+        expect(wyvernWeapons).toContain('wyvern_claw')
+        expect(wyvernWeapons).toContain('wyvern_breath')
+        expect(wyvernWeapons).not.toContain('long_sword')
+    })
+
     test('持握模式与副手：同类近战副手启用双持，切换副手类别后回退单持', async ({page}) => {
         await openCharacterPanel(page)
 

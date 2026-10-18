@@ -6,6 +6,8 @@
 ## 约定
 
 - 护甲四槽 `head/chest/arms/legs` + 肢体四槽 `head/arms/body/legs`；预设 `armor_pieces` / `limb_pieces`，目录与装备表校验 `catalog`。
+- **护甲 / 种族肢体低多面体化**：`armor_mesh.ts` 各 `gen*` 用统一材质库（`render/character_materials.ts`）经 `b.materialById` 取材质，几何以 `frustum` / 低分段 `cylinder`/`cone`/`sphere` 拼装（`flatShading` 棱面）。`ArmorMeshConfig.material?` 可显式指定材质（缺省按形状推导：金属甲 / 布料 / 皮革，见 `ARMOR_SHAPE_MATERIAL`）；种族肢体材质按种族推导（骷髅 `bone` / 兽人 · 精灵 `skin`）。护甲 / 肢体仍为**纯视觉子节点**，无碰撞箱。
+- **护甲厚度按材质**：躯干 / 四肢护甲的宽 / 深 = 身体对应部件尺寸 × **材质厚度系数**（`appearance/constants.ts` 的 `armorThicknessOf`：布 1.05 / 皮 1.1 / 鳞 1.15 / 铁 1.2 / 石 1.25）；护甲均为**方块造型**（`frustum` / `box`），不使用圆柱 / 球。**护甲按材质成套**：布 / 皮 / 铁 / 鳞 / 石 / 法师各四槽齐全（护甲名 keyed by id，见 `catalog.ts` 的 `ARMOR_NAME_KEYS`；每个预设须有对应物品 `items.ts` + 专属图标）。
 - 提供逐类别防御、逐类别攻击加成与移速乘数：`CombatComponent.setCombatEquipment` 统一重算有效防御 / `attackBonus` / `moveSpeedMultiplier`（护甲与肢体同一汇总口径）。
 - 攻击加成仅与武器类别匹配才计入；状态机移速一律走 `moveSpeedOf(entity)`，**禁止**在面板或状态机里对 `config.speed` 预乘装备系数。
 - 护甲 / 肢体领域数据不得写死关节 id。
@@ -14,6 +16,7 @@
 
 - `armor` / `limb`（槽位 → 装备 id）与 `defense`（基础逐类别防御）是存档可选字段，未知 id / 槽位不匹配一律回退空槽（肢体空 / undefined / null = 默认人类肢体）。
 - 护甲 / 肢体件是关节下的纯视觉子节点，不建碰撞体、不进 `getMeshes()`，不影响受击箱 / 视线 / 导航。
+- **躯干类护甲顶缘不得只与身体顶面对齐**：共面会 z-fighting / 穿模。布衣 / 皮甲 / 法袍等躯干护甲的顶端必须**高出身体部件顶面至少 `ARMOR_TOP_OVERLAP`（`appearance/constants.ts`，当前 = `ARMOR_PAD`）**；宽度也须 ≥ 身体对应尺寸（**等宽或上收窄都会让躯干从衣身上缘穿出**）。
 - **惯用手镜像**：非对称护甲 / 肢体网格在副手或左撇子（`handedness='left'`）下按 `scale.x=-1` 镜像，由 `model.ts` 槽位装配统一处理；护甲领域数据（`ArmorMeshConfig` / `LimbMeshConfig`）不感知 handedness，勿在 `gen` 内写死左右。
 
 ## 一、目标与范围

@@ -1,11 +1,12 @@
 import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
+import type { StringLocaleKey } from '../../i18n/index.ts'
 import type { DamageType } from '../combat/damage_type.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
 import { withChargeTuningMap } from './attack_chain.ts'
 import { buildMeleeAttacks, DEFAULT_HEAVY_CHARGE, DEFAULT_MELEE_AIR_ATTACK, type BuildMeleeAttacksOptions, type HeavyChargeConfig, type MeleeAirAttackConfig } from './melee_attacks.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
-import { SHIELD_BLOCK_LARGE, SHIELD_BLOCK_MEDIUM, SHIELD_BLOCK_SMALL, type ShieldBlockConfig } from './constants.ts'
+import type { ShieldBlockConfig } from './constants.ts'
 
 /**
  * 攻击检测箱（AI 出招触发判定专用，与红色伤害判定箱解耦）：
@@ -27,6 +28,16 @@ export interface MeleeDetectBox {
 export interface MeleeWeaponClassConfig {
     readonly id: string
     readonly type: 'melee'
+    /**
+     * 天然武器类别（空手 / 撕咬 / 爪击 / 踢击）：无可视模型、无动画关键帧数据，
+     * 动作由所属**体形分包**提供（不进骨骼编辑器人形动作库）。
+     */
+    readonly natural?: boolean
+    /**
+     * 武器挂点关节 id（可选；仅生物体形使用）：覆盖体形默认主挂点（如马踢击挂后/前蹄、飞龙爪击挂翼爪）。
+     * 缺省 = 体形 `createModel` 的默认主挂点（人形忽略此字段）。
+     */
+    readonly mountJointId?: string
     /** 攻击类别（武器固有，不可被存档/面板覆写）：决定按哪一类防御结算固定减伤 */
     readonly damageType: DamageType
     readonly damage: number
@@ -58,12 +69,16 @@ export interface MeleeWeaponClassConfig {
     readonly block?: ShieldBlockConfig
 }
 
-/** 解析后的近战武器 = 武器类固有属性 + 所属模型（模型 id / 名称 / 网格） */
+/** 解析后的近战武器 = 武器类固有属性 + 所属模型（模型 id / 体形 / 名称 / 网格） */
 export interface MeleeWeaponConfig extends MeleeWeaponClassConfig {
     /** 所属武器类 id（双持同类判定用；见 catalog.ts 的 sameWeaponClass） */
     readonly classId: string
+    /** 所属体形 id（`BodyForm.id`）；武器只对应一种体形 */
+    readonly formId: string
     /** 武器中文名（面向玩家显示，如面板武器下拉、展示场景标签） */
     readonly name: string
+    /** 武器名本地化键（UI 展示统一经此取用） */
+    readonly nameKey: StringLocaleKey
     /** 程序化武器模型（主手 / 右手） */
     readonly mesh: WeaponMeshConfig
 }
@@ -71,8 +86,11 @@ export interface MeleeWeaponConfig extends MeleeWeaponClassConfig {
 /** 近战武器类的各持握模式链编排（未声明的模式不注入攻击链） */
 export type MeleeModeChains = Readonly<Partial<Record<HoldMode, BuildMeleeAttacksOptions>>>
 
-/** 近战武器类装配：按支持的持握模式逐一注入固有攻击链 */
-const meleeClass = (
+/**
+ * 近战武器类装配：按支持的持握模式逐一注入固有攻击链。
+ * 由各体形的 `weapons.ts` 调用（武器类数据由所属体形拥有）。
+ */
+export const meleeClass = (
     base: Omit<MeleeWeaponClassConfig, 'attacks'>,
     modeChains: MeleeModeChains,
 ): MeleeWeaponClassConfig => {
@@ -87,190 +105,8 @@ const meleeClass = (
     return {...base, heavyCharge, airAttack, attacks}
 }
 
-/**
- * 近战武器类目录（键 = 类 id）。普通近战类支持单持 / 双手共持 / 双持三模式，默认单持；
- * 盾类仅支持单持（`holdModes: ['one_handed']`，承载格挡）。
- * 每种模式有独立连段（段 id = `{classId}_{holdMode}_{模板键}`）。
- */
-export const MELEE_WEAPON_CLASSES: Record<string, MeleeWeaponClassConfig> = {
-    short_sword: meleeClass({
-        id: 'short_sword', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
-        damage: 2,
-        knockbackForce: 2, knockbackY: 1,
-        detectionRange: 6,
-        /* 前缘 = (0.5 + reach 0.3125) × 0.8 = 0.65，外扩 +0.05 见 src/entity/character/ai/ai.md 2.5.1 */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.8 }, offset: { x: 0, y: 0, z: 0.275 } },
-    }, {
-        one_handed: {},
-        two_handed: {},
-        dual_wield: {},
-    }),
-    long_sword: meleeClass({
-        id: 'long_sword', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
-        damage: 3,
-        knockbackForce: 5, knockbackY: 2,
-        detectionRange: 8,
-        /* 前缘 = (0.5 + reach 0.4875) × 0.8 = 0.79 */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
-    }, {
-        one_handed: {},
-        two_handed: {},
-        dual_wield: {},
-    }),
-    /* 巨剑：双手链轻型链加长为三段（轻 1 → 轻 2 → 轻 3 循环），重链保持两段 */
-    heavy_sword: meleeClass({
-        id: 'heavy_sword', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
-        damage: 8,
-        knockbackForce: 8, knockbackY: 3,
-        detectionRange: 10,
-        /* 前缘 = (0.5 + reach 0.6025) × 0.8 = 0.882 */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 1.032 }, offset: { x: 0, y: 0, z: 0.391 } },
-        /* 空中：两段旋风斩（复用轻 1/轻 2 挥砍），动量略低、保留少量操控 */
-        airAttack: {steps: ['air_1', 'air_2'], loop: false, momentum: 0.9, airControl: 0.25, slamSpeed: 0, poseKeys: ['light_1', 'light_2']},
-    }, {
-        one_handed: {},
-        two_handed: {chains: {light: {steps: ['light_1', 'light_2', 'light_3'], loop: true}}},
-        dual_wield: {},
-    }),
-    /* 长枪：轻击链为标准两段（蓄力统一由「重击蓄力」承担，见 melee_attacks.ts 的 heavyCharge） */
-    spear: meleeClass({
-        id: 'spear', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
-        damage: 5,
-        knockbackForce: 4, knockbackY: 1,
-        detectionRange: 10,
-        /* 前缘 = (0.5 + reach 1.17) × 0.8 = 1.336（长杆武器攻击距离优势） */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 1.486 }, offset: { x: 0, y: 0, z: 0.618 } },
-        /* 空中：单段下刺（复用重 1 突刺），几乎保持惯性 */
-        airAttack: {steps: ['air_1'], loop: false, momentum: 0.95, airControl: 0.3, slamSpeed: 0, poseKeys: ['heavy_1']},
-    }, {
-        one_handed: {},
-        two_handed: {},
-        dual_wield: {},
-    }),
-    /* 战斧：同为单刃斧（斧刃几何关于矢状面对称），双持时左右手各一把同类武器，副手相位错开半程（交替挥砍） */
-    dual_axe: meleeClass({
-        id: 'dual_axe', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
-        damage: 6,
-        knockbackForce: 7, knockbackY: 2,
-        detectionRange: 7,
-        /* 前缘 = (0.5 + reach 0.4193) × 0.8 = 0.73544 */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.88544 }, offset: { x: 0, y: 0, z: 0.31772 } },
-    }, {
-        one_handed: {},
-        two_handed: {},
-        dual_wield: {},
-    }),
-    war_hammer: meleeClass({
-        id: 'war_hammer', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
-        damage: 10,
-        knockbackForce: 10, knockbackY: 4,
-        detectionRange: 8,
-        /* 前缘 = (0.5 + reach 0.4875) × 0.8 = 0.79（战锤握把偏低，reach 已计入 gripY） */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
-        /* 空中：跳跃砸地——单段重砸（复用重 1），打击瞬间施加向下冲量 */
-        airAttack: {steps: ['air_1'], loop: false, momentum: 0.7, airControl: 0.12, slamSpeed: 14, poseKeys: ['heavy_1']},
-    }, {
-        one_handed: {},
-        two_handed: {},
-        dual_wield: {},
-    }),
-    /* 盾牌：仅单持，承载格挡（`block`）。轻击 = 盾击，重击 = 盾撞；三档共用同一套盾击 / 盾撞姿态，仅握持角不同。 */
-    shield_small: meleeClass({
-        id: 'shield_small', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed'],
-        damage: 2,
-        knockbackForce: 3, knockbackY: 1,
-        detectionRange: 3,
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.7 }, offset: { x: 0, y: 0, z: 0.225 } },
-        block: SHIELD_BLOCK_SMALL,
-    }, {
-        one_handed: {},
-    }),
-    shield_medium: meleeClass({
-        id: 'shield_medium', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed'],
-        damage: 3,
-        knockbackForce: 4, knockbackY: 2,
-        detectionRange: 4,
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.8 }, offset: { x: 0, y: 0, z: 0.275 } },
-        block: SHIELD_BLOCK_MEDIUM,
-    }, {
-        one_handed: {},
-    }),
-    shield_large: meleeClass({
-        id: 'shield_large', type: 'melee',
-        damageType: 'physical',
-        holdModes: ['one_handed'],
-        damage: 4,
-        knockbackForce: 5, knockbackY: 2,
-        detectionRange: 5,
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
-        block: SHIELD_BLOCK_LARGE,
-    }, {
-        one_handed: {},
-    }),
-}
-
-/** 近战武器模型目录（键 = 模型 id；当前每类只有默认模型，模型 id = 类 id） */
-export const MELEE_WEAPON_MODELS: Record<string, WeaponModelConfig> = {
-    short_sword: {
-        id: 'short_sword', classId: 'short_sword', name: '短剑',
-        mesh: { id: 'sword', bladeLen: 0.3, color: 0xcc5555, gripColor: 0x664422 },
-    },
-    long_sword: {
-        id: 'long_sword', classId: 'long_sword', name: '长剑',
-        mesh: { id: 'sword', bladeLen: 0.5, color: 0xcc6666, gripColor: 0x553322 },
-    },
-    heavy_sword: {
-        id: 'heavy_sword', classId: 'heavy_sword', name: '巨剑',
-        mesh: { id: 'heavy_sword', bladeLen: 0.65, color: 0x555566, gripColor: 0x332211 },
-    },
-    spear: {
-        id: 'spear', classId: 'spear', name: '长枪',
-        mesh: { id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa },
-    },
-    dual_axe: {
-        id: 'dual_axe', classId: 'dual_axe', name: '战斧',
-        mesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322 },
-    },
-    war_hammer: {
-        id: 'war_hammer', classId: 'war_hammer', name: '战锤',
-        mesh: { id: 'war_hammer', headSize: 0.35, color: 0x777777, gripColor: 0x443311 },
-    },
-    shield_small: {
-        id: 'shield_small', classId: 'shield_small', name: '小盾',
-        mesh: { id: 'shield_small', width: 0.44, height: 0.44, thickness: 0.06, round: true, color: 0x8a6a3a, gripColor: 0x4a3520, bossColor: 0x9a9a9a },
-    },
-    shield_medium: {
-        id: 'shield_medium', classId: 'shield_medium', name: '中盾',
-        mesh: { id: 'shield_medium', width: 0.6, height: 0.9, thickness: 0.12, round: false, color: 0x6a5a44, gripColor: 0x4a3520, bossColor: 0x8a8a8a },
-    },
-    shield_large: {
-        id: 'shield_large', classId: 'shield_large', name: '大盾',
-        mesh: { id: 'shield_large', width: 0.9, height: 1.4, thickness: 0.15, round: false, color: 0x556070, gripColor: 0x3a2a18, bossColor: 0x9a9a9a },
-    },
-}
-
-/** 合并武器类固有属性与模型，得到运行时 / 面板 / 存档统一使用的武器配置 */
-export const resolveMeleeWeapon = (model: WeaponModelConfig): MeleeWeaponConfig => {
-    const weaponClass = MELEE_WEAPON_CLASSES[model.classId]
-    if (weaponClass === undefined) {
-        throw new Error(`近战武器模型 ${model.id} 引用了未知武器类 ${model.classId}`)
-    }
+/** 合并近战武器类固有属性与模型，得到运行时 / 面板 / 存档统一使用的武器配置 */
+export const resolveMeleeWeapon = (weaponClass: MeleeWeaponClassConfig, model: WeaponModelConfig): MeleeWeaponConfig => {
     /* 蓄力调参：武器模板默认，单武器（模型）可覆盖；覆写后同步重烘焙攻击链中可蓄力段的字段 */
     const heavyCharge: HeavyChargeConfig = model.charge === undefined
         ? (weaponClass.heavyCharge ?? DEFAULT_HEAVY_CHARGE)
@@ -284,12 +120,9 @@ export const resolveMeleeWeapon = (model: WeaponModelConfig): MeleeWeaponConfig 
             : withChargeTuningMap(weaponClass.attacks, heavyCharge),
         classId: model.classId,
         id: model.id,
+        formId: model.formId,
         name: model.name,
+        nameKey: model.nameKey,
         mesh: model.mesh,
     }
 }
-
-/** 生产近战武器预设（当前 = 各类的默认模型解析结果；键 = 模型 id） */
-export const MELEE_WEAPON_PRESETS: Record<string, MeleeWeaponConfig> = Object.fromEntries(
-    Object.entries(MELEE_WEAPON_MODELS).map(([id, model]) => [id, resolveMeleeWeapon(model)]),
-)

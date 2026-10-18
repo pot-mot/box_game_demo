@@ -189,6 +189,7 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
     - 半长 = `size / 2 × scale`；盒中心 = 身体位置 + `offset × scale` 绕 yaw 旋转（局部 +Z → (sin, 0, cos)），主体覆盖角色前方与两侧，身后覆盖由 `offset.z - size.z / 2` 决定（预设保留少量贴背余量）
 - **判定**：`testAttackDetect()` 用检测箱 OBB 与目标受击箱 OBB（与碰撞箱同尺寸的竖直胶囊包围盒，随目标朝向旋转）做 15 轴 SAT 相交（`combat/obb.ts`）。
 - **注入链路**：`world.ts` `activateAI` 创建 AI 时传入闭包——近战直接取当前技能武器的 `detectBox` 走 `testAttackDetect`（朝向取 `facingAngles`，无需武器模型在场）；远程回退 `Math.hypot <= weapon.range` 圆形判定（保持原有行为，edit debug 以橙色射程圆环显示，半径 = `weapon.range`）。近战武器配置已无 `range` 字段，攻击触发判定完全由武器 `detectBox` 驱动。
+- **体形化（生物）**：AI 的感知与出招几何一律经 `entity/character/body_form/geometry.ts` 读**体形属性**——眼部高度 `formEyeHeight`（`BodyForm.eyeHeight`）、目标体半径 `formBodyRadius`、目标受击箱半长 `formHurtHalf`（`BodyForm.size`）；**禁止**再写死人形常量。索敌半径仍取武器 `detectionRange`（因此生物天然武器的 `detectionRange` 必须在其 `forms/<form>/weapons.ts` 中按体形语义调对，不能沿用人体近战的 6–10 或天然武器的 2.x）。生物天然武器可经 `mountJointId` 挂到正确关节（马踢击 / 飞龙爪击），命中盒由 `weapon_mesh.ts` 的 `genNone` 给出（覆盖打击区）。
 - **生效点**（仅近战）：`attack.update` 出招门控、`attack → chase`（出箱）guard、`chase → attack`（入箱）guard、`kite` 射程内判定；`detectionRange`（索敌感知半径）语义不变。
 - **回退**：checker 缺失（测试环境）时回退圆形距离判定（近战用 `MELEE_FALLBACK_DETECT_RANGE`，远程用 `weapon.range`），保证无装配环境下 AI 行为不变。
 - **与伤害判定的边界**：攻击检测箱仅用于 AI 出招触发（橙色 debug 线框）；实际伤害由**攻击判定箱**（武器本地盒随 `weaponGroup.matrixWorld` 变换的世界 OBB，红色 debug 线框）与受击箱 SAT 相交决定，两者职责分离、几何不同。
@@ -212,8 +213,8 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 
 ```text
 前缘 = (MELEE_ARM_FORWARD_REACH + 武器 reach) × MELEE_DETECT_FORWARD_SCALE   // 前向收短
-估算 size.x = CHARACTER_BASE_SIZE.width  + 2 × MELEE_DETECT_SIDE_MARGIN
-估算 size.y = CHARACTER_BASE_SIZE.height + 2 × MELEE_DETECT_HEIGHT_MARGIN
+估算 size.x = HUMANOID_BODY_FORM.size.width  + 2 × MELEE_DETECT_SIDE_MARGIN
+估算 size.y = HUMANOID_BODY_FORM.size.height + 2 × MELEE_DETECT_HEIGHT_MARGIN
 估算 size.z = 前缘 + MELEE_DETECT_BACK_MARGIN
 估算 offset.z = (前缘 − MELEE_DETECT_BACK_MARGIN) / 2      // 身后贴背余量固定
 detectBox.size[轴] = 估算 size[轴] + MELEE_DETECT_MARGIN      // 略大于估算盒

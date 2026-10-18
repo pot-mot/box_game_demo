@@ -146,4 +146,16 @@ describe('角色 setTransform 瞬移与朝向映射', () => {
         system.setTransform(999, {x: 0, y: 0, z: 0}, {x: 0, y: 45, z: 0})
         expect(system.getAll()).toHaveLength(0)
     })
+
+    it('setBodyForm 切换体形后保留当前朝向（编辑暂停态不丢失）', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+        /* 编辑期先把角色转向左（270°），再切到狼体形：新模型必须保持该朝向 */
+        system.setTransform(id, {x: 0, y: 0, z: 0}, {x: 0, y: 270, z: 0})
+        expect(system.setBodyForm(id, 'wolf')).toBe(true)
+        const entity = system.getAll().find(e => e.id === id)
+        expect(entity).toBeDefined()
+        const forward = new Vector3(0, 0, 1).applyQuaternion(entity!.appearanceGroup.quaternion)
+        const yawDeg = ((Math.atan2(forward.x, forward.z) * 180 / Math.PI) % 360 + 360) % 360
+        expect(yawDeg).toBeCloseTo(270, 3)
+    })
 })

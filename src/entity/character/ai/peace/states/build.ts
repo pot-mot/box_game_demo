@@ -1,7 +1,7 @@
 import {v3Set, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {PeaceStateHandler} from '../types.ts'
 import {isBuildConfig, type BoxSpawnEntry} from '../../../../../character/ai_strategy/types.ts'
-import {CHARACTER_BASE_SIZE} from '../../../constants.ts'
+import {formCenterOffsetY} from '../../../body_form/geometry.ts'
 
 const _pos: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -41,7 +41,7 @@ export const buildHandler: PeaceStateHandler = {
         const dist = 1 + Math.random() * 1.5
         const bx = pos.x + Math.cos(angle) * dist
         const bz = pos.z + Math.sin(angle) * dist
-        const groundY = pos.y - (CHARACTER_BASE_SIZE.height * character.config.scale) / 2
+        const groundY = pos.y - formCenterOffsetY(character.config)
 
         v3Set(_pos, bx, groundY + 0.05, bz)
 

@@ -9,7 +9,7 @@ import {createButtonRow} from '../../../ui/components/button_row.ts'
 import {createEntityPanel} from '../../../ui/components/entity_panel.ts'
 import {createIcon} from '../../../ui/icons/icon.ts'
 import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.ts'
-import {ALL_WEAPON_PRESETS, availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
+import {availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, isHoldMode} from '../../../character/weapon/hold_mode.ts'
 import {HANDEDNESS, HANDEDNESS_LABELS, isHandedness} from '../../../character/handedness.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
@@ -26,6 +26,7 @@ import {BOX_PRESET_IDS, isBoxPresetId, type BoxPresetId} from '../../../types/bo
 import type {LockPointConfig} from '../../../character/lock_point.ts'
 import {CHARACTER_JOINT_IDS} from '../appearance/clips/base_clips.ts'
 import {buildCharacterSkeletonDefinition, humanoidJointDisplayName} from '../skeleton/preset.ts'
+import {BODY_FORM_IDS, BODY_FORMS, bodyFormOf, type BodyForm} from '../body_form/index.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import {localizeText, localizeTitle, appendLocalizedText, localizeApply} from '../../../i18n/dom.ts'
 
@@ -83,7 +84,7 @@ const ORIGIN_LABELS: Record<OriginSubStrategy, StringLocaleKey> = {
 
 /** 武器预设 → 下拉项文案（远程附带模式标记，便于区分特殊弹道） */
 const describeWeapon = (w: WeaponConfig): string => {
-    const name = weaponDisplayName(w.id, w.name)
+    const name = weaponDisplayName(w)
     if (w.type === 'melee') return `${name} (dmg:${w.damage})`
     const tags: string[] = []
     if (w.spreadCount !== undefined) tags.push(translate({key: 'character.tag.spread', args: [String(w.spreadCount)]}))
@@ -94,11 +95,11 @@ const describeWeapon = (w: WeaponConfig): string => {
 }
 
 /** 武器下拉按近战 / 盾牌 / 远程分组（类型由所选武器决定，因此不再有独立「攻击类型」选择器） */
-const buildWeaponOptions = (): {melee: readonly WeaponOption[]; shield: readonly WeaponOption[]; ranged: readonly WeaponOption[]} => {
+const buildWeaponOptions = (form: BodyForm): {melee: readonly WeaponOption[]; shield: readonly WeaponOption[]; ranged: readonly WeaponOption[]} => {
     const melee: WeaponOption[] = []
     const shield: WeaponOption[] = []
     const ranged: WeaponOption[] = []
-    for (const preset of ALL_WEAPON_PRESETS) {
+    for (const preset of weaponsOfForm(form.id)) {
         const option: WeaponOption = {id: preset.id, type: preset.type, preset}
         if (preset.type === 'melee') {
             if (preset.block !== undefined) shield.push(option)
@@ -110,27 +111,31 @@ const buildWeaponOptions = (): {melee: readonly WeaponOption[]; shield: readonly
     return {melee, shield, ranged}
 }
 
-/** 武器下拉数据（模块级构建一次：预设为静态数据） */
-const WEAPON_OPTIONS = buildWeaponOptions()
-
-/** 填充武器下拉：近战 / 盾牌 / 远程分组（withNone = 追加「无」空项，供副手选择）；选项文案随语言切换重译 */
-const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean): void => {
+/**
+ * 填充武器下拉：近战 / 盾牌 / 远程分组（withNone = 追加「无」空项，供副手选择）；选项文案随语言切换重译。
+ * 选项 = 该体形拥有的武器（`weaponsOfForm(form.id)`；武器只属于一种体形）。会先清空现有选项。
+ */
+const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean, form: BodyForm): void => {
+    select.replaceChildren()
     if (withNone) {
         const none = document.createElement('option')
         none.value = ''
         localizeText(none, 'common.none')
         select.appendChild(none)
     }
+    const weaponOptions = buildWeaponOptions(form)
     for (const group of [
-        {labelKey: WEAPON_GROUP_LABEL_MELEE, options: WEAPON_OPTIONS.melee},
-        {labelKey: WEAPON_GROUP_LABEL_SHIELD, options: WEAPON_OPTIONS.shield},
-        {labelKey: WEAPON_GROUP_LABEL_RANGED, options: WEAPON_OPTIONS.ranged},
+        {labelKey: WEAPON_GROUP_LABEL_MELEE, options: weaponOptions.melee},
+        {labelKey: WEAPON_GROUP_LABEL_SHIELD, options: weaponOptions.shield},
+        {labelKey: WEAPON_GROUP_LABEL_RANGED, options: weaponOptions.ranged},
     ]) {
+        const visible = group.options
+        if (visible.length === 0) continue
         const optGroup = document.createElement('optgroup')
         localizeApply(optGroup, el => {
             if (el instanceof HTMLOptGroupElement) el.label = translate(group.labelKey)
         })
-        for (const opt of group.options) {
+        for (const opt of visible) {
             const o = document.createElement('option')
             o.value = opt.id
             o.dataset.weaponType = opt.type
@@ -247,7 +252,7 @@ const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
     fields.atkChargeMult.value = formatNumber(charge?.maxChargeMultiplier ?? 100)
     fields.atkChargeTime.value = formatNumber(charge?.maxChargeTime ?? 1)
     const damageTypeLabel = `  ·  ${translate(DAMAGE_TYPE_LABELS[weapon.damageType])}`
-    const weaponName = weaponDisplayName(weapon.id, weapon.name)
+    const weaponName = weaponDisplayName(weapon)
     if (weapon.type === 'ranged') {
         fields.weaponTag.textContent = [weaponName, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
         fields.atkRange.value = formatNumber(weapon.range)
@@ -321,6 +326,23 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     }
     handednessLabel.appendChild(handednessSelect)
     el.appendChild(handednessLabel)
+
+    /* 基础模组（体形）：切换运行时重建骨架 / 外观 / 碰撞 / 受击 / 装备槽（见 world.setBodyForm） */
+    const bodyFormLabel = document.createElement('label')
+    bodyFormLabel.className = 'dc-label'
+    appendLocalizedText(bodyFormLabel, 'character.body_form')
+    bodyFormLabel.appendChild(document.createTextNode(' '))
+    const bodyFormSelect = document.createElement('select')
+    bodyFormSelect.id = 'body-form-select'
+    bodyFormSelect.className = 'dc-select'
+    for (const planId of BODY_FORM_IDS) {
+        const o = document.createElement('option')
+        o.value = planId
+        localizeText(o, BODY_FORMS[planId].nameKey)
+        bodyFormSelect.appendChild(o)
+    }
+    bodyFormLabel.appendChild(bodyFormSelect)
+    el.appendChild(bodyFormLabel)
 
     el.appendChild(createSection('panel.faction'))
     const faction = createLabeledNumberInput(el, 'character.faction', {min: '0', step: '1', value: '0'})
@@ -396,7 +418,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     attackSegmentTag.className = 'dc-hint'
     attackSegmentTag.style.cssText = 'margin-top:2px'
     el.appendChild(attackSegmentTag)
-    fillWeaponSelect(weaponSelect, false)
+    fillWeaponSelect(weaponSelect, false, bodyFormOf(undefined))
 
     const weaponTag = document.createElement('div')
     weaponTag.className = 'dc-hint'
@@ -415,7 +437,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     offhandSelect.id = 'offhand-weapon-select'
     offhandSelect.className = 'dc-select'
     offhandSelect.style.cssText = 'max-width:180px'
-    fillWeaponSelect(offhandSelect, true)
+    fillWeaponSelect(offhandSelect, true, bodyFormOf(undefined))
     offhandLabel.appendChild(offhandSelect)
     offhandRow.appendChild(offhandLabel)
     el.appendChild(offhandRow)
@@ -472,6 +494,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         }
     }
 
+    const equipRowEls: Array<{readonly armor: ArmorSlot; readonly limb: LimbSlot; readonly row: HTMLDivElement; readonly armorLabel: HTMLLabelElement; readonly limbLabel: HTMLLabelElement}> = []
     for (const {armor, limb} of EQUIP_ROWS) {
         const row = document.createElement('div')
         row.className = 'dc-row'
@@ -499,6 +522,19 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         row.appendChild(limbLabel)
 
         el.appendChild(row)
+        equipRowEls.push({armor, limb, row, armorLabel, limbLabel})
+    }
+
+    /** 按体形计划的 equipSlots 隐藏不适用装备区域（无护甲 / 肢体槽的体形整行隐藏） */
+    const applyEquipVisibility = (planId: string | undefined): void => {
+        const slots = bodyFormOf(planId).equipSlots
+        for (const entry of equipRowEls) {
+            const hasArmor = slots.armor.includes(entry.armor)
+            const hasLimb = slots.limb.includes(entry.limb)
+            entry.armorLabel.style.display = hasArmor ? '' : 'none'
+            entry.limbLabel.style.display = hasLimb ? '' : 'none'
+            entry.row.style.display = hasArmor || hasLimb ? '' : 'none'
+        }
     }
 
     /* 属性模块：状态类（生命 / 韧性）与属性类（攻击 / 防御 / 移速 / 跳跃高度 / 体型）排成公式行。
@@ -534,7 +570,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const weaponAttackTerms = (category: DamageType): StatTerm[] => {
         const weapon = selectedWeaponOf(weaponSelect)
         if (weapon === undefined || weapon.damageType !== category || weapon.damage <= 0) return []
-        return [{name: weaponDisplayName(weapon.id, weapon.name), value: weapon.damage}]
+        return [{name: weaponDisplayName(weapon), value: weapon.damage}]
     }
 
     /** 属性 / 状态行公式登记表 */
@@ -973,7 +1009,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         if (sel === undefined) return ''
         const weapon = sel.combat.weapon
         const damageTypeLabel = `  ·  ${translate(DAMAGE_TYPE_LABELS[weapon.damageType])}`
-        const name = weaponDisplayName(weapon.id, weapon.name)
+        const name = weaponDisplayName(weapon)
         return weapon.type === 'ranged'
             ? [name, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
             : name + damageTypeLabel
@@ -983,7 +1019,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const renderAttackSegmentTag = (): string => {
         const sel = getSelected()
         if (sel === undefined) return ''
-        const name = weaponDisplayName(sel.combat.weapon.id, sel.combat.weapon.name)
+        const name = weaponDisplayName(sel.combat.weapon)
         const activeSegment = sel.combat.activeSegment
         return activeSegment === undefined
             ? `${name} · ${translate('character.idle')}`
@@ -1155,6 +1191,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         jumpH.value = String(sel.config.jumpHeight)
         scale.value = String(sel.config.scale)
         handednessSelect.value = sel.config.handedness ?? 'right'
+        bodyFormSelect.value = bodyFormOf(sel.config.bodyFormId).id
+        applyEquipVisibility(sel.config.bodyFormId)
 
         maxHP.value = String(sel.combat.maxHealth)
         curHP.value = String(sel.combat.health)
@@ -1163,7 +1201,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         targetFactionsInput.value = sel.combat.tendencyConfig.targetFactions?.join(',') ?? ''
         showTargetFactions()
 
-        /* 攻击区：装备武器 + 数值覆写（类型由武器决定，动作时长由武器模组决定，均不在面板暴露） */
+        /* 攻击区：装备武器 + 数值覆写（类型由武器决定，动作时长由武器模组决定，均不在面板暴露）。
+         * 按当前体形重建武器选项（天然类别仅其所属体形可选）。 */
+        const form = bodyFormOf(sel.config.bodyFormId)
+        fillWeaponSelect(weaponSelect, false, form)
+        fillWeaponSelect(offhandSelect, true, form)
         const attack = readSelectedAttack(sel)
         weaponSelect.value = attack.weaponId
         atkDmg.value = formatNumber(attack.damage)
@@ -1360,6 +1402,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (knockdownValue !== undefined) poiseCfg.knockdownDuration = knockdownValue
                 const getUpValue = parseOpt(getUpDurationInput.value)
                 if (getUpValue !== undefined) poiseCfg.getUpDuration = getUpValue
+                /* 体形切换：先按所选基础模组运行时重构（骨架 / 外观 / 碰撞 / 装备槽），再应用其余配置 */
+                ctx.setBodyForm?.(cur.id, bodyFormSelect.value)
+                /* 立即按新体形刷新装备区域可见性（不等下次回显） */
+                applyEquipVisibility(bodyFormSelect.value)
                 const handednessValue = handednessSelect.value
                 ctx.updateCharacterConfig?.(cur.id, {
                     speed: parseFloat(speed.value),

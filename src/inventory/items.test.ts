@@ -1,6 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {ITEM_CATEGORIES, ITEM_DEFS} from './items.ts'
-import {ALL_WEAPON_PRESETS} from '../character/weapon/catalog.ts'
+import {weaponsOfForm} from '../character/weapon/catalog.ts'
+import {HUMANOID_BODY_FORM_ID} from '../entity/character/body_form/index.ts'
 import {ALL_ARMOR_PRESETS} from '../character/armor/catalog.ts'
 import {ENTITY_TYPE_VALUES} from '../entity/constants.ts'
 import {BOX_PRESET_IDS} from '../types/boxPreset.ts'
@@ -18,7 +19,10 @@ describe('物品目录完整性', () => {
 
     it('每个武器模型都有对应物品（weaponId 指向武器目录 id）', () => {
         const weaponItemIds = new Set(ITEM_DEFS.filter(def => def.category === 'weapon').map(def => def.weaponId))
-        for (const weapon of ALL_WEAPON_PRESETS) {
+        /* 物品为通用可拾取物：仅人形武器进背包目录（生物武器体形锁定，非通用物品） */
+        for (const weapon of weaponsOfForm(HUMANOID_BODY_FORM_ID)) {
+            /* 无可视模型的天然 / 空手类别（mesh = none）不可拾取，不要求物品条目 */
+            if (weapon.mesh.id === 'none') continue
             expect(weaponItemIds.has(weapon.id), `缺少武器物品：${weapon.id}`).toBe(true)
         }
     })

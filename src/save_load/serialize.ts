@@ -10,7 +10,7 @@ import type {WeaponConfig} from '../character/weapon/catalog.ts'
 import type {LockPointConfig} from '../character/lock_point.ts'
 import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON, ModeInfoJSON, CameraInfoJSON, EntitySourceMap} from './types.ts'
 import {SAVE_FORMAT_VERSION} from './types.ts'
-import {CHARACTER_BASE_SIZE} from '../entity/character/constants.ts'
+import {bodyFormOf} from '../entity/character/body_form/index.ts'
 
 /** 将 {x, y, z} 转为 [x, y, z] */
 const vec3ToTuple = (v: {x: number; y: number; z: number}): [number, number, number] =>
@@ -175,13 +175,15 @@ export const collectWorldState = (
         for (const e of character.getAll()) {
             /* position 存脚底原点（实体原点语义）：物理身体中心回退半高 */
             const bodyPos = e.body.translation()
-            const halfH = (CHARACTER_BASE_SIZE.height * e.config.scale) / 2
+            const halfH = bodyFormOf(e.config.bodyFormId).centerOffsetY * e.config.scale
             entities.push({
                 type: 'character',
                 config: {
                     speed: e.config.speed,
                     jumpHeight: e.config.jumpHeight,
                     scale: e.config.scale,
+                    /* 体形计划（基础模组）：缺省 humanoid，旧代码读到缺字段安全回退 */
+                    bodyFormId: e.config.bodyFormId,
                     peaceStrategy: e.peaceStrategy,
                     combatStrategy: e.combatStrategy,
                     /* 攻击配置：装备武器 + 数值覆写（攻击动作由武器模组的攻击链决定） */

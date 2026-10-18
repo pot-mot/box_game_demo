@@ -28,14 +28,16 @@ src/modes/showcase/
 ├── menu.ts            # 二级菜单（条目卡片 + 选择回调，文案经 i18n）
 ├── scene.ts           # 独立 Scene + 灯光 + 无限网格 + 自由飞行相机（WASDZX 平移 + 拖拽转视角 + 聚焦环绕）
 ├── focus.ts           # 点击聚焦拾取器（统一「聚焦」指针动作 + 射线拾取 → 相机聚焦 + 脚下呼吸圆环标记，供非角色舞台子模块复用）
-├── actor_stage.ts     # 共享舞台：场景 + 自由飞行相机 + 多展示角色 + 聚焦环 + 暂停/单步/变速 + 信息面板
-├── panel.ts           # 信息面板（标题 / 副标题可经 PanelOptions 自定义）
-├── actor.ts           # 武器攻击展示角色驱动器
+├── actor_stage.ts     # 共享舞台：场景 + 自由飞行相机 + 多 Tab 展示角色 + 聚焦环 + 暂停/单步/变速 + 调试箱开关 + 信息面板
+├── panel.ts           # 信息面板（标题 / 副标题 / Tab 栏可定制；含调试箱开关）
+├── actor.ts           # 武器攻击展示角色驱动器（支持体形：人形 / 龙 / 马 / 狼）
 ├── race_actor.ts      # 种族 / 套装展示角色驱动器（站立/行走循环）
+├── creature_actor.ts  # 体形（狼 / 马 / 双足飞龙）展示角色驱动器（站立/行走循环）
+├── actor_debug.ts     # 展示角色调试箱（物理碰撞箱 / 受击箱 / 攻击箱，逐种开关）
 ├── label.ts / actor_handle.ts / constants.ts
 └── modules/
     ├── index.ts       # SHOWCASE_MODULES 注册表（顺序即菜单顺序）
-    ├── actions.ts     # 动作展示
+    ├── actions.ts     # 攻击模组展示（Tab：人 / 龙 / 马 / 狼）
     ├── appearance.ts  # 装备与外观图鉴
     ├── ai_terrain.ts  # AI 行为 × 复杂地形
     ├── terrain.ts     # 复杂地形与建筑
@@ -46,17 +48,17 @@ src/modes/showcase/
 
 - **`ShowcaseModule`**：`{id, title, description, setup(host) → {updater, dispose}}`。`title` / `description` 为 i18n 文案键（强类型 `StringLocaleKey`）；`setup` 接收宿主 `{renderer}`，自建场景并返回每帧 updater 与释放函数。
 - **控制器**：持有 `SHOWCASE_MODULES` 注册表，`selectModule` 释放当前模块、装配新模块并隐藏菜单；`backToMenu` 释放模块、显示菜单；`exit` 释放模块 + 菜单 + 返回按钮后回调宿主。无激活模块时 updater 为空操作（菜单覆盖画布）。
-- **`actor_stage.ts`**：把「独立场景 + 自由飞行相机 + 多展示角色 + 聚焦环 + 点击拾取 + 空格暂停/Esc 取消聚焦 + 信息面板」这套通用编排集中一处，供 `actions` / `appearance` 复用（子模块只负责 `populate(scene, register)` 填充角色与面板行）。
+- **`actor_stage.ts`**：把「独立场景 + 自由飞行相机 + 多 Tab 展示角色 + 聚焦环 + 点击拾取 + 空格暂停/Esc 取消聚焦 + 调试箱开关 + 信息面板」这套通用编排集中一处，供 `actions` / `appearance` 复用。子模块按 `tabs`（`ActorStageTab[]`，单 Tab 不显示 Tab 栏）提供各自 `populate(scene, register)`；切换 Tab 时隐藏旧 Tab 角色、重建面板行、复位聚焦。面板含 **3 个调试箱开关**（物理碰撞箱 / 受击箱 / 攻击箱，默认全关，由 `actor_debug.ts` 逐角色实现）。
 - **相机（两套方案）**：相机类子模块使用共享**纯摄像机** `modes/control/camera_control.ts`——`W/A/S/D` 前后左右、`Z/X` 升 / 降（`MOVE_STEP`，随相机偏航角），按住 `boost` 动作（默认 Shift）加速飞行；「旋转视角」绑定（默认鼠标左键）拖拽转视角、「平移视角」绑定（默认右键）拖拽平移、滚轮缩放；「聚焦」绑定（默认左键点击）命中角色 / 物件进入**聚焦**（相机平滑飞向目标并环绕，期间暂停自由移动），`Esc` 或点击空白恢复自由飞行。旋转 / 平移 / 聚焦均为可重绑的指针动作（操作设置面板「鼠标」分组）。**含玩家的子模块**（交互物 / 背包）使用共享**玩家主控** `modes/control/player_control.ts`：相机第三人称跟随玩家、鼠标拖拽环绕、滚轮缩放，`Shift` = 翻滚，**不提供右键平移**。
 - **新增子模块**：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 补 `showcase.module.<id>.title/desc` 与模块内文案 → 补单测（`modules.test.ts` 自动覆盖注册表一致性）/ e2e。
 
 ## 子模块
 
-### 动作展示（actions）
+### 攻击模组展示（actions）
 
-全武器攻击动作展示台：近战 6 武器 × 3 持握模式分三排（单持 → 双手共持 → 双持，由前到后），远程 9 单独一排，每角色循环播放其连段（轻链 → 停顿 → 重链），信息面板复现段计时。
+以 **Tab** 切换 人 / 龙 / 马 / 狼 各自攻击模组的展示台：人形 Tab 为全武器攻击动作（近战 6 武器 × 3 持握模式分三排 + 远程 9 单排 + **盾牌 3 件**：攻击模组 = 盾击，待机时经 `AnimationContext.shieldHands` 演示**格挡举盾姿态**），龙 / 马 / 狼 Tab 展示该体形的天然 / 允许武器（龙 = 爪击 / 吐息；马 = 踢击 / 长枪 / 飞斧；狼 = 撕咬 / 短剑 / 长剑）。每角色循环播放其连段（轻链 → 停顿 → 重链），信息面板复现段计时。
 
-- 清单条目按**武器 id + 持握模式**（`SHOWCASE_ROSTER`），武器参数与攻击链经 `weaponPresetOrDefault(id)` + `weaponAttacksOf(weapon, holdMode)` 取自武器模组。共 **27** 个展示角色。
+- 人形清单条目按**武器 id + 持握模式**（`SHOWCASE_ROSTER`）；立体形角色经 `createShowcaseActor({bodyFormId, weapon, holdMode})` 用 `bodyFormOf(id).createModel` / `createAnimation` 构建（人形 = 默认）。武器参数与攻击链经 `weaponPresetOrDefault(id)` + `weaponAttacksOf(weapon, holdMode)` 取自武器模组。
 - 近战演示按该武器该模式的段展示顺序连播 → 停顿 0.6s（模拟松开攻击键）→ 重链 → 收尾待机 → 循环；每个**重击段播放前**先定格**满蓄力姿势**（时间 = 武器模板最长蓄力时间 `maxChargeTime`）。每段 tilt 为段固有值。
 - 段展示顺序 = `orderedSegments` 全量枚举，**含空中攻击段 `air`**（如短剑·单持：轻1/轻2/重1/重2/空中1 共 5 行）。展示台无跳跃，空中段仅复用地面 pose 站立播放（见 weapon.md §3.8）。
 - 副手展示：单持不装备副手；双持左手握同类武器；双手共持副手挂背（`backWeaponMount`）且双手 IK 贴合主手武器。远程为单段开火动作（不发射弹丸）。
@@ -68,7 +70,9 @@ src/modes/showcase/
 
 ### 装备与外观（appearance）
 
-种族 / 护甲件图鉴：第一排三族肢体（骷髅 / 兽人 / 精灵，四槽同族肢体 replace，各自独立阵营着色）；后续排按槽位分组逐个展示全部护甲预设（人类身体 + 单件护甲，副名标注槽位与逐类别防御 / 移速）。共 **20** 个展示角色（3 种族 + 17 护甲件）。全部角色站立 2s ↔ 行走 2s 交替循环（`RACE_SHOWCASE_HOLD_SECONDS`），位置原地不动，纯外观展示。
+种族 / 整套护甲 / 体形图鉴：第一排三族肢体（骷髅 / 兽人 / 精灵，四槽同族肢体 replace，各自独立阵营着色）；第二排起按材质展示**整套护甲**（布 / 皮 / 铁 / 鳞 / 石 / 法师，各四槽齐全，`ARMOR_SET_SHOWCASE`，每行 3 套）——**以整套为整体预览，不单件展示**；末排展示非人形体形（狼 / 马 / 双足飞龙 wyvern，`CREATURE_SHOWCASE_ROSTER`）。共 **12** 个展示角色（3 种族 + 6 套护甲 + 3 体形）。全部角色站立 2s ↔ 行走 2s 交替循环（`RACE_SHOWCASE_HOLD_SECONDS`），位置原地不动，纯外观展示。
+
+- **体形展示**（`creature_actor.ts`）：经 `bodyFormOf(id).createModel` / `createAnimation` 构建非人形角色，动画上下文注入镜像 `world.ts`（行走时 `horizontalSpeed = ACTOR_SPEED`）；标签高度按模型实际包围盒计算（各体形身高差异大），避免标签压进身体。
 
 ### AI 行为 × 复杂地形（ai_terrain）
 
@@ -129,4 +133,4 @@ src/modes/showcase/
   - `src/entity/interactable/behaviors.test.ts` — 升降梯 `F` 停止 / 继续 / 端点反向、暂停不推进、信号清除暂停、提示随状态。
   - `src/modes/showcase/modules.test.ts` — 注册表与 `SHOWCASE_MODULE_IDS` 一一对应、标题/说明可本地化、id 唯一。
   - `src/modes/showcase/menu.test.ts` — 每个子模块渲染一张卡片、点击触发 `onSelect`、show/hide/dispose。
-- e2e：`e2e/showcase.spec.ts` — 二级菜单 7 张卡片、动作模块 27 行、外观模块 20 行、AI 模块 10 单位、地形模块 12 配方、交互物模块 8 行（含激活回写状态）、图鉴 41 格、背包模块（背包 / 装备面板 + 玩家 HUD）、聚焦段计时行顺序、返回展示菜单、经设置菜单返回主页面。
+- e2e：`e2e/showcase.spec.ts` — 二级菜单 7 张卡片、攻击模组展示（人形 Tab 30 行 + 切龙 Tab 2 行）、外观模块 12 行、AI 模块 10 单位、地形模块 12 配方、交互物模块 8 行（含激活回写状态）、图鉴 56 格、背包模块（背包 / 装备面板 + 玩家 HUD）、聚焦段计时行顺序、返回展示菜单、经设置菜单返回主页面。

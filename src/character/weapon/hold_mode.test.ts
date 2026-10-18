@@ -1,6 +1,5 @@
 import {describe, it, expect} from 'vitest'
 import {
-    ALL_WEAPON_PRESETS,
     availableHoldModes,
     defaultHoldMode,
     isDualWieldPair,
@@ -8,11 +7,15 @@ import {
     supportsHoldMode,
     weaponAttacksOf,
     weaponHoldModes,
+    weaponsOfForm,
 } from './catalog.ts'
+import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 import {orderedSegments} from './attack_chain.ts'
 import {getAttackClipById} from '../../entity/character/appearance/clips/attack_clips.ts'
 
 const MELEE_IDS = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
+/* 本测试针对人形武器（人形关键帧 / 持握语义）；生物武器动画由体形分包提供 */
+const ALL_WEAPON_PRESETS = weaponsOfForm(HUMANOID_BODY_FORM_ID)
 
 describe('武器持握模式数组 + 攻击链 map', () => {
     it('每把武器至少声明一种持握模式，默认模式为数组首个', () => {
@@ -86,6 +89,8 @@ describe('武器类 / 模型与双持可用性', () => {
 describe('攻击段动作组合（每个连段引用 pose）', () => {
     it('全部武器全部模式的段都声明非空 poses，且每个 pose id 都能解析出骨骼关键帧', () => {
         for (const weapon of ALL_WEAPON_PRESETS) {
+            /* 天然武器（空手/撕咬/爪/踢/吐息）的动画由体形分包提供，不在人形关键帧数据内 */
+            if (weapon.natural === true) continue
             for (const mode of weaponHoldModes(weapon)) {
                 for (const segment of orderedSegments(weaponAttacksOf(weapon, mode))) {
                     expect(segment.poses.length, segment.id).toBeGreaterThan(0)

@@ -2,11 +2,11 @@ import {describe, it, expect} from 'vitest'
 import {createAIMachine} from './machine.ts'
 import {updateOrigin, notifyAIKill, setOriginFromCharacter, setOriginFromPosition} from './origin.ts'
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
-import {CHARACTER_BASE_SIZE} from '../constants.ts'
+import {HUMANOID_BODY_FORM} from '../body_form/index.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 
-/** 脚底半高（scale=1 → 0.5）：由物理中心反算脚底原点用 */
-const HALF_H = CHARACTER_BASE_SIZE.height / 2
+/** 脚底中心偏移（scale=1 → 0.5）：由物理中心反算脚底原点用 */
+const HALF_H = HUMANOID_BODY_FORM.centerOffsetY
 
 /** 最小角色替身：仅提供原点逻辑读取的字段（body.translation / config.scale / originInterval） */
 const makeChar = (x: number, z: number, y = 0): {char: CharacterEntity; pos: {x: number; y: number; z: number}} => {

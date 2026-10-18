@@ -1,5 +1,6 @@
 import type {Skeleton} from '../../skeleton/skeleton.ts'
-import {ALL_WEAPON_PRESETS, DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, supportsHoldMode, weaponDisplayName, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, supportsHoldMode, weaponDisplayName, weaponsOfForm, type WeaponConfig} from '../../character/weapon/catalog.ts'
+import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 import type {HoldMode} from '../../character/weapon/hold_mode.ts'
 import {DEFAULT_HANDEDNESS, offHandSide, type Handedness} from '../../character/handedness.ts'
 import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
@@ -143,10 +144,11 @@ export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): Bon
     }
     const meleeGroup = groupOf('bone_edit.weapon.group_melee')
     const rangedGroup = groupOf('bone_edit.weapon.group_ranged')
-    for (const preset of ALL_WEAPON_PRESETS) {
+    /* 骨骼动画编辑器为**人形专用**：仅列人形武器 */
+    for (const preset of weaponsOfForm(HUMANOID_BODY_FORM_ID)) {
         const option = document.createElement('option')
         option.value = preset.id
-        localizeApply(option, el => { el.textContent = weaponDisplayName(preset.id, preset.name) })
+        localizeApply(option, el => { el.textContent = weaponDisplayName(preset) })
         option.dataset.weaponType = preset.type
         ;(preset.type === 'melee' ? meleeGroup : rangedGroup).appendChild(option)
     }

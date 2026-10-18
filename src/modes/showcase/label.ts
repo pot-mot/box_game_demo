@@ -25,9 +25,9 @@ export interface NameLabel {
  * Sprite 始终面向相机。挂载到角色锚点（position.y 已在内部设置）。
  *
  * 调用方传入 `getText` 取值函数：创建时绘制一次，并订阅语言切换重新取值重绘，
- * 使标签文案随语言实时更新。
+ * 使标签文案随语言实时更新。`height` 可覆盖标签相对锚点的高度（体形展示按模型实际高度传入）。
  */
-export const createNameLabel = (getText: () => NameLabelText): NameLabel => {
+export const createNameLabel = (getText: () => NameLabelText, height: number = LABEL_HEIGHT): NameLabel => {
     const canvas = document.createElement('canvas')
     canvas.width = LABEL_CANVAS_W
     canvas.height = LABEL_CANVAS_H
@@ -37,7 +37,7 @@ export const createNameLabel = (getText: () => NameLabelText): NameLabel => {
     const material = new SpriteMaterial({map: texture, transparent: true})
     const sprite = new Sprite(material)
     sprite.scale.set(LABEL_WORLD_W, LABEL_WORLD_H, 1)
-    sprite.position.y = LABEL_HEIGHT
+    sprite.position.y = height
 
     const draw = (): void => {
         const {title, subtitle} = getText()

@@ -4,7 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld, type SharedWorld} from '../../../physics/world.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import {FIXED_TIME_STEP} from '../../../physics/constants.ts'
-import {RANGED_WEAPON_PRESETS} from '../../../character/weapon/ranged_weapon.ts'
+import {findWeaponPreset} from '../../../character/weapon/catalog.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 
 /**
@@ -170,8 +170,10 @@ describe('远程瞄准与弹道朝向', () => {
         const bullet = findBulletBody(shared)
         expect(bullet).toBeDefined()
         const lv = bullet!.linvel()
-        const bow = RANGED_WEAPON_PRESETS.longbow
-        const maxSpeed = bow.projectileSpeed * bow.charge!.maxSpeedScale
+        const bowPreset = findWeaponPreset('longbow')
+        if (bowPreset === undefined || bowPreset.type !== 'ranged' || bowPreset.charge === undefined) throw new Error('longbow 未注册 / 无蓄力')
+        const bow = bowPreset
+        const maxSpeed = bow.projectileSpeed * bowPreset.charge.maxSpeedScale
         /* 蓄力接近满值：弹速显著高于未蓄力预设（20），且不超过满蓄力上限 */
         expect(Math.hypot(lv.x, lv.z)).toBeGreaterThan(bow.projectileSpeed * 1.5)
         expect(Math.hypot(lv.x, lv.z)).toBeLessThanOrEqual(maxSpeed + 0.01)

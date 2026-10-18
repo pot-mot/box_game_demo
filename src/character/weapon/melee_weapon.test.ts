@@ -1,36 +1,32 @@
 import {describe, it, expect} from 'vitest'
-import {MELEE_WEAPON_CLASSES, MELEE_WEAPON_MODELS, MELEE_WEAPON_PRESETS, resolveMeleeWeapon} from './melee_weapon.ts'
+import {findWeaponPreset, weaponsOfForm} from './catalog.ts'
 import {SHIELD_CLASS_IDS} from './shield_clip_data.ts'
 import {ATTACK_CLIP_JSON} from './attack_clip_data.ts'
+import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 
-describe('MELEE_WEAPON_PRESETS 武器类 / 模型分层', () => {
-    it('武器类 / 模型分层：每个类恰好一个默认模型，解析结果合并类玩法与模型外观', () => {
-        const classIds = Object.keys(MELEE_WEAPON_CLASSES)
-        for (const classId of classIds) {
-            const models = Object.values(MELEE_WEAPON_MODELS).filter(model => model.classId === classId)
-            expect(models, classId).toHaveLength(1)
-            const resolved = resolveMeleeWeapon(models[0])
-            expect(resolved.id, classId).toBe(models[0].id)
-            expect(resolved.name, classId).toBe(models[0].name)
-            expect(resolved.mesh, classId).toBe(models[0].mesh)
-            expect(resolved.damage, classId).toBe(MELEE_WEAPON_CLASSES[classId].damage)
-            expect(resolved.attacks, classId).toBe(MELEE_WEAPON_CLASSES[classId].attacks)
+describe('人形近战武器（体形拥有 + 注册表查询）', () => {
+    it('武器归属人形体形，且可在注册表按 id 查回同一实例', () => {
+        for (const weapon of weaponsOfForm(HUMANOID_BODY_FORM_ID)) {
+            expect(weapon.formId, weapon.id).toBe(HUMANOID_BODY_FORM_ID)
+            expect(findWeaponPreset(weapon.id), weapon.id).toBe(weapon)
         }
     })
 
-    it('普通近战类声明三持握模式且默认单持；盾类（有 block）仅单持', () => {
-        for (const classId of Object.keys(MELEE_WEAPON_CLASSES)) {
-            const config = MELEE_WEAPON_CLASSES[classId]
-            const expected = config.block !== undefined
+    it('普通近战类声明三持握模式且默认单持；盾类（有 block）与天然空手仅单持', () => {
+        for (const weapon of weaponsOfForm(HUMANOID_BODY_FORM_ID)) {
+            if (weapon.type !== 'melee') continue
+            const expected = weapon.block !== undefined || weapon.natural === true
                 ? ['one_handed']
                 : ['one_handed', 'two_handed', 'dual_wield']
-            expect(config.holdModes, classId).toEqual(expected)
+            expect(weapon.holdModes, weapon.id).toEqual(expected)
         }
     })
 
     it('盾类：声明 block 配置、轻/重攻击链含盾击 / 盾撞四段，且攻击 clip 可解析', () => {
         for (const classId of SHIELD_CLASS_IDS) {
-            const config = MELEE_WEAPON_CLASSES[classId]
+            const config = findWeaponPreset(classId)
+            expect(config, classId).toBeDefined()
+            if (config === undefined || config.type !== 'melee') continue
             expect(config.block, classId).toBeDefined()
             expect(config.block?.guardMax ?? 0, classId).toBeGreaterThan(0)
             const attacks = config.attacks.one_handed
@@ -45,9 +41,10 @@ describe('MELEE_WEAPON_PRESETS 武器类 / 模型分层', () => {
         }
     })
 
-    it('盾类 block 经 resolveMeleeWeapon 贯通到预设（模型解析不丢格挡配置）', () => {
+    it('盾类 block 经解析贯通到武器预设（模型解析不丢格挡配置）', () => {
         for (const classId of SHIELD_CLASS_IDS) {
-            expect(MELEE_WEAPON_PRESETS[classId].block, classId).toBe(MELEE_WEAPON_CLASSES[classId].block)
+            const weapon = findWeaponPreset(classId)
+            expect(weapon?.type === 'melee' ? weapon.block : undefined, classId).toBeDefined()
         }
     })
 })

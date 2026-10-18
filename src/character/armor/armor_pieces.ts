@@ -45,7 +45,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         defense: {physical: 2, magic: 1},
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
-        mesh: {id: 'vest', color: 0x7a5230, accentColor: 0x4a3018},
+        mesh: {id: 'vest', color: 0x7a5230, accentColor: 0x4a3018, material: 'leather'},
     },
     iron_plate: {
         id: 'iron_plate', name: '铁胸甲', slot: 'chest',
@@ -66,7 +66,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         defense: {physical: 3, magic: 2},
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.92, poise: 5,
-        mesh: {id: 'plate', color: 0x6b7a5a, accentColor: 0x3f4a34},
+        mesh: {id: 'plate', color: 0x6b7a5a, accentColor: 0x3f4a34, material: 'scale'},
     },
 
     /* ── 臂甲 ── */
@@ -75,7 +75,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         defense: {physical: 0, magic: 1},
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
-        mesh: {id: 'bracer', color: 0x8b7d5a, accentColor: 0x5f553c},
+        mesh: {id: 'bracer', color: 0x8b7d5a, accentColor: 0x5f553c, material: 'cloth'},
     },
     iron_bracers: {
         id: 'iron_bracers', name: '铁臂甲', slot: 'arms',
@@ -96,7 +96,7 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         defense: {physical: 0, magic: 2},
         attack: {physical: 0, magic: 1},
         moveSpeedMultiplier: 1,
-        mesh: {id: 'bracer', color: 0x4455aa, accentColor: 0x2a3370},
+        mesh: {id: 'bracer', color: 0x4455aa, accentColor: 0x2a3370, material: 'cloth'},
     },
 
     /* ── 护腿 ── */
@@ -135,5 +135,81 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1.25,
         mesh: {id: 'boots', color: 0x3f8f8f, accentColor: 0xcfe8e8, hideBodyParts: ['rightShin', 'leftShin']},
+    },
+
+    /* ── 皮甲套（补全头 / 臂 / 腿；胸甲为 leather_armor） ── */
+    leather_cap: {
+        id: 'leather_cap', name: '皮帽', slot: 'head',
+        defense: {physical: 1, magic: 0},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 1,
+        mesh: {id: 'cap', color: 0x7a5230, accentColor: 0x4a3018, material: 'leather'},
+    },
+    leather_bracers: {
+        id: 'leather_bracers', name: '皮护腕', slot: 'arms',
+        defense: {physical: 1, magic: 0},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 1,
+        mesh: {id: 'bracer', color: 0x7a5230, accentColor: 0x4a3018, material: 'leather'},
+    },
+    leather_legs: {
+        id: 'leather_legs', name: '皮护腿', slot: 'legs',
+        defense: {physical: 1, magic: 0},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 1,
+        mesh: {id: 'legwrap', color: 0x7a5230, accentColor: 0x4a3018, material: 'leather'},
+    },
+
+    /* ── 鳞甲套（补全头 / 臂 / 腿；胸甲为 scale_mail） ── */
+    scale_helm: {
+        id: 'scale_helm', name: '鳞盔', slot: 'head',
+        defense: {physical: 2, magic: 1},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 0.98, poise: 1,
+        mesh: {id: 'helmet', color: 0x6b7a5a, accentColor: 0x3f4a34, material: 'scale'},
+    },
+    scale_bracers: {
+        id: 'scale_bracers', name: '鳞护腕', slot: 'arms',
+        defense: {physical: 1, magic: 1},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 0.97,
+        mesh: {id: 'bracer', color: 0x6b7a5a, accentColor: 0x3f4a34, material: 'scale'},
+    },
+    scale_legs: {
+        id: 'scale_legs', name: '鳞护腿', slot: 'legs',
+        defense: {physical: 2, magic: 1},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 0.96, poise: 2,
+        mesh: {id: 'greaves', color: 0x6b7a5a, accentColor: 0x3f4a34, material: 'scale'},
+    },
+
+    /* ── 石甲套（全新四件套，最厚最重） ── */
+    stone_helm: {
+        id: 'stone_helm', name: '石盔', slot: 'head',
+        defense: {physical: 2, magic: 1},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 0.95, poise: 2,
+        mesh: {id: 'helmet', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
+    },
+    stone_plate: {
+        id: 'stone_plate', name: '石胸甲', slot: 'chest',
+        defense: {physical: 3, magic: 1},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 0.9, poise: 4,
+        mesh: {id: 'plate', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
+    },
+    stone_bracers: {
+        id: 'stone_bracers', name: '石护腕', slot: 'arms',
+        defense: {physical: 1, magic: 1},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 0.95, poise: 1,
+        mesh: {id: 'bracer', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
+    },
+    stone_legs: {
+        id: 'stone_legs', name: '石护腿', slot: 'legs',
+        defense: {physical: 2, magic: 1},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 0.94, poise: 2,
+        mesh: {id: 'greaves', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
     },
 }

@@ -20,6 +20,7 @@ const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterE
         wakeUp: () => {},
     } as unknown as CharacterEntity['body'],
     mainCollider: undefined as unknown as RAPIER.Collider,
+    colliders: [],
     isOnGround,
     groundNormal: {x: nx, y: ny, z: nz},
     groundKeepTimer: 0,
