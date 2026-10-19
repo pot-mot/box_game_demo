@@ -22,7 +22,12 @@ import {setupPlayInteraction} from './interaction/index.ts'
 import {HIT_SHAKE_DURATION, HIT_SHAKE_AMPLITUDE} from './constants.ts'
 
 export interface PlayModeController {
-    updater: (dt: number) => void
+    /** 每渲染帧一次、物理步进前：采样输入并写入角色 */
+    sampleInput: () => void
+    /** 每物理步：交互计时等游戏逻辑（状态机 / 动画由角色系统自身按步推进） */
+    fixedUpdate: (dt: number) => void
+    /** 每渲染帧一次、物理步进与插值同步之后：相机 / HUD / 表现层 */
+    renderUpdate: (dt: number) => void
     /** 注册交互目标提供者（交互物 / 掉落物等系统） */
     registerInteractionProvider: (provider: InteractionProvider) => void
 }
@@ -46,10 +51,10 @@ export const setupPlayMode = (
     const lockOn = createPlayerLockOn(characterSystem, camera)
     const playerControl = createPlayerControl(camera, renderer.domElement, {
         getTarget: () => {
-            const player = characterSystem.getPlayerCharacter()
-            if (!player) return undefined
-            const t = player.body.translation()
-            cameraTarget.set(t.x, t.y, t.z)
+            /* 取渲染插值位置（滞后一拍），相机无需再叠一层 EMA 平滑 */
+            const p = characterSystem.getPlayerRenderPosition()
+            if (!p) return undefined
+            cameraTarget.set(p.x, p.y, p.z)
             return cameraTarget
         },
         move: (dx, dz, jump, forwardX, forwardZ, roll, swimLift) =>
@@ -99,11 +104,18 @@ export const setupPlayMode = (
         camera.position.z += (Math.random() * 2 - 1) * k
     }
 
-    const updater = (dt: number): void => {
+    /** 每渲染帧一次：采样输入（必须在物理步进之前）；交互边沿在此锁存 */
+    const sampleInput = (): void => {
         playerControl.move()
-        /* 交互脉冲须早于角色状态机更新，保证同帧生效 */
-        interaction.update(dt)
-        characterSystem.update(dt)
+        interaction.sampleInput()
+    }
+
+    /** 每物理步：交互计时与激活（边沿只在首个物理步消费一次） */
+    const fixedUpdate = (dt: number): void => {
+        interaction.fixedUpdate(dt)
+    }
+
+    const renderUpdate = (dt: number): void => {
         playerControl.update(dt)
         lockMarkerUpdate(lockOn.getAimPoint())
         applyHitShake(dt)
@@ -192,7 +204,9 @@ export const setupPlayMode = (
     }
 
     return {
-        updater,
+        sampleInput,
+        fixedUpdate,
+        renderUpdate,
         registerInteractionProvider: interaction.registerProvider,
     }
 }

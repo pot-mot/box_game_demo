@@ -1,11 +1,11 @@
 /** 重力加速度（Y 轴向下） */
 export const GRAVITY = -9.82
-/** 物理固定时间步长 —— Rapier 内部固定步长，此常量仅用于 main.ts 计算子步次数 */
+/** 物理固定时间步长 —— 每个物理步恒定推进的仿真时间 */
 export const FIXED_TIME_STEP = 1 / 60
-/** 每帧最大物理子步数 */
+/** 每个渲染帧最多执行的物理步数（超出部分作为欠账丢弃，见 docs/design/fixed_step_interpolation.md） */
 export const MAX_SUB_STEPS = 3
-/** 帧间隔上限，防止卡顿时 delta 过大导致物理爆炸 */
-export const MAX_DT = 0.033
+/** 单渲染帧 delta 上限；须 ≥ MAX_SUB_STEPS × FIXED_TIME_STEP 才能让上限真正生效 */
+export const MAX_DT = 0.05
 /** 地面 Y 坐标 */
 export const GROUND_Y = 0
 // --- 碰撞组 ---

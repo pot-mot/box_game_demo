@@ -1,6 +1,6 @@
 # 游玩模式（第三人称）
 
-入口：启动屏第二个按钮「游玩模式」（`src/modes/startup_screen.ts`）；与其它模式共享主页渲染器与单 RAF 循环，由 `main.ts` 调用 `setupPlayMode(...)`（`src/modes/play/index.ts`），返回 `updater` 接入统一调度。
+入口：启动屏第二个按钮「游玩模式」（`src/modes/startup_screen.ts`）；与其它模式共享主页渲染器与单 RAF 循环，由 `main.ts` 调用 `setupPlayMode(...)`（`src/modes/play/index.ts`），返回 `sampleInput` / `fixedUpdate` / `renderUpdate` 接入固定步调度。
 
 ## 约定
 
@@ -9,14 +9,15 @@
 
 ## 陷阱
 
-- play 交互脉冲由 `modes/play/interaction/` 每帧读取，且 `interaction.update(dt)` **必须早于 `characterSystem.update(dt)`**，否则交互脉冲晚一帧、目标守卫失效。
+- play 交互输入分两段：`sampleInput()` 每渲染帧捕获 `interact` 按下边沿并解析目标（高刷下存在 0 物理步帧，边沿必须锁存）；`fixedUpdate(FIXED_TIME_STEP)` 每物理步推进计时并**在首个物理步消费一次边沿**，且必须早于 `characterSystem.update(FIXED_TIME_STEP)`，否则交互脉冲晚一步、目标守卫失效。
 - 脱困不设快捷键，走右上角设置菜单「传送至最近存档点」（`setupSettingsPanel` 第三参，`hakoniwa.teleportToNearestSavePoint()`）。
 - **游玩模式不注册 Ctrl+S 存档**：Ctrl+S 会与「Ctrl 单独按下切换持握」冲突，故 `main.ts` 仅编辑模式注册 `save_world` 回调（绑定保留以继续遮蔽浏览器默认保存）。手动存档改走右上角设置菜单「保存世界」（`setupSettingsPanel` 第四参 → `exportSaveWorld`，编辑 / 游玩模式均可用）。
 - 装备模型预览独立 `WebGLRenderer` 必须惰性创建（见 `src/inventory/inventory.md`）。
 
 ## 相机
 
-- 有玩家：第三人称环绕相机（`src/modes/control/player_control.ts` 的 `createPlayerControl`），以玩家身体中心为跟随点做帧率无关 EMA 平滑（`PLAYER_CAMERA_SMOOTH_FACTOR = 8`），抑制角色弹跳导致的抖动。攻击 / 锁定 / 交互与移动输入一并由该控制器编排（玩家主控方案）。
+- 有玩家：第三人称环绕相机（`src/modes/control/player_control.ts` 的 `createPlayerControl`），跟随点取**渲染插值后的玩家身体中心**（`getPlayerRenderPosition()`，滞后一拍），**不再叠加跟随 EMA**——画面平滑由物理步 + 渲染插值负责；仅聚焦进出过渡保留平滑。攻击 / 锁定 / 交互与移动输入一并由该控制器编排（玩家主控方案）。
+- 固定步时序：`sampleInput()` 每渲染帧采样输入；`fixedUpdate(FIXED_TIME_STEP)` 在每物理步推进交互；`renderUpdate(delta)` 在插值同步之后更新相机 / 锁定标记 / 命中震动 / 血条 / HUD。
 - 「旋转视角」绑定（默认鼠标左键）拖拽旋转，「滚轮」缩放（`PLAYER_CAMERA_MIN_DISTANCE` ~ `PLAYER_CAMERA_MAX_DISTANCE`）；「轻击」绑定（默认左键松开）/「重击」绑定（默认右键松开）触发攻击，攻击携带按住时长供蓄力守卫区分点按/长按，拖拽视角时该次攻击不触发。旋转 / 轻击 / 重击 / 锁定目标均为可重绑的指针动作（操作设置面板「鼠标」分组）。**玩家主控不提供右键平移**（右键 = 重击）。
 - **远程蓄力（弓 / 投掷类）**：左键**按住**进入蓄力（角色冻结在拉弓/后引姿态，HUD 显示 `CHARGE` 进度条），**松开**出手；力度决定弓的射程·速度·伤害、投掷物的远近·伤害。按住后拖拽旋转视角（或窗口失焦）会取消本次蓄力，不出手。连弩 / 霰弹枪 / 法杖 / 魔杖不支持蓄力，仍为松开即发。
 - 无玩家（未标记玩家或玩家死亡）：相机回退自由飞行（`src/modes/control/free_flight.ts` 的 `applyFreeFlightMovement`，按住 `boost` 动作加速）。
@@ -46,7 +47,7 @@
 
 ## 箱庭子系统集成
 
-- **不新增 `GameMode`**：启动屏「游玩模式」即箱庭游玩模式；`GAME_MODE_VALUES` 不变，避免改动输入模式映射、`main.ts` 模式分派与 `modeInfo` 序列化分支。子系统在 `setupPlayMode` 内装配，`updater` 串接进现有顺序（单 RAF，返回 `(dt)=>void`）。
+- **不新增 `GameMode`**：启动屏「游玩模式」即箱庭游玩模式；`GAME_MODE_VALUES` 不变，避免改动输入模式映射、`main.ts` 模式分派与 `modeInfo` 序列化分支。子系统在 `setupPlayMode` 内装配，`sampleInput` / `fixedUpdate` / `renderUpdate` 串接进固定步循环（单 RAF）。
 - 跨系统依赖由 `main.ts` 传入（`systems: EntityInfoSource[]`、`building: BuildingGeneratorContext`、交互物系统）。
 - 输入动作：交互 `interact`（默认 F）、背包 `open_inventory`（B）、装备 `open_equipment`（E）、地图 `open_map`（M）；脱困不设快捷键。新增动作须同步 `INPUT_ACTIONS` / `ACTION_LABELS` / `ACTION_GROUPS` / `DEFAULT_BINDINGS` / `registry.test.ts`。
 - 关联模块文档：背包/物品/装备/容器见 `src/inventory/inventory.md`；交互物见 `src/entity/interactable/interactable.md`；建筑结构与箱庭配方见 `src/entity/building_generator/building_generator.md`；存档字段见 `src/save_load/save_load.md`。

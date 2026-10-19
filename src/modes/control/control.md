@@ -6,6 +6,7 @@
 ## 约定
 
 - 所有具备操作能力的模式只归入两套共享方案：**玩家主控** `createPlayerControl`（`player_control.ts`：play、showcase 含玩家子模块；`WASD` 相对相机移动 + `roll` 翻滚 + 空格跳跃 + 第三人称环绕，可选攻击/锁定/聚焦，**不提供右键平移**）与**纯摄像机** `createCameraControl`（`camera_control.ts`：edit / bone_edit / showcase 相机类模块 / play 无玩家兜底；`WASD`+`Z/X` 自由飞行 + `boost` 加速 + 左键旋转 + 右键 `mouse_pan` 平移 + 滚轮缩放 + 可选聚焦/跟随）。
+- **玩家主控的跟随点不做 EMA 平滑**：`getTarget` 返回角色渲染插值位置（滞后一拍），相机直接跟随；仅聚焦进出过渡、滚轮距离、锁定转向保留平滑。纯摄像机方案不变。
 - 新增模式按其是否主控角色选用其一，**不得另写相机/移动逻辑**；`free_flight.ts` 为自由飞行。
 - `roll` 与 `boost` 默认均绑定 `Shift`，分属两套方案，运行时不会同时消费。
 

@@ -315,21 +315,27 @@ export const interactablesModule: ShowcaseModule = {
 
         /* 固定子步物理（镜像 main.ts，清力内聚于运行器）：移动平台先瞬移到位、乘客步进**前**对齐，
          * 再世界步进。陷阱：漏清力会让角色坡面反重力力残留、跳跃后持续升空。 */
-        const step = createFixedStepStepper(shared, systems)
+        /* 交互物只在渲染层参与插值：其 update 必须在 world.step 之前（平台瞬移 + 乘客携带） */
+        const interactableRender: SteppableSystem = {
+            captureRenderState: interactables.captureRenderState,
+            syncPositions: interactables.syncPositions,
+        }
+        const step = createFixedStepStepper(shared, [...systems, interactableRender], {
+            beforeStep: (dt) => {
+                interactables.update(dt)
+                characterSystem.applySupportCarry(dt)
+            },
+        })
 
         const updater = (dt: number): void => {
-            /* 推进交互物（移动平台瞬移 + 注册速度），随后步进前携带乘客（避免运动学推挤/速度叠加双倍） */
-            interactables.update(dt)
-            characterSystem.applySupportCarry(dt)
-            step(dt, performance.now())
+            /* 输入采样与交互脉冲须早于固定步（角色状态机在步内消费） */
             playerControl.move()
             applyInteraction()
-            characterSystem.update(dt)
-            /* 相机跟随玩家（固定观察高度） */
-            const player = characterSystem.getPlayerCharacter()
-            if (player !== undefined) {
-                const t = player.body.translation()
-                followPoint.set(t.x, INTERACTABLE_CAMERA_TARGET_Y, t.z)
+            step(dt, performance.now())
+            /* 相机跟随玩家渲染插值位置（固定观察高度） */
+            const p = characterSystem.getPlayerRenderPosition()
+            if (p !== undefined) {
+                followPoint.set(p.x, INTERACTABLE_CAMERA_TARGET_Y, p.z)
             }
             if (respawnTimer > 0) {
                 respawnTimer -= dt

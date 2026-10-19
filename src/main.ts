@@ -46,6 +46,7 @@ import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
 import {promptLoadFile} from './save_load/actions.ts'
 import {showSkippedEntitiesNotice} from './ui/components/message_dialog.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
+import {createFixedStepClock} from './physics/fixed_step.ts'
 import {createInputRegistry} from './input/registry.ts'
 import {openOperationsPanel} from './input/operations_panel.ts'
 
@@ -86,9 +87,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const physicsEnv = createPhysicsEnv()
 
     /* 每个物理子步结束后清除所有刚体累积力：
-     * Rapier addForce 不会自动清除，本项目所有施力均为每帧瞬态语义。
-     * 注意：力是每帧施加一次（preSync/update），多子步帧里只在第一个子步生效
-     * （与 cannon-es 每内部步清力的语义一致，属有意取舍） */
+     * Rapier addForce 不会自动清除，本项目所有施力均为「每物理步」瞬态语义（preSync / 状态机每步执行一次） */
     shared.eventBus.onStepEnd(() => clearAllForces(shared.world))
 
     /* 撞击前速度快照（单例）：箱子可破坏 / 弹性特性共用，每子步结束自动刷新 */
@@ -361,6 +360,10 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
 
     // --- 单 RAF 循环 ---
     let lastTime = performance.now()
+    /** play 模式固定步时钟：步数由真实帧间隔累计决定，不追赶（欠账丢弃） */
+    const playClock = createFixedStepClock()
+    /** play 模式累计仿真时间（每物理步 +1/60） */
+    let simTime = 0
 
     const tick = (time: number): void => {
         /* 展示模式已退出（返回启动屏）：终止本循环，不再排队下一帧 */
@@ -373,13 +376,36 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             const pendingSteps = editMode?.execute.pendingSteps() ?? 0
             const stepActive = pendingSteps > 0 && !executing
 
-            if (simActive) {
+            if (mode === 'play') {
+                /* 固定 1/60 物理步 + 滞后一拍渲染插值：帧间隔只决定本帧步数（0..MAX），
+                 * 游戏时间轴（状态机 / 计时器 / 动画）全部按物理步推进 */
+                playMode?.sampleInput()
+                const {steps, alpha} = playClock.advance(delta)
+                for (let s = 0; s < steps; s++) {
+                    /* 移动平台先瞬移到位并注册速度，乘客在步进前对齐（避免顶起抖动） */
+                    interactables.update(FIXED_TIME_STEP)
+                    characterSystem.applySupportCarry(FIXED_TIME_STEP)
+                    shared.world.step(shared.eventQueue)
+                    /* 每个子步立即排空事件：autoDrain 会在下一步前清空队列 */
+                    shared.eventBus.drain()
+                    characterSystem.clearEnvironments()
+                    for (const sys of systems) { if (sys !== interactables) sys.preSync?.(FIXED_TIME_STEP, simTime) }
+                    /* 交互脉冲须早于角色状态机更新，保证同一步生效 */
+                    playMode?.fixedUpdate(FIXED_TIME_STEP)
+                    /* 碰撞体同步需要真实物理位置（不能是插值位置） */
+                    characterSystem.syncTrueTransforms()
+                    characterSystem.update(FIXED_TIME_STEP)
+                    for (const sys of systems) sys.captureRenderState?.()
+                    simTime += FIXED_TIME_STEP
+                }
+                for (const sys of systems) sys.syncPositions(alpha)
+            } else if (simActive) {
                 /* 世界一旦步进就不再是编辑基线（编辑模式的 Reset 需回到步进前的状态） */
                 if (mode === 'edit') steppedSinceBaseline = true
                 /* 移动平台（升降梯 / 闸门）先瞬移到位并注册速度，乘客在步进前对齐（避免顶起抖动） */
                 interactables.update(delta)
                 characterSystem.applySupportCarry(delta)
-                /* play 模式或持续执行：正常变速步进 */
+                /* 编辑模式持续执行：保持原有变速步进语义 */
                 const totalSteps = Math.min(Math.max(1, Math.ceil(delta / FIXED_TIME_STEP)), MAX_SUB_STEPS)
                 for (let s = 0; s < totalSteps; s++) {
                     shared.world.step(shared.eventQueue)
@@ -429,7 +455,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 /* 骨骼动画编辑模式：物理冻结，推进视窗交互与时间轴 */
                 boneEditMode?.updater(delta)
             } else {
-                playMode?.updater(delta)
+                /* play 模式：物理已在固定步循环推进，此处只做渲染侧更新（相机 / HUD） */
+                playMode?.renderUpdate(delta)
                 hakoniwa?.updater(delta)
             }
 

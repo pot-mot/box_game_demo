@@ -4,6 +4,7 @@ import type {SharedWorld} from '../../../physics/world.ts'
 import {ITEM_COLLISION_GROUP, ITEM_COLLISION_MASK} from '../../../physics/constants.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {createColliderForBody} from '../../../physics/rapier_utils.ts'
+import {applyRenderPose, captureObjectRenderPose} from '../../../physics/render_interpolation.ts'
 import type {EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter, type SourceEventMap} from '../../box/base/types/event_emitter.ts'
 import type {EntityType} from '../../constants.ts'
@@ -69,6 +70,7 @@ export const setupItemEntities = (scene: Scene, shared: SharedWorld): ItemEntity
             count,
             mesh,
             body,
+            spin: 0,
             rowText: `#${id} ${def === undefined ? defId : itemDisplayName(def)} ×${count}`,
         }
         items.push(e)
@@ -111,11 +113,21 @@ export const setupItemEntities = (scene: Scene, shared: SharedWorld): ItemEntity
         e.body.setTranslation({x: pos.x, y: pos.y + FLOAT_HEIGHT, z: pos.z}, true)
     }
 
-    const syncPositions = (): void => rebuildPanelInfo()
+    /** 每个物理步末记录掉落物可视位姿（含 preSync 的浮动 / 自转） */
+    const captureRenderState = (): void => {
+        for (const e of items) captureObjectRenderPose(e.mesh)
+    }
+
+    const syncPositions = (alpha = 1): void => {
+        for (const e of items) applyRenderPose(e.mesh, alpha)
+        rebuildPanelInfo()
+    }
 
     const preSync = (dt: number, _time: number): void => {
         for (const e of items) {
-            e.mesh.rotation.y += dt * 1.5
+            /* 自转相位独立累加：渲染插值会写回 mesh 旋转，直接 += 会被插值结果污染 */
+            e.spin += dt * 1.5
+            e.mesh.rotation.y = e.spin
             const t = e.body.translation()
             e.mesh.position.set(t.x, t.y + Math.sin(performance.now() * 0.002) * 0.05, t.z)
         }
@@ -188,6 +200,7 @@ export const setupItemEntities = (scene: Scene, shared: SharedWorld): ItemEntity
         getMeshes: () => items.map(e => e.mesh),
         getEntityList: () => items.map(e => ({id: e.id, mesh: e.mesh})),
         syncPositions,
+        captureRenderState,
         setTransform,
         preSync,
     }

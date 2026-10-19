@@ -1,14 +1,30 @@
 import {Vector3, type PerspectiveCamera} from 'three'
-import type {CharacterEntitySystem} from '../../../entity/character/physics/world.ts'
 import type {InteractionProvider, InteractionTarget} from '../../../character/interaction/types.ts'
 import {INTERACTION_ACTIVATE_TIME} from '../../../character/interaction/types.ts'
+import type {CharacterState} from '../../../character/state_machine/types.ts'
 import {getInputRegistry} from '../../../input/registry.ts'
 import {pickInteraction} from './resolve.ts'
 import {createInteractionPrompt} from './prompt.ts'
 
+/** 交互控制器所需的最小角色视图（便于单测注入，不依赖完整实体系统） */
+export interface InteractionActorView {
+    readonly body: {readonly translation: () => {readonly x: number; readonly y: number; readonly z: number}}
+    readonly stateMachine: {readonly currentState: CharacterState}
+}
+
+export interface PlayInteractionCharacterSource {
+    getPlayerCharacter: () => InteractionActorView | undefined
+    setPlayerInteract: (pending: boolean, targetX: number, targetZ: number) => void
+}
+
 export interface PlayInteractionController {
-    /** 每帧调用（必须早于 characterSystem.update，交互脉冲同帧生效） */
-    update: (dt: number) => void
+    /**
+     * 每渲染帧一次、物理步进前：捕获交互按下边沿、解析当前目标并更新提示。
+     * 边沿在此锁存，避免高刷下「0 物理步」渲染帧被 input 清理而丢输入。
+     */
+    sampleInput: () => void
+    /** 每物理步：交互计时与激活（锁存边沿只在首个物理步消费一次） */
+    fixedUpdate: (dt: number) => void
     registerProvider: (provider: InteractionProvider) => void
     getCurrentTarget: () => InteractionTarget | undefined
     dispose: () => void
@@ -16,7 +32,7 @@ export interface PlayInteractionController {
 
 export const setupPlayInteraction = (
     camera: PerspectiveCamera,
-    characterSystem: CharacterEntitySystem,
+    characterSystem: PlayInteractionCharacterSource,
 ): PlayInteractionController => {
     const input = getInputRegistry()
     const prompt = createInteractionPrompt()
@@ -29,13 +45,17 @@ export const setupPlayInteraction = (
     let awaitingEntry = false
     let activationTimer = 0
     let fired = false
+    /** 交互按下边沿锁存：渲染帧采样、首个物理步消费 */
+    let interactLatched = false
 
-    const update = (dt: number): void => {
+    /** 每渲染帧：捕获边沿 + 解析目标 + 更新提示（不推进计时） */
+    const sampleInput = (): void => {
         const player = characterSystem.getPlayerCharacter()
         if (player === undefined) {
             currentTarget = undefined
             pendingKey = undefined
             awaitingEntry = false
+            interactLatched = false
             prompt.update(undefined)
             return
         }
@@ -48,7 +68,20 @@ export const setupPlayInteraction = (
         for (const provider of providers) provider.collectInteractionTargets(pos.x, pos.y, pos.z, candidates)
         currentTarget = pickInteraction(candidates, pos.x, pos.y, pos.z, forward.x, forward.z)
 
-        const justPressed = input.wasActionPressed('interact') && input.isActionActive('interact')
+        if (input.wasActionPressed('interact') && input.isActionActive('interact')) interactLatched = true
+        prompt.update(currentTarget)
+    }
+
+    /** 每物理步：交互计时与激活 */
+    const fixedUpdate = (dt: number): void => {
+        const player = characterSystem.getPlayerCharacter()
+        if (player === undefined) {
+            interactLatched = false
+            return
+        }
+
+        const justPressed = interactLatched
+        interactLatched = false
 
         if (player.stateMachine.currentState === 'interacting') {
             if (awaitingEntry) {
@@ -76,8 +109,6 @@ export const setupPlayInteraction = (
             awaitingEntry = true
             characterSystem.setPlayerInteract(true, currentTarget.x, currentTarget.z)
         }
-
-        prompt.update(currentTarget)
     }
 
     const registerProvider = (provider: InteractionProvider): void => {
@@ -89,5 +120,5 @@ export const setupPlayInteraction = (
         providers.length = 0
     }
 
-    return {update, registerProvider, getCurrentTarget, dispose}
+    return {sampleInput, fixedUpdate, registerProvider, getCurrentTarget, dispose}
 }

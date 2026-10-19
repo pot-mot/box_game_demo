@@ -189,6 +189,8 @@ export const setupHakoniwa = (
         player.body.setTranslation({x, y: t.y + 0.5, z}, true)
         player.body.setLinvel({x: 0, y: 0, z: 0}, true)
         player.body.wakeUp()
+        /* 传送后重置渲染插值历史，避免相机 / 模型从旧位置滑行 */
+        characterSystem.resetRenderState(player.id)
     }
 
     const onTeleport = (e: InteractableEntity): void => {

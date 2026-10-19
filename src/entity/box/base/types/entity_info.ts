@@ -25,7 +25,10 @@ interface EntityInfoSource {
     getMeshes: () => Mesh[]
     getEntityList: () => Array<{id: number; mesh: Object3D}>
     spawnAt: (x: number, y: number, z: number) => void
-    syncPositions: () => void
+    /** 每个物理步末记录渲染插值状态（可选，静态系统可缺省） */
+    captureRenderState?: () => void
+    /** 渲染帧写变换：alpha ∈ [0,1) 为两个物理状态之间的插值系数 */
+    syncPositions: (alpha?: number) => void
     /** 设置实体位置与旋转（度）；角色等不支持旋转的系统可忽略 rotDeg */
     setTransform: (id: number, pos: XYZ, rotDeg: XYZ) => void
 }

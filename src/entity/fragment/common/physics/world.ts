@@ -1,6 +1,7 @@
 import {type Scene, MeshStandardMaterial, LineBasicMaterial} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import {createColliderForBody, setBodyMass} from '../../../../physics/rapier_utils.ts'
+import {applyRenderPose, captureBodyRenderPose} from '../../../../physics/render_interpolation.ts'
 import type {SharedWorld} from '../../../../physics/world.ts'
 import {FRAGMENT_COLLISION_GROUP, FRAGMENT_COLLISION_MASK} from '../../../../physics/constants.ts'
 import {categoryCollisionGroups} from '../../../../physics/collision_category.ts'
@@ -222,9 +223,14 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         }
     }
 
-    const syncPositions = (): void => {
+    /** 每个物理步末记录碎片真实位姿，供渲染帧插值 */
+    const captureRenderState = (): void => {
+        for (const f of fragments) captureBodyRenderPose(f.mesh, f.body)
+    }
+
+    const syncPositions = (alpha = 1): void => {
         for (const f of fragments) {
-            syncFragmentToMesh(f)
+            if (!applyRenderPose(f.mesh, alpha)) syncFragmentToMesh(f)
             f.rowText = formatRowText(f)
         }
         rebuildPanelInfo()
@@ -244,6 +250,7 @@ export const setupFragmentEntities = (scene: Scene, shared: SharedWorld): Fragme
         getEntityList: () => fragments,
         getMeshes: () => fragments.map(f => f.mesh),
         syncPositions,
+        captureRenderState,
         updateConfig,
         setTransform,
         updatePhysics,

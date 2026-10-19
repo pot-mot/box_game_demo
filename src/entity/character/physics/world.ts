@@ -2,6 +2,7 @@ import {Euler, type LineBasicMaterial, type Mesh, Matrix4, type Object3D, Quater
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
+import {applyRenderPose, captureObjectRenderPose, resetObjectRenderPose} from '../../../physics/render_interpolation.ts'
 import {createBodyEnvironment, resetBodyEnvironment} from '../../../physics/environment.ts'
 import {worldizeHurtBlock, zeroWorldHurtBlock, type WorldHurtBlock} from '../../../character/hurt_blocks.ts'
 import {bodyFormOf, isKnownBodyFormId, HUMANOID_BODY_FORM, weaponSelectableFor, type ColliderSpec} from '../body_form/index.ts'
@@ -214,6 +215,16 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     /** 玩家交互脉冲：本帧按下交互键且存在目标时传 true，并给出目标世界坐标（用于转身朝向） */
     setPlayerInteract: (pending: boolean, targetX: number, targetZ: number) => void
     getPlayerCharacter: () => CharacterEntity | undefined
+    /** 玩家渲染插值位置（身体中心）：相机 / HUD 使用，避免直接读物理原始位置 */
+    getPlayerRenderPosition: () => {readonly x: number; readonly y: number; readonly z: number} | undefined
+    /** 物理步：把真实物理位置写到渲染根（碰撞体同步前调用） */
+    syncTrueTransforms: () => void
+    /** 每个物理步末记录渲染插值状态 */
+    captureRenderState: () => void
+    /** 传送 / 体形重建后重置插值历史（避免从旧位置插值滑行） */
+    resetRenderState: (id: number) => void
+    /** 每物理步的游戏逻辑（状态机 / 动画 / 计时器），供展示模式固定步子步调用 */
+    fixedUpdate: (dt: number) => void
     getHostileTo: (faction: number) => CharacterEntity[]
     getCharacterByBody: (body: CharacterRigidBody) => CharacterEntity | undefined
     update: (dt: number) => void
@@ -766,7 +777,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         select(entity.id)
     }
 
-    const syncPositions = (): void => {
+    /** 物理步：把真实物理位置写到渲染根（碰撞体同步需要真实位置，不能是插值位置） */
+    const syncTrueTransforms = (): void => {
         for (const entity of characters) {
             if (entity.combat.isDead) continue
             const pos = entity.body.translation()
@@ -776,6 +788,32 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             /* 碰撞箱可视化随身体朝向旋转（物理碰撞体为竖直胶囊，旋转对称不受影响） */
             entity.mesh.rotation.set(0, facingAngles.get(entity.id) ?? 0, 0)
             entity.appearanceGroup.position.set(pos.x, originY, pos.z)
+        }
+    }
+
+    /** 物理步末：记录角色可视节点的真实变换，供渲染帧滞后一拍插值 */
+    const captureRenderState = (): void => {
+        for (const entity of characters) {
+            if (entity.combat.isDead) continue
+            captureObjectRenderPose(entity.mesh)
+            captureObjectRenderPose(entity.appearanceGroup)
+        }
+    }
+
+    /** 渲染帧：按 alpha 写插值后的可视变换（无历史时回退真实变换） */
+    const syncPositions = (alpha = 1): void => {
+        for (const entity of characters) {
+            if (entity.combat.isDead) continue
+            if (!applyRenderPose(entity.mesh, alpha)) {
+                const pos = entity.body.translation()
+                const originY = pos.y - originToCenterY(entity.config)
+                entity.mesh.position.set(pos.x, originY, pos.z)
+                entity.mesh.rotation.set(0, facingAngles.get(entity.id) ?? 0, 0)
+            }
+            if (!applyRenderPose(entity.appearanceGroup, alpha)) {
+                /* 无插值历史（首帧 / 编辑暂停 / 体形重建）：位置跟随 mesh，姿态保留 update 写入的真实值 */
+                entity.appearanceGroup.position.copy(entity.mesh.position)
+            }
             if (entity.isDying) {
                 /* 死亡渐隐以选中态不透明度为基线：未选中角色基线为 0（全程不可见，
                  * 避免覆写选中态透明度导致胶囊在死亡时冒出）；选中角色自胶囊固有透明度渐隐 */
@@ -942,8 +980,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean, swimLift?: number): void => {
         playerDx = dx
         playerDz = dz
-        playerJump = jump
-        playerRoll = roll ?? false
+        /* 跳跃 / 翻滚是渲染帧采样的按下边沿：高刷下会出现「0 物理步」的渲染帧，
+         * 必须锁存到下一个物理步消费，否则边沿会被 input.getUpdater() 清掉而丢输入 */
+        playerJump = playerJump || jump
+        playerRoll = playerRoll || (roll ?? false)
         playerSwimLift = swimLift ?? 0
         playerForwardX = forwardX
         playerForwardZ = forwardZ
@@ -1085,6 +1125,25 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const getPlayerCharacter = (): CharacterEntity | undefined =>
         characters.find(c => c.isPlayer && !c.combat.isDead)
+
+    /** 复用向量：玩家渲染插值位置（身体中心，供相机 / HUD 使用；禁止逐帧分配） */
+    const _playerRenderPos = {x: 0, y: 0, z: 0}
+    const getPlayerRenderPosition = (): {readonly x: number; readonly y: number; readonly z: number} | undefined => {
+        const player = getPlayerCharacter()
+        if (player === undefined) return undefined
+        _playerRenderPos.x = player.mesh.position.x
+        _playerRenderPos.y = player.mesh.position.y + originToCenterY(player.config)
+        _playerRenderPos.z = player.mesh.position.z
+        return _playerRenderPos
+    }
+
+    /** 传送 / 体形重建 / 瞬移后重置插值历史，避免从旧位置插值滑行 */
+    const resetRenderState = (id: number): void => {
+        const entity = charById.get(id)
+        if (entity === undefined) return
+        resetObjectRenderPose(entity.mesh)
+        resetObjectRenderPose(entity.appearanceGroup)
+    }
     const getHostileTo = (faction: number): CharacterEntity[] =>
         characters.filter(c => c.combat.attackTendency(c.combat.faction, faction) && !c.combat.isDead)
 
@@ -1948,6 +2007,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const model = appearanceModels.get(id)
         if (model) model.group.quaternion.copy(_facingQuat)
         placeDebugBoxes(entity, pos.x, pos.y + halfH, pos.z, yaw)
+        /* 编辑态瞬移：重置插值历史，避免从旧位置插值滑行 */
+        resetObjectRenderPose(entity.mesh)
+        resetObjectRenderPose(entity.appearanceGroup)
     }
 
     const getFacing = (id: number): number => {
@@ -2230,6 +2292,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
 
         refreshPlayerLabel()
+        /* 体形重建：新外观节点无插值历史，按重建后的真实位姿初始化 */
+        resetObjectRenderPose(entity.mesh)
+        resetObjectRenderPose(entity.appearanceGroup)
         return true
     }
 
@@ -2371,6 +2436,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         cancelPlayerAttackHold,
         setPlayerInteract,
         getPlayerCharacter,
+        getPlayerRenderPosition,
+        syncTrueTransforms,
+        captureRenderState,
+        resetRenderState,
+        fixedUpdate: update,
         getHostileTo,
         getCharacterByBody,
         update,

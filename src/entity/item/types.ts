@@ -10,6 +10,8 @@ export interface DroppedItemEntity {
     count: number
     mesh: Mesh
     body: RAPIER.RigidBody
+    /** 自转相位（只在物理步内累加，避免被渲染插值写回污染） */
+    spin: number
     rowText: string
 }
 

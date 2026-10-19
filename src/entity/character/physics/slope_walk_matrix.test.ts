@@ -15,7 +15,6 @@ import {
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {GroundState} from './ground_state.ts'
 import {createAppearanceSystem} from '../appearance/system.ts'
-import {PLAYER_CAMERA_SMOOTH_FACTOR as CAMERA_SMOOTH_FACTOR} from '../../../modes/control/constants.ts'
 import type {CharacterModel} from '../appearance/types.ts'
 import type {TrackedBoxPart} from '../../../render/box_parts.ts'
 
@@ -273,43 +272,33 @@ describe('郊狼过程动画与摄像机平滑', () => {
             const y = Math.tan(deg * Math.PI / 180) * x + 0.51
             const entity = makeChar(hw, 1, x, y, -50)
 
-            /* 与 createPlayerControl 默认参数一致（yaw=π, pitch=π/6, distance=6），含 EMA 平滑跟随 */
+            /* 相机不再叠 EMA，直接跟随插值后的角色位置：约束单帧 3D 位移 + 可见竖直振荡次数。
+             * 下坡本身会让 y 单调下降（不算振荡）；只有方向反复反转且幅度达到厘米级才算弹跳。 */
             const CAM_YAW = Math.PI
             const CAM_PITCH = Math.PI / 6
             const CAM_DIST = 6
-            const SMOOTH_K = 1 - Math.exp(-CAMERA_SMOOTH_FACTOR * DT)
-            /* y 振荡噪声阈值：低于此幅度的帧间位移视为接触法线噪声而非真实振荡 */
-            const CAMERA_Y_NOISE_EPSILON = 0.001
+            /** 可见竖直振荡阈值（2cm）：低于此幅度的反向视为 trimesh 接触法线噪声 */
+            const CAMERA_Y_VISIBLE_OSCILLATION = 0.02
             let gs: GroundState = initGS()
             let prevCam: {x: number; y: number; z: number} | undefined
             let maxFrameDelta = 0
             let yFlips = 0
             let prevSign: number | undefined
-            let smoothed: {x: number; y: number; z: number} | undefined
             for (let i = 0; i < FRAMES_3600; i++) {
                 gs = tick(hw, entity, gs, -1, 0)
                 if (i < WARMUP_FRAMES) continue
                 const p = entity.body.translation()
-                const rawCamX = p.x + CAM_DIST * Math.sin(CAM_YAW) * Math.cos(CAM_PITCH)
-                const rawCamY = p.y + CAM_DIST * Math.sin(CAM_PITCH)
-                const rawCamZ = p.z + CAM_DIST * Math.cos(CAM_YAW) * Math.cos(CAM_PITCH)
-                if (!smoothed) {
-                    smoothed = {x: rawCamX, y: rawCamY, z: rawCamZ}
-                } else {
-                    smoothed.x += (rawCamX - smoothed.x) * SMOOTH_K
-                    smoothed.y += (rawCamY - smoothed.y) * SMOOTH_K
-                    smoothed.z += (rawCamZ - smoothed.z) * SMOOTH_K
-                }
+                const camX = p.x + CAM_DIST * Math.sin(CAM_YAW) * Math.cos(CAM_PITCH)
+                const camY = p.y + CAM_DIST * Math.sin(CAM_PITCH)
+                const camZ = p.z + CAM_DIST * Math.cos(CAM_YAW) * Math.cos(CAM_PITCH)
                 if (prevCam) {
-                    maxFrameDelta = Math.max(maxFrameDelta, Math.hypot(smoothed.x - prevCam.x, smoothed.y - prevCam.y, smoothed.z - prevCam.z))
-                    const dy = smoothed.y - prevCam.y
-                    /* Rapier 陡坡 trimesh 接触法线逐帧交替会产生亚毫米级 60Hz y 抖动，
-                       低于噪声阈值的位移不计入振荡（真实弹跳为厘米级，仍会被捕获） */
-                    const sign = Math.abs(dy) > CAMERA_Y_NOISE_EPSILON ? Math.sign(dy) : 0
+                    maxFrameDelta = Math.max(maxFrameDelta, Math.hypot(camX - prevCam.x, camY - prevCam.y, camZ - prevCam.z))
+                    const dy = camY - prevCam.y
+                    const sign = Math.abs(dy) > CAMERA_Y_VISIBLE_OSCILLATION ? Math.sign(dy) : 0
                     if (prevSign !== undefined && sign !== 0 && prevSign !== 0 && sign !== prevSign) yFlips++
                     if (sign !== 0) prevSign = sign
                 }
-                prevCam = {...smoothed}
+                prevCam = {x: camX, y: camY, z: camZ}
             }
             expect(maxFrameDelta).toBeLessThan(0.15)
             expect(yFlips).toBeLessThan(2)

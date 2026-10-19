@@ -50,8 +50,8 @@ export const PLAYER_CAMERA_ZOOM_SMOOTH_FACTOR = 14
 export const PLAYER_CAMERA_MIN_DISTANCE = 1
 export const PLAYER_CAMERA_MAX_DISTANCE = 30
 
-/** 玩家相机跟随平滑速率（1/s）：抑制角色弹跳导致的摄像机抖动 */
-export const PLAYER_CAMERA_SMOOTH_FACTOR = 8
+/** 取消聚焦后回到玩家跟随的最长过渡时间（秒）：玩家持续移动时也保证过渡结束 */
+export const PLAYER_CAMERA_RETURN_MAX_TIME = 1.5
 
 /** 锁定后相机转向目标的角速度系数（1/s，同 EMA 形式） */
 export const LOCK_ON_TURN_FACTOR = 10

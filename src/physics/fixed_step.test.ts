@@ -1,9 +1,9 @@
 import {describe, it, expect, beforeAll} from 'vitest'
 import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld} from './world.ts'
-import {createFixedStepStepper} from './fixed_step.ts'
+import {createFixedStepStepper, createFixedStepClock} from './fixed_step.ts'
 import {setBodyMass} from './rapier_utils.ts'
-import {FIXED_TIME_STEP, GRAVITY} from './constants.ts'
+import {FIXED_TIME_STEP, GRAVITY, MAX_SUB_STEPS} from './constants.ts'
 
 /**
  * 回归：独立物理世界（展示模式 AI×复杂地形子模块等）必须每个物理子步结束后清除累积力。
@@ -48,5 +48,45 @@ describe('独立物理世界的固定子步运行器', () => {
         for (let i = 0; i < 5; i++) stepper(FIXED_TIME_STEP, 0)
 
         expect(body.linvel().y).toBeLessThan(-0.1)
+    })
+})
+
+describe('固定步时钟（累加器 + 丢欠账）', () => {
+    it('60Hz 帧间隔在 16.6 / 16.7ms 抖动时不产生 1↔2 步跳变导致的仿真超速', () => {
+        const clock = createFixedStepClock()
+        let simSeconds = 0
+        let realSeconds = 0
+        let totalSteps = 0
+        for (let i = 0; i < 600; i++) {
+            const delta = i % 2 === 0 ? 0.0166 : 0.0167
+            const {steps, alpha} = clock.advance(delta)
+            realSeconds += delta
+            /* 实际推进的仿真时间只由物理步数决定；alpha 仅是渲染插值余量 */
+            simSeconds += steps * FIXED_TIME_STEP
+            totalSteps += steps
+            expect(steps).toBeLessThanOrEqual(MAX_SUB_STEPS)
+            expect(alpha).toBeGreaterThanOrEqual(0)
+            expect(alpha).toBeLessThan(1)
+        }
+        /* 仿真时间必须跟随真实时间（误差 < 一个物理步）；旧的 ceil 方案会跑成约 1.5 倍速 */
+        expect(Math.abs(simSeconds - realSeconds)).toBeLessThan(FIXED_TIME_STEP)
+        expect(totalSteps).toBeLessThanOrEqual(Math.ceil(realSeconds / FIXED_TIME_STEP) + MAX_SUB_STEPS)
+    })
+
+    it('低帧率单帧超过步数上限：欠账丢弃且不跨帧累积', () => {
+        const clock = createFixedStepClock()
+        const first = clock.advance(0.5)
+        expect(first.steps).toBe(MAX_SUB_STEPS)
+        expect(first.alpha).toBe(0)
+        /* 欠账已丢：下一帧不应继续补步 */
+        const second = clock.advance(0)
+        expect(second.steps).toBe(0)
+        expect(second.alpha).toBe(0)
+    })
+
+    it('单帧 delta 受 MAX_DT 限制', () => {
+        const clock = createFixedStepClock()
+        const {steps} = clock.advance(10)
+        expect(steps).toBe(MAX_SUB_STEPS)
     })
 })

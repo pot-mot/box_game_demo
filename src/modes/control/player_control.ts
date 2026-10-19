@@ -13,7 +13,7 @@ import {
     PLAYER_CAMERA_DEFAULT_YAW,
     PLAYER_CAMERA_MAX_DISTANCE,
     PLAYER_CAMERA_MIN_DISTANCE,
-    PLAYER_CAMERA_SMOOTH_FACTOR,
+    PLAYER_CAMERA_RETURN_MAX_TIME,
     PLAYER_CAMERA_WHEEL_SENSITIVITY,
     PLAYER_CAMERA_ZOOM_SMOOTH_FACTOR,
     PLAYER_CLICK_DRAG_THRESHOLD,
@@ -108,9 +108,9 @@ export const createPlayerControl = (
     let lightButton: number | undefined
     let heavyButton: number | undefined
 
-    /** 平滑后的跟随目标（EMA），避免角色弹跳直接传导到相机 */
-    const smoothedTarget = new Vector3()
-    let hasSmoothedTarget = false
+    /** 相机跟随点：直接使用目标（隐式 = 物理插值后的角色位置），仅聚焦过渡做平滑 */
+    const followTarget = new Vector3()
+    let hasFollowTarget = false
     /** 视点（lookAt 目标）：锁定/取消锁定时在玩家与锁定目标之间平滑混合 */
     const lookPoint = new Vector3()
     /** 最近一次有效锁定瞄准点（解除锁定后淡出期间继续使用） */
@@ -125,6 +125,8 @@ export const createPlayerControl = (
     /** 取消聚焦后是否正在回归快照距离 */
     let returning = false
     let returnDistance = distance
+    /** 回归过渡已用时长：玩家持续移动时用时间上限保证过渡结束 */
+    let returnTimer = 0
 
     const focusTo = (position: Vector3 | null, targetDistance?: number): void => {
         if (position === null) {
@@ -132,6 +134,7 @@ export const createPlayerControl = (
             focusPoint = null
             returnDistance = savedDistance
             returning = true
+            returnTimer = 0
             return
         }
         /* 首次进入聚焦时快照当前观察距离（连续切换聚焦目标不覆盖快照） */
@@ -139,6 +142,7 @@ export const createPlayerControl = (
         focusPoint = position.clone()
         focusDistance = targetDistance ?? CAMERA_ORBIT_FOCUS_DISTANCE
         returning = false
+        returnTimer = 0
     }
     const isFocused = (): boolean => focusPoint !== null
 
@@ -279,32 +283,44 @@ export const createPlayerControl = (
         }
 
         const focusK = 1 - Math.exp(-CAMERA_ORBIT_FOCUS_LERP * dt)
+        if (!hasFollowTarget) {
+            followTarget.copy(target)
+            hasFollowTarget = true
+        }
         if (focusPoint !== null) {
             /* 聚焦：平滑移向聚焦点并调整距离（展示模式点击聚焦） */
-            if (!hasSmoothedTarget) { smoothedTarget.copy(target); hasSmoothedTarget = true }
-            smoothedTarget.lerp(focusPoint, focusK)
+            followTarget.lerp(focusPoint, focusK)
             distance += (focusDistance - distance) * focusK
         } else {
-            /* 帧率无关的 EMA 平滑：1 - exp(-k·dt) */
-            const k = 1 - Math.exp(-PLAYER_CAMERA_SMOOTH_FACTOR * dt)
-            if (!hasSmoothedTarget) {
-                smoothedTarget.copy(target)
-                hasSmoothedTarget = true
+            /* 正常跟随：直接取目标（目标已是物理插值后的角色位置），不再叠加跟随 EMA。
+             * 取消聚焦后的「回归玩家」属于聚焦过渡动画，仍需平滑，避免镜头瞬跳。 */
+            if (returning) {
+                followTarget.lerp(target, focusK)
             } else {
-                smoothedTarget.lerp(target, k)
+                followTarget.copy(target)
             }
             /* 锁定期间：环绕角平滑转向「玩家 → 目标」方向（相机绕到目标对侧） */
             const aimPoint = lock?.getAimPoint()
             if (aimPoint) {
                 lastAimPoint.copy(aimPoint)
-                const desiredYaw = Math.atan2(smoothedTarget.x - aimPoint.x, smoothedTarget.z - aimPoint.z)
+                const desiredYaw = Math.atan2(followTarget.x - aimPoint.x, followTarget.z - aimPoint.z)
                 yaw += wrapAngle(desiredYaw - yaw) * (1 - Math.exp(-LOCK_ON_TURN_FACTOR * dt))
             }
             lockViewBlend += (((aimPoint !== undefined) ? 1 : 0) - lockViewBlend) * (1 - Math.exp(-LOCK_ON_BLEND_FACTOR * dt))
             /* 取消聚焦后观察距离平滑回归进入聚焦前的距离 */
             if (returning) {
+                returnTimer += dt
                 distance += (returnDistance - distance) * focusK
-                if (Math.abs(distance - returnDistance) < 0.01) returning = false
+                const settled = Math.abs(distance - returnDistance) < 0.01
+                    && followTarget.distanceToSquared(target) < 1e-6
+                /* 玩家持续移动时 followTarget 始终落后于目标，位置条件永远不满足；
+                 * 用时间上限兜底（1.5s 指数收敛后残余位移为亚毫米级） */
+                if (settled || returnTimer >= PLAYER_CAMERA_RETURN_MAX_TIME) {
+                    returning = false
+                    returnTimer = 0
+                    followTarget.copy(target)
+                    distance = returnDistance
+                }
             }
         }
 
@@ -312,15 +328,15 @@ export const createPlayerControl = (
         renderDistance += (distance - renderDistance) * (1 - Math.exp(-PLAYER_CAMERA_ZOOM_SMOOTH_FACTOR * dt))
 
         camera.position.set(
-            smoothedTarget.x + renderDistance * Math.sin(yaw) * Math.cos(pitch),
-            smoothedTarget.y + renderDistance * Math.sin(pitch),
-            smoothedTarget.z + renderDistance * Math.cos(yaw) * Math.cos(pitch),
+            followTarget.x + renderDistance * Math.sin(yaw) * Math.cos(pitch),
+            followTarget.y + renderDistance * Math.sin(pitch),
+            followTarget.z + renderDistance * Math.cos(yaw) * Math.cos(pitch),
         )
         if (focusPoint !== null) {
-            lookPoint.copy(smoothedTarget)
+            lookPoint.copy(followTarget)
         } else {
             /* 视点平滑过渡：锁定/解除均不跳变（解除后沿用最后瞄准点淡出回玩家） */
-            lookPoint.copy(smoothedTarget).lerp(lastAimPoint, lockViewBlend)
+            lookPoint.copy(followTarget).lerp(lastAimPoint, lockViewBlend)
         }
         camera.lookAt(lookPoint)
     }

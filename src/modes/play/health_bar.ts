@@ -138,11 +138,12 @@ export const setupHealthBars = (
                     entry.lastMaxGuard = guardMax
                 }
 
-                const ct2 = c.body.translation()
+                /* 血条锚定「渲染插值后的身体中心」（滞后一拍），与角色可视位置一致 */
+                const form = bodyFormOf(c.config.bodyFormId)
                 entry.sprite.position.set(
-                    ct2.x,
-                    ct2.y + bodyFormOf(c.config.bodyFormId).size.height * c.config.scale + 0.3,
-                    ct2.z,
+                    c.mesh.position.x,
+                    c.mesh.position.y + form.centerOffsetY * c.config.scale + form.size.height * c.config.scale + 0.3,
+                    c.mesh.position.z,
                 )
                 entry.sprite.scale.set(FIXED_SCALE, FIXED_SCALE * (BAR_H / BAR_W), 1)
             }

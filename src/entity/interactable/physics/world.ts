@@ -4,6 +4,7 @@ import {type SharedWorld, deleteMovingSupport, setMovingSupport} from '../../../
 import {INTERACTABLE_COLLISION_GROUP, INTERACTABLE_COLLISION_MASK} from '../../../physics/constants.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {createColliderForBody} from '../../../physics/rapier_utils.ts'
+import {applyRenderPose, captureObjectRenderPose} from '../../../physics/render_interpolation.ts'
 import type {EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter, type SourceEventMap} from '../../box/base/types/event_emitter.ts'
 import type {EntityType} from '../../constants.ts'
@@ -154,6 +155,7 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
         deleteMovingSupport(shared, e.body.handle)
         lastSupportPos.delete(e.id)
         lastSupportRot.delete(e.id)
+        animatedNodesById.delete(e.id)
         world.removeRigidBody(e.body)
         entities.splice(idx, 1)
         byId.delete(id)
@@ -312,7 +314,39 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
         add({kind: 'save_point', material: 'rusty_iron', size: [0.8, 1.2, 0.8], channel: '', name: '篝火'}, x, y, z)
     }
 
-    const syncPositions = (): void => {
+    /**
+     * 行为直接驱动的可视节点名（闸门 / 升降梯 / 门扇 / 箱盖 / 拉杆等）。
+     * 这些节点每步写**绝对**进度值，可安全插值；`flame` / `glow` 是持续累加旋转 / 缩放，
+     * 若参与插值会被渲染写回污染相位，故排除。
+     */
+    const ANIMATED_NODE_NAMES = ['gate', 'platform', 'door', 'doorLeft', 'doorRight', 'lid', 'lever', 'ring'] as const
+
+    /** 每个交互物的可动节点引用缓存（避免每物理步 / 每渲染帧 getObjectByName 递归遍历） */
+    const animatedNodesById = new Map<number, Object3D[]>()
+    const animatedNodesOf = (e: InteractableEntity): Object3D[] => {
+        let nodes = animatedNodesById.get(e.id)
+        if (nodes === undefined) {
+            nodes = []
+            for (const name of ANIMATED_NODE_NAMES) {
+                const node = e.group.getObjectByName(name)
+                if (node !== undefined) nodes.push(node)
+            }
+            animatedNodesById.set(e.id, nodes)
+        }
+        return nodes
+    }
+
+    /** 每个物理步末记录可动可视节点的真实变换，供渲染帧插值（运动平台 / 闸门不再 60Hz 台阶） */
+    const captureRenderState = (): void => {
+        for (const e of entities) {
+            for (const node of animatedNodesOf(e)) captureObjectRenderPose(node)
+        }
+    }
+
+    const syncPositions = (alpha = 1): void => {
+        for (const e of entities) {
+            for (const node of animatedNodesOf(e)) applyRenderPose(node, alpha)
+        }
         /* 运动学闸门 / 升降梯：根节点保持基准，可动子节点由行为维护；此处只刷新列表行 */
         rebuildPanelInfo()
     }
@@ -332,6 +366,7 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
 
     const loadSave = (entries: readonly InteractableSaveEntry[]): void => {
         for (const e of [...entities]) remove(e.id)
+        animatedNodesById.clear()
         signals.clear()
         for (const entry of entries) {
             const {id} = add(entry.config, entry.position[0], entry.position[1], entry.position[2], entry.yawQuarter)
@@ -372,6 +407,7 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
         getMeshes,
         getEntityList: () => entities.map(e => ({id: e.id, mesh: e.group})),
         syncPositions,
+        captureRenderState,
         setTransform,
         preSync,
     }

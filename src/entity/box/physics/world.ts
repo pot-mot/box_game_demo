@@ -5,6 +5,7 @@ import type {PhysicsEnv} from '../../../physics/env.ts'
 import {GROUND_Y, DEFAULT_COLLISION_GROUP, DEFAULT_COLLISION_MASK} from '../../../physics/constants.ts'
 import {categoryCollisionGroups} from '../../../physics/collision_category.ts'
 import {createColliderForBody, quatVmult, setBodyMass} from '../../../physics/rapier_utils.ts'
+import {applyRenderPose, captureBodyRenderPose} from '../../../physics/render_interpolation.ts'
 import type {VelocitySnapshots} from '../../../physics/velocity_snapshots.ts'
 import type {FragmentEntityContext} from '../../fragment/common/types'
 import type {XYZ} from '../base/types'
@@ -551,14 +552,21 @@ export const setupBoxes = (
 
     // ── 同步 ──
 
-    const syncPositions = (): void => {
+    /** 每个物理步末记录箱体真实位姿，供渲染帧滞后一拍插值 */
+    const captureRenderState = (): void => {
+        for (const box of boxes) captureBodyRenderPose(box.mesh, box.body)
+    }
+
+    const syncPositions = (alpha = 1): void => {
         for (const box of boxes) {
-            const pos = box.body.translation()
-            box.mesh.position.set(pos.x, pos.y, pos.z)
-            const rot = box.body.rotation()
-            box.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
+            if (!applyRenderPose(box.mesh, alpha)) {
+                const pos = box.body.translation()
+                box.mesh.position.set(pos.x, pos.y, pos.z)
+                const rot = box.body.rotation()
+                box.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w)
+            }
             if (box.runtime.burning !== undefined) {
-                box.runtime.burning.particles.position.set(pos.x, pos.y, pos.z)
+                box.runtime.burning.particles.position.copy(box.mesh.position)
             }
             const elastic = box.runtime.elastic
             if (elastic !== undefined) {
@@ -585,6 +593,7 @@ export const setupBoxes = (
         getEntityList: () => boxes,
         getMeshes: () => boxes.map(b => b.mesh),
         syncPositions,
+        captureRenderState,
         updateConfig,
         setTransform,
         setTraitHealth,

@@ -78,7 +78,7 @@ src/modes/showcase/
 
 内容：FBM 起伏地形（`AI_TERRAIN_*`）+ 中央低墙（高度低于跳跃高度，触发导航跳跃）+ 红蓝双阵营各 5 个单位（近战 / 远程混合、三档战斗策略 aggressive/tactical/cowardly），阵营互相敌对（`hostileExceptSelf`）——展示不同 AI 在同一复杂地形中的寻路、障碍跳跃与面向敌对阵营的索敌 / 追击 / 攻击行为。
 
-- 物理：模块自建 `SharedWorld`（地形 trimesh + 障碍 + 角色），每帧按 `main.ts` play 模式同一固定子步策略步进（`world.step` → `eventBus.drain` → 各系统 `preSync` / `syncPositions` → `characterSystem.update`），运行的是与生产同一套 AI / 物理 / 状态机运行时（人员测试镜像）。子步运行器经 `physics/fixed_step.ts` 的 `createFixedStepStepper` 统一内聚「每物理子步结束后清力」（`clearAllForces`）——施力为每帧瞬态语义，漏清力会让 idle / 站定攻击的坡面反重力力残留、抵消重力，角色跳跃后持续升空。
+- 物理：模块自建 `SharedWorld`（地形 trimesh + 障碍 + 角色），每渲染帧经 `physics/fixed_step.ts` 的 `createFixedStepStepper` 按 `main.ts` play 模式同一固定步策略推进：累加器决定本帧 `0..MAX_SUB_STEPS` 个物理步（不追赶、欠账丢弃）→ `beforeStep` → `world.step` → `eventBus.drain` → 各系统 `preSync` → `syncTrueTransforms` → `fixedUpdate`（角色状态机 / 动画 / 计时器）→ `captureRenderState`；全部步结束后 `syncPositions(alpha)` 写滞后一拍渲染插值。运行的是与生产同一套 AI / 物理 / 状态机运行时（人员测试镜像）。运行器内聚「每物理子步结束后清力」（`clearAllForces`）——施力为每物理步瞬态语义，漏清力会让 idle / 站定攻击的坡面反重力力残留、抵消重力，角色跳跃后持续升空。
 - 相机默认俯视战场全貌（`setDistance` 取初始距离），可用 WASDZX 自由飞行、拖拽旋转 / 平移 / 缩放。
 - 左侧 HUD 逐角色列出面板行文本（HP / 武器 / 防御 / 移速 / 状态机状态）与阵营色点；「重开战斗」按钮清子弹、移除并重新生成双方单位、重建 AI 上下文，便于反复观察。
 

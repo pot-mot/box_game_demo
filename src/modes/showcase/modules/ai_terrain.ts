@@ -253,8 +253,8 @@ export const aiTerrainModule: ShowcaseModule = {
         const step = createFixedStepStepper(shared, systems)
 
         const updater = (dt: number): void => {
+            /* 固定步内已完成 world.step → preSync → 角色游戏逻辑 → 插值捕获 */
             step(dt, performance.now())
-            characterSystem.update(dt)
             sceneCtx.orbit.update(dt)
             sceneCtx.followGrid()
             host.renderer.render(sceneCtx.scene, sceneCtx.camera)

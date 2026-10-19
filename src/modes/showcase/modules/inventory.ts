@@ -79,7 +79,7 @@ export const inventoryModule: ShowcaseModule = {
         const shared = createSharedWorld()
         const interactables: InteractableContext = setupInteractables(stage.scene, shared)
         const characterSystem: CharacterEntitySystem = setupCharacterEntities(stage.scene, shared)
-        const systems: SteppableSystem[] = [interactables, characterSystem]
+        const systems: SteppableSystem[] = [characterSystem]
 
         /* —— 简化玩家：出生在箱子前方，隐藏碰撞胶囊 —— */
         const playerId = characterSystem.add(PLAYER_CONFIG, 0, 0.6, PLAYER_SPAWN_Z).id
@@ -287,20 +287,29 @@ export const inventoryModule: ShowcaseModule = {
             }
         }
 
-        /* 固定子步物理（镜像 main.ts，清力内聚于运行器）：世界步进 → 各系统 preSync / syncPositions
-         * （preSync 内已推进交互物动画）。陷阱：漏清力会让角色坡面反重力力残留、跳跃后持续升空。 */
-        const step = createFixedStepStepper(shared, systems)
+        /* 固定子步物理（镜像 main.ts，清力内聚于运行器）：世界步进 → 各系统 preSync / 游戏逻辑 / 插值。
+         * 陷阱：漏清力会让角色坡面反重力力残留、跳跃后持续升空。 */
+        /* 交互物只在渲染层参与插值：其 update 必须在 world.step 之前（平台瞬移） */
+        const interactableRender: SteppableSystem = {
+            captureRenderState: interactables.captureRenderState,
+            syncPositions: interactables.syncPositions,
+        }
+        const step = createFixedStepStepper(shared, [...systems, interactableRender], {
+            beforeStep: (dt) => {
+                interactables.update(dt)
+                characterSystem.applySupportCarry(dt)
+            },
+        })
 
         const updater = (dt: number): void => {
-            step(dt, performance.now())
+            /* 输入采样与交互脉冲须早于固定步（角色状态机在步内消费） */
             playerControl.move()
             applyInteraction()
-            characterSystem.update(dt)
-            /* 相机跟随玩家（固定观察高度） */
-            const player = characterSystem.getPlayerCharacter()
-            if (player !== undefined) {
-                const t = player.body.translation()
-                followPoint.set(t.x, INVENTORY_CAMERA_TARGET_Y, t.z)
+            step(dt, performance.now())
+            /* 相机跟随玩家渲染插值位置（固定观察高度） */
+            const p = characterSystem.getPlayerRenderPosition()
+            if (p !== undefined) {
+                followPoint.set(p.x, INVENTORY_CAMERA_TARGET_Y, p.z)
             }
             playerControl.update(dt)
             stage.followGrid()
