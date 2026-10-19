@@ -148,6 +148,11 @@ export interface CharacterModel extends CreatureModel {
 /** 动画上下文，由 animation system 每帧传入（horizontalSpeed 用于行走步频变速与下落腿张开的体态随速度） */
 export interface AnimationContext {
     readonly stateTime: number
+    /**
+     * 当前状态配置时长（秒；仅倒地 / 起身这类可由角色属性配置时长的状态提供）。
+     * 动画层据此按 `stateTime / stateDuration` 定位 clip 进度，保证手脚动作与状态根旋转同拍。
+     */
+    readonly stateDuration?: number
     /** 水平速度（m/s）：行走播放变速（步频随速度）、falling 腿张开随速度 */
     readonly horizontalSpeed: number
     /** 当前持握模式（决定上半身姿态组合与双手/双持 IK 分支） */

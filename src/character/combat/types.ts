@@ -122,6 +122,11 @@ export interface CombatComponent {
     knockdownDuration: number
     /** 起身状态持续时间（秒，角色属性；结束时韧性回满） */
     getUpDuration: number
+    /**
+     * 起身前翻身时长（秒）：倒地后先躺在地上转到正面朝下，再开始爬起。
+     * 由 knockdown 进入时按「当前面朝 → 倒向」的水平转角换算（180° = `GET_UP_TURN_180_DURATION`）。
+     */
+    getUpTurnDuration: number
     /** 是否被标记为受击倒地（由受击结算置位，knockdown 状态消费后清零） */
     pendingKnockdown: boolean
     /**
@@ -294,6 +299,7 @@ export const createCombatComponent = (
         poiseRegenPerSec: attrs.poiseRegenPerSec ?? DEFAULT_POISE_REGEN_PER_SEC,
         knockdownDuration: attrs.knockdownDuration ?? DEFAULT_KNOCKDOWN_DURATION,
         getUpDuration: attrs.getUpDuration ?? DEFAULT_GET_UP_DURATION,
+        getUpTurnDuration: 0,
         pendingKnockdown: false,
         hitImmunityTimer: 0,
         lastHitDirX: 0,

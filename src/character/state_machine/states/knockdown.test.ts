@@ -4,6 +4,7 @@ import {createCharacterStateMachine} from '../machine.ts'
 import {createCombatComponent} from '../../combat/types.ts'
 import {createWeaponRuntime} from '../../weapon/weapon_runtime.ts'
 import {createBodyEnvironment} from '../../../physics/environment.ts'
+import {KNOCKDOWN_FALL_RATIO} from '../../combat/constants.ts'
 import type {CharacterEntity} from '../../types.ts'
 
 const DT = 1 / 60
@@ -74,7 +75,7 @@ describe('倒地 / 起身状态', () => {
         e.combat.lastHitDirZ = 4
         enterKnockdown(e)
         expect(e.combat.pendingKnockdown).toBe(false)
-        expect(e.combat.hitImmunityTimer).toBeCloseTo(e.combat.knockdownDuration + e.combat.getUpDuration, 6)
+        expect(e.combat.hitImmunityTimer).toBeCloseTo(e.combat.knockdownDuration + e.combat.getUpTurnDuration + e.combat.getUpDuration, 6)
         expect(e.knockdownFallDirX).toBeCloseTo(0.6, 6)
         expect(e.knockdownFallDirZ).toBeCloseTo(0.8, 6)
         expect(e.knockdownFallAngle).toBe(0)
@@ -125,16 +126,47 @@ describe('倒地 / 起身状态', () => {
         expect(e.stateMachine.currentState).toBe('knockdown')
     })
 
-    it('倒下角度在 knockdownDuration 内由 0 缓动到 90°', () => {
+    it('倒地前半段完成 0→90° 倒下，后半段保持完全倒地的最后一帧', () => {
         const e = makeMock()
         enterKnockdown(e)
-        const steps = Math.floor((e.combat.knockdownDuration / DT) / 2)
-        for (let i = 0; i < steps; i++) e.stateMachine.update(DT, e)
+        const fallDuration = e.combat.knockdownDuration * KNOCKDOWN_FALL_RATIO
+        /* 倒下过程中 */
+        const midSteps = Math.floor((fallDuration / 2) / DT)
+        for (let i = 0; i < midSteps; i++) e.stateMachine.update(DT, e)
         expect(e.knockdownFallAngle).toBeGreaterThan(0)
         expect(e.knockdownFallAngle).toBeLessThan(Math.PI / 2)
+        /* 倒下完成后到状态结束前：角度保持 90°，不再有任何动作 */
+        while (e.stateMachine.currentState === 'knockdown'
+            && e.stateMachine.stateTime < e.combat.knockdownDuration - DT) {
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.stateMachine.currentState).toBe('knockdown')
+        expect(e.stateMachine.stateTime).toBeGreaterThan(fallDuration)
+        expect(e.knockdownFallAngle).toBeCloseTo(Math.PI / 2, 6)
     })
 
-    it('knockdown → getting_up（时长到达），起身角度由 90° 缓动回 0 并在结束回满韧性、清免疫', () => {
+    it('起身前翻身时长按水平转角换算：180° = 0.25s，90° = 0.125s，已俯卧 = 0', () => {
+        /* 默认向后倒：面朝与倒向相差 180° */
+        const backward = makeMock(0)
+        enterKnockdown(backward)
+        expect(backward.combat.getUpTurnDuration).toBeCloseTo(0.25, 6)
+
+        /* 倒向 = 面朝（角色正面朝下）：无需翻身 */
+        const prone = makeMock(0)
+        prone.combat.lastHitDirX = 0
+        prone.combat.lastHitDirZ = 1
+        enterKnockdown(prone)
+        expect(prone.combat.getUpTurnDuration).toBeCloseTo(0, 6)
+
+        /* 侧面倒地：相差 90° */
+        const side = makeMock(0)
+        side.combat.lastHitDirX = 1
+        side.combat.lastHitDirZ = 0
+        enterKnockdown(side)
+        expect(side.combat.getUpTurnDuration).toBeCloseTo(0.125, 6)
+    })
+
+    it('knockdown → getting_up：先躺地翻身（角度保持 90°），翻身后角度缓动回 0 并在结束回满韧性、清免疫', () => {
         const e = makeMock()
         enterKnockdown(e)
         e.combat.poise = 3
@@ -142,14 +174,46 @@ describe('倒地 / 起身状态', () => {
         expect(t).toBeDefined()
         expect(t!).toBeGreaterThanOrEqual(e.combat.knockdownDuration)
         expect(e.knockdownFallAngle).toBeCloseTo(Math.PI / 2, 6)
-        /* 起身过程角度递减 */
+        /* 翻身阶段仍完全伏地，不开始爬起 */
         e.stateMachine.update(DT, e)
+        expect(e.knockdownFallAngle).toBeCloseTo(Math.PI / 2, 6)
+        /* 翻身后角度递减 */
+        const turnSteps = Math.ceil(e.combat.getUpTurnDuration / DT) + 1
+        for (let i = 0; i < turnSteps; i++) e.stateMachine.update(DT, e)
         expect(e.knockdownFallAngle).toBeLessThan(Math.PI / 2)
 
         const t2 = advanceUntil(e, 'idle')
         expect(t2).toBeDefined()
         expect(e.combat.hitImmunityTimer).toBe(0)
         expect(e.combat.poise).toBeCloseTo(e.combat.poiseMax, 6)
+        expect(e.knockdownFallAngle).toBe(0)
+    })
+
+    it('起身根旋转分三拍：撑地阶段仍接近伏地，推起阶段快速回落，结束归零', () => {
+        const e = makeMock()
+        enterKnockdown(e)
+        expect(advanceUntil(e, 'getting_up')).toBeDefined()
+        const turn = e.combat.getUpTurnDuration
+        const rise = e.combat.getUpDuration
+        const stepToTime = (target: number): void => {
+            while (e.stateMachine.currentState === 'getting_up' && e.stateMachine.stateTime < target) {
+                e.stateMachine.update(DT, e)
+            }
+        }
+        /* 翻身阶段：保持完全伏地 */
+        stepToTime(turn * 0.5)
+        expect(e.knockdownFallAngle).toBeCloseTo(Math.PI / 2, 6)
+        /* 撑地段：双手撑地发力，身体只抬起很小角度 */
+        stepToTime(turn + rise * 0.15)
+        const planted = e.knockdownFallAngle
+        expect(planted).toBeGreaterThan(Math.PI / 2 - 0.1)
+        /* 推起段：收腿蹬手后根旋转快速回落 */
+        stepToTime(turn + rise * 0.6)
+        expect(e.knockdownFallAngle).toBeLessThan(planted - 0.5)
+        /* 收尾段：接近站直 */
+        stepToTime(turn + rise * 0.95)
+        expect(e.knockdownFallAngle).toBeLessThan(0.1)
+        expect(advanceUntil(e, 'idle')).toBeDefined()
         expect(e.knockdownFallAngle).toBe(0)
     })
 })

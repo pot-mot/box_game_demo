@@ -695,8 +695,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     }
     const poiseRegenDelayInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_delay', {min: '0', step: '0.1', value: '1'})
     const poiseRegenRateInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_rate', {min: '0', step: '1', value: '8'})
-    const knockdownDurationInput = createLabeledNumberInput(blockRow(), 'character.knockdown_duration', {min: '0', step: '0.1', value: '0.7'})
-    const getUpDurationInput = createLabeledNumberInput(blockRow(), 'character.get_up_duration', {min: '0', step: '0.1', value: '0.6'})
+    const knockdownDurationInput = createLabeledNumberInput(blockRow(), 'character.knockdown_duration', {min: '0', step: '0.1', value: '1.4'})
+    const getUpDurationInput = createLabeledNumberInput(blockRow(), 'character.get_up_duration', {min: '0', step: '0.1', value: '1.2'})
 
     /* 装备 / 武器下拉与基础值输入变更即时重算公式（武器决定攻击行的加值项） */
     for (const slot of ARMOR_SLOTS) armorSelects[slot].onchange = refreshStatFormulas

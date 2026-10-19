@@ -21,7 +21,12 @@ import {
     SHIELD_FACE_NET_X,
 } from './constants.ts'
 import {FLINCH_DURATION} from '../../../character/combat/attack_phases.ts'
-import {DEFAULT_KNOCKDOWN_DURATION, DEFAULT_GET_UP_DURATION} from '../../../character/combat/constants.ts'
+import {
+    DEFAULT_KNOCKDOWN_DURATION,
+    DEFAULT_GET_UP_DURATION,
+    GET_UP_PLANT_END,
+    GET_UP_PUSH_END,
+} from '../../../character/combat/constants.ts'
 import {ROLL_DURATION} from '../../../character/combat/roll_skill.ts'
 import {INTERACTION_DURATION} from '../../../character/interaction/types.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
@@ -352,39 +357,140 @@ const flinchingPose = (t: number, ctx: PoseContext): PoseState => {
 
 /* ── 倒地 / 起身姿态 ──
  * 身体「倒下」的根旋转由 world 层按受击方向合成（与 dying / rolling 同机制），
- * 姿势本身只负责四肢松软伏地：0 = 站立中立位，1 = 完全伏地。 */
-const KNOCKDOWN_POSE_SETTLE = 0.2
-const GETUP_POSE_STAND = 0.4
+ * 姿势本身负责四肢：倒地时松软伏地；起身时按「双手撑地 → 蹬手收腿推起 → 站直」的顺序发力。
+ * 阶段比例与 `states/getting_up.ts` 的根旋转曲线共用同一组常量，避免手脚与身体脱节。 */
 
-const downedPose = (e: number, ctx: PoseContext): PoseState => {
-    /* 持械时武器骨骼回到垂直握持，避免倒地时武器穿身 */
+/** 倒地姿态收敛时长（秒） */
+const KNOCKDOWN_POSE_SETTLE = 0.2
+
+interface GetUpKeyframe {
+    readonly shoulderRx: number
+    readonly shoulderRz: number
+    readonly elbowRx: number
+    readonly hipRx: number
+    readonly kneeRx: number
+    readonly headRx: number
+    readonly spineRx: number
+}
+
+/* 关节弯折方向恒定按自然方向：肘 `rx <= 0`（前臂向前屈）、膝 `rx >= 0`（小腿向后屈），
+ * 不得靠整体取反来改变弯折方向（否则肘 / 膝会反关节）。
+ * 伏地姿势与倒地朝向无关：同一帧既是倒地末帧也是起身首帧，保证状态切换零跳变。 */
+
+/** 完全伏地：手臂向体侧摊开并压向地面，双腿自然贴地 */
+const DOWNED: GetUpKeyframe = {
+    shoulderRx: 0.8,
+    shoulderRz: 0.5,
+    elbowRx: -1.2,
+    hipRx: 0.08,
+    kneeRx: 0.25,
+    headRx: 0.4,
+    spineRx: 0.3,
+}
+
+/** 起身起始 = 伏地末帧（与倒地最后一帧完全一致） */
+const GETUP_DOWNED: GetUpKeyframe = DOWNED
+
+/** 双手撑地：肘继续屈曲把上身撑住，抬头，膝略收 */
+const GETUP_BRACE: GetUpKeyframe = {
+    shoulderRx: 0.8,
+    shoulderRz: 0.3,
+    elbowRx: -1.6,
+    hipRx: 0.1,
+    kneeRx: 0.6,
+    headRx: 0.15,
+    spineRx: 0.45,
+}
+
+/** 蹬手推起：肘部蹬直把上身顶起，同时收腿把膝盖收到身下（蹲姿） */
+const GETUP_PUSH: GetUpKeyframe = {
+    shoulderRx: 0.2,
+    shoulderRz: 0.18,
+    elbowRx: -0.2,
+    hipRx: -0.55,
+    kneeRx: 1.2,
+    headRx: 0,
+    spineRx: 0.5,
+}
+
+/** 站立中立位 */
+const GETUP_STAND: GetUpKeyframe = {
+    shoulderRx: 0,
+    shoulderRz: 0,
+    elbowRx: 0,
+    hipRx: 0,
+    kneeRx: 0,
+    headRx: 0,
+    spineRx: 0,
+}
+
+const lerpNumber = (a: number, b: number, k: number): number => a + (b - a) * k
+const smoothstep = (p: number): number => p * p * (3 - 2 * p)
+
+const scaleKeyframe = (k: GetUpKeyframe, s: number): GetUpKeyframe => ({
+    shoulderRx: k.shoulderRx * s,
+    shoulderRz: k.shoulderRz * s,
+    elbowRx: k.elbowRx * s,
+    hipRx: k.hipRx * s,
+    kneeRx: k.kneeRx * s,
+    headRx: k.headRx * s,
+    spineRx: k.spineRx * s,
+})
+
+const lerpKeyframe = (a: GetUpKeyframe, b: GetUpKeyframe, k: number): GetUpKeyframe => ({
+    shoulderRx: lerpNumber(a.shoulderRx, b.shoulderRx, k),
+    shoulderRz: lerpNumber(a.shoulderRz, b.shoulderRz, k),
+    elbowRx: lerpNumber(a.elbowRx, b.elbowRx, k),
+    hipRx: lerpNumber(a.hipRx, b.hipRx, k),
+    kneeRx: lerpNumber(a.kneeRx, b.kneeRx, k),
+    headRx: lerpNumber(a.headRx, b.headRx, k),
+    spineRx: lerpNumber(a.spineRx, b.spineRx, k),
+})
+
+/** 起身进度 0-1 → 关键帧（撑地 → 推起 → 站直） */
+const getUpKeyframeAt = (p: number): GetUpKeyframe => {
+    if (p <= GET_UP_PLANT_END) {
+        return lerpKeyframe(GETUP_DOWNED, GETUP_BRACE, smoothstep(clamp01(p / GET_UP_PLANT_END)))
+    }
+    if (p <= GET_UP_PUSH_END) {
+        const k = smoothstep(clamp01((p - GET_UP_PLANT_END) / (GET_UP_PUSH_END - GET_UP_PLANT_END)))
+        return lerpKeyframe(GETUP_BRACE, GETUP_PUSH, k)
+    }
+    return lerpKeyframe(GETUP_PUSH, GETUP_STAND, smoothstep(clamp01((p - GET_UP_PUSH_END) / (1 - GET_UP_PUSH_END))))
+}
+
+const poseFromKeyframe = (k: GetUpKeyframe, ctx: PoseContext): PoseState => {
+    /* 持械时武器骨骼回到垂直握持，避免倒地 / 撑地时武器穿身 */
     const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
-        rightArmShoulder: {rx: -0.9 * e, ry: 0, rz: -0.5 * e},
-        rightArmElbow: {rx: -0.6 * e, ry: 0, rz: 0},
+        rightArmShoulder: {rx: k.shoulderRx, ry: 0, rz: -k.shoulderRz},
+        rightArmElbow: {rx: k.elbowRx, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
         rightWeaponMount: grip,
-        leftArmShoulder: {rx: -0.9 * e, ry: 0, rz: 0.5 * e},
-        leftArmElbow: {rx: -0.6 * e, ry: 0, rz: 0},
+        leftArmShoulder: {rx: k.shoulderRx, ry: 0, rz: k.shoulderRz},
+        leftArmElbow: {rx: k.elbowRx, ry: 0, rz: 0},
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
         leftWeaponMount: grip,
-        rightLegHip: {rx: 0.5 * e, ry: 0, rz: 0},
-        rightLegKnee: {rx: -0.9 * e, ry: 0, rz: 0},
-        leftLegHip: {rx: 0.5 * e, ry: 0, rz: 0},
-        leftLegKnee: {rx: -0.9 * e, ry: 0, rz: 0},
-        headNeck: {rx: 0.4 * e, ry: 0, rz: 0},
-        spine: {rotation: {rx: 0.3 * e, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
+        rightLegHip: {rx: k.hipRx, ry: 0, rz: 0},
+        rightLegKnee: {rx: k.kneeRx, ry: 0, rz: 0},
+        leftLegHip: {rx: k.hipRx, ry: 0, rz: 0},
+        leftLegKnee: {rx: k.kneeRx, ry: 0, rz: 0},
+        headNeck: {rx: k.headRx, ry: 0, rz: 0},
+        spine: {rotation: {rx: k.spineRx, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
         root: {rotation: ZERO},
     }
 }
+
+const downedPose = (e: number, ctx: PoseContext): PoseState =>
+    poseFromKeyframe(scaleKeyframe(DOWNED, e), ctx)
 
 const knockdownPose = (t: number, ctx: PoseContext): PoseState =>
     downedPose(clamp01(t / KNOCKDOWN_POSE_SETTLE), ctx)
 
 const gettingUpPose = (t: number, ctx: PoseContext): PoseState =>
-    downedPose(1 - clamp01(t / GETUP_POSE_STAND), ctx)
+    poseFromKeyframe(getUpKeyframeAt(clamp01(t / DEFAULT_GET_UP_DURATION)), ctx)
 
 export type PoseSampler = (t: number, ctx: PoseContext) => PoseState
 

@@ -301,8 +301,8 @@ type ImpactLevel = typeof IMPACT_LEVELS[number]
 | `poiseMax` | 韧性上界**基础值** | 20 |
 | `poiseRegenDelay` | 受击后延迟开始回充（秒） | 1.0 |
 | `poiseRegenPerSec` | 回充速率（/秒） | 8 |
-| `knockdownDuration` | 倒地时长（秒） | 0.7 |
-| `getUpDuration` | 起身时长（秒） | 0.6 |
+| `knockdownDuration` | 倒地总时长（秒；前 50% 倒下、后 50% 保持伏地） | 1.4 |
+| `getUpDuration` | 起身时长（秒） | 1.2 |
 
 ### 19.3 装备韧性
 
@@ -330,8 +330,10 @@ type ImpactLevel = typeof IMPACT_LEVELS[number]
 - 转换：
   - `any → knockdown`：`pendingKnockdown && health > 0`（dying 优先级最高）。
   - `knockdown → getting_up`：`stateTime >= config.knockdownDuration`。
-  - `getting_up → idle / walking`：`stateTime >= config.getUpDuration`。
-- `knockdown.enter`：清水平速度、置 `hitImmunityTimer = knockdownDuration + getUpDuration`、禁用攻击 / 格挡；期间忽略 `pendingFlinch / pendingKnockdown`。
+  - `getting_up → idle / walking`：`stateTime >= config.getUpTurnDuration + config.getUpDuration`。
+- `knockdown.enter`：清水平速度、置 `hitImmunityTimer = knockdownDuration + getUpTurnDuration + getUpDuration`、禁用攻击 / 格挡；期间忽略 `pendingFlinch / pendingKnockdown`。
+- 倒地前 50%（`KNOCKDOWN_FALL_RATIO`）完成 0→90° 倒下，后 50% 保持完全伏地的最后一帧静止；倒地末帧与起身首帧共用同一套完全伏地姿势，状态切换零跳变。
+- 起身前置翻身：躺在地上水平转到正面朝下后再爬起；`getUpTurnDuration` 按面朝与倒向夹角换算（180° = 0.25s），`world.ts` 按固定角速度推进朝向。
 - `getting_up.exit`：`hitImmunityTimer = 0`、`poise = poiseMax`（**起身结束回满**）。
 - 弱 / 强硬直复用 `flinching`（`FLINCH_DURATION`）；如需区分时长可新增 `combat.flinchDuration`（实现时定）。
 - 新增状态显示名 i18n 键。

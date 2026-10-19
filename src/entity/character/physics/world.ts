@@ -67,7 +67,7 @@ import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import {getSkillExecutor, registerSkillExecutor} from '../../../character/combat/executor.ts'
 import {attackDetectOBB, createMeleeExecutor, targetHitBoxHalves, testAttackDetect} from '../combat/melee_executor.ts'
 import type {WorldDamageTarget, WorldDamageTargetProvider} from '../../../character/combat/world_targets.ts'
-import {ROLL_WORLD_DAMAGE} from '../../../character/combat/constants.ts'
+import {GET_UP_TURN_SPEED, ROLL_WORLD_DAMAGE} from '../../../character/combat/constants.ts'
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createMaterialEffects} from '../combat_vfx/material_effects.ts'
@@ -1495,8 +1495,28 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         && offWeapon !== undefined && offWeapon.weapon.type === 'melee' && offWeapon.weapon.block !== undefined,
                 }
 
-                sys.update(dt, model, entity.stateMachine.currentState, {
-                    stateTime: entity.stateMachine.stateTime,
+                /* 倒地 / 起身时长可配置：动画层按同一状态时长定位 clip，与根旋转曲线同拍 */
+                const animState = entity.stateMachine.currentState
+                const stateDuration = animState === 'knockdown'
+                    ? entity.combat.knockdownDuration
+                    : animState === 'getting_up'
+                        ? entity.combat.getUpDuration
+                        : undefined
+                /* 进入起身首帧时按实际面朝重算翻身时长（180° = 0.25s），保证倒地段朝向漂移后仍按角速度对齐 */
+                const facingYaw = facingAngles.get(entity.id) ?? 0
+                if (animState === 'getting_up' && entity.stateMachine.stateTime === 0) {
+                    const targetYaw = Math.atan2(entity.knockdownFallDirX, entity.knockdownFallDirZ)
+                    let turnDiff = targetYaw - facingYaw
+                    turnDiff = ((turnDiff + Math.PI) % (2 * Math.PI)) - Math.PI
+                    entity.combat.getUpTurnDuration = Math.abs(turnDiff) / GET_UP_TURN_SPEED
+                }
+                /* 起身前翻身阶段不算爬起进度：动画停在伏地首帧，翻身结束后再推进 */
+                const animStateTime = animState === 'getting_up'
+                    ? Math.max(entity.stateMachine.stateTime - Math.max(entity.combat.getUpTurnDuration, 0), 0)
+                    : entity.stateMachine.stateTime
+                sys.update(dt, model, animState, {
+                    stateTime: animStateTime,
+                    ...(stateDuration !== undefined ? {stateDuration} : {}),
                     horizontalSpeed: hSpeed,
                     holdMode: entity.holdMode,
                     handedness: entity.config.handedness ?? DEFAULT_HANDEDNESS,
@@ -1517,6 +1537,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const isRolling = entity.stateMachine.currentState === 'rolling'
                 const isKnockdown = entity.stateMachine.currentState === 'knockdown'
                 const isGettingUp = entity.stateMachine.currentState === 'getting_up'
+                /* 起身前置翻身：躺在地上按固定角速度转到倒向（正面朝下），180° = 0.25s。
+                 * 末尾多允许一个物理步，确保离散步长下也能转到目标角（步进按剩余角夹紧，不越过）。 */
+                const turnDuration = Math.max(entity.combat.getUpTurnDuration, 0)
+                const turningOver = isGettingUp
+                    && entity.stateMachine.stateTime > 0
+                    && turnDuration - entity.stateMachine.stateTime > -dt
 
                 let targetAngle: number
                 /** 远程武器（近战不受瞄准朝向影响，攻击判定箱随武器模型） */
@@ -1532,7 +1558,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 /** 仅在「站定转身瞄准 / 射击动作」期间把朝向锁到目标；移动阶段（含逃跑/回撤）朝向跟随移动方向 */
                 const aiFacingTarget = aiAimTarget !== undefined
                     && (entity.combat.attackActive || (aiCtx !== undefined && aiCtx.combatAimActive))
-                if (entity.isPlayer) {
+                if (isKnockdown || (isGettingUp && !turningOver)) {
+                    /* 倒地段与翻身结束后的爬起段都锁定朝向：避免躺地时被 AI / 输入带着原地打转 */
+                    targetAngle = currentAngle
+                } else if (entity.isPlayer) {
                     const inputLen = Math.hypot(playerDx, playerDz)
                     if (isRolling) {
                         /* 翻滚期间朝向锁定翻滚方向：输入转向不改变朝向，避免边滚边原地打转 */
@@ -1579,9 +1608,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 }
 
-                let diff = targetAngle - currentAngle
-                diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
-                const newAngle = currentAngle + diff * Math.min(ROTATION_SPEED * dt, 1)
+                let newAngle: number
+                if (turningOver) {
+                    const targetYaw = Math.atan2(entity.knockdownFallDirX, entity.knockdownFallDirZ)
+                    let turnDiff = targetYaw - currentAngle
+                    turnDiff = ((turnDiff + Math.PI) % (2 * Math.PI)) - Math.PI
+                    const step = GET_UP_TURN_SPEED * dt
+                    newAngle = currentAngle + Math.max(-step, Math.min(step, turnDiff))
+                } else {
+                    let diff = targetAngle - currentAngle
+                    diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
+                    newAngle = currentAngle + diff * Math.min(ROTATION_SPEED * dt, 1)
+                }
                 facingAngles.set(entity.id, newAngle)
                 if (entity.isDying) {
                     /* 死亡倒下：绕世界轴「上 × 倒向」旋转 dyingFallAngle（方向/角度由 dying state 决定），

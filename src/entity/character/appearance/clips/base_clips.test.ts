@@ -3,6 +3,7 @@ import {Euler, Quaternion, Vector3} from 'three'
 import {buildBaseClip, getBaseClipForHoldMode, getBaseLayers, CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
 import {WEAPON_GRIP_FLEX} from '../constants.ts'
+import {GET_UP_PLANT_END, GET_UP_PUSH_END} from '../../../../character/combat/constants.ts'
 import {sampleClip} from '../../../../skeleton/anim/sampling.ts'
 import type {BoneAnimationClip} from '../../../../skeleton/anim/types.ts'
 import {composePoses} from '../../../../skeleton/anim/composition.ts'
@@ -131,6 +132,46 @@ describe('基础状态 clip 生成器', () => {
             const normal = shieldNormal(clip, arm, 0)
             expect(Math.abs(normal.y), `${state}:${arm}`).toBeLessThan(0.05)
             expect(normal.z, `${state}:${arm}`).toBeGreaterThan(0.99)
+        }
+    })
+
+    it('起身姿态：双手先收到肩下撑地，再蹬肘收腿推起，末帧回站立中立位', () => {
+        const meta = BASE_CLIP_META.getting_up
+        const sample = (ratio: number): PoseState =>
+            BASE_POSE_SAMPLERS.getting_up(meta.duration * ratio, {weaponHeld: false, horizontalSpeed: 0})
+        const downed = sample(0)
+        const braced = sample(GET_UP_PLANT_END)
+        const pushed = sample(GET_UP_PUSH_END)
+        const stand = sample(1)
+        /* 撑地：肘继续前屈（自然弯折方向），双手收到肩侧撑住地面 */
+        expect(Math.abs(braced.rightArmElbow.rx)).toBeGreaterThan(Math.abs(downed.rightArmElbow.rx))
+        /* 推起：肘部蹬直、膝盖收到身下 */
+        expect(Math.abs(pushed.rightArmElbow.rx)).toBeLessThan(Math.abs(braced.rightArmElbow.rx))
+        expect(pushed.rightLegHip.rx).toBeLessThan(braced.rightLegHip.rx)
+        expect(pushed.rightLegKnee.rx).toBeGreaterThan(braced.rightLegKnee.rx)
+        /* 站直：全部回中立位 */
+        expect(stand.rightArmShoulder.rx).toBeCloseTo(0)
+        expect(stand.rightArmElbow.rx).toBeCloseTo(0)
+        expect(stand.rightLegHip.rx).toBeCloseTo(0)
+        expect(stand.rightLegKnee.rx).toBeCloseTo(0)
+        /* 全过程肘不得反向超伸、膝不得反向弯折 */
+        for (const ratio of [0, GET_UP_PLANT_END, 0.5, GET_UP_PUSH_END, 1]) {
+            const pose = sample(ratio)
+            expect(pose.rightArmElbow.rx, `肘@${ratio}`).toBeLessThanOrEqual(0)
+            expect(pose.leftArmElbow.rx, `肘@${ratio}`).toBeLessThanOrEqual(0)
+            expect(pose.rightLegKnee.rx, `膝@${ratio}`).toBeGreaterThanOrEqual(0)
+            expect(pose.leftLegKnee.rx, `膝@${ratio}`).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it('倒地末帧与起身首帧姿态无缝一致（完全伏地 → 直接爬起）', () => {
+        const knockdownEnd = BASE_POSE_SAMPLERS.knockdown(BASE_CLIP_META.knockdown.duration, {
+            weaponHeld: false,
+            horizontalSpeed: 0,
+        })
+        const gettingUpStart = BASE_POSE_SAMPLERS.getting_up(0, {weaponHeld: false, horizontalSpeed: 0})
+        for (const jointId of CHARACTER_JOINT_IDS) {
+            expect(quatOf(gettingUpStart, jointId).angleTo(quatOf(knockdownEnd, jointId)), jointId).toBeLessThan(1e-6)
         }
     })
 

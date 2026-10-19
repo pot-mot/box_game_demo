@@ -324,6 +324,24 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
         model.dispose()
     })
 
+    it('倒地 / 起身按状态时长定位 clip（时长可配置时手脚与根旋转仍同拍）', () => {
+        const makeModel = (): ReturnType<typeof createCharacterModel> => createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        const slow = makeModel()
+        const fast = makeModel()
+        const slowSys = createAppearanceSystem()
+        const fastSys = createAppearanceSystem()
+        /* 同一状态时间：getUpDuration = 1.2 的角色仍在推起段；0.6 的角色已站直 */
+        for (let i = 0; i <= 36; i++) {
+            const stateTime = i / 60
+            slowSys.update(1 / 60, slow, 'getting_up', makeCtx({stateTime, stateDuration: 1.2}))
+            fastSys.update(1 / 60, fast, 'getting_up', makeCtx({stateTime, stateDuration: 0.6}))
+        }
+        expect(Math.abs(slow.rightArmElbow.rotation.x)).toBeGreaterThan(0.2)
+        expect(Math.abs(fast.rightArmElbow.rotation.x)).toBeLessThan(0.05)
+        slow.dispose()
+        fast.dispose()
+    })
+
     it('falling 腿张开随水平速度（速度 0 vs 高速档，动画键切换生成不同 clip）', () => {
         const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const sys = createAppearanceSystem()

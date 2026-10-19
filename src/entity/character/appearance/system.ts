@@ -255,6 +255,10 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             if (chargingPose) {
                 /* 蓄力姿势：按蓄力值定位到 clip 对应进度（0 = 起始位，1 = 满蓄力位），不自由推进 */
                 player.seekProgress(ctx.attackCharge * chargingSeekScale)
+            } else if (ctx.stateDuration !== undefined && (state === 'knockdown' || state === 'getting_up')) {
+                /* 倒地 / 起身时长可由角色属性配置：按状态时间定位 clip（而非自由推进），
+                 * 保证撑地 / 推起姿势与 `getting_up` 的根旋转曲线始终同拍 */
+                player.seekProgress(ctx.stateTime / Math.max(ctx.stateDuration, 0.0001))
             } else {
                 player.updater(dt)
                 /* 行走 / 游泳：步频随水平速度变速 */

@@ -1,4 +1,4 @@
-import {Euler, Quaternion, Vector3} from 'three'
+﻿import {Euler, Quaternion, Vector3} from 'three'
 import type {BoneAnimationClip, BoneJointKeyframeRecord} from '../../../../skeleton/anim/types.ts'
 import type {JointPose} from '../../../../skeleton/skeleton.ts'
 import type {PoseLayer} from '../../../../skeleton/anim/composition.ts'
@@ -148,7 +148,11 @@ const buildBaseClipWithJoints = (
         const records: BoneJointKeyframeRecord[] = []
         for (let i = 0; i < frameCount; i++) {
             const t = meta.duration * i / (frameCount - 1)
-            const sampled = sampler(t, {weaponHeld, horizontalSpeed, ...(blockArm !== undefined ? {blockArm} : {})})
+            const sampled = sampler(t, {
+                weaponHeld,
+                horizontalSpeed,
+                ...(blockArm !== undefined ? {blockArm} : {}),
+            })
             const pose = orientShieldArms(adjustArmsForHoldMode(sampled, holdMode, weaponHeld, state), shieldArms)
             const record = poseToRecord(pose).get(jointId)!
             records.push({time: t, position: record.position, rotation: record.rotation})
@@ -223,7 +227,11 @@ export const getWalkLegsClip = (handedness: Handedness = DEFAULT_HANDEDNESS): Bo
 const lowerClipCache = new Map<string, BoneAnimationClip>()
 const upperClipCache = new Map<string, BoneAnimationClip>()
 
-const getLowerClip = (state: keyof typeof BASE_POSE_SAMPLERS, horizontalSpeed: number, handedness: Handedness): BoneAnimationClip => {
+const getLowerClip = (
+    state: keyof typeof BASE_POSE_SAMPLERS,
+    horizontalSpeed: number,
+    handedness: Handedness,
+): BoneAnimationClip => {
     const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
     const key = `${handedness}:${state}${speedKey}`
     const cached = lowerClipCache.get(key)
@@ -296,3 +304,4 @@ export const getBaseClipForHoldMode = (
     holdClipCache.set(key, clip)
     return clip
 }
+
