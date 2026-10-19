@@ -94,6 +94,8 @@ export interface CombatComponent {
      * 段入场（`enterAttackSegment`）清零。
      */
     chargeCommitted: boolean
+    /** 当前段已施加的冲击条数（`AttackSegment.impulses` 的消费索引；段入场清零） */
+    impulsesFired: number
 
     /** 是否被标记为受击硬直 */
     pendingFlinch: boolean
@@ -280,6 +282,7 @@ export const createCombatComponent = (
         attackCharge: 0,
         attackHolding: false,
         chargeCommitted: false,
+        impulsesFired: 0,
         pendingFlinch: false,
         flinchDuration: FLINCH_DURATION,
         flinchImmunityTimer: 0,

@@ -5,6 +5,7 @@ import {segmentTotalDuration} from '../../weapon/attack_chain.ts'
 import {DEFAULT_MELEE_AIR_ATTACK, type MeleeAirAttackConfig} from '../../weapon/melee_attacks.ts'
 import {resolvePhases} from '../../combat/attack_phases.ts'
 import {canStartAttack, inRecoveryWindow} from '../../combat/attack_runtime.ts'
+import {fireSegmentImpulses} from '../../combat/attack_impulses.ts'
 import {SLOPE_WALK_THRESHOLD} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
 import {moveSpeedOf} from '../../types.ts'
@@ -16,7 +17,9 @@ import {advanceSegmentPhases, enterAttackSegment, resolveSegmentNextState, type 
  * 与地面 `attacking` 共用同一套段调度（`attacking/segment.ts`），差异：
  * - 起手固定走武器 `air` 链（空中键，与轻重链命名空间分离；远程武器空链 → 不起手）；
  * - 空中不蓄力（`attackHeld` 恒忽略）、无移动投射/斜坡逻辑，改为「保留跳跃惯性 + 低操控」；
- * - 段数/动量/操控/砸地由武器类的 `airAttack` 模组决定（段数可与地面不同，动画复用地面 pose）；
+ * - 段数/动量/操控由武器类的 `airAttack` 模组决定（段数可与地面不同）；
+ * - 段动作是**自烘焙 clip**（`attack_clip_data.ts` 的 `_air_N` 条目），砸地等自身冲击由段的
+ *   `impulses` 配置在指定段内时刻施加（见 `combat/attack_impulses.ts`）；
  * - 收招/落地后回到地面状态；**不回 jumping**（`jumping.enter` 会重置 vy，会造成二段跳）。
  */
 
@@ -81,12 +84,6 @@ export const airAttackingHandler: StateHandler = {
         const segment = c.activeSegment
         if (segment === undefined) return
         enterAttackSegment(c, segment, entity)
-        /* 砸地：打击段起手瞬间施加向下冲量（战锤「跳跃砸地」） */
-        const slamSpeed = airAttackOf(entity).slamSpeed
-        if (slamSpeed > 0) {
-            const linvel = entity.body.linvel()
-            entity.body.setLinvel({x: linvel.x, y: Math.min(linvel.y, -slamSpeed), z: linvel.z}, true)
-        }
     },
     update: (dt, input, entity) => {
         const c = entity.combat
@@ -95,6 +92,8 @@ export const airAttackingHandler: StateHandler = {
 
         /* 阶段时间线推进（不蓄力：attackHeld 恒 false） */
         const phasesDone = advanceSegmentPhases(c, dt, false)
+        /* 段内冲击（数据驱动）：砸地等由段配置在指定时刻对自身施加 */
+        fireSegmentImpulses(c, entity)
 
         /* 空中连段：按攻击键续接同一 `air` 链（把任意攻击键归一为空键）；
          * 与地面一致，**仅后摇窗口接受预输入** */

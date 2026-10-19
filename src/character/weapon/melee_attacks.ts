@@ -1,7 +1,7 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
 import type {ImpactLevel} from '../combat/impact.ts'
 import {effectiveChargeFullTime} from './attack_chain.ts'
-import type {AttackEntry, AttackKey, AttackSegment, AttackTransition, GroundAttackKey, WeaponAttackChain, WeaponAttacks} from './attack_chain.ts'
+import type {AttackEntry, AttackImpulse, AttackKey, AttackSegment, AttackTransition, GroundAttackKey, WeaponAttackChain, WeaponAttacks} from './attack_chain.ts'
 import type {HoldMode} from './hold_mode.ts'
 import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
 
@@ -56,7 +56,8 @@ export type MeleeSegmentKey = typeof MELEE_SEGMENT_KEYS[number]
 
 /**
  * 空中段模板键（与地面段命名空间分离；段数可与地面不同）。
- * 空中段不单独烘焙关键帧，动画经 `MeleeAirAttackConfig.poseKeys` 复用地面段 pose。
+ * 空中段拥有自己的 clip 数据（`attack_clip_data.ts` 的 `_air_N` 条目）；`poseKeys` 只记录
+ * 「该空中段的姿势基底取自哪个地面段」，仅在生成 clip 数据时使用，运行时不再引用地面 pose。
  */
 export const MELEE_AIR_SEGMENT_KEYS = ['air_1', 'air_2'] as const
 export type MeleeAirSegmentKey = typeof MELEE_AIR_SEGMENT_KEYS[number]
@@ -154,7 +155,8 @@ export const MELEE_CHAIN_SPECS: Readonly<Record<GroundAttackKey, MeleeChainSpec>
 /**
  * 空中攻击模组配置（武器类拥有）：
  * 「跳跃中按攻击键」时由 `air_attacking` 状态读取——空中不单独烘焙关键帧，
- * 每段动画经 `poseKeys` 复用地面段 pose；动量/操控/砸地由武器种类决定（段数可与地面不同）。
+ * 段数/动量/操控由武器种类决定（段数可与地面不同）；自身冲击由段的 `impulses` 配置。
+ * 空中段动画是自烘焙 clip，`poseKeys` 仅作 clip 数据的姿势基底说明。
  */
 export interface MeleeAirAttackConfig {
     /** 空中链主干段（顺序 = 播放与清单顺序；段数可与地面不同） */
@@ -165,15 +167,13 @@ export interface MeleeAirAttackConfig {
     readonly momentum: number
     /** 空中攻击期间输入对水平速度的操控系数（0~1；越小越不可转向） */
     readonly airControl: number
-    /** 打击段起始施加的向下冲量（m/s，0 = 无；战锤「跳跃砸地」用） */
-    readonly slamSpeed: number
-    /** 每段动画复用的地面段模板键（与 `steps` 一一对应；缺省按轻击 1 段） */
+    /** 每段动画的**姿势基底**地面段模板键（与 `steps` 一一对应；仅用于生成空中段自己的 clip 数据） */
     readonly poseKeys: readonly MeleeSegmentKey[]
 }
 
-/** 默认空中攻击模组：单段、保留惯性、低操控、无砸地、复用轻击 1 段动画 */
+/** 默认空中攻击模组：单段、保留惯性、低操控、姿势基底取轻击 1 段 */
 export const DEFAULT_MELEE_AIR_ATTACK: MeleeAirAttackConfig = {
-    steps: ['air_1'], loop: false, momentum: 0.98, airControl: 0.35, slamSpeed: 0, poseKeys: ['light_1'],
+    steps: ['air_1'], loop: false, momentum: 0.98, airControl: 0.35, poseKeys: ['light_1'],
 }
 
 /** 单段冲击力 / 削韧覆写（缺省字段沿用重段/轻段/空中段默认值） */
@@ -192,6 +192,8 @@ export interface BuildMeleeAttacksOptions {
     readonly entries?: Partial<Record<AttackKey, readonly AttackEntry[]>>
     /** 空中攻击模组覆写（缺省 = DEFAULT_MELEE_AIR_ATTACK） */
     readonly air?: MeleeAirAttackConfig
+    /** 逐段自身冲击序列（键 = 模板键，地面与空中段共用命名空间；缺省 = 无冲击） */
+    readonly impulses?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, readonly AttackImpulse[]>>
     /** 逐段冲击力 / 削韧覆写（键 = 模板键，地面与空中段共用命名空间） */
     readonly impact?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, SegmentImpactOverride>>
     /**
@@ -259,6 +261,7 @@ export const buildMeleeAttacks = (
             damageMultiplier: heavy ? MELEE_HEAVY_DAMAGE_MULTIPLIER : 1,
             impact: impactOverride?.impact ?? (heavy ? MELEE_HEAVY_IMPACT : MELEE_LIGHT_IMPACT),
             poiseDamage: impactOverride?.poiseDamage ?? (heavy ? MELEE_HEAVY_POISE_DAMAGE : MELEE_LIGHT_POISE_DAMAGE),
+            ...(options.impulses?.[segmentKey] !== undefined ? {impulses: options.impulses[segmentKey]} : {}),
             cooldown: 0,
             next: transitionsFor(classId, holdMode, chains[meta.key], segmentKey),
         }
@@ -278,8 +281,8 @@ export const buildMeleeAttacks = (
         segments[segment.id] = segment
     }
 
-    /* 空中段：独立命名空间，动画复用地面段 pose（不单独烘焙关键帧）；
-     * poseKeys 必须与 steps 一一对应且指向本模式实际生成的地面段（fail loudly，避免静默回退到不存在的 clip） */
+    /* 空中段：独立命名空间 + 自烘焙 clip（`poses[0].poseId === 段 id`，运行时不再引用地面 pose）；
+     * poseKeys 必须与 steps 一一对应且指向本模式实际生成的地面段（= 该空中段 clip 的姿势基底出处，fail loudly） */
     if (air.poseKeys.length !== air.steps.length) {
         throw new Error(`近战空中攻击模组错误（${classId}/${holdMode}）：poseKeys 数量（${air.poseKeys.length}）须与 steps 数量（${air.steps.length}）一致`)
     }
@@ -292,7 +295,6 @@ export const buildMeleeAttacks = (
     air.steps.forEach((_step, index) => {
         const id = airIds[index]
         const nextId = airIds[index + 1] ?? (air.loop ? airIds[0] : undefined)
-        const poseKey = air.poseKeys[index]
         const impactOverride = options.impact?.[_step]
         segments[id] = {
             id,
@@ -301,10 +303,11 @@ export const buildMeleeAttacks = (
             duration: MELEE_AIR_DURATION,
             recovery: MELEE_AIR_RECOVERY,
             phases: airSegmentPhases(),
-            poses: [{poseId: poseRef(meleeSegmentId(classId, holdMode, poseKey)), weight: 1}],
+            poses: [{poseId: id, weight: 1}],
             damageMultiplier: MELEE_AIR_DAMAGE_MULTIPLIER,
             impact: impactOverride?.impact ?? MELEE_AIR_IMPACT,
             poiseDamage: impactOverride?.poiseDamage ?? MELEE_AIR_POISE_DAMAGE,
+            ...(options.impulses?.[_step] !== undefined ? {impulses: options.impulses[_step]} : {}),
             cooldown: 0,
             next: nextId !== undefined ? [{to: nextId}] : [],
         }

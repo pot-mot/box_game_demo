@@ -511,26 +511,27 @@ describe('空中攻击链（跳跃中按攻击键，武器种类独立模组）'
         }
     })
 
-    it('空中段动画复用地面段 pose（不单独烘焙关键帧）', () => {
+    it('空中段动画自烘焙：pose 指向段自身（不再复用地面段 pose）', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
-            const mode = defaultHoldMode(MELEE_WEAPON_PRESETS[weaponId])
-            const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
-            for (const segmentId of chainOf(attacks, 'air').steps) {
-                const segment = findSegment(attacks, segmentId)!
-                const poseId = segment.poses[0].poseId
-                /* pose 指向同一持握模式下的地面段（存在且非空中段） */
-                expect(attacks.segments[poseId], `${segmentId} → ${poseId}`).toBeDefined()
-                expect(poseId.includes('_air_')).toBe(false)
+            const weapon = MELEE_WEAPON_PRESETS[weaponId]
+            for (const mode of weapon.holdModes) {
+                const attacks = weaponAttacksOf(weapon, mode)
+                for (const segmentId of chainOf(attacks, 'air').steps) {
+                    const segment = findSegment(attacks, segmentId)!
+                    expect(segment.poses[0].poseId, segmentId).toBe(segmentId)
+                }
             }
         }
     })
 
-    it('武器种类独立模组：巨剑两段、长枪复用重刺、战锤单段砸地', () => {
+    it('武器种类独立模组：巨剑两段、长枪单段、战锤单段砸地（段内冲击）', () => {
         expect(chainOf(weaponAttacksOf(MELEE_WEAPON_PRESETS.heavy_sword, 'two_handed'), 'air').steps)
             .toEqual(['heavy_sword_two_handed_air_1', 'heavy_sword_two_handed_air_2'])
         expect(findSegment(weaponAttacksOf(MELEE_WEAPON_PRESETS.spear), 'spear_one_handed_air_1')?.poses[0].poseId)
-            .toBe('spear_one_handed_heavy_1')
-        expect(MELEE_WEAPON_PRESETS.war_hammer.airAttack?.slamSpeed).toBeGreaterThan(0)
+            .toBe('spear_one_handed_air_1')
+        const hammerAir = findSegment(weaponAttacksOf(MELEE_WEAPON_PRESETS.war_hammer), 'war_hammer_one_handed_air_1')
+        expect(hammerAir?.impulses?.length).toBe(1)
+        expect(hammerAir?.impulses?.[0].speed).toBeGreaterThan(0)
         expect(chainOf(weaponAttacksOf(MELEE_WEAPON_PRESETS.war_hammer), 'air').steps)
             .toEqual(['war_hammer_one_handed_air_1'])
     })

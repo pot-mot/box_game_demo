@@ -32,6 +32,7 @@ export const enterAttackSegment = (c: CombatComponent, segment: AttackSegment, e
     c.attackCharge = 0
     c.attackHolding = false
     c.chargeCommitted = false
+    c.impulsesFired = 0
     c.attackedTargets.clear()
     /* 冷却从触发时刻开始计时（链中段冷却为 0，不受影响） */
     armSegmentCooldown(c, segment)

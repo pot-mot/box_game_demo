@@ -342,11 +342,25 @@ attacking update(dt):
 「跳跃 / 下落中按攻击键」进入独立状态 `air_attacking`（与地面 `attacking` 并列的 meta-state，共用 `states/attacking/segment.ts` 的段调度），按**武器种类**读取空中攻击模组（`MeleeWeaponClassConfig.airAttack`，缺省 `DEFAULT_MELEE_AIR_ATTACK`）：
 
 - **独立攻击键 `air`**：`ATTACK_KEYS = ['light','heavy','air']`，空中攻击固定走 `air` 链，与地面轻重链命名空间分离；段 id 形如 `{classId}_{holdMode}_air_N`。**远程武器声明空 air 链**（`buildRangedAttacks` 的 `air: {entries: [], steps: []}`）→ 空中起手解析失败，跳跃中按攻击键无效。
-- **每武器独立模组**（`MeleeAirAttackConfig`）：`steps`（空中段数，可与地面不同）、`loop`、`momentum`（每帧水平动量保留系数）、`airControl`（输入对水平速度的操控系数）、`slamSpeed`（打击段向下冲量，战锤「跳跃砸地」）、`poseKeys`（每段动画复用的**地面段模板键**）。空中段不单独烘焙关键帧：`poses[0].poseId` 指向地面段 id（如战锤 air_1 复用 `heavy_1` 的重砸 pose），属显式复用而非占位。
+- **每武器独立模组**（`MeleeAirAttackConfig`）：`steps`（空中段数，可与地面不同）、`loop`、`momentum`（每帧水平动量保留系数）、`airControl`（输入对水平速度的操控系数）、`poseKeys`（每段动画的**姿势基底**地面段模板键，仅用于说明该空中段 clip 数据的由来，运行时不再引用）。空中段动画是**自烘焙 clip**：`attack_clip_data.ts` 为每个空中段提供独立条目（与地面/盾/远程段同表、按武器模组聚合），`poses[0].poseId === 段 id`，**不复用地面段 pose**——调整空中动作（关键帧 / 时长 / 命中帧）不会影响地面段，反之亦然。
 - **起手/输入映射**：`world.ts` 的 `setPlayerAttack` 在角色处于空中攻击态（`isAirborneAttackState(currentState)`，即 `jumping`/`falling`/`air_attacking`）时把按键统一映射为 `'air'`；`beginPlayerAttackHold` 同判据下直接 return（**空中攻击不可蓄力**，`air` 段无 `chargeFullTime`）。**按状态而非 `isSupportedOn` 判定离地**——胶囊跨 trimesh 棱线时接触法线会瞬时读陡，`idle`/`walking` 也会短暂 `isSupportedOn=false`，否则地面攻击会误走 `air` 链（无空中动量/砸地）。转换守卫 `canStartAirAttack(entity)` = `canStartAttack(attacks, 'air')`。
 - **状态转换**：`jumping` / `falling` 末尾新增 `→ air_attacking`（死亡/受击优先级更高，故置于末尾）；`air_attacking` 播完 → 支撑则 `walking`/`idle`、否则 `falling`；**绝不回 `jumping`**（`jumping.enter` 会重置 vy 造成二段跳）。
 - **位移**：`applyAirAttackMotion` 保留起跳惯性（`vx *= momentum`）并按 `airControl` 微调；不走段默认的 `moveSpeedMultiplier` 与斜坡投影。
+- **砸地（自身冲击）**：战锤空中段配 `impulses: [{at: 0.5, direction: {x: 0, y: -1, z: 0}, speed: 14, requireAirborne: true}]`——段内 0.5s（= clip `hitbox_on`）向下砸，**不在起手施加**（否则角色会在命中窗口开启前落地，判定扑空）。机制见 §3.9；**禁止**挪回状态 `enter`。回归 `entity/character/physics/air_slam.test.ts`。
 - **动画**：`appearance/system.ts` 的 `isAttackState` 把 `attacking` 与 `air_attacking` 归入同一攻击 clip 生成器与双手 IK 分支；动画键仍为 `attacking:{segment.id}`。
+
+### 3.9 段内自身冲击（`impulses`）
+
+任意攻击段（地面 / 空中 / 远程）都可声明**多条**自身冲击：段内时间轴到达 `at` 时对施术者施加一次速度冲量（砸地 / 突进 / 反冲）。
+
+```ts
+// 武器类数据（`MeleeWeaponClassConfig.impulses`，键 = 段模板键；同类的全部持握模式共享）
+impulses: {air_1: [{at: 0.5, direction: {x: 0, y: -1, z: 0}, speed: 14, requireAirborne: true}]}
+```
+
+- **数据**：`AttackSegment.impulses?: readonly AttackImpulse[]`，`AttackImpulse = {at（秒，段内时间轴）, direction（世界空间，施加时归一化）, speed（m/s，叠加到当前线速度）, requireAirborne?}`。缺省 = 空数组（无冲击）。
+- **派发**：`combat/attack_impulses.ts` 的 `fireSegmentImpulses`，由 `attacking` 与 `air_attacking` 在阶段推进后调用；`combat.impulsesFired` 作消费索引（段入场 `enterAttackSegment` 清零），每条冲击每段只施加一次。
+- **时序语义**：与阶段时间线 / 动画 clip **同一时钟**（段总时长 = clip 时长），故「动画播到该程度」即「时间到达」。蓄力冻结时时间不推进 → 不触发；蓄力释放跳过的时刻会**补发**（跨帧不漏）。`requireAirborne` 的冲击在已落地时跳过（避免向地面注入速度）。
 
 ---
 
@@ -487,7 +501,7 @@ SAT 相交命中且目标不在 `attackedTargets`（每段攻击只结算一次�
 
 ```
 character/weapon/
-├── attack_clip_data.ts    ← 攻击段基础骨骼关键帧（段 id → 稀疏关键帧）
+├── attack_clip_data.ts    ← 全武器模组的攻击段骨骼关键帧（地面 / 空中 / 盾击 / 远程同表，按武器模组排序）
 └── attack_pose_edits.ts   ← 逐段关键姿势修订（不改变时长、阶段或事件）
 entity/character/appearance/
 ├── pose_fns.ts            ← 基础状态姿态纯函数（固定频率采样）
@@ -518,8 +532,9 @@ entity/character/appearance/
 export const getAttackClipById = (clipId: string, handedness?: Handedness): BoneAnimationClip => {}
 ```
 
+- **数据来源**：全部攻击段（地面 / 空中 / 盾击 / 远程）统一在 `attack_clip_data.ts`；条目**按武器模组聚合排序**（武器类声明顺序 → 持握模式 → 段模板键 light/heavy/air），同一武器的地面段与空中段相邻。空中段是独立条目（不复用地面段 pose）；盾段基础轨道为静止位 + 恒等旋转，真实姿态由 `attack_pose_edits.ts` 提供。
 - **关键帧时间** = 0 与各阶段边界（`phaseDurationOf` 累加）；姿态是显式关节旋转/位置，修订只覆盖基础轨道里已存在的关键时刻。**三段式约定**：t=0 起手/蓄力 → 中帧（动作段结束）= 打击完成姿态（刃/枪口位于打击平面内、双手副握点在支撑臂臂展内）→ 末帧 = 持械戒备（与 idle 一致）。挥砍平面与刃面朝向由武器骨骼（主手 `rightWeaponMount` / 副手 `leftWeaponMount`；左撇子由 clip 镜像落到相反侧）承担，收招帧回到 `WEAPON_GRIP_FLEX`。双持副手相位由原有关键帧表达。
-- **事件轨**：`hitbox_on` ≈ 0.5×动作时间、`hitbox_off` ≈ 0.95×动作时间（对齐打击帧；驱动 `melee_executor.setHitWindow`，按 `params.weapon` 分主/副手）。
+- **事件轨**：`hitbox_on` ≈ 0.5×动作时间、`hitbox_off` ≈ 0.95×动作时间（对齐打击帧；`world.ts` 的 `onAttackEvent` 收到后驱动 `melee_executor.setHitWindow`，按 `params.weapon` 分主/副手；空中砸地等自身冲击由段 `impulses` 独立配置（可配成与 `hitbox_on` 同刻，见 §3.9）。
 - **数据校验**：`attack_pose_edits.ts` 引用的关节轨道和时间必须在基础 clip 中存在；`getAttackClipById` 对缺失段 id 抛错（数据与武器段不同步）。事件轨和 clip 时长不受姿势修订影响。
 
 ### 6.4 AnimationContext 与段 id 动画键
@@ -612,6 +627,8 @@ const phaseKey = c.phaseIndex < phases.length
 |---|---|
 | 某段动作时长/恢复/伤害倍率 | `melee_attacks.ts` 的段模板（`SEGMENT_META`：轻/重决定时长与伤害倍率） |
 | 某段动作形态（挥砍/直刺幅度、双手、倾斜角…） | `character/weapon/attack_pose_edits.ts` 的逐段关键姿势；需要增删关键时刻时再编辑 `attack_clip_data.ts` |
+| 某段对**施术者自身**施加冲击（砸地 / 突进 / 反冲） | 武器类 `MeleeWeaponClassConfig.impulses`（键 = 段模板键，可多条；`at` 为段内秒数）→ 自动注入段数据，派发见 §3.9 |
+| 空中段的动作（现在是独立 clip） | `attack_clip_data.ts` 中该 `_air_N` 条目（关键帧 / 命中帧）+ `attack_pose_edits.ts`（按空中段 clip 的时间修订姿势） |
 | 某段阶段序列（windup/strike/recovery 之外的新阶段、`moveSpeedMultiplier`、`cancellable`） | `melee_attacks.ts` 的 `groundSegmentPhases()` / `airSegmentPhases()`（影响所有近战模板段；抬手 / 挥砍比例由 `MELEE_*_WINDUP` 与 `MELEE_*_ATTACK` 推导）；单独一个段用 `extraSegments` 自带 `phases` |
 | 链长度/顺序/是否循环 | `melee_weapon.ts` 里该武器类 `meleeClass(base, modeChains)` 的对应模式编排 `chains`（缺省 = `melee_attacks.ts` 的 `MELEE_CHAIN_SPECS`：轻/重各 2 段循环） |
 | 起手条件（长按/方向变体/特殊技） | 该模式的 `extraSegments` + `entries`（守卫变体在前、兜底在后） |
@@ -729,7 +746,7 @@ const phaseKey = c.phaseIndex < phases.length
 | `attack_chain.ts` | 攻击链领域模型：`ATTACK_KEYS` / `AttackKey`、`AttackSegment`（含 `chargeFullTime` / `chargeDamageBonus` / `chargeCooldown`）、`AttackTransition`、`AttackEntry`、`WeaponAttackChain`、`WeaponAttacks`；守卫原语（`always`/`pressedKey`/`pressedOtherKey`/`holdAtLeast`/`holdLessThan`/`hasMoveInput`/`noMoveInput`/`cooldownReady`/`allOf`/`anyOf`/`not`）；`isChargeableKey`；`effectiveChargeFullTime`（蓄力时长下限，构建与覆写共用）；解析与查询（`findSegment`/`chainOf`/`resolveEntrySegment`/`resolveNextSegment`/`orderedSegments`/`segmentDisplayName`/`segmentTotalDuration`） |
 | `charge_tuning.ts` | 蓄力调参 `ChargeTuning`（`maxChargeMultiplier` % / `maxChargeTime` s）+ `chargeDamageScale`（一次函数 0→100%）+ `chargeDamageBonusOf`；`DEFAULT_CHARGE_TUNING` |
 | `melee_attacks.ts` | 近战段模板与链编排：`MELEE_SEGMENT_KEYS`（light_1/2/3、heavy_1/2）、`SEGMENT_META`（键组/序号/是否重段）、**段时长常量（`MELEE_*_WINDUP + MELEE_*_ATTACK` 推导动作时长；轻 0.6+0.5 / 重 0.72+0.6 / 空中 0.6+0.5，抬手:挥击:后摇 = 2:1:2.5）**、重段倍率 1.6、`MELEE_CHAIN_SPECS`（缺省链编排）、`meleeSegmentId(classId, holdMode, key)`、重击蓄力配置 `HeavyChargeConfig extends ChargeTuning` / `DEFAULT_HEAVY_CHARGE`、`buildMeleeAttacks(classId, holdMode, options)`（重击段声明蓄力字段，`chargeFullTime` 经 `effectiveChargeFullTime` 取下限） |
-| `attack_clip_data.ts` / `attack_pose_edits.ts` | 攻击动画基础稀疏关键帧与逐段局部姿势修订（`getAttackClipById` 合并解析） |
+| `attack_clip_data.ts` / `attack_pose_edits.ts` | 全武器模组攻击段的骨骼关键帧（按模组排序聚合）与逐段局部姿势修订（`getAttackClipById` 合并解析） |
 | `ranged_attacks.ts` | 远程段规格（9 把武器，单段）：`RANGED_ATTACK_SPECS`、`rangedSegmentIdOf`、`buildRangedAttacks(weaponId, charge?)`（charge 提供时注入段 `chargeFullTime`） |
 | `catalog.ts` | 武器目录统一查询（**注册表由体形装配时填充**）：`WeaponConfig` / `WeaponType`、`DEFAULT_WEAPON_ID`、`registerFormWeapons` / `weaponsOfForm` / `allWeaponPresets`、`findWeaponPreset`、`weaponPresetOrDefault`、额外预设注册 `registerWeaponPreset`（测试武器）；武器名经自带 `nameKey` 由 `weaponDisplayName(weapon)` 取用 |
 | `weapon_runtime.ts` | `createWeaponRuntime(weaponId, overrides)` → `{weapon, attacks}`：伤害覆写、起手段冷却覆写（`isEntrySegment` 判定）、远程弹道覆写、蓄力调参覆写（`charge` → `withChargeTuningMap` 重烘焙段字段）；动作/时长/阶段不可覆写；`isKnownWeaponId` |
@@ -754,7 +771,7 @@ const phaseKey = c.phaseIndex < phases.length
 | `src/character/state_machine/types.ts` | `CHARACTER_STATES`（含 `'rolling'` / `'flinching'`）；`CharacterInput.roll`（`setInput` 第 5 参，由 `roll` 动作触发）、`attackKey: AttackKey \| undefined`、`attackHoldDuration`（第 6/7 参）；`MachineContext.attackPhase` |
 | `src/character/state_machine/machine.ts` | 静态 `Record<CharacterState, StateHandler>` 注册全部状态；transition guard 检查 + `onStateChange` 派发；**进入 attacking / air_attacking 时用 `resolveEntrySegment` 完成起手解析并写入 `combat.activeSegment`**（后者固定 `'air'` 键） |
 | `src/character/state_machine/states/attacking/index.ts` | attacking 段子状态调度器：推进阶段时间线（`!chargeCommitted` 才冻结蓄力）→ 按输入求段转换写缓冲（**仅 `combat/attack_runtime.ts` 的 `inRecoveryWindow`，即当前阶段 `name === 'recovery'`**）→ 段播完推进下一段（不退出状态）→ 委托阶段 handler 或走默认行为；导出 `phaseHandlerRegistry` / `registerPhaseHandler` |
-| `src/character/state_machine/states/air_attacking.ts` | 空中攻击 meta-state：起手走 `air` 链、空中动量/操控/砸地（`airAttackOf`）、播完回 walking/idle/falling（回 `canStartAirAttack`）；**不得转 `jumping`**；缓冲同受后摇窗口门控 |
+| `src/character/state_machine/states/air_attacking.ts` | 空中攻击 meta-state：起手走 `air` 链、空中动量/操控（`airAttackOf`）、段内自身冲击（`combat/attack_impulses.ts`，含战锤砸地）、播完回 walking/idle/falling（回 `canStartAirAttack`）；**不得转 `jumping`**；缓冲同受后摇窗口门控 |
 | `src/character/state_machine/states/attacking/segment.ts` | 段子状态单元：`enterAttackSegment`（重置计时/挂段冷却/清命中记录/唤醒刚体/清零 `chargeCommitted`）、`advanceSegmentPhases`、`isSegmentPhasesDone`、`resolveSegmentNextState`（同键 → 本段 `next`；异键 → 该键起手解析） |
 | `src/character/state_machine/states/{idle,walking}.ts` | 攻击转换 guard 复用 `canStartAttack`（无起手候选则不进入 attacking） |
 | `src/character/state_machine/states/rolling.ts` | 翻滚状态 handler：锁定方向位移 + 中段无敌帧写入 `invincibleTimer`（exit 清零），结束转 walking/idle/falling |

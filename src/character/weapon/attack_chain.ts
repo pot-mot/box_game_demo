@@ -69,6 +69,22 @@ export interface SegmentPoseLayer {
     readonly progressOffset?: number
 }
 
+/**
+ * 攻击段冲击（数据驱动，任意段可配多个）：段内时间轴到达 `at` 时对**施术者自身**叠加一次速度冲量，
+ * 用于砸地 / 突进 / 反冲等「动作推进到某一程度时推动自己」的编排。
+ * 时间与阶段时间线、动画 clip 同一时钟（段总时长 = clip 时长）。
+ */
+export interface AttackImpulse {
+    /** 施加时刻（秒，段内时间轴；首帧 `at = 0` 亦生效） */
+    readonly at: number
+    /** 冲量方向（世界空间，y 向上；施加时按长度归一化） */
+    readonly direction: {readonly x: number; readonly y: number; readonly z: number}
+    /** 冲量大小（m/s，直接叠加到当前线速度） */
+    readonly speed: number
+    /** 仅离地时施加（砸地类：已落地则跳过，避免向地面注入速度） */
+    readonly requireAirborne?: boolean
+}
+
 /** 攻击段（武器模组拥有的一次可播放动作；id 同时是动画键与展示/编辑器清单键） */
 export interface AttackSegment {
     /** 段 id（武器内唯一，形如 `{weaponId}_{key}_{step}`） */
@@ -92,6 +108,8 @@ export interface AttackSegment {
     readonly impact: ImpactLevel
     /** 削韧值（命中时从目标韧性扣除；韧性归零触发倒地） */
     readonly poiseDamage: number
+    /** 段内冲击序列（按 `at` 升序；缺省 = 空数组，无冲击） */
+    readonly impulses?: readonly AttackImpulse[]
     /** 冷却（秒，0 = 无冷却；非 0 时从段触发时刻开始计时，只挡起手） */
     readonly cooldown: number
     /**

@@ -1,6 +1,6 @@
 import {describe, it, expect} from 'vitest'
 import {findWeaponPreset, weaponsOfForm} from './catalog.ts'
-import {SHIELD_CLASS_IDS} from './shield_clip_data.ts'
+import {SHIELD_CLASS_IDS} from './attack_pose_edits.ts'
 import {ATTACK_CLIP_JSON} from './attack_clip_data.ts'
 import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 

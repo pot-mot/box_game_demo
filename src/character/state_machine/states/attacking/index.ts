@@ -3,6 +3,7 @@ import type {CombatComponent} from '../../../combat/types.ts'
 import {segmentTotalDuration} from '../../../weapon/attack_chain.ts'
 import {isWindupStrike, phaseDurationOf, resolvePhases} from '../../../combat/attack_phases.ts'
 import {inRecoveryWindow} from '../../../combat/attack_runtime.ts'
+import {fireSegmentImpulses} from '../../../combat/attack_impulses.ts'
 import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlope, projectToSlopeAtSpeed, applySlopeAntiGravity, applySlopeSink} from '../../ground.ts'
 import {moveSpeedOf} from '../../../types.ts'
@@ -85,6 +86,8 @@ export const attackingHandler: StateHandler = {
                 c.phaseTimer = offset
             }
         }
+        /* 段内冲击（数据驱动）：时间轴跨过 `impulse.at` 时对自身施加（含蓄力释放跳跃的补发） */
+        fireSegmentImpulses(c, entity)
 
         /* 缓冲写入：AI 侧按住 attack 持续写入；玩家侧由 setPlayerAttack 写单帧脉冲。
          * **仅后摇窗口接受预输入**（抬手 / 挥斩等出招阶段的按键忽略），

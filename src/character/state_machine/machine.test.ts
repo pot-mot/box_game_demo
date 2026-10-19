@@ -877,12 +877,54 @@ describe('空中攻击（air_attacking）', () => {
         expect(e.combat.activeSegment?.id).toBe('heavy_sword_two_handed_air_2')
     })
 
-    it('战锤跳跃攻击砸地：进入瞬间施加向下冲量', () => {
+    it('战锤跳跃攻击砸地：段内冲击（impulses@0.5s）施加向下冲量，起手不下坠', () => {
         const e = makeMock(createWeaponRuntime('war_hammer'))
         jumpOff(e)
         pressAttack(e)
         expect(e.stateMachine.currentState).toBe('air_attacking')
-        expect(getMockBody(e).linvel().y).toBeLessThanOrEqual(-10)
+        expect(e.combat.activeSegment?.key).toBe('air')
+        const impulse = e.combat.activeSegment?.impulses?.[0]
+        expect(impulse?.at).toBeGreaterThan(0)
+        const jumpVy = getMockBody(e).linvel().y
+        /* 起手瞬间不施加（段内 0.5s 才到打击帧） */
+        expect(e.combat.impulsesFired).toBe(0)
+        expect(jumpVy).toBeGreaterThan(0)
+
+        let frames = 0
+        while (e.combat.impulsesFired === 0 && frames < 90) {
+            e.stateMachine.update(DT, e)
+            frames += 1
+        }
+        /* 施加帧 ≈ 段内 0.5s（30 帧） */
+        expect(e.combat.impulsesFired).toBe(1)
+        expect(frames).toBeGreaterThanOrEqual(Math.floor((impulse?.at ?? 0) / DT) - 1)
+        expect(frames).toBeLessThanOrEqual(Math.ceil((impulse?.at ?? 0) / DT) + 1)
+        /* 速度增量 = -impulse.speed（叠加在起跳惯性上） */
+        expect(getMockBody(e).linvel().y).toBeCloseTo(jumpVy - (impulse?.speed ?? 0), 5)
+        /* 每段只施加一次 */
+        run(e.stateMachine, e, 5)
+        expect(e.combat.impulsesFired).toBe(1)
+        expect(getMockBody(e).linvel().y).toBeCloseTo(jumpVy - (impulse?.speed ?? 0), 5)
+    })
+
+    it('段内冲击：无 impulses 的段不产生冲量；requireAirborne 在已落地时跳过', () => {
+        const sword = makeMock(createWeaponRuntime('long_sword'))
+        jumpOff(sword)
+        pressAttack(sword)
+        run(sword.stateMachine, sword, 60)
+        expect(sword.combat.activeSegment?.impulses).toBeUndefined()
+        expect(sword.combat.impulsesFired).toBe(0)
+
+        /* 落地后再到打击帧：跳过向下冲量（不向地面注入速度） */
+        const landed = makeMock(createWeaponRuntime('war_hammer'))
+        jumpOff(landed)
+        pressAttack(landed)
+        landed.isOnGround = true
+        landed.groundNormal = {x: 0, y: 1, z: 0}
+        getMockBody(landed).setLinvel({x: 0, y: 0, z: 0})
+        run(landed.stateMachine, landed, 35)
+        expect(landed.combat.impulsesFired).toBe(1)
+        expect(getMockBody(landed).linvel().y).toBe(0)
     })
 
     it('空中攻击不可蓄力：按住攻击键不冻结、不累积蓄力', () => {

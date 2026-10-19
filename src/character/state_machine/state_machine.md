@@ -15,7 +15,7 @@
 - **攻击阶段移速**（`states/attacking/index.ts` 默认阶段行为）：有移动输入时按阶段 `moveSpeedMultiplier` 缩放 `entity.config.speed`；若玩家蓄力保持（`attackHolding`）且阶段声明 `chargeMoveSpeedMultiplier`，则改用后者（近战重击 windup = 0.5，远程沿用自身 `moveSpeedMultiplier`）。未注册阶段 handler 时一律走此默认行为；同一条件下外观叠加下半身行走步态。
 - **远程 AI 的站定/攻击需要移动清零也能进入 attacking**——`walking.ts` 的 `to:'attacking'` 必须排在 `to:'idle'` 之前，否则移动清零那一帧会先转 idle 而漏掉攻击。
 - 死亡动画保持直立（`pose_fns.ts` 的 `dyingPose` 不旋转根关节）：倒地方向由 `states/dying.ts` 取最后受击冲击方向（`DamageEvent.dirX/dirZ` → `combat.lastHitDirX/Z`，无记录默认向后倒）决定，`world.ts` 绕「上 × 倒向」轴把 `dyingFallAngle`（0→90°，0.3s）合成到模型根旋转；**新增伤害路径须携带方向**。
-- **空中攻击 `air_attacking`**（`states/air_attacking.ts`）：跳跃/下落中按攻击键进入，起手固定走武器 `air` 链（`machine.ts` 起手解析把该状态归一为 `'air'` 键），与地面 `attacking` 共用 `states/attacking/segment.ts` 的段调度。**不得加 `→ jumping` 转换**（`jumping.enter` 会重置向上速度 → 二段跳）；播完只回 `walking`/`idle`（有支撑）或 `falling`。转换守卫用 `canStartAirAttack`；`air` 段不可蓄力。
+- **空中攻击 `air_attacking`**（`states/air_attacking.ts`）：跳跃/下落中按攻击键进入，起手固定走武器 `air` 链（`machine.ts` 起手解析把该状态归一为 `'air'` 键），与地面 `attacking` 共用 `states/attacking/segment.ts` 的段调度。**不得加 `→ jumping` 转换**（`jumping.enter` 会重置向上速度 → 二段跳）；播完只回 `walking`/`idle`（有支撑）或 `falling`。转换守卫用 `canStartAirAttack`；`air` 段不可蓄力。自身冲击（战锤砸地等）由段数据 `AttackSegment.impulses` 在段内时刻施加（`combat/attack_impulses.ts` 的 `fireSegmentImpulses`，`impulsesFired` 每段只消费一次），与阶段时间线同一时钟；**不得**挪回状态 `enter`（见 `weapon.md` §3.9）。
 
 ## 文档
 

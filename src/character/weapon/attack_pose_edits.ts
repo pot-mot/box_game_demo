@@ -9,7 +9,6 @@
  * - 末帧 = 持械戒备（肩 -0.45 / 肘 -0.85 / 挂点 1.7），与 idle/walking 一致，链段之间无跳变。
  * 武器骨骼（rightWeaponMount / leftWeaponMount）承担挥砍平面与刃面朝向；腕关节只做小幅甩腕。
  */
-import {SHIELD_CLASS_IDS, SHIELD_SEGMENT_TIMES} from './shield_clip_data.ts'
 
 type JointPose = readonly [number, number, number]
 
@@ -31,6 +30,21 @@ const READY = {
 } as const satisfies Readonly<Record<string, JointPose>>
 
 /* ── 盾牌：三档盾共享的盾击（light）/ 盾撞（heavy）姿态，仅握持角不同，故共用同一套修订 ── */
+
+/**
+ * 盾段关键帧时间（持械戒备 / 抬手到位 / 打击完成 / 收招），节奏等同轻段 / 重段
+ * （轻 0.4 + 0.2 + 0.5 / 重 0.48 + 0.24 + 0.6）。必须与 `attack_clip_data.ts` 中盾段条目
+ * 的关键帧时刻严格一致——姿势修订只能落在已有关键时刻（不一致会在解析时抛错、并有单测兜底）。
+ */
+export const SHIELD_SEGMENT_TIMES: Readonly<Record<string, readonly [number, number, number, number]>> = {
+    light_1: [0, 0.4, 0.6, 1.1],
+    light_2: [0, 0.4, 0.6, 1.1],
+    heavy_1: [0, 0.48, 0.72, 1.32],
+    heavy_2: [0, 0.48, 0.72, 1.32],
+}
+
+/** 三档盾的武器类 id（与武器模组声明保持同步；盾段共享同一套姿态修订） */
+export const SHIELD_CLASS_IDS = ['shield_small', 'shield_medium', 'shield_large'] as const
 
 /** 盾击削弱打击面：盾击为一整套独立姿态（非刀剑挥砍），末帧统一回到持械戒备 */
 const shieldPoseEdits = (): Record<string, readonly AttackPoseEdit[]> => {

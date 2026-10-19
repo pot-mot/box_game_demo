@@ -4,7 +4,8 @@ import type { DamageType } from '../combat/damage_type.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
 import { withChargeTuningMap } from './attack_chain.ts'
-import { buildMeleeAttacks, DEFAULT_HEAVY_CHARGE, DEFAULT_MELEE_AIR_ATTACK, type BuildMeleeAttacksOptions, type HeavyChargeConfig, type MeleeAirAttackConfig } from './melee_attacks.ts'
+import { buildMeleeAttacks, DEFAULT_HEAVY_CHARGE, DEFAULT_MELEE_AIR_ATTACK, type BuildMeleeAttacksOptions, type HeavyChargeConfig, type MeleeAirAttackConfig, type MeleeAirSegmentKey, type MeleeSegmentKey } from './melee_attacks.ts'
+import type { AttackImpulse } from './attack_chain.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
 import type { ShieldBlockConfig } from './constants.ts'
 
@@ -59,9 +60,15 @@ export interface MeleeWeaponClassConfig {
     /**
      * 空中攻击模组（可选；缺省 = `DEFAULT_MELEE_AIR_ATTACK`）。
      * 「跳跃/下落中按攻击键」时由 `air_attacking` 状态读取：决定空中段数、每帧水平动量保留、
-     * 操控系数与打击段向下冲量（如战锤「跳跃砸地」）。所有模式共用同一套空中编排。
+     * 操控系数与向下冲量（如战锤「跳跃砸地」；冲量在命中帧施加，而非起手瞬间）。所有模式共用同一套空中编排。
      */
     readonly airAttack?: Partial<MeleeAirAttackConfig>
+    /**
+     * 逐段自身冲击序列（可选；键 = 段模板键，地面与空中段共用命名空间）。
+     * 段内时间轴到达 `impulse.at` 时对施术者施加一次速度冲量（砸地 / 突进 / 反冲），
+     * 由全部持握模式共享（如战锤空中砸地的向下冲量）。缺省 = 无冲击。
+     */
+    readonly impulses?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, readonly AttackImpulse[]>>
     /**
      * 盾牌格挡能力（可选；仅盾类声明）。声明后该武器可长按攻击键举盾格挡，
      * 提供遮挡减免与格挡槽；短按仍照常出招（盾击）。详见 `constants.ts` 与 `docs/design/shield_block.md`。
@@ -100,7 +107,7 @@ export const meleeClass = (
     for (const mode of base.holdModes) {
         const options = modeChains[mode]
         if (options === undefined) continue
-        attacks[mode] = buildMeleeAttacks(base.id, mode, {...options, heavyCharge, air: airAttack})
+        attacks[mode] = buildMeleeAttacks(base.id, mode, {...options, heavyCharge, air: airAttack, impulses: options.impulses ?? base.impulses})
     }
     return {...base, heavyCharge, airAttack, attacks}
 }

@@ -52,8 +52,8 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         detectionRange: 10,
         /* 前缘 = (0.5 + reach 0.6025) × 0.8 = 0.882 */
         detectBox: { size: { x: 0.5, y: 1.15, z: 1.032 }, offset: { x: 0, y: 0, z: 0.391 } },
-        /* 空中：两段旋风斩（复用轻 1/轻 2 挥砍），动量略低、保留少量操控 */
-        airAttack: {steps: ['air_1', 'air_2'], loop: false, momentum: 0.9, airControl: 0.25, slamSpeed: 0, poseKeys: ['light_1', 'light_2']},
+        /* 空中：两段旋风斩（姿势基底取轻 1/轻 2），动量略低、保留少量操控 */
+        airAttack: {steps: ['air_1', 'air_2'], loop: false, momentum: 0.9, airControl: 0.25, poseKeys: ['light_1', 'light_2']},
     }, {
         one_handed: {},
         two_handed: {chains: {light: {steps: ['light_1', 'light_2', 'light_3'], loop: true}}},
@@ -69,8 +69,8 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         detectionRange: 10,
         /* 前缘 = (0.5 + reach 1.17) × 0.8 = 1.336（长杆武器攻击距离优势） */
         detectBox: { size: { x: 0.5, y: 1.15, z: 1.486 }, offset: { x: 0, y: 0, z: 0.618 } },
-        /* 空中：单段下刺（复用重 1 突刺），几乎保持惯性 */
-        airAttack: {steps: ['air_1'], loop: false, momentum: 0.95, airControl: 0.3, slamSpeed: 0, poseKeys: ['heavy_1']},
+        /* 空中：单段下刺（姿势基底取重 1 突刺），几乎保持惯性 */
+        airAttack: {steps: ['air_1'], loop: false, momentum: 0.95, airControl: 0.3, poseKeys: ['heavy_1']},
     }, {
         one_handed: {},
         two_handed: {},
@@ -100,8 +100,12 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         detectionRange: 8,
         /* 前缘 = (0.5 + reach 0.4875) × 0.8 = 0.79（战锤握把偏低，reach 已计入 gripY） */
         detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
-        /* 空中：跳跃砸地——单段重砸（复用重 1），打击瞬间施加向下冲量 */
-        airAttack: {steps: ['air_1'], loop: false, momentum: 0.7, airControl: 0.12, slamSpeed: 14, poseKeys: ['heavy_1']},
+        /* 空中：跳跃砸地——单段重砸（姿势基底取重 1） */
+        airAttack: {steps: ['air_1'], loop: false, momentum: 0.7, airControl: 0.12, poseKeys: ['heavy_1']},
+        /* 段内自身冲击：砸地在下砸到打击帧（段内 0.5s，与 clip hitbox_on 同刻）时向下砸；离地才施加 */
+        impulses: {
+            air_1: [{at: 0.5, direction: {x: 0, y: -1, z: 0}, speed: 14, requireAirborne: true}],
+        },
     }, {
         one_handed: {},
         two_handed: {},
