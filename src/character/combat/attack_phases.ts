@@ -21,8 +21,9 @@ export interface AttackPhase {
     readonly cancellable: boolean
     /**
      * 蓄力保持锚点（可选）：玩家按住攻击键时，本阶段停在**起始帧**（姿态冻结）
-     * 并累积段蓄力值，松开后才继续推进——用于远程蓄力（弓拉弓 / 投掷后引 / 飞镖后摆）。
-     * 段需同时声明 `chargeFullTime` 才具备蓄力；锚点应对应「射出前」的姿态阶段。
+     * 并累积段蓄力值，松开后才继续推进——用于近战重击抬手（从持械戒备后引）与
+     * 远程蓄力（弓拉弓 / 投掷后引 / 飞镖后摆）。
+     * 段需同时声明 `chargeFullTime` 才具备蓄力；锚点应对应「射出 / 挥出前」的姿态阶段。
      */
     readonly chargeable?: boolean
     /**
@@ -55,6 +56,16 @@ const FALLBACK_PHASE: AttackPhase = {
 /** 解析阶段数组：未定义时返回回退单阶段 */
 export const resolvePhases = (phases: readonly AttackPhase[] | undefined): readonly AttackPhase[] =>
     phases !== undefined && phases.length > 0 ? phases : [FALLBACK_PHASE]
+
+/**
+ * 阶段序列是否为「抬手 → 挥斩」结构。
+ *
+ * 近战可蓄力段的蓄力姿势映射（`appearance/system.ts` 的 `meleeWindupFraction`）、蓄力时长下限
+ * （`attack_chain.ts` 的 `effectiveChargeFullTime`）、松手续播偏移（`attacking/index.ts`）与展示模式
+ * 蓄力前置（`showcase/actor.ts`）都依赖同一结构判定，故集中于此，避免四处各写一份而漂移。
+ */
+export const isWindupStrike = (phases: readonly AttackPhase[]): boolean =>
+    phases[0]?.name === 'windup' && phases[1]?.name === 'strike'
 
 /**
  * 单阶段时长：recovery 阶段取段配置的恢复时间（segment.recovery），

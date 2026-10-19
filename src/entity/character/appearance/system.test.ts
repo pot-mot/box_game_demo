@@ -5,6 +5,8 @@ import {createAppearanceSystem} from './system.ts'
 import {createCharacterModel} from './model.ts'
 import {weaponAttacksOf, weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {orderedSegments} from '../../../character/weapon/attack_chain.ts'
+import {phaseDurationOf, resolvePhases} from '../../../character/combat/attack_phases.ts'
+import {getAttackClipById} from './clips/attack_clips.ts'
 
 /** happy-dom 无 2d 上下文：stub canvas.getContext（脸部纹理绘制用） */
 const stubCanvas2d = (): void => {
@@ -138,9 +140,10 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
                     model.equipWeapon({main: preset.mesh})
                     const sys = createAppearanceSystem()
                     const total = seg.duration + seg.recovery
+                    const frames = Math.ceil(total * 60)
                     let maxDist = 0
                     let minElbowDy = 1
-                    for (let i = 0; i <= 20; i++) {
+                    for (let i = 0; i <= frames; i++) {
                         const t = Math.min(i / 60, total)
                         sys.update(1 / 60, model, 'attacking', makeCtx({
                             stateTime: t,
@@ -170,6 +173,100 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
                     expect(minElbowDy, `${seg.id}@${scale}× 左肘反关节`).toBeLessThan(-0.3)
                     model.dispose()
                 }
+            }
+        }
+    })
+
+    it('双手共持蓄力：整段蓄力进程中左手持续吸附副握点，且左肘朝下', () => {
+        const ids = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
+        for (const id of ids) {
+            const preset = weaponPresetOrDefault(id)
+            const heavy = weaponAttacksOf(preset, 'two_handed').segments[`${id}_two_handed_heavy_1`]!
+            expect(heavy.chargeFullTime, id).toBe(1)
+            const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+            model.equipWeapon({main: preset.mesh})
+            const sys = createAppearanceSystem()
+            let maxDist = 0
+            let minElbowDy = 1
+            for (let i = 0; i <= 20; i++) {
+                const charge = i / 20
+                for (let k = 0; k < 2; k++) {
+                    sys.update(1 / 60, model, 'attacking', makeCtx({
+                        holdMode: 'two_handed',
+                        attackSegment: heavy,
+                        attackPhase: 'strike',
+                        attackHolding: true,
+                        attackCharge: charge,
+                        weaponHeld: true,
+                    }))
+                }
+                model.group.updateMatrixWorld(true)
+                const shoulder = model.leftArmShoulder.getWorldPosition(new Vector3())
+                const elbow = model.leftArmElbow.getWorldPosition(new Vector3())
+                const hand = model.leftWeaponMount.getWorldPosition(new Vector3())
+                const supportGrip = model.weaponGroup!.localToWorld(new Vector3(0, model.weaponSupportGripOffset, 0))
+                maxDist = Math.max(maxDist, hand.distanceTo(supportGrip))
+                const axis = hand.clone().sub(shoulder).normalize()
+                const elbowPerp = elbow.clone().sub(shoulder)
+                elbowPerp.addScaledVector(axis, -elbowPerp.dot(axis)).normalize()
+                minElbowDy = Math.min(minElbowDy, elbowPerp.y)
+            }
+            expect(maxDist, `${id} 蓄力时左手未贴近副握点`).toBeLessThan(0.18)
+            expect(minElbowDy, `${id} 蓄力时左肘反关节`).toBeLessThan(-0.3)
+            model.dispose()
+        }
+    })
+
+    it('近战蓄力：满蓄力姿势 = 松开后的抬手段末（不同武器均无回位跳变，回归）', () => {
+        /* 覆盖抬手姿势差异最大的几类：长枪（前刺）、战锤（举械）、小盾（盾击）、长剑（单持 / 双手） */
+        const cases = [
+            {id: 'spear', mode: 'two_handed' as const},
+            {id: 'war_hammer', mode: 'two_handed' as const},
+            {id: 'shield_small', mode: 'one_handed' as const},
+            {id: 'long_sword', mode: 'one_handed' as const},
+            {id: 'long_sword', mode: 'two_handed' as const},
+        ]
+        for (const {id, mode} of cases) {
+            const preset = weaponPresetOrDefault(id)
+            const heavy = weaponAttacksOf(preset, mode).segments[`${id}_${mode}_heavy_1`]!
+            const phases = resolvePhases(heavy.phases)
+            const windup = phaseDurationOf(phases[0]!, heavy.duration, heavy.recovery)
+            const total = heavy.duration + heavy.recovery
+            const clipDuration = Math.max(...heavy.poses.map(pose => getAttackClipById(pose.poseId).duration))
+            /* 松开蓄力后播放器按 dt 正常推进：预补偿 12 帧推进量，使末帧恰好停在目标进度 */
+            const frames = 12
+            const advance = frames / 60 / clipDuration
+            const run = (overrides: Partial<AnimationContext>) => {
+                const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+                model.equipWeapon({main: preset.mesh})
+                const sys = createAppearanceSystem()
+                /* 12 帧 > STATE_BLEND_DURATION，过渡混合已完成 */
+                for (let i = 0; i < frames; i++) {
+                    sys.update(1 / 60, model, 'attacking', makeCtx({
+                        holdMode: mode,
+                        attackSegment: heavy,
+                        weaponHeld: true,
+                        ...overrides,
+                    }))
+                }
+                model.group.updateMatrixWorld(true)
+                return model
+            }
+            for (const charge of [0.5, 1]) {
+                const held = run({attackHolding: true, attackCharge: charge, attackPhase: 'windup'})
+                const released = run({
+                    attackHolding: false,
+                    attackTotalProgress: Math.max(0, charge * windup / total - advance),
+                    attackPhase: 'strike',
+                })
+                for (const axis of ['x', 'y', 'z'] as const) {
+                    expect(
+                        held.rightArmShoulder.rotation[axis],
+                        `${id}/${mode}@${charge} 满蓄力与松手起点姿势跳变（${axis}）`,
+                    ).toBeCloseTo(released.rightArmShoulder.rotation[axis], 3)
+                }
+                held.dispose()
+                released.dispose()
             }
         }
     })

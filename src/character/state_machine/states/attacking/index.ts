@@ -1,7 +1,8 @@
 import type {CharacterInput, StateHandler} from '../../types.ts'
 import type {CombatComponent} from '../../../combat/types.ts'
 import {segmentTotalDuration} from '../../../weapon/attack_chain.ts'
-import {resolvePhases} from '../../../combat/attack_phases.ts'
+import {isWindupStrike, phaseDurationOf, resolvePhases} from '../../../combat/attack_phases.ts'
+import {inRecoveryWindow} from '../../../combat/attack_runtime.ts'
 import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlope, projectToSlopeAtSpeed, applySlopeAntiGravity, applySlopeSink} from '../../ground.ts'
 import {moveSpeedOf} from '../../../types.ts'
@@ -58,8 +59,9 @@ export const attackingHandler: StateHandler = {
         const segment = c.activeSegment
         if (segment === undefined) return
 
-        /* 蓄力累积：按住蓄力键且段声明 chargeFullTime 时按 dt 累积（AI 不蓄力） */
-        if (input.attackHeld && segment.chargeFullTime !== undefined && segment.chargeFullTime > 0) {
+        /* 蓄力累积：按住蓄力键且段声明 chargeFullTime 时按 dt 累积（AI 不蓄力）。
+         * 蓄力一旦释放（chargeCommitted）即视为结束，按住不再续蓄（防止蓄力值一段段增长） */
+        if (input.attackHeld && !c.chargeCommitted && segment.chargeFullTime !== undefined && segment.chargeFullTime > 0) {
             c.attackCharge = Math.min(1, c.attackCharge + dt / segment.chargeFullTime)
         }
 
@@ -70,10 +72,25 @@ export const attackingHandler: StateHandler = {
         if (wasHolding && !c.attackHolding && c.attackCharge > 0 && segment.chargeCooldown !== undefined) {
             c.segmentCooldowns.set(segment.id, segment.chargeCooldown)
         }
+        /* 近战抬手蓄力：松开后从已蓄力的抬手进度继续播完剩余抬手，再进入挥斩。
+         * 蓄力姿势（READY → 抬手位）与攻击 clip 抬手段使用同一缓动，故偏移量按蓄力值线性映射。
+         * 释放即「结束蓄力」（chargeCommitted）：之后按住不再冻结 / 续蓄。 */
+        if (wasHolding && !c.attackHolding && c.attackCharge > 0) {
+            c.chargeCommitted = true
+            const releasePhases = resolvePhases(segment.phases)
+            if (isWindupStrike(releasePhases)) {
+                const windupDuration = phaseDurationOf(releasePhases[0], segment.duration, segment.recovery)
+                const offset = c.attackCharge * windupDuration
+                c.attackTimer = offset
+                c.phaseTimer = offset
+            }
+        }
 
         /* 缓冲写入：AI 侧按住 attack 持续写入；玩家侧由 setPlayerAttack 写单帧脉冲。
-         * 逐帧按最新输入（方向/按住时长/攻击键）重新求值段转换，新输入可覆写旧缓冲（中途改键/改方向 = 切链/换变体） */
-        if (input.attack) {
+         * **仅后摇窗口接受预输入**（抬手 / 挥斩等出招阶段的按键忽略），
+         * 逐帧按最新输入（方向/按住时长/攻击键）重新求值段转换，
+         * 新输入可覆写旧缓冲（中途改键/改方向 = 切链/换变体） */
+        if (input.attack && inRecoveryWindow(c)) {
             const next = resolveSegmentNextState(c, segment, segmentInputOf(input))
             if (next !== undefined) c.bufferedSegment = next
         }
@@ -140,6 +157,7 @@ export const attackingHandler: StateHandler = {
         c.bufferedSegment = undefined
         c.attackCharge = 0
         c.attackHolding = false
+        c.chargeCommitted = false
         /* 冷却已在段触发时挂上，exit 不再补挂 */
     },
     transitions: [

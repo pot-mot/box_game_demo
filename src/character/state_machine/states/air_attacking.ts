@@ -4,7 +4,7 @@ import type {CombatComponent} from '../../combat/types.ts'
 import {segmentTotalDuration} from '../../weapon/attack_chain.ts'
 import {DEFAULT_MELEE_AIR_ATTACK, type MeleeAirAttackConfig} from '../../weapon/melee_attacks.ts'
 import {resolvePhases} from '../../combat/attack_phases.ts'
-import {canStartAttack} from '../../combat/attack_runtime.ts'
+import {canStartAttack, inRecoveryWindow} from '../../combat/attack_runtime.ts'
 import {SLOPE_WALK_THRESHOLD} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
 import {moveSpeedOf} from '../../types.ts'
@@ -96,8 +96,9 @@ export const airAttackingHandler: StateHandler = {
         /* 阶段时间线推进（不蓄力：attackHeld 恒 false） */
         const phasesDone = advanceSegmentPhases(c, dt, false)
 
-        /* 空中连段：按攻击键续接同一 `air` 链（把任意攻击键归一为空键） */
-        if (input.attack) {
+        /* 空中连段：按攻击键续接同一 `air` 链（把任意攻击键归一为空键）；
+         * 与地面一致，**仅后摇窗口接受预输入** */
+        if (input.attack && inRecoveryWindow(c)) {
             const next = resolveSegmentNextState(c, segment, {
                 dx: input.dx,
                 dz: input.dz,
@@ -119,6 +120,7 @@ export const airAttackingHandler: StateHandler = {
         c.bufferedSegment = undefined
         c.attackCharge = 0
         c.attackHolding = false
+        c.chargeCommitted = false
     },
     transitions: [
         {

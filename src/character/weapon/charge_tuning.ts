@@ -4,11 +4,14 @@
  * 蓄力值 `charge ∈ [0,1]`（`combat.attackCharge`）与伤害倍率成**一次函数**：
  * charge = 0 → 100%（无加成）；charge = 1 → `maxChargeMultiplier`%（如 300 = 攻击力 ×3）。
  * 满蓄力所需按住时长为 `maxChargeTime` 秒。
+ *
+ * 近战重击的「抬手 → 挥斩」段，蓄力时长另取 `max(maxChargeTime, 抬手段时长)` 下限
+ * （见 `attack_chain.ts` 的 `effectiveChargeFullTime`）：配置更短也须完整播完前摇。
  */
 export interface ChargeTuning {
     /** 满蓄力伤害倍率（%，100 = 无加成；300 = 满蓄力攻击力 ×3） */
     readonly maxChargeMultiplier: number
-    /** 满蓄力所需按住时长（秒） */
+    /** 满蓄力所需按住时长（秒）；近战重击段实际生效值另受抬手段时长下限约束 */
     readonly maxChargeTime: number
 }
 

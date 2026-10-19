@@ -1,11 +1,27 @@
 import type {AttackKey, AttackSegment, AttackTransitionContext} from '../weapon/attack_chain.ts'
 import {resolveEntrySegment} from '../weapon/attack_chain.ts'
+import {resolvePhases} from './attack_phases.ts'
 import type {CombatComponent} from './types.ts'
 
 /**
- * 攻击运行时辅助：段冷却读写 + 段转换上下文构造。
+ * 攻击运行时辅助：段冷却读写 + 段转换上下文构造 + 段阶段窗口查询。
  * 冷却语义与原「起手冷却」一致 —— 从段触发时刻开始计时、只挡起手（链推进不查冷却）。
  */
+
+/**
+ * 段是否处于「后摇窗口」（当前阶段为 recovery 后摇阶段）。
+ *
+ * **攻击中只有后摇窗口接受攻击键预输入**（写连段缓冲）：抬手 / 挥斩等出招阶段的按键一律忽略
+ * （蓄力保持期间的按键同样不写缓冲），后摇里按下的攻击键才在段末消费、推进下一段。
+ * 无 recovery 阶段的段（如远程单段 draw/aim/release）不开放窗口 = 不可连段。
+ */
+export const inRecoveryWindow = (c: CombatComponent): boolean => {
+    const segment = c.activeSegment
+    if (segment === undefined) return false
+    const phases = resolvePhases(segment.phases)
+    const phase = c.phaseIndex < phases.length ? phases[c.phaseIndex] : undefined
+    return phase !== undefined && phase.name === 'recovery'
+}
 
 /** 段冷却剩余（秒，<= 0 = 就绪） */
 export const segmentCooldownRemaining = (c: CombatComponent, segmentId: string): number =>

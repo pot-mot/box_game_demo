@@ -1,5 +1,12 @@
 import type {ClipJSON} from '../../skeleton/anim/serialization.ts'
-import {MELEE_HEAVY_DURATION, MELEE_HEAVY_RECOVERY, MELEE_LIGHT_DURATION, MELEE_LIGHT_RECOVERY} from './melee_attacks.ts'
+import {
+    MELEE_HEAVY_DURATION,
+    MELEE_HEAVY_RECOVERY,
+    MELEE_HEAVY_WINDUP,
+    MELEE_LIGHT_DURATION,
+    MELEE_LIGHT_RECOVERY,
+    MELEE_LIGHT_WINDUP,
+} from './melee_attacks.ts'
 
 /**
  * 盾牌攻击基础关键帧（程序化生成，避免手写三档 × 四段的巨型字面量）。
@@ -7,7 +14,7 @@ import {MELEE_HEAVY_DURATION, MELEE_HEAVY_RECOVERY, MELEE_LIGHT_DURATION, MELEE_
  * 的盾击 / 盾撞姿态供给（三档盾共享同一套姿态，仅握持角不同）。
  *
  * 三档盾均为单持（`shield_*_one_handed_{light_1,light_2,heavy_1,heavy_2}`），
- * 段时长与轻 / 重段默认值一致（轻 0.533s / 重 0.667s）。
+ * 段时长与轻 / 重段默认值一致（轻 1.1s / 重 1.32s），节奏为抬手 : 挥击 : 后摇 = 2 : 1 : 2.5。
  */
 
 /** 参与盾击动作的关节静止局部位置（与预设骨架定义同源，顺序与真实近战段轨道一致） */
@@ -29,17 +36,17 @@ const JOINT_REST: Readonly<Record<string, readonly [number, number, number]>> = 
     root: [0, 0, 0],
 }
 
-/** 轻段关键帧时间（起手 / 打击顶点 / 收招） */
-const SHIELD_LIGHT_TIMES = [0, MELEE_LIGHT_DURATION, MELEE_LIGHT_DURATION + MELEE_LIGHT_RECOVERY] as const
-/** 重段关键帧时间（起手 / 打击顶点 / 收招） */
-const SHIELD_HEAVY_TIMES = [0, MELEE_HEAVY_DURATION, MELEE_HEAVY_DURATION + MELEE_HEAVY_RECOVERY] as const
+/** 轻段关键帧时间（持械戒备 / 抬手到位 / 打击完成 / 收招） */
+const SHIELD_LIGHT_TIMES = [0, MELEE_LIGHT_WINDUP, MELEE_LIGHT_DURATION, MELEE_LIGHT_DURATION + MELEE_LIGHT_RECOVERY] as const
+/** 重段关键帧时间（持械戒备 / 抬手到位 / 打击完成 / 收招） */
+const SHIELD_HEAVY_TIMES = [0, MELEE_HEAVY_WINDUP, MELEE_HEAVY_DURATION, MELEE_HEAVY_DURATION + MELEE_HEAVY_RECOVERY] as const
 
-/** 命中窗口（on 早于 off 且落在时长内；与其它近战段同节奏） */
-const SHIELD_LIGHT_HITBOX = [0.133, 0.253] as const
-const SHIELD_HEAVY_HITBOX = [0.2, 0.38] as const
+/** 命中窗口（on 早于 off 且落在挥击阶段内；与其它近战段同节奏） */
+const SHIELD_LIGHT_HITBOX = [0.5, 0.59] as const
+const SHIELD_HEAVY_HITBOX = [0.6, 0.708] as const
 
 /** 盾段模板键 → 关键帧时间（同时供 `attack_pose_edits.ts` 复用，保证修订时间与基础轨道严格一致） */
-export const SHIELD_SEGMENT_TIMES: Readonly<Record<string, readonly [number, number, number]>> = {
+export const SHIELD_SEGMENT_TIMES: Readonly<Record<string, readonly [number, number, number, number]>> = {
     light_1: SHIELD_LIGHT_TIMES,
     light_2: SHIELD_LIGHT_TIMES,
     heavy_1: SHIELD_HEAVY_TIMES,
@@ -49,9 +56,9 @@ export const SHIELD_SEGMENT_TIMES: Readonly<Record<string, readonly [number, num
 /** 三档盾的类 id（与 `melee_weapon.ts` 的 `MELEE_WEAPON_CLASSES` 保持同步） */
 export const SHIELD_CLASS_IDS = ['shield_small', 'shield_medium', 'shield_large'] as const
 
-const shieldClip = (id: string, times: readonly [number, number, number], hitbox: readonly [number, number]): ClipJSON => ({
+const shieldClip = (id: string, times: readonly [number, number, number, number], hitbox: readonly [number, number]): ClipJSON => ({
     name: id,
-    duration: times[2],
+    duration: times[3],
     loop: false,
     jointTracks: Object.entries(JOINT_REST).map(([jointId, position]) => ({
         targetId: jointId,

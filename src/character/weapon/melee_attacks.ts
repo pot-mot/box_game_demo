@@ -1,5 +1,6 @@
 import type {AttackPhase} from '../combat/attack_phases.ts'
 import type {ImpactLevel} from '../combat/impact.ts'
+import {effectiveChargeFullTime} from './attack_chain.ts'
 import type {AttackEntry, AttackKey, AttackSegment, AttackTransition, GroundAttackKey, WeaponAttackChain, WeaponAttacks} from './attack_chain.ts'
 import type {HoldMode} from './hold_mode.ts'
 import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
@@ -13,14 +14,22 @@ import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
  * 每种持握模式拥有独立段 id 命名空间，三模式连段互不覆盖。
  */
 
-/** 轻段动作时间（秒，仅挥砍动作，不含后摇）：原 0.2s 的 0.75 倍速（0.267s，总时长与 clip 关键帧对齐） */
-export const MELEE_LIGHT_DURATION = 0.267
-/** 重段动作时间（秒，仅挥砍动作，不含后摇）：原 0.3s 的 0.75 倍速（0.4s） */
-export const MELEE_HEAVY_DURATION = 0.4
-/** 轻段恢复时间（秒，动作结束后的后摇）：与原 0.2s 的 0.75 倍速对齐（轻段总时长 0.533s） */
-export const MELEE_LIGHT_RECOVERY = 0.266
-/** 重段恢复时间（秒，动作结束后的后摇）：与原 0.2s 的 0.75 倍速对齐（重段总时长 0.667s） */
-export const MELEE_HEAVY_RECOVERY = 0.267
+/** 轻段抬手时间（秒）：持械戒备 → 满后引（动作 2:1:2.5 中的「2」） */
+export const MELEE_LIGHT_WINDUP = 0.4
+/** 轻段挥砍时间（秒）：满后引 → 打击完成（动作 2:1:2.5 中的「1」） */
+export const MELEE_LIGHT_ATTACK = 0.2
+/** 轻段动作时间（秒，抬手 + 挥砍，不含后摇）：0.6s（轻段总时长 1.1s） */
+export const MELEE_LIGHT_DURATION = MELEE_LIGHT_WINDUP + MELEE_LIGHT_ATTACK
+/** 轻段恢复时间（秒，打击完成后的后摇）：0.5s（动作 2:1:2.5 中的「2.5」） */
+export const MELEE_LIGHT_RECOVERY = 0.5
+/** 重段抬手时间（秒）：持械戒备 → 满后引 */
+export const MELEE_HEAVY_WINDUP = 0.48
+/** 重段挥砍时间（秒）：满后引 → 打击完成 */
+export const MELEE_HEAVY_ATTACK = 0.24
+/** 重段动作时间（秒，抬手 + 挥砍，不含后摇）：0.72s（重段总时长 1.32s） */
+export const MELEE_HEAVY_DURATION = MELEE_HEAVY_WINDUP + MELEE_HEAVY_ATTACK
+/** 重段恢复时间（秒，打击完成后的后摇）：0.6s */
+export const MELEE_HEAVY_RECOVERY = 0.6
 /** 重段伤害倍率（相对武器基础伤害） */
 export const MELEE_HEAVY_DAMAGE_MULTIPLIER = 1.6
 /** 轻段默认冲击力（弱硬直：不打断攻击，仅中断非承诺动作） */
@@ -32,12 +41,10 @@ export const MELEE_HEAVY_IMPACT: ImpactLevel = 'heavy'
 /** 重段默认削韧值 */
 export const MELEE_HEAVY_POISE_DAMAGE = 4
 
-/** 重击蓄力配置（武器模板默认，可被单武器 / 面板覆盖）：蓄力调参 + 冷却 + 蓄力姿势 */
+/** 重击蓄力配置（武器模板默认，可被单武器 / 面板覆盖）：蓄力调参 + 冷却 */
 export interface HeavyChargeConfig extends ChargeTuning {
     /** 蓄力重击冷却（秒，仅蓄力值 > 0 时挂起；短按普通重击不触发） */
     readonly cooldown: number
-    /** 专用蓄力姿势 clip 覆写（缺省按持握模式取 `charge_melee_{holdMode}`） */
-    readonly chargePoseId?: string
 }
 
 /** 重击蓄力默认值：满蓄力 1s → 200%（×2）、冷却 0.8s（所有近战武器默认启用） */
@@ -54,10 +61,14 @@ export type MeleeSegmentKey = typeof MELEE_SEGMENT_KEYS[number]
 export const MELEE_AIR_SEGMENT_KEYS = ['air_1', 'air_2'] as const
 export type MeleeAirSegmentKey = typeof MELEE_AIR_SEGMENT_KEYS[number]
 
-/** 空中段动作时间（秒，仅挥砍动作，不含后摇） */
-export const MELEE_AIR_DURATION = 0.32
-/** 空中段恢复时间（秒，动作结束后的后摇） */
-export const MELEE_AIR_RECOVERY = 0.2
+/** 空中段抬手时间（秒）：复用地面轻段节奏（总时长 1.1s） */
+export const MELEE_AIR_WINDUP = 0.4
+/** 空中段挥砍时间（秒）：满后引 → 打击完成 */
+export const MELEE_AIR_ATTACK = 0.2
+/** 空中段动作时间（秒，抬手 + 挥砍，不含后摇）：0.6s */
+export const MELEE_AIR_DURATION = MELEE_AIR_WINDUP + MELEE_AIR_ATTACK
+/** 空中段恢复时间（秒，打击完成后的后摇）：0.5s */
+export const MELEE_AIR_RECOVERY = 0.5
 /** 空中段伤害倍率（相对武器基础伤害，略高于地面轻击） */
 export const MELEE_AIR_DAMAGE_MULTIPLIER = 1.25
 /** 空中段默认冲击力（弱硬直） */
@@ -77,21 +88,44 @@ const SEGMENT_META: Record<MeleeSegmentKey, {key: 'light' | 'heavy'; step: numbe
 /** 重击蓄力保持期间的移速倍率：比不蓄力的 0.3 略快，仍显著慢于行走，配合下半身行走动画 */
 export const MELEE_CHARGE_MOVE_SPEED_MULTIPLIER = 0.5
 
-/** 段阶段时序：strike 动作段（ratio = 1） + recovery 恢复段（ratio 不参与计算，时长取段 recovery）；
- *  重击段的 strike 声明 `chargeable`，按住时冻结在起手帧蓄力（移速改用 `MELEE_CHARGE_MOVE_SPEED_MULTIPLIER`）。 */
-const segmentPhases = (chargeable = false): readonly AttackPhase[] => [
-    {
-        name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.3, cancellable: false,
-        ...(chargeable ? {chargeable: true, chargeMoveSpeedMultiplier: MELEE_CHARGE_MOVE_SPEED_MULTIPLIER} : {}),
-    },
-    {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.35, cancellable: false},
-]
+/** 动作阶段（抬手 / 挥砍）移速倍率：攻击期间显著减速 */
+const MELEE_ACTION_MOVE_SPEED = 0.3
+/** 后摇阶段移速倍率：略快于动作阶段，便于收招后衔接移动 */
+const MELEE_RECOVERY_MOVE_SPEED = 0.35
+/** 空中段移速倍率：空中攻击全程保持较低的空中操控 */
+const MELEE_AIR_MOVE_SPEED = 0.5
 
-/** 空中段阶段时序：strike（ratio 1）+ recovery；空中段不可蓄力。 */
-const airSegmentPhases = (): readonly AttackPhase[] => [
-    {name: 'strike', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false},
-    {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: 0.5, cancellable: false},
-]
+/**
+ * 段阶段时序：windup 抬手 → strike 挥砍 → recovery 后摇（后摇比例不参与分摊，时长取段 recovery）。
+ * **动作阶段比例由抬手 / 挥砍时长推导**（`windup / (windup + attack)`），保证阶段时长与命名常量恒等
+ * （`MELEE_*_WINDUP` 就是抬手段时长，蓄力时长下限据此取用）。
+ * 重击段的 **windup** 声明 `chargeable`：按住时冻结在抬手起始帧（持械戒备）播放蓄力姿势，
+ * 松开后按已蓄力进度继续播完剩余抬手再进入挥砍（移速改用 `MELEE_CHARGE_MOVE_SPEED_MULTIPLIER`）。
+ */
+const segmentPhases = (
+    windup: number,
+    attack: number,
+    moveSpeed: {readonly action: number; readonly recovery: number},
+    chargeable = false,
+): readonly AttackPhase[] => {
+    const total = windup + attack
+    return [
+        {
+            name: 'windup', durationRatio: windup / total, moveSpeedMultiplier: moveSpeed.action, cancellable: false,
+            ...(chargeable ? {chargeable: true, chargeMoveSpeedMultiplier: MELEE_CHARGE_MOVE_SPEED_MULTIPLIER} : {}),
+        },
+        {name: 'strike', durationRatio: attack / total, moveSpeedMultiplier: moveSpeed.action, cancellable: false},
+        {name: 'recovery', durationRatio: 0, moveSpeedMultiplier: moveSpeed.recovery, cancellable: false},
+    ]
+}
+
+/** 地面段阶段：动作 0.3 / 后摇 0.35 */
+const groundSegmentPhases = (windup: number, attack: number, chargeable = false): readonly AttackPhase[] =>
+    segmentPhases(windup, attack, {action: MELEE_ACTION_MOVE_SPEED, recovery: MELEE_RECOVERY_MOVE_SPEED}, chargeable)
+
+/** 空中段阶段：与地面同结构但全程 0.5 移速；空中段不可蓄力。 */
+const airSegmentPhases = (): readonly AttackPhase[] =>
+    segmentPhases(MELEE_AIR_WINDUP, MELEE_AIR_ATTACK, {action: MELEE_AIR_MOVE_SPEED, recovery: MELEE_AIR_MOVE_SPEED})
 
 /** 段 id：`{classId}_{holdMode}_{模板键}`（与武器类 + 持握模式一一对应，同时是动画键与骨骼动画数据键） */
 export const meleeSegmentId = (classId: string, holdMode: HoldMode, segmentKey: MeleeSegmentKey): string =>
@@ -100,9 +134,6 @@ export const meleeSegmentId = (classId: string, holdMode: HoldMode, segmentKey: 
 /** 空中段 id：`{classId}_{holdMode}_{air_N}`（命名空间与地面段分离） */
 export const meleeAirSegmentId = (classId: string, holdMode: HoldMode, airKey: MeleeAirSegmentKey): string =>
     `${classId}_${holdMode}_${airKey}`
-
-/** 近战默认专用蓄力姿势 clip id（按持握模式共享；武器类可经 `heavyCharge.chargePoseId` 覆写） */
-export const meleeChargePoseId = (holdMode: HoldMode): string => `charge_melee_${holdMode}`
 
 /** 单条攻击键链的编排：主干段模板序列（顺序 = 播放与清单顺序）+ 是否循环回第一段 */
 export interface MeleeChainSpec {
@@ -169,8 +200,8 @@ export interface BuildMeleeAttacksOptions {
      */
     readonly poseRef?: (ownPoseId: string) => string
     /**
-     * 重击蓄力配置：提供后，本模式的重击段声明为可蓄力（`chargeFullTime` + strike `chargeable`），
-     * 按住攻击键即冻结在重击起手帧蓄力、松开出手；伤害按蓄力值连续缩放，蓄力值 > 0 时挂冷却。
+     * 重击蓄力配置：提供后，本模式的重击段声明为可蓄力（`chargeFullTime` + windup `chargeable`），
+     * 按住攻击键即冻结在重击抬手起始帧蓄力、松开从已蓄力进度续播挥斩；伤害按蓄力值连续缩放，蓄力值 > 0 时挂冷却。
      */
     readonly heavyCharge?: HeavyChargeConfig
 }
@@ -210,29 +241,34 @@ export const buildMeleeAttacks = (
         const meta = SEGMENT_META[segmentKey]
         const heavy = meta.heavy
         const id = meleeSegmentId(classId, holdMode, segmentKey)
-        /* 重击段可蓄力：按住攻击键冻结在 strike 起始帧蓄力，松开出手 */
-        const chargeable = heavy && heavyCharge !== undefined
         const impactOverride = options.impact?.[segmentKey]
-        return {
+        const base: AttackSegment = {
             id,
             key: meta.key,
             step: meta.step,
             duration: heavy ? MELEE_HEAVY_DURATION : MELEE_LIGHT_DURATION,
             recovery: heavy ? MELEE_HEAVY_RECOVERY : MELEE_LIGHT_RECOVERY,
-            phases: segmentPhases(chargeable),
+            /* 重击段可蓄力：按住攻击键冻结在 windup 起始帧蓄力，松开从已蓄力进度继续抬手并挥出 */
+            phases: groundSegmentPhases(
+                heavy ? MELEE_HEAVY_WINDUP : MELEE_LIGHT_WINDUP,
+                heavy ? MELEE_HEAVY_ATTACK : MELEE_LIGHT_ATTACK,
+                heavy && heavyCharge !== undefined,
+            ),
             /* 动作组合：默认单层（段 id 即 pose 资产 id），可继续追加分层 pose 与权重 */
             poses: [{poseId: poseRef(id), weight: 1}],
             damageMultiplier: heavy ? MELEE_HEAVY_DAMAGE_MULTIPLIER : 1,
             impact: impactOverride?.impact ?? (heavy ? MELEE_HEAVY_IMPACT : MELEE_LIGHT_IMPACT),
             poiseDamage: impactOverride?.poiseDamage ?? (heavy ? MELEE_HEAVY_POISE_DAMAGE : MELEE_LIGHT_POISE_DAMAGE),
             cooldown: 0,
-            ...(chargeable && heavyCharge !== undefined ? {
-                chargeFullTime: heavyCharge.maxChargeTime,
-                chargeDamageBonus: chargeDamageBonusOf(heavyCharge),
-                chargeCooldown: heavyCharge.cooldown,
-                chargePoseId: heavyCharge.chargePoseId ?? meleeChargePoseId(holdMode),
-            } : {}),
             next: transitionsFor(classId, holdMode, chains[meta.key], segmentKey),
+        }
+        if (!heavy || heavyCharge === undefined) return base
+        return {
+            ...base,
+            /* 满蓄力 = 抬手段末（缓慢完成整段前摇）：有效蓄力时长取下限，与单武器 / 面板覆写路径同一规则 */
+            chargeFullTime: effectiveChargeFullTime(base, heavyCharge.maxChargeTime),
+            chargeDamageBonus: chargeDamageBonusOf(heavyCharge),
+            chargeCooldown: heavyCharge.cooldown,
         }
     }
 

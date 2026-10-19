@@ -77,6 +77,7 @@ import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {cleanupWireframe, createWireframe} from '../../box/base/render'
 import {createCharacterPanel} from '../ui/panel.ts'
 import {phaseDurationOf, resolvePhases, FLINCH_DURATION, HEAVY_FLINCH_DURATION} from '../../../character/combat/attack_phases.ts'
+import {inRecoveryWindow} from '../../../character/combat/attack_runtime.ts'
 import {isWeakFlinchReceptive} from '../../../character/combat/impact.ts'
 import {rollSpinProgress} from '../../../character/combat/roll_skill.ts'
 
@@ -984,7 +985,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         return []
     }
 
-    /** 玩家按下攻击键：可蓄力攻击（远程弓/投掷、近战重击）进入蓄力（按住期间冻结并累积力度）；盾键转入举盾计时 */
+    /**
+     * 玩家按下攻击键：
+     * - **后摇窗口内按下 = 连段预输入**：写单帧脉冲（段末消费推进下一段），动作阶段（抬手 / 挥斩 / 蓄力中）的按键一律忽略；
+     * - 其余情况：可蓄力攻击（远程弓 / 投掷、近战重击）进入蓄力（按住期间冻结并累积力度）；盾键转入举盾计时。
+     */
     const beginPlayerAttackHold = (attackKey?: AttackKey): void => {
         const player = getPlayerCharacter()
         if (!player || player.combat.isDead) return
@@ -998,6 +1003,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             playerShieldHoldKey = key
             playerShieldHoldTime = 0
             playerAttackHeld = false
+            return
+        }
+        /* 后摇窗口内按下攻击键：写连段预输入脉冲（按住计时吞掉松开时的补脉冲，避免重复出招） */
+        if (player.combat.attackActive && inRecoveryWindow(player.combat)) {
+            playerAttackHeld = true
+            setPlayerAttack(key, 0)
             return
         }
         /* 该攻击键的起手段声明了 chargeFullTime 才进入蓄力；否则忽略（松开时按原有语义出招） */

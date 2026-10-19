@@ -88,6 +88,12 @@ export interface CombatComponent {
     attackCharge: number
     /** 本帧是否停在蓄力锚点阶段（冻结姿态）：为 true 时远程执行器不发射 */
     attackHolding: boolean
+    /**
+     * 本段蓄力是否已释放（视为**结束蓄力**）：抬手 / 拉弓蓄力一旦松开即置位，
+     * 之后不再接受蓄力保持（防止「松开再按住」反复续蓄、蓄力值一段段增长）；
+     * 段入场（`enterAttackSegment`）清零。
+     */
+    chargeCommitted: boolean
 
     /** 是否被标记为受击硬直 */
     pendingFlinch: boolean
@@ -273,6 +279,7 @@ export const createCombatComponent = (
         phaseTimer: 0,
         attackCharge: 0,
         attackHolding: false,
+        chargeCommitted: false,
         pendingFlinch: false,
         flinchDuration: FLINCH_DURATION,
         flinchImmunityTimer: 0,

@@ -40,4 +40,22 @@ describe('蓄力调参（一次函数）', () => {
         expect(segment.chargeFullTime).toBe(2)
         expect(segment.chargeDamageBonus).toBeCloseTo(2, 6)
     })
+
+    it('近战重击蓄力时长下限 = 抬手段（2:1:2.5 中的「2」）：配置更短也完整播完前摇', () => {
+        const segment = createWeaponRuntime('long_sword', {charge: {maxChargeTime: 0.2}})
+            .attacks.segments['long_sword_one_handed_heavy_1']
+        expect(segment.chargeFullTime).toBeCloseTo(0.48, 6)
+    })
+
+    it('蓄力时间为 0 时同样取前摇下限（不跳过前摇）', () => {
+        const segment = createWeaponRuntime('long_sword', {charge: {maxChargeTime: 0}})
+            .attacks.segments['long_sword_one_handed_heavy_1']
+        expect(segment.chargeFullTime).toBeCloseTo(0.48, 6)
+    })
+
+    it('远程段不受前摇下限影响，直接取配置值', () => {
+        const segment = createWeaponRuntime('longbow', {charge: {maxChargeTime: 0.3}})
+            .attacks.segments['longbow_shot']
+        expect(segment?.chargeFullTime).toBeCloseTo(0.3, 6)
+    })
 })

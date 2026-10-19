@@ -1,4 +1,4 @@
-import type {AttackPhase} from '../combat/attack_phases.ts'
+import {isWindupStrike, phaseDurationOf, resolvePhases, type AttackPhase} from '../combat/attack_phases.ts'
 import type {ImpactLevel} from '../combat/impact.ts'
 import {HOLD_MODES, type HoldMode} from './hold_mode.ts'
 import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
@@ -104,12 +104,6 @@ export interface AttackSegment {
     readonly chargeDamageBonus?: number
     /** 蓄力重击冷却（秒）：仅当松开时蓄力值 > 0 才挂到本段（短按普通攻击不触发） */
     readonly chargeCooldown?: number
-    /**
-     * 专用蓄力姿势 clip id（进度 0 = 蓄力起始位 → 1 = 满蓄力位）：
-     * 按住期间动画改为按 `combat.attackCharge` 定位到该 clip 的对应进度，
-     * 使「后摆 / 拉弓 / 举械」幅度随蓄力连续增长；松开后切回本段攻击动画。
-     */
-    readonly chargePoseId?: string
     /** 段播完（含恢复段）后的下一状态候选；空数组 = 链终止 */
     readonly next: readonly AttackTransition[]
     /** 显示名覆写（条件变体段用，如「蓄力重劈」）；缺省按 轻击/重击 + 序号 推导 */
@@ -203,6 +197,20 @@ export const isChargeableKey = (attacks: WeaponAttacks, key: AttackKey): boolean
     chainOf(attacks, key).entries.some(entry => attacks.segments[entry.segmentId]?.chargeFullTime !== undefined)
 
 /**
+ * 可蓄力段的**有效蓄力时长**（= 蓄力需按住多久到达满蓄力 +100%）。
+ *
+ * 近战重击的「抬手 → 挥斩」段，蓄力过程就是**缓慢完成抬手**，故满蓄力必须至少覆盖整个抬手段
+ * （2:1:2.5 中的「2」）——配置的 `maxChargeTime` 小于抬手段时取下限，避免蓄力过快把整段前摇跳过
+ * （即使蓄力时间为 0 也要完整播完一遍前摇）。其余结构（远程拉弓 / 后引 / 后摆、投掷）无此前摇语义，
+ * 直接取配置值。
+ */
+export const effectiveChargeFullTime = (segment: AttackSegment, maxChargeTime: number): number => {
+    const phases = resolvePhases(segment.phases)
+    if (!isWindupStrike(phases)) return maxChargeTime
+    return Math.max(maxChargeTime, phaseDurationOf(phases[0], segment.duration, segment.recovery))
+}
+
+/**
  * 用给定蓄力调参覆写攻击链中全部可蓄力段的 `chargeFullTime` / `chargeDamageBonus`
  * （单武器覆盖 / 角色面板覆写用；克隆段，不改武器共享数据）。
  */
@@ -215,7 +223,7 @@ export const withChargeTuning = (attacks: WeaponAttacks, tuning: ChargeTuning): 
         }
         segments[id] = {
             ...segment,
-            chargeFullTime: tuning.maxChargeTime,
+            chargeFullTime: effectiveChargeFullTime(segment, tuning.maxChargeTime),
             ...(segment.chargeDamageBonus !== undefined ? {chargeDamageBonus: chargeDamageBonusOf(tuning)} : {}),
         }
     }

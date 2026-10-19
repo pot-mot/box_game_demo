@@ -8,7 +8,7 @@ import type {ShowcaseActorHandle} from './actor_handle.ts'
 import type {WeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.ts'
 import type {NameLabel} from './label.ts'
-import {resolvePhases, phaseDurationOf} from '../../character/combat/attack_phases.ts'
+import {resolvePhases, phaseDurationOf, isWindupStrike} from '../../character/combat/attack_phases.ts'
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
 import {weaponAttacksOf} from '../../character/weapon/catalog.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
@@ -78,7 +78,7 @@ export interface ActorStatus {
     readonly isMelee: boolean
     /** 是否正在演示格挡姿态（盾牌待机时举盾） */
     readonly isBlocking: boolean
-    /** 'charging' = 近战重击前的满蓄力前置表现（定格满蓄力姿势） */
+    /** 'charging' = 近战重击前的满蓄力前置表现（按蓄力进度缓慢完成抬手段） */
     readonly mode: 'idle' | 'charging' | 'attacking'
     /** 当前段（1 起，idle 时为下一段的段号） */
     readonly hitNumber: number
@@ -150,10 +150,6 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     const isMelee = init.weapon.type === 'melee'
     /** 盾牌（声明 block）：攻击模组之外，待机时改为演示**格挡姿态** */
     const isShield = isMelee && init.weapon.block !== undefined
-    /** 近战重击前的满蓄力前置保持时长 = 武器（模板）的最长蓄力时间（缺省回退 `CHARGE_HOLD_DURATION`） */
-    const chargeHoldDuration = init.weapon.type === 'melee'
-        ? (init.weapon.heavyCharge?.maxChargeTime ?? CHARGE_HOLD_DURATION)
-        : CHARGE_HOLD_DURATION
     /*
      * 演示脚本 = 段展示顺序本身（下标 0..n-1 即播放顺序）：
      * 播放顺序、面板计时行顺序与清单顺序三者一致（统一枚举源，无需重排映射）。
@@ -224,15 +220,28 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     /** 当前脚本站位的段（scriptPos 恒在脚本范围内；越界回退首段防御） */
     const currentSegment = (): AttackSegment => segments[scriptPos] ?? segments[0]
 
-    /** 是否为「蓄力重击段」（声明专用蓄力姿势）→ 展示时先播满蓄力前置 */
-    const isChargeHeavy = (segment: AttackSegment): boolean => segment.chargePoseId !== undefined
+    /** 是否为「蓄力重击段」（近战：满蓄力时长 + 抬手→挥斩）→ 展示时先播缓慢蓄力前置 */
+    const isChargeHeavy = (segment: AttackSegment): boolean =>
+        segment.chargeFullTime !== undefined && isWindupStrike(resolvePhases(segment.phases))
 
-    /** 正式进入 attacking（重置攻击计时、挂段冷却；stateTime 由调用方决定是否保留） */
-    const enterAttacking = (pos: number, nextLink: LinkLabel): void => {
+    /** 蓄力重击段的**有效蓄力时长**（= 段声明的 `chargeFullTime`；缺省回退 `CHARGE_HOLD_DURATION`） */
+    const chargeTimeOf = (segment: AttackSegment): number => segment.chargeFullTime ?? CHARGE_HOLD_DURATION
+
+    /** 蓄力前置进度 0→1（0 = 持械戒备起始帧，1 = 满蓄力位）：按有效蓄力时长线性推进，镜像生产蓄力过程 */
+    const chargeProgress = (): number => {
+        const hold = chargeTimeOf(currentSegment())
+        return hold > 0 ? Math.min(Math.max(chargeHoldTimer / hold, 0), 1) : 1
+    }
+
+    /**
+     * 正式进入 attacking（挂段冷却；stateTime 由调用方决定是否保留）。
+     * `startTimer` = 从段内该时刻开始播（满蓄力前置结束后从抬手段末继续，不重播抬手）。
+     */
+    const enterAttacking = (pos: number, nextLink: LinkLabel, startTimer = 0): void => {
         scriptPos = pos
         mode = 'attacking'
-        attackTimer = 0
-        phaseTimer = 0
+        attackTimer = startTimer
+        phaseTimer = startTimer
         phaseIndex = 0
         link = nextLink
         /* 触发即挂自身冷却（镜像生产起手 enter） */
@@ -253,12 +262,20 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         enterAttacking(pos, nextLink)
     }
 
-    /** 满蓄力前置：定格满蓄力姿势保持武器的最长蓄力时间 → 转正式出招 */
+    /**
+     * 满蓄力前置：按段有效蓄力时长从 0 缓慢蓄到满蓄力位（镜像生产「按住蓄力键缓慢完成抬手段」），
+     * 蓄满后从抬手段末续播正式出招（不重播抬手）。
+     */
     const advanceCharging = (dt: number): void => {
         stateTime += dt
         chargeHoldTimer += dt
-        if (chargeHoldTimer >= chargeHoldDuration) {
-            enterAttacking(scriptPos, link)
+        if (chargeHoldTimer >= chargeTimeOf(currentSegment())) {
+            const segment = currentSegment()
+            const phases = resolvePhases(segment.phases)
+            const windupDuration = phases.length > 0
+                ? phaseDurationOf(phases[0], segment.duration, segment.recovery)
+                : 0
+            enterAttacking(scriptPos, link, windupDuration)
         }
     }
 
@@ -349,7 +366,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             horizontalSpeed: 0,
             holdMode,
             handedness: DEFAULT_HANDEDNESS,
-            /* 蓄力前置同样携带 attackSegment（外观据此取专用蓄力姿势 clip） */
+            /* 蓄力前置同样携带 attackSegment（外观据此取该段攻击 clip 的抬手段） */
             attackSegment: (inAttacking || inCharging) ? segment : undefined,
             attackPhase: ctxPhaseName,
             attackPhaseProgress: inAttacking && phaseDuration > 0 ? phaseTimer / phaseDuration : 0,
@@ -358,8 +375,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
                 ? attackTimer / segmentTotalDuration(segment)
                 : 0,
             attackPhaseIndex: inAttacking ? phaseIndex : 0,
-            /* 满蓄力前置：定格满蓄力姿势（attackCharge = 1、attackHolding = true） */
-            attackCharge: inCharging ? 1 : 0,
+            /* 满蓄力前置：按蓄力进度缓慢完成抬手段（0 = 持械戒备 → 1 = 满蓄力位，镜像生产蓄力） */
+            attackCharge: inCharging ? chargeProgress() : 0,
             attackHolding: inCharging,
             weaponHeld: model.weaponMesh !== null,
             /* 盾牌：待机时举盾（主手盾），演示格挡姿态；攻击时交回攻击 clip */
@@ -415,7 +432,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             phaseProgress: mode === 'idle'
                 ? 0
                 : mode === 'charging'
-                    ? Math.min(Math.max(chargeHoldTimer / chargeHoldDuration, 0), 1)
+                    ? chargeProgress()
                     : Math.min(Math.max(phaseIndex < phases.length ? phaseTimer / phaseDurationOf(phases[phaseIndex], segment.duration, segment.recovery) : 1, 0), 1),
             attackProgress: mode === 'attacking' ? Math.min(Math.max(attackTimer / segmentTotalDuration(segment), 0), 1) : 0,
             link: mode === 'attacking' ? link : LINK_NONE,

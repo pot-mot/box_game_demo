@@ -104,7 +104,7 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
         }
     })
 
-    it.each(MELEE_WEAPON_IDS)('%s：主干段时长/伤害倍率（轻 0.267+0.266、重 0.4+0.267 ×1.6）', (weaponId) => {
+    it.each(MELEE_WEAPON_IDS)('%s：主干段时长/伤害倍率（轻 0.6+0.5、重 0.72+0.6 ×1.6）', (weaponId) => {
         const weapon = MELEE_WEAPON_PRESETS[weaponId]
         const mode = defaultHoldMode(weapon)
         const attacks = weaponAttacksOf(weapon)
@@ -113,10 +113,10 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
         for (const segment of Object.values(attacks.segments)) {
             if (!stepIds.has(segment.id)) continue
             if (segment.key === 'light') {
-                expect(segmentTotalDuration(segment), segment.id).toBeCloseTo(0.533, 6)
+                expect(segmentTotalDuration(segment), segment.id).toBeCloseTo(1.1, 6)
                 expect(segment.damageMultiplier, segment.id).toBe(1)
             } else {
-                expect(segmentTotalDuration(segment), segment.id).toBeCloseTo(0.667, 6)
+                expect(segmentTotalDuration(segment), segment.id).toBeCloseTo(1.32, 6)
                 expect(segment.damageMultiplier, segment.id).toBeCloseTo(1.6, 6)
             }
         }
@@ -135,7 +135,7 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
         expect(segmentDisplayName(findSegment(attacks, 'heavy_sword_two_handed_light_3')!)).toBe('轻击三段')
     })
 
-    it('通用重击蓄力：所有近战武器每种模式的重击段均可蓄力（时长/姿势/伤害加成/冷却），轻击段不可', () => {
+    it('通用重击蓄力：所有近战武器每种模式的重击段均可蓄力（时长/伤害加成/冷却），轻击段不可', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
             for (const mode of MELEE_WEAPON_PRESETS[weaponId].holdModes) {
                 const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
@@ -143,9 +143,8 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
                 expect(heavy1.chargeFullTime, `${weaponId}/${mode}`).toBe(1)
                 expect(heavy1.chargeDamageBonus).toBe(1)
                 expect(heavy1.chargeCooldown).toBeGreaterThan(0)
-                expect(heavy1.chargePoseId).toBe(`charge_melee_${mode}`)
-                /* 重击 strike 阶段为蓄力锚点（按住冻结在起手帧） */
-                expect(heavy1.phases.some(phase => phase.chargeable === true)).toBe(true)
+                /* 重击 windup（抬手）阶段为蓄力锚点（按住冻结在抬手起始帧） */
+                expect(heavy1.phases.some(phase => phase.name === 'windup' && phase.chargeable === true)).toBe(true)
                 /* 轻击段不可蓄力 */
                 expect(findSegment(attacks, `${weaponId}_${mode}_light_1`)!.chargeFullTime).toBeUndefined()
                 expect(isChargeableKey(attacks, 'heavy')).toBe(true)

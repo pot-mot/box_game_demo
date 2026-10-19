@@ -5,11 +5,13 @@ import {createComposedAnimationPlayer, type ComposedAnimationPlayer, type Compos
 import {applyComposedPose} from '../../../skeleton/anim/composition.ts'
 import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
 import {getBaseClipForHoldMode, getWalkLegsClip, fallingSpeedTier} from './clips/base_clips.ts'
-import {getAttackClipById, getChargeClipById} from './clips/attack_clips.ts'
+import {getAttackClipById} from './clips/attack_clips.ts'
 import {createCharacterSkeletonBridge} from './skeleton_bridge.ts'
 import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
 import {solveTwoHandedGrip} from './two_handed_ik.ts'
 import {offHandSide} from '../../../character/handedness.ts'
+import {isWindupStrike, phaseDurationOf, resolvePhases} from '../../../character/combat/attack_phases.ts'
+import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
 import {ENGAGED_WALK_MIN_SPEED, STATE_BLEND_DURATION, TWO_HAND_GRIP_OFFSET, walkSpeedScale} from './constants.ts'
 
 /** clip 驱动的状态（全部 14 状态；基础状态用基础生成器，attacking / air_attacking 用攻击生成器） */
@@ -52,8 +54,21 @@ export interface AppearanceSystem {
     update: (dt: number, model: CreatureModel, state: CharacterState, ctx: AnimationContext) => void
 }
 
-/** 无专用蓄力 clip 时，蓄力进度映射到攻击 clip 前段的比例上限（0.5 ≈ 动作中段/满蓄力位） */
+/** 蓄力进度映射到攻击 clip 前段的通用比例上限（0.5 ≈ 动作中段/满蓄力位；用于非「抬手 → 挥斩」结构的远程段） */
 const CHARGE_SEEK_FRACTION = 0.5
+
+/**
+ * 近战重击的蓄力定位比例：满蓄力 = 抬手段末帧（= 松开后续播挥斩的起点）。
+ * 蓄力姿势直接取攻击 clip 的抬手段，故与各武器实际的抬手姿势逐帧一致，
+ * 松开蓄力时不会出现「先回位再抬手」的跳变；仅「抬手 → 挥斩」结构的近战段返回比例，其余返回 undefined。
+ */
+const meleeWindupFraction = (segment: AttackSegment): number | undefined => {
+    const phases = resolvePhases(segment.phases)
+    if (!isWindupStrike(phases)) return undefined
+    const total = segment.duration + segment.recovery
+    if (total <= 0) return undefined
+    return phaseDurationOf(phases[0], segment.duration, segment.recovery) / total
+}
 
 /* 持盾臂集合（canonical 右撇子：主手 = 右、副手 = 左；左撇子由 clip 镜像处理）——复用常量避免逐帧分配 */
 const NO_SHIELD_ARMS: readonly ('right' | 'left')[] = []
@@ -89,7 +104,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     let player: ComposedAnimationPlayer | undefined
     /* 当前是否在播放「蓄力姿势」（按住蓄力）：为真时播放器不自由推进，而按蓄力值定位进度 */
     let chargingPose = false
-    /* 蓄力进度缩放：专用蓄力 clip（0→1）取 1；无专用 clip 时定位到攻击 clip 前段 */
+    /* 蓄力进度缩放：定位到攻击 clip 蓄力段末的比例（近战 = 抬手段占全段比例；远程 = 前段通用比例） */
     let chargingSeekScale = 1
     /* 格挡 / 蓄力攻击下半身行走叠加的相位累积（秒）：按水平速度步频推进，仅覆盖双腿 */
     let engagedWalkPhase = 0
@@ -125,20 +140,17 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             if (supportShoulder !== undefined) supportShoulder.ikRootLevel = 0
         }
         if (isAttackState(state)) {
-            /* 攻击段动作组合：段引用的 pose 层（含 hitbox 事件轨），按权重合成；按住蓄力时按蓄力值定位姿势 */
+            /* 攻击段动作组合：段引用的 pose 层（含 hitbox 事件轨），按权重合成。
+             * 蓄力按住时不自由推进，而按蓄力值定位「蓄力段」进度：近战 = 攻击 clip 的抬手段（武器各异），
+             * 其余（拉弓 / 后引 / 后摆）= 攻击 clip 前段；松开后由攻击态正常推进，无缝续播挥斩。 */
             const segment = ctx.attackSegment
             chargingPose = ctx.attackHolding && segment !== undefined
-            if (chargingPose && segment !== undefined && segment.chargePoseId !== undefined) {
-                /* 专用蓄力姿势 clip：设计为 0（起始位）→ 1（满蓄力位），进度直接取蓄力值 */
-                chargingSeekScale = 1
-                player = createComposedAnimationPlayer(bridge, [{clip: getChargeClipById(segment.chargePoseId, ctx.handedness), weight: 1}])
-            } else {
-                /* 无专用蓄力 clip：定位到攻击 clip 前段（拉弓 / 后引 / 后摆），同样随蓄力参数化 */
-                chargingSeekScale = CHARGE_SEEK_FRACTION
-                const layers = attackLayersOf(ctx)
-                if (layers.length === 0) return
-                player = createComposedAnimationPlayer(bridge, layers)
-            }
+            chargingSeekScale = chargingPose && segment !== undefined
+                ? meleeWindupFraction(segment) ?? CHARGE_SEEK_FRACTION
+                : 1
+            const layers = attackLayersOf(ctx)
+            if (layers.length === 0) return
+            player = createComposedAnimationPlayer(bridge, layers)
             player.onEvent = (record) => onAttackEvent?.(record)
             player.play()
         } else {
@@ -213,9 +225,10 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             if (to === 'attacking' || to === 'air_attacking') {
                 onAttackEvent?.({time: 0, eventName: 'hitbox_off'})
             }
-            /* 用真实 ctx 生成 clip（falling 速度档 / attacking 阶段配置等依赖当前上下文） */
+            /* 用真实 ctx 生成 clip（falling 速度档 / attacking 阶段配置等依赖当前上下文）。
+             * 攻击 clip 按段总进度定位：松开蓄力时阶段时间线已推进到抬手进度，不能回到 0 重播。 */
             setupClip(to, model, ctx)
-            player?.seekProgress(0)
+            player?.seekProgress(isAttackState(to) ? ctx.attackTotalProgress : 0)
         } else {
             teardownClip()
         }

@@ -169,7 +169,7 @@ export interface AnimationContext {
     readonly attackPhaseIndex: number
     /** 当前蓄力值 0-1（近战重击 / 远程蓄力；未蓄力 = 0） */
     readonly attackCharge: number
-    /** 是否正冻结在蓄力锚点阶段（按住中）：为真时动画改为按蓄力值定位专用蓄力姿势 */
+    /** 是否正冻结在蓄力锚点阶段（按住中）：为真时动画改为按蓄力值定位到攻击 clip 的蓄力段（近战抬手段 / 远程前段） */
     readonly attackHolding: boolean
     /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
     readonly weaponHeld: boolean
