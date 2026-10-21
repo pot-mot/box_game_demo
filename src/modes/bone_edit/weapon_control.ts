@@ -1,10 +1,6 @@
-import type {Skeleton} from '../../skeleton/skeleton.ts'
 import {DEFAULT_WEAPON_ID, defaultHoldMode, findWeaponPreset, supportsHoldMode, weaponDisplayName, weaponsOfForm, type WeaponConfig} from '../../character/weapon/catalog.ts'
-import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 import type {HoldMode} from '../../character/weapon/hold_mode.ts'
-import {DEFAULT_HANDEDNESS, offHandSide, type Handedness} from '../../character/handedness.ts'
-import {TWO_HAND_GRIP_OFFSET} from '../../entity/character/appearance/constants.ts'
-import {clearTwoHandGripRoot, solveTwoHandedGrip} from '../../entity/character/appearance/two_handed_ik.ts'
+import {DEFAULT_HANDEDNESS, type Handedness} from '../../character/handedness.ts'
 import {
     equipSkeletonWeapon,
     RIGHT_WEAPON_MOUNT_JOINT,
@@ -12,30 +8,27 @@ import {
     type SkeletonWeaponSpec,
 } from './weapon_equip.ts'
 import type {SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
-import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import {localizeText, localizeTitle, localizeApply} from '../../i18n/dom.ts'
+import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import {
     ANIM_OPTION_WEAPON_AUTO,
     ANIM_OPTION_WEAPON_NONE,
-    GRIP_TOGGLE_ID,
     WEAPON_SELECT_ID,
 } from './constants.ts'
 
 /**
- * 骨骼动画编辑器武器控制：「武器占两个骨骼位」的装载与贴合。
- *
- * - 下拉三态：**自动**（跟随当前动画来源：选中内置攻击动作即装备该武器）/ **无武器** / 手动指定某把武器；
- * - 装载：武器网格挂**主手武器挂点**（右撇子 = `rightWeaponMount`，左撇子 = `leftWeaponMount`，随主手动画）；
- * - 双手贴合：武器 `twoHanded` 为真时，**支撑肩**（与主手相反侧）设为 IK 根并每次姿态应用后把支撑手链
- *   CCD 求解到武器轴上的副握点（与生产共用 `entity/character/appearance/two_handed_ik.ts`）；
- * - 惯用手（`setHandedness`）决定主手挂点侧与双手 IK 支撑侧（右撇子支撑左手、左撇子支撑右手）。
+ * 骨骼动画编辑器武器控制：
+ * - 下拉三态：**自动**（跟随当前动画来源）/ **无武器** / 手动指定当前体形的武器；
+ * - 装载：主手武器挂点（人形按惯用手取左右手挂点；生物体形使用武器自带 `mountJointId`）；
+ * - **不再自动求解副手贴合**：双手共持动作由动画数据与节点 IK 独立控制；
+ * - 切换体形时重建武器列表并同步该体形的默认武器。
  */
 
 /** 当前动画的来源信息（用于「自动」模式选武器） */
 export interface ClipWeaponSource {
     readonly weaponId?: string
     readonly segmentId?: string
-    /** 段所在持握模式（决定编辑器预览时是否双手贴合 / 装配副手；缺省 = 武器默认模式） */
+    /** 段所在持握模式（决定编辑器预览时是否双手） */
     readonly holdMode?: HoldMode
     /**
      * 基础状态是否持械（仅 待机/行走 的持械-空手变体携带）：
@@ -44,248 +37,210 @@ export interface ClipWeaponSource {
     readonly weaponHeld?: boolean
 }
 
-/** 自动模式的兜底武器（进入编辑器时即装备，避免「武器没出来」） */
-export const DEFAULT_EDITOR_WEAPON_ID = DEFAULT_WEAPON_ID
-
 /**
  * 「自动」模式解析应装备的武器：
- * - 动画带武器来源（内置攻击动作及其副本）→ 装备该武器；
- * - 基础状态空手变体（`weaponHeld === false`）→ 卸下武器（但记住上一次用的武器）；
- * - 其余（自定义动画、跳跃/下落等无持械语义的基础状态、持械变体）→ **保留当前武器**；
- * - 当前无武器时回退默认武器（进入编辑器即有一把武器可编辑）。
+ * - 动画带武器来源 → 该武器；
+ * - 基础状态空手变体（`weaponHeld === false`）→ 卸下；
+ * - 其余 → 保留当前武器，无当前时回退体形默认武器。
  */
 export const resolveAutoWeapon = (
     source: ClipWeaponSource,
     current: SkeletonWeaponSpec | undefined,
+    fallback: SkeletonWeaponSpec | undefined,
+    formId?: string,
 ): SkeletonWeaponSpec | undefined => {
-    if (source.weaponId !== undefined) return weaponSpecOf(source.weaponId, source.holdMode)
+    if (source.weaponId !== undefined) return weaponSpecOf(source.weaponId, source.holdMode, formId) ?? fallback
     if (source.weaponHeld === false) return undefined
-    return current ?? weaponSpecOf(DEFAULT_EDITOR_WEAPON_ID)
+    return current ?? fallback
 }
 
 /** 是否双手持握：显式模式优先，缺省取武器默认持握模式（生产与编辑器同源） */
 export const isTwoHandedWeapon = (weapon: WeaponConfig, holdMode?: HoldMode): boolean =>
     (holdMode !== undefined && supportsHoldMode(weapon, holdMode) ? holdMode : defaultHoldMode(weapon)) === 'two_handed'
 
-/** 武器规格（编辑器装载用）；武器 id 未知时返回 undefined。holdMode 缺省取武器默认模式 */
-export const weaponSpecOf = (weaponId: string, holdMode?: HoldMode): SkeletonWeaponSpec | undefined => {
+/** 武器规格（编辑器装载用）；武器 id 未知或不属于指定体形时返回 undefined */
+export const weaponSpecOf = (
+    weaponId: string,
+    holdMode?: HoldMode,
+    formId?: string,
+): SkeletonWeaponSpec | undefined => {
     const weapon = findWeaponPreset(weaponId)
     if (weapon === undefined) return undefined
+    if (formId !== undefined && weapon.formId !== formId) return undefined
     const mode = holdMode !== undefined && supportsHoldMode(weapon, holdMode) ? holdMode : defaultHoldMode(weapon)
     return {
         weaponId: weapon.id,
         meshConfig: weapon.mesh,
-        /* 双持预览：副手用同类默认模型（与主手同一网格）；双手共持 / 单持不装配副手 */
+        /* 双持预览：副手用同类默认模型（与主手同一网格）；其余模式不装配副手 */
         offhandMeshConfig: mode === 'dual_wield' ? weapon.mesh : undefined,
         twoHanded: mode === 'two_handed',
+        ...(weapon.mountJointId !== undefined ? {mountJointId: weapon.mountJointId} : {}),
+        ...(weapon.mountRotation !== undefined ? {mountRotation: weapon.mountRotation} : {}),
     }
 }
 
 export interface BoneEditWeaponControl {
     /** 控制条上的武器下拉（由 timeline 插入控制条） */
     readonly select: HTMLSelectElement
-    /** 控制条上的「左手贴合」开关（默认关；见下方贴合策略） */
-    readonly gripToggle: HTMLButtonElement
-    /** 切换聚焦骨架/重建后重新装载（保留当前选择模式） */
+    /** 切换聚焦骨架/体形后重新装载（保留当前选择模式；体形变化时重建列表） */
     readonly reload: () => void
     /** 跟随当前动画来源（「自动」模式下装备该武器） */
     readonly syncForClip: (source: ClipWeaponSource) => void
-    /**
-     * 每次姿态应用后调用（仅播放预览时由 timeline 调用）：
-     * 贴合开关打开且当前武器为双手时，把左手链求解到武器副握点；否则不做任何干预。
-     */
-    readonly solveGrip: () => void
-    /** 左手贴合开关（默认关）：关闭时两只手完全独立，互不牵扯 */
-    readonly isGripAssist: () => boolean
-    readonly setGripAssist: (on: boolean) => void
-    /** 当前惯用手（决定主手挂点侧与双手 IK 支撑侧） */
+    /** 当前惯用手（决定人形主手挂点侧） */
     readonly getHandedness: () => Handedness
     /** 切换惯用手：改挂主手挂点侧并重装武器（动作数据不变） */
     readonly setHandedness: (next: Handedness) => void
+    /** 启用/停用武器控制（函数编排模式关闭时卸下武器） */
+    readonly setEnabled: (enabled: boolean) => void
     /** 当前装备武器 id（DOM 可测试面：data-weapon） */
     readonly currentWeaponId: () => string | undefined
     /** 当前装备武器是否双手（DOM 可测试面：data-two-handed） */
     readonly isTwoHanded: () => boolean
-    /** 左手贴合是否已求解（DOM 可测试面：data-grip-solved） */
-    readonly isGripSolved: () => boolean
     readonly dispose: () => void
 }
 
-export const createBoneEditWeaponControl = (world: SkeletonEntitiesContext): BoneEditWeaponControl => {
+export const createBoneEditWeaponControl = (
+    world: SkeletonEntitiesContext,
+    getFormId: () => string,
+    getDefaultWeaponId: () => string,
+): BoneEditWeaponControl => {
     const select = document.createElement('select')
     select.id = WEAPON_SELECT_ID
     select.className = 'dc-select'
     localizeTitle(select, 'bone_edit.weapon.select_title')
     select.style.cssText = 'max-width:150px'
 
-    const autoOption = document.createElement('option')
-    autoOption.value = ANIM_OPTION_WEAPON_AUTO
-    localizeText(autoOption, 'bone_edit.weapon.auto')
-    select.appendChild(autoOption)
-    const noneOption = document.createElement('option')
-    noneOption.value = ANIM_OPTION_WEAPON_NONE
-    localizeText(noneOption, 'bone_edit.weapon.none')
-    select.appendChild(noneOption)
-
-    /* 左手贴合开关（默认关：编辑器里两只手独立，避免「拖武器牵扯另一只手」） */
-    const gripToggle = document.createElement('button')
-    gripToggle.id = GRIP_TOGGLE_ID
-    gripToggle.className = 'dc-btn'
-    gripToggle.style.cssText = 'padding:2px 8px'
-
-    /* 手动指定武器：近战 / 远程分组（optgroup 用 label 属性，不能走 localizeText 以免清空子选项） */
-    const groupOf = (labelKey: StringLocaleKey): HTMLOptGroupElement => {
-        const group = document.createElement('optgroup')
-        localizeApply(group, el => {
-            if (el instanceof HTMLOptGroupElement) el.label = translate(labelKey)
-        })
-        select.appendChild(group)
-        return group
-    }
-    const meleeGroup = groupOf('bone_edit.weapon.group_melee')
-    const rangedGroup = groupOf('bone_edit.weapon.group_ranged')
-    /* 骨骼动画编辑器为**人形专用**：仅列人形武器 */
-    for (const preset of weaponsOfForm(HUMANOID_BODY_FORM_ID)) {
-        const option = document.createElement('option')
-        option.value = preset.id
-        localizeApply(option, el => { el.textContent = weaponDisplayName(preset) })
-        option.dataset.weaponType = preset.type
-        ;(preset.type === 'melee' ? meleeGroup : rangedGroup).appendChild(option)
-    }
-
     let mode: string = ANIM_OPTION_WEAPON_AUTO
     let source: ClipWeaponSource = {}
     let equipped: SkeletonWeapon | undefined
     /** 上一次使用的武器（卸下后仍记住：空手变体切回持械变体时沿用） */
     let lastSpec: SkeletonWeaponSpec | undefined
-    /** 左手贴合开关（默认关：编辑器里两只手完全独立，互不牵扯） */
-    let gripAssist = false
-    let gripSolved = false
-    /** 惯用手：决定主手挂点侧与双手 IK 支撑侧 */
+    /** 惯用手：决定人形主手挂点侧 */
     let handedness: Handedness = DEFAULT_HANDEDNESS
+    /** 非轨道模式停用（卸下武器并禁止重装） */
+    let enabled = true
+    let formIdCache = getFormId()
 
-    const focusSkeleton = (): Skeleton | undefined => world.getFocus()?.skeleton
+    const weaponsForCurrentForm = (): readonly WeaponConfig[] => weaponsOfForm(formIdCache)
 
-    /** 副手（支撑）肩关节 id：右撇子 = 左肩、左撇子 = 右肩 */
-    const supportShoulderId = (): string => `${offHandSide(handedness)}ArmShoulder`
+    const rebuildOptions = (): void => {
+        select.innerHTML = ''
+        const autoOption = document.createElement('option')
+        autoOption.value = ANIM_OPTION_WEAPON_AUTO
+        localizeText(autoOption, 'bone_edit.weapon.auto')
+        select.appendChild(autoOption)
+        const noneOption = document.createElement('option')
+        noneOption.value = ANIM_OPTION_WEAPON_NONE
+        localizeText(noneOption, 'bone_edit.weapon.none')
+        select.appendChild(noneOption)
 
-    /** 清除两侧肩的 IK 根（切换惯用手时旧支撑侧也要解除） */
-    const clearGripRoot = (skeleton: Skeleton): void => {
-        clearTwoHandGripRoot(skeleton, 'leftArmShoulder')
-        clearTwoHandGripRoot(skeleton, 'rightArmShoulder')
+        /* 手动指定武器：近战 / 远程分组（optgroup 用 label 属性，不能走 localizeText 以免清空子选项） */
+        const groupOf = (labelKey: StringLocaleKey): HTMLOptGroupElement => {
+            const group = document.createElement('optgroup')
+            localizeApply(group, el => {
+                if (el instanceof HTMLOptGroupElement) el.label = translate(labelKey)
+            })
+            select.appendChild(group)
+            return group
+        }
+        const meleeGroup = groupOf('bone_edit.weapon.group_melee')
+        const rangedGroup = groupOf('bone_edit.weapon.group_ranged')
+        for (const preset of weaponsForCurrentForm()) {
+            const option = document.createElement('option')
+            option.value = preset.id
+            localizeApply(option, el => { el.textContent = weaponDisplayName(preset) })
+            option.dataset.weaponType = preset.type
+            ;(preset.type === 'melee' ? meleeGroup : rangedGroup).appendChild(option)
+        }
+        select.value = mode
     }
 
-    /** 释放当前武器并清除双手 IK 根（回到由 clip 驱动支撑臂） */
-    const unequip = (): void => {
-        const skeleton = focusSkeleton()
-        if (skeleton !== undefined) clearGripRoot(skeleton)
-        equipped?.dispose()
-        equipped = undefined
-        gripSolved = false
+    /** 体形变化时重建武器列表并回到「自动」，避免沿用上一体形的武器 */
+    const refreshForm = (): void => {
+        const formId = getFormId()
+        if (formId === formIdCache) return
+        formIdCache = formId
+        mode = ANIM_OPTION_WEAPON_AUTO
+        lastSpec = undefined
+        rebuildOptions()
     }
 
-    /** 解析当前应装备的武器规格：自动模式取动画来源（无来源保留当前/上次武器），手动模式取下拉值 */
+    const fallbackSpec = (): SkeletonWeaponSpec | undefined =>
+        weaponSpecOf(getDefaultWeaponId(), undefined, formIdCache)
+            ?? weaponSpecOf(DEFAULT_WEAPON_ID, undefined, formIdCache)
+
+    /** 解析当前应装备的武器规格 */
     const resolveSpec = (): SkeletonWeaponSpec | undefined => {
+        refreshForm()
         if (mode === ANIM_OPTION_WEAPON_NONE) return undefined
-        if (mode === ANIM_OPTION_WEAPON_AUTO) return resolveAutoWeapon(source, equipped?.spec ?? lastSpec)
-        return weaponSpecOf(mode)
+        if (mode === ANIM_OPTION_WEAPON_AUTO) {
+            const current = equipped?.spec ?? lastSpec
+            const currentValid = current !== undefined && weaponSpecOf(current.weaponId, undefined, formIdCache) !== undefined
+                ? current
+                : undefined
+            return resolveAutoWeapon(source, currentValid, fallbackSpec(), formIdCache)
+        }
+        return weaponSpecOf(mode, undefined, formIdCache) ?? fallbackSpec()
     }
 
     const reload = (): void => {
-        unequip()
+        equipped?.dispose()
+        equipped = undefined
+        if (!enabled) return
         const spec = resolveSpec()
         if (spec === undefined) return
         const groups = world.getFocus()?.visuals.groups
         if (groups === undefined) return
         equipped = equipSkeletonWeapon(groups, spec, handedness)
         if (equipped !== undefined) lastSpec = spec
-        /* 注意：装载本身不求解左手（贴合只在播放预览且开关打开时进行）——
-         * 保证编辑（暂停）状态下拖任意关节都不会牵扯另一只手 */
     }
 
     const syncForClip = (next: ClipWeaponSource): void => {
         source = next
+        refreshForm()
         reload()
     }
 
     select.addEventListener('change', () => {
+        refreshForm()
         mode = select.value
         reload()
     })
 
-    /**
-     * 双手贴合求解（仅在贴合开关打开 + 双手武器 + 播放预览时由 timeline 调用）：
-     * **支撑肩**（右撇子 = 左肩、左撇子 = 右肩）为 IK 根，链末端为支撑侧武器挂点，
-     * 目标为武器轴上的副握点（共享求解器）。
-     * 关闭贴合时立即清除 IK 根（支撑臂回到 clip 姿态），不做任何跨手干预。
-     */
-    const solveGrip = (): void => {
-        const focus = world.getFocus()
-        const skeleton = focus?.skeleton
-        if (skeleton === undefined || focus === undefined) {
-            gripSolved = false
-            return
-        }
-        if (!gripAssist || equipped === undefined || !equipped.spec.twoHanded) {
-            if (!gripAssist) clearGripRoot(skeleton)
-            gripSolved = false
-            return
-        }
-        gripSolved = solveTwoHandedGrip(skeleton, equipped.weaponGroup, {
-            shoulderId: supportShoulderId(),
-            supportSide: offHandSide(handedness),
-            /* 武器根节点已对齐主握把；按该武器沿柄身分配的间距定位副握点 */
-            offset: equipped.supportGripOffset + TWO_HAND_GRIP_OFFSET,
-            /* 与生产同源：目标换算回骨架空间（编辑器骨架若带根缩放也保持一致） */
-            rootObject: focus.visuals.groups.get('root'),
-        })
-    }
-
-    const refreshGripToggleLabel = (): void => {
-        gripToggle.textContent = translate(gripAssist ? 'bone_edit.grip.on' : 'bone_edit.grip.off')
-        gripToggle.title = translate(gripAssist ? 'bone_edit.grip.on_title' : 'bone_edit.grip.off_title')
-    }
-    /* 初始文案（默认关） */
-    refreshGripToggleLabel()
-
-    const setGripAssist = (on: boolean): void => {
-        gripAssist = on
-        if (!on) {
-            /* 关闭：立刻解除支撑臂 IK 根并清状态（由 timeline 重新应用 clip 姿态） */
-            const skeleton = focusSkeleton()
-            if (skeleton !== undefined) clearGripRoot(skeleton)
-            gripSolved = false
-        }
-        refreshGripToggleLabel()
-    }
-
-    /** 切换惯用手：解除旧支撑侧 IK 根并按新主手挂点侧重装武器（动作数据由 timeline 侧镜像） */
     const setHandedness = (next: Handedness): void => {
         if (next === handedness) return
         handedness = next
-        const skeleton = focusSkeleton()
-        if (skeleton !== undefined) clearGripRoot(skeleton)
         reload()
     }
 
-    gripToggle.addEventListener('click', () => {
-        setGripAssist(!gripAssist)
-    })
+    const setEnabled = (next: boolean): void => {
+        if (enabled === next) return
+        enabled = next
+        select.disabled = !next
+        if (!next) {
+            equipped?.dispose()
+            equipped = undefined
+            return
+        }
+        refreshForm()
+        reload()
+    }
+
+    rebuildOptions()
 
     return {
         select,
-        gripToggle,
         reload,
         syncForClip,
-        solveGrip,
-        isGripAssist: () => gripAssist,
-        setGripAssist,
         getHandedness: () => handedness,
         setHandedness,
+        setEnabled,
         currentWeaponId: () => equipped?.spec.weaponId,
         isTwoHanded: () => equipped?.spec.twoHanded === true,
-        isGripSolved: () => gripSolved,
-        dispose: unequip,
+        dispose: () => {
+            equipped?.dispose()
+            equipped = undefined
+        },
     }
 }
 

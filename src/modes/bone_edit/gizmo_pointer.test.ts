@@ -4,7 +4,7 @@ import {createTransformGizmo} from '../edit/transform_gizmo.ts'
 import {setupBoneGizmoPointer} from './gizmo_pointer.ts'
 import {createDragCoordinator, type DragCoordinator} from './drag_state.ts'
 import {createSkeleton} from '../../skeleton/skeleton.ts'
-import {createSkeletonJoint} from '../../skeleton/joint.ts'
+import {createSkeletonJoint, connectJoint} from '../../skeleton/joint.ts'
 import type {SkeletonSceneBridge} from '../../entity/skeleton/render/bridge.ts'
 import type {SkeletonEntitiesContext, SkeletonEntity, SkeletonSelection} from '../../entity/skeleton/world.ts'
 import type {BoneEditHistory} from './history.ts'
@@ -25,13 +25,31 @@ const makeSkeleton = (): ReturnType<typeof createSkeleton> => {
     return skel
 }
 
+/** 末端位于原点的三节链（root → elbow → wrist）：用于验证节点 IK 平移 */
+const makeIkSkeleton = (): ReturnType<typeof createSkeleton> => {
+    const skeleton = createSkeleton()
+    const root = createSkeletonJoint('root', 'root')
+    const elbow = createSkeletonJoint('elbow', 'elbow')
+    const wrist = createSkeletonJoint('wrist', 'wrist')
+    connectJoint(root, elbow)
+    connectJoint(elbow, wrist)
+    elbow.position.set(0, -1, 0)
+    wrist.position.set(0, -1, 0)
+    skeleton.addJoint(root)
+    skeleton.addJoint(elbow)
+    skeleton.addJoint(wrist)
+    wrist.ik = {solver: 'ccd', chainDepth: 2}
+    skeleton.updateWorldTransforms()
+    return skeleton
+}
+
 /** 最小骨架实体：gizmo 指针只用 skeleton，visuals/appearance 为空洞实现 */
-const fakeEntity = (): SkeletonEntity => {
-    const skeleton = makeSkeleton()
+const fakeEntity = (skeleton: ReturnType<typeof createSkeleton> = makeSkeleton()): SkeletonEntity => {
     const bridge: SkeletonSceneBridge = Object.assign(skeleton, {syncFromScene: () => {}})
     return {
         id: 1,
         name: '测试骨架',
+        presetId: 'humanoid',
         skeleton,
         visuals: {
             rootGroup: new Group(),
@@ -40,6 +58,8 @@ const fakeEntity = (): SkeletonEntity => {
             boneVisuals: new Map(),
             bridge,
             resizeBoneVisuals: () => {},
+            setJointsVisible: () => {},
+            setBonesVisible: () => {},
             cleanup: () => {},
         },
         appearance: {
@@ -66,6 +86,8 @@ const fakeWorld = (opts: {
     select: () => {},
     getSelection: () => opts.selection,
     getMeshes: () => [],
+    getViewSettings: () => ({editEnabled: true, showJoints: true, showBones: true, showModel: true}),
+    setViewSettings: () => {},
     getCascadeSettings: () => ({enabled: true, depth: 16}),
     refresh: opts.refresh ?? (() => {}),
     syncFromScene: () => {},
@@ -232,6 +254,32 @@ describe('bone_edit gizmo 指针交互', () => {
         /* 无拖拽时 cancel 无副作用 */
         pointer.handlePointerCancel()
         expect(history.endEdit).toHaveBeenCalledTimes(1)
+        pointer.destroy()
+        gizmo.dispose()
+    })
+
+    it('配置节点 IK 的末端平移：沿轴拖动触发父级链求解', () => {
+        const gizmo = createTransformGizmo()
+        gizmo.setVisible(true)
+        const refresh = vi.fn()
+        const skeleton = makeIkSkeleton()
+        const entity = fakeEntity(skeleton)
+        const pointer = setup(
+            fakeWorld({focus: entity, selection: {kind: 'joint', id: 'wrist'}, refresh}),
+            gizmo, fakeHistory(), () => {}, createDragCoordinator(),
+        )
+        const consumed = pointer.handlePointerDown(
+            new PointerEvent('pointerdown', {clientX: 640, clientY: 384, button: 0}),
+        )
+        expect(consumed).toBe(true)
+        expect(pointer.getActivePart()).toBe('translate_x')
+        pointer.handlePointerMove(new PointerEvent('pointermove', {clientX: 700, clientY: 384}))
+        expect(refresh).toHaveBeenCalled()
+        /* 末端被父级链带到 +X 方向；根保持不动 */
+        const wrist = skeleton.getWorldPosition('wrist')!
+        expect(wrist.x).toBeGreaterThan(0.1)
+        expect(skeleton.getWorldPosition('root')!.length()).toBeLessThan(1e-9)
+        pointer.handlePointerUp(new PointerEvent('pointerup', {button: 0}))
         pointer.destroy()
         gizmo.dispose()
     })

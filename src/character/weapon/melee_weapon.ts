@@ -39,6 +39,8 @@ export interface MeleeWeaponClassConfig {
      * 缺省 = 体形 `createModel` 的默认主挂点（人形忽略此字段）。
      */
     readonly mountJointId?: string
+    /** 生物武器挂点局部欧拉角（可选；如狼口含剑横置）；缺省 = 体形默认握持姿态 */
+    readonly mountRotation?: readonly [number, number, number]
     /** 攻击类别（武器固有，不可被存档/面板覆写）：决定按哪一类防御结算固定减伤 */
     readonly damageType: DamageType
     readonly damage: number
@@ -107,7 +109,12 @@ export const meleeClass = (
     for (const mode of base.holdModes) {
         const options = modeChains[mode]
         if (options === undefined) continue
-        attacks[mode] = buildMeleeAttacks(base.id, mode, {...options, heavyCharge, air: airAttack, impulses: options.impulses ?? base.impulses})
+        attacks[mode] = buildMeleeAttacks(base.id, mode, {
+            ...options,
+            heavyCharge,
+            air: {...airAttack, ...(options.air ?? {})},
+            impulses: options.impulses ?? base.impulses,
+        })
     }
     return {...base, heavyCharge, airAttack, attacks}
 }

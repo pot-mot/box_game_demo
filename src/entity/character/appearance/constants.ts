@@ -91,12 +91,6 @@ export const HEAD_TURN_LIMIT = Math.PI / 2
  * （`rightWeaponMount` / `leftWeaponMount`）的动画轨道控制。此处不再有任何外部武器握持常量。
  */
 
-/**
- * 双手副握点的额外统一微调距离（米）：各武器自己的柄间距已由 `weapon_mesh.ts` 提供。
- * 0 表示使用武器模型声明的副握点原位；生产与编辑器共用此增量。
- */
-export const TWO_HAND_GRIP_OFFSET = 0
-
 /** 持械戒备位：肩前举角（rad，负值 = 前摆，刃尖朝上收至体侧前方） */
 export const WEAPON_READY_SHOULDER = -0.45
 

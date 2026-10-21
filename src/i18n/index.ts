@@ -117,15 +117,13 @@ type CoreLocale = {
     'input.group.system': string
     'input.fixed.key.click_left': string
     'input.fixed.key.wheel': string
-    'input.fixed.key.drag_joint': string
-    'input.fixed.key.drag_bone': string
+    'input.fixed.key.drag_gizmo': string
     'input.fixed.key.dbl_timeline': string
     'input.fixed.key.ctrl_wheel': string
     'input.fixed.label.edit_select': string
     'input.fixed.label.zoom_camera': string
     'input.fixed.label.bone_select': string
-    'input.fixed.label.bone_move_ik': string
-    'input.fixed.label.bone_rotate_tail': string
+    'input.fixed.label.bone_transform_gizmo': string
     'input.fixed.label.bone_add_key': string
     'input.fixed.label.bone_zoom_timeline': string
     'input.action.move_forward': string

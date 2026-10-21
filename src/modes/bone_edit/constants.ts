@@ -21,11 +21,7 @@ export const TRACK_LIST_WIDTH = 220
 /** 关键帧菱形标记尺寸（px） */
 export const KEYFRAME_DIAMOND_SIZE = 9
 
-/** 拖拽判定阈值（px）：位移小于该值视为点击 */
-export const DRAG_CLICK_THRESHOLD = 4
 
-/** 骨骼/关节拖拽旋转灵敏度（rad/px） */
-export const ROT_SENSITIVITY = 0.012
 
 /* 时间轴配色：Canvas 无法直接使用 CSS 变量，统一在模块加载时从主题令牌解析（读取失败回退为同色值） */
 export const TIMELINE_BG = themeColor('--dc-bg-1', '#14110d')
@@ -76,13 +72,10 @@ export const ANIM_OPTION_EDITED_PREFIX = 'edited:'
 /** 动画下拉 option 值前缀：内置动作（后接内置条目 id） */
 export const ANIM_OPTION_BUILTIN_PREFIX = 'builtin:'
 
-// ── 武器控制（编辑器武器装载与双手贴合）──
+// ── 武器控制（编辑器武器装载）──
 
 /** 武器下拉 DOM id（e2e 断言面） */
 export const WEAPON_SELECT_ID = 'bone-weapon-select'
-
-/** 左手贴合开关按钮 DOM id（默认关；开启后仅在播放预览时求解） */
-export const GRIP_TOGGLE_ID = 'bone-grip-toggle'
 
 // ── 惯用手预览（聚焦骨架整体镜像）──
 
@@ -95,5 +88,25 @@ export const ANIM_OPTION_WEAPON_AUTO = 'auto'
 /** 武器下拉：无武器 */
 export const ANIM_OPTION_WEAPON_NONE = 'none'
 
-/** 双手武器副握点沿武器轴（本地 +Y，握把→刃尖）的距离（米），与生产双手 IK 同量级 */
-export const LEFT_GRIP_OFFSET = 0.45
+// ── 骨骼页编辑模式 / 体形切换 ──
+
+/** 轨道编辑 / 函数编排模式按钮 DOM id（e2e 断言面） */
+export const BONE_MODE_TRACKS_ID = 'bone-mode-tracks'
+export const BONE_MODE_SCRIPT_ID = 'bone-mode-script'
+
+/** 骨骼体形下拉 DOM id（e2e 断言面） */
+export const BONE_FORM_SELECT_ID = 'bone-form-select'
+
+/* ── 右侧视图/编辑常驻面板 ── */
+
+export const BONE_EDIT_LOCK_ID = 'bone-edit-lock'
+export const BONE_SHOW_JOINTS_ID = 'bone-show-joints'
+export const BONE_SHOW_BONES_ID = 'bone-show-bones'
+export const BONE_SHOW_MODEL_ID = 'bone-show-model'
+
+/** 函数编排面板 DOM id（e2e 断言面） */
+export const BONE_SCRIPT_LIST_ID = 'bone-script-list'
+export const BONE_SCRIPT_REBAKE_ID = 'bone-script-rebake'
+export const BONE_SCRIPT_TO_TRACKS_ID = 'bone-script-to-tracks'
+export const BONE_SCRIPT_STATUS_ID = 'bone-script-status'
+export const BONE_SCRIPT_PROGRESS_ID = 'bone-script-progress'

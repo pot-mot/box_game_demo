@@ -1,6 +1,6 @@
 import {Vector3} from 'three'
-import {IK_EPSILON} from './constants.ts'
-import type {SkeletonJoint} from './joint.ts'
+import {DEFAULT_IK_CHAIN_DEPTH, IK_EPSILON} from './constants.ts'
+import type {IkSolverId, SkeletonJoint} from './joint.ts'
 import type {Skeleton} from './skeleton.ts'
 import {rotateJointSubtree} from './skeleton.ts'
 
@@ -9,29 +9,42 @@ export interface IkSolverOptions {
     readonly tolerance: number
 }
 
+export interface IkSolveResult {
+    readonly iterations: number
+    readonly error: number
+}
+
 /**
- * 链回溯：给定末端关节，沿其自身树的祖先链向上找第一个 ikRootLevel !== undefined 的关节作为链根；
- * 「自身树」= 从 endJoint 沿 parent 走到 undefined 为止的路径（多根骨架中仅限本树，不跨树）；
- * 路径上无 IK 根时，链根 = 该树的根关节。返回 根 → 末端 的关节数组。
- * 退化情形：链长 1（endJoint 即树根）无旋转自由度。
+ * 以 endJoint 为末端向上取 chainDepth 个父级，返回 根 → 末端 的关节数组。
+ * 父级不足时截断到该树根；chainDepth < 1 时按 1 处理。
  */
-export const resolveIkChain = (endJoint: SkeletonJoint): readonly SkeletonJoint[] => {
-    const chain: SkeletonJoint[] = []
-    let cursor: SkeletonJoint | undefined = endJoint
-    while (cursor !== undefined) {
+export const resolveIkChain = (
+    endJoint: SkeletonJoint,
+    chainDepth = DEFAULT_IK_CHAIN_DEPTH,
+): readonly SkeletonJoint[] => {
+    const depth = Math.max(1, Math.floor(chainDepth))
+    const chain: SkeletonJoint[] = [endJoint]
+    let cursor = endJoint.parent
+    for (let level = 0; level < depth && cursor !== undefined; level++) {
         chain.push(cursor)
         cursor = cursor.parent
     }
-    chain.reverse()
-    /* 找到链上最后一个 IK 根：从根向末端遍历，记录最新遇到的 IK 根作为链根 */
-    let ikRoot: SkeletonJoint | undefined
-    for (const joint of chain) {
-        if (joint.ikRootLevel !== undefined) {
-            ikRoot = joint
-        }
+    return chain.reverse()
+}
+
+/** 构建 root → end 的显式链（要求 root 是 end 的祖先；不满足时返回空数组） */
+export const collectChainBetween = (
+    root: SkeletonJoint,
+    end: SkeletonJoint,
+): readonly SkeletonJoint[] => {
+    const chain: SkeletonJoint[] = []
+    let cursor: SkeletonJoint | undefined = end
+    while (cursor !== undefined) {
+        chain.push(cursor)
+        if (cursor === root) return chain.reverse()
+        cursor = cursor.parent
     }
-    if (ikRoot === undefined) return chain
-    return chain.slice(chain.indexOf(ikRoot))
+    return []
 }
 
 /**
@@ -44,7 +57,7 @@ export const solveCcd = (
     chain: readonly SkeletonJoint[],
     target: Vector3,
     options: IkSolverOptions,
-): {iterations: number; error: number} => {
+): IkSolveResult => {
     skeleton.updateWorldTransforms()
     if (chain.length <= 1) {
         const endPos = skeleton.getWorldPosition(chain[0].id)
@@ -90,3 +103,114 @@ export const solveCcd = (
         error: finalEnd !== undefined ? finalEnd.distanceTo(target) : Number.POSITIVE_INFINITY,
     }
 }
+
+/**
+ * FABRIK 求解：先在位置空间做后向/前向迭代，收敛后再逐段把方向变化写回关节旋转。
+ * 位置迭代不改变根关节位置；回写旋转时保留各段 roll/扭转。
+ */
+export const solveFabrik = (
+    skeleton: Skeleton,
+    chain: readonly SkeletonJoint[],
+    target: Vector3,
+    options: IkSolverOptions,
+): IkSolveResult => {
+    skeleton.updateWorldTransforms()
+    if (chain.length <= 1) {
+        const endPos = skeleton.getWorldPosition(chain[0].id)
+        return {iterations: 0, error: endPos !== undefined ? endPos.distanceTo(target) : Number.POSITIVE_INFINITY}
+    }
+
+    const count = chain.length
+    const positions: Vector3[] = []
+    for (const joint of chain) {
+        const pos = skeleton.getWorldPosition(joint.id)
+        if (pos === undefined) {
+            return {iterations: 0, error: Number.POSITIVE_INFINITY}
+        }
+        positions.push(pos.clone())
+    }
+
+    const lengths: number[] = []
+    let totalReach = 0
+    for (let i = 1; i < count; i++) {
+        const length = positions[i].distanceTo(positions[i - 1])
+        lengths.push(length)
+        totalReach += length
+    }
+
+    const root = positions[0].clone()
+    const targetDistance = root.distanceTo(target)
+    let iterations = 0
+
+    if (targetDistance > totalReach) {
+        /* 目标不可达：把链拉成指向目标的直线 */
+        const direction = target.clone().sub(root)
+        if (direction.lengthSq() >= IK_EPSILON) {
+            direction.normalize()
+            for (let i = 1; i < count; i++) {
+                positions[i].copy(positions[i - 1]).addScaledVector(direction, lengths[i - 1])
+            }
+        }
+    } else {
+        for (let iter = 1; iter <= options.maxIterations; iter++) {
+            iterations = iter
+            /* 后向：末端贴目标，逐段回推父节点 */
+            positions[count - 1].copy(target)
+            for (let i = count - 2; i >= 0; i--) {
+                const direction = positions[i].clone().sub(positions[i + 1])
+                const length = direction.length()
+                if (length < IK_EPSILON) continue
+                direction.multiplyScalar(lengths[i] / length)
+                positions[i].copy(positions[i + 1]).add(direction)
+            }
+            /* 前向：根固定，逐段前推子节点 */
+            positions[0].copy(root)
+            for (let i = 1; i < count; i++) {
+                const direction = positions[i].clone().sub(positions[i - 1])
+                const length = direction.length()
+                if (length < IK_EPSILON) continue
+                direction.multiplyScalar(lengths[i - 1] / length)
+                positions[i].copy(positions[i - 1]).add(direction)
+            }
+            if (positions[count - 1].distanceTo(target) < options.tolerance) break
+        }
+    }
+
+    /* 位置解 → 局部旋转：逐段把当前段方向旋到目标段方向 */
+    skeleton.updateWorldTransforms()
+    for (let i = 0; i < count - 1; i++) {
+        const joint = chain[i]
+        const jointPos = skeleton.getWorldPosition(joint.id)
+        const nextPos = skeleton.getWorldPosition(chain[i + 1].id)
+        if (jointPos === undefined || nextPos === undefined) continue
+        const currentDirection = nextPos.clone().sub(jointPos)
+        const desiredDirection = positions[i + 1].clone().sub(positions[i])
+        if (currentDirection.lengthSq() < IK_EPSILON || desiredDirection.lengthSq() < IK_EPSILON) continue
+        currentDirection.normalize()
+        desiredDirection.normalize()
+        const cos = currentDirection.dot(desiredDirection)
+        const axis = currentDirection.clone().cross(desiredDirection)
+        const sin = axis.length()
+        if (sin < IK_EPSILON) continue
+        const angle = Math.atan2(sin, Math.max(-1, Math.min(1, cos)))
+        rotateJointSubtree(skeleton, joint, jointPos, axis.normalize(), angle)
+    }
+    skeleton.updateWorldTransforms()
+
+    const finalEnd = skeleton.getWorldPosition(chain[count - 1].id)
+    return {
+        iterations,
+        error: finalEnd !== undefined ? finalEnd.distanceTo(target) : Number.POSITIVE_INFINITY,
+    }
+}
+
+/** 按节点配置的求解器求解链（统一入口） */
+export const solveIkChain = (
+    skeleton: Skeleton,
+    chain: readonly SkeletonJoint[],
+    target: Vector3,
+    solver: IkSolverId,
+    options: IkSolverOptions,
+): IkSolveResult => solver === 'fabrik'
+    ? solveFabrik(skeleton, chain, target, options)
+    : solveCcd(skeleton, chain, target, options)

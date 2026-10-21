@@ -105,6 +105,11 @@ export const createProjectileSystem = (
             explosionColor: PROJECTILE_HIT_COLOR,
             impactColor: PROJECTILE_HIT_COLOR,
             passThroughMask: 0,
+            pierceRemaining: 0,
+            hitCharacterIds: new Set<number>(),
+            chainCount: 0,
+            chainRadius: 0,
+            chainFalloff: 1,
             elapsed: 0,
             prevX: 0,
             prevY: 0,
@@ -124,7 +129,7 @@ export const createProjectileSystem = (
     )
 
     const spawn = (args: ProjectileSpawn): void => {
-        const {owner, direction, weapon, throwAngle, charge, impact, poiseDamage} = args
+        const {owner, direction, weapon, throwAngle, charge, impact, poiseDamage, origin} = args
         const spec = weapon.projectile
         const p = projectilePool.acquire()
         p.body.setEnabled(true)
@@ -139,9 +144,9 @@ export const createProjectileSystem = (
         const speed = weapon.projectileSpeed * speedScale
 
         const spawnPos = owner.body.translation()
-        const sx = spawnPos.x + direction.x * PROJECTILE_SPAWN_FORWARD
-        const sy = spawnPos.y + PROJECTILE_SPAWN_HEIGHT
-        const sz = spawnPos.z + direction.z * PROJECTILE_SPAWN_FORWARD
+        const sx = origin !== undefined ? origin.x : spawnPos.x + direction.x * PROJECTILE_SPAWN_FORWARD
+        const sy = origin !== undefined ? origin.y : spawnPos.y + PROJECTILE_SPAWN_HEIGHT
+        const sz = origin !== undefined ? origin.z : spawnPos.z + direction.z * PROJECTILE_SPAWN_FORWARD
         p.body.setTranslation({x: sx, y: sy, z: sz}, true)
         p.body.setGravityScale(weapon.projectileGravityScale ?? DEFAULT_PROJECTILE_GRAVITY_SCALE, true)
 
@@ -194,6 +199,11 @@ export const createProjectileSystem = (
         p.passThroughMask = collisionCategoryMask(
             weapon.passThroughCategories ?? DEFAULT_BULLET_PASS_THROUGH_CATEGORIES,
         )
+        p.pierceRemaining = weapon.pierceCount ?? 0
+        p.hitCharacterIds.clear()
+        p.chainCount = weapon.chainCount ?? 0
+        p.chainRadius = weapon.chainRadius ?? 0
+        p.chainFalloff = weapon.chainFalloff ?? 1
         p.elapsed = 0
         p.prevX = sx
         p.prevY = sy
@@ -205,6 +215,54 @@ export const createProjectileSystem = (
 
     const getOwnerEntity = (ownerId: number, allCharacters: readonly CharacterEntity[]): CharacterEntity | undefined =>
         allCharacters.find(c => c.id === ownerId)
+
+    /** 雷电链：从命中点向附近未命中目标传导，伤害逐跳衰减 */
+    const chainFrom = (
+        p: Projectile,
+        startX: number,
+        startY: number,
+        startZ: number,
+        allCharacters: readonly CharacterEntity[],
+    ): void => {
+        if (p.chainCount <= 0 || p.chainRadius <= 0) return
+        let cx = startX
+        let cy = startY
+        let cz = startZ
+        let damage = p.damage
+        for (let hop = 0; hop < p.chainCount; hop++) {
+            damage *= p.chainFalloff
+            let nearest: CharacterEntity | undefined
+            let nearestDist = p.chainRadius
+            for (const target of allCharacters) {
+                if (target.id === p.ownerId || target.combat.isDead) continue
+                if (p.hitCharacterIds.has(target.id)) continue
+                if (!p.ownerAttackTendency(p.ownerFaction, target.combat.faction)) continue
+                if (isDamageImmune(target.combat)) continue
+                const tp = target.body.translation()
+                const dist = Math.hypot(tp.x - cx, tp.y - cy, tp.z - cz)
+                if (dist > nearestDist) continue
+                nearest = target
+                nearestDist = dist
+            }
+            if (nearest === undefined) return
+            const tp = nearest.body.translation()
+            p.hitCharacterIds.add(nearest.id)
+            effects.hit(tp.x, tp.y, tp.z, p.impactColor)
+            applyDamage(nearest.combat, {
+                sourceId: p.ownerId,
+                targetId: nearest.id,
+                damageType: p.damageType,
+                baseAmount: damage,
+                finalAmount: damage,
+                skillId: 'ranged',
+                impact: p.impact,
+                poiseDamage: p.poiseDamage * p.chainFalloff,
+            })
+            cx = tp.x
+            cy = tp.y
+            cz = tp.z
+        }
+    }
 
     /** 消失前结算范围伤害（爆炸半径 0 的子弹为空操作）并生成爆炸特效 */
     const detonateAt = (
@@ -434,6 +492,7 @@ export const createProjectileSystem = (
                         hitHurtBlocks = FALLBACK_HURT_BLOCK
                     }
                     if (hitHurtBlocks === undefined) continue
+                    if (p.hitCharacterIds.has(target.id)) continue
 
                     if (p.ownerAttackTendency(p.ownerFaction, target.combat.faction)) {
                         if (isDamageImmune(target.combat)) continue
@@ -514,7 +573,15 @@ export const createProjectileSystem = (
                                     true,
                                 )
                             }
+                            p.hitCharacterIds.add(target.id)
+                            chainFrom(p, tp.x, tp.y, tp.z, allCharacters)
                         }
+                    }
+
+                    /* 激光等穿透弹：命中后继续飞行，同一段可贯穿多个目标 */
+                    if (p.explosionRadius <= 0 && p.pierceRemaining > 0 && p.hitCharacterIds.has(target.id)) {
+                        p.pierceRemaining -= 1
+                        continue
                     }
 
                     release(i)

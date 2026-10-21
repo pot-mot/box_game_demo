@@ -137,7 +137,7 @@ test.describe('角色装备与属性面板', () => {
         await expect(page.locator('#character-panel').locator('label', {hasText: '肢体'}).first()).toBeVisible()
     })
 
-    test('基础模组：切到狼后武器仅限口含短剑/长剑，切到双足飞龙武器仅爪击/吐息', async ({page}) => {
+    test('基础模组：切到狼后武器仅限口含短剑/长剑，切到双足飞龙武器仅龙爪', async ({page}) => {
         await openCharacterPanel(page)
 
         const panel = page.locator('#character-panel')
@@ -155,14 +155,14 @@ test.describe('角色装备与属性面板', () => {
         expect(wolfWeapons).toContain('wolf_long_sword')
         expect(wolfWeapons).not.toContain('spear')
 
-        /* 双足飞龙：wyvern_claw / wyvern_breath */
+        /* 双足飞龙：主武器只有龙爪；吐息是独立背包装备槽，不出现在武器下拉 */
         await page.locator('#character-panel #body-form-select').selectOption('wyvern')
         await page.locator('#character-panel').locator('button', {hasText: '应用'}).click()
         await page.locator('#element-list-panel [data-id][data-type="character"]').click()
         await expect(page.locator('#character-panel #body-form-select')).toHaveValue('wyvern')
         const wyvernWeapons = await weaponValues()
         expect(wyvernWeapons).toContain('wyvern_claw')
-        expect(wyvernWeapons).toContain('wyvern_breath')
+        expect(wyvernWeapons).not.toContain('wyvern_breath')
         expect(wyvernWeapons).not.toContain('long_sword')
     })
 

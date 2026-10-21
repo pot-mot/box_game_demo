@@ -1,7 +1,11 @@
+import {Quaternion, Vector3} from 'three'
 import type {CharacterEntity} from '../types.ts'
 import type {CombatComponent} from './types.ts'
 import {isSupportedOn} from '../state_machine/ground.ts'
 import {SLOPE_WALK_THRESHOLD} from '../state_machine/constants.ts'
+
+const _dir = new Vector3()
+const _quat = new Quaternion()
 
 /**
  * 攻击段冲击派发（`AttackSegment.impulses`）：
@@ -20,14 +24,20 @@ export const fireSegmentImpulses = (c: CombatComponent, entity: CharacterEntity)
         if (impulse.at > c.attackTimer) return
         c.impulsesFired += 1
         if (impulse.requireAirborne === true && isSupportedOn(entity, SLOPE_WALK_THRESHOLD)) continue
-        const len = Math.hypot(impulse.direction.x, impulse.direction.y, impulse.direction.z)
+        _dir.set(impulse.direction.x, impulse.direction.y, impulse.direction.z)
+        if (impulse.relativeToFacing === true) {
+            const rot = entity.body.rotation()
+            _quat.set(rot.x, rot.y, rot.z, rot.w)
+            _dir.applyQuaternion(_quat)
+        }
+        const len = _dir.length()
         if (len < 1e-6) continue
         const linvel = entity.body.linvel()
         const scale = impulse.speed / len
         entity.body.setLinvel({
-            x: linvel.x + impulse.direction.x * scale,
-            y: linvel.y + impulse.direction.y * scale,
-            z: linvel.z + impulse.direction.z * scale,
+            x: linvel.x + _dir.x * scale,
+            y: linvel.y + _dir.y * scale,
+            z: linvel.z + _dir.z * scale,
         }, true)
     }
 }

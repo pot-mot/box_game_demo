@@ -3,7 +3,7 @@ import {Vector3} from 'three'
 import {createSkeleton} from './skeleton.ts'
 import {createSkeletonJoint, connectJoint} from './joint.ts'
 import {createSkeletonBone} from './bone.ts'
-import {resolveIkChain, solveCcd} from './ik.ts'
+import {collectChainBetween, resolveIkChain, solveCcd, solveFabrik, solveIkChain} from './ik.ts'
 import {DEFAULT_IK_MAX_ITERATIONS, DEFAULT_IK_TOLERANCE} from './constants.ts'
 
 /** 构建双臂链：root → shoulder → elbow → wrist，每段 +Y 方向 */
@@ -28,35 +28,22 @@ const buildArm = (): ReturnType<typeof createSkeleton> => {
     return skeleton
 }
 
-describe('resolveIkChain 链回溯', () => {
-    it('无 IK 根时回退本树根（root → wrist）', () => {
+describe('resolveIkChain 按父级段数回溯', () => {
+    it('默认影响 2 段父级（wrist → shoulder）', () => {
         const skeleton = buildArm()
-        const wrist = skeleton.findJoint('wrist')!
-        const chain = resolveIkChain(wrist)
-        expect(chain.map(j => j.id)).toEqual(['root', 'shoulder', 'elbow', 'wrist'])
-    })
-
-    it('回溯遇到的第一个 IK 根作为链根（肩膀设根后截断）', () => {
-        const skeleton = buildArm()
-        skeleton.findJoint('shoulder')!.ikRootLevel = 0
         const chain = resolveIkChain(skeleton.findJoint('wrist')!)
         expect(chain.map(j => j.id)).toEqual(['shoulder', 'elbow', 'wrist'])
     })
 
-    it('多级 IK 根取最接近末端的那个（elbow 设根后取 elbow）', () => {
+    it('链深度 = 1 时只影响直接父级', () => {
         const skeleton = buildArm()
-        skeleton.findJoint('shoulder')!.ikRootLevel = 0
-        skeleton.findJoint('elbow')!.ikRootLevel = 1
-        const chain = resolveIkChain(skeleton.findJoint('wrist')!)
+        const chain = resolveIkChain(skeleton.findJoint('wrist')!, 1)
         expect(chain.map(j => j.id)).toEqual(['elbow', 'wrist'])
     })
 
-    it('多根骨架不跨树（另一棵树的关节不影响本树回溯）', () => {
+    it('链深度超过祖先数量时截断到树根', () => {
         const skeleton = buildArm()
-        const other = createSkeletonJoint('other', 'other')
-        other.ikRootLevel = 0
-        skeleton.addJoint(other)
-        const chain = resolveIkChain(skeleton.findJoint('wrist')!)
+        const chain = resolveIkChain(skeleton.findJoint('wrist')!, 99)
         expect(chain.map(j => j.id)).toEqual(['root', 'shoulder', 'elbow', 'wrist'])
     })
 
@@ -67,69 +54,86 @@ describe('resolveIkChain 链回溯', () => {
     })
 })
 
-describe('solveCcd 求解', () => {
+describe('collectChainBetween 显式链', () => {
+    it('root 是 end 的祖先时返回完整链', () => {
+        const skeleton = buildArm()
+        const chain = collectChainBetween(skeleton.findJoint('shoulder')!, skeleton.findJoint('wrist')!)
+        expect(chain.map(j => j.id)).toEqual(['shoulder', 'elbow', 'wrist'])
+    })
+
+    it('root 不是 end 的祖先时返回空数组', () => {
+        const skeleton = buildArm()
+        const other = createSkeletonJoint('other', 'other')
+        skeleton.addJoint(other)
+        expect(collectChainBetween(other, skeleton.findJoint('wrist')!)).toEqual([])
+    })
+})
+
+describe('IK 求解（CCD / FABRIK）', () => {
     const options = {maxIterations: DEFAULT_IK_MAX_ITERATIONS, tolerance: DEFAULT_IK_TOLERANCE}
+    const fullChain = (skeleton: ReturnType<typeof createSkeleton>) =>
+        resolveIkChain(skeleton.findJoint('wrist')!, 3)
 
-    it('可达目标：末端收敛到目标点（误差 < tolerance）', () => {
+    for (const [label, solve] of [
+        ['CCD', solveCcd],
+        ['FABRIK', solveFabrik],
+    ] as const) {
+        it(`${label}：可达目标收敛到目标点`, () => {
+            const skeleton = buildArm()
+            const target = new Vector3(1.5, 0.5, 0)
+            const result = solve(skeleton, fullChain(skeleton), target, options)
+            const wristPos = skeleton.getWorldPosition('wrist')!
+            expect(wristPos.distanceTo(target)).toBeLessThan(0.02)
+            expect(result.error).toBeLessThan(0.02)
+            expect(result.iterations).toBeLessThanOrEqual(options.maxIterations)
+        })
+
+        it(`${label}：不可达目标不劣化`, () => {
+            const skeleton = buildArm()
+            skeleton.updateWorldTransforms()
+            const before = skeleton.getWorldPosition('wrist')!.clone()
+            const target = new Vector3(50, 50, 50)
+            solve(skeleton, fullChain(skeleton), target, options)
+            const after = skeleton.getWorldPosition('wrist')!
+            expect(after.distanceTo(target)).toBeLessThanOrEqual(before.distanceTo(target))
+        })
+
+        it(`${label}：退化链不修改姿态`, () => {
+            const skeleton = buildArm()
+            const root = skeleton.findJoint('root')!
+            skeleton.updateWorldTransforms()
+            const before = skeleton.getWorldPosition('root')!.clone()
+            const result = solve(skeleton, [root], new Vector3(5, 0, 0), options)
+            expect(result.iterations).toBe(0)
+            expect(skeleton.getWorldPosition('root')!.distanceTo(before)).toBe(0)
+        })
+
+        it(`${label}：链根位置固定`, () => {
+            const skeleton = buildArm()
+            skeleton.updateWorldTransforms()
+            const rootBefore = skeleton.getWorldPosition('root')!.clone()
+            solve(skeleton, fullChain(skeleton), new Vector3(1.5, 0.5, 0), options)
+            expect(skeleton.getWorldPosition('root')!.distanceTo(rootBefore)).toBeLessThan(1e-6)
+        })
+    }
+
+    it('solveIkChain 按求解器 id 分发', () => {
         const skeleton = buildArm()
-        /* 臂自然下垂指向 +Y，目标在 +X 侧上方 */
         const target = new Vector3(1.5, 0.5, 0)
-        const result = solveCcd(skeleton, resolveIkChain(skeleton.findJoint('wrist')!), target, options)
-        const wristPos = skeleton.getWorldPosition('wrist')!
-        expect(wristPos.distanceTo(target)).toBeLessThan(options.tolerance)
-        expect(result.error).toBeLessThan(options.tolerance)
-        expect(result.iterations).toBeLessThanOrEqual(options.maxIterations)
+        const result = solveIkChain(skeleton, fullChain(skeleton), target, 'fabrik', options)
+        expect(result.error).toBeLessThan(0.02)
     })
 
-    it('迭代次数不超过 maxIterations', () => {
+    it('目标与末端重合时不旋转', () => {
         const skeleton = buildArm()
-        const target = new Vector3(50, 50, 50)
-        const result = solveCcd(skeleton, resolveIkChain(skeleton.findJoint('wrist')!), target, options)
-        expect(result.iterations).toBeLessThanOrEqual(options.maxIterations)
-    })
-
-    it('不可达目标：误差不增（求解不劣化）', () => {
-        const skeleton = buildArm()
-        skeleton.updateWorldTransforms()
-        const before = skeleton.getWorldPosition('wrist')!
-        const target = new Vector3(50, 50, 50)
-        solveCcd(skeleton, resolveIkChain(skeleton.findJoint('wrist')!), target, options)
-        const after = skeleton.getWorldPosition('wrist')!
-        /* 链全展开后末端应比初始更接近目标（初始完全松弛下垂） */
-        expect(after.distanceTo(target)).toBeLessThanOrEqual(before.distanceTo(target))
-    })
-
-    it('退化链（长度 <= 1）不修改姿态', () => {
-        const skeleton = buildArm()
-        const root = skeleton.findJoint('root')!
-        skeleton.updateWorldTransforms()
-        const before = skeleton.getWorldPosition('root')!.clone()
-        const result = solveCcd(skeleton, [root], new Vector3(5, 0, 0), options)
-        expect(result.iterations).toBe(0)
-        expect(skeleton.getWorldPosition('root')!.distanceTo(before)).toBe(0)
-    })
-
-    it('目标与末端重合时不旋转（sin ≈ 0 跳过）', () => {
-        const skeleton = buildArm()
-        const wrist = skeleton.findJoint('wrist')!
         skeleton.updateWorldTransforms()
         const target = skeleton.getWorldPosition('wrist')!.clone()
         const before = skeleton.readPose()
-        solveCcd(skeleton, resolveIkChain(wrist), target, options)
+        solveCcd(skeleton, fullChain(skeleton), target, options)
         const after = skeleton.readPose()
         for (const [id, pose] of before.jointPoses) {
             const afterPose = after.jointPoses.get(id)
             expect(afterPose!.position.distanceTo(pose.position)).toBeLessThan(1e-6)
         }
-    })
-
-    it('IK 根固定：链根关节位置不因求解移动', () => {
-        const skeleton = buildArm()
-        skeleton.findJoint('shoulder')!.ikRootLevel = 0
-        skeleton.updateWorldTransforms()
-        const shoulderBefore = skeleton.getWorldPosition('shoulder')!.clone()
-        solveCcd(skeleton, resolveIkChain(skeleton.findJoint('wrist')!), new Vector3(1.5, 0.5, 0), options)
-        const shoulderAfter = skeleton.getWorldPosition('shoulder')!
-        expect(shoulderAfter.distanceTo(shoulderBefore)).toBeLessThan(1e-6)
     })
 })

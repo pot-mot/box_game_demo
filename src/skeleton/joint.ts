@@ -3,11 +3,26 @@ import {Quaternion, Vector3} from 'three'
 /** 全局关节 id 计数器：未显式指定 id 时生成全局唯一 id */
 let nextJointId = 1
 
+/** 节点 IK 求解器（求解以该节点为末端、向父级回溯的链） */
+export const IK_SOLVERS = ['ccd', 'fabrik'] as const
+export type IkSolverId = typeof IK_SOLVERS[number]
+
+/** 节点 IK 配置：末端节点 + 求解器 + 影响父级段数 */
+export interface JointIkConfig {
+    readonly solver: IkSolverId
+    /** 影响父级段数（1 = 仅父节点，默认 2） */
+    readonly chainDepth: number
+}
+
+/** 运行时校验求解器 id（存档/导入边界用） */
+export const isIkSolverId = (value: unknown): value is IkSolverId =>
+    IK_SOLVERS.some(solver => solver === value)
+
 /**
  * 骨骼关节点（≈ Godot bone）：
  * - 持有相对父关节的局部变换（position + rotation），通过 parent 单向引用组织为树；
  * - children 数组由 connectJoint / disconnectJoint 维护（可变数组，接口内保持只读视图约定）；
- * - ikRootLevel：IK 根级别标记（undefined = 普通关节），IK 链回溯见 resolveIkChain。
+ * - ik：节点 IK 配置（undefined = 普通节点）；配置后该节点始终作为 IK 末端求解父级链。
  */
 export interface SkeletonJoint {
     readonly id: string
@@ -20,8 +35,8 @@ export interface SkeletonJoint {
     rotation: Quaternion
     /** 子关节集合（由 connectJoint / disconnectJoint 维护；消费方按只读约定使用，勿直接增删） */
     readonly children: SkeletonJoint[]
-    /** IK 根级别（undefined = 普通关节；0 为最高级根） */
-    ikRootLevel: number | undefined
+    /** 节点 IK 配置（undefined = 普通节点） */
+    ik: JointIkConfig | undefined
 }
 
 /** 创建骨骼关节点。id 未显式提供时由全局计数器生成唯一 id；
@@ -41,7 +56,7 @@ export const createSkeletonJoint = (name: string, id?: string): SkeletonJoint =>
         position: new Vector3(),
         rotation: new Quaternion(),
         children,
-        ikRootLevel: undefined,
+        ik: undefined,
     }
     return joint
 }

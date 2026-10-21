@@ -1,5 +1,4 @@
 import {
-    ConeGeometry,
     Group,
     Mesh,
     MeshBasicMaterial,
@@ -20,10 +19,6 @@ import {
     JOINT_GIZMO_COLOR,
     JOINT_GIZMO_RADIUS,
     JOINT_GIZMO_SELECTED_COLOR,
-    ROTATION_GIZMO_COLOR,
-    ROTATION_GIZMO_HEIGHT,
-    ROTATION_GIZMO_OFFSET,
-    ROTATION_GIZMO_RADIUS,
 } from '../constants.ts'
 
 /** 骨骼可视化：关节 = 小球，骨骼段 = 细长菱形（连接段），Group 层级以骨架关节树为真源。
@@ -41,6 +36,10 @@ export interface JointVisuals {
     readonly bridge: SkeletonSceneBridge
     /** 按 head→tail 实际距离更新菱形（关节拖拽/面板/IK 调整后调用） */
     resizeBoneVisuals: () => void
+    /** 显示/隐藏关节小球层 */
+    setJointsVisible: (visible: boolean) => void
+    /** 显示/隐藏骨骼段菱形层（不影响内部长度判定） */
+    setBonesVisible: (visible: boolean) => void
     cleanup: () => void
 }
 
@@ -65,7 +64,7 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
     const gizmos = new Map<string, Mesh>()
     const boneVisuals = new Map<string, Mesh>()
     const materials: MeshBasicMaterial[] = []
-    const geometries: (SphereGeometry | OctahedronGeometry | ConeGeometry)[] = []
+    const geometries: (SphereGeometry | OctahedronGeometry)[] = []
 
     /* 关节小球（骨骼层覆盖渲染：忽略深度、后绘制） */
     for (const joint of skeleton.joints.values()) {
@@ -87,11 +86,11 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
         [...groups.entries()].map(([jointId, group]) => ({jointId, group})),
         true,
     )
-    /* 复制 IK 根级别到桥接骨架 */
+    /* 复制节点 IK 配置到桥接骨架 */
     for (const joint of skeleton.joints.values()) {
         const target = bridge.findJoint(joint.id)
         if (target === undefined) continue
-        target.ikRootLevel = joint.ikRootLevel
+        target.ik = joint.ik !== undefined ? {...joint.ik} : undefined
     }
     /* 骨骼段复制到桥接骨架（菱形/面板/时间轴以桥接骨架的 bones 为准） */
     for (const bone of skeleton.bones.values()) {
@@ -100,6 +99,9 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
         if (head === undefined || tail === undefined) continue
         bridge.addBone(createSkeletonBone(bone.name, head, tail, bone.length, bone.id))
     }
+
+    /* 图层可见性：关节小球与骨骼段由视图面板独立控制 */
+    let bonesVisible = true
 
     /* 骨骼段菱形：挂在 head group 下，位置 = 段局部中点、方向对准 head→tail、
      * 沿段方向拉伸（厚度 = BONE_DIAMOND_THICKNESS）；长度取两端关节实际距离，始终连接两节点 */
@@ -114,7 +116,7 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
             /* tail 在 head 局部空间的偏移（菱形挂在 head group 下） */
             const local = tailPos.clone().sub(headPos).applyQuaternion(headRot.clone().invert())
             const len = local.length()
-            if (len <= BONE_DIAMOND_MIN_LENGTH) {
+            if (!bonesVisible || len <= BONE_DIAMOND_MIN_LENGTH) {
                 mesh.visible = false
                 continue
             }
@@ -144,6 +146,14 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
     bridge.updateWorldTransforms()
     resizeBoneVisuals()
 
+    const setJointsVisible = (visible: boolean): void => {
+        for (const gizmo of gizmos.values()) gizmo.visible = visible
+    }
+    const setBonesVisible = (visible: boolean): void => {
+        bonesVisible = visible
+        resizeBoneVisuals()
+    }
+
     const cleanup = (): void => {
         for (const gizmo of gizmos.values()) gizmo.removeFromParent()
         for (const diamond of boneVisuals.values()) diamond.removeFromParent()
@@ -153,31 +163,7 @@ export const createJointVisuals = (skeleton: Skeleton, scene: Scene): JointVisua
         for (const geometry of geometries) geometry.dispose()
     }
 
-    return {rootGroup, groups, gizmos, boneVisuals, bridge, resizeBoneVisuals, cleanup}
-}
-
-/** 创建旋转指针（方向三角形）：3 棱圆锥，尖端指向局部 +Z，挂到选中关节 Group 下（随关节旋转） */
-export const createRotationGizmo = (group: Group, jointId: string): Mesh => {
-    const geometry = new ConeGeometry(ROTATION_GIZMO_RADIUS, ROTATION_GIZMO_HEIGHT, 3)
-    const material = new MeshBasicMaterial({color: ROTATION_GIZMO_COLOR, depthTest: false, depthWrite: false})
-    const mesh = new Mesh(geometry, material)
-    /* 圆锥默认尖端 +Y，旋转 π/2 使尖端指向局部 +Z */
-    mesh.rotation.x = Math.PI / 2
-    mesh.position.set(0, 0, ROTATION_GIZMO_OFFSET)
-    mesh.renderOrder = 1
-    mesh.userData.jointId = jointId
-    mesh.userData.rotHandle = true
-    group.add(mesh)
-    return mesh
-}
-
-/** 销毁旋转指针（从 Group 移除并释放几何/材质） */
-export const disposeRotationGizmo = (mesh: Mesh): void => {
-    mesh.removeFromParent()
-    mesh.geometry.dispose()
-    if (mesh.material instanceof MeshBasicMaterial) {
-        mesh.material.dispose()
-    }
+    return {rootGroup, groups, gizmos, boneVisuals, bridge, resizeBoneVisuals, setJointsVisible, setBonesVisible, cleanup}
 }
 
 /** 设置选中高亮：joint 高亮小球、bone 高亮菱形 */

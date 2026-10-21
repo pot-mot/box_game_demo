@@ -11,7 +11,7 @@
  */
 
 /** 弹丸视觉种类常量集 */
-export const PROJECTILE_VISUAL_KINDS = ['arrow', 'bolt', 'bullet', 'thrown_weapon', 'magic_orb'] as const
+export const PROJECTILE_VISUAL_KINDS = ['arrow', 'bolt', 'bullet', 'thrown_weapon', 'magic_orb', 'lightning', 'laser'] as const
 export type ProjectileVisualKind = typeof PROJECTILE_VISUAL_KINDS[number]
 
 /** 范围伤害命中特效风格常量集（火光 / 碎片 / 魔法爆散） */

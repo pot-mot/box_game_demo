@@ -21,6 +21,8 @@ export interface WeaponEquipConfig {
     readonly offhandStowed?: boolean
     /** 主手武器挂点关节 id 覆盖（生物体形用；缺省 = 模型默认主挂点） */
     readonly mainMountJointId?: string
+    /** 主手武器挂点局部旋转覆盖（生物体形用；缺省 = 握持屈角） */
+    readonly mainMountRotation?: readonly [number, number, number]
     /** 副手武器挂点关节 id 覆盖（生物体形用；缺省 = 模型默认副挂点） */
     readonly offMountJointId?: string
 }
@@ -93,6 +95,9 @@ export interface CreatureModel {
     readonly offhandWeaponHitBox: WeaponLocalHitBox | null
     /** 副手握把中心在武器本地 Y 轴上的坐标（无副手 = 0） */
     readonly offhandWeaponGripY: number
+
+    /** 逐帧更新依赖骨骼变换的程序化部件（翅膜拉伸等；无此类部件时 undefined） */
+    readonly updateDeform?: () => void
 
     /** 根据新调色板原地更新所有部位材质颜色（不重建几何体） */
     recolor: (palette: CharacterColorPalette) => void

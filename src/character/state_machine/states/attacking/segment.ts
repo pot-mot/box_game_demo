@@ -25,6 +25,7 @@ export interface SegmentInput {
 /** 进入攻击段：重置计时/阶段、挂段冷却、清空命中记录并唤醒刚体（动画取段 id 的骨骼关键帧数据） */
 export const enterAttackSegment = (c: CombatComponent, segment: AttackSegment, entity: CharacterEntity): void => {
     c.activeSegment = segment
+    c.activeWeapon = c.attackWeapons.get(segment.id) ?? c.weapon
     c.bufferedSegment = undefined
     c.attackTimer = 0
     c.phaseIndex = 0

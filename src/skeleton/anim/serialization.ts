@@ -2,7 +2,7 @@ import {Quaternion, Vector3} from 'three'
 import {z} from 'zod'
 import type {Skeleton} from '../skeleton.ts'
 import {createSkeleton} from '../skeleton.ts'
-import {createSkeletonJoint, connectJoint} from '../joint.ts'
+import {createSkeletonJoint, connectJoint, isIkSolverId, type IkSolverId, type JointIkConfig} from '../joint.ts'
 import {createSkeletonBone} from '../bone.ts'
 import type {
     BoneAnimationClip,
@@ -18,7 +18,7 @@ export interface SkeletonDefinition {
         readonly parentId?: string
         readonly position: readonly [number, number, number]
         readonly rotation: readonly [number, number, number, number]
-        readonly ikRootLevel?: number
+        readonly ik?: JointIkConfig
     }[]
     readonly bones: readonly {
         readonly id: string
@@ -87,6 +87,10 @@ const ClipSchema = z.object({
     boneTracks: z.array(SegmentTrackSchema).default([]),
     eventTracks: z.array(EventTrackSchema).default([]),
 })
+const IkConfigSchema = z.object({
+    solver: z.custom<IkSolverId>(isIkSolverId),
+    chainDepth: z.number().int().min(1),
+})
 const SkeletonDefinitionSchema = z.object({
     joints: z.array(z.object({
         id: z.string(),
@@ -94,7 +98,7 @@ const SkeletonDefinitionSchema = z.object({
         parentId: z.string().optional(),
         position: Vec3TupleSchema,
         rotation: QuatTupleSchema,
-        ikRootLevel: z.number().optional(),
+        ik: IkConfigSchema.optional(),
     })).default([]),
     bones: z.array(z.object({
         id: z.string(),
@@ -215,7 +219,7 @@ export const skeletonToDefinition = (skeleton: Skeleton): SkeletonDefinition => 
         parentId: joint.parent?.id,
         position: [joint.position.x, joint.position.y, joint.position.z],
         rotation: [joint.rotation.x, joint.rotation.y, joint.rotation.z, joint.rotation.w],
-        ikRootLevel: joint.ikRootLevel,
+        ik: joint.ik !== undefined ? {...joint.ik} : undefined,
     })),
     bones: [...skeleton.bones.values()].map(bone => ({
         id: bone.id,
@@ -236,7 +240,7 @@ export const skeletonFromDefinition = (definition: SkeletonDefinition): Skeleton
         const joint = createSkeletonJoint(jointDef.name, jointDef.id)
         joint.position.fromArray(jointDef.position)
         joint.rotation.fromArray(jointDef.rotation)
-        joint.ikRootLevel = jointDef.ikRootLevel
+        joint.ik = jointDef.ik !== undefined ? {...jointDef.ik} : undefined
         byId.set(joint.id, joint)
         skeleton.addJoint(joint)
     }

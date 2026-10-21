@@ -5,6 +5,7 @@ import {mirrorClip} from '../../../../skeleton/anim/mirror.ts'
 import {DEFAULT_HANDEDNESS, type Handedness} from '../../../../character/handedness.ts'
 import {ATTACK_CLIP_JSON} from '../../../../character/weapon/attack_clip_data.ts'
 import {ATTACK_POSE_EDITS} from '../../../../character/weapon/attack_pose_edits.ts'
+import {bakeTwoHandedSupportHand} from './support_hand_bake.ts'
 
 /**
  * 攻击动画解析：段 id → 显式骨骼关键帧 clip。
@@ -54,7 +55,11 @@ const resolveClip = (
     if (cached !== undefined) return cached
     const raw = source[clipId]
     if (raw === undefined) throw new Error(missingMessage)
-    const base = clipFromJSON(applyPoseEdits(clipId, raw, edits[clipId]))
+    /* 双手共持：先把副手轨迹烘焙成显式关键帧（首帧解析时一次性完成，播放时零 IK 开销） */
+    const base = bakeTwoHandedSupportHand(
+        clipId,
+        clipFromJSON(applyPoseEdits(clipId, raw, edits[clipId])),
+    )
     /* 左撇子：对 canonical clip 施加矢状面反射（左右关节互换 + 旋转共轭），离线烘焙零运行时开销 */
     const clip = handedness === DEFAULT_HANDEDNESS ? base : mirrorClip(base)
     cache.set(key, clip)

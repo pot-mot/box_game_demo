@@ -21,30 +21,31 @@
 ## 已注册体形（`forms/<form>/` 分包）
 
 - **humanoid**（`forms/humanoid/body_form.ts`）：字段与既有常量逐一对应（行为不变）；`createModel = createCharacterModel`、`createAnimation = createAppearanceSystem`；`defaultWeaponId = 'unarmed'`。
-- **wolf**（`forms/wolf/`）：四足；自包含骨架 / 外观 / `pose_fns.ts` / `clips.ts`；口部挂点（口含短剑·长剑），天然 `bite` 为 default。
-- **horse**（`forms/horse/`）：四足高腿长颈；天然 `kick` 为 default + 长枪 / 飞斧。
-- **wyvern**（`forms/wyvern/`）：**双足飞龙（双足 + 双翼，共 4 肢）**；天然 `claw`（melee）/ `breath`（ranged）。（dragon 六肢西方龙不在本期。）
+- **wolf**（`forms/wolf/`）：四足；自包含骨架（`joints` + `bones` 层级段）/ 外观 / `pose_fns.ts` / `clips.ts`；口含短剑/长剑横向咬持；撕咬轻 1–2、口含剑轻 1–3，重击均为单段蓄力。
+- **horse**（`forms/horse/`）：四足高腿长颈；骨架同样包含完整关节 + 骨骼段；唯一武器 `horse_iron_hoof`（铁蹄），轻 1 前踢 / 轻 2 后踹 / 重击蓄力践踏；长枪与飞斧已移除。
+- **wyvern**（`forms/wyvern/`）：**双足飞龙（双足 + 双翼，共 4 肢）**；骨架含关节 + 骨骼段（翼主链 / 尾 / 后足 / 颈头）；固定天然 `claw`（melee，五段爪击）；重击来自独立 **`breath` 装备槽**（火球 / 雷电 / 激光三件物品，仅 wyvern 可装备）。
 
 ### 通用生物运行时（`forms/creature_runtime/`）
 
 狼 / 马 / wyvern 共用的**非人形**通用工具（非参数化人形代码）：
-- `model.ts`：`createCreatureModel` / `createCreatureAppearance`（**低多面体部件**：`CreaturePartSpec` 为形状判别联合 `box`/`frustum`/`cylinder`/`cone`/`sphere`/`fan`，材质取自统一材质库 `render/character_materials.ts`；经 `mesh_builder` 挂到骨架关节组，支持武器位 + 碰撞可视化 + `alignYTo` 沿骨骼段定向）；
-- `animation.ts`：`createCreatureAnimationSystem(clipProvider)`（状态 / 段 → clip 播放，攻击态首帧关命中窗口）；
-- `pose.ts`：`bakePoseClip`（逐帧欧拉角 → clip）。
+- `model.ts`：`createCreatureModel` / `createCreatureAppearance`（**低多面体部件**：`CreaturePartSpec` 为形状判别联合 `box`/`frustum`/`cylinder`/`cone`/`sphere`/`fan`/`wing_membrane`，材质取自统一材质库 `render/character_materials.ts`；经 `mesh_builder` 挂到骨架关节组，支持武器位 + 碰撞可视化 + `alignYTo` 沿骨骼段定向；`wing_membrane` 由翼根 / 翼肘 / 翼腕 / 翼指关节逐帧驱动顶点，暴露 `updateDeform`）；
+- `animation.ts`：`createCreatureAnimationSystem(clipProvider)`（状态 / 段 → clip 播放，攻击态首帧关命中窗口；状态 / 段切换按 `STATE_BLEND_DURATION` 做姿态混合消除突跳，行走 / 游泳按 `walkSpeedScale(horizontalSpeed)` 同步步频；播放后调用 `model.updateDeform()` 重建翅膜等骨骼驱动部件）；
+- `pose.ts`：`bakePoseClip`（逐帧欧拉角 / 带位置姿态 → clip）。
 各体形分包只提供自己的骨架、部件、`pose_fns`、`clips` 数据。
 
 ## BodyForm 字段（types.ts）
 
-`id` / `nameKey` / `buildSkeleton` / `jointNameKeys?` / `assemble` / `palette?` / `createModel` / `createAnimation` / `colliderLayout` / `centerOffsetY` / `eyeHeight` / `size` / `baseHealth?` / `hurtProfile` / `equipSlots` / `weapons` / `defaultWeaponId` / `rollSpinTurns?` / `onFrame?`。
+`id` / `nameKey` / `buildSkeleton` / `jointNameKeys?` / `assemble` / `palette?` / `createModel` / `createAnimation` / `colliderLayout` / `centerOffsetY` / `eyeHeight` / `size` / `baseHealth?` / `hurtProfile` / `equipSlots` / `weapons` / `defaultWeaponId` / `breathModules?` / `rollSpinTurns?` / `onFrame?`。
 
 - `eyeHeight`：眼部高度（脚底原点起算，scale=1）；AI 视线扇形 / 瞄准目标点一律经 `body_form/geometry.ts` 的 `formEyeHeight` 读取，不再写死人形常量。
 - `weapons`：该体形**拥有**的全部武器（`WeaponConfig[]`，见「武器按体形分包」）。
+- `breathModules`：体形专属吐息模组（仅 wyvern）；不进入主武器下拉，由背包 `breath` 槽装备。
 
 ## 武器按体形分包
 
 每个武器**只属于一种体形**（`WeaponModelConfig.formId`），数据声明在 `forms/<form>/weapons.ts`，只复用 `appearance/weapon_mesh.ts` 的网格生成器（不同体形即使外观相同也各有一份独立条目）。`body_form/index.ts` 装配 `BODY_FORMS` 时经 `catalog.ts` 的 `registerFormWeapons(form.id, form.weapons)` 注册；`weaponSelectableFor(form, weapon)` = `weapon.formId === form.id`；面板武器下拉列 `weaponsOfForm(form.id)`。**切体形一律落到新体形 `defaultWeaponId`**（不跨体形沿用武器）。存档武器 id 与体形不符时由 `world.spawnEntity` 回退该体形默认武器。
 
-生物天然武器可经 `mountJointId` 指定专属挂点关节（如马 `horse_kick` → `kickMount`、飞龙 `wyvern_claw` → `clawMount`），由 `createCreatureModel.equipWeapon` 重定向挂点。
+生物天然武器可经 `mountJointId` 指定专属挂点关节（马 `horse_iron_hoof` → 默认前蹄、飞龙 `wyvern_claw` → 右翼腕 `wingRWrist`），由 `createCreatureModel.equipWeapon` 重定向挂点；多肢体攻击段再用 `AttackSegment.hitMountJointIds` 分别指定左右翼爪 / 口 / 尾 / 四蹄。吐息模组通过独立 `breath` 装备槽装备，装备后与龙爪组合成「轻击爪链 + 重击吐息链」。
 
 ## 运行时切换（world.setBodyForm）
 
@@ -67,4 +68,4 @@
 - **生物受击块走显式 `hurtProfile.shape`**：生物低多面体部件不注册 `jointParts`（几何非盒，无法按 `geometry.parameters` 对齐），`refreshHurtBlocks` 无部件时回退「关节矩阵 + `shape` 常量」，故非人形务必给出合理 `shape.half` + `offsetLocal`（已随 `config.scale` 正确缩放）。
 - 外观装配器返回 `colliderMeshes`（edit / bone_edit 可视化）。
 - 受击子块检定（`refreshHurtBlocks`）无部件时回退关节矩阵 + `shape` 常量，非人形务必给出合理 `shape.half`。
-- **生物有多种天然武器时，攻击姿态 / clip 缓存必须按段 `id` 而非 `key` 判别**：近战与远程段的 `key` 可能同为 `'light'`（如 wyvern 的 claw 与 breath），按 `key` 分支会串味（吐息用爪击姿态）、按 `key` 缓存会互相覆盖。背驰示例：`wyvernAttackPose(segment)` 用 `segment.id.startsWith('breath')` 区分、`wyvernAttackClip` 用 `segment.id` 作缓存键。
+- **生物攻击姿态 / clip 缓存必须按段 `id` 判别**：狼撕咬与口含剑、马前踢/后踹/践踏、龙五段爪击与吐息各自使用独立 clip；按 `key` 分支会串味、按 `key` 缓存会互相覆盖。狼/马/龙均以 `segment.id` 作缓存键，吐息段用 `segment.attackWeaponId` 区分武器来源。

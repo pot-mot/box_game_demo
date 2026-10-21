@@ -40,6 +40,19 @@ describe('体形计划公共契约（全部注册体形）', () => {
                 }
             })
 
+            it('骨骼段与关节一样完整声明：头尾关节存在、id 不与关节冲突且长度有效', () => {
+                expect(skeleton.bones.length).toBeGreaterThan(0)
+                const boneIds = new Set<string>()
+                for (const bone of skeleton.bones) {
+                    expect(jointIds.has(bone.headJointId), `${bone.id}:head`).toBe(true)
+                    expect(jointIds.has(bone.tailJointId), `${bone.id}:tail`).toBe(true)
+                    expect(boneIds.has(bone.id), bone.id).toBe(false)
+                    expect(jointIds.has(bone.id), `${bone.id} 不应与关节 id 冲突`).toBe(false)
+                    expect(bone.length, bone.id).toBeGreaterThanOrEqual(0)
+                    boneIds.add(bone.id)
+                }
+            })
+
             it('受击子块关节均在骨架内且 id 唯一', () => {
                 const ids = form.hurtProfile.map(block => block.id)
                 expect(new Set(ids).size).toBe(ids.length)

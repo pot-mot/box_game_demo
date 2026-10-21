@@ -14,8 +14,6 @@ import {ANIM_OPTION_BUILTIN_PREFIX, ANIM_OPTION_EDITED_PREFIX} from './constants
 export interface WeaponData {
     readonly weaponId: string
     readonly twoHanded: boolean
-    readonly gripAssist: boolean
-    readonly gripSolved: boolean
 }
 
 /** 动画库依赖（动画下拉 / 导入导出 / undo 恢复） */
@@ -25,9 +23,10 @@ export interface LibraryHost {
     readonly history: BoneEditHistory
     readonly container: HTMLElement
     readonly animSelect: HTMLSelectElement
-    readonly clipWeaponSource: Map<string, ClipWeaponSource>
+    readonly getClipWeaponSource: () => Map<string, ClipWeaponSource>
     readonly runtime: TimelineRuntime
     readonly getWeaponData: () => WeaponData
+    readonly getFormId: () => string
 }
 
 export interface TimelineLibrary {
@@ -60,7 +59,7 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
         host.animSelect.appendChild(editedGroup)
 
         for (const group of BUILTIN_CLIP_GROUP_ORDER) {
-            const entries = getBuiltinClips().filter(entry => entry.group === group)
+            const entries = getBuiltinClips(host.getFormId()).filter(entry => entry.group === group)
             if (entries.length === 0) continue
             const optgroup = document.createElement('optgroup')
             localizeApply(optgroup, el => {
@@ -79,17 +78,15 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
         host.animSelect.value = store.currentName !== undefined ? `${ANIM_OPTION_EDITED_PREFIX}${store.currentName}` : ''
         /* DOM 可测试面：当前动画名与内置动作条目总数 */
         host.container.dataset.currentClip = store.currentName ?? ''
-        host.container.dataset.builtinClipCount = String(getBuiltinClips().length)
+        host.container.dataset.builtinClipCount = String(getBuiltinClips(host.getFormId()).length)
         /* DOM 可测试面：当前编辑器武器状态 */
         const weapon = host.getWeaponData()
         host.container.dataset.weapon = weapon.weaponId
         host.container.dataset.twoHanded = String(weapon.twoHanded)
-        host.container.dataset.gripAssist = weapon.gripAssist ? 'on' : 'off'
-        host.container.dataset.gripSolved = String(weapon.gripSolved)
     }
 
     const selectBuiltinClip = (builtinId: string): void => {
-        const entry = findBuiltinClip(builtinId)
+        const entry = findBuiltinClip(builtinId, host.getFormId())
         if (entry === undefined) return
         if (store.clips.has(entry.label)) {
             store.select(entry.label)
@@ -98,7 +95,7 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
         const imported = store.importClip(entry.clip)
         /* 记录来源：编辑器「武器：自动」模式据此装备该动作所属武器 / 按持械变体保留或卸下武器 */
         if (entry.weaponId !== undefined || entry.weaponHeld !== undefined) {
-            host.clipWeaponSource.set(imported.name, {
+            host.getClipWeaponSource().set(imported.name, {
                 weaponId: entry.weaponId,
                 segmentId: entry.segmentId,
                 holdMode: entry.holdMode,
@@ -138,11 +135,15 @@ export const setupTimelineLibrary = (host: LibraryHost): TimelineLibrary => {
                     if (typeof reader.result !== 'string') return
                     const raw = JSON.parse(reader.result) as unknown
                     const asset = parseAsset(JSON.stringify(raw))
-                    const entity = world.addFromDefinition(asset.skeleton, translate({key: 'bone_edit.library.import_skeleton', args: [world.getEntityList().length + 1]}))
+                    const entity = world.addFromDefinition(
+                        asset.skeleton,
+                        translate({key: 'bone_edit.library.import_skeleton', args: [world.getEntityList().length + 1]}),
+                        host.getFormId(),
+                    )
                     world.focus(entity.id)
                     history.startEdit()
                     store.replaceAll(asset.animations, asset.animations[0]?.name)
-                    host.clipWeaponSource.clear()
+                    host.getClipWeaponSource().clear()
                     /* 骨架被重建：武器必须重新挂到新骨架的右手挂点上 */
                     runtime.syncWeaponForCurrentClip(true)
                     runtime.rebuildPlayer()

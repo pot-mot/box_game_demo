@@ -1,6 +1,7 @@
 import type { Faction, AttackTendency, TendencyConfig } from '../faction.ts'
 import type { AttackSegment, WeaponAttacks } from '../weapon/attack_chain.ts'
 import type { WeaponConfig } from '../weapon/catalog.ts'
+import { composeClawAndBreath, type BreathRuntime } from './breath_runtime.ts'
 import type { WeaponRuntime } from '../weapon/weapon_runtime.ts'
 import type { ShieldBlockConfig } from '../weapon/constants.ts'
 import type { HoldMode } from '../weapon/hold_mode.ts'
@@ -50,6 +51,17 @@ export interface CombatComponent {
     offhand: WeaponRuntime | undefined
     /** 攻击链（武器固有段定义 + 起手段冷却覆写）；换武器时由 `setCombatWeapon` 同步更新 */
     attacks: WeaponAttacks
+    /** 主武器自身的攻击链（不含吐息组合）；装备 / 卸下吐息时据此重新组合 */
+    baseAttacks: WeaponAttacks
+    /**
+     * 段 id → 实际攻击武器（可选；龙吐息等“轻链爪击 + 重链吐息”组合用）。
+     * 未声明的段回退 `weapon`。进入攻击段时写入 `activeWeapon`。
+     */
+    attackWeapons: ReadonlyMap<string, WeaponConfig>
+    /** 当前攻击段实际使用的武器（未攻击 = 主武器）；执行器 / 枪口采样 / 数值均读此字段 */
+    activeWeapon: WeaponConfig
+    /** 当前装备的吐息模组（仅 wyvern；undefined = 未装备） */
+    breath: BreathRuntime | undefined
 
     /** 段冷却剩余（秒）：段 id → 剩余时间（仅非 0 冷却的起手段写入） */
     readonly segmentCooldowns: Map<string, number>
@@ -74,6 +86,10 @@ export interface CombatComponent {
      */
     muzzleDirX: number
     muzzleDirZ: number
+    /** 远程武器挂点世界坐标（world 每帧采样；零值 = 无数据，弹丸回退身体中心发射） */
+    muzzleX: number
+    muzzleY: number
+    muzzleZ: number
     attackedTargets: Set<number>
 
     /** 当前段阶段索引（0-based），attacking meta-state 推进 */
@@ -200,8 +216,39 @@ export interface CombatComponent {
  */
 export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime, holdMode?: HoldMode): void => {
     c.weapon = runtime.weapon
-    c.attacks = runtime.attacks
+    c.baseAttacks = runtime.attacks
+    /* 换武器 / 换持握模式后必须重新组合吐息重击链，否则已装备的吐息会被静默丢弃 */
+    const composed = composeClawAndBreath(c.baseAttacks, c.breath)
+    c.attacks = composed.attacks
+    c.attackWeapons = composed.attackWeapons
+    /* 攻击中换武器 / 换持握模式：activeWeapon 必须仍指向当前段的实际武器 */
+    c.activeWeapon = c.activeSegment !== undefined
+        ? (c.attackWeapons.get(c.activeSegment.id) ?? runtime.weapon)
+        : runtime.weapon
     updateShieldBlock(c, holdMode)
+}
+
+/** 写入组合攻击链与按段武器映射（吐息装备变更时由 world 调用） */
+export const setCombatAttackSet = (
+    c: CombatComponent,
+    attacks: WeaponAttacks,
+    attackWeapons: ReadonlyMap<string, WeaponConfig>,
+): void => {
+    c.baseAttacks = attacks
+    c.attacks = attacks
+    c.attackWeapons = attackWeapons
+    if (c.activeSegment === undefined) c.activeWeapon = c.weapon
+}
+
+/** 设置 / 卸下吐息模组，并重建“主武器轻链 + 吐息重链”的组合攻击链 */
+export const setCombatBreath = (c: CombatComponent, breath: BreathRuntime | undefined): void => {
+    c.breath = breath
+    const composed = composeClawAndBreath(c.baseAttacks, breath)
+    c.attacks = composed.attacks
+    c.attackWeapons = composed.attackWeapons
+    c.activeWeapon = c.activeSegment !== undefined
+        ? (c.attackWeapons.get(c.activeSegment.id) ?? c.weapon)
+        : c.weapon
 }
 
 /** 变更副手武器（undefined = 卸下；双持可用性判定见 world.ts 的 setHoldMode） */
@@ -272,6 +319,10 @@ export const createCombatComponent = (
         weapon: runtime.weapon,
         offhand: undefined,
         attacks: runtime.attacks,
+        baseAttacks: runtime.attacks,
+        attackWeapons: new Map(),
+        activeWeapon: runtime.weapon,
+        breath: undefined,
         segmentCooldowns: new Map(),
         activeSegment: undefined,
         bufferedSegment: undefined,
@@ -281,6 +332,9 @@ export const createCombatComponent = (
         attackDirZ: 1,
         muzzleDirX: 0,
         muzzleDirZ: 0,
+        muzzleX: 0,
+        muzzleY: 0,
+        muzzleZ: 0,
         attackedTargets: new Set(),
         phaseIndex: 0,
         phaseTimer: 0,

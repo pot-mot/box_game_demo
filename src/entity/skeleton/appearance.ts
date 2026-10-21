@@ -21,6 +21,8 @@ export interface SkeletonAppearance {
     readonly partMeshes: readonly Mesh[]
     /** 骨骼段长度变化后按实际距离缩放部件（无部件或无需缩放时省略） */
     resize?: (skeleton: Skeleton) => void
+    /** 依赖骨骼变换的程序化部件（翅膜等）逐帧重建（无此类部件时省略） */
+    update?: () => void
     cleanup: () => void
 }
 

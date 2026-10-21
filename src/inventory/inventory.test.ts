@@ -132,3 +132,20 @@ describe('跨容器转移（箱子存取）', () => {
         expect(bag.stacks.some(s => s.instanceId === id)).toBe(true)
     })
 })
+
+describe('龙吐息装备槽', () => {
+    it('三件吐息物品只能装备到 breath 槽，且仅 wyvern 可装备', () => {
+        const inv = createInventory()
+        const fireball = addItem(inv, 'item_breath_fireball', 1, () => 'b1').instanceId!
+        expect(equipStack(inv, fireball, 'breath', {bodyFormId: 'wolf'})).toBe(false)
+        expect(equipStack(inv, fireball, 'breath', {bodyFormId: 'wyvern'})).toBe(true)
+        expect(inv.equipment.breath).toBe('b1')
+        expect(unequipSlot(inv, 'breath')).toBe(true)
+    })
+
+    it('吐息物品不可进入主手 / 副手槽', () => {
+        const inv = createInventory()
+        const laser = addItem(inv, 'item_breath_laser', 1).instanceId!
+        expect(equipStack(inv, laser, 'main_hand', {bodyFormId: 'wyvern'})).toBe(false)
+    })
+})

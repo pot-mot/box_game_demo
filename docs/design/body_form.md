@@ -42,8 +42,8 @@ src/entity/character/
 │   │   ├── ai/                    # 人形专属 AI 条目（若有）
 │   │   └── body_form.ts           # 组装为 BodyForm
 │   ├── wolf/                      # 狼分包（同名文件，独立实现：四足步态 / 撕咬 / 口部挂点）
-│   ├── horse/                     # 马分包（踢 / 刺 / 骑乘挂点）
-│   └── wyvern/                    # 双足飞龙分包（双足 + 双翼 / 飞行 / 爪 / 吐息；dragon 为六肢西方龙，本期不实现）
+│   ├── horse/                     # 马分包（铁蹄前踢 / 后踹 / 践踏）
+│   └── wyvern/                    # 双足飞龙分包（双足 + 双翼 / 五段爪击 / 独立吐息装备槽）
 ```
 
 **共享层（保持通用，不含体形假设）**：`skeleton/`（通用骨骼动画引擎：关节/IK/过渡/序列化）、
@@ -109,12 +109,13 @@ export interface BodyForm {
 
 ## 6. 空手 / 天然攻击作为武器类别
 
-- **不新增并行层**。武器目录扩展出「天然/空手」类别（`unarmed` / `bite` / `kick` / `claw` / `breath`…），
+- **不新增并行层**。武器目录扩展出「天然/空手」类别（`unarmed` / `bite` / `horse_iron_hoof` / `wyvern_claw`…），
   与近战 / 远程同类对待，携带 `type`（`melee|ranged`）、`attacks`、数值。
-- 投送分类 = `weapon.type`；执行器分发仍 `getSkillExecutor(weapon.type)`。
+- 投送分类 = 当前攻击段实际武器 `combat.activeWeapon.type`；执行器分发仍 `getSkillExecutor(type)`。
 - **default 分配**：`BodyForm.defaultWeaponId`；无武器 / 无持械时落到它（人形 = 空手 `unarmed`）。
-- wyvern 的爪（`claw`，melee，后足 / 翼爪）与吐息（`breath`，ranged，口部锥形喷射）是**两个天然类别**（按 `weapon.type` 单一投送）。
-- 天然类别的**动画**（拳 / 咬 / 踢 / 爪 / 吐息）由所属体形分包的 `pose_fns` / `clips` 提供（段 `poses[].poseId` 指向该分包 clip）。
+- **吐息不再是主武器**：火龙吐息拆为独立 `breath` 背包装备槽（火球 / 雷电 / 激光三件物品，仅 wyvern 可装备）。
+- 龙爪固定为主武器，轻击五段（右爪 / 左爪 / 咬 / 甩尾 / 双爪猛抓）；装备吐息后组合出重击链，执行器按段切换到远程。
+- 天然类别的**动画**（拳 / 咬 / 蹄 / 爪 / 吐息）由所属体形分包的 `pose_fns` / `clips` 提供（按段 `id` 缓存，段 `hitMountJointIds` 指定多肢体命中挂点）。
 
 ## 7. 装备槽体形化
 
@@ -134,13 +135,13 @@ export interface BodyForm {
 - **W3** 装备槽 / 武器策略体形化 + 运行时 `setBodyForm` + 存档 v16 + 面板选择器。✅ 已落地（以狼等体形验证切换；单测 + e2e 通过）。
 - **W3.5 体形分包化**：`forms/<form>/` 分包结构落定；`BodyForm` 增 `createModel`（体形自带模型工厂）与 `createAnimation`（体形自带动画系统工厂）；世界经 plan 取模型 / 动画 / 碰撞 / 受击 / 装备，**不 import 任何 `forms/<form>/` 内部实现**；跨体形公共渲染契约抽为 `CreatureModel`（人形 `CharacterModel` 扩展之）。✅ 已落地。
   > 注：人形专属实现（骨架 / 外观 / `clips` / `animation_system`）仍位于 `appearance/` 与 `skeleton/`，由 `forms/humanoid/body_form.ts` 组装引用；生物分包 `forms/wolf|horse|wyvern/` 为自包含实现（各带 `skeleton.ts` / 外观 / `pose_fns.ts` / `clips.ts`）。
-- **W4 狼分包** `forms/wolf/`：四足骨架 / 步态 / 受击 / 碰撞 / 口部挂点（口含短剑·长剑）+ 天然 `bite`（撕咬，melee）为 default；自带 `pose_fns.ts` / `clips.ts`（程序化烘焙）+ 通用 `createCreatureAnimationSystem`。✅ 已落地。
-- **W5 马分包** `forms/horse/`：四足高腿长颈 + 天然 `kick`（踢击）为 default + 少量武器（长枪 / 飞斧）；自带动画。✅ 已落地。
-- **W6 wyvern 分包** `forms/wyvern/`：**双足飞龙（双足 + 双翼，共 4 肢）** + 天然 `claw`（爪击，melee）/ `breath`（吐息，ranged）两类别；自带动画。✅ 已落地（**dragon = 四足双翼的六肢西方龙，不在本期范围**）。
+- **W4 狼分包** `forms/wolf/`：四足骨架 / 步态 / 受击 / 碰撞 / 口部挂点（口含短剑·长剑横向咬持）+ 天然 `wolf_bite`（轻 1–2）+ 口含剑（轻 1–3）；重击均为单段蓄力；按段 id 烘焙独立 clip。✅ 已落地。
+- **W5 马分包** `forms/horse/`：四足高腿长颈；唯一武器 `horse_iron_hoof`（铁蹄），轻 1 前踢 / 轻 2 后踹 / 重击蓄力践踏；长枪 / 飞斧已移除。✅ 已落地。
+- **W6 wyvern 分包** `forms/wyvern/`：**双足飞龙（双足 + 双翼，共 4 肢）**；固定龙爪五段轻击；重击来自独立 `breath` 装备槽（火球 / 雷电 / 激光，三件物品仅 wyvern 可装备）。✅ 已落地。
 - **W7** 玩家操控（共享状态机，随 `moveSpeedOf` 生效）+ 面板按体形选择与武器白名单过滤 + e2e。✅ 已落地；展示 / 骨骼动画两个**编辑器**仍按人形骨架构建（生物体形接入编辑器为后续工作）。
 - **W8** 全量 `type-check` / `test` / `test:e2e` / `build` + 文档同步。✅ 已落地。
 - **W9 低多面体美术**：统一角色材质库 `render/character_materials.ts` + 通用低多面体 builder（`mesh_builder` 的 `frustum` / `materialById` / flatShading / 指定父节点）落地；护甲 / 兜帽、狼 / 马 / wyvern、种族肢体（骷髅 / 兽人 / 精灵）、近战武器迁移为低多面体（生物用皮毛 / 鳞片 / 翅膜 / 爪 / 牙 / 角，装备用金属 / 皮革 / 布料 / 木料等命名材质）；生物碰撞体与受击块重排（受击走显式 `hurtProfile.shape`，不注册 `jointParts`）；近战命中箱随几何同步（保持范围序）。✅ 已落地。
-- **W10 武器体形化 + 几何属性体形化 + 碰撞箱重构**：① 武器**只属于一种体形**（`WeaponModelConfig.formId`），数据下沉到 `forms/<form>/weapons.ts`（只复用 `weapon_mesh.ts` 网格生成器），`body_form/index.ts` 装配时经 `registerFormWeapons` 注册；人形 id 不变、生物用新 id（`wolf_bite` / `horse_kick` / `wyvern_claw` …）；切体形一律落新体形 `defaultWeaponId`；存档武器 id 与体形不符安全回退。② `BodyForm` 增 `eyeHeight`，AI / 导航 / 受击判定 / 分离一律经 `body_form/geometry.ts` 读体形属性（删除 `CHARACTER_BASE_SIZE` 在实体层的引用）。③ 生物碰撞布局改为「主竖直胶囊（落地）+ 横胶囊 / 悬空盒补形」（横胶囊由节点 90° 旋转实现），并修正马的攻击检测箱朝向、wyvern 段→姿势映射（按段 id 判别）、天然武器挂点（`mountJointId`）与命中盒。④ 翻滚根自转按体形（四足 `rollSpinTurns = 0` 低伏冲刺）。✅ 已落地。
+- **W10 武器体形化 + 几何属性体形化 + 碰撞箱重构**：① 武器**只属于一种体形**（`WeaponModelConfig.formId`），数据下沉到 `forms/<form>/weapons.ts`（只复用 `weapon_mesh.ts` 网格生成器），`body_form/index.ts` 装配时经 `registerFormWeapons` 注册；人形 id 不变、生物用新 id（`wolf_bite` / `horse_iron_hoof` / `wyvern_claw` …）；切体形一律落新体形 `defaultWeaponId`；存档武器 id 与体形不符安全回退。② `BodyForm` 增 `eyeHeight`，AI / 导航 / 受击判定 / 分离一律经 `body_form/geometry.ts` 读体形属性（删除 `CHARACTER_BASE_SIZE` 在实体层的引用）。③ 生物碰撞布局改为「主竖直胶囊（落地）+ 横胶囊 / 悬空盒补形」（横胶囊由节点 90° 旋转实现），并修正马的攻击检测箱朝向、wyvern 段→姿势映射（按段 id 判别）、天然武器挂点（`mountJointId`）与命中盒。④ 翻滚根自转按体形（四足 `rollSpinTurns = 0` 低伏冲刺）。✅ 已落地。
 
 ### 为什么 W3.5 先行
 

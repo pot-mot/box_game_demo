@@ -4,12 +4,13 @@ import type {AreaPresetId} from '../types/areaPreset.ts'
 import {translate, type StringLocaleKey} from '../i18n/index.ts'
 import type {IconName} from '../ui/icons/sprite.ts'
 
-export const ITEM_CATEGORIES = ['weapon', 'armor', 'block', 'consumable', 'material', 'key'] as const
+export const ITEM_CATEGORIES = ['weapon', 'armor', 'breath', 'block', 'consumable', 'material', 'key'] as const
 export type ItemCategory = typeof ITEM_CATEGORIES[number]
 
 export const ITEM_CATEGORY_LABELS: Record<ItemCategory, StringLocaleKey> = {
     weapon: 'item_category.weapon',
     armor: 'item_category.armor',
+    breath: 'item_category.breath',
     block: 'item_category.block',
     consumable: 'item_category.consumable',
     material: 'item_category.material',
@@ -32,6 +33,9 @@ export interface ItemDef {
     readonly maxStack: number
     readonly weaponId?: string
     readonly armorId?: string
+    readonly breathModuleId?: string
+    /** 仅允许该体形装备（如吐息物品只允许 wyvern） */
+    readonly equipBodyFormId?: string
     readonly equipSlot?: EquipSlot
     /** 方块物品放置时生成的实体类型（`box` / `area`；仅 `block` 类别） */
     readonly blockType?: string
@@ -66,6 +70,27 @@ const armor = (id: string, name: string, shape: readonly string[], armorId: stri
     armorId,
     equipSlot: slot,
     dropSize: [0.35, 0.35, 0.35],
+    description: `${name}（${effect}）`,
+})
+
+const breath = (
+    id: string,
+    name: string,
+    shape: readonly string[],
+    breathModuleId: string,
+    effect: string,
+    icon: IconName,
+): ItemDef => ({
+    id,
+    name,
+    category: 'breath',
+    icon,
+    shape,
+    maxStack: 1,
+    breathModuleId,
+    equipSlot: 'breath',
+    equipBodyFormId: 'wyvern',
+    dropSize: [0.28, 0.28, 0.28],
     description: `${name}（${effect}）`,
 })
 
@@ -117,6 +142,10 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     weapon('weapon_grenade', '手雷', ['#'], 'grenade', '范围爆炸', 'item-grenade'),
     weapon('weapon_molotov', '燃烧瓶', ['#', '#'], 'molotov', '范围灼烧', 'item-molotov'),
     weapon('weapon_throwing_dart', '飞镖', ['#', '#'], 'throwing_dart', '轻巧暗器', 'item-throwing-dart'),
+    /* ── 龙吐息（独立 breath 装备槽，仅 wyvern 可装备） ── */
+    breath('item_breath_fireball', '火球吐息', ['##', '##'], 'breath_fireball', '抛射火球并爆炸', 'item-breath-fireball'),
+    breath('item_breath_lightning', '雷电吐息', ['#.', '##', '.#'], 'breath_lightning', '高速弹与链式传导', 'item-breath-lightning'),
+    breath('item_breath_laser', '激光吐息', ['###', '...', '###'], 'breath_laser', '高速穿透光束', 'item-breath-laser'),
     /* ── 护甲 ── */
     armor('armor_cloth_cap', '布帽', ['#'], 'cloth_cap', 'head', '轻便', 'item-cloth-cap'),
     armor('armor_iron_helmet', '铁盔', ['#'], 'iron_helmet', 'head', '物理防御', 'item-iron-helmet'),
@@ -213,6 +242,10 @@ const ITEM_NAME_KEYS: Record<string, StringLocaleKey> = {
     armor_mage_leggings: 'armor.mage_leggings',
     armor_swift_boots: 'armor.swift_boots',
     armor_wind_boots: 'armor.wind_boots',
+    /* 龙吐息 */
+    item_breath_fireball: 'item.item_breath_fireball.name',
+    item_breath_lightning: 'item.item_breath_lightning.name',
+    item_breath_laser: 'item.item_breath_laser.name',
     /* 方块 */
     block_common: 'item.block_common.name',
     block_destruction: 'item.block_destruction.name',
@@ -263,6 +296,9 @@ const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
     armor_mage_leggings: 'item.armor_generic.desc',
     armor_swift_boots: 'item.armor_generic.desc',
     armor_wind_boots: 'item.armor_generic.desc',
+    item_breath_fireball: 'item.item_breath_fireball.desc',
+    item_breath_lightning: 'item.item_breath_lightning.desc',
+    item_breath_laser: 'item.item_breath_laser.desc',
     block_common: 'item.block_common.desc',
     block_destruction: 'item.block_destruction.desc',
     block_burning: 'item.block_burning.desc',

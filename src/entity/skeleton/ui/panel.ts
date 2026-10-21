@@ -10,6 +10,8 @@ import {createSection} from '../../../ui/components/section.ts'
 import {localizeText, localizePlaceholder, appendLocalizedText} from '../../../i18n/dom.ts'
 import {translate} from '../../../i18n/index.ts'
 import {CASCADE_DEPTH_MAX} from '../constants.ts'
+import {DEFAULT_IK_CHAIN_DEPTH, DEFAULT_IK_SOLVER, IK_CHAIN_DEPTH_MAX} from '../../../skeleton/constants.ts'
+import {IK_SOLVERS} from '../../../skeleton/joint.ts'
 
 /** 面板所需的实体上下文（由 world 装配，两阶段初始化） */
 export interface SkeletonPanelContext {
@@ -17,6 +19,8 @@ export interface SkeletonPanelContext {
     getSelection: () => SkeletonSelection | undefined
     /** 级联编辑设置（开关 + 层数，面板修改、指针读取） */
     getCascadeSettings: () => JointCascadeSettings
+    /** 是否允许编辑（禁用时属性输入与操作按钮置灰） */
+    isEditingEnabled: () => boolean
     /** 领域编辑后刷新：FK + 写回场景图 + 部件缩放 */
     refresh: () => void
     /** 重开面板（选中变化后由 world 调用） */
@@ -116,24 +120,48 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
         depthInput.value = String(clamped)
     })
 
-    /* IK 根级别 */
-    container.appendChild(createSection('skeleton.ik_root'))
-    const levelSelect = document.createElement('select')
-    levelSelect.className = 'dc-select'
-    const levelOptions = [
-        {value: '', label: translate('skeleton.ik_none')},
-        {value: '0', label: translate('skeleton.ik_level0')},
-        {value: '1', label: '1'},
-        {value: '2', label: '2'},
-    ] as const
-    for (const opt of levelOptions) {
+    /* 节点 IK：该节点作为末端，按求解器与父级段数影响上游链 */
+    container.appendChild(createSection('skeleton.ik'))
+    const ikSolverSelect = document.createElement('select')
+    ikSolverSelect.className = 'dc-select'
+    const ikNoneOption = document.createElement('option')
+    ikNoneOption.value = ''
+    localizeText(ikNoneOption, 'skeleton.ik_none')
+    ikSolverSelect.appendChild(ikNoneOption)
+    for (const solver of IK_SOLVERS) {
         const el = document.createElement('option')
-        el.value = opt.value
-        el.textContent = opt.label
-        levelSelect.appendChild(el)
+        el.value = solver
+        localizeText(el, solver === 'ccd' ? 'skeleton.ik_ccd' : 'skeleton.ik_fabrik')
+        ikSolverSelect.appendChild(el)
     }
-    levelSelect.value = joint.ikRootLevel !== undefined ? String(joint.ikRootLevel) : ''
-    container.appendChild(levelSelect)
+    ikSolverSelect.value = joint.ik?.solver ?? ''
+    container.appendChild(ikSolverSelect)
+
+    const ikDepthRow = document.createElement('label')
+    ikDepthRow.className = 'dc-label'
+    ikDepthRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:4px'
+    const ikDepthText = document.createElement('span')
+    localizeText(ikDepthText, 'skeleton.ik_depth')
+    ikDepthRow.appendChild(ikDepthText)
+    const ikDepthInput = createNumberInput({
+        value: String(joint.ik?.chainDepth ?? DEFAULT_IK_CHAIN_DEPTH),
+        min: '1',
+        max: String(IK_CHAIN_DEPTH_MAX),
+        step: '1',
+        style: 'width:48px',
+    })
+    ikDepthInput.disabled = joint.ik === undefined
+    ikDepthRow.appendChild(ikDepthInput)
+    container.appendChild(ikDepthRow)
+    const ikHint = document.createElement('div')
+    ikHint.className = 'dc-hint'
+    ikHint.style.cssText = 'margin-top:2px'
+    localizeText(ikHint, 'skeleton.ik_hint')
+    container.appendChild(ikHint)
+
+    ikSolverSelect.addEventListener('change', () => {
+        ikDepthInput.disabled = ikSolverSelect.value === ''
+    })
 
     /* 父关节重连 */
     container.appendChild(createSection('skeleton.parent'))
@@ -187,7 +215,17 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     applyBtn.addEventListener('click', () => {
         joint.position.set(valueOf(posX), valueOf(posY), valueOf(posZ))
         joint.rotation.setFromEuler(new Euler(valueOf(rotX), valueOf(rotY), valueOf(rotZ), EULER_ORDER))
-        joint.ikRootLevel = levelSelect.value === '' ? undefined : Number(levelSelect.value)
+        const solver = ikSolverSelect.value
+        if (solver !== '') {
+            const rawDepth = parseFloat(ikDepthInput.value)
+            const depth = Number.isNaN(rawDepth)
+                ? DEFAULT_IK_CHAIN_DEPTH
+                : Math.max(1, Math.min(IK_CHAIN_DEPTH_MAX, Math.round(rawDepth)))
+            ikDepthInput.value = String(depth)
+            joint.ik = {solver: IK_SOLVERS.find(item => item === solver) ?? DEFAULT_IK_SOLVER, chainDepth: depth}
+        } else {
+            joint.ik = undefined
+        }
         const newParentId = parentSelect.value === '' ? undefined : parentSelect.value
         if (joint.parent?.id !== newParentId) {
             if (joint.parent !== undefined) disconnectJoint(joint)
@@ -289,30 +327,57 @@ export const createSkeletonPanel = (ctx: SkeletonPanelContext): PanelContext => 
     let refreshValues: (() => void) | undefined
     /** 面板容器（render 时赋值，update 用于焦点检查） */
     let panelContainer: HTMLElement | undefined
+    /** 时间轴高度变化时同步面板底边（面板始终浮在时间轴上方） */
+    let panelResizeObserver: ResizeObserver | undefined
 
     const render = (container: HTMLElement): void => {
-        panelContainer = container
+        /* 与编辑模式实体面板一致：独立固定浮层，避免被挤在画布下方 */
+        const root = document.createElement('div')
+        root.id = 'skeleton-panel'
+        root.className = 'dc-panel dc-scroll'
+        root.style.cssText = 'position:fixed;bottom:var(--dc-space-4);right:var(--dc-space-4);z-index:130;padding:16px 20px;min-width:230px;max-width:340px;max-height:70vh;user-select:none'
+        container.appendChild(root)
+        panelContainer = root
         refreshValues = undefined
+
+        panelResizeObserver?.disconnect()
+        const timeline = document.getElementById('bone-timeline')
+        if (timeline !== null) {
+            const syncBottom = (): void => {
+                root.style.bottom = `${timeline.getBoundingClientRect().height + 16}px`
+            }
+            syncBottom()
+            panelResizeObserver = new ResizeObserver(syncBottom)
+            panelResizeObserver.observe(timeline)
+        }
+
         const entity = ctx.getFocus()
         if (entity === undefined) {
-            appendLocalizedText(container, 'skeleton.no_entity')
+            appendLocalizedText(root, 'skeleton.no_entity')
             return
         }
         const selection = ctx.getSelection()
         if (selection === undefined) {
-            appendLocalizedText(container, 'skeleton.no_selection')
+            appendLocalizedText(root, 'skeleton.no_selection')
             return
         }
         if (selection.kind === 'joint') {
-            refreshValues = renderJointPanel(ctx, container)
+            refreshValues = renderJointPanel(ctx, root)
         } else {
-            refreshValues = renderBonePanel(ctx, container)
+            refreshValues = renderBonePanel(ctx, root)
         }
         /* 选中高亮：关节小球 / 骨骼段菱形 */
         setSelectedVisual(entity.visuals, selection, true)
+        if (!ctx.isEditingEnabled()) {
+            for (const el of root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button')) {
+                el.disabled = true
+            }
+        }
     }
 
     const destroy = (): void => {
+        panelResizeObserver?.disconnect()
+        panelResizeObserver = undefined
         const entity = ctx.getFocus()
         if (entity !== undefined) {
             clearSelectedVisuals(entity.visuals)

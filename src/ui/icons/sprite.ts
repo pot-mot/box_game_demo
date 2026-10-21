@@ -102,6 +102,9 @@ export const ICON_NAMES = [
     'item-block-air',
     'item-block-force-field',
     'item-flask',
+    'item-breath-fireball',
+    'item-breath-lightning',
+    'item-breath-laser',
     'item-stone',
     'item-key',
 ] as const
@@ -208,6 +211,9 @@ const ICON_PATHS: Record<IconName, string> = {
     'item-block-air': 'M12 3l8 4-8 4-8-4zM4 7v8l8 4 8-4V7M12 11v8M5 9h5M4 12h4.5',
     'item-block-force-field': 'M12 3l8 4-8 4-8-4zM4 7v8l8 4 8-4V7M12 11v8M12 6.2l1.8 1.8-1.8 1.8L10.2 8z',
     'item-flask': 'M10 3h4v3l2 3v11H8V9l2-3zM12 3V1M8 13h8',
+    'item-breath-fireball': 'M12 3c3 4 6 7 6 11a6 6 0 1 1-12 0c0-2 1-4 3-6 0 2 1 3 2 3 1-2 1-5 1-8z',
+    'item-breath-lightning': 'M13 2L5 14h6l-1 8 9-13h-6z',
+    'item-breath-laser': 'M3 12h4M17 12h4M12 3v4M12 17v4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8',
     'item-stone': 'M6 17l2-8 5-3 5 4-1 7zM8 11l5 2 5-2M13 8v5',
     'item-key': 'M15 8a4 4 0 1 0-8 0 4 4 0 0 0 8 0M11 12v9M11 16h3M11 19h3',
 }

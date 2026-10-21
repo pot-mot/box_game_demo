@@ -161,6 +161,7 @@ export const attackingHandler: StateHandler = {
         c.attackCharge = 0
         c.attackHolding = false
         c.chargeCommitted = false
+        c.activeWeapon = c.weapon
         /* 冷却已在段触发时挂上，exit 不再补挂 */
     },
     transitions: [

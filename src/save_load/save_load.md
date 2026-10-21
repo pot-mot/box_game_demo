@@ -5,7 +5,7 @@
 ## 约定
 
 - 改存档结构必须同步 `types.ts`、`validation.ts`（缺失时安全回退默认，不得抛错）与 `serialize.ts`。
-- 当前 `SAVE_FORMAT_VERSION = 15`，版本推进：v4 起 character 增加可选基础防御 `defense` 与护甲 `armor`；v5 起锁定点 `lockPoints`；v6 起副手 `offhand` 与持握 `holdMode`；v7 起肢体 `limb` 与 `building_generator` 建筑实体；v8 起 `interactable` / `item` 实体与 play 背包 `inventory`、传送点 `teleports`（`modeInfo.play`）；v9 起 character 增加可选韧性/倒地属性 `poiseMax` / `poiseRegenDelay` / `poiseRegenPerSec` / `knockdownDuration` / `getUpDuration`；v10 起 character 增加可选惯用手 `handedness`（`'right'` 默认 / `'left'`，缺失安全回退 `'right'`）；v11 起 character 增加可选行为原点策略 `originStrategy`（`'resident'` 默认 / `'fighter'` / `'hunter'` / `'roamer'`）、漫游间隔 `originInterval`、追击半径 `chaseLeashRadius`（缺失安全回退默认）；v12 起 character 增加可选基础攻击加成 `baseAttack`（逐攻击类别，缺失安全回退 0/0）；v13 起 5 种箱子变体合并为统一 `box` 实体（`config` 携带可选特性对象）；v14 起 `area/water` 统一为 `area` 实体（`config` 携带几何 + 视觉材质 + 可选物理场）；v15 起 character 增加可选 AI 反应式举盾窗口 `aiBlockDuration` 与冷却 `aiBlockCooldown`（缺失安全回退 0.4 / 1.2）。
+- 当前 `SAVE_FORMAT_VERSION = 17`，版本推进：v4 起 character 增加可选基础防御 `defense` 与护甲 `armor`；v5 起锁定点 `lockPoints`；v6 起副手 `offhand` 与持握 `holdMode`；v7 起肢体 `limb` 与 `building_generator` 建筑实体；v8 起 `interactable` / `item` 实体与 play 背包 `inventory`、传送点 `teleports`（`modeInfo.play`）；v9 起 character 增加可选韧性/倒地属性 `poiseMax` / `poiseRegenDelay` / `poiseRegenPerSec` / `knockdownDuration` / `getUpDuration`；v10 起 character 增加可选惯用手 `handedness`（`'right'` 默认 / `'left'`，缺失安全回退 `'right'`）；v11 起 character 增加可选行为原点策略 `originStrategy`（`'resident'` 默认 / `'fighter'` / `'hunter'` / `'roamer'`）、漫游间隔 `originInterval`、追击半径 `chaseLeashRadius`（缺失安全回退默认）；v12 起 character 增加可选基础攻击加成 `baseAttack`（逐攻击类别，缺失安全回退 0/0）；v13 起 5 种箱子变体合并为统一 `box` 实体（`config` 携带可选特性对象）；v14 起 `area/water` 统一为 `area` 实体（`config` 携带几何 + 视觉材质 + 可选物理场）；v15 起 character 增加可选 AI 反应式举盾窗口 `aiBlockDuration` 与冷却 `aiBlockCooldown`（缺失安全回退 0.4 / 1.2）；v16 起 character 增加可选体形计划 `bodyFormId`（缺失 / 未知 id 安全回退 humanoid）；v17 起 character 增加可选吐息模组 `breathModuleId`（未知 id 安全视为未装备）。
 - 历史存档不保证兼容；未知副手武器 id 加载时安全丢弃。
 
 ## 陷阱
@@ -16,7 +16,7 @@
 
 ## 1. 版本推进
 
-`SAVE_FORMAT_VERSION` 从 `14` 推进到 `15`（`types.ts` 注释说明）：
+`SAVE_FORMAT_VERSION` 当前为 `17`（`types.ts` 注释说明）：
 
 | 版本 | 新增 |
 |------|------|
@@ -28,6 +28,8 @@
 | v13 | 5 种箱子变体（`box/common`、`box/destruction`、`box/burning`、`box/magnet`、`box/elasticity`）合并为统一 `box` 实体：`config`（`BoxConfig`）携带可选特性对象 `destructible` / `burning` / `magnet` / `elastic`，各特性运行态分别放在顶层可选字段 `destructible` / `burning` / `elastic`。旧的 `box/*` 元素在加载时作为**未知类型**按元素粒度跳过（不兼容迁移） |
 | v14 | `area/water` 统一为 `area` 实体：`config`（`AreaConfig`）携带 `shape`（box/sphere/cylinder 判别联合）+ `material`（water/air/force_field）+ 可选物理场 `fields.{float,wind,gravity}`。旧的 `area/water` 元素在加载时作为**未知类型**按元素粒度跳过（不兼容迁移） |
 | v15 | character 可选 AI 反应式举盾窗口 `aiBlockDuration` 与冷却 `aiBlockCooldown`（均须正数；冷却为 0 会让举盾无限续期）；旧档缺失即回退运行时默认 `0.4` / `1.2`，非法值安全回退 `undefined` |
+| v16 | character 可选体形计划 `bodyFormId`；旧档缺失 / 未知 id 由 `bodyFormOf` 安全回退 humanoid |
+| v17 | character 可选吐息模组 `breathModuleId`；旧档缺失即未装备，未知 id 由 `breathModuleOf` 安全视为未装备 |
 
 > 重生点当前经由存档点激活时刷新缓存存档实现（玩家就在点上），不再单列字段。
 

@@ -6,13 +6,12 @@ import {applyComposedPose} from '../../../skeleton/anim/composition.ts'
 import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
 import {getBaseClipForHoldMode, getWalkLegsClip, fallingSpeedTier} from './clips/base_clips.ts'
 import {getAttackClipById} from './clips/attack_clips.ts'
+import {supportGripLocalFromWeapon} from './clips/support_hand_bake.ts'
 import {createCharacterSkeletonBridge} from './skeleton_bridge.ts'
 import type {SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
-import {solveTwoHandedGrip} from './two_handed_ik.ts'
-import {offHandSide} from '../../../character/handedness.ts'
 import {isWindupStrike, phaseDurationOf, resolvePhases} from '../../../character/combat/attack_phases.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
-import {ENGAGED_WALK_MIN_SPEED, STATE_BLEND_DURATION, TWO_HAND_GRIP_OFFSET, walkSpeedScale} from './constants.ts'
+import {ENGAGED_WALK_MIN_SPEED, STATE_BLEND_DURATION, walkSpeedScale} from './constants.ts'
 
 /** clip 驱动的状态（全部 14 状态；基础状态用基础生成器，attacking / air_attacking 用攻击生成器） */
 const CLIP_STATES: readonly CharacterState[] = ['idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'dying', 'rolling', 'flinching', 'attacking', 'air_attacking', 'interacting', 'knockdown', 'getting_up', 'blocking', 'guard_broken']
@@ -21,7 +20,7 @@ type ClipState = 'idle' | 'walking' | 'jumping' | 'falling' | 'swimming' | 'floa
 
 const isClipState = (state: CharacterState): state is ClipState => CLIP_STATES.includes(state)
 
-/** 攻击态（地面攻击 + 空中攻击共用攻击 clip 生成器与双手 IK） */
+/** 攻击态（地面攻击 + 空中攻击共用攻击 clip 生成器） */
 type AttackClipState = 'attacking' | 'air_attacking'
 const isAttackState = (state: ClipState): state is AttackClipState => state === 'attacking' || state === 'air_attacking'
 
@@ -131,14 +130,6 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     const setupClip = (state: ClipState, model: CreatureModel, ctx: AnimationContext): void => {
         teardownClip()
         bridge = createCharacterSkeletonBridge(model)
-        /* 双手共持：支撑肩设为 IK 根（持械且持握模式为双手时，攻击态与全部非攻击持械状态），
-         * 支撑手链可独立求解贴合握柄。
-         * 支撑侧 = 与主手相反的手臂（右撇子为左臂、左撇子为右臂）。
-         * 副手武器（若装备）在双手模式下挂背，不影响 IK；双持模式副手握持自身武器，不走共享 IK。 */
-        if (ctx.weaponHeld && ctx.holdMode === 'two_handed') {
-            const supportShoulder = bridge.findJoint(`${offHandSide(ctx.handedness)}ArmShoulder`)
-            if (supportShoulder !== undefined) supportShoulder.ikRootLevel = 0
-        }
         if (isAttackState(state)) {
             /* 攻击段动作组合：段引用的 pose 层（含 hitbox 事件轨），按权重合成。
              * 蓄力按住时不自由推进，而按蓄力值定位「蓄力段」进度：近战 = 攻击 clip 的抬手段（武器各异），
@@ -155,6 +146,10 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             player.play()
         } else {
             chargingPose = false
+            /* 双手共持的待机 / 行走 / 跳跃等基础状态：把副握点传给 clip 生成器，副手烘焙到武器 */
+            const supportGripLocal = ctx.weaponHeld && ctx.holdMode === 'two_handed' && model.weaponGroup !== null
+                ? supportGripLocalFromWeapon(model.weaponGroup, model.weaponSupportGripOffset)
+                : undefined
             /* 基础状态：持握模式感知的完整 clip（下半身 + 上半身已离线预组合，运行时不产生组合开销） */
             const clip = getBaseClipForHoldMode(
                 state,
@@ -163,6 +158,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
                 ctx.horizontalSpeed,
                 shieldArmsOf(ctx),
                 ctx.handedness,
+                supportGripLocal,
             )
             player = createComposedAnimationPlayer(bridge, [{clip, weight: 1}])
             player.play()
@@ -171,22 +167,6 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
                 player.setSpeed(walkSpeedScale(ctx.horizontalSpeed))
             }
         }
-    }
-
-    /** 双手武器 IK（applyPose 先写、IK 后写覆盖支撑臂链）：支撑手链追武器轴上的副握点 */
-    const applyTwoHandedIk = (ctx: AnimationContext, model: CreatureModel): void => {
-        if (bridge === undefined || player === undefined) return
-        /* 双持：副手握持自身武器，不做共享 IK */
-        if (ctx.holdMode !== 'two_handed') return
-        const supportSide = offHandSide(ctx.handedness)
-        solveTwoHandedGrip(bridge, model.weaponGroup ?? undefined, {
-            shoulderId: `${supportSide}ArmShoulder`,
-            supportSide,
-            /* 武器模型原点已对齐主握把，副握点按该武器握把间距沿本地 +Y 定位 */
-            offset: model.weaponSupportGripOffset + TWO_HAND_GRIP_OFFSET,
-            /* 模型根含 scale（展示模式 1.3×）：目标换算回骨架空间 */
-            rootObject: model.group,
-        })
     }
 
     /** 是否处于「上半身保持姿态、下半身行走」叠加：格挡 / 蓄力攻击中且确实在水平移动 */
@@ -235,15 +215,19 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     }
 
     const update = (dt: number, model: CreatureModel, state: CharacterState, ctx: AnimationContext): void => {
-        /* 动画键：attacking 用当前段 id（段切换触发混合）；基础状态 weaponHeld 变体；falling 附加速度档（腿张开随速度） */
+        /* 动画键：attacking 用当前段 id（段切换触发混合）；基础状�?weaponHeld 变体；falling 附加速度档（腿张开随速度�?*/
         const weaponKey = ctx.weaponHeld ? `:${ctx.holdMode}` : ':n'
         const shieldKey = SHIELD_ARM_KEY_SUFFIXES.get(shieldArmsOf(ctx)) ?? ''
+        /* 武器 Group 在每次装备/换武器时重建：uuid 变化即重解析基础 clip（副手贴合新副握点） */
+        const gripKey = ctx.weaponHeld && ctx.holdMode === 'two_handed' && model.weaponGroup !== null
+            ? `:w${model.weaponGroup.uuid}`
+            : ''
         const clipKey = (state === 'attacking' || state === 'air_attacking') && ctx.attackSegment !== undefined
-            ? `attacking:${ctx.attackSegment.id}${ctx.attackHolding ? ':charging' : ''}`
+            ? `attacking:${ctx.attackSegment.id}${ctx.attackHolding ? ':charging' : ''}${gripKey}`
             : state === 'falling'
-                ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${weaponKey}`
-                : `${state}${weaponKey}${shieldKey}`
-        /* 惯用手影响 clip（左撇子取镜像）：纳入键，切换时重解析并触发混合 */
+                ? `falling:${fallingSpeedTier(ctx.horizontalSpeed)}${weaponKey}${gripKey}`
+                : `${state}${weaponKey}${shieldKey}${gripKey}`
+        /* 惯用手影�?clip（左撇子取镜像）：纳入键，切换时重解析并触发混合 */
         const animKey = `${clipKey}:${ctx.handedness}`
         if (animKey !== currentAnimKey || model !== currentModel) {
             onStateChange(currentState, state, model, ctx)
@@ -266,12 +250,7 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
                     player.setSpeed(walkSpeedScale(ctx.horizontalSpeed))
                 }
             }
-            /* 双手武器 IK（applyPose 后、混合前：IK 覆盖支撑臂链，评审分层顺序）：
-             * 攻击态与全部非攻击持械状态都让副手吸附握把（`applyTwoHandedIk` 内部据 holdMode 早退） */
-            if (ctx.weaponHeld && ctx.holdMode === 'two_handed') {
-                applyTwoHandedIk(ctx, model)
-            }
-            /* 格挡 / 蓄力攻击下半身行走叠加：双腿改为行走步态，上半身姿态保留（含双手 IK） */
+            /* 格挡 / 蓄力攻击下半身行走叠加：双腿改为行走步态，上半身姿态保留 */
             applyEngagedWalk(dt, state, ctx)
         }
 

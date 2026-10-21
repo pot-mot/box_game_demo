@@ -64,6 +64,14 @@ export interface Projectile {
     impactColor: number
     /** 可穿过类别的位掩码（命中这些类别继续飞行） */
     passThroughMask: number
+    /** 剩余穿透角色次数（激光等；> 0 时命中角色后继续飞行） */
+    pierceRemaining: number
+    /** 已命中角色 id（穿透弹防止同一目标重复结算） */
+    hitCharacterIds: Set<number>
+    /** 雷电链：额外目标数 / 搜索半径 / 每跳伤害衰减 */
+    chainCount: number
+    chainRadius: number
+    chainFalloff: number
     /** 存活时间（秒，用于视觉脉冲） */
     elapsed: number
     /** 上一帧位置 —— 形状扫描起点 */
@@ -75,6 +83,8 @@ export interface Projectile {
 /** 生成一发弹丸的入参 */
 export interface ProjectileSpawn {
     readonly owner: CharacterEntity
+    /** 发射点世界坐标（武器挂点 / 口部）；缺省 = 身体中心 + 固定高度 */
+    readonly origin?: RapVector3
     /** 水平单位向量（x/z 已归一化，y 恒 0） */
     readonly direction: RapVector3
     /** 当前武器（含模型 / 视觉规格 / 弹道数值） */

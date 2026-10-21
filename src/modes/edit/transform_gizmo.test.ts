@@ -13,7 +13,7 @@ import {
     GIZMO_ARC_OPACITY_ACTIVE,
     type TransformGizmo,
 } from './transform_gizmo.ts'
-import {JOINT_GIZMO_RADIUS, ROTATION_GIZMO_OFFSET, ROTATION_GIZMO_HEIGHT, ROTATION_GIZMO_RADIUS} from '../../entity/skeleton/constants.ts'
+import {JOINT_GIZMO_RADIUS} from '../../entity/skeleton/constants.ts'
 
 /** 从相机看向屏幕坐标的射线 */
 const rayFromScreen = (camera: PerspectiveCamera, x: number, y: number): Raycaster => {
@@ -99,18 +99,6 @@ describe('transform gizmo 拾取几何避让', () => {
         expect(GIZMO_PICK_START_OFFSET).toBeGreaterThan(JOINT_GIZMO_RADIUS)
     })
 
-    it('旋转锥体半径小于关节小球半径（不遮挡小球正面拾取）', () => {
-        expect(ROTATION_GIZMO_RADIUS).toBeLessThan(JOINT_GIZMO_RADIUS)
-    })
-
-    it('拾取圆柱起点偏移避开旋转锥体（骨骼编辑模式）', () => {
-        /* 旋转锥体几何：ConeGeometry 中心在 mesh.position（z=ROTATION_GIZMO_OFFSET），
-         * 半高 = ROTATION_GIZMO_HEIGHT/2；rotation.x=π/2 使尖端指向 +Z。
-         * 尖端最大延伸 = ROTATION_GIZMO_OFFSET + ROTATION_GIZMO_HEIGHT/2，
-         * 拾取圆柱沿各平移轴从 GIZMO_PICK_START_OFFSET 处开始，需大于该值 */
-        const coneTipReach = ROTATION_GIZMO_OFFSET + ROTATION_GIZMO_HEIGHT / 2
-        expect(GIZMO_PICK_START_OFFSET).toBeGreaterThan(coneTipReach)
-    })
 })
 
 describe('transform gizmo 拖拽数学', () => {

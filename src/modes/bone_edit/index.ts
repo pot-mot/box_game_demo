@@ -1,17 +1,27 @@
 import {Box3, Vector3, type PerspectiveCamera, type Scene, type WebGLRenderer, type Object3D} from 'three'
-import {setupSkeletonEntities, type SkeletonEntitiesContext, type SkeletonEntity} from '../../entity/skeleton/world.ts'
-import {createCharacterSkeletonPreset} from '../../entity/character/skeleton/preset_appearance.ts'
+import {
+    setupSkeletonEntities,
+    type SkeletonEntitiesContext,
+    type SkeletonEntity,
+    type SkeletonPresetSource,
+} from '../../entity/skeleton/world.ts'
 import {createCameraControl} from '../control/camera_control.ts'
-import {createAnimationStore, type AnimationStore} from './animation_store.ts'
 import {setupBoneEditHistory, type BoneEditHistory} from './history.ts'
 import {setupTimelinePanel, type TimelinePanel} from './timeline.ts'
+import {
+    BONE_EDIT_FORM_PROFILES,
+    DEFAULT_BONE_EDIT_FORM_ID,
+    boneEditFormProfileOf,
+} from './form_catalog.ts'
+import {createFormAnimationStores} from './form_store.ts'
 import {setupBoneEditPointer} from './pointer.ts'
 import {setupBoneGizmoPointer} from './gizmo_pointer.ts'
 import {createDragCoordinator} from './drag_state.ts'
+import {setupBoneViewPanel} from './view_panel.ts'
 import {createTransformGizmo} from '../edit/transform_gizmo.ts'
 import {GIZMO_SCALE_FACTOR, VIEW_ELEVATION, VIEW_FIT_MARGIN, VIEW_MIN_DISTANCE, VIEW_MIN_VISIBLE_RATIO, VIEW_YAW} from './constants.ts'
 import {skeletonToDefinition, clipToJSON, type SkeletonDefinition, type ClipJSON} from '../../skeleton/anim/serialization.ts'
-import {focusPanel, getCurrentPanel} from '../../ui/entity_control_panel.ts'
+import {getCurrentPanel} from '../../ui/entity_control_panel.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 
 /** 骨骼动画编辑模式控制器 */
@@ -21,8 +31,9 @@ export interface BoneEditModeController {
     exit: () => void
 }
 
-/** 编辑快照：聚焦骨架定义 + 动画库 JSON + 当前动画名 */
+/** 编辑快照：体形 + 聚焦骨架定义 + 该体形动画库 JSON + 当前动画名 */
 interface ModeSnapshot {
+    readonly formId: string
     readonly skeleton: SkeletonDefinition
     readonly clips: readonly ClipJSON[]
     readonly currentClipName: string | undefined
@@ -39,12 +50,22 @@ export const setupBoneEditMode = (
     scene: Scene,
     excludeFromBackground: (obj: Object3D) => void,
 ): BoneEditModeController => {
-    /* 骨架实体（多骨架 + 聚焦）：注入角色预设（人形定义 + 方块人外观构建器，与游玩共用） */
-    const world: SkeletonEntitiesContext = setupSkeletonEntities(scene, createCharacterSkeletonPreset())
-    world.addPreset()
+    /* 骨架来源：全部体形预设（人形/狼/马/飞龙），骨骼层不依赖具体身体 */
+    const presetById = new Map(BONE_EDIT_FORM_PROFILES.map(profile => [profile.formId, profile.preset]))
+    const fallbackPreset = boneEditFormProfileOf(DEFAULT_BONE_EDIT_FORM_ID).preset
+    const presetSource: SkeletonPresetSource = {
+        defaultPresetId: DEFAULT_BONE_EDIT_FORM_ID,
+        presetIds: BONE_EDIT_FORM_PROFILES.map(profile => profile.formId),
+        presetOf: (presetId) => presetById.get(presetId) ?? fallbackPreset,
+    }
+    const world: SkeletonEntitiesContext = setupSkeletonEntities(scene, presetSource)
+    world.addPreset(DEFAULT_BONE_EDIT_FORM_ID)
 
-    /* 动画库 */
-    const store: AnimationStore = createAnimationStore()
+    /* 每体形独立动画库；路由 store 让时间轴无感切换 */
+    const stores = createFormAnimationStores(
+        BONE_EDIT_FORM_PROFILES.map(profile => profile.formId),
+        DEFAULT_BONE_EDIT_FORM_ID,
+    )
 
     /* 相机（共享模块：modes/control/camera_control.ts） */
     const cameraControl = createCameraControl(camera, renderer.domElement, {
@@ -57,28 +78,55 @@ export const setupBoneEditMode = (
     /* 时间轴面板（含 IK 开关状态） */
     let timeline: TimelinePanel
 
-    /* 撤销/重做：快照 = 骨架定义 + 动画库（applyState 在 undo/redo 时执行） */
+    const focusForm = (formId: string): SkeletonEntity => {
+        const profile = boneEditFormProfileOf(formId)
+        const current = world.getFocus()
+        if (current?.presetId === profile.formId) return current
+        const existing = world.getEntityList().find(entity => entity.presetId === profile.formId)
+        const entity = existing ?? world.addPreset(profile.formId)
+        world.focus(entity.id)
+        return entity
+    }
+
+    const onFormChange = (formId: string): void => {
+        const profile = boneEditFormProfileOf(formId)
+        const entity = focusForm(profile.formId)
+        stores.setActive(profile.formId)
+        timeline.setForm(profile.formId)
+        frameFocus(entity)
+    }
+
+    /* 撤销/重做：快照 = 体形 + 骨架定义 + 该体形动画库（applyState 在 undo/redo 时执行） */
     const snapshotOf = (): ModeSnapshot => {
         const skeleton = world.getFocus()?.skeleton
         if (skeleton === undefined) {
-            return {skeleton: {joints: [], bones: []}, clips: [], currentClipName: undefined}
+            return {
+                formId: stores.activeFormId,
+                skeleton: {joints: [], bones: []},
+                clips: [],
+                currentClipName: undefined,
+            }
         }
         return {
+            formId: stores.activeFormId,
             skeleton: skeletonToDefinition(skeleton),
-            clips: [...store.clips.values()].map(clipToJSON),
-            currentClipName: store.currentName,
+            clips: [...stores.store.clips.values()].map(clipToJSON),
+            currentClipName: stores.store.currentName,
         }
     }
     const applySnapshot = (state: ModeSnapshot): void => {
-        /* 重建聚焦骨架 + 恢复动画库 */
+        /* 重建聚焦骨架 + 恢复该体形动画库 */
+        stores.setActive(state.formId)
         const focus = world.getFocus()
         if (focus !== undefined) world.remove(focus.id)
-        world.addFromDefinition(state.skeleton)
+        world.addFromDefinition(state.skeleton, undefined, state.formId)
+        timeline.setForm(state.formId)
         timeline.applyLibrary(state.clips, state.currentClipName)
+        frameFocus(world.getFocus())
     }
     const history: BoneEditHistory = setupBoneEditHistory(snapshotOf, applySnapshot)
 
-    timeline = setupTimelinePanel(world, store, history)
+    timeline = setupTimelinePanel(world, stores, history, {onFormChange})
 
     /** 初始取景：按包围盒把聚焦骨架放到视窗中心。
      *  时间轴面板遮挡画布底部，可见区域中心高于画布中心，故相机需额外下压等同偏移角。 */
@@ -113,25 +161,19 @@ export const setupBoneEditMode = (
     /* 折射背景渲染时排除 gizmo，避免水面上出现残影镜像 */
     excludeFromBackground(gizmo.group)
 
-    /* 指针交互（拾取/拖拽/IK 牵引） */
+    /* 指针交互：只负责点击选中，变换统一交给 Gizmo */
     const onPicked = (hit: {kind: 'joint' | 'bone'; jointId: string; boneId: string | undefined}): void => {
         if (hit.kind === 'joint') {
             world.select({kind: 'joint', id: hit.jointId})
         } else if (hit.boneId !== undefined) {
             world.select({kind: 'bone', id: hit.boneId})
         }
-        focusPanel(world.panel)
     }
-    /* 拖拽互斥协调器：gizmo 拖拽进行中时骨骼指针跳过（取代模块级标志） */
+    /* 拖拽互斥协调器：gizmo 拖拽进行中时骨骼指针跳过 */
     const dragCoordinator = createDragCoordinator()
 
-    /* 指针交互（拾取/拖拽/IK 牵引）：命中骨骼时挂起轨道相机旋转，仅保留拖拽 */
-    setupBoneEditPointer(world, camera, history, () => timeline.isIkEnabled(), onPicked, cameraControl.setEnabled, dragCoordinator)
-
-    /* Gizmo 指针交互（拦截 gizmo 部件拖拽） */
+    /* Gizmo 指针交互（先注册：命中 Gizmo 时优先消费事件） */
     const gizmoPointer = setupBoneGizmoPointer(world, camera, gizmo, history, cameraControl.setEnabled, dragCoordinator)
-
-    /* Gizmo 指针事件（在原有指针之前拦截） */
     renderer.domElement.addEventListener('pointerdown', gizmoPointer.handlePointerDown)
     window.addEventListener('pointermove', gizmoPointer.handlePointerMove)
     window.addEventListener('pointerup', gizmoPointer.handlePointerUp)
@@ -139,14 +181,22 @@ export const setupBoneEditMode = (
     window.addEventListener('pointercancel', gizmoPointer.handlePointerCancel)
     window.addEventListener('blur', gizmoPointer.handlePointerCancel)
 
-    /** 退出清理：移除 gizmo 指针监听器 + 释放几何/材质 */
+    /* 点击选中（画布内、Gizmo 未消费时） */
+    const selectionPointer = setupBoneEditPointer(world, camera, renderer.domElement, onPicked, dragCoordinator)
+
+    /* 右侧常驻视图/编辑面板 */
+    const viewPanel = setupBoneViewPanel(world, timeline.container)
+
+    /** 退出清理：移除指针监听器 + 释放几何/材质 */
     const exit = (): void => {
+        selectionPointer.destroy()
         gizmoPointer.destroy()
         renderer.domElement.removeEventListener('pointerdown', gizmoPointer.handlePointerDown)
         window.removeEventListener('pointermove', gizmoPointer.handlePointerMove)
         window.removeEventListener('pointerup', gizmoPointer.handlePointerUp)
         window.removeEventListener('pointercancel', gizmoPointer.handlePointerCancel)
         window.removeEventListener('blur', gizmoPointer.handlePointerCancel)
+        viewPanel.destroy()
         gizmo.dispose()
         window.location.reload()
     }
@@ -154,12 +204,16 @@ export const setupBoneEditMode = (
     const updater = (dt: number): void => {
         cameraControl.update(dt)
         timeline.updater(dt)
+        /* 动画播放器写入关节后，重建翅膜等骨骼驱动部件 */
+        world.updater(dt)
 
         /** 更新 gizmo 位置/旋转跟随选中关节 */
         const selection = world.getSelection()
         const entity = world.getFocus()
+        const viewSettings = world.getViewSettings()
         let hasSelection = false
-        if (selection !== undefined && selection.kind === 'joint' && entity !== undefined) {
+        if (selection !== undefined && selection.kind === 'joint' && entity !== undefined
+            && viewSettings.editEnabled && viewSettings.showJoints) {
             entity.skeleton.updateWorldTransforms()
             const jointWorldPos = entity.skeleton.getWorldPosition(selection.id)
             const jointWorldQuat = entity.skeleton.getWorldRotation(selection.id)

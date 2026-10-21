@@ -17,6 +17,7 @@ import {
 import {getInputRegistry} from '../../input/registry.ts'
 import {DEFAULT_WEAPON_ID} from '../../character/weapon/catalog.ts'
 import type {ArmorLoadout} from '../../character/armor/types.ts'
+import {bodyFormOf} from '../../entity/character/body_form/index.ts'
 import {createInventoryPanel, type InventoryPanel} from './inventory_ui/panel.ts'
 import {createContainerPanel, type ContainerPanel} from './container_ui/panel.ts'
 import {createEquipmentPreview, type EquipPreviewData} from './equipment_ui/preview.ts'
@@ -54,12 +55,14 @@ export const setupHakoniwa = (
         getInventory: () => inventory,
         onMove: (instanceId, placement) => moveStack(inventory, instanceId, placement),
         onEquip: (instanceId, slot) => {
+            const player = characterSystem.getPlayerCharacter()
+            const bodyFormId = player !== undefined ? bodyFormOf(player.config.bodyFormId).id : undefined
             if (slot === undefined) {
                 const def = findItemDef(findStack(inventory, instanceId)?.defId ?? '')
                 const target: EquipSlot = def?.category === 'weapon' ? 'main_hand' : (def?.equipSlot ?? 'main_hand')
-                return equipStack(inventory, instanceId, target)
+                return equipStack(inventory, instanceId, target, {bodyFormId})
             }
-            return equipStack(inventory, instanceId, slot)
+            return equipStack(inventory, instanceId, slot, {bodyFormId})
         },
         onUnequip: (slot) => unequipSlot(inventory, slot),
         onDrop: (instanceId) => dropToWorld(instanceId),
@@ -121,6 +124,14 @@ export const setupHakoniwa = (
             undefined, undefined, undefined, undefined, undefined,
             {armor: armor as ArmorLoadout},
         )
+        /* 吐息仅 wyvern 可用：非龙体形自动卸下并退回背包 */
+        const plan = bodyFormOf(player.config.bodyFormId)
+        if (plan.equipSlots.breath === true) {
+            characterSystem.setBreathModule(player.id, equippedDef('breath')?.breathModuleId)
+        } else {
+            if (inventory.equipment.breath !== undefined) unequipSlot(inventory, 'breath')
+            characterSystem.setBreathModule(player.id, undefined)
+        }
         refreshPreview()
     }
 

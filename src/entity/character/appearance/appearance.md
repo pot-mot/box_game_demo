@@ -30,8 +30,8 @@
 - **主 / 副手槽位**：`CharacterModel` 暴露 `mainSlot()` / `offSlot()`；`equipSlot` 把主手武器挂 `mainHandSide(handedness)` 对应的挂点（右撇子 = `rightWeaponMount`，左撇子 = `leftWeaponMount`），副手同理。非对称网格按 `mirrorScale()` 设 `scale.x`（**仅左撇子 = `-1`**，右撇子含其副手 = `1`；主/副手两侧的差异由挂点决定，不靠缩放），护甲 / 肢体同理。
 - **切换入口 `setHandedness(handedness)`**：互换主/副手槽内容（`swapSlotContents`）并重挂网格；`world.ts` 的 `updateCharacterConfig` 调用它，切换后需重解析 clip 与刷新外观。
 - **clip 镜像**：`appearance/clips/attack_clips.ts`（`getAttackClipById(id, handedness)`）与 `base_clips.ts`（`getBaseClip(..., handedness)`）按键含 handedness 惰性缓存；`'left'` 时对 canonical clip 施加 `skeleton/anim/mirror.ts` 的 `mirrorClip`（左右关节 id 互换 + 四元数/欧拉共轭 + 位置 `x→-x`；对任意欧拉顺序成立）。逐帧零开销。
-- **双手 IK 支撑侧**：`system.ts` 双手共持（`holdMode === 'two_handed'` 且持械）时 IK 根 = `offHandSide(handedness)` 的肩（右撇子左肩、左撇子右肩），`two_handed_ik.ts` 的 `gripJointId(skeleton, side)` 取该侧腕关节。**生效范围 = 攻击态 + 全部非攻击持械状态**（待机 / 行走 / 跳跃 / 下落 / 死亡 / 翻滚 / 受击 / 交互 / 倒地 / 起身 / 格挡 / 破防）：支撑手链每帧追随武器轴上的副握点，而非简单复制主手姿态。
-- **bone_edit 预览**：编辑器用同一镜像路径——`timeline.ts` 的 `previewClip`（`'left'` 时 `mirrorClip`）驱动播放器与洋葱皮；`weapon_control.ts` 的 `setHandedness` 切挂点 / 支撑侧并重载武器；采集关键帧时由 `mirror_capture.ts` 把镜像姿势反射回 canonical 轨道写入（轨道列表 / 选择仍为 canonical）。
+- **双手共持不再逐帧求解支撑手 IK**：`clips/support_hand_bake.ts` 在攻击 clip 首次解析时，按 30fps 采样主武器副握点并求解支撑手臂链，把左肩 / 左肘写成显式关键帧（含原关键帧时刻），随后 `mirrorClip` 派生左撇子版本；播放时只做普通 clip 采样。基础状态（idle / walking / jumping 等）在 `getBaseClipForHoldMode` 收到当前武器副握点时同样烘焙，并按武器挂点 uuid 在换武器时重建 clip。编辑器仍可给末端节点配置节点 IK（CCD / FABRIK + 父级段数）做手动调整。
+- **bone_edit 预览**：编辑器用同一镜像路径——`timeline.ts` 的 `previewClip`（`'left'` 时 `mirrorClip`）驱动播放器与洋葱皮；`weapon_control.ts` 的 `setHandedness` 切主手挂点并重载武器；采集关键帧时由 `mirror_capture.ts` 把镜像姿势反射回 canonical 轨道写入（轨道列表 / 选择仍为 canonical）。
 
 ## 游泳 / 漂浮姿态与碰撞节点
 

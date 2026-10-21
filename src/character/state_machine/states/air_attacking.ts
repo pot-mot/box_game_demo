@@ -120,6 +120,7 @@ export const airAttackingHandler: StateHandler = {
         c.attackCharge = 0
         c.attackHolding = false
         c.chargeCommitted = false
+        c.activeWeapon = c.weapon
     },
     transitions: [
         {

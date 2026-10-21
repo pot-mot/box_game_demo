@@ -20,8 +20,8 @@ import {
 
 /** 各体形 Tab 的天然 / 允许武器（攻击模组）清单（武器只属于一种体形，用其体形专属 id） */
 const CREATURE_TABS: readonly {readonly key: string; readonly labelKey: StringLocaleKey; readonly weapons: readonly string[]}[] = [
-    {key: 'wyvern', labelKey: 'showcase.tab.wyvern', weapons: ['wyvern_claw', 'wyvern_breath']},
-    {key: 'horse', labelKey: 'showcase.tab.horse', weapons: ['horse_kick', 'horse_spear', 'horse_throwing_axe']},
+    {key: 'wyvern', labelKey: 'showcase.tab.wyvern', weapons: ['wyvern_claw']},
+    {key: 'horse', labelKey: 'showcase.tab.horse', weapons: ['horse_iron_hoof']},
     {key: 'wolf', labelKey: 'showcase.tab.wolf', weapons: ['wolf_bite', 'wolf_short_sword', 'wolf_long_sword']},
 ]
 

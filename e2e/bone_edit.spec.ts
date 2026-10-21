@@ -105,7 +105,7 @@ test.describe('骨骼动画编辑模式', () => {
         expect(armCount).toBeGreaterThanOrEqual(2)
     })
 
-    test('编辑器武器：攻击动作自动装备对应武器，双手武器左手贴合到武器', async ({page}) => {
+    test('编辑器武器：攻击动作自动装备对应武器，切换体形同步对应体形武器', async ({page}) => {
         await page.goto('/')
         await page.waitForSelector('#startup-overlay', {timeout: 5000})
         await page.locator('button', {hasText: '骨骼动画'}).click()
@@ -113,33 +113,21 @@ test.describe('骨骼动画编辑模式', () => {
         /* 武器占用的两个骨骼位在轨道列表中可见 */
         await expect(page.locator('[data-track-target="rightWeaponMount"]')).toBeAttached()
         await expect(page.locator('[data-track-target="leftWeaponMount"]')).toBeAttached()
-        /* 进入编辑器即有默认武器（长剑），且左手贴合默认关闭（编辑时两只手互不牵扯） */
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'long_sword')
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-assist', 'off')
+        /* 进入编辑器默认同步人形体形的默认武器（空手） */
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'unarmed')
 
-        /* 选长剑轻击一段 → 自动装备长剑（单手，不求解左手） */
+        /* 选长剑轻击一段 → 自动装备长剑（单手） */
         await page.selectOption('#bone-anim-select', 'builtin:long_sword_one_handed_light_1')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'long_sword')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-two-handed', 'false')
 
-        /* 选巨剑 → 自动换成巨剑（双手）；贴合默认关闭，播放时左手也不被牵扯 */
+        /* 选巨剑 → 自动换成巨剑（双手）；不再有自动副手贴合开关 */
         await page.selectOption('#bone-anim-select', 'builtin:heavy_sword_two_handed_light_1')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'heavy_sword')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-two-handed', 'true')
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-solved', 'false')
         await page.locator('#bone-timeline-play').click()
         await page.waitForTimeout(300)
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-solved', 'false')
-
-        /* 打开「左手贴合」→ 左手链才求解到武器副握点（暂停状态下即时生效） */
-        await page.locator('#bone-grip-toggle').click()
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-assist', 'on')
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-solved', 'true')
-
-        /* 关闭贴合 → 解除左手约束（回到由动画驱动的左手姿态） */
-        await page.locator('#bone-grip-toggle').click()
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-assist', 'off')
-        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-grip-solved', 'false')
+        await expect(page.locator('#bone-grip-toggle')).toHaveCount(0)
 
         /* 基础状态：空手变体卸下武器，持械变体保留当前武器 */
         await page.selectOption('#bone-anim-select', 'builtin:state/idle')
@@ -163,6 +151,41 @@ test.describe('骨骼动画编辑模式', () => {
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'war_hammer')
         await page.selectOption('#bone-handedness-select', 'right')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-handedness', 'right')
+
+        /* 切换体形：武器列表与当前武器同步到该体形默认武器 */
+        await page.selectOption('#bone-form-select', 'wolf')
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-form', 'wolf')
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'wolf_bite')
+        await expect(page.locator('#bone-weapon-select option[value="wolf_bite"]')).toBeAttached()
+        await expect(page.locator('#bone-handedness-select')).toBeHidden()
+    })
+
+    test('右侧常驻面板：编辑开关与节点/骨骼/模型显示独立控制', async ({page}) => {
+        await page.goto('/')
+        await page.waitForSelector('#startup-overlay', {timeout: 5000})
+        await page.locator('button', {hasText: '骨骼动画'}).click()
+        const panel = page.locator('#bone-view-panel')
+        await expect(panel).toBeVisible()
+        await expect(panel).toHaveAttribute('data-edit-enabled', 'true')
+        await expect(panel).toHaveAttribute('data-show-joints', 'true')
+        await expect(panel).toHaveAttribute('data-show-bones', 'true')
+        await expect(panel).toHaveAttribute('data-show-model', 'true')
+
+        await page.locator('#bone-edit-lock').uncheck()
+        await expect(panel).toHaveAttribute('data-edit-enabled', 'false')
+        await page.locator('#bone-show-joints').uncheck()
+        await expect(panel).toHaveAttribute('data-show-joints', 'false')
+        await page.locator('#bone-show-bones').uncheck()
+        await expect(panel).toHaveAttribute('data-show-bones', 'false')
+        await page.locator('#bone-show-model').uncheck()
+        await expect(panel).toHaveAttribute('data-show-model', 'false')
+
+        await page.locator('#bone-edit-lock').check()
+        await page.locator('#bone-show-joints').check()
+        await page.locator('#bone-show-bones').check()
+        await page.locator('#bone-show-model').check()
+        await expect(panel).toHaveAttribute('data-edit-enabled', 'true')
+        await expect(panel).toHaveAttribute('data-show-model', 'true')
     })
 
     test('导出资产触发下载', async ({page}) => {
@@ -176,6 +199,72 @@ test.describe('骨骼动画编辑模式', () => {
         if (download) {
             expect(download.suggestedFilename()).toContain('bone-asset')
         }
+    })
+
+    test('函数编排模式：懒烘焙内置脚本、可播放预览并转回轨道', async ({page}) => {
+        await page.goto('/')
+        await page.waitForSelector('#startup-overlay', {timeout: 5000})
+        await page.locator('button', {hasText: '骨骼动画'}).click()
+        await expect(page.locator('#bone-timeline')).toBeVisible()
+        await page.locator('#bone-mode-script').click()
+        const timeline = page.locator('#bone-timeline')
+        const panel = page.locator('#bone-script-panel')
+        await expect(panel).toBeVisible()
+        await expect(timeline).toHaveAttribute('data-authoring-mode', 'script')
+        await expect(panel).toHaveAttribute('data-form', 'humanoid')
+        await expect(panel).toHaveAttribute('data-baked-count', '3')
+        await expect(page.locator('[data-script-id="wave"]')).toHaveAttribute('data-baked', 'true')
+        await expect(page.locator('[data-script-id="march"]')).toHaveAttribute('data-baked', 'true')
+        await page.locator('#bone-timeline-play').click()
+        await page.waitForTimeout(250)
+        const time = Number(await page.locator('#bone-script-progress').getAttribute('data-time'))
+        expect(time).toBeGreaterThan(0)
+        await page.locator('#bone-timeline-stop').click()
+        await page.locator('#bone-script-to-tracks').click()
+        await expect(timeline).toHaveAttribute('data-authoring-mode', 'tracks')
+        await expect(panel).toBeHidden()
+        const count = Number(await page.locator('[data-track-target="headNeck"] [data-keyframe-count]').getAttribute('data-keyframe-count'))
+        expect(count).toBeGreaterThan(0)
+    })
+
+    test('体形切换：脚本动作与动画库按 form 独立', async ({page}) => {
+        await page.goto('/')
+        await page.waitForSelector('#startup-overlay', {timeout: 5000})
+        await page.locator('button', {hasText: '骨骼动画'}).click()
+        await expect(page.locator('#bone-timeline')).toBeVisible()
+        await page.locator('#bone-mode-script').click()
+        const timeline = page.locator('#bone-timeline')
+        const panel = page.locator('#bone-script-panel')
+        await page.selectOption('#bone-form-select', 'wolf')
+        await expect(timeline).toHaveAttribute('data-form', 'wolf')
+        await expect(panel).toHaveAttribute('data-form', 'wolf')
+        await expect(page.locator('[data-script-id="tail_wag"]')).toHaveAttribute('data-baked', 'true')
+        await page.selectOption('#bone-form-select', 'horse')
+        await expect(panel).toHaveAttribute('data-form', 'horse')
+        await expect(page.locator('[data-script-id="head_nod"]')).toHaveAttribute('data-baked', 'true')
+    })
+
+    test('非人形体形隐藏惯用手但仍显示自身武器，且列出自身内置动画', async ({page}) => {
+        await page.goto('/')
+        await page.waitForSelector('#startup-overlay', {timeout: 5000})
+        await page.locator('button', {hasText: '骨骼动画'}).click()
+        await expect(page.locator('#bone-timeline')).toBeVisible()
+        await page.selectOption('#bone-form-select', 'wyvern')
+        const timeline = page.locator('#bone-timeline')
+        await expect(timeline).toHaveAttribute('data-form', 'wyvern')
+        await expect(timeline).toHaveAttribute('data-authoring-mode', 'tracks')
+        expect(Number(await timeline.getAttribute('data-builtin-clip-count'))).toBeGreaterThan(0)
+        await expect(page.locator('#bone-weapon-select')).toBeVisible()
+        await expect(page.locator('#bone-handedness-select')).toBeHidden()
+        await expect(timeline).toHaveAttribute('data-weapon', 'wyvern_claw')
+
+        /* 非人形内置动作可实际载入：攻击段有关键帧，骨架段（bones）出现在轨道列表中 */
+        const option = page.locator('#bone-anim-select option[data-builtin-id="wyvern_claw_one_handed_light_1"]')
+        const optionValue = await option.getAttribute('value')
+        expect(optionValue).not.toBeNull()
+        await page.selectOption('#bone-anim-select', optionValue!)
+        await expect(page.locator('[data-track-target="body"] [data-keyframe-count]')).not.toHaveText('0')
+        await expect(page.locator('[data-track-target="spineSeg"]')).toBeVisible()
     })
 
     test('时间轴面板可拖拽调高度（renderer 视窗联动）', async ({page}) => {

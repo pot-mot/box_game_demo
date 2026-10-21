@@ -1,8 +1,18 @@
 import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
+import type {CharacterState} from '../../character/state_machine/types.ts'
 import {getAttackClipById, getBaseClip} from '../../entity/character/appearance/builtin_catalog.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../character/weapon/catalog.ts'
-import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
+import {
+    HORSE_BODY_FORM_ID,
+    HUMANOID_BODY_FORM_ID,
+    WOLF_BODY_FORM_ID,
+    WYVERN_BODY_FORM_ID,
+} from '../../entity/character/body_form/index.ts'
+import {wolfAttackClip, wolfBaseClip} from '../../entity/character/forms/wolf/clips.ts'
+import {horseAttackClip, horseBaseClip} from '../../entity/character/forms/horse/clips.ts'
+import {wyvernAttackClip, wyvernBaseClip} from '../../entity/character/forms/wyvern/clips.ts'
+import {WYVERN_BREATH_MODULES} from '../../entity/character/forms/wyvern/breath.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
@@ -123,10 +133,44 @@ const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']
 export const BASE_STATE_ENTRY_COUNT = BASE_STATE_ORDER.reduce(
     (sum, state) => sum + (WEAPON_VARIANT_STATES.includes(state) ? 2 : 1), 0)
 
-const buildBaseEntries = (): BuiltinClipEntry[] => {
+/** 体形 clip 来源：人形走生产缓存，生物走各自 `forms/<form>/clips.ts` 烘焙缓存 */
+interface ClipProvider {
+    readonly attackClip: (segment: AttackSegment) => BoneAnimationClip
+    readonly baseClip: (state: BaseState, held: boolean) => BoneAnimationClip
+    /** 基础状态是否有「持械 / 空手」两种变体（仅人形） */
+    readonly weaponVariants: boolean
+    /** 是否跳过天然武器（人形天然武器动作由体形分包提供） */
+    readonly skipNaturalWeapons: boolean
+}
+
+const humanoidProvider: ClipProvider = {
+    attackClip: segment => getAttackClipById(segment.poses[0]?.poseId ?? segment.id),
+    baseClip: (state, held) => getBaseClip(state, held, 0),
+    weaponVariants: true,
+    skipNaturalWeapons: true,
+}
+
+const creatureProvider = (
+    baseClip: (state: CharacterState) => BoneAnimationClip,
+    attackClip: (segment: AttackSegment) => BoneAnimationClip,
+): ClipProvider => ({
+    attackClip,
+    baseClip: state => baseClip(state),
+    weaponVariants: false,
+    skipNaturalWeapons: false,
+})
+
+const CLIP_PROVIDERS: Readonly<Record<string, ClipProvider>> = {
+    [HUMANOID_BODY_FORM_ID]: humanoidProvider,
+    [WOLF_BODY_FORM_ID]: creatureProvider(wolfBaseClip, wolfAttackClip),
+    [HORSE_BODY_FORM_ID]: creatureProvider(horseBaseClip, horseAttackClip),
+    [WYVERN_BODY_FORM_ID]: creatureProvider(wyvernBaseClip, wyvernAttackClip),
+}
+
+const buildBaseEntries = (provider: ClipProvider): BuiltinClipEntry[] => {
     const entries: BuiltinClipEntry[] = []
     for (const state of BASE_STATE_ORDER) {
-        const hasWeaponVariants = WEAPON_VARIANT_STATES.includes(state)
+        const hasWeaponVariants = provider.weaponVariants && WEAPON_VARIANT_STATES.includes(state)
         const variants: readonly {held: boolean; suffixKey?: StringLocaleKey}[] = hasWeaponVariants
             ? [
                 {held: false, suffixKey: 'bone_edit.state.variant_bare'},
@@ -140,7 +184,7 @@ const buildBaseEntries = (): BuiltinClipEntry[] => {
                 `state/${state}${held ? '_held' : ''}`,
                 GROUP_BASE,
                 labelOf(),
-                getBaseClip(state, held, 0),
+                provider.baseClip(state, held),
                 /* 仅持械/空手变体带标记：空手变体在编辑器里卸下武器，持械变体保留当前武器；
                  * 其余基础状态（跳跃/下落/死亡/翻滚/受击）无持械语义 → 保留当前武器 */
                 hasWeaponVariants ? {weaponHeld: held} : {},
@@ -153,20 +197,20 @@ const buildBaseEntries = (): BuiltinClipEntry[] => {
 
 /* ── 攻击动作（全部武器 × 其武器模组声明的攻击段） ── */
 
-/** 攻击 clip：取段**首个 pose** 的显式骨骼关键帧数据（与运行时装配 `appearance/system.ts` 同源）。
- *  蓄力重击等变体段复用普通重击的 pose，因此按 poseId 取而非段 id。 */
-const buildAttackSource = (segment: AttackSegment): BoneAnimationClip =>
-    getAttackClipById(segment.poses[0]?.poseId ?? segment.id)
-
 /**
  * 攻击条目：逐武器枚举其**全部持握模式**的攻击段（顺序 = `orderedSegments`：轻1 → 轻2 → 重1 → 重2，
  * 条件起手变体段接在所属攻击键末尾），故「同链 1、2 段相邻、轻链在重链之前」由武器链数据本身保证。
  * 多模式武器（近战）标签带持握模式名以保持全库唯一；单段武器（远程）标签只用武器名。
+ * 人形攻击 clip 取段首个 pose 的生产缓存；生物体形使用各自分包按段 id 烘焙的 clip。
  */
-const buildAttackEntries = (): BuiltinClipEntry[] =>
-    weaponsOfForm(HUMANOID_BODY_FORM_ID).flatMap(weapon => {
-        /* 天然武器（空手 / 撕咬 / 吐息…）无可视模型且动画由体形分包提供，不入人形动作库 */
-        if (weapon.natural === true) return []
+const buildAttackEntries = (formId: string, provider: ClipProvider): BuiltinClipEntry[] => {
+    /* 龙吐息是独立装备槽，不属于 `bodyForm.weapons`；编辑器仍应能直接预览三种吐息动作 */
+    const weapons = formId === WYVERN_BODY_FORM_ID
+        ? [...weaponsOfForm(formId), ...WYVERN_BREATH_MODULES]
+        : weaponsOfForm(formId)
+    return weapons.flatMap(weapon => {
+        /* 人形天然武器（空手 / 撕咬 / 吐息…）无可视模型且动画由体形分包提供，不入人形动作库 */
+        if (provider.skipNaturalWeapons && weapon.natural === true) return []
         const multiMode = weapon.holdModes.length > 1
         return weapon.holdModes.flatMap(holdMode => {
             const segments = orderedSegments(weaponAttacksOf(weapon, holdMode))
@@ -174,30 +218,40 @@ const buildAttackEntries = (): BuiltinClipEntry[] =>
                 const labelOf = (): string => segments.length > 1
                     ? `${weaponDisplayName(weapon)} · ${multiMode ? `${translate(HOLD_MODE_LABELS[holdMode])} · ` : ''}${segmentDisplayName(segment)}`
                     : weaponDisplayName(weapon)
+                /* 吐息段在运行时由 `composeClawAndBreath` 标记 attackWeaponId；编辑器直接预览时补上，
+                 * 避免把吐息段误当作近战段生成 hitbox 事件轨 */
+                const source = weapon.id.startsWith('breath_')
+                    ? {...segment, attackWeaponId: weapon.id}
+                    : segment
                 return entryOf(
                     segment.id,
                     weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,
                     labelOf(),
-                    buildAttackSource(segment),
+                    provider.attackClip(source),
                     {weaponId: weapon.id, segmentId: segment.id, holdMode},
                     labelOf,
                 )
             })
         })
     })
-
-/* ── 动画库（惰性构建并缓存：主入口静态导入本模块，构建成本推迟到进入骨骼动画模式） ── */
-
-let cachedLibrary: readonly BuiltinClipEntry[] | undefined
-
-/** 全部内置动作（基础状态 + 全部武器的攻击段） */
-export const getBuiltinClips = (): readonly BuiltinClipEntry[] => {
-    if (cachedLibrary === undefined) {
-        cachedLibrary = [...buildBaseEntries(), ...buildAttackEntries()]
-    }
-    return cachedLibrary
 }
 
-/** 按 id 查找内置动作条目 */
-export const findBuiltinClip = (id: string): BuiltinClipEntry | undefined =>
-    getBuiltinClips().find(entry => entry.id === id)
+/* ── 动画库（按体形惰性构建并缓存：主入口静态导入本模块，构建成本推迟到进入骨骼动画模式） ── */
+
+const cachedLibraries = new Map<string, readonly BuiltinClipEntry[]>()
+
+/** 指定体形的内置动作：人形 + 狼 / 马 / 飞龙各自的生产基础状态与攻击段 */
+export const getBuiltinClips = (formId: string = HUMANOID_BODY_FORM_ID): readonly BuiltinClipEntry[] => {
+    const cached = cachedLibraries.get(formId)
+    if (cached !== undefined) return cached
+    const provider = CLIP_PROVIDERS[formId]
+    const library = provider === undefined
+        ? []
+        : [...buildBaseEntries(provider), ...buildAttackEntries(formId, provider)]
+    cachedLibraries.set(formId, library)
+    return library
+}
+
+/** 按 id 查找指定体形的内置动作条目 */
+export const findBuiltinClip = (id: string, formId: string = HUMANOID_BODY_FORM_ID): BuiltinClipEntry | undefined =>
+    getBuiltinClips(formId).find(entry => entry.id === id)

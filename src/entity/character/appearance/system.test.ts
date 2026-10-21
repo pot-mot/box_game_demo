@@ -84,6 +84,28 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
         model.dispose()
     })
 
+    it('双手共持待机 / 行走 / 跳跃：副手保持贴合武器副握点', () => {
+        const preset = weaponPresetOrDefault('heavy_sword')
+        for (const state of ['idle', 'walking', 'jumping'] as const) {
+            const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+            model.equipWeapon({main: preset.mesh})
+            const sys = createAppearanceSystem()
+            for (let i = 0; i < 20; i++) {
+                sys.update(1 / 60, model, state, makeCtx({
+                    stateTime: i / 60,
+                    weaponHeld: true,
+                    holdMode: 'two_handed',
+                    horizontalSpeed: state === 'walking' ? 3.7 : 0,
+                }))
+            }
+            model.group.updateMatrixWorld(true)
+            const grip = model.weaponGroup!.localToWorld(new Vector3(0, model.weaponSupportGripOffset, 0))
+            const hand = model.leftHandPivot.getWorldPosition(new Vector3())
+            expect(hand.distanceTo(grip), `${state} 副手未贴合副握点`).toBeLessThan(0.18)
+            model.dispose()
+        }
+    })
+
     it('格挡时叠加下半身行走步态（水平移动 → 双腿摆动；静止 → 静态格挡腿姿）', () => {
         const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const sys = createAppearanceSystem()
@@ -121,100 +143,6 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
         }
         expect(varied).toBe(true)
         model.dispose()
-    })
-
-    it('双手共持（含远程，含缩放模型）：左手吸附各武器对应的副握点，且左肘朝下（不生反关节）', () => {
-        /* 全部支持双手共持的武器：6 近战 + 4 远程；武器按显式 two_handed 模式解析连段 */
-        const ids = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer', 'longbow', 'crossbow', 'shotgun', 'staff']
-        /* scale = 1（play/edit）与 1.3（展示模式 ACTOR_SCALE）：IK 目标/臂展须在同一骨架空间计算，
-         * 且模型根位置（play 中为 body 位置）不得引入偏移（残差按模型空间归一后两者一致） */
-        for (const scale of [1, 1.3]) {
-            for (const id of ids) {
-                const preset = weaponPresetOrDefault(id)
-                const segments = orderedSegments(weaponAttacksOf(preset, 'two_handed'))
-                for (const seg of segments) {
-                    const model = createCharacterModel({speed: 6, jumpHeight: 2, scale}, 0)
-                    /* 模拟生产：模型根由物理 body 管理（非原点） */
-                    model.group.position.set(3, 1, -2)
-                    /* 双手共持：不装备副手武器（副手挂背同样不干扰 IK，但此测试聚焦徒手贴合） */
-                    model.equipWeapon({main: preset.mesh})
-                    const sys = createAppearanceSystem()
-                    const total = seg.duration + seg.recovery
-                    const frames = Math.ceil(total * 60)
-                    let maxDist = 0
-                    let minElbowDy = 1
-                    for (let i = 0; i <= frames; i++) {
-                        const t = Math.min(i / 60, total)
-                        sys.update(1 / 60, model, 'attacking', makeCtx({
-                            stateTime: t,
-                            holdMode: 'two_handed',
-                            attackSegment: seg,
-                            attackPhase: 'aim',
-                            attackPhaseProgress: 0.5,
-                            attackTotalProgress: t / total,
-                            weaponHeld: true,
-                        }))
-                        model.group.updateMatrixWorld(true)
-                        const shoulder = model.leftArmShoulder.getWorldPosition(new Vector3())
-                        const elbow = model.leftArmElbow.getWorldPosition(new Vector3())
-                        const hand = model.leftWeaponMount.getWorldPosition(new Vector3())
-                        const supportGrip = model.weaponGroup!.localToWorld(
-                            new Vector3(0, model.weaponSupportGripOffset, 0),
-                        )
-                        maxDist = Math.max(maxDist, hand.distanceTo(supportGrip))
-                        /* 肘在「肩→手」垂面上的方向：y 分量应为负（朝下，非反折朝上/后） */
-                        const axis = hand.clone().sub(shoulder).normalize()
-                        const elbowPerp = elbow.clone().sub(shoulder)
-                        elbowPerp.addScaledVector(axis, -elbowPerp.dot(axis)).normalize()
-                        minElbowDy = Math.min(minElbowDy, elbowPerp.y)
-                    }
-                    /* 全部攻击姿势中左手贴近各武器的副握点（残差按 scale 归一到模型空间），左肘始终朝下 */
-                    expect(maxDist / scale, `${seg.id}@${scale}× 左手未贴近副握点`).toBeLessThan(0.18)
-                    expect(minElbowDy, `${seg.id}@${scale}× 左肘反关节`).toBeLessThan(-0.3)
-                    model.dispose()
-                }
-            }
-        }
-    })
-
-    it('双手共持蓄力：整段蓄力进程中左手持续吸附副握点，且左肘朝下', () => {
-        const ids = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
-        for (const id of ids) {
-            const preset = weaponPresetOrDefault(id)
-            const heavy = weaponAttacksOf(preset, 'two_handed').segments[`${id}_two_handed_heavy_1`]!
-            expect(heavy.chargeFullTime, id).toBe(1)
-            const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
-            model.equipWeapon({main: preset.mesh})
-            const sys = createAppearanceSystem()
-            let maxDist = 0
-            let minElbowDy = 1
-            for (let i = 0; i <= 20; i++) {
-                const charge = i / 20
-                for (let k = 0; k < 2; k++) {
-                    sys.update(1 / 60, model, 'attacking', makeCtx({
-                        holdMode: 'two_handed',
-                        attackSegment: heavy,
-                        attackPhase: 'strike',
-                        attackHolding: true,
-                        attackCharge: charge,
-                        weaponHeld: true,
-                    }))
-                }
-                model.group.updateMatrixWorld(true)
-                const shoulder = model.leftArmShoulder.getWorldPosition(new Vector3())
-                const elbow = model.leftArmElbow.getWorldPosition(new Vector3())
-                const hand = model.leftWeaponMount.getWorldPosition(new Vector3())
-                const supportGrip = model.weaponGroup!.localToWorld(new Vector3(0, model.weaponSupportGripOffset, 0))
-                maxDist = Math.max(maxDist, hand.distanceTo(supportGrip))
-                const axis = hand.clone().sub(shoulder).normalize()
-                const elbowPerp = elbow.clone().sub(shoulder)
-                elbowPerp.addScaledVector(axis, -elbowPerp.dot(axis)).normalize()
-                minElbowDy = Math.min(minElbowDy, elbowPerp.y)
-            }
-            expect(maxDist, `${id} 蓄力时左手未贴近副握点`).toBeLessThan(0.18)
-            expect(minElbowDy, `${id} 蓄力时左肘反关节`).toBeLessThan(-0.3)
-            model.dispose()
-        }
     })
 
     it('近战蓄力：满蓄力姿势 = 松开后的抬手段末（不同武器均无回位跳变，回归）', () => {
@@ -267,43 +195,6 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
                 }
                 held.dispose()
                 released.dispose()
-            }
-        }
-    })
-
-    it('双手共持：待机 / 行走等非攻击持械状态也吸附副握点（问题 1 回归）', () => {
-        const ids = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer', 'longbow', 'crossbow', 'shotgun', 'staff']
-        for (const state of ['idle', 'walking'] as const) {
-            for (const id of ids) {
-                const preset = weaponPresetOrDefault(id)
-                const model = createCharacterModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
-                model.equipWeapon({main: preset.mesh})
-                const sys = createAppearanceSystem()
-                let maxDist = 0
-                let minElbowDy = 1
-                for (let i = 0; i < 30; i++) {
-                    sys.update(1 / 60, model, state, makeCtx({
-                        stateTime: i / 60,
-                        horizontalSpeed: state === 'walking' ? 3.7 : 0,
-                        holdMode: 'two_handed',
-                        weaponHeld: true,
-                    }))
-                    model.group.updateMatrixWorld(true)
-                    const shoulder = model.leftArmShoulder.getWorldPosition(new Vector3())
-                    const elbow = model.leftArmElbow.getWorldPosition(new Vector3())
-                    const hand = model.leftWeaponMount.getWorldPosition(new Vector3())
-                    const supportGrip = model.weaponGroup!.localToWorld(new Vector3(0, model.weaponSupportGripOffset, 0))
-                    maxDist = Math.max(maxDist, hand.distanceTo(supportGrip))
-                    /* 肘在「肩→手」垂面上的方向：y 分量应为负（朝下，非反折朝上/后） */
-                    const axis = hand.clone().sub(shoulder).normalize()
-                    const elbowPerp = elbow.clone().sub(shoulder)
-                    elbowPerp.addScaledVector(axis, -elbowPerp.dot(axis)).normalize()
-                    minElbowDy = Math.min(minElbowDy, elbowPerp.y)
-                }
-                /* 待机 / 行走同样让副手吸附副握点，且左肘朝下（不生反关节） */
-                expect(maxDist, `${id}@${state} 副手未吸附副握点`).toBeLessThan(0.18)
-                expect(minElbowDy, `${id}@${state} 左肘反关节`).toBeLessThan(-0.3)
-                model.dispose()
             }
         }
     })

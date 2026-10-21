@@ -7,7 +7,7 @@ import {serializeAsset, parseAsset, skeletonToDefinition, skeletonFromDefinition
 import type {SkeletonAnimationAsset} from './serialization.ts'
 import type {BoneAnimationClip} from './types.ts'
 
-/** 构建人形简化骨架（带 IK 根标记） */
+/** 构建人形简化骨架（带节点 IK 配置） */
 const buildSkeleton = (): ReturnType<typeof createSkeleton> => {
     const skeleton = createSkeleton()
     const spine = createSkeletonJoint('spine', 'spine')
@@ -17,7 +17,7 @@ const buildSkeleton = (): ReturnType<typeof createSkeleton> => {
     connectJoint(shoulder, elbow)
     shoulder.position.set(0.3, 0.4, 0)
     elbow.position.set(0, -0.3, 0)
-    shoulder.ikRootLevel = 0
+    shoulder.ik = {solver: 'fabrik', chainDepth: 3}
     skeleton.addJoint(spine)
     skeleton.addJoint(shoulder)
     skeleton.addJoint(elbow)
@@ -73,12 +73,29 @@ describe('资产序列化/解析', () => {
         expect(clip.eventTracks[0].records[0].params?.weapon).toBe('sword')
     })
 
-    it('ikRootLevel 持久化', () => {
+    it('节点 IK 配置持久化', () => {
         const parsed = parseAsset(serializeAsset(makeAsset()))
         const shoulder = parsed.skeleton.joints.find(j => j.id === 'shoulder')!
-        expect(shoulder.ikRootLevel).toBe(0)
+        expect(shoulder.ik).toEqual({solver: 'fabrik', chainDepth: 3})
         const spine = parsed.skeleton.joints.find(j => j.id === 'spine')!
-        expect(spine.ikRootLevel).toBeUndefined()
+        expect(spine.ik).toBeUndefined()
+    })
+
+    it('旧资产中的 ikRootLevel 被安全忽略', () => {
+        const parsed = parseAsset(JSON.stringify({
+            skeleton: {
+                joints: [{
+                    id: 'root',
+                    name: 'root',
+                    position: [0, 0, 0],
+                    rotation: [0, 0, 0, 1],
+                    ikRootLevel: 0,
+                }],
+                bones: [],
+            },
+            animations: [],
+        }))
+        expect(parsed.skeleton.joints[0]?.ik).toBeUndefined()
     })
 
     it('非法 JSON 抛错', () => {
@@ -109,7 +126,7 @@ describe('资产序列化/解析', () => {
 })
 
 describe('骨架定义转换', () => {
-    it('skeletonToDefinition → skeletonFromDefinition 往返：层级/位置/旋转/IK 根一致', () => {
+    it('skeletonToDefinition → skeletonFromDefinition 往返：层级/位置/旋转/节点 IK 一致', () => {
         const original = buildSkeleton()
         original.updateWorldTransforms()
         const elbowWorldBefore = original.getWorldPosition('elbow')!.clone()
@@ -123,7 +140,7 @@ describe('骨架定义转换', () => {
             expect(rebuiltJoint.name).toBe(joint.name)
             expect(rebuiltJoint.position.distanceTo(joint.position)).toBeLessThan(1e-6)
             expect(rebuiltJoint.rotation.angleTo(joint.rotation)).toBeLessThan(1e-6)
-            expect(rebuiltJoint.ikRootLevel).toBe(joint.ikRootLevel)
+            expect(rebuiltJoint.ik).toEqual(joint.ik)
             expect(rebuiltJoint.parent?.id).toBe(joint.parent?.id)
         }
         for (const [id, bone] of original.bones) {

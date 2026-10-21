@@ -46,6 +46,9 @@ const BULLET_MAT = new MeshStandardMaterial({color: 0xd9b24a, roughness: 0.35, m
 
 const ORB_CORE_GEOM = new SphereGeometry(ORB_CORE_RADIUS, 10, 8)
 const ORB_GLOW_GEOM = new SphereGeometry(ORB_GLOW_RADIUS, 10, 8)
+const LIGHTNING_CORE_GEOM = new CylinderGeometry(0.035, 0.06, 0.7, 6)
+const LIGHTNING_GLOW_GEOM = new SphereGeometry(0.16, 8, 6)
+const LASER_CORE_GEOM = new CylinderGeometry(0.055, 0.09, 1.3, 6)
 
 /** 从武器模型推导魔法球颜色（法杖取球颜色 / 魔杖取宝石颜色） */
 const magicColorOf = (mesh: WeaponMeshConfig): number | undefined => {
@@ -161,6 +164,73 @@ const genMagicOrb = (color: number): ProjectileVisual => {
     }
 }
 
+/** 雷电：细长发光弹体 + 光晕，沿速度朝向 */
+const genLightning = (color: number): ProjectileVisual => {
+    const group = new Group()
+    const coreMat = new MeshBasicMaterial({color: lightenColor(color, 1.5)})
+    const glowMat = new MeshBasicMaterial({
+        color, transparent: true, opacity: 0.42,
+        blending: AdditiveBlending, depthWrite: false,
+    })
+    const core = new Mesh(LIGHTNING_CORE_GEOM, coreMat)
+    core.rotation.x = Math.PI / 2
+    group.add(core)
+    const glow = new Mesh(LIGHTNING_GLOW_GEOM, glowMat)
+    glow.scale.set(0.7, 0.7, 2.2)
+    group.add(glow)
+    const trail = createProjectileTrail(lightenColor(color, 1.35))
+    return {
+        group,
+        orientation: 'velocity',
+        trailMesh: trail.mesh,
+        trail,
+        animate: (elapsed: number) => {
+            const pulse = 0.85 + Math.sin(elapsed * 38) * 0.15
+            glow.scale.set(0.7 * pulse, 0.7 * pulse, 2.2)
+        },
+        dispose: () => {
+            group.clear()
+            coreMat.dispose()
+            glowMat.dispose()
+            trail.dispose()
+        },
+    }
+}
+
+/** 激光：细长穿透光束 + 加色光晕 */
+const genLaser = (color: number): ProjectileVisual => {
+    const group = new Group()
+    const coreMat = new MeshBasicMaterial({color: lightenColor(color, 1.7)})
+    const glowMat = new MeshBasicMaterial({
+        color, transparent: true, opacity: 0.5,
+        blending: AdditiveBlending, depthWrite: false,
+    })
+    const core = new Mesh(LASER_CORE_GEOM, coreMat)
+    core.rotation.x = Math.PI / 2
+    group.add(core)
+    const glow = new Mesh(LASER_CORE_GEOM, glowMat)
+    glow.rotation.x = Math.PI / 2
+    glow.scale.set(2.4, 1.1, 2.4)
+    group.add(glow)
+    const trail = createProjectileTrail(lightenColor(color, 1.4))
+    return {
+        group,
+        orientation: 'velocity',
+        trailMesh: trail.mesh,
+        trail,
+        animate: (elapsed: number) => {
+            const pulse = 1 + Math.sin(elapsed * 42) * 0.12
+            glow.scale.set(2.4 * pulse, 1.1, 2.4 * pulse)
+        },
+        dispose: () => {
+            group.clear()
+            coreMat.dispose()
+            glowMat.dispose()
+            trail.dispose()
+        },
+    }
+}
+
 const genThrownWeapon = (meshConfig: WeaponMeshConfig): ProjectileVisual => {
     const weapon = createWeaponMesh(meshConfig)
     /* 外层 root 承担物理位移 / 旋转，内层武器模型保留烘焙的握持变换，
@@ -190,6 +260,14 @@ const buildVisual = (spec: ProjectileVisualSpec, meshConfig: WeaponMeshConfig): 
             const color = spec.color ?? magicColorOf(meshConfig) ?? ORB_DEFAULT_COLOR
             return genMagicOrb(color)
         }
+        case 'laser': {
+            const color = spec.color ?? 0xff5f8d
+            return genLaser(color)
+        }
+        case 'lightning': {
+            const color = spec.color ?? 0x8fc8ff
+            return genLightning(color)
+        }
     }
 }
 
@@ -197,6 +275,8 @@ const buildVisual = (spec: ProjectileVisualSpec, meshConfig: WeaponMeshConfig): 
 const visualSignature = (spec: ProjectileVisualSpec, meshConfig: WeaponMeshConfig): string => {
     switch (spec.kind) {
         case 'magic_orb': return `orb:${spec.color ?? magicColorOf(meshConfig) ?? ORB_DEFAULT_COLOR}`
+        case 'laser': return `laser:${spec.color ?? 0xff5f8d}`
+        case 'lightning': return `lightning:${spec.color ?? 0x8fc8ff}`
         /* 投掷物直接复用武器模型：签名必须包含完整 mesh 参数，
          * 否则同一 model id 的不同参数（覆写 / 测试）会复用首份几何 */
         case 'thrown_weapon': return `weapon:${JSON.stringify(meshConfig)}`

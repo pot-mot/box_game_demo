@@ -19,18 +19,6 @@ export const BONE_DIAMOND_THICKNESS = 0.05
 /** 骨骼段菱形最小可见长度（米，小于该值隐藏，避免退化段显示为点） */
 export const BONE_DIAMOND_MIN_LENGTH = 0.005
 
-/** 旋转指针（方向三角形）半径（米，小于关节小球半径避免遮挡小球正面拾取） */
-export const ROTATION_GIZMO_RADIUS = 0.015
-
-/** 旋转指针（方向三角形）高度（米，圆锥尖指向局部 +Z） */
-export const ROTATION_GIZMO_HEIGHT = 0.1
-
-/** 旋转指针沿局部 +Z 的偏移（米，露出关节小球） */
-export const ROTATION_GIZMO_OFFSET = 0.035
-
-/** 旋转指针颜色 */
-export const ROTATION_GIZMO_COLOR = 0xffa020
-
 /** 级联编辑默认值：默认开启、层数取满覆盖深层自定义骨架（避免默认深度截断拉伸链条） */
 export const DEFAULT_CASCADE_ENABLED = true
 export const DEFAULT_CASCADE_DEPTH = 16

@@ -1,4 +1,4 @@
-import type {Group} from 'three'
+import {Euler, type Group} from 'three'
 import {createWeaponMesh, type WeaponMeshConfig} from '../../entity/character/appearance/weapon_mesh.ts'
 import {DEFAULT_HANDEDNESS, mainHandSide, offHandSide, type Handedness} from '../../character/handedness.ts'
 
@@ -17,8 +17,12 @@ export interface SkeletonWeaponSpec {
     readonly meshConfig: WeaponMeshConfig
     /** 副手（左手）武器网格；存在即双持（挂左手武器挂点） */
     readonly offhandMeshConfig?: WeaponMeshConfig
-    /** 是否双手持握（左手需 IK 贴合武器） */
+    /** 是否双手持握（仅用于展示/动作来源标记，不再自动求解副手 IK） */
     readonly twoHanded: boolean
+    /** 专属挂点关节 id（生物体形用；缺省 = 按惯用手取手部武器挂点） */
+    readonly mountJointId?: string
+    /** 挂点局部旋转覆盖（生物体形用；应用到武器网格，避免改动骨架关节） */
+    readonly mountRotation?: readonly [number, number, number]
 }
 
 /** 已装载的副手武器（双持） */
@@ -70,10 +74,19 @@ export const equipSkeletonWeapon = (
     handedness: Handedness = DEFAULT_HANDEDNESS,
 ): SkeletonWeapon | undefined => {
     const mirrorScaleX = handedness === 'left' ? -1 : 1
-    const parent = groups.get(mountIdOf(mainHandSide(handedness))) ?? groups.get(wristIdOf(mainHandSide(handedness)))
+    const parent = spec.mountJointId !== undefined
+        ? groups.get(spec.mountJointId)
+        : groups.get(mountIdOf(mainHandSide(handedness))) ?? groups.get(wristIdOf(mainHandSide(handedness)))
     if (parent === undefined) return undefined
     const result = createWeaponMesh(spec.meshConfig)
     result.group.scale.x = mirrorScaleX
+    if (spec.mountRotation !== undefined) {
+        result.group.quaternion.setFromEuler(new Euler(
+            spec.mountRotation[0],
+            spec.mountRotation[1],
+            spec.mountRotation[2],
+        ))
+    }
     parent.add(result.group)
 
     /* 双持：副手武器挂副手侧武器挂点（缺挂点回退副手侧腕） */

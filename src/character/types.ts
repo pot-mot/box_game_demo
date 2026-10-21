@@ -22,6 +22,8 @@ export interface CharacterConfig {
     bodyFormId?: string
     /** 惯用手（缺省 = 右撇子）：决定主 / 副手槽位与动作镜像 */
     handedness?: Handedness
+    /** 吐息模组 id（仅 wyvern；缺省 = 未装备） */
+    breathModuleId?: string
     /** 韧性上限基础值（缺省 = 常量 `DEFAULT_POISE_MAX`；有效上限再叠加装备加成） */
     poiseMax?: number
     /** 受击后韧性停止回充的延迟（秒，缺省 = 常量 `DEFAULT_POISE_REGEN_DELAY`） */

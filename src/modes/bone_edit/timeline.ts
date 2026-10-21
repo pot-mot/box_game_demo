@@ -1,9 +1,13 @@
 import {Quaternion, Vector3} from 'three'
 import type {ClipJSON} from '../../skeleton/anim/serialization.ts'
+import {skeletonToDefinition} from '../../skeleton/anim/serialization.ts'
 import {createBoneAnimationPlayer} from '../../skeleton/anim/player.ts'
 import type {SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
-import type {AnimationStore} from './animation_store.ts'
+import type {FormAnimationStores} from './form_store.ts'
 import type {BoneEditHistory} from './history.ts'
+import {BONE_EDIT_FORM_PROFILES, boneEditFormProfileOf, type BoneEditFormProfile} from './form_catalog.ts'
+import {ensureScriptCache, invalidateScriptCache, type FormScriptCacheEntry} from './script_cache.ts'
+import {setupScriptView, type ScriptView} from './script_view.ts'
 import {createTimelineControls} from './timeline_controls.ts'
 import {setupTrackView} from './timeline_tracks.ts'
 import {setupTimelineLibrary} from './timeline_library.ts'
@@ -23,10 +27,18 @@ import {
     TIMELINE_PX_PER_SEC,
     TIMELINE_LABEL,
 } from './constants.ts'
-import {translate} from '../../i18n/index.ts'
+import {onLocaleChange, translate} from '../../i18n/index.ts'
 import {localizeApply} from '../../i18n/dom.ts'
 
 export type {KeyframeSelection} from './timeline_ops.ts'
+
+/** 骨骼页编辑模式：精细轨道 / 语义函数编排 */
+export type BoneEditAuthoringMode = 'tracks' | 'script'
+
+/** 时间轴主装配需要外壳提供的回调（体形切换涉及相机/骨架装配） */
+export interface TimelineHost {
+    readonly onFormChange: (formId: string) => void
+}
 
 /** 时间轴面板对外接口（index/pointer/e2e 使用） */
 export interface TimelinePanel {
@@ -34,10 +46,13 @@ export interface TimelinePanel {
     readonly updater: (dt: number) => void
     /** 当前播放头时间（DOM 可测试面：data-playhead-time） */
     readonly playheadTime: number
-    /** IK 牵引模式是否开启（指针交互读取） */
-    isIkEnabled: () => boolean
     /** 恢复动画库（undo/导入用） */
     applyLibrary: (clips: readonly ClipJSON[], currentName?: string) => void
+    /** 切换体形：切换独立动画库并刷新脚本预览 */
+    setForm: (formId: string) => void
+    /** 切换编辑模式（测试/外壳也可主动调用） */
+    setAuthoringMode: (mode: BoneEditAuthoringMode) => void
+    readonly authoringMode: BoneEditAuthoringMode
     togglePlay: () => void
     /** 导出/导入资产 */
     exportAsset: () => void
@@ -51,9 +66,11 @@ export interface TimelinePanel {
  *  + 曲线编辑器（curve_editor）+ 洋葱皮（onion_skin），主装配只负责状态与事件接线。 */
 export const setupTimelinePanel = (
     world: SkeletonEntitiesContext,
-    store: AnimationStore,
+    stores: FormAnimationStores,
     history: BoneEditHistory,
+    host: TimelineHost,
 ): TimelinePanel => {
+    const store = stores.store
     const container = document.createElement('div')
     container.id = 'bone-timeline'
     container.style.cssText = `position:fixed;left:0;right:0;bottom:0;z-index:120;background:${TIMELINE_BG};display:flex;flex-direction:column;font:12px system-ui,sans-serif;color:${TIMELINE_LABEL};height:${TIMELINE_HEIGHT}px`
@@ -67,22 +84,50 @@ export const setupTimelinePanel = (
     })
 
     /* ── 武器控制（自动跟随动画来源 / 手动覆盖；双手贴合开关，默认关）── */
-    const weaponControl = createBoneEditWeaponControl(world)
+    const weaponControl = createBoneEditWeaponControl(
+        world,
+        () => stores.activeFormId,
+        () => boneEditFormProfileOf(stores.activeFormId).defaultWeaponId,
+    )
     controls.bar.appendChild(weaponControl.select)
-    controls.bar.appendChild(weaponControl.gripToggle)
+
+    for (const profile of BONE_EDIT_FORM_PROFILES) {
+        const option = document.createElement('option')
+        option.value = profile.formId
+        localizeApply(option, el => { el.textContent = translate(profile.form.nameKey) })
+        controls.formSelect.appendChild(option)
+    }
+    controls.formSelect.value = stores.activeFormId
 
     /* ── 状态 ── */
     let pxPerSec = TIMELINE_PX_PER_SEC
     let playhead = 0
     let playing = false
-    let ikEnabled = false
     let player: ReturnType<typeof createBoneAnimationPlayer> | undefined
     let selection: KeyframeSelection = new Map()
     let copiedKeyframes: {targetId: string; kind: 'joint' | 'bone'; time: number; data: unknown}[] = []
-    /** 动画库中每个 clip 的来源（内置动作载入副本时记录，供「自动」模式选武器） */
-    const clipWeaponSource = new Map<string, ClipWeaponSource>()
+    /** 每体形动画库中每个 clip 的来源（内置动作载入副本时记录，供「自动」模式选武器） */
+    const clipWeaponSources = new Map<string, Map<string, ClipWeaponSource>>()
+    const currentClipWeaponSources = (): Map<string, ClipWeaponSource> => {
+        const formId = stores.activeFormId
+        const existing = clipWeaponSources.get(formId)
+        if (existing !== undefined) return existing
+        const created = new Map<string, ClipWeaponSource>()
+        clipWeaponSources.set(formId, created)
+        return created
+    }
     /** 上次武器同步键：动画名 + 来源武器/段，避免同一动画重复重装武器 */
     let lastWeaponSyncKey: string | undefined
+    let authoringMode: BoneEditAuthoringMode = 'tracks'
+    let scriptMotionId: string | undefined
+    let scriptCache: FormScriptCacheEntry | undefined
+    let scriptView: ScriptView | undefined
+
+    const activeProfile = (): BoneEditFormProfile => boneEditFormProfileOf(stores.activeFormId)
+    const scriptClip = (): BoneAnimationClip | undefined => {
+        if (scriptMotionId === undefined) return undefined
+        return scriptCache?.result.clips.get(scriptMotionId)
+    }
 
     /* 运行期回调槽：子模块在事件回调中经它调用主装配操作，避免循环依赖 */
     const runtime: TimelineRuntime = {
@@ -130,12 +175,9 @@ export const setupTimelinePanel = (
     })
     const onion = setupOnionSkin(world, () => previewClip(store.current), () => playhead)
 
-    /* 洋葱皮 / IK 为开合切换按钮：登记计算型本地化，语言切换时按当前开关状态重译（不覆盖开合态） */
+    /* 洋葱皮为开合切换按钮：登记计算型本地化，语言切换时按当前开关状态重译（不覆盖开合态） */
     localizeApply(controls.onionBtn, el => {
         el.textContent = translate(onion.isEnabled() ? 'bone_edit.timeline.onion_on' : 'bone_edit.timeline.onion_off')
-    })
-    localizeApply(controls.ikBtn, el => {
-        el.textContent = translate(ikEnabled ? 'bone_edit.timeline.ik_on' : 'bone_edit.timeline.ik_off')
     })
 
     /* ── 动画库（下拉 / 导入导出 / undo 恢复）── */
@@ -145,24 +187,28 @@ export const setupTimelinePanel = (
         history,
         container,
         animSelect: controls.animSelect,
-        clipWeaponSource,
+        getClipWeaponSource: currentClipWeaponSources,
         runtime,
         getWeaponData: () => ({
             weaponId: weaponControl.currentWeaponId() ?? '',
             twoHanded: weaponControl.isTwoHanded(),
-            gripAssist: weaponControl.isGripAssist(),
-            gripSolved: weaponControl.isGripSolved(),
         }),
+        getFormId: () => stores.activeFormId,
     })
 
     const playerSpeedRef = {current: 1}
 
     /** 当前动画来源（「自动」模式据此装备武器） */
     const currentWeaponSource = (): ClipWeaponSource =>
-        store.currentName !== undefined ? (clipWeaponSource.get(store.currentName) ?? {}) : {}
+        store.currentName !== undefined ? (currentClipWeaponSources().get(store.currentName) ?? {}) : {}
 
     /** 按当前动画来源同步武器（force = 强制重装，如切换聚焦骨架后） */
     const syncWeaponForCurrentClip = (force = false): void => {
+        if (authoringMode !== 'tracks') {
+            weaponControl.setEnabled(false)
+            return
+        }
+        weaponControl.setEnabled(true)
         const source = currentWeaponSource()
         const key = `${store.currentName ?? ''}|${source.weaponId ?? ''}|${source.segmentId ?? ''}`
         if (!force && key === lastWeaponSyncKey) return
@@ -170,13 +216,15 @@ export const setupTimelinePanel = (
         weaponControl.syncForClip(source)
     }
 
-    /** 预览用 clip：左撇子时施加矢状面镜像（左右轨互换 + 反射共轭）；右撇子原样返回（不拷贝） */
+    /** 预览用 clip：仅人形支持惯用手镜像；其他体形原样返回 */
     const previewClip = (clip: BoneAnimationClip | undefined): BoneAnimationClip | undefined =>
-        clip === undefined ? undefined : (weaponControl.getHandedness() === 'left' ? mirrorClip(clip) : clip)
+        clip === undefined
+            ? undefined
+            : (activeProfile().supportsHandedness && weaponControl.getHandedness() === 'left' ? mirrorClip(clip) : clip)
 
     const rebuildPlayer = (): void => {
         player?.pause()
-        const clip = previewClip(store.current)
+        const clip = previewClip(authoringMode === 'script' ? scriptClip() : store.current)
         const skeleton = world.getFocus()?.skeleton
         if (clip === undefined || skeleton === undefined) {
             player = undefined
@@ -190,26 +238,142 @@ export const setupTimelinePanel = (
          * 贴合只在播放预览的每帧（updater）且开关打开时进行 */
     }
 
+    const ensureScriptForActiveForm = (): void => {
+        const focus = world.getFocus()
+        if (focus === undefined) {
+            scriptCache = undefined
+            scriptMotionId = undefined
+            return
+        }
+        const profile = activeProfile()
+        scriptCache = ensureScriptCache(profile.formId, skeletonToDefinition(focus.skeleton), profile.motions)
+        if (scriptMotionId === undefined || !scriptCache.result.clips.has(scriptMotionId)) {
+            scriptMotionId = profile.motions.find(motion => scriptCache?.result.clips.has(motion.id))?.id
+        }
+    }
+
+    const applyModeVisibility = (): void => {
+        const profile = activeProfile()
+        const track = authoringMode === 'tracks'
+        for (const el of controls.trackOnly) el.style.display = track ? '' : 'none'
+        const weaponVisible = track
+        weaponControl.select.style.display = weaponVisible ? '' : 'none'
+        weaponControl.setEnabled(weaponVisible)
+        controls.handednessLabel.style.display = track && profile.supportsHandedness ? '' : 'none'
+        controls.handednessSelect.style.display = track && profile.supportsHandedness ? '' : 'none'
+        trackView.element.style.display = track ? '' : 'none'
+        if (scriptView !== undefined) {
+            scriptView.setVisible(!track)
+            scriptView.setVisibleProgress(!track)
+        }
+        if (track) curveEditor.update()
+        else curveWrap.style.display = 'none'
+    }
+
     const refreshControls = (): void => {
-        const clip = store.current
+        const clip = authoringMode === 'script' ? scriptClip() : store.current
         controls.loopInput.checked = clip?.loop ?? false
         controls.durationInput.value = String(round(clip?.duration ?? 0))
         controls.speedInput.value = String(playerSpeedRef.current)
+        controls.formSelect.value = stores.activeFormId
+        applyModeVisibility()
         /* 武器：「自动」模式跟随当前动画来源（仅在来源变化时重装，避免每帧重建武器网格） */
         syncWeaponForCurrentClip()
         /* 动画下拉 */
-        library.rebuildAnimOptions()
-        /* 骨架下拉 */
-        controls.skeletonSelect.innerHTML = ''
-        for (const entity of world.getEntityList()) {
-            const opt = document.createElement('option')
-            opt.value = String(entity.id)
-            opt.textContent = entity.name
-            controls.skeletonSelect.appendChild(opt)
+        if (authoringMode === 'tracks') library.rebuildAnimOptions()
+        if (scriptView !== undefined) {
+            scriptView.render(activeProfile(), scriptCache, scriptMotionId)
         }
-        const focus = world.getFocus()
-        controls.skeletonSelect.value = focus !== undefined ? String(focus.id) : ''
     }
+
+    const selectScriptMotion = (motionId: string): void => {
+        if (scriptCache?.result.clips.has(motionId) !== true) return
+        scriptMotionId = motionId
+        playhead = 0
+        playing = false
+        player?.pause()
+        rebuildPlayer()
+        refreshControls()
+    }
+
+    const rebakeScripts = (): void => {
+        invalidateScriptCache(activeProfile().formId)
+        scriptCache = undefined
+        ensureScriptForActiveForm()
+        playhead = 0
+        playing = false
+        player?.pause()
+        rebuildPlayer()
+        refreshControls()
+        trackView.renderCanvas()
+    }
+
+    const loadScriptToTracks = (): void => {
+        const clip = scriptClip()
+        if (clip === undefined) return
+        const profile = activeProfile()
+        const motion = profile.motions.find(item => item.id === scriptMotionId)
+        const name = motion !== undefined ? translate(motion.nameKey) : clip.name
+        const imported = store.importClip({...clip, name})
+        currentClipWeaponSources().set(imported.name, {weaponHeld: false})
+        setAuthoringMode('tracks')
+        playhead = 0
+        rebuildPlayer()
+        refreshControls()
+        trackView.renderList()
+        trackView.renderCanvas()
+    }
+
+    const setAuthoringMode = (next: BoneEditAuthoringMode): void => {
+        if (next === authoringMode) return
+        authoringMode = next
+        container.dataset.authoringMode = next
+        controls.modeTracksBtn.classList.toggle('is-active', next === 'tracks')
+        controls.modeScriptBtn.classList.toggle('is-active', next === 'script')
+        controls.modeTracksBtn.setAttribute('aria-pressed', String(next === 'tracks'))
+        controls.modeScriptBtn.setAttribute('aria-pressed', String(next === 'script'))
+        player?.pause()
+        playing = false
+        playhead = 0
+        selection = new Map()
+        curveEditor.update()
+        if (next === 'script') ensureScriptForActiveForm()
+        else if (store.current === undefined) store.createEmpty(translate('bone_edit.timeline.default_clip_name'))
+        refreshControls()
+        rebuildPlayer()
+        trackView.renderList()
+        trackView.renderCanvas()
+        onion.update()
+        scriptView?.updateProgress(0, scriptClip()?.duration ?? 0)
+    }
+
+    const setForm = (formId: string): void => {
+        stores.setActive(formId)
+        scriptMotionId = undefined
+        scriptCache = undefined
+        lastWeaponSyncKey = undefined
+        player?.pause()
+        playing = false
+        playhead = 0
+        selection = new Map()
+        curveEditor.update()
+        if (authoringMode === 'script') ensureScriptForActiveForm()
+        else if (store.current === undefined) store.createEmpty(translate('bone_edit.timeline.default_clip_name'))
+        refreshControls()
+        rebuildPlayer()
+        trackView.renderList()
+        trackView.renderCanvas()
+        onion.update()
+        scriptView?.updateProgress(0, scriptClip()?.duration ?? 0)
+    }
+
+    scriptView = setupScriptView({
+        onSelect: selectScriptMotion,
+        onRebake: rebakeScripts,
+        onToTracks: loadScriptToTracks,
+    })
+    container.appendChild(scriptView.element)
+    scriptView.setVisible(false)
 
     /* ── 关键帧操作 ── */
     const addKeyframeAt = (t: number): void => {
@@ -383,19 +547,25 @@ export const setupTimelinePanel = (
     }
 
     /* ── 控制条事件接线 ── */
+    controls.modeTracksBtn.addEventListener('click', () => setAuthoringMode('tracks'))
+    controls.modeScriptBtn.addEventListener('click', () => setAuthoringMode('script'))
+    controls.formSelect.addEventListener('change', () => host.onFormChange(controls.formSelect.value))
     controls.playBtn.addEventListener('click', togglePlay)
     controls.stopBtn.addEventListener('click', () => {
         player?.stop()
         playhead = 0
-        trackView.renderCanvas()
+        if (authoringMode === 'tracks') trackView.renderCanvas()
+        else scriptView?.updateProgress(0, scriptClip()?.duration ?? 0)
     })
     controls.loopInput.addEventListener('change', () => {
+        if (authoringMode !== 'tracks') return
         history.startEdit()
         store.updateMeta({loop: controls.loopInput.checked})
         rebuildPlayer()
         history.endEdit()
     })
     controls.durationInput.addEventListener('change', () => {
+        if (authoringMode !== 'tracks') return
         const v = parseFloat(controls.durationInput.value)
         if (Number.isNaN(v) || v <= 0) return
         history.startEdit()
@@ -409,11 +579,6 @@ export const setupTimelinePanel = (
             player?.setSpeed(v)
             playerSpeedRef.current = v
         }
-    })
-    weaponControl.gripToggle.addEventListener('click', () => {
-        rebuildPlayer()
-        weaponControl.solveGrip()
-        refreshControls()
     })
     controls.animSelect.addEventListener('change', () => {
         const value = controls.animSelect.value
@@ -449,10 +614,11 @@ export const setupTimelinePanel = (
         const renameTo = next.trim()
         store.rename(name, renameTo)
         /* 动画改名时同步搬运内置来源记录（供「武器：自动」继续跟随） */
-        const source = clipWeaponSource.get(name)
+        const sources = currentClipWeaponSources()
+        const source = sources.get(name)
         if (source !== undefined) {
-            clipWeaponSource.delete(name)
-            clipWeaponSource.set(store.currentName ?? renameTo, source)
+            sources.delete(name)
+            sources.set(store.currentName ?? renameTo, source)
         }
         history.endEdit()
         refreshControls()
@@ -479,28 +645,13 @@ export const setupTimelinePanel = (
         onion.toggle()
         controls.onionBtn.textContent = translate(onion.isEnabled() ? 'bone_edit.timeline.onion_on' : 'bone_edit.timeline.onion_off')
     })
-    controls.ikBtn.addEventListener('click', () => {
-        ikEnabled = !ikEnabled
-        controls.ikBtn.textContent = translate(ikEnabled ? 'bone_edit.timeline.ik_on' : 'bone_edit.timeline.ik_off')
-    })
     controls.undoBtn.addEventListener('click', () => history.undo())
     controls.redoBtn.addEventListener('click', () => history.redo())
     controls.exportBtn.addEventListener('click', () => library.exportAsset())
     controls.importBtn.addEventListener('click', () => library.importAsset())
-    controls.skeletonSelect.addEventListener('change', () => {
-        const id = Number(controls.skeletonSelect.value)
-        world.focus(id)
-        selection = new Map()
-        curveEditor.update()
-        /* 聚焦骨架更换：武器需重新挂到新骨架的右手挂点上 */
-        syncWeaponForCurrentClip(true)
-        rebuildPlayer()
-        refreshControls()
-        trackView.renderList()
-        trackView.renderCanvas()
-    })
     /* 惯用手预览：左撇子 = 播放时镜像 clip + 武器改挂副手挂点 + 双手 IK 支撑换侧；canonical 动作数据（存档）不变 */
     controls.handednessSelect.addEventListener('change', () => {
+        if (authoringMode !== 'tracks' || !activeProfile().supportsHandedness) return
         const value = controls.handednessSelect.value
         weaponControl.setHandedness(isHandedness(value) ? value : DEFAULT_HANDEDNESS)
         rebuildPlayer()
@@ -547,18 +698,21 @@ export const setupTimelinePanel = (
         if (player !== undefined && player.isPlaying) {
             player.updater(dt)
             playhead = player.time
-            onion.update()
-            trackView.renderCanvas()
+            if (authoringMode === 'tracks') {
+                onion.update()
+                trackView.renderCanvas()
+            } else {
+                scriptView?.updateProgress(playhead, scriptClip()?.duration ?? 0)
+            }
         }
-        /* 左手贴合：仅在开关打开且双手武器时生效（关闭时为零耦合的空操作）；
-         * 放在播放分支之外，保证暂停状态下开启贴合也能立即跟随武器 */
-        weaponControl.solveGrip()
         /* DOM 可测试面：播放头时间与武器状态 */
         container.dataset.playheadTime = playhead.toFixed(3)
+        container.dataset.authoringMode = authoringMode
+        container.dataset.form = stores.activeFormId
+        container.dataset.scriptMotion = scriptMotionId ?? ''
+        container.dataset.bakedScriptCount = String(scriptCache?.result.clips.size ?? 0)
         container.dataset.weapon = weaponControl.currentWeaponId() ?? ''
         container.dataset.twoHanded = String(weaponControl.isTwoHanded())
-        container.dataset.gripAssist = weaponControl.isGripAssist() ? 'on' : 'off'
-        container.dataset.gripSolved = String(weaponControl.isGripSolved())
         container.dataset.handedness = weaponControl.getHandedness()
     }
 
@@ -569,6 +723,8 @@ export const setupTimelinePanel = (
     }
 
     /* 初始化：默认动画 */
+    container.dataset.authoringMode = authoringMode
+    container.dataset.form = stores.activeFormId
     if (store.current === undefined) {
         store.createEmpty(translate('bone_edit.timeline.default_clip_name'))
     }
@@ -577,12 +733,21 @@ export const setupTimelinePanel = (
     trackView.renderList()
     layout()
 
+    /* 函数动作名/状态等动态文案随语言切换重译（静态控件由 localizeText 注册） */
+    const offLocaleChange = onLocaleChange(() => {
+        refreshControls()
+        trackView.renderList()
+        trackView.renderCanvas()
+    })
+
     return {
         container,
         updater,
         get playheadTime() { return playhead },
-        isIkEnabled: () => ikEnabled,
+        get authoringMode() { return authoringMode },
         applyLibrary: library.applyLibrary,
+        setForm,
+        setAuthoringMode,
         togglePlay,
         exportAsset: library.exportAsset,
         importAsset: library.importAsset,
@@ -590,10 +755,12 @@ export const setupTimelinePanel = (
         destroy: () => {
             player?.pause()
             weaponControl.dispose()
+            offLocaleChange()
             window.removeEventListener('resize', onResize)
             window.removeEventListener('keydown', onKeyDown)
             curveEditor.dispose()
             onion.clear()
+            scriptView?.destroy()
             container.remove()
         },
     }

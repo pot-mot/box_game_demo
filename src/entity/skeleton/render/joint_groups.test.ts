@@ -3,7 +3,7 @@ import {MeshBasicMaterial, Scene, SphereGeometry} from 'three'
 import {createSkeleton} from '../../../skeleton/skeleton.ts'
 import {createSkeletonJoint, connectJoint} from '../../../skeleton/joint.ts'
 import {createSkeletonBone} from '../../../skeleton/bone.ts'
-import {createJointVisuals, createRotationGizmo, disposeRotationGizmo, setSelectedVisual, clearSelectedVisuals} from './joint_groups.ts'
+import {createJointVisuals, setSelectedVisual, clearSelectedVisuals} from './joint_groups.ts'
 import {BONE_DIAMOND_COLOR, BONE_DIAMOND_SELECTED_COLOR, JOINT_GIZMO_COLOR, JOINT_GIZMO_SELECTED_COLOR} from '../constants.ts'
 
 /** 构建 root → mid → tail 链（mid 沿 +Y 偏移 2，tail 沿 +Y 偏移 1，骨骼段 len=1） */
@@ -86,16 +86,20 @@ describe('骨骼可视化（关节小球 + 骨骼段菱形）', () => {
         visuals.cleanup()
     })
 
-    it('旋转指针（方向三角形）创建/挂载/销毁', () => {
+    it('节点/骨骼层可独立开关，隐藏后 resize 不会重新显示骨骼段', () => {
         const skeleton = buildSkeleton()
         const visuals = createJointVisuals(skeleton, new Scene())
-        const group = visuals.groups.get('mid')!
-        const gizmo = createRotationGizmo(group, 'mid')
-        expect(gizmo.parent).toBe(group)
-        expect(gizmo.userData.jointId).toBe('mid')
-        expect(gizmo.userData.rotHandle).toBe(true)
-        disposeRotationGizmo(gizmo)
-        expect(gizmo.parent).toBeNull()
+        visuals.setJointsVisible(false)
+        expect([...visuals.gizmos.values()].every(gizmo => !gizmo.visible)).toBe(true)
+        visuals.setJointsVisible(true)
+        expect([...visuals.gizmos.values()].every(gizmo => gizmo.visible)).toBe(true)
+
+        visuals.setBonesVisible(false)
+        expect(visuals.boneVisuals.get('mid_bone')!.visible).toBe(false)
+        visuals.resizeBoneVisuals()
+        expect(visuals.boneVisuals.get('mid_bone')!.visible).toBe(false)
+        visuals.setBonesVisible(true)
+        expect(visuals.boneVisuals.get('mid_bone')!.visible).toBe(true)
         visuals.cleanup()
     })
 })

@@ -4,6 +4,7 @@ import type {ClipJSON} from '../../skeleton/anim/serialization.ts'
 
 /** 编辑状态快照：聚焦骨架定义 + 全部动画（JSON-safe）+ 当前动画名 */
 export interface EditorSnapshot {
+    readonly formId: string
     readonly skeleton: SkeletonDefinition
     readonly clips: readonly ClipJSON[]
     readonly currentClipName: string | undefined

@@ -1,4 +1,5 @@
 import {describe, it, expect} from 'vitest'
+import {Euler, Vector3} from 'three'
 import type {CharacterState} from '../../../../character/state_machine/types.ts'
 import {findWeaponPreset, weaponAttacksOf} from '../../../../character/weapon/catalog.ts'
 import {bodyFormOf, isKnownBodyFormId} from '../../body_form/index.ts'
@@ -6,6 +7,8 @@ import {buildWolfSkeleton} from './skeleton.ts'
 import {WOLF_BODY_FORM} from './body_form.ts'
 import {wolfAttackClip, wolfBaseClip} from './clips.ts'
 import {WOLF_HURT_BLOCKS} from './hurt.ts'
+import {wolfAttackPose} from './pose_fns.ts'
+import {isPoseWithPosition, type JointPose} from '../creature_runtime/pose.ts'
 
 const STATES: readonly CharacterState[] = [
     'idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'dying',
@@ -66,5 +69,53 @@ describe('狼体形（forms/wolf）', () => {
     it('天然撕咬为默认武器且武器表仅撕咬 + 口含短剑 / 长剑', () => {
         expect(WOLF_BODY_FORM.defaultWeaponId).toBe('wolf_bite')
         expect(WOLF_BODY_FORM.weapons.map(w => w.id)).toEqual(['wolf_bite', 'wolf_short_sword', 'wolf_long_sword'])
+    })
+
+    it('口含剑横咬：刃身朝前（+Z）且刃面水平', () => {
+        const weapon = findWeaponPreset('wolf_long_sword')
+        if (weapon === undefined || weapon.type !== 'melee') throw new Error('wolf_long_sword 未注册')
+        const rotation = weapon.mountRotation
+        if (rotation === undefined) throw new Error('口含剑缺少挂点旋转')
+        const euler = new Euler(rotation[0], rotation[1], rotation[2], 'XYZ')
+        const blade = new Vector3(0, 1, 0).applyEuler(euler)
+        expect(blade.z).toBeGreaterThan(0.95)
+        expect(Math.abs(blade.x)).toBeLessThan(0.05)
+        /* 刃宽（本地 Z）应落在水平面，而不是竖起来 */
+        const width = new Vector3(0, 0, 1).applyEuler(euler)
+        expect(Math.abs(width.y)).toBeLessThan(0.05)
+    })
+
+    it('攻击 clip 覆盖完整骨架，仅口部武器挂点保留装备旋转', () => {
+        const weapon = findWeaponPreset('wolf_long_sword')
+        if (weapon === undefined) throw new Error('wolf_long_sword 未注册')
+        const attacks = weaponAttacksOf(weapon)
+        const expected = buildWolfSkeleton().joints.map(joint => joint.id).filter(id => id !== 'mouthMount')
+        for (const key of ['light', 'heavy', 'air'] as const) {
+            for (const id of attacks.chains[key].steps) {
+                const clip = wolfAttackClip(attacks.segments[id]!)
+                const covered = new Set(clip.jointTracks.map(track => track.targetId))
+                expect(expected.filter(jointId => !covered.has(jointId)), id).toEqual([])
+                expect(covered.has('mouthMount')).toBe(false)
+            }
+        }
+    })
+
+    it('攻击收招时清除扭头 / 蓄势旋转残留（剑轻击与重击旋斩）', () => {
+        const weapon = findWeaponPreset('wolf_long_sword')
+        if (weapon === undefined) throw new Error('wolf_long_sword 未注册')
+        const attacks = weaponAttacksOf(weapon)
+        const normalise = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle))
+        const yawOf = (pose: JointPose): number => isPoseWithPosition(pose) ? pose.rotation[1] : pose[1]
+
+        const light = attacks.segments[attacks.chains.light.steps[0]!]!
+        const lightEnd = wolfAttackPose(light)(light.duration + light.recovery, light.duration + light.recovery)
+        expect(Math.abs(normalise(yawOf(lightEnd.body!)))).toBeLessThan(1e-6)
+        expect(Math.abs(normalise(yawOf(lightEnd.neck!)))).toBeLessThan(1e-6)
+        expect(Math.abs(normalise(yawOf(lightEnd.head!)))).toBeLessThan(1e-6)
+
+        const heavy = attacks.segments[attacks.chains.heavy.steps[0]!]!
+        const heavyEnd = wolfAttackPose(heavy)(heavy.duration + heavy.recovery, heavy.duration + heavy.recovery)
+        expect(Math.abs(normalise(yawOf(heavyEnd.body!)))).toBeLessThan(1e-6)
+        expect(Math.abs(normalise(yawOf(heavyEnd.head!)))).toBeLessThan(1e-6)
     })
 })

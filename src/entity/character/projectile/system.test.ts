@@ -74,6 +74,25 @@ describe('弹丸系统', () => {
         expect(body.translation().z).toBeGreaterThan(z0)
     })
 
+    it('指定发射点时从挂点（口部 / 枪口）生成，而不是身体中心', () => {
+        const hw = createHarnessWorld()
+        const system = createProjectileSystem(hw.shared, new Scene())
+        const owner = makeChar(hw, 1, 0, 5, 0)
+
+        system.spawn({
+            owner,
+            origin: {x: 3, y: 4, z: 5},
+            direction: {x: 0, y: 0, z: 1},
+            weapon: weaponWith(0),
+            throwAngle: 0,
+        })
+        const body = enabledSensorBodies(hw.shared)[0]
+        const p = body.translation()
+        expect(p.x).toBeCloseTo(3, 6)
+        expect(p.y).toBeCloseTo(4, 6)
+        expect(p.z).toBeCloseTo(5, 6)
+    })
+
     it('降低重力：默认重力缩放的下落量远小于全额重力', () => {
         /* 全额重力 0.5s 下落 ≈ 0.5 × 9.82 × 0.25 ≈ 1.23m */
         const full = dropAfterHalfSecond(1)

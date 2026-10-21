@@ -281,6 +281,7 @@ const CharacterConfigInner = z.object({
     getUpDuration: z.number().min(0).optional().catch(undefined),
     /* 体形计划 id：非法值安全回退 undefined（运行时回退 humanoid），未知 id 由 bodyFormOf 安全回退 */
     bodyFormId: z.string().optional().catch(undefined),
+    breathModuleId: z.string().optional().catch(undefined),
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),
     /* 行为原点策略 / 间隔 / 追击半径：非法值安全回退 undefined（运行时用默认），不抛错 */

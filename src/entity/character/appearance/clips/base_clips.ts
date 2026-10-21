@@ -7,6 +7,7 @@ import {DEFAULT_HANDEDNESS, type Handedness} from '../../../../character/handedn
 import {mirrorClip} from '../../../../skeleton/anim/mirror.ts'
 import {CLIP_SAMPLE_FPS} from '../constants.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, adjustArmsForHoldMode, orientShieldArms, type PoseState} from '../pose_fns.ts'
+import {bakeSupportHandToGrip} from './support_hand_bake.ts'
 import {
     MODEL_BASE_HEIGHT,
     MODEL_BASE_WIDTH,
@@ -136,6 +137,7 @@ const buildBaseClipWithJoints = (
     holdMode: HoldMode | undefined,
     shieldArms: readonly ('right' | 'left')[] = [],
     handedness: Handedness = DEFAULT_HANDEDNESS,
+    supportGripLocal?: Vector3,
 ): BoneAnimationClip => {
     const meta = BASE_CLIP_META[state]
     const sampler = BASE_POSE_SAMPLERS[state]
@@ -173,8 +175,12 @@ const buildBaseClipWithJoints = (
         boneTracks: [],
         eventTracks: [],
     }
+    /* 双手共持：把副手肩肘烘焙到主武器副握点（canonical 右撇子），随后再镜像 */
+    const posable = weaponHeld && holdMode === 'two_handed' && supportGripLocal !== undefined
+        ? bakeSupportHandToGrip(clip, supportGripLocal)
+        : clip
     /* 左撇子：对 canonical 姿态施加矢状面反射（左右关节互换 + 旋转共轭），离线烘焙零运行时开销 */
-    return handedness === DEFAULT_HANDEDNESS ? clip : mirrorClip(clip)
+    return handedness === DEFAULT_HANDEDNESS ? posable : mirrorClip(posable)
 }
 
 /** 完整基础状态 clip（编辑器动画库 / 兼容全骨架播放） */
@@ -286,10 +292,14 @@ export const getBaseClipForHoldMode = (
     horizontalSpeed = 0,
     shieldArms: readonly ('right' | 'left')[] = [],
     handedness: Handedness = DEFAULT_HANDEDNESS,
+    supportGripLocal?: Vector3,
 ): BoneAnimationClip => {
     const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
     const shieldKey = shieldArms.length > 0 ? `:s${shieldArms.map(arm => arm[0]).join('')}` : ''
-    const key = `${handedness}:${state}:${weaponHeld ? holdMode : 'n'}${speedKey}${shieldKey}`
+    const gripKey = weaponHeld && holdMode === 'two_handed' && supportGripLocal !== undefined
+        ? `:g${supportGripLocal.x.toFixed(3)},${supportGripLocal.y.toFixed(3)},${supportGripLocal.z.toFixed(3)}`
+        : ''
+    const key = `${handedness}:${state}:${weaponHeld ? holdMode : 'n'}${speedKey}${shieldKey}${gripKey}`
     const cached = holdClipCache.get(key)
     if (cached !== undefined) return cached
     const clip = buildBaseClipWithJoints(
@@ -300,6 +310,7 @@ export const getBaseClipForHoldMode = (
         weaponHeld ? holdMode : undefined,
         shieldArms,
         handedness,
+        weaponHeld && holdMode === 'two_handed' ? supportGripLocal : undefined,
     )
     holdClipCache.set(key, clip)
     return clip

@@ -156,9 +156,9 @@ export const inventoryModule: ShowcaseModule = {
                 if (slot === undefined) {
                     const def = findItemDef(findStack(inventory, instanceId)?.defId ?? '')
                     const target: EquipSlot = def?.category === 'weapon' ? 'main_hand' : (def?.equipSlot ?? 'main_hand')
-                    return equipStack(inventory, instanceId, target)
+                    return equipStack(inventory, instanceId, target, {bodyFormId: 'humanoid'})
                 }
-                return equipStack(inventory, instanceId, slot)
+                return equipStack(inventory, instanceId, slot, {bodyFormId: 'humanoid'})
             },
             onUnequip: (slot) => unequipSlot(inventory, slot),
             onDrop: (instanceId) => { removeAt(inventory, instanceId) },

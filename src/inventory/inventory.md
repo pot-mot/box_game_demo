@@ -41,14 +41,14 @@ export const ITEM_DEFS: readonly ItemDef[]
 export const findItemDef = (id: string | undefined): ItemDef | undefined
 ```
 
-- `ITEM_DEFS` 覆盖**全部武器模型**（近战 6 + 远程 9）、**全部护甲预设**、**全部方块实体**；`items.test.ts` 对照武器 / 护甲目录与 `ENTITY_TYPE_VALUES` 锁定完整性——新增武器 / 护甲 / 方块须同步补条目。本地化名复用 `weapon.*` / `armor.*` 名称键，描述共用 `item.weapon_generic.desc` / `item.armor_generic.desc`。
+- `ITEM_DEFS` 覆盖**全部武器模型**（近战 6 + 远程 9）、**全部护甲预设**、**龙吐息三件物品**、**全部方块实体**；`items.test.ts` 对照武器 / 护甲目录与 `ENTITY_TYPE_VALUES` 锁定完整性——新增武器 / 护甲 / 吐息 / 方块须同步补条目。本地化名复用 `weapon.*` / `armor.*` / `breath.*` 名称键，描述共用 `item.weapon_generic.desc` / `item.armor_generic.desc`。
 - **物品图标**：每件物品的 `icon` 为专属图标（登记于 `src/ui/icons/sprite.ts` 的 `ICON_NAMES`，命名 `item-*`），`items.test.ts` 锁定「图标均已登记且逐件唯一」；背包网格（`modes/play/inventory_ui/grid_render.ts`）与图鉴（`modes/showcase/modules/catalog.ts`）据此呈现。
 - `grid.ts` 纯函数（带单测）：`rotatedShape` / `canPlace` / `findPlacement` / `buildOccupancy`（`rot` = 0..3 顺时针 90°）。
 
 ## 背包实例与操作（`types.ts` / `inventory.ts`）
 
 ```ts
-export const EQUIP_SLOTS = ['main_hand', 'off_hand', 'head', 'chest', 'arms', 'legs'] as const
+export const EQUIP_SLOTS = ['main_hand', 'off_hand', 'head', 'chest', 'arms', 'legs', 'breath'] as const
 export interface ItemStack { instanceId: string; defId: string; count: number; grid?: Placement }
 export interface InventoryState {
     width: number; height: number
@@ -61,7 +61,9 @@ export const addItem / removeAt / moveStack / equipStack / unequipSlot / equippe
 ```
 
 - `addItem` 自动 `findPlacement`，支持堆叠合并；背包满返回 `{ok:false, reason:'full'}`。
-- 装备：目标槽已占则交换；武器 → `main_hand`/`off_hand`，护甲 → 对应槽，校验类型匹配。
+- 装备：目标槽已占则交换；武器 → `main_hand`/`off_hand`，护甲 → 对应槽，龙吐息 → `breath`。
+- `equipStack(inv, instanceId, slot, {bodyFormId})`：吐息物品声明 `equipBodyFormId = 'wyvern'`，非龙体形直接被拒绝；`item_breath_fireball` / `item_breath_lightning` / `item_breath_laser` 三件物品分别映射 `breath_fireball` / `breath_lightning` / `breath_laser`。
+- `applyEquipment` 仅在 wyvern 体形把吐息模组写入 `characterSystem.setBreathModule`；切到其他体形时自动尝试卸下并退回背包。
 
 ## 掉落与拾取（`entity/item/`）
 

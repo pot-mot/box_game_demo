@@ -5,6 +5,7 @@ import {createCreatureAppearance, createCreatureModel} from '../creature_runtime
 import {wyvernAttackClip, wyvernBaseClip} from './clips.ts'
 import {WYVERN_HURT_BLOCKS, WYVERN_PARTS} from './parts.ts'
 import {buildWyvernSkeleton} from './skeleton.ts'
+import {WYVERN_BREATH_MODULES} from './breath.ts'
 import {WYVERN_WEAPONS} from './weapons.ts'
 
 export const WYVERN_BODY_FORM_ID = 'wyvern'
@@ -22,7 +23,7 @@ const WYVERN_COLLIDER_LAYOUT: readonly ColliderSpec[] = [
 
 /**
  * 双足飞龙（wyvern，双足 + 双翼，共 4 肢）体形计划。
- * 天然类别 `claw`（爪击，melee）与 `breath`（吐息，ranged）——按 `weapon.type` 单一投送，default = 爪击。
+ * 主武器固定为 `wyvern_claw`（五段爪击）；重击来自独立 `breath` 装备槽（火球/雷电/激光）。
  * **注意**：本计划是 wyvern，不是六肢（四足双翼）的 dragon。
  */
 export const WYVERN_BODY_FORM: BodyForm = {
@@ -49,7 +50,8 @@ export const WYVERN_BODY_FORM: BodyForm = {
         clipForState: state => wyvernBaseClip(state),
         clipForSegment: segment => wyvernAttackClip(segment),
     }),
-    equipSlots: {armor: [], limb: [], weapon: true},
+    equipSlots: {armor: [], limb: [], weapon: true, breath: true},
     weapons: WYVERN_WEAPONS,
     defaultWeaponId: 'wyvern_claw',
+    breathModules: WYVERN_BREATH_MODULES,
 }

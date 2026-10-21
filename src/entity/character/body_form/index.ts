@@ -5,6 +5,7 @@ import {WYVERN_BODY_FORM, WYVERN_BODY_FORM_ID} from '../forms/wyvern/body_form.t
 import type {BodyForm} from './types.ts'
 import type {WeaponConfig} from '../../../character/weapon/catalog.ts'
 import {registerFormWeapons} from '../../../character/weapon/catalog.ts'
+import {registerBreathModules} from '../../../character/weapon/breath_module.ts'
 
 /**
  * 某体形是否可选择某武器：武器只属于一种体形，故**仅当武器归属该体形时可选**。
@@ -33,7 +34,10 @@ export const BODY_FORMS: Readonly<Record<string, BodyForm>> = {
 export const BODY_FORM_IDS: readonly string[] = Object.keys(BODY_FORMS)
 
 /* 把各体形的武器注册进武器目录（装配 BODY_FORMS 时一次性完成；武器数据由体形拥有） */
-for (const form of Object.values(BODY_FORMS)) registerFormWeapons(form.id, form.weapons)
+for (const form of Object.values(BODY_FORMS)) {
+    registerFormWeapons(form.id, form.weapons)
+    if (form.breathModules !== undefined) registerBreathModules(form.breathModules)
+}
 
 /** 按 id 取体形计划；未知 / 缺省 id 安全回退人形（存档容错） */
 export const bodyFormOf = (id: string | undefined): BodyForm =>

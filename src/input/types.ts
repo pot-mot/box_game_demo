@@ -124,8 +124,7 @@ export const FIXED_MOUSE_OPERATIONS: Record<MouseOperationsMode, readonly FixedM
     ],
     bone_edit: [
         {keys: 'input.fixed.key.click_left', label: 'input.fixed.label.bone_select'},
-        {keys: 'input.fixed.key.drag_joint', label: 'input.fixed.label.bone_move_ik'},
-        {keys: 'input.fixed.key.drag_bone', label: 'input.fixed.label.bone_rotate_tail'},
+        {keys: 'input.fixed.key.drag_gizmo', label: 'input.fixed.label.bone_transform_gizmo'},
         {keys: 'input.fixed.key.dbl_timeline', label: 'input.fixed.label.bone_add_key'},
         {keys: 'input.fixed.key.ctrl_wheel', label: 'input.fixed.label.bone_zoom_timeline'},
     ],

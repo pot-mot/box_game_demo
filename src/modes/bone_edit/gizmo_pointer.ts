@@ -6,6 +6,8 @@
 import {Raycaster, Vector2, type PerspectiveCamera} from 'three'
 import type {SkeletonEntitiesContext} from '../../entity/skeleton/world.ts'
 import {translateJointCascade, rotateJointCascade} from '../../skeleton/skeleton.ts'
+import {resolveIkChain, solveIkChain} from '../../skeleton/ik.ts'
+import {DEFAULT_IK_MAX_ITERATIONS, DEFAULT_IK_TOLERANCE} from '../../skeleton/constants.ts'
 import type {TransformGizmo, DragState, GizmoDragCallbacks, GizmoPartType} from '../edit/transform_gizmo.ts'
 import type {BoneEditHistory} from './history.ts'
 import type {DragCoordinator} from './drag_state.ts'
@@ -59,6 +61,18 @@ export const setupBoneGizmoPointer = (
                 const skel = entity.skeleton
                 const joint = skel.findJoint(jointId)
                 if (joint === undefined) return
+                /* 节点配置了 IK：该节点始终作为末端，由父级链求解到目标位置 */
+                if (joint.ik !== undefined) {
+                    const chain = resolveIkChain(joint, joint.ik.chainDepth)
+                    if (chain.length > 1) {
+                        solveIkChain(skel, chain, newWorldPos, joint.ik.solver, {
+                            maxIterations: DEFAULT_IK_MAX_ITERATIONS,
+                            tolerance: DEFAULT_IK_TOLERANCE,
+                        })
+                        world.refresh()
+                        return
+                    }
+                }
                 const curWorld = skel.getWorldPosition(jointId)
                 if (curWorld === undefined) return
                 const delta = newWorldPos.clone().sub(curWorld)
@@ -81,6 +95,7 @@ export const setupBoneGizmoPointer = (
 
     const handlePointerDown = (e: PointerEvent): boolean => {
         if (e.button !== 0) return false
+        if (!world.getViewSettings().editEnabled) return false
         /** 安全重置：上一轮拖拽被中断（如切换标签页丢 pointerup）时清除标志 */
         if (coordinator.isGizmoActive() && dragState === undefined) {
             coordinator.setGizmoActive(false)

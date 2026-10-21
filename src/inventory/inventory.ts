@@ -101,18 +101,29 @@ export const moveStack = (inv: InventoryState, instanceId: string, placement: Pl
     return true
 }
 
-const slotAccepts = (def: ItemDef, slot: EquipSlot): boolean => {
+const slotAccepts = (def: ItemDef, slot: EquipSlot, bodyFormId: string | undefined): boolean => {
+    if (def.equipBodyFormId !== undefined && bodyFormId !== undefined && def.equipBodyFormId !== bodyFormId) return false
     if (def.category === 'weapon') return slot === 'main_hand' || slot === 'off_hand'
-    if (def.category === 'armor') return def.equipSlot === slot
+    if (def.category === 'armor' || def.category === 'breath') return def.equipSlot === slot
     return false
 }
 
+/** 装备上下文：吐息等体形专属物品需要当前体形 id */
+export interface EquipContext {
+    readonly bodyFormId?: string
+}
+
 /** 装备：占用槽位；若已有装备则尝试放回背包（无空位则失败） */
-export const equipStack = (inv: InventoryState, instanceId: string, slot: EquipSlot): boolean => {
+export const equipStack = (
+    inv: InventoryState,
+    instanceId: string,
+    slot: EquipSlot,
+    context: EquipContext = {},
+): boolean => {
     const stack = findStack(inv, instanceId)
     if (stack === undefined) return false
     const def = findItemDef(stack.defId)
-    if (def === undefined || !slotAccepts(def, slot)) return false
+    if (def === undefined || !slotAccepts(def, slot, context.bodyFormId)) return false
 
     const prevId = inv.equipment[slot]
     if (prevId !== undefined && prevId !== instanceId) {
@@ -243,7 +254,7 @@ export const inventoryFromSave = (data: InventorySaveData | undefined): Inventor
         const stack = findStack(inv, id)
         if (stack === undefined) continue
         const def = findItemDef(stack.defId)
-        if (def === undefined || !slotAccepts(def, slot)) continue
+        if (def === undefined || !slotAccepts(def, slot, undefined)) continue
         inv.equipment[slot] = id
         stack.grid = undefined
     }

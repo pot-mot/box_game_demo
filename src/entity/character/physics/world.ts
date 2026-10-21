@@ -14,7 +14,7 @@ import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {TendencyConfig} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
 import type {AttackResult} from '../../../character/combat/types.ts'
-import {createCombatComponent, setCombatEquipment, setCombatOffhand, setCombatWeapon, updateShieldBlock} from '../../../character/combat/types.ts'
+import {createCombatComponent, setCombatBreath, setCombatEquipment, setCombatOffhand, setCombatWeapon, updateShieldBlock} from '../../../character/combat/types.ts'
 import {ZERO_PROFILE, type DefenseProfile} from '../../../character/combat/defense.ts'
 import type {DamageTypeProfile} from '../../../character/combat/damage_type.ts'
 import type {ArmorLoadout, LimbLoadout} from '../../../character/armor/types.ts'
@@ -24,6 +24,7 @@ import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/at
 import {createTestWeaponRuntime, TEST_WEAPON_ID} from '../../../character/combat/test_weapon.ts'
 import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {availableHoldModes, defaultHoldMode, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
+import {breathModuleOf} from '../../../character/weapon/breath_module.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import {DEFAULT_HANDEDNESS, isHandedness} from '../../../character/handedness.ts'
@@ -91,6 +92,7 @@ const _trailTipVec = new Vector3()
 /** 远程枪口世界朝向采样复用对象（武器骨骼世界四元数 × 本地 +Y，投影到水平面） */
 const _muzzleQuat = new Quaternion()
 const _muzzleVec = new Vector3()
+const _muzzlePos = new Vector3()
 
 /** 角色朝向提取复用对象（将旋转后的前向量投影到水平面求朝向，避免每帧分配） */
 const _facingForward = new Vector3()
@@ -243,6 +245,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; baseAttack?: DamageTypeProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null) => void
     /** 运行时切换体形（基础模组）；未知 id 或同体形返回 false */
     setBodyForm: (id: number, planId: string) => boolean
+    /** 设置 / 卸下吐息模组（仅支持 breath 槽的体形；未知 id 视为卸下） */
+    setBreathModule: (id: number, breathModuleId: string | undefined) => void
     /** 设置单个角色的和平策略 */
     setPeaceStrategy: (id: number, strategy: PeaceSubStrategy) => void
     /** 设置单个角色的和平策略配置 */
@@ -327,6 +331,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         model.equipWeapon({
             main: entity.combat.weapon.mesh,
             ...(entity.combat.weapon.mountJointId !== undefined ? {mainMountJointId: entity.combat.weapon.mountJointId} : {}),
+            ...(entity.combat.weapon.mountRotation !== undefined ? {mainMountRotation: entity.combat.weapon.mountRotation} : {}),
             ...(entity.combat.weapon.type === 'melee'
                 ? {offhand: entity.combat.offhand?.weapon.mesh, offhandStowed: entity.holdMode === 'two_handed'}
                 : {}),
@@ -467,7 +472,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (record.eventName === 'hitbox_off') meleeExecutor.setHitWindow(false, slot)
     }
     /** 追踪当前激活的近战攻击（用于 start/end 生命周期） */
-    const activatedAttacks = new Set<number>()
+    const activatedAttacks = new Map<number, 'melee' | 'ranged'>()
     /** 材质表面效果（受击闪红 + 翻滚无敌半透明白） */
     const materialEffects = new Map<number, ReturnType<typeof createMaterialEffects>>()
     const noopExecCtx: import('../../../character/combat/executor.ts').ExecutorContext = {
@@ -614,6 +619,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         model.equipWeapon({
             main: runtime.weapon.mesh,
             ...(runtime.weapon.mountJointId !== undefined ? {mainMountJointId: runtime.weapon.mountJointId} : {}),
+            ...(runtime.weapon.mountRotation !== undefined ? {mainMountRotation: runtime.weapon.mountRotation} : {}),
             ...(runtime.weapon.type === 'melee' ? {offhand: offhandRuntime?.weapon.mesh} : {}),
         })
         model.group.position.set(x, y, z)
@@ -651,6 +657,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             },
         )
         setCombatOffhand(combat, offhandRuntime)
+        const breathModule = plan.equipSlots.breath === true ? breathModuleOf(config.breathModuleId) : undefined
+        if (breathModule !== undefined) {
+            setCombatBreath(combat, {module: breathModule, attacks: weaponAttacksOf(breathModule)})
+        }
 
         const entity: CharacterEntity = {
             id,
@@ -933,8 +943,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         cleanupWireframe(entity)
 
         if (entity.combat.attackActive) {
-            const executor = getSkillExecutor(entity.combat.weapon.type)
-            executor?.end(entity.combat, entity, noopExecCtx)
+            const activeType = activatedAttacks.get(entity.id) ?? entity.combat.weapon.type
+            getSkillExecutor(activeType)?.end(entity.combat, entity, noopExecCtx)
             activatedAttacks.delete(entity.id)
         }
 
@@ -1545,8 +1555,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     && turnDuration - entity.stateMachine.stateTime > -dt
 
                 let targetAngle: number
+                /** 当前攻击实际武器（吐息重击 = 吐息模组；其余 = 主武器） */
+                const attackWeapon = entity.combat.attackActive ? (entity.combat.activeWeapon ?? entity.combat.weapon) : entity.combat.weapon
                 /** 远程武器（近战不受瞄准朝向影响，攻击判定箱随武器模型） */
-                const rangedWeapon = entity.combat.weapon.type === 'ranged'
+                const rangedWeapon = attackWeapon.type === 'ranged'
                 /** 当前战斗目标 id（仅 AI 处于 combat 时有效） */
                 const aiCombatTargetId = aiCtx !== undefined && aiCtx.activeFsm === 'combat'
                     ? aiCtx.combatTargetId
@@ -1690,14 +1702,22 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                 /* 远程枪口世界朝向：武器本地 +Y = 枪口/弹道方向；在骨骼姿势与身体朝向写入后采样，
                  * 供 ranged_executor 在 release 帧作为弹道初始方向（角色朝向 + 出手动画共同决定） */
-                if (rangedWeapon && !entity.isDying && model.weaponGroup !== null) {
-                    model.weaponGroup.updateWorldMatrix(true, false)
-                    model.weaponGroup.getWorldQuaternion(_muzzleQuat)
-                    _muzzleVec.set(0, 1, 0).applyQuaternion(_muzzleQuat)
-                    const muzzleLen = Math.hypot(_muzzleVec.x, _muzzleVec.z)
-                    if (muzzleLen > 0.001) {
-                        entity.combat.muzzleDirX = _muzzleVec.x / muzzleLen
-                        entity.combat.muzzleDirZ = _muzzleVec.z / muzzleLen
+                if (rangedWeapon && !entity.isDying) {
+                    const muzzleJointId = attackWeapon.mountJointId
+                    const muzzleGroup = (muzzleJointId !== undefined ? model.jointGroups.get(muzzleJointId) : undefined) ?? model.weaponGroup
+                    if (muzzleGroup !== null && muzzleGroup !== undefined) {
+                        muzzleGroup.updateWorldMatrix(true, false)
+                        muzzleGroup.getWorldPosition(_muzzlePos)
+                        entity.combat.muzzleX = _muzzlePos.x
+                        entity.combat.muzzleY = _muzzlePos.y
+                        entity.combat.muzzleZ = _muzzlePos.z
+                        muzzleGroup.getWorldQuaternion(_muzzleQuat)
+                        _muzzleVec.set(0, 1, 0).applyQuaternion(_muzzleQuat)
+                        const muzzleLen = Math.hypot(_muzzleVec.x, _muzzleVec.z)
+                        if (muzzleLen > 0.001) {
+                            entity.combat.muzzleDirX = _muzzleVec.x / muzzleLen
+                            entity.combat.muzzleDirZ = _muzzleVec.z / muzzleLen
+                        }
                     }
                 }
 
@@ -1818,10 +1838,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             syncShieldCollider(entity)
 
             if (entity.combat.attackActive && !entity.combat.isDead) {
-                const executor = getSkillExecutor(entity.combat.weapon.type)
+                const activeType = entity.combat.activeWeapon?.type ?? entity.combat.weapon.type
+                const executor = getSkillExecutor(activeType)
                 if (executor) {
+                    const kind = activeType === 'ranged' ? 'ranged' : 'melee'
+                    const previousKind = activatedAttacks.get(entity.id)
+                    if (previousKind !== undefined && previousKind !== kind) {
+                        getSkillExecutor(previousKind)?.end(entity.combat, entity, noopExecCtx)
+                        activatedAttacks.delete(entity.id)
+                    }
                     if (!activatedAttacks.has(entity.id)) {
-                        activatedAttacks.add(entity.id)
+                        activatedAttacks.set(entity.id, kind)
                         const dirInfo = aiTargetDirs.get(entity.id)
                         let dirX = dirInfo ? dirInfo.dx : entity.combat.attackDirX
                         let dirZ = dirInfo ? dirInfo.dz : entity.combat.attackDirZ
@@ -1834,9 +1861,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     executor.update(dt, entity.combat, entity, noopExecCtx)
                 }
             } else if (activatedAttacks.has(entity.id)) {
+                const previousKind = activatedAttacks.get(entity.id)
                 activatedAttacks.delete(entity.id)
-                const executor = getSkillExecutor(entity.combat.weapon.type)
-                executor?.end(entity.combat, entity, noopExecCtx)
+                if (previousKind !== undefined) getSkillExecutor(previousKind)?.end(entity.combat, entity, noopExecCtx)
             }
         }
 
@@ -1982,6 +2009,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             scale: saveConfig.scale,
             /* 体形计划：已知 id 才写入（未知 / 缺省安全回退 humanoid） */
             ...(saveConfig.bodyFormId !== undefined && isKnownBodyFormId(saveConfig.bodyFormId) ? {bodyFormId: saveConfig.bodyFormId} : {}),
+            ...(saveConfig.breathModuleId !== undefined ? {breathModuleId: saveConfig.breathModuleId} : {}),
             /* 惯用手：非法 / 缺省安全回退 undefined（运行时按右撇子处理） */
             ...(isHandedness(saveConfig.handedness) ? {handedness: saveConfig.handedness} : {}),
             /* 韧性 / 倒地属性：旧档缺字段回退默认（createCombatComponent 内 clamp 默认值） */
@@ -2162,6 +2190,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const mainWeapon = weaponRuntimeOf(newAttackSlot)
                 if (weaponSelectableFor(plan, mainWeapon.weapon)) {
                     setCombatWeapon(entity.combat, mainWeapon)
+                    if (plan.equipSlots.breath === true) {
+                        const module = breathModuleOf(entity.config.breathModuleId)
+                        if (module !== undefined) setCombatBreath(entity.combat, {module, attacks: weaponAttacksOf(module)})
+                    }
                     changed = true
                 }
             }
@@ -2246,6 +2278,26 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         refreshPlayerLabel()
     }
 
+    /** 设置 / 卸下吐息模组（仅 breath 槽体形；未知 id 视为卸下） */
+    const setBreathModule = (id: number, breathModuleId: string | undefined): void => {
+        const entity = characters.find(c => c.id === id)
+        if (entity === undefined) return
+        const plan = bodyFormOf(entity.config.bodyFormId)
+        if (plan.equipSlots.breath !== true) {
+            delete entity.config.breathModuleId
+            setCombatBreath(entity.combat, undefined)
+            return
+        }
+        const module = breathModuleOf(breathModuleId)
+        if (module === undefined) {
+            delete entity.config.breathModuleId
+            setCombatBreath(entity.combat, undefined)
+            return
+        }
+        entity.config.breathModuleId = module.id
+        setCombatBreath(entity.combat, {module, attacks: weaponAttacksOf(module)})
+    }
+
     /**
      * 运行时切换体形（基础模组）：重建骨架 / 外观 / 碰撞体 / 受击子块，重解析武器与装备，重设数值。
      * 脚底原点保持不变；未知 id 或切换为同一体形时安全返回 false。
@@ -2273,6 +2325,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setCombatWeapon(entity.combat, weaponRuntimeOf({weaponId: plan.defaultWeaponId}))
         entity.holdMode = defaultHoldMode(entity.combat.weapon)
         setCombatOffhand(entity.combat, undefined)
+        /* 吐息只属于 wyvern：非 wyvern 体形不应用（配置保留，切回龙时恢复） */
+        if (plan.equipSlots.breath === true) {
+            const module = breathModuleOf(entity.config.breathModuleId)
+            setCombatBreath(entity.combat, module !== undefined ? {module, attacks: weaponAttacksOf(module)} : undefined)
+        } else {
+            setCombatBreath(entity.combat, undefined)
+        }
 
         /* 3) 装备过滤：剔除该体形不支持的护甲 / 肢体槽，重算防御 / 加成 / 移速 */
         const {armor, limb} = filterEquipLoadouts(plan.equipSlots, entity.combat.armor, entity.combat.limb)
@@ -2490,6 +2549,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setTransform,
         updateCharacterConfig,
         setBodyForm,
+        setBreathModule,
         setPeaceStrategy,
         setPeaceConfig,
         setCombatStrategy,

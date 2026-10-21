@@ -23,7 +23,7 @@ const HORSE_COLLIDER_LAYOUT: readonly ColliderSpec[] = [
 
 /**
  * 马（四足）体形计划：自带骨架 / 外观 / 动画系统 / 受击子块 / 碰撞布局。
- * 天然武器 `kick`（踢击，melee）为 default；口部挂点可持长枪等少量武器。
+ * 天然武器 `horse_iron_hoof`（铁蹄，melee）为 default；无其他武器。
  */
 export const HORSE_BODY_FORM: BodyForm = {
     id: HORSE_BODY_FORM_ID,
@@ -51,7 +51,7 @@ export const HORSE_BODY_FORM: BodyForm = {
     }),
     equipSlots: {armor: [], limb: [], weapon: true},
     weapons: HORSE_WEAPONS,
-    defaultWeaponId: 'horse_kick',
+    defaultWeaponId: 'horse_iron_hoof',
     /* 四足：翻滚改为低伏冲刺，不做前滚翻 */
     rollSpinTurns: 0,
 }

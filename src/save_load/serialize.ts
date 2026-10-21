@@ -184,6 +184,7 @@ export const collectWorldState = (
                     scale: e.config.scale,
                     /* 体形计划（基础模组）：缺省 humanoid，旧代码读到缺字段安全回退 */
                     bodyFormId: e.config.bodyFormId,
+                    breathModuleId: e.config.breathModuleId,
                     peaceStrategy: e.peaceStrategy,
                     combatStrategy: e.combatStrategy,
                     /* 攻击配置：装备武器 + 数值覆写（攻击动作由武器模组的攻击链决定） */

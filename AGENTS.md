@@ -162,6 +162,7 @@ src/
 | 游玩模式 | [`src/modes/play/play.md`](src/modes/play/play.md) | 第三人称、锁定、箱庭子系统 |
 | 编辑模式 | [`src/modes/edit/edit.md`](src/modes/edit/edit.md) | 指针、执行面板、雕刻 |
 | 展示模式 | [`src/modes/showcase/showcase.md`](src/modes/showcase/showcase.md) | 子模块框架与注册 |
+| 骨骼动画编辑 | [`src/modes/bone_edit/bone_edit.md`](src/modes/bone_edit/bone_edit.md) | 轨道/函数双模式、体形切换、脚本 JIT |
 | 全局 UI 风格 | [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)、[`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | 任何面板/HUD |
 | 全局 i18n | [`docs/i18n.md`](docs/i18n.md) | 文案 |
 | 全局动作规范 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 调动作 |

@@ -1,4 +1,4 @@
-import {BufferGeometry, CapsuleGeometry, Euler, Float32BufferAttribute, Quaternion, Vector3, type Group, Mesh, MeshBasicMaterial} from 'three'
+import {BufferAttribute, BufferGeometry, CapsuleGeometry, DynamicDrawUsage, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type Group, Mesh, MeshBasicMaterial, type MeshStandardMaterial} from 'three'
 import type {SkeletonDefinition} from '../../../../skeleton/anim/serialization.ts'
 import {skeletonFromDefinition} from '../../../../skeleton/anim/serialization.ts'
 import {createJointHierarchy} from '../../../../skeleton/render/joint_hierarchy.ts'
@@ -20,8 +20,23 @@ export type CreatureShape =
     | {readonly kind: 'cylinder'; readonly rTop: number; readonly rBottom: number; readonly h: number; readonly segments?: number}
     | {readonly kind: 'cone'; readonly r: number; readonly h: number; readonly segments?: number}
     | {readonly kind: 'sphere'; readonly r: number; readonly widthSegments?: number; readonly heightSegments?: number}
-    /** 三角扇（翅膜等薄片）：`points` 为关节局部顶点，按首点扇形三角化 */
+    /** 三角扇（薄片）：`points` 为关节局部顶点，按首点扇形三角化 */
     | {readonly kind: 'fan'; readonly points: readonly (readonly [number, number, number])[]}
+    /**
+     * 骨骼驱动的翅膜：顶点由翼根 / 翼肘 / 翼腕与各翼指末端实时计算，
+     * 翼指张开、腕部挥动时膜面跟随拉伸，避免刚性扇形与骨架裂开。
+     * `fingers[].tip` 为翼指关节局部末端坐标（与对应骨段几何一致）。
+     */
+    | {
+        readonly kind: 'wing_membrane'
+        readonly shoulderJointId: string
+        readonly elbowJointId: string
+        readonly wristJointId: string
+        readonly fingers: readonly {
+            readonly jointId: string
+            readonly tip: readonly [number, number, number]
+        }[]
+    }
 
 /** 体形部件（低多面体网格挂在关节上，材质取自统一材质库；受击块走 hurtProfile 显式形状） */
 export interface CreaturePartSpec {
@@ -55,6 +70,7 @@ interface WeaponSlot {
     /** 体形默认挂点（武器未指定 `mountJointId` 时回退到此，避免覆盖后残留） */
     readonly defaultMountJoint: Group
     mountJointId: string | undefined
+    mountRotation: readonly [number, number, number]
     group: Group | null
     hitCenter: Mesh | null
     tip: Mesh | null
@@ -124,7 +140,87 @@ const buildPartGeometry = (b: MeshBuilder, shape: CreatureShape): BufferGeometry
             b.trackGeometry(geom)
             return geom
         }
+        case 'wing_membrane':
+            throw new Error('wing_membrane 需由 createWingMembrane 构建（动态几何）')
     }
+}
+
+/**
+ * 骨骼驱动翅膜：几何顶点按「翼根 → 翼肘 → 翼腕 → 各翼指末端」的扇形组织，
+ * 每帧从各关节 Group 的当前变换重建顶点，使膜面随骨架拉伸而不是刚性跟随腕部。
+ */
+const createWingMembrane = (
+    groups: ReadonlyMap<string, Group>,
+    shape: Extract<CreatureShape, {kind: 'wing_membrane'}>,
+    material: MeshStandardMaterial,
+): {mesh: Mesh; update: () => void} => {
+    const shoulder = requireGroup(groups, shape.shoulderJointId, 'wing_membrane')
+    const elbow = requireGroup(groups, shape.elbowJointId, 'wing_membrane')
+    const wrist = requireGroup(groups, shape.wristJointId, 'wing_membrane')
+    const fingers = shape.fingers.map(finger => ({
+        group: requireGroup(groups, finger.jointId, 'wing_membrane'),
+        tip: new Vector3().fromArray([...finger.tip]),
+    }))
+
+    const vertexCount = 3 + fingers.length
+    const positions = new Float32Array(vertexCount * 3)
+    const uvs = new Float32Array(vertexCount * 2)
+    /* 顶点顺序：0 翼根、1 翼肘、2 翼腕（扇心）、3.. 各翼指末端 */
+    const setUv = (index: number, u: number, v: number): void => {
+        uvs[index * 2] = u
+        uvs[index * 2 + 1] = v
+    }
+    setUv(0, 0, 0)
+    setUv(1, 0.12, 0.02)
+    setUv(2, 0.3, 0.5)
+    for (let i = 0; i < fingers.length; i++) setUv(3 + i, 0.35 + i * 0.15, 0.98)
+
+   /* 扇心（翼腕）连接外缘：翼根→翼肘→翼指……→翼根 */
+    const rim = [0, 1, ...fingers.map((_, i) => 3 + i)]
+    const indices: number[] = []
+    for (let i = 0; i < rim.length; i++) {
+        indices.push(2, rim[i], rim[(i + 1) % rim.length])
+    }
+
+    const geometry = new BufferGeometry()
+    geometry.setIndex(indices)
+    /* 必须直接持有 positions 引用（Float32BufferAttribute 会复制数组，导致逐帧写入无效） */
+    const positionAttribute = new BufferAttribute(positions, 3).setUsage(DynamicDrawUsage)
+    geometry.setAttribute('position', positionAttribute)
+    geometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+    const mesh = new Mesh(geometry, material)
+    mesh.castShadow = true
+    mesh.userData.deform = 'wing_membrane'
+    wrist.add(mesh)
+
+    const wristInverse = new Matrix4()
+    const worldPos = new Vector3()
+    const writeVertex = (index: number, value: Vector3): void => {
+        positions[index * 3] = value.x
+        positions[index * 3 + 1] = value.y
+        positions[index * 3 + 2] = value.z
+    }
+    const update = (): void => {
+        wrist.updateWorldMatrix(true, false)
+        wristInverse.copy(wrist.matrixWorld).invert()
+        worldPos.setFromMatrixPosition(shoulder.matrixWorld).applyMatrix4(wristInverse)
+        writeVertex(0, worldPos)
+        worldPos.setFromMatrixPosition(elbow.matrixWorld).applyMatrix4(wristInverse)
+        writeVertex(1, worldPos)
+        worldPos.set(0, 0, 0)
+        writeVertex(2, worldPos)
+        for (let i = 0; i < fingers.length; i++) {
+            const finger = fingers[i]
+            /* 翼指关节与腕同点、仅旋转：末端 = 关节局部位移 + 旋转后的骨段方向 */
+            worldPos.copy(finger.tip).applyQuaternion(finger.group.quaternion).add(finger.group.position)
+            writeVertex(3 + i, worldPos)
+        }
+        positionAttribute.needsUpdate = true
+        geometry.computeBoundingSphere()
+        geometry.computeVertexNormals()
+    }
+    update()
+    return {mesh, update}
 }
 
 /** 碰撞体可视化 mesh（edit / bone_edit 显示；与真实碰撞体几何同源） */
@@ -157,11 +253,20 @@ export const createCreatureAppearance = (
 ): BodyAppearance => {
     const builder = createMeshBuilder()
     const partMeshes: Mesh[] = []
+    const deformers: (() => void)[] = []
     for (const spec of partSpecs) {
         const joint = groups.get(spec.jointId)
         if (joint === undefined) continue
-        const geometry = buildPartGeometry(builder, spec.shape)
         const material = builder.materialById(spec.material, spec.color)
+        if (spec.shape.kind === 'wing_membrane') {
+            const membrane = createWingMembrane(groups, spec.shape, material)
+            builder.trackGeometry(membrane.mesh.geometry)
+            membrane.mesh.userData.jointId = spec.jointId
+            partMeshes.push(membrane.mesh)
+            deformers.push(membrane.update)
+            continue
+        }
+        const geometry = buildPartGeometry(builder, spec.shape)
         const off = spec.offset ?? [0, 0, 0]
         const rot = spec.rot ?? [0, 0, 0]
         const mesh = builder.add(geometry, material, off[0], off[1], off[2], rot[0], rot[1], rot[2], joint)
@@ -170,9 +275,13 @@ export const createCreatureAppearance = (
         partMeshes.push(mesh)
     }
     const colliderMeshes = createColliderDebugMeshes(groups, colliderLayout)
+    const update = deformers.length > 0
+        ? (): void => { for (const deformer of deformers) deformer() }
+        : undefined
     const cleanup = (): void => {
         for (const mesh of partMeshes) mesh.removeFromParent()
         partMeshes.length = 0
+        deformers.length = 0
         builder.dispose()
         for (const mesh of colliderMeshes) {
             mesh.removeFromParent()
@@ -181,7 +290,7 @@ export const createCreatureAppearance = (
         }
         colliderMeshes.length = 0
     }
-    return {boneParts: new Map(), jointParts: new Map(), partMeshes, colliderMeshes, cleanup}
+    return {boneParts: new Map(), jointParts: new Map(), partMeshes, colliderMeshes, cleanup, ...(update !== undefined ? {update} : {})}
 }
 
 /**
@@ -198,7 +307,7 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
     const appearance = createCreatureAppearance(groups, spec.parts, spec.colliderLayout)
 
     const createSlot = (mountJoint: Group, mountJointId: string | undefined): WeaponSlot => ({
-        mountJoint, defaultMountJoint: mountJoint, mountJointId, group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0, supportGripOffset: 0, meshConfig: undefined,
+        mountJoint, defaultMountJoint: mountJoint, mountJointId, mountRotation: [WEAPON_GRIP_FLEX, 0, 0], group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0, supportGripOffset: 0, meshConfig: undefined,
     })
     const mainSlot = createSlot(requireGroup(groups, spec.mainMountId, 'CreatureModel'), spec.mainMountId)
     const offSlot = spec.offMountId !== undefined ? createSlot(requireGroup(groups, spec.offMountId, 'CreatureModel'), spec.offMountId) : undefined
@@ -211,8 +320,13 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
         slot.gripY = 0; slot.supportGripOffset = 0; slot.meshConfig = undefined
         slot.mountJoint.rotation.set(0, 0, 0)
     }
-    const equipSlot = (slot: WeaponSlot, meshConfig: WeaponMeshConfig | undefined, mountJointId: string | undefined): void => {
-        if (slot.meshConfig === meshConfig && slot.mountJointId === mountJointId) return
+    const equipSlot = (
+        slot: WeaponSlot,
+        meshConfig: WeaponMeshConfig | undefined,
+        mountJointId: string | undefined,
+        mountRotation: readonly [number, number, number] | undefined,
+    ): void => {
+        if (slot.meshConfig === meshConfig && slot.mountJointId === mountJointId && slot.mountRotation === mountRotation) return
         clearSlot(slot)
         if (meshConfig === undefined) return
         const result = createWeaponMesh(meshConfig)
@@ -223,8 +337,9 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
          * 未指定时回退体形默认挂点（否则换装后会残留上一个武器的专属挂点） */
         slot.mountJoint = mountJointId !== undefined ? requireGroup(groups, mountJointId, 'CreatureModel') : slot.defaultMountJoint
         slot.mountJointId = mountJointId
+        slot.mountRotation = mountRotation ?? [WEAPON_GRIP_FLEX, 0, 0]
         slot.mountJoint.add(result.group)
-        slot.mountJoint.rotation.set(WEAPON_GRIP_FLEX, 0, 0)
+        slot.mountJoint.rotation.set(slot.mountRotation[0], slot.mountRotation[1], slot.mountRotation[2])
     }
     const setOffhandStowed = (stowed: boolean): void => {
         if (offSlot === undefined) return
@@ -237,8 +352,8 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
         slotGroup.quaternion.setFromEuler(new Euler(grip?.rx ?? 0, grip?.ry ?? 0, grip?.rz ?? 0))
     }
     const equipWeapon = (equipConfig: WeaponEquipConfig): void => {
-        equipSlot(mainSlot, equipConfig.main, equipConfig.mainMountJointId)
-        if (offSlot !== undefined) equipSlot(offSlot, equipConfig.offhand, equipConfig.offMountJointId)
+        equipSlot(mainSlot, equipConfig.main, equipConfig.mainMountJointId, equipConfig.mainMountRotation)
+        if (offSlot !== undefined) equipSlot(offSlot, equipConfig.offhand, equipConfig.offMountJointId, undefined)
         setOffhandStowed(equipConfig.offhandStowed === true)
     }
     const removeWeapon = (): void => {
@@ -256,6 +371,7 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
         jointGroups: groups,
         jointParts: appearance.jointParts,
         colliderMeshes: appearance.colliderMeshes,
+        ...(appearance.update !== undefined ? {updateDeform: appearance.update} : {}),
         equipWeapon,
         setOffhandStowed,
         /* 体形无惯用手差异：空操作 */

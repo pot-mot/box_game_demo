@@ -32,6 +32,7 @@ import {createIcon} from '../../../ui/icons/icon.ts'
 const CATEGORY_COLORS: Record<ItemCategory, number> = {
     weapon: 0xc96a5a,
     armor: 0x5a7fc9,
+    breath: 0xc95ab0,
     block: 0x8a97a8,
     consumable: 0x5abf86,
     material: 0xb09055,

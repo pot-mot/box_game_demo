@@ -84,16 +84,6 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
             {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
         ],
     },
-    /* 马投掷飞斧：复用投掷斧动作时序（武器数据由 horse 体形拥有，仅复用动作模板） */
-    horse_throwing_axe: {
-        segmentId: 'horse_throwing_axe_hurl',
-        duration: 0.5,
-        cooldown: 0,
-        phases: [
-            {name: 'windup', durationRatio: 0.3, moveSpeedMultiplier: 0.4, cancellable: false, chargeable: true},
-            {name: 'release', durationRatio: 0.7, moveSpeedMultiplier: 0.3, cancellable: false},
-        ],
-    },
     grenade: {
         segmentId: 'grenade_throw',
         duration: 0.8,
@@ -121,14 +111,32 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
             {name: 'release', durationRatio: 1, moveSpeedMultiplier: 0.5, cancellable: false, chargeable: true},
         ],
     },
-    /* 天然吐息（wyvern）：昂首蓄势 → 喷吐（在 release 首帧发射锥形弹幕） */
-    wyvern_breath: {
-        segmentId: 'wyvern_breath_blast',
-        duration: 0.5,
+    /* 龙吐息（三种机制共用蓄力/释放时序） */
+    breath_fireball: {
+        segmentId: 'breath_fireball_blast',
+        duration: 0.65,
         cooldown: 0,
         phases: [
-            {name: 'aim', durationRatio: 0.4, moveSpeedMultiplier: 0.2, cancellable: false},
+            {name: 'aim', durationRatio: 0.45, moveSpeedMultiplier: 0.2, cancellable: false, chargeable: true},
+            {name: 'release', durationRatio: 0.55, moveSpeedMultiplier: 0.2, cancellable: false},
+        ],
+    },
+    breath_lightning: {
+        segmentId: 'breath_lightning_blast',
+        duration: 0.55,
+        cooldown: 0,
+        phases: [
+            {name: 'aim', durationRatio: 0.4, moveSpeedMultiplier: 0.2, cancellable: false, chargeable: true},
             {name: 'release', durationRatio: 0.6, moveSpeedMultiplier: 0.2, cancellable: false},
+        ],
+    },
+    breath_laser: {
+        segmentId: 'breath_laser_beam',
+        duration: 1.1,
+        cooldown: 0,
+        phases: [
+            {name: 'aim', durationRatio: 0.36, moveSpeedMultiplier: 0.2, cancellable: false, chargeable: true},
+            {name: 'release', durationRatio: 0.64, moveSpeedMultiplier: 0.2, cancellable: false},
         ],
     },
 }
@@ -142,14 +150,18 @@ export const rangedSegmentIdOf = (weaponId: string): string =>
  * 轻击键 → 该段起手；段无 next（单发，无连段），冷却为 0（节奏由动作时间自然形成）。
  * `charge` 提供时该段声明 `chargeFullTime`（可蓄力），时长取武器类的最长蓄力时间。
  */
-export const buildRangedAttacks = (weaponId: string, charge?: ChargeTuning): WeaponAttacks => {
+export const buildRangedAttacks = (
+    weaponId: string,
+    charge?: ChargeTuning,
+    attackKey: 'light' | 'heavy' = 'light',
+): WeaponAttacks => {
     const spec = RANGED_ATTACK_SPECS[weaponId]
     if (spec === undefined) {
         throw new Error(`远程武器攻击段未定义：${weaponId}`)
     }
     const segment: AttackSegment = {
         id: spec.segmentId,
-        key: 'light',
+        key: attackKey,
         step: 1,
         duration: spec.duration,
         recovery: 0,
@@ -163,12 +175,12 @@ export const buildRangedAttacks = (weaponId: string, charge?: ChargeTuning): Wea
         ...(charge !== undefined ? {chargeFullTime: charge.maxChargeTime} : {}),
         next: [],
     }
+    const activeChain = {key: attackKey, entries: [{segmentId: segment.id}], steps: [segment.id]}
     return {
         segments: {[segment.id]: segment},
         chains: {
-            light: {key: 'light', entries: [{segmentId: segment.id}], steps: [segment.id]},
-            /* 远程武器无重击链（空链：起手解析恒失败） */
-            heavy: {key: 'heavy', entries: [], steps: []},
+            light: attackKey === 'light' ? activeChain : {key: 'light', entries: [], steps: []},
+            heavy: attackKey === 'heavy' ? activeChain : {key: 'heavy', entries: [], steps: []},
             /* 远程武器无空中攻击链（空链：跳跃中按攻击键不起手） */
             air: {key: 'air', entries: [], steps: []},
         },

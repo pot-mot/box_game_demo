@@ -5,6 +5,7 @@
 export type CatalogLocale = {
     'item_category.weapon': string
     'item_category.armor': string
+    'item_category.breath': string
     'item_category.block': string
     'item_category.consumable': string
     'item_category.material': string
@@ -15,8 +16,15 @@ export type CatalogLocale = {
     'equip_slot.chest': string
     'equip_slot.arms': string
     'equip_slot.legs': string
+    'equip_slot.breath': string
     'item.weapon_short_sword.name': string
     'item.weapon_short_sword.desc': string
+    'item.item_breath_fireball.name': string
+    'item.item_breath_fireball.desc': string
+    'item.item_breath_lightning.name': string
+    'item.item_breath_lightning.desc': string
+    'item.item_breath_laser.name': string
+    'item.item_breath_laser.desc': string
     'item.weapon_long_sword.name': string
     'item.weapon_long_sword.desc': string
     'item.weapon_heavy_sword.name': string
@@ -74,6 +82,7 @@ export type CatalogLocale = {
 export const catalogZh: CatalogLocale = {
     'item_category.weapon': '武器',
     'item_category.armor': '护甲',
+    'item_category.breath': '龙息',
     'item_category.block': '方块',
     'item_category.consumable': '消耗品',
     'item_category.material': '材料',
@@ -84,8 +93,15 @@ export const catalogZh: CatalogLocale = {
     'equip_slot.chest': '躯干',
     'equip_slot.arms': '手臂',
     'equip_slot.legs': '腿部',
+    'equip_slot.breath': '吐息',
     'item.weapon_short_sword.name': '短剑',
     'item.weapon_short_sword.desc': '短剑（轻快短兵）',
+    'item.item_breath_fireball.name': '火球吐息',
+    'item.item_breath_fireball.desc': '火球吐息（抛射火球并爆炸）',
+    'item.item_breath_lightning.name': '雷电吐息',
+    'item.item_breath_lightning.desc': '雷电吐息（高速弹与链式传导）',
+    'item.item_breath_laser.name': '激光吐息',
+    'item.item_breath_laser.desc': '激光吐息（高速穿透光束）',
     'item.weapon_long_sword.name': '长剑',
     'item.weapon_long_sword.desc': '长剑（均衡单手剑）',
     'item.weapon_heavy_sword.name': '巨剑',
@@ -143,6 +159,7 @@ export const catalogZh: CatalogLocale = {
 export const catalogEn: CatalogLocale = {
     'item_category.weapon': 'Weapon',
     'item_category.armor': 'Armor',
+    'item_category.breath': 'Dragon Breath',
     'item_category.block': 'Block',
     'item_category.consumable': 'Consumable',
     'item_category.material': 'Material',
@@ -153,8 +170,15 @@ export const catalogEn: CatalogLocale = {
     'equip_slot.chest': 'Chest',
     'equip_slot.arms': 'Arms',
     'equip_slot.legs': 'Legs',
+    'equip_slot.breath': 'Breath',
     'item.weapon_short_sword.name': 'Short Sword',
     'item.weapon_short_sword.desc': 'Short Sword (light and quick)',
+    'item.item_breath_fireball.name': 'Fireball Breath',
+    'item.item_breath_fireball.desc': 'Fireball Breath (arcing explosion)',
+    'item.item_breath_lightning.name': 'Lightning Breath',
+    'item.item_breath_lightning.desc': 'Lightning Breath (fast bolt and chain)',
+    'item.item_breath_laser.name': 'Laser Breath',
+    'item.item_breath_laser.desc': 'Laser Breath (piercing beam)',
     'item.weapon_long_sword.name': 'Long Sword',
     'item.weapon_long_sword.desc': 'Long Sword (balanced one-hander)',
     'item.weapon_heavy_sword.name': 'Heavy Sword',

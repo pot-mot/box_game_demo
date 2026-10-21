@@ -1,64 +1,50 @@
 import type {WeaponConfig} from '../../../../character/weapon/catalog.ts'
 import type {WeaponModelConfig} from '../../../../character/weapon/weapon_class.ts'
 import {meleeClass, resolveMeleeWeapon, type MeleeWeaponClassConfig} from '../../../../character/weapon/melee_weapon.ts'
-import {rangedClass, resolveRangedWeapon, type RangedWeaponClassConfig} from '../../../../character/weapon/ranged_weapon.ts'
 
 /**
- * 马武器表（formId = 'horse'）：天然踢击 + 长枪 / 飞斧（复用 `spear` / `throwing_axe` 网格）。
- * 踢击检测箱朝前（配合 AI 正面进攻），动作由马体形分包提供。
+ * 马武器表（formId = 'horse'）：唯一天然武器「铁蹄」。
+ * - 轻 1 前踢（双前蹄），轻 2 后踹（双后蹄）；
+ * - 重击蓄力践踏（双前蹄高举后砸下）。
+ * 铁蹄外观由体形部件常驻表现，武器本身无可视网格。
  */
 
 const FORM_ID = 'horse'
 
-const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
-    horse_kick: meleeClass({
-        id: 'horse_kick', type: 'melee', natural: true, damageType: 'physical', holdModes: ['one_handed'],
+const CLASSES: Record<string, MeleeWeaponClassConfig> = {
+    horse_iron_hoof: meleeClass({
+        id: 'horse_iron_hoof', type: 'melee', natural: true, damageType: 'physical', holdModes: ['one_handed'],
         damage: 5, knockbackForce: 8, knockbackY: 2, detectionRange: 6,
-        /* 检测箱朝前（原后置 -0.4 使 AI 正面追击永不出招）；命中盒挂前蹄专属挂点 */
-        mountJointId: 'kickMount',
-        detectBox: { size: { x: 0.6, y: 0.7, z: 0.9 }, offset: { x: 0, y: 0, z: 0.45 } },
-    }, { one_handed: {} }),
-    horse_spear: meleeClass({
-        id: 'horse_spear', type: 'melee', damageType: 'physical', holdModes: ['one_handed'],
-        damage: 5, knockbackForce: 4, knockbackY: 1, detectionRange: 10,
-        detectBox: { size: { x: 0.5, y: 0.7, z: 1.486 }, offset: { x: 0, y: 0, z: 0.618 } },
-    }, { one_handed: {} }),
-}
-
-const MELEE_MODELS: Record<string, WeaponModelConfig> = {
-    horse_kick: {
-        id: 'horse_kick', classId: 'horse_kick', formId: FORM_ID, name: '踢击', nameKey: 'weapon.horse_kick',
-        mesh: { id: 'none' },
-    },
-    horse_spear: {
-        id: 'horse_spear', classId: 'horse_spear', formId: FORM_ID, name: '长枪', nameKey: 'weapon.horse_spear',
-        mesh: { id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa },
-    },
-}
-
-const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
-    horse_throwing_axe: rangedClass({
-        id: 'horse_throwing_axe', type: 'ranged',
-        damageType: 'physical',
-        holdModes: ['one_handed'],
-        damage: 6, range: 10,
-        knockbackForce: 5, projectileSpeed: 15, projectileLifetime: 3,
-        detectionRange: 12, idealRange: 6, retreatRange: 3,
-        throwAngle: Math.PI / 8,
-        projectile: {kind: 'thrown_weapon', spin: true}, projectileGravityScale: 0.45,
-        charge: {maxChargeMultiplier: 140, maxChargeTime: 0.9, minSpeedScale: 0.45, maxSpeedScale: 1.7, minLifetimeScale: 0.8, maxLifetimeScale: 1.2},
+        mountJointId: 'flFoot',
+        detectBox: { size: { x: 0.7, y: 0.8, z: 1.0 }, offset: { x: 0, y: 0, z: 0.45 } },
+    }, {
+        one_handed: {
+            chains: {
+                light: {steps: ['light_1', 'light_2'], loop: true},
+                heavy: {steps: ['heavy_1'], loop: false},
+            },
+            hitMounts: {
+                light_1: ['flFoot', 'frFoot'],
+                light_2: ['rlFoot', 'rrFoot'],
+                heavy_1: ['flFoot', 'frFoot'],
+                air_1: ['flFoot', 'frFoot'],
+            },
+            impact: {
+                light_1: {impact: 'medium', poiseDamage: 2},
+                light_2: {impact: 'heavy', poiseDamage: 3},
+                heavy_1: {impact: 'knockdown', poiseDamage: 6},
+            },
+        },
     }),
 }
 
-const RANGED_MODELS: Record<string, WeaponModelConfig> = {
-    horse_throwing_axe: {
-        id: 'horse_throwing_axe', classId: 'horse_throwing_axe', formId: FORM_ID, name: '飞斧', nameKey: 'weapon.horse_throwing_axe',
-        mesh: { id: 'throwing_axe', bladeSize: 0.25, color: 0x888888, gripColor: 0x553322 },
+const MODELS: Record<string, WeaponModelConfig> = {
+    horse_iron_hoof: {
+        id: 'horse_iron_hoof', classId: 'horse_iron_hoof', formId: FORM_ID, name: '铁蹄', nameKey: 'weapon.horse_iron_hoof',
+        mesh: { id: 'none' },
     },
 }
 
-/** 马全部武器（近战在前、远程在后） */
-export const HORSE_WEAPONS: readonly WeaponConfig[] = [
-    ...Object.values(MELEE_MODELS).map(model => resolveMeleeWeapon(MELEE_CLASSES[model.classId]!, model)),
-    ...Object.values(RANGED_MODELS).map(model => resolveRangedWeapon(RANGED_CLASSES[model.classId]!, model)),
-]
+/** 马全部武器 */
+export const HORSE_WEAPONS: readonly WeaponConfig[] = Object.values(MODELS)
+    .map(model => resolveMeleeWeapon(CLASSES[model.classId]!, model))

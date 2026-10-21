@@ -90,9 +90,12 @@ export type EntityLocale = {
     'skeleton.cascade_children': string
     'skeleton.depth': string
     'skeleton.cascade_hint': string
-    'skeleton.ik_root': string
+    'skeleton.ik': string
     'skeleton.ik_none': string
-    'skeleton.ik_level0': string
+    'skeleton.ik_ccd': string
+    'skeleton.ik_fabrik': string
+    'skeleton.ik_depth': string
+    'skeleton.ik_hint': string
     'skeleton.parent': string
     'skeleton.parent_none': string
     'skeleton.add_child': string
@@ -279,10 +282,13 @@ export const entityZh: EntityLocale = {
     'skeleton.cascade': '级联编辑',
     'skeleton.cascade_children': '级联子节点',
     'skeleton.depth': '层数',
-    'skeleton.cascade_hint': '开：子节点（≤层数）跟随调整，层数外后代保持原位；关：仅本节点变化',
-    'skeleton.ik_root': 'IK 根级别',
-    'skeleton.ik_none': '无（普通关节）',
-    'skeleton.ik_level0': '0（最高级根）',
+    'skeleton.cascade_hint': '开：子节点（≤层数）跟随调整，层数外后代保持原位；关：仅本节点变化。配置 IK 的节点平移时由父级链求解，不受级联设置影响',
+    'skeleton.ik': '节点 IK',
+    'skeleton.ik_none': '无（普通节点）',
+    'skeleton.ik_ccd': 'CCD（迭代）',
+    'skeleton.ik_fabrik': 'FABRIK（位置迭代）',
+    'skeleton.ik_depth': '影响父级段数',
+    'skeleton.ik_hint': '该节点作为 IK 末端；Gizmo 平移时由父级链求解（默认影响 2 段父级）',
     'skeleton.parent': '父关节',
     'skeleton.parent_none': '（无 - 独立根）',
     'skeleton.add_child': '添加子关节',
@@ -469,10 +475,13 @@ export const entityEn: EntityLocale = {
     'skeleton.cascade': 'Cascade Edit',
     'skeleton.cascade_children': 'Cascade children',
     'skeleton.depth': 'Depth',
-    'skeleton.cascade_hint': 'On: children (≤ depth) follow, deeper descendants stay; Off: only this node changes',
-    'skeleton.ik_root': 'IK Root Level',
-    'skeleton.ik_none': 'None (plain joint)',
-    'skeleton.ik_level0': '0 (top-level root)',
+    'skeleton.cascade_hint': 'On: children (≤ depth) follow, deeper descendants stay; Off: only this node changes. IK nodes use their parent chain instead',
+    'skeleton.ik': 'Node IK',
+    'skeleton.ik_none': 'None (plain node)',
+    'skeleton.ik_ccd': 'CCD (iterative)',
+    'skeleton.ik_fabrik': 'FABRIK (positional)',
+    'skeleton.ik_depth': 'Affected parent segments',
+    'skeleton.ik_hint': 'This node is the IK end effector; Gizmo translation solves its parent chain (default 2 segments)',
     'skeleton.parent': 'Parent Joint',
     'skeleton.parent_none': '(none - independent root)',
     'skeleton.add_child': 'Add Child Joint',

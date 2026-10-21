@@ -31,4 +31,4 @@ export {
     inventoryToSave,
     inventoryFromSave,
 } from './inventory.ts'
-export type {AddItemResult} from './inventory.ts'
+export type {AddItemResult, EquipContext} from './inventory.ts'

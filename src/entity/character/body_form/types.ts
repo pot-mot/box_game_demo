@@ -50,6 +50,8 @@ export interface EquipSlotSet {
     readonly limb: readonly LimbSlot[]
     /** 该体形是否有武器槽（main_hand / off_hand；缺省 false） */
     readonly weapon: boolean
+    /** 该体形是否有吐息装备槽（仅 wyvern；缺省 false） */
+    readonly breath?: boolean
 }
 
 /** 体形外观装配结果：通用外观 + 关节部件 + 碰撞可视化 */
@@ -104,6 +106,9 @@ export interface BodyForm {
     readonly weapons: readonly import('../../../character/weapon/catalog.ts').WeaponConfig[]
     /** 默认武器 id（须在 `weapons` 内；无武器 / 无持械体形回退，如空手 `unarmed` / 天然） */
     readonly defaultWeaponId: string
+
+    /** 该体形拥有的吐息模组（独立装备槽；缺省 = 无） */
+    readonly breathModules?: readonly import('../../../character/weapon/breath_module.ts').BreathModuleConfig[]
 
     /**
      * 翻滚根自转圈数（可选；缺省 1 = 前滚翻一周，人形默认）。

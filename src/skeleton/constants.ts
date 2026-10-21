@@ -1,3 +1,14 @@
+import type {IkSolverId} from './joint.ts'
+
+/** 节点 IK 默认求解器 */
+export const DEFAULT_IK_SOLVER: IkSolverId = 'ccd'
+
+/** 节点 IK 默认影响父级段数 */
+export const DEFAULT_IK_CHAIN_DEPTH = 2
+
+/** 节点 IK 影响父级段数上限 */
+export const IK_CHAIN_DEPTH_MAX = 8
+
 /** CCD IK 求解默认最大迭代次数 */
 export const DEFAULT_IK_MAX_ITERATIONS = 10
 

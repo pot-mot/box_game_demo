@@ -11,6 +11,10 @@ import type { WeaponModelConfig } from './weapon_class.ts'
 import type { ProjectileVisualSpec } from './projectile_visual.ts'
 import type { ChargeTuning } from './charge_tuning.ts'
 
+/** 吐息机制类型（龙专属装备） */
+export const BREATH_KINDS = ['fireball', 'lightning', 'laser'] as const
+export type BreathKind = typeof BREATH_KINDS[number]
+
 /**
  * 投掷物默认可穿过的碰撞类别 —— 仅水域（area）：
  * 其余类别（角色 / 箱子 / 碎片 / 地形 / 世界地面）命中即消失，见 `entity/character/combat/ranged_executor.ts`。
@@ -48,6 +52,8 @@ export interface RangedWeaponClassConfig {
     readonly natural?: boolean
     /** 武器挂点关节 id（可选；仅生物体形使用）：覆盖体形默认主挂点。缺省 = 默认主挂点 */
     readonly mountJointId?: string
+    /** 生物武器挂点局部欧拉角（可选；如狼口含剑横置）；缺省 = 体形默认握持姿态 */
+    readonly mountRotation?: readonly [number, number, number]
     /** 攻击类别（武器固有，不可被存档/面板覆写）：弹丸与爆炸伤害均按此类别结算防御 */
     readonly damageType: DamageType
     /** 可支持的持握模式（数组；首个为默认模式，换武器时角色持握模式重置为首个） */
@@ -90,6 +96,14 @@ export interface RangedWeaponClassConfig {
     readonly explosionPoise?: number
     readonly homingStrength?: number
     readonly throwAngle?: number
+    /** 吐息机制（仅吐息模组声明）：火球 / 雷电 / 激光 */
+    readonly breathKind?: BreathKind
+    /** 雷电链式传导：额外目标数 / 搜索半径 / 每跳伤害衰减 */
+    readonly chainCount?: number
+    readonly chainRadius?: number
+    readonly chainFalloff?: number
+    /** 激光穿透角色数（命中后继续飞行） */
+    readonly pierceCount?: number
     /**
      * 子弹可穿过的碰撞类别列表（默认 `DEFAULT_BULLET_PASS_THROUGH_CATEGORIES` = 仅 area）：
      * 命中列表内类别的物体时子弹继续飞行，命中其它类别（角色 / 箱子 / 碎片 / 地形 / 世界地面）即消失。
@@ -118,9 +132,12 @@ export interface RangedWeaponConfig extends RangedWeaponClassConfig {
  * 远程武器类装配：按默认持握模式注入固有开火动作链。
  * 由各体形的 `weapons.ts` 调用（武器类数据由所属体形拥有）。
  */
-export const rangedClass = (base: Omit<RangedWeaponClassConfig, 'attacks'>): RangedWeaponClassConfig => {
+export const rangedClass = (
+    base: Omit<RangedWeaponClassConfig, 'attacks'>,
+    attackKey: 'light' | 'heavy' = 'light',
+): RangedWeaponClassConfig => {
     const attacks: Partial<Record<HoldMode, WeaponAttacks>> = {}
-    attacks[base.holdModes[0]] = buildRangedAttacks(base.id, base.charge)
+    attacks[base.holdModes[0]] = buildRangedAttacks(base.id, base.charge, attackKey)
     return {...base, attacks}
 }
 

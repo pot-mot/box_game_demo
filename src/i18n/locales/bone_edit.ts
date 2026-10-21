@@ -22,18 +22,21 @@ export type BoneEditLocale = {
     'bone_edit.timeline.paste': string
     'bone_edit.timeline.onion_off': string
     'bone_edit.timeline.onion_on': string
-    'bone_edit.timeline.ik_off': string
-    'bone_edit.timeline.ik_on': string
-    'bone_edit.timeline.ik_title': string
     'bone_edit.timeline.undo': string
     'bone_edit.timeline.redo': string
     'bone_edit.timeline.export': string
     'bone_edit.timeline.import': string
     'bone_edit.timeline.duration': string
     'bone_edit.timeline.speed': string
-    'bone_edit.timeline.skeleton': string
     'bone_edit.timeline.rename_prompt': string
     'bone_edit.timeline.default_clip_name': string
+
+    /* ── 右侧视图/编辑常驻面板 ── */
+    'bone_edit.view.title': string
+    'bone_edit.view.edit_enabled': string
+    'bone_edit.view.show_joints': string
+    'bone_edit.view.show_bones': string
+    'bone_edit.view.show_model': string
 
     /* ── 轨道插值方式 ── */
     'bone_edit.interp.linear': string
@@ -48,10 +51,6 @@ export type BoneEditLocale = {
     'bone_edit.weapon.none': string
     'bone_edit.weapon.group_melee': string
     'bone_edit.weapon.group_ranged': string
-    'bone_edit.grip.on': string
-    'bone_edit.grip.off': string
-    'bone_edit.grip.on_title': string
-    'bone_edit.grip.off_title': string
 
     /* ── 惯用手预览 ── */
     'bone_edit.handedness': string
@@ -85,6 +84,34 @@ export type BoneEditLocale = {
     'bone_edit.state.guard_broken': string
     'bone_edit.state.variant_bare': string
     'bone_edit.state.variant_held': string
+
+    /* ── 函数编排模式 ── */
+    'bone_edit.mode.tracks': string
+    'bone_edit.mode.script': string
+    'bone_edit.form': string
+    'bone_edit.form.select_title': string
+    'bone_edit.script.title': string
+    'bone_edit.script.help': string
+    'bone_edit.script.rebake': string
+    'bone_edit.script.to_tracks': string
+    'bone_edit.script.duration': string
+    'bone_edit.script.loop': string
+    'bone_edit.script.once': string
+    'bone_edit.script.error': string
+    'bone_edit.script.empty': string
+    'bone_edit.script.baked': (n: number) => string
+    'bone_edit.script.humanoid.wave': string
+    'bone_edit.script.humanoid.bow': string
+    'bone_edit.script.humanoid.march': string
+    'bone_edit.script.wolf.tail_wag': string
+    'bone_edit.script.wolf.prowl': string
+    'bone_edit.script.wolf.howl': string
+    'bone_edit.script.horse.head_nod': string
+    'bone_edit.script.horse.trot': string
+    'bone_edit.script.horse.paw': string
+    'bone_edit.script.wyvern.wing_fold': string
+    'bone_edit.script.wyvern.roar': string
+    'bone_edit.script.wyvern.stalk': string
 }
 
 export const boneEditZh: BoneEditLocale = {
@@ -107,18 +134,21 @@ export const boneEditZh: BoneEditLocale = {
     'bone_edit.timeline.paste': '粘贴',
     'bone_edit.timeline.onion_off': '洋葱皮',
     'bone_edit.timeline.onion_on': '洋葱皮开',
-    'bone_edit.timeline.ik_off': 'IK 关',
-    'bone_edit.timeline.ik_on': 'IK 开',
-    'bone_edit.timeline.ik_title': 'IK 牵引模式切换',
     'bone_edit.timeline.undo': '撤销',
     'bone_edit.timeline.redo': '重做',
     'bone_edit.timeline.export': '导出',
     'bone_edit.timeline.import': '导入',
     'bone_edit.timeline.duration': '时长',
     'bone_edit.timeline.speed': '速度',
-    'bone_edit.timeline.skeleton': '骨架',
     'bone_edit.timeline.rename_prompt': '新动画名：',
     'bone_edit.timeline.default_clip_name': '动画',
+
+    /* ── 右侧视图/编辑常驻面板 ── */
+    'bone_edit.view.title': '视图与编辑',
+    'bone_edit.view.edit_enabled': '允许编辑节点',
+    'bone_edit.view.show_joints': '显示节点',
+    'bone_edit.view.show_bones': '显示骨骼',
+    'bone_edit.view.show_model': '显示模型',
 
     /* ── 轨道插值方式 ── */
     'bone_edit.interp.linear': '线性',
@@ -133,10 +163,6 @@ export const boneEditZh: BoneEditLocale = {
     'bone_edit.weapon.none': '武器：无',
     'bone_edit.weapon.group_melee': '近战武器',
     'bone_edit.weapon.group_ranged': '远程武器',
-    'bone_edit.grip.on': '支撑手贴合：开',
-    'bone_edit.grip.off': '支撑手贴合：关',
-    'bone_edit.grip.on_title': '播放预览时把支撑手臂链求解到武器副握点（关闭后两只手互不牵扯）',
-    'bone_edit.grip.off_title': '支撑手贴合已关闭：编辑与预览时两只手完全独立',
 
     /* ── 惯用手预览 ── */
     'bone_edit.handedness': '惯用手',
@@ -170,6 +196,34 @@ export const boneEditZh: BoneEditLocale = {
     'bone_edit.state.guard_broken': '破防',
     'bone_edit.state.variant_bare': '（空手）',
     'bone_edit.state.variant_held': '（持械）',
+
+    /* ── 函数编排模式 ── */
+    'bone_edit.mode.tracks': '轨道编辑',
+    'bone_edit.mode.script': '函数编排',
+    'bone_edit.form': '体形',
+    'bone_edit.form.select_title': '切换骨骼体形（各体形独立保存动画库）',
+    'bone_edit.script.title': '语义动作脚本',
+    'bone_edit.script.help': '动作函数在首次进入本模式时烘焙为 clip，之后直接播放缓存',
+    'bone_edit.script.rebake': '重新烘焙',
+    'bone_edit.script.to_tracks': '载入轨道编辑',
+    'bone_edit.script.duration': '时长',
+    'bone_edit.script.loop': '循环',
+    'bone_edit.script.once': '单次',
+    'bone_edit.script.error': '烘焙失败',
+    'bone_edit.script.empty': '当前体形没有注册脚本动作',
+    'bone_edit.script.baked': (n) => `已烘焙 ${n} 个动作`,
+    'bone_edit.script.humanoid.wave': '挥手',
+    'bone_edit.script.humanoid.bow': '鞠躬',
+    'bone_edit.script.humanoid.march': '行军步',
+    'bone_edit.script.wolf.tail_wag': '摇尾',
+    'bone_edit.script.wolf.prowl': '潜行',
+    'bone_edit.script.wolf.howl': '长嚎',
+    'bone_edit.script.horse.head_nod': '点头',
+    'bone_edit.script.horse.trot': '快步',
+    'bone_edit.script.horse.paw': '刨蹄',
+    'bone_edit.script.wyvern.wing_fold': '振翼',
+    'bone_edit.script.wyvern.roar': '咆哮',
+    'bone_edit.script.wyvern.stalk': '潜近',
 }
 
 export const boneEditEn: BoneEditLocale = {
@@ -192,18 +246,21 @@ export const boneEditEn: BoneEditLocale = {
     'bone_edit.timeline.paste': 'Paste',
     'bone_edit.timeline.onion_off': 'Onion Skin',
     'bone_edit.timeline.onion_on': 'Onion Skin On',
-    'bone_edit.timeline.ik_off': 'IK Off',
-    'bone_edit.timeline.ik_on': 'IK On',
-    'bone_edit.timeline.ik_title': 'Toggle IK drag mode',
     'bone_edit.timeline.undo': 'Undo',
     'bone_edit.timeline.redo': 'Redo',
     'bone_edit.timeline.export': 'Export',
     'bone_edit.timeline.import': 'Import',
     'bone_edit.timeline.duration': 'Duration',
     'bone_edit.timeline.speed': 'Speed',
-    'bone_edit.timeline.skeleton': 'Skeleton',
     'bone_edit.timeline.rename_prompt': 'New animation name:',
     'bone_edit.timeline.default_clip_name': 'Animation',
+
+    /* ── View/edit side panel ── */
+    'bone_edit.view.title': 'View & Editing',
+    'bone_edit.view.edit_enabled': 'Allow node editing',
+    'bone_edit.view.show_joints': 'Show joints',
+    'bone_edit.view.show_bones': 'Show bones',
+    'bone_edit.view.show_model': 'Show model',
 
     /* ── Track interpolation ── */
     'bone_edit.interp.linear': 'Linear',
@@ -218,10 +275,6 @@ export const boneEditEn: BoneEditLocale = {
     'bone_edit.weapon.none': 'Weapon: None',
     'bone_edit.weapon.group_melee': 'Melee',
     'bone_edit.weapon.group_ranged': 'Ranged',
-    'bone_edit.grip.on': 'Support Grip: On',
-    'bone_edit.grip.off': 'Support Grip: Off',
-    'bone_edit.grip.on_title': 'Solve the support arm chain to the weapon support grip during preview playback (off = hands stay independent)',
-    'bone_edit.grip.off_title': 'Support grip off: hands are fully independent while editing and previewing',
 
     /* ── Handedness preview ── */
     'bone_edit.handedness': 'Handed',
@@ -255,4 +308,32 @@ export const boneEditEn: BoneEditLocale = {
     'bone_edit.state.guard_broken': 'Guard Broken',
     'bone_edit.state.variant_bare': ' (Unarmed)',
     'bone_edit.state.variant_held': ' (Armed)',
+
+    /* ── Script authoring mode ── */
+    'bone_edit.mode.tracks': 'Tracks',
+    'bone_edit.mode.script': 'Script',
+    'bone_edit.form': 'Form',
+    'bone_edit.form.select_title': 'Switch skeleton form (each form keeps its own animation library)',
+    'bone_edit.script.title': 'Semantic Motion Scripts',
+    'bone_edit.script.help': 'Motion functions are baked into clips the first time this mode opens, then played from cache',
+    'bone_edit.script.rebake': 'Re-bake',
+    'bone_edit.script.to_tracks': 'Load to Tracks',
+    'bone_edit.script.duration': 'Duration',
+    'bone_edit.script.loop': 'Loop',
+    'bone_edit.script.once': 'One-shot',
+    'bone_edit.script.error': 'Bake failed',
+    'bone_edit.script.empty': 'No scripted motions registered for this form',
+    'bone_edit.script.baked': (n) => `${n} motion(s) baked`,
+    'bone_edit.script.humanoid.wave': 'Wave',
+    'bone_edit.script.humanoid.bow': 'Bow',
+    'bone_edit.script.humanoid.march': 'March',
+    'bone_edit.script.wolf.tail_wag': 'Tail Wag',
+    'bone_edit.script.wolf.prowl': 'Prowl',
+    'bone_edit.script.wolf.howl': 'Howl',
+    'bone_edit.script.horse.head_nod': 'Head Nod',
+    'bone_edit.script.horse.trot': 'Trot',
+    'bone_edit.script.horse.paw': 'Paw',
+    'bone_edit.script.wyvern.wing_fold': 'Wing Flap',
+    'bone_edit.script.wyvern.roar': 'Roar',
+    'bone_edit.script.wyvern.stalk': 'Stalk',
 }

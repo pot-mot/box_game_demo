@@ -1,4 +1,12 @@
-import {ANIM_SELECT_ID, HANDEDNESS_SELECT_ID, TIMELINE_MAX_HEIGHT, TIMELINE_MIN_HEIGHT} from './constants.ts'
+import {
+    ANIM_SELECT_ID,
+    BONE_FORM_SELECT_ID,
+    BONE_MODE_SCRIPT_ID,
+    BONE_MODE_TRACKS_ID,
+    HANDEDNESS_SELECT_ID,
+    TIMELINE_MAX_HEIGHT,
+    TIMELINE_MIN_HEIGHT,
+} from './constants.ts'
 import {HANDEDNESS, HANDEDNESS_LABELS} from '../../character/handedness.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import {localizeText, localizeTitle} from '../../i18n/dom.ts'
@@ -8,6 +16,11 @@ import {createIcon} from '../../ui/icons/icon.ts'
 export interface TimelineControls {
     /** 控制条容器（武器控制等需追加控件） */
     readonly bar: HTMLElement
+    readonly modeTracksBtn: HTMLButtonElement
+    readonly modeScriptBtn: HTMLButtonElement
+    readonly formSelect: HTMLSelectElement
+    /** 仅轨道模式可见的控制（函数编排模式隐藏） */
+    readonly trackOnly: readonly HTMLElement[]
     readonly playBtn: HTMLButtonElement
     readonly stopBtn: HTMLButtonElement
     readonly loopInput: HTMLInputElement
@@ -23,14 +36,13 @@ export interface TimelineControls {
     readonly copyBtn: HTMLButtonElement
     readonly pasteBtn: HTMLButtonElement
     readonly onionBtn: HTMLButtonElement
-    readonly ikBtn: HTMLButtonElement
     readonly undoBtn: HTMLButtonElement
     readonly redoBtn: HTMLButtonElement
     readonly exportBtn: HTMLButtonElement
     readonly importBtn: HTMLButtonElement
-    readonly skeletonSelect: HTMLSelectElement
     /** 惯用手预览下拉（左撇子 = 聚焦骨架整体镜像；行为由时间轴主装配绑定） */
     readonly handednessSelect: HTMLSelectElement
+    readonly handednessLabel: HTMLElement
     /** 当前面板高度（px，拖拽顶边改变） */
     readonly getHeight: () => number
 }
@@ -89,6 +101,22 @@ export const createTimelineControls = (
     bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 8px;flex-shrink:0;flex-wrap:wrap'
     container.appendChild(bar)
 
+    const modeTracksBtn = makeTextButton('bone_edit.mode.tracks')
+    modeTracksBtn.id = BONE_MODE_TRACKS_ID
+    modeTracksBtn.classList.add('is-active')
+    modeTracksBtn.setAttribute('aria-pressed', 'true')
+    const modeScriptBtn = makeTextButton('bone_edit.mode.script')
+    modeScriptBtn.id = BONE_MODE_SCRIPT_ID
+    modeScriptBtn.setAttribute('aria-pressed', 'false')
+
+    const formLabel = document.createElement('span')
+    localizeText(formLabel, 'bone_edit.form')
+    const formSelect = document.createElement('select')
+    formSelect.id = BONE_FORM_SELECT_ID
+    formSelect.className = 'dc-select'
+    localizeTitle(formSelect, 'bone_edit.form.select_title')
+    formSelect.style.cssText = 'max-width:130px'
+
     const playBtn = makeButton()
     playBtn.id = 'bone-timeline-play'
     playBtn.appendChild(createIcon('play', {size: 'sm'}))
@@ -135,12 +163,9 @@ export const createTimelineControls = (
     const delKeyBtn = makeTextButton('bone_edit.timeline.del_key', 'bone_edit.timeline.del_key_title')
     const copyBtn = makeTextButton('bone_edit.timeline.copy')
     const pasteBtn = makeTextButton('bone_edit.timeline.paste')
-    /* 洋葱皮 / IK 为开合切换按钮：文案在点击时按状态重译（不走 localizeText，避免语言切换覆盖开合态） */
+    /* 洋葱皮为开合切换按钮：文案在点击时按状态重译（不走 localizeText，避免语言切换覆盖开合态） */
     const onionBtn = makeButton()
     onionBtn.textContent = translate('bone_edit.timeline.onion_off')
-    const ikBtn = makeButton()
-    ikBtn.textContent = translate('bone_edit.timeline.ik_off')
-    localizeTitle(ikBtn, 'bone_edit.timeline.ik_title')
     const undoBtn = makeButton()
     undoBtn.id = 'bone-timeline-undo'
     undoBtn.appendChild(createIcon('undo', {size: 'sm'}))
@@ -151,11 +176,6 @@ export const createTimelineControls = (
     localizeTitle(redoBtn, 'bone_edit.timeline.redo')
     const exportBtn = makeTextButton('bone_edit.timeline.export')
     const importBtn = makeTextButton('bone_edit.timeline.import')
-
-    /* 骨架聚焦下拉 */
-    const skeletonSelect = document.createElement('select')
-    skeletonSelect.className = 'dc-select'
-    skeletonSelect.style.cssText = 'max-width:140px'
 
     /* 惯用手预览下拉：右撇子 = 原样；左撇子 = 聚焦骨架整体镜像（与游戏内镜像结果一致） */
     const handednessSelect = document.createElement('select')
@@ -174,25 +194,32 @@ export const createTimelineControls = (
     localizeText(durationLabel, 'bone_edit.timeline.duration')
     const speedLabel = document.createElement('span')
     localizeText(speedLabel, 'bone_edit.timeline.speed')
-    const skeletonLabel = document.createElement('span')
-    localizeText(skeletonLabel, 'bone_edit.timeline.skeleton')
     const handednessLabel = document.createElement('span')
     localizeText(handednessLabel, 'bone_edit.handedness')
 
     for (const el of [
+        modeTracksBtn, modeScriptBtn, formLabel, formSelect,
         playBtn, stopBtn, loopCheck, animSelect, newAnimBtn, renameAnimBtn, delAnimBtn,
         durationLabel, durationInput, speedLabel, speedInput,
-        addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn, onionBtn, ikBtn, undoBtn, redoBtn,
-        exportBtn, importBtn, skeletonLabel, skeletonSelect, handednessLabel, handednessSelect,
+        addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn, onionBtn, undoBtn, redoBtn,
+        exportBtn, importBtn, handednessLabel, handednessSelect,
     ]) {
         bar.appendChild(el)
     }
 
     return {
         bar,
+        modeTracksBtn, modeScriptBtn, formSelect,
+        trackOnly: [
+            loopCheck, animSelect, newAnimBtn, renameAnimBtn, delAnimBtn,
+            durationLabel, durationInput, addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn,
+            onionBtn, undoBtn, redoBtn, exportBtn, importBtn,
+            handednessLabel, handednessSelect,
+        ],
         playBtn, stopBtn, loopInput, animSelect, newAnimBtn, renameAnimBtn, delAnimBtn,
         durationInput, speedInput, addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn,
-        onionBtn, ikBtn, undoBtn, redoBtn, exportBtn, importBtn, skeletonSelect, handednessSelect,
+        onionBtn, undoBtn, redoBtn, exportBtn, importBtn, handednessSelect,
+        handednessLabel,
         getHeight: () => panelHeight,
     }
 }

@@ -198,7 +198,10 @@ export const createMeleeExecutor = (
         entity: CharacterEntity,
         _ctx: ExecutorContext,
     ): void => {
-        const weapon = combat.weapon
+        const activeSegment = combat.activeSegment
+        const weapon = activeSegment !== undefined && combat.attackWeapons?.has(activeSegment.id) === true
+            ? (combat.activeWeapon ?? combat.weapon)
+            : combat.weapon
         if (weapon.type !== 'melee') return
         /* 命中窗口全部关闭（动画事件轨 hitbox_off 或攻击尚未进入打击阶段）时不检测 */
         if (!mainWindowActive && !offhandWindowActive) return
@@ -341,7 +344,17 @@ export const createMeleeExecutor = (
             }
         }
 
-        if (mainWindowActive) strikeWith(model.weaponGroup, model.weaponHitBox, weapon)
+        if (mainWindowActive) {
+            const mountIds = combat.activeSegment?.hitMountJointIds
+            if (mountIds !== undefined && mountIds.length > 0) {
+                for (const mountId of mountIds) {
+                    const mountGroup = model.jointGroups.get(mountId)
+                    if (mountGroup !== undefined) strikeWith(mountGroup, model.weaponHitBox, weapon)
+                }
+            } else {
+                strikeWith(model.weaponGroup, model.weaponHitBox, weapon)
+            }
+        }
         if (offhandWindowActive) {
             /* 副手武器缺失（异常数据）时回退主手数值，保证命中不丢失 */
             const offhand = combat.offhand?.weapon

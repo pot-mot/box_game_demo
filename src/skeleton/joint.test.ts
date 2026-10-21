@@ -10,7 +10,7 @@ describe('骨骼关节点', () => {
         expect(a.rotation.w).toBe(1)
         expect(a.parent).toBeUndefined()
         expect(a.children).toHaveLength(0)
-        expect(a.ikRootLevel).toBeUndefined()
+        expect(a.ik).toBeUndefined()
     })
 
     it('创建：可显式指定 id（序列化/预设用）', () => {
@@ -83,11 +83,11 @@ describe('骨骼关节点', () => {
         expect(a.parent).toBeUndefined()
     })
 
-    it('ikRootLevel 读写', () => {
+    it('节点 IK 配置读写', () => {
         const a = createSkeletonJoint('a')
-        a.ikRootLevel = 1
-        expect(a.ikRootLevel).toBe(1)
-        a.ikRootLevel = undefined
-        expect(a.ikRootLevel).toBeUndefined()
+        a.ik = {solver: 'ccd', chainDepth: 2}
+        expect(a.ik).toEqual({solver: 'ccd', chainDepth: 2})
+        a.ik = undefined
+        expect(a.ik).toBeUndefined()
     })
 })

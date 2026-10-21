@@ -5,7 +5,15 @@ import {buildCharacterSkeletonDefinition} from '../../entity/character/skeleton/
 import {sampleClip} from '../../skeleton/anim/sampling.ts'
 import {orderedSegments} from '../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponsOfForm, type WeaponConfig} from '../../character/weapon/catalog.ts'
-import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
+import {
+    HORSE_BODY_FORM_ID,
+    HUMANOID_BODY_FORM_ID,
+    WOLF_BODY_FORM_ID,
+    WYVERN_BODY_FORM_ID,
+} from '../../entity/character/body_form/index.ts'
+import {buildWolfSkeleton} from '../../entity/character/forms/wolf/skeleton.ts'
+import {buildHorseSkeleton} from '../../entity/character/forms/horse/skeleton.ts'
+import {buildWyvernSkeleton} from '../../entity/character/forms/wyvern/skeleton.ts'
 import type {BuiltinClipEntry} from './builtin_clips.ts'
 
 const entriesOf = (group: string): readonly BuiltinClipEntry[] =>
@@ -147,6 +155,31 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         expect(bare).toBeDefined()
         expect(held).toBeDefined()
         expect(bare!.rotation.angleTo(held!.rotation)).toBeGreaterThan(0.1)
+    })
+
+    it('狼 / 马 / 飞龙也拥有各自的内置基础状态与攻击动作，且轨道目标匹配自身骨架', () => {
+        const forms: readonly (readonly [string, () => ReturnType<typeof buildWolfSkeleton>])[] = [
+            [WOLF_BODY_FORM_ID, buildWolfSkeleton],
+            [HORSE_BODY_FORM_ID, buildHorseSkeleton],
+            [WYVERN_BODY_FORM_ID, buildWyvernSkeleton],
+        ]
+        for (const [formId, buildSkeleton] of forms) {
+            const library = getBuiltinClips(formId)
+            expect(library.length, formId).toBeGreaterThan(0)
+            expect(library.some(entry => entry.group === '基础状态'), formId).toBe(true)
+            expect(library.some(entry => entry.group === '近战攻击'), formId).toBe(true)
+            expect(new Set(library.map(entry => entry.id)).size, formId).toBe(library.length)
+            const jointIds = new Set(buildSkeleton().joints.map(joint => joint.id))
+            for (const entry of library) {
+                for (const track of entry.clip.jointTracks) {
+                    expect(jointIds.has(track.targetId), `${formId}:${entry.id}:${track.targetId}`).toBe(true)
+                }
+            }
+        }
+        /* 龙吐息为独立装备槽，也要能在编辑器里直接选择 */
+        expect(getBuiltinClips(WYVERN_BODY_FORM_ID).map(entry => entry.id)).toEqual(expect.arrayContaining([
+            'breath_fireball_blast', 'breath_lightning_blast', 'breath_laser_beam',
+        ]))
     })
 
     it('惰性构建并缓存（重复取用返回同一集合）', () => {

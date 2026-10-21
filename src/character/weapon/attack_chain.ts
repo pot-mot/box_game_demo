@@ -83,6 +83,8 @@ export interface AttackImpulse {
     readonly speed: number
     /** 仅离地时施加（砸地类：已落地则跳过，避免向地面注入速度） */
     readonly requireAirborne?: boolean
+    /** 方向按角色当前朝向旋转（生物突进 / 后踹用；缺省 = 世界空间方向） */
+    readonly relativeToFacing?: boolean
 }
 
 /** 攻击段（武器模组拥有的一次可播放动作；id 同时是动画键与展示/编辑器清单键） */
@@ -110,6 +112,17 @@ export interface AttackSegment {
     readonly poiseDamage: number
     /** 段内冲击序列（按 `at` 升序；缺省 = 空数组，无冲击） */
     readonly impulses?: readonly AttackImpulse[]
+    /**
+     * 天然武器的命中挂点关节 id（可选）：近战执行器用这些关节的世界矩阵定位命中箱，
+     * 支持同一武器在一段内使用不同肢体（马前/后蹄、龙左右翼爪/口/尾）。
+     * 缺省 = 当前武器模型挂点（`model.weaponGroup`）。
+     */
+    readonly hitMountJointIds?: readonly string[]
+    /**
+     * 本段实际使用的攻击武器 id（可选；吐息等“非主武器段”用）。
+     * 缺省 = 角色当前主武器；运行时按该 id 切换执行器与数值来源。
+     */
+    readonly attackWeaponId?: string
     /** 冷却（秒，0 = 无冷却；非 0 时从段触发时刻开始计时，只挡起手） */
     readonly cooldown: number
     /**

@@ -45,11 +45,11 @@ export type CharacterLocale = {
     'weapon.wolf_bite': string
     'weapon.wolf_short_sword': string
     'weapon.wolf_long_sword': string
-    'weapon.horse_kick': string
-    'weapon.horse_spear': string
-    'weapon.horse_throwing_axe': string
+    'weapon.horse_iron_hoof': string
     'weapon.wyvern_claw': string
-    'weapon.wyvern_breath': string
+    'breath.fireball': string
+    'breath.lightning': string
+    'breath.laser': string
     'weapon.shield_small': string
     'weapon.shield_medium': string
     'weapon.shield_large': string
@@ -257,11 +257,11 @@ export const characterZh: CharacterLocale = {
     'weapon.wolf_bite': '撕咬',
     'weapon.wolf_short_sword': '口含短剑',
     'weapon.wolf_long_sword': '口含长剑',
-    'weapon.horse_kick': '踢击',
-    'weapon.horse_spear': '长枪',
-    'weapon.horse_throwing_axe': '飞斧',
-    'weapon.wyvern_claw': '爪击',
-    'weapon.wyvern_breath': '吐息',
+    'weapon.horse_iron_hoof': '铁蹄',
+    'weapon.wyvern_claw': '龙爪',
+    'breath.fireball': '火球吐息',
+    'breath.lightning': '雷电吐息',
+    'breath.laser': '激光吐息',
     'weapon.shield_small': '小盾',
     'weapon.shield_medium': '中盾',
     'weapon.shield_large': '大盾',
@@ -466,11 +466,11 @@ export const characterEn: CharacterLocale = {
     'weapon.wolf_bite': 'Bite',
     'weapon.wolf_short_sword': 'Mouthed Short Sword',
     'weapon.wolf_long_sword': 'Mouthed Long Sword',
-    'weapon.horse_kick': 'Kick',
-    'weapon.horse_spear': 'Spear',
-    'weapon.horse_throwing_axe': 'Throwing Axe',
-    'weapon.wyvern_claw': 'Claw',
-    'weapon.wyvern_breath': 'Breath',
+    'weapon.horse_iron_hoof': 'Iron Hoof',
+    'weapon.wyvern_claw': 'Dragon Claw',
+    'breath.fireball': 'Fireball Breath',
+    'breath.lightning': 'Lightning Breath',
+    'breath.laser': 'Laser Breath',
     'weapon.shield_small': 'Small Shield',
     'weapon.shield_medium': 'Medium Shield',
     'weapon.shield_large': 'Large Shield',

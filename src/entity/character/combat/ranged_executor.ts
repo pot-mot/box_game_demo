@@ -29,6 +29,7 @@ const activePhaseName = (combat: CombatComponent): string | undefined => {
 }
 
 const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
+const _origin: RapVector3 = {x: 0, y: 0, z: 0}
 
 export const createRangedExecutor = (
     shared: SharedWorld,
@@ -60,7 +61,10 @@ export const createRangedExecutor = (
         entity: CharacterEntity,
         _ctx: ExecutorContext,
     ): void => {
-        const weapon = combat.weapon
+        const segment = combat.activeSegment
+        const weapon = segment !== undefined && combat.attackWeapons?.has(segment.id) === true
+            ? (combat.activeWeapon ?? combat.weapon)
+            : combat.weapon
         if (weapon.type !== 'ranged') return
 
         if (firedThisAttack.has(entity.id) || combat.attackHolding || activePhaseName(combat) !== 'release') return
@@ -89,6 +93,10 @@ export const createRangedExecutor = (
         /* 弹丸冲击力 / 削韧取自当前开火段（缺省沿用远程默认值） */
         const impact = combat.activeSegment?.impact ?? RANGED_DEFAULT_IMPACT
         const poiseDamage = combat.activeSegment?.poiseDamage ?? RANGED_DEFAULT_POISE_DAMAGE
+        /* 武器挂点世界坐标（口部吐息 / 枪口）：有效时从挂点发射，否则回退身体中心 */
+        const muzzlePositioned = Math.abs(combat.muzzleX) + Math.abs(combat.muzzleY) + Math.abs(combat.muzzleZ) > 1e-6
+        if (muzzlePositioned) v3Set(_origin, combat.muzzleX, combat.muzzleY, combat.muzzleZ)
+        const origin = muzzlePositioned ? _origin : undefined
 
         if (spreadCount > 1) {
             const halfSpread = (weapon.spreadAngle ?? 0) / 2
@@ -99,11 +107,11 @@ export const createRangedExecutor = (
                 const px = fixedDx * cosOff - fixedDz * sinOff
                 const pz = fixedDx * sinOff + fixedDz * cosOff
                 v3Set(_tmpVec, px, 0, pz)
-                projectiles.spawn({owner: entity, direction: _tmpVec, weapon, throwAngle, impact, poiseDamage, ...chargeProp})
+                projectiles.spawn({owner: entity, direction: _tmpVec, weapon, throwAngle, impact, poiseDamage, ...(origin !== undefined ? {origin} : {}), ...chargeProp})
             }
         } else {
             v3Set(_tmpVec, fixedDx, 0, fixedDz)
-            projectiles.spawn({owner: entity, direction: _tmpVec, weapon, throwAngle, impact, poiseDamage, ...chargeProp})
+            projectiles.spawn({owner: entity, direction: _tmpVec, weapon, throwAngle, impact, poiseDamage, ...(origin !== undefined ? {origin} : {}), ...chargeProp})
         }
     }
 

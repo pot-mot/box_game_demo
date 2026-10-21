@@ -51,7 +51,7 @@ export interface HeavyChargeConfig extends ChargeTuning {
 export const DEFAULT_HEAVY_CHARGE: HeavyChargeConfig = {maxChargeMultiplier: 200, maxChargeTime: 1, cooldown: 0.8}
 
 /** 近战段模板键：键组 + 链内序号（模板可被任意武器引用；某武器是否使用由链编排 `steps` 决定） */
-export const MELEE_SEGMENT_KEYS = ['light_1', 'light_2', 'light_3', 'heavy_1', 'heavy_2'] as const
+export const MELEE_SEGMENT_KEYS = ['light_1', 'light_2', 'light_3', 'light_4', 'light_5', 'heavy_1', 'heavy_2'] as const
 export type MeleeSegmentKey = typeof MELEE_SEGMENT_KEYS[number]
 
 /**
@@ -82,6 +82,8 @@ const SEGMENT_META: Record<MeleeSegmentKey, {key: 'light' | 'heavy'; step: numbe
     light_1: {key: 'light', step: 1, heavy: false},
     light_2: {key: 'light', step: 2, heavy: false},
     light_3: {key: 'light', step: 3, heavy: false},
+    light_4: {key: 'light', step: 4, heavy: false},
+    light_5: {key: 'light', step: 5, heavy: false},
     heavy_1: {key: 'heavy', step: 1, heavy: true},
     heavy_2: {key: 'heavy', step: 2, heavy: true},
 }
@@ -196,6 +198,10 @@ export interface BuildMeleeAttacksOptions {
     readonly impulses?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, readonly AttackImpulse[]>>
     /** 逐段冲击力 / 削韧覆写（键 = 模板键，地面与空中段共用命名空间） */
     readonly impact?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, SegmentImpactOverride>>
+    /** 逐段命中挂点（天然武器多肢体；键 = 模板键，地面/空中共用） */
+    readonly hitMounts?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, readonly string[]>>
+    /** 逐段实际攻击武器 id（吐息等非主武器段） */
+    readonly attackWeaponIds?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, string>>
     /**
      * pose 引用重映射（空手 / 天然武器复用既有段动画，避免为每类武器重复烘焙关键帧）：
      * 入参为本武器自己的段 id，返回实际 clip id（缺省 = 恒等，指向本段自烘焙关键帧）。
@@ -262,6 +268,8 @@ export const buildMeleeAttacks = (
             impact: impactOverride?.impact ?? (heavy ? MELEE_HEAVY_IMPACT : MELEE_LIGHT_IMPACT),
             poiseDamage: impactOverride?.poiseDamage ?? (heavy ? MELEE_HEAVY_POISE_DAMAGE : MELEE_LIGHT_POISE_DAMAGE),
             ...(options.impulses?.[segmentKey] !== undefined ? {impulses: options.impulses[segmentKey]} : {}),
+            ...(options.hitMounts?.[segmentKey] !== undefined ? {hitMountJointIds: options.hitMounts[segmentKey]} : {}),
+            ...(options.attackWeaponIds?.[segmentKey] !== undefined ? {attackWeaponId: options.attackWeaponIds[segmentKey]} : {}),
             cooldown: 0,
             next: transitionsFor(classId, holdMode, chains[meta.key], segmentKey),
         }
@@ -308,6 +316,8 @@ export const buildMeleeAttacks = (
             impact: impactOverride?.impact ?? MELEE_AIR_IMPACT,
             poiseDamage: impactOverride?.poiseDamage ?? MELEE_AIR_POISE_DAMAGE,
             ...(options.impulses?.[_step] !== undefined ? {impulses: options.impulses[_step]} : {}),
+            ...(options.hitMounts?.[_step] !== undefined ? {hitMountJointIds: options.hitMounts[_step]} : {}),
+            ...(options.attackWeaponIds?.[_step] !== undefined ? {attackWeaponId: options.attackWeaponIds[_step]} : {}),
             cooldown: 0,
             next: nextId !== undefined ? [{to: nextId}] : [],
         }

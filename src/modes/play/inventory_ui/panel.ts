@@ -97,6 +97,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         off_hand: {left: '2%', top: '72%'},
         arms: {left: '78%', top: '62%'},
         legs: {left: '50%', top: '88%'},
+        breath: {left: '22%', top: '22%'},
     }
 
     const renderEquipment = (): void => {
@@ -164,9 +165,7 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         equipBtn.textContent = equipped ? translate('play.inventory.equipped') : translate('play.inventory.equip')
         equipBtn.disabled = equipped
         equipBtn.onclick = () => {
-            const slot = def.equipSlot === 'head' || def.equipSlot === 'chest' || def.equipSlot === 'arms' || def.equipSlot === 'legs'
-                ? def.equipSlot
-                : 'main_hand'
+            const slot = def.category === 'weapon' ? 'main_hand' : (def.equipSlot ?? 'main_hand')
             if (cb.onEquip(stack.instanceId, slot)) {
                 cb.onEquipmentChanged()
                 render()
