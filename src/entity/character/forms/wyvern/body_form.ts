@@ -53,5 +53,6 @@ export const WYVERN_BODY_FORM: BodyForm = {
     equipSlots: {armor: [], limb: [], weapon: true, breath: true},
     weapons: WYVERN_WEAPONS,
     defaultWeaponId: 'wyvern_claw',
+    editor: {weaponControl: true, handedness: false},
     breathModules: WYVERN_BREATH_MODULES,
 }

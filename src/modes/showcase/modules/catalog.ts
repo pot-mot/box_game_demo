@@ -2,8 +2,8 @@ import {BoxGeometry, Group, Mesh} from 'three'
 import type {Material} from 'three'
 import type {ShowcaseModule} from '../module.ts'
 import {setupShowcaseScene} from '../scene.ts'
-import {createCharacterModel} from '../../../entity/character/appearance/model.ts'
-import {createAppearanceSystem} from '../../../entity/character/appearance/system.ts'
+import {createHumanoidModel} from '../../../entity/character/forms/humanoid/body_form.ts'
+import {createAppearanceSystem} from '../../../entity/character/forms/humanoid/system.ts'
 import type {AnimationContext} from '../../../entity/character/appearance/types.ts'
 import {weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {DEFAULT_HANDEDNESS} from '../../../character/handedness.ts'
@@ -71,7 +71,7 @@ const isEquipment = (def: ItemDef): boolean => def.category === 'weapon' || def.
 const categoryColorHex = (def: ItemDef): string => `#${CATEGORY_COLORS[def.category].toString(16).padStart(6, '0')}`
 
 /** 把物品定义装备到展示人体上（武器 → 主手；护甲 → 对应槽；其余 → 空手无甲） */
-const applyItemToModel = (model: ReturnType<typeof createCharacterModel>, def: ItemDef | undefined): void => {
+const applyItemToModel = (model: ReturnType<typeof createHumanoidModel>, def: ItemDef | undefined): void => {
     model.removeWeapon()
     model.removeArmor()
     if (def === undefined) return
@@ -107,7 +107,7 @@ export const catalogModule: ShowcaseModule = {
         const sceneCtx = setupShowcaseScene(host.renderer)
 
         /* —— 预览：展示人体（装备）+ 代表方块（方块 / 其它） —— */
-        const model = createCharacterModel({speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: 1}, 0)
+        const model = createHumanoidModel({speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: 1}, 0)
         sceneCtx.scene.add(model.group)
         /* 图鉴预览不展示物理碰撞箱（半胶囊可视化） */
         for (const m of model.colliderMeshes) m.visible = false

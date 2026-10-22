@@ -16,6 +16,7 @@ import {
     RANGED_ROW_Z,
     RANGED_SPACING,
     SHOWCASE_ROSTER,
+    SHOWCASE_UNARMED_ID,
 } from '../constants.ts'
 
 /** 各体形 Tab 的天然 / 允许武器（攻击模组）清单（武器只属于一种体形，用其体形专属 id） */
@@ -30,7 +31,7 @@ const SHIELD_IDS = ['shield_small', 'shield_medium', 'shield_large'] as const
 
 /**
  * 攻击模组展示子模块：以 **Tab** 切换 人 / 龙 / 马 / 狼 各自的攻击模组。
- * - **人形**：近战 6 武器 × 3 持握模式分三排（单持 → 双手共持 → 双持）+ 远程 9 单排；
+ * - **人形**：近战 6 武器 × 3 持握模式分三排（单持 / 双手共持 / 双持）、远程 9 单排、空手独立一排；
  * - **龙 / 马 / 狼**：该体形的天然 / 允许武器各一个（如龙 = 爪击 / 吐息）。
  * 每角色循环播放其连段；面板复现段计时，并可开关调试箱（碰撞箱 / 受击箱 / 攻击箱）。
  */
@@ -100,6 +101,9 @@ export const actionsModule: ShowcaseModule = {
                     const weapon = weaponPresetOrDefault(weaponId)
                     place(scene, register, weapon, defaultHoldMode(weapon), (i - (SHIELD_IDS.length - 1) / 2) * RANGED_SPACING, shieldZ, 'humanoid')
                 })
+                /* 空手：独立一排，展示拳击动作（无可见武器） */
+                const unarmed = weaponPresetOrDefault(SHOWCASE_UNARMED_ID)
+                place(scene, register, unarmed, defaultHoldMode(unarmed), 0, shieldZ - MELEE_ROW_SPACING, 'humanoid')
             },
         }
 

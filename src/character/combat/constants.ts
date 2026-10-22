@@ -1,5 +1,14 @@
 import type {ImpactLevel} from './impact.ts'
 
+/** 无盾兜底破防时长（秒） */
+export const FALLBACK_GUARD_BREAK_DURATION = 0.6
+
+/** 死亡状态总时长（秒） */
+export const DYING_DURATION = 0.6
+
+/** 死亡倒下时长（秒）：0 → 90°，之后保持倒地 */
+export const DYING_FALL_DURATION = 0.3
+
 /** 默认子弹尺寸 */
 export const BULLET_SIZE = 0.1
 

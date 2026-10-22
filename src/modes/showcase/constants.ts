@@ -16,12 +16,15 @@ export interface ShowcaseRosterEntry {
 
 const MELEE_IDS = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer'] as const
 
+/** 空手展示 id：独立成排，不属于近战三模式清单 */
+export const SHOWCASE_UNARMED_ID = 'unarmed'
+
 /**
  * 全部展示武器的清单：
  * - 近战 6 武器 × 3 持握模式 = 18 角色（按模式分三排：单持 / 双手共持 / 双持），
  *   每角色按该模式连段循环播放（轻链 → 停顿 → 重链）；
- * - 远程 9 武器（单段开火动作）。
- */
+ * - 空手单独一排（`SHOWCASE_UNARMED_ID`）；
+ * - 远程 9 武器（单段开火动作）。 */
 export const SHOWCASE_ROSTER: readonly ShowcaseRosterEntry[] = [
     ...MELEE_IDS.map(skillId => ({skillId, kind: 'melee', holdMode: 'one_handed'} as const)),
     ...MELEE_IDS.map(skillId => ({skillId, kind: 'melee', holdMode: 'two_handed'} as const)),

@@ -104,11 +104,14 @@ export const createSkeleton = (options?: SkeletonOptions): Skeleton => {
         const joint = joints.get(id)
         if (joint === undefined) return
         disconnectJoint(joint)
-        /* 断开直接子关节并把其局部坐标换算为世界坐标（子树独立成根且世界变换不变）；
-         * 注：子关节若为骨骼 tail 且带 roll，重根后 roll 会重复应用（罕见场景，暂不处理） */
+        /* 断开直接子关节并把其局部坐标换算为世界坐标（子树独立成根且世界变换不变）。
+         * 世界变换会先应用骨骼 roll，故重根前先按含 roll 的世界值回写局部；
+         * 随后删除跨出子树的骨骼段，避免其 roll 在独立子树根上再次叠加。 */
         updateWorldTransforms()
+        const detached = new Set<SkeletonJoint>()
         for (const child of [...joint.children]) {
             disconnectJoint(child)
+            for (const jointOfSubtree of collectSubtree(child)) detached.add(jointOfSubtree)
             const worldPos = world.get(child.id)?.position
             const worldRot = world.get(child.id)?.rotation
             if (worldPos !== undefined) child.position.copy(worldPos)
@@ -116,6 +119,10 @@ export const createSkeleton = (options?: SkeletonOptions): Skeleton => {
         }
         for (const [boneId, bone] of bones) {
             if (bone.head === joint || bone.tail === joint) {
+                bones.delete(boneId)
+                continue
+            }
+            if (detached.has(bone.head) !== detached.has(bone.tail)) {
                 bones.delete(boneId)
             }
         }

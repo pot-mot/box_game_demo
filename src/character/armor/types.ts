@@ -1,5 +1,5 @@
 import type {DamageTypeProfile} from '../combat/damage_type.ts'
-import type {ArmorMeshConfig, LimbMeshConfig} from '../../entity/character/appearance/armor_mesh.ts'
+import type {ArmorMeshConfig, LimbMeshConfig} from '../../entity/character/forms/humanoid/armor_mesh.ts'
 import type {ArmorSlot, LimbSlot} from './slots.ts'
 
 /**

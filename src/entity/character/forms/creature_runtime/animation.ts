@@ -1,13 +1,12 @@
 import type {Group} from 'three'
-import type {CharacterState} from '../../../../character/state_machine/types.ts'
+import {isAttackState, type BaseClipState, type CharacterState} from '../../../../character/state_machine/types.ts'
 import type {AttackSegment} from '../../../../character/weapon/attack_chain.ts'
 import type {BoneAnimationClip} from '../../../../skeleton/anim/types.ts'
 import {createComposedAnimationPlayer, type ComposedAnimationPlayer} from '../../../../skeleton/anim/composed_player.ts'
 import {STATE_BLEND_DURATION, walkSpeedScale} from '../../appearance/constants.ts'
 import {segmentPhaseRatios} from './timing.ts'
 import {createCharacterSkeletonBridge} from '../../appearance/skeleton_bridge.ts'
-import type {AppearanceSystem, AppearanceSystemOptions} from '../../appearance/system.ts'
-import type {AnimationContext, CreatureModel} from '../../appearance/types.ts'
+import type {AppearanceSystem, AppearanceSystemOptions, AnimationContext, CreatureModel} from '../../appearance/types.ts'
 
 /**
  * 体形动画 clip 提供者（每个体形分包自带其 `pose_fns.ts` / `clips.ts` 实现）：
@@ -15,11 +14,9 @@ import type {AnimationContext, CreatureModel} from '../../appearance/types.ts'
  * - `clipForSegment`：攻击段 → 攻击 clip（按段 id 取该体形的爪击 / 咬击 / 蹄击 / 吐息等）。
  */
 export interface CreatureClipProvider {
-    readonly clipForState: (state: CharacterState, ctx: AnimationContext) => BoneAnimationClip
+    readonly clipForState: (state: BaseClipState, ctx: AnimationContext) => BoneAnimationClip
     readonly clipForSegment: (segment: AttackSegment) => BoneAnimationClip
 }
-
-const isAttackState = (state: CharacterState): boolean => state === 'attacking' || state === 'air_attacking'
 
 /** 蓄力定位比例：冻结在抬手 / 瞄准末（近战 windup、远程 aim / draw 共用真实阶段分界） */
 const chargeSeekScale = (segment: AttackSegment): number => segmentPhaseRatios(segment).windupEnd
@@ -88,7 +85,7 @@ export const createCreatureAnimationSystem = (
             const segment = ctx.attackSegment
             const clip = isAttackState(state) && segment !== undefined
                 ? provider.clipForSegment(segment)
-                : provider.clipForState(state, ctx)
+                : provider.clipForState(isAttackState(state) ? 'idle' : state, ctx)
             charging = isAttackState(state) && ctx.attackHolding && segment !== undefined
             chargingScale = charging && segment !== undefined ? chargeSeekScale(segment) : 1
             player = createComposedAnimationPlayer(bridge, [{clip, weight: 1}])
@@ -101,7 +98,6 @@ export const createCreatureAnimationSystem = (
         }
 
         return {
-            onStateChange: (): void => {},
             update: (dt, model, state, ctx): void => {
                 const key = isAttackState(state)
                     ? `${state}:${ctx.attackSegment?.id ?? ''}`
@@ -126,7 +122,7 @@ export const createCreatureAnimationSystem = (
                     return
                 }
                 charging = false
-                if (ctx.stateDuration !== undefined && (state === 'knockdown' || state === 'getting_up')) {
+                if (ctx.stateDuration !== undefined) {
                     player.seekProgress(ctx.stateTime / Math.max(ctx.stateDuration, 0.0001))
                     applyBlend(dt)
                     model.updateDeform?.()

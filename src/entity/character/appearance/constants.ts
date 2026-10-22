@@ -1,6 +1,6 @@
 import type {CharacterColorPalette} from './types.ts'
+import type {BoxPartPalette} from '../../../render/box_parts.ts'
 import {darkenColor, lightenColor} from '../../../render/constants.ts'
-import type {CharacterMaterialId} from '../../../render/character_materials.ts'
 
 /** 6 套基础调色板，按 faction % 6 选取 */
 const BASE_PALETTES: readonly CharacterColorPalette[] = [
@@ -51,6 +51,14 @@ export const SELECT_PALETTE = (faction: number): CharacterColorPalette => {
     return {...base, bodyColor}
 }
 
+/** 预设骨架默认调色板（与 `SELECT_PALETTE(0)` 一致） */
+export const PRESET_PALETTE: BoxPartPalette = {
+    skinColor: 0xf0c8a0,
+    hairColor: 0x3a2218,
+    bodyColor: 0xe06040,
+    legColor: 0x303050,
+}
+
 /** 髋部 pivot 基准高度（模型本地 Y），由 render 层共享常量提供 */
 export {HIP_Y} from '../../../render/constants.ts'
 
@@ -65,40 +73,11 @@ export const WALK_SPEED_MAX_SCALE = 2
 export const walkSpeedScale = (speed: number): number =>
     Math.max(WALK_SPEED_MIN_SCALE, Math.min(WALK_SPEED_MAX_SCALE, speed / WALK_BASE_SPEED))
 
-/** 行走速度归一化上限（m/s），用于动画周期计算 */
-export const WALK_ANIM_MAX_SPEED = 6.0
-
-/** 水平速度平滑系数（EMA 权重，0~1，越小越平滑）：抑制 coyote 吸附/弹跳导致的速度突变引起的动画频率抖动 */
-export const HORIZONTAL_SPEED_SMOOTHING = 0.3
-
-/** 格挡 / 蓄力期间叠加下半身行走动画的最低水平速度（m/s）：低于此值视为原地不动，腿保持静态姿态 */
-export const ENGAGED_WALK_MIN_SPEED = 0.3
-
 /** 身体朝向旋转速度（rad/s） */
 export const ROTATION_SPEED = 10
 
 /** 速度低于此阈值时不更新目标朝向（m/s） */
 export const VELOCITY_DIR_THRESHOLD = 0.05
-
-/** 头部水平旋转相对身体的最大角度（rad），±90° */
-export const HEAD_TURN_LIMIT = Math.PI / 2
-
-// ── 持握与武器骨骼动态 ──
-
-/*
- * 武器的固有握持姿态（怎么被握住）是**武器模型自身属性**，已随模型烘焙（`weapon_mesh.ts` 的
- * `WEAPON_MESH_GRIPS`）；武器与前臂的夹角、刃面偏转、逐动作微调全部由武器骨骼
- * （`rightWeaponMount` / `leftWeaponMount`）的动画轨道控制。此处不再有任何外部武器握持常量。
- */
-
-/** 持械戒备位：肩前举角（rad，负值 = 前摆，刃尖朝上收至体侧前方） */
-export const WEAPON_READY_SHOULDER = -0.45
-
-/** 持械戒备位：肘弯曲（rad，负值 = 前臂向前折、肘尖朝后，符合人体；见 docs/bone_animation/动作设计规范.md §3） */
-export const WEAPON_READY_ELBOW = -0.85
-
-/** 持械戒备位：持械臂微摆幅度（rad，武器竖持微摆） */
-export const WEAPON_READY_SWAY = 0.03
 
 /**
  * 武器骨骼握持屈角（rad，施加在左右手武器骨骼 `rightWeaponMount` / `leftWeaponMount` 上）：
@@ -108,91 +87,11 @@ export const WEAPON_READY_SWAY = 0.03
  */
 export const WEAPON_GRIP_FLEX = 1.7
 
-/** 持械行走：持械臂摆动幅度（rad，远小于空手摆臂） */
-export const WEAPON_WALK_ARM_SWING = 0.12
-
 /** 状态过渡混合时长（秒）：新状态动画从切换前关节快照收敛，消除关节角突跳 */
 export const STATE_BLEND_DURATION = 0.15
 
-// ── 护甲外观 ──
-
-/** 护甲外扩边距（米）：包裹对应身体部件且不产生明显穿模 */
-export const ARMOR_PAD = 0.03
-
-/**
- * 护甲**材质厚度系数**（宽 / 深 = 身体对应部件尺寸 × 该系数）：布料最薄、皮、鳞、铁、石依次增厚。
- * 材质越厚，护甲离身体越远；未知材质回退 `ARMOR_DEFAULT_THICKNESS`。
- */
-export const ARMOR_MATERIAL_THICKNESS: Readonly<Partial<Record<CharacterMaterialId, number>>> = {
-    cloth: 1.05,
-    leather: 1.1,
-    scale: 1.15,
-    metal: 1.2,
-    stone: 1.25,
-}
-
-/** 未知材质的护甲厚度回退值 */
-export const ARMOR_DEFAULT_THICKNESS = 1.1
-
-/** 取某材质对应的护甲厚度系数 */
-export const armorThicknessOf = (material: CharacterMaterialId): number =>
-    ARMOR_MATERIAL_THICKNESS[material] ?? ARMOR_DEFAULT_THICKNESS
-
-/**
- * 护甲顶缘相对身体部件顶面的**额外上探量**（米）：躯干类护甲（布衣 / 皮甲 / 法袍等）顶端
- * **不得只与身体顶面对齐**——共面会 z-fighting / 穿模。顶缘须高出身体顶面至少 1 个该单位。
- */
-export const ARMOR_TOP_OVERLAP = ARMOR_PAD
-
-// ── 受击硬直 ──
-
-/** 受击后仰幅度（rad，spine.rotation.x 负值 = 向后仰） */
-export const FLINCH_SPINE_BACK = 0.25
-
-/** 受击双臂抬举护头（rad，肩 X 前抬） */
-export const FLINCH_ARM_RAISE = 0.9
-
-/** 受击双臂外张（rad，肩 Z） */
-export const FLINCH_ARM_SPREAD = 0.5
-
-/** 受击屈肘（rad，负值 = 前折） */
-export const FLINCH_ELBOW = -1.2
-
-/** 受击头部后仰（rad） */
-export const FLINCH_HEAD_BACK = 0.15
-
-// ── 基础状态 clip 烘焙 ──
-
-/** clip 关键帧烘焙采样率（fps）：基础状态动画使用 */
-export const CLIP_SAMPLE_FPS = 60
-
-// ── 格挡 / 破防姿态 ──
-
-/** 举盾臂前抬角（rad，负值 = 前举；使盾牌护于身前） */
-export const BLOCK_SHOULDER = -0.35
-
-/** 举盾屈肘（rad，负值 = 前臂前折收盾于身前） */
-export const BLOCK_ELBOW = -1.35
-/** 格挡躯干前倾（rad） */
-export const BLOCK_LEAN = 0.08
-/** 格挡姿态轻微起伏幅度（rad，循环呼吸感） */
-export const BLOCK_SWAY = 0.02
 /** 格挡举盾循环姿态周期（秒） */
 export const BLOCKING_POSE_PERIOD = 1.6
-/** 未持盾侧手臂自然下垂角（肩 / 肘，rad） */
-export const BLOCK_IDLE_SHOULDER = -0.05
-export const BLOCK_IDLE_ELBOW = -0.1
-/** 破防硬直姿态时长（秒；取最大盾档破防时长，仅用于编辑器预览与基础 clip 烘焙） */
+
+/** 破防硬直姿态时长（秒；仅用于编辑器预览与基础 clip 烘焙） */
 export const GUARD_BROKEN_POSE_DURATION = 1.2
-
-// ── 盾牌朝向校正 ──
-
-/**
- * 盾面朝前时武器骨骼相对前臂链的**净 X 转角**（rad）：盾面法线为武器本地 +Y，
- * 按住盾时前臂近似竖直，净转 π/2 使法线水平指向角色前方（+Z），盾面竖直平行于身体。
- * 手臂各关节在基础状态仅绕 X 旋转，故净转角 ≈ 肩 + 肘 + 武器骨骼三者 X 之和。
- */
-export const SHIELD_FACE_NET_X = Math.PI / 2
-
-/** 副手盾挂背时的额外倾角（rad，绕武器本地 X）：使盾面法线水平、盾面竖直贴于背部 */
-export const SHIELD_STOW_TILT_X = -Math.PI / 2

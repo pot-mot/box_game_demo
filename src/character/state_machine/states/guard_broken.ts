@@ -3,9 +3,7 @@ import type {CharacterEntity} from '../../types.ts'
 import {SLOPE_WALK_THRESHOLD, STATE_FLIP_MIN_TIME} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
 import {guardMaxOf} from '../../combat/types.ts'
-
-/** 无盾兜底破防时长（秒）：正常路径下 `block` 必定存在，仅防御性回退 */
-const FALLBACK_GUARD_BREAK_DURATION = 0.6
+import {FALLBACK_GUARD_BREAK_DURATION} from '../../combat/constants.ts'
 
 /**
  * 破防状态：格挡槽归零（`machine.ts` 全局检查）时进入，持续盾的 `guardBreakDuration`。

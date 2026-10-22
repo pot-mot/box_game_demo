@@ -14,12 +14,12 @@ test.describe('展示模式（二级菜单 + 子模块）', () => {
         await expect(page.locator('.sch-menu-card')).toHaveCount(7)
     })
 
-    test('选择「攻击模组展示」：Tab 人形，近战三模式 + 远程 + 盾牌共 30 个角色', async ({page}) => {
+    test('选择「攻击模组展示」：Tab 人形，近战三模式 + 空手 + 远程 + 盾牌共 31 个角色', async ({page}) => {
         await enterShowcaseMenu(page)
         await page.locator('.sch-menu-card', {hasText: '攻击模组展示'}).click()
         await expect(page.locator('.sch-panel')).toBeVisible()
-        /* Tab 人形为默认；近战 6 × 3 模式 = 18 + 远程 9 + 盾牌 3 = 30 */
-        await expect(page.locator('.sch-panel .sch-row')).toHaveCount(30)
+        /* Tab 人形为默认；近战 6 × 3 模式 + 空手 = 19 + 远程 9 + 盾牌 3 = 31 */
+        await expect(page.locator('.sch-panel .sch-row')).toHaveCount(31)
     })
 
     test('攻击模组展示 Tab：切到龙 → 龙爪 1 个角色', async ({page}) => {

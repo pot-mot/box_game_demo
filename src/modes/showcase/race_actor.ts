@@ -1,10 +1,11 @@
 import {Group, Mesh, Sprite} from 'three'
 import type {Material, Scene} from 'three'
-import {createCharacterModel} from '../../entity/character/appearance/model.ts'
-import {createAppearanceSystem} from '../../entity/character/appearance/system.ts'
-import type {AppearanceSystem} from '../../entity/character/appearance/system.ts'
-import type {AnimationContext, CharacterModel} from '../../entity/character/appearance/types.ts'
-import {HUMANOID_HURT_BLOCKS} from '../../entity/character/skeleton/hurt_blocks.ts'
+import {createHumanoidModel} from '../../entity/character/forms/humanoid/body_form.ts'
+import {createAppearanceSystem} from '../../entity/character/forms/humanoid/system.ts'
+import type {AppearanceSystem} from '../../entity/character/appearance/types.ts'
+import type {AnimationContext} from '../../entity/character/appearance/types.ts'
+import type {CharacterModel} from '../../entity/character/forms/humanoid/types.ts'
+import {HUMANOID_HURT_BLOCKS} from '../../entity/character/forms/humanoid/hurt.ts'
 import {createActorDebug} from './actor_debug.ts'
 import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
 import {resolveLimbLoadout, resolveArmorLoadout} from '../../character/armor/catalog.ts'
@@ -55,7 +56,7 @@ interface MaterialSnapshot {
 export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
     const {id, scene, x, z, name, subtitle, faction} = init
 
-    const model: CharacterModel = createCharacterModel(
+    const model: CharacterModel = createHumanoidModel(
         {speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: ACTOR_SCALE},
         faction,
     )

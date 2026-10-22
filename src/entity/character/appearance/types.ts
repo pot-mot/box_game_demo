@@ -7,6 +7,8 @@ import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
 import type {Handedness} from '../../../character/handedness.ts'
 import type {ResolvedArmorLoadout, ResolvedLimbLoadout} from '../../../character/armor/types.ts'
 import type {BoxPartPalette} from '../../../render/box_parts.ts'
+import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
+import type {CharacterState} from '../../../character/state_machine/types.ts'
 
 /** 角色配色 palette（方块人部件共享，见 render/box_parts） */
 export type CharacterColorPalette = BoxPartPalette
@@ -29,7 +31,8 @@ export interface WeaponEquipConfig {
 
 /**
  * 体形渲染模型门面（**跨体形公共契约**）：世界主循环 / 近战执行器 / 动画系统只依赖这些成员，
- * 不感知具体体形。人形专属关节 getter 见 `CharacterModel`（人形分包）；狼 / 马 / wyvern 各自实现本接口。
+ * 不感知具体体形。人形专属关节 getter 见 `forms/humanoid/types.ts` 的 `CharacterModel`；
+ * 狼 / 马 / wyvern 各自实现本接口。
  */
 export interface CreatureModel {
     readonly group: Group
@@ -106,49 +109,6 @@ export interface CreatureModel {
     dispose: () => void
 }
 
-/** 人形外观模型：在公共契约之上暴露全部人形关节 pivot 供人形动画系统直接操纵 */
-export interface CharacterModel extends CreatureModel {
-    /** 躯干关节（髋部 pivot）：旋转带动 躯干+双臂+头（拧腰/前倾动力链） */
-    readonly spine: Group
-
-    readonly headNeck: Group
-    readonly head: Mesh
-
-    readonly body: Mesh
-
-    readonly rightArmShoulder: Group
-    readonly rightUpperArm: Mesh
-    readonly rightArmElbow: Group
-    readonly rightForearm: Mesh
-    readonly rightHandPivot: Group
-    /** 右腕动态关节（动画器驱动刃面朝向/攻击对齐，静止时为单位变换，武器挂其下） */
-    readonly rightWristPivot: Group
-
-    readonly leftArmShoulder: Group
-    readonly leftUpperArm: Mesh
-    readonly leftArmElbow: Group
-    readonly leftForearm: Mesh
-    readonly leftHandPivot: Group
-    /** 左腕动态关节（双持副手武器挂其下） */
-    readonly leftWristPivot: Group
-
-    /** 右手武器挂点（主手武器模型直接挂其下；可被动画驱动，控制武器朝向） */
-    readonly rightWeaponMount: Group
-    /** 左手武器挂点（副手武器/双手 IK 末端；可被动画驱动） */
-    readonly leftWeaponMount: Group
-    /** 背部武器挂点（双手共持时副手武器挂背；仅视觉挂点，无 clip 轨道） */
-    readonly backWeaponMount: Group
-
-    readonly rightLegHip: Group
-    readonly rightThigh: Mesh
-    readonly rightLegKnee: Group
-    readonly rightShin: Mesh
-
-    readonly leftLegHip: Group
-    readonly leftThigh: Mesh
-    readonly leftLegKnee: Group
-    readonly leftShin: Mesh
-}
 
 /** 动画上下文，由 animation system 每帧传入（horizontalSpeed 用于行走步频变速与下落腿张开的体态随速度） */
 export interface AnimationContext {
@@ -181,6 +141,8 @@ export interface AnimationContext {
     readonly attackCharge: number
     /** 是否正冻结在蓄力锚点阶段（按住中）：为真时动画改为按蓄力值定位到攻击 clip 的蓄力段（近战抬手段 / 远程前段） */
     readonly attackHolding: boolean
+    /** 当前装备武器的 classId（支撑手预烘焙数据键；空手 = undefined） */
+    readonly weaponClassId?: string
     /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
     readonly weaponHeld: boolean
     /**
@@ -190,9 +152,12 @@ export interface AnimationContext {
     readonly shieldHands: Readonly<{main: boolean; off: boolean}>
 }
 
-/** 单个状态的动画处理器（按体形自定义；参数为跨体形公共模型契约） */
-export interface AnimationHandler {
-    enter: (model: CreatureModel, ctx: AnimationContext) => void
-    update: (dt: number, model: CreatureModel, ctx: AnimationContext) => void
-    exit: (model: CreatureModel, ctx: AnimationContext) => void
+/** 攻击动画事件回调（hitbox_on/off → 近战命中窗口开关） */
+export interface AppearanceSystemOptions {
+    readonly onAttackEvent?: (record: BoneEventRecord) => void
+}
+
+/** 体形动画系统：世界主循环只调用 update */
+export interface AppearanceSystem {
+    update: (dt: number, model: CreatureModel, state: CharacterState, ctx: AnimationContext) => void
 }

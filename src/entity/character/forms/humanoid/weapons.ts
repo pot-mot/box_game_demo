@@ -167,27 +167,27 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
 const MELEE_MODELS: Record<string, WeaponModelConfig> = {
     short_sword: {
         id: 'short_sword', classId: 'short_sword', formId: FORM_ID, name: '短剑', nameKey: 'weapon.short_sword',
-        mesh: { id: 'sword', bladeLen: 0.3, color: 0xcc5555, gripColor: 0x664422 },
+        mesh: { id: 'sword', bladeLen: 0.3, color: 0xcc5555, gripColor: 0x664422, supportGripOffset: 0 },
     },
     long_sword: {
         id: 'long_sword', classId: 'long_sword', formId: FORM_ID, name: '长剑', nameKey: 'weapon.long_sword',
-        mesh: { id: 'sword', bladeLen: 0.5, color: 0xcc6666, gripColor: 0x553322 },
+        mesh: { id: 'sword', bladeLen: 0.5, color: 0xcc6666, gripColor: 0x553322, supportGripOffset: 0.08 },
     },
     heavy_sword: {
         id: 'heavy_sword', classId: 'heavy_sword', formId: FORM_ID, name: '巨剑', nameKey: 'weapon.heavy_sword',
-        mesh: { id: 'heavy_sword', bladeLen: 0.65, color: 0x555566, gripColor: 0x332211 },
+        mesh: { id: 'heavy_sword', bladeLen: 0.65, color: 0x555566, gripColor: 0x332211, supportGripOffset: 0.065 },
     },
     spear: {
         id: 'spear', classId: 'spear', formId: FORM_ID, name: '长枪', nameKey: 'weapon.spear',
-        mesh: { id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa },
+        mesh: { id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa, supportGripOffset: 0.14 },
     },
     dual_axe: {
         id: 'dual_axe', classId: 'dual_axe', formId: FORM_ID, name: '战斧', nameKey: 'weapon.dual_axe',
-        mesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322 },
+        mesh: { id: 'dual_axe', bladeSize: 0.3, color: 0x888888, gripColor: 0x553322, supportGripOffset: -0.18 },
     },
     war_hammer: {
         id: 'war_hammer', classId: 'war_hammer', formId: FORM_ID, name: '战锤', nameKey: 'weapon.war_hammer',
-        mesh: { id: 'war_hammer', headSize: 0.35, color: 0x777777, gripColor: 0x443311 },
+        mesh: { id: 'war_hammer', headSize: 0.35, color: 0x777777, gripColor: 0x443311, supportGripOffset: -0.0805 },
     },
     shield_small: {
         id: 'shield_small', classId: 'shield_small', formId: FORM_ID, name: '小盾', nameKey: 'weapon.shield_small',
@@ -310,19 +310,19 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
 const RANGED_MODELS: Record<string, WeaponModelConfig> = {
     longbow: {
         id: 'longbow', classId: 'longbow', formId: FORM_ID, name: '长弓', nameKey: 'weapon.longbow',
-        mesh: { id: 'bow', size: 0.7, color: 0x886633, stringColor: 0xddddcc },
+        mesh: { id: 'bow', size: 0.7, color: 0x886633, stringColor: 0xddddcc, supportGripOffset: 0.084 },
     },
     crossbow: {
         id: 'crossbow', classId: 'crossbow', formId: FORM_ID, name: '弩', nameKey: 'weapon.crossbow',
-        mesh: { id: 'crossbow', size: 0.5, color: 0x553322, metalColor: 0x888888 },
+        mesh: { id: 'crossbow', size: 0.5, color: 0x553322, metalColor: 0x888888, supportGripOffset: 0.16 },
     },
     shotgun: {
         id: 'shotgun', classId: 'shotgun', formId: FORM_ID, name: '霰弹枪', nameKey: 'weapon.shotgun',
-        mesh: { id: 'shotgun', size: 0.6, color: 0x443322, metalColor: 0x666666 },
+        mesh: { id: 'shotgun', size: 0.6, color: 0x443322, metalColor: 0x666666, supportGripOffset: 0.156 },
     },
     staff: {
         id: 'staff', classId: 'staff', formId: FORM_ID, name: '法杖', nameKey: 'weapon.staff',
-        mesh: { id: 'staff', poleLen: 0.8, orbRadius: 0.12, color: 0x664422, orbColor: 0x44aaff },
+        mesh: { id: 'staff', poleLen: 0.8, orbRadius: 0.12, color: 0x664422, orbColor: 0x44aaff, supportGripOffset: 0.24 },
     },
     magic_wand: {
         id: 'magic_wand', classId: 'magic_wand', formId: FORM_ID, name: '魔杖', nameKey: 'weapon.magic_wand',

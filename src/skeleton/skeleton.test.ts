@@ -147,6 +147,22 @@ describe('骨架 removeJoint（仅断开）', () => {
         expect(skeleton.bones.size).toBe(1)
     })
 
+    it('跨子树骨骼段随关节移除，重根后 roll 不重复叠加', () => {
+        const skeleton = buildChain()
+        const root = skeleton.findJoint('root')!
+        const tip = skeleton.findJoint('tip')!
+        const cross = createSkeletonBone('cross', root, tip, 0, 'cross')
+        cross.roll = 0.5
+        skeleton.addBone(cross)
+        skeleton.updateWorldTransforms()
+        const tipBefore = skeleton.getWorldPosition('tip')!.clone()
+        skeleton.removeJoint('mid')
+        expect(skeleton.findBone('cross')).toBeUndefined()
+        skeleton.updateWorldTransforms()
+        expect(skeleton.getWorldPosition('tip')!.distanceTo(tipBefore)).toBeLessThan(1e-6)
+        expect(skeleton.findJoint('tip')!.parent).toBeUndefined()
+    })
+
     it('移除不存在的关节/骨骼为空操作', () => {
         const skeleton = createSkeleton()
         expect(() => skeleton.removeJoint('nope')).not.toThrow()

@@ -17,6 +17,7 @@
 - `pnpm test:e2e` — `playwright test` 全量端到端测试
 - `pnpm vitest run <测试文件>` — 只跑指定单元测试（开发期首选）
 - `pnpm test:e2e <spec 文件名>` — 只跑指定端到端用例（开发期首选，参数会透传给带 `--config` 的 playwright）
+- `pnpm bake:support-hands` — 重新生成人形双手共持支撑手离线烘焙数据（修改 `pose_fns` / 武器网格 / 基础状态时长后必须运行）
 
 ## 测试与验证
 
@@ -111,7 +112,7 @@ src/
 ├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/）
 ├── character/                   # 角色领域模型：ai_strategy / interaction / weapon / combat / armor / state_machine / handedness
 ├── entity/
-│   ├── character/               # 角色实体（body_form / skeleton / appearance / combat / projectile / physics / ai / combat_vfx / ui）
+│   ├── character/               # 角色实体（body_form / forms / appearance / combat / projectile / physics / ai / combat_vfx / ui）
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（人形无关，预设外部注入）
 │   ├── interactable/            # 交互物实体系统（行为 + 信号联动 + 可破坏 + 网格 + 编辑面板）
 │   ├── item/                    # 掉落物实体（sensor body 漂浮小立方体，拾取经交互）
@@ -146,7 +147,8 @@ src/
 | 状态机 | [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md) | 新增状态、死亡/翻滚/倒地起身、攻击段、空中攻击 |
 | 骨骼动画 | [`src/skeleton/skeleton.md`](src/skeleton/skeleton.md) | 骨骼/IK/组合动画 |
 | 角色 AI | [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) | 寻路索敌、导航避障、朝向 |
-| 方块人外观 | [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md) | 模型构建、挂点、武器/护甲/肢体网格、种族 |
+| 方块人外观（共享工具） | [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md) | 跨体形网格构建器、武器网格、桥接 |
+| 人形分包 | [`src/entity/character/forms/humanoid/humanoid.md`](src/entity/character/forms/humanoid/humanoid.md) | 人形骨架/模型/动画/clip/支撑手烘焙 |
 | 体形计划 | [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md) | 基础模组（骨架/碰撞布局/受击子块/装备槽/武器策略）、运行时切换 |
 | 弹丸 | [`src/entity/character/projectile/projectile.md`](src/entity/character/projectile/projectile.md) | 弹丸物理/视觉/对象池 |
 | 角色物理 | [`src/entity/character/physics/physics.md`](src/entity/character/physics/physics.md) | body/mesh 同步、移动平台载客 |
@@ -170,5 +172,9 @@ src/
 | AI 行为原点策略（设计记录，已实现） | [`docs/design/ai_origin_strategy.md`](docs/design/ai_origin_strategy.md) | 调整原点策略 / 追击半径设计前 |
 | 箱庭重构 + 生成对齐（设计，未实现） | [`docs/design/diorama.md`](docs/design/diorama.md) | 移除建筑箱庭 / 实现组合式箱庭 / 调整生成对齐前 |
 | 固定物理步 + 渲染插值 + 相机去平滑（设计记录，已实现） | [`docs/design/fixed_step_interpolation.md`](docs/design/fixed_step_interpolation.md) | 调整物理步进 / 角色位移抖动 / 相机跟随前 |
+| 动作 / 骨骼 / 模型清理（执行计划） | [`docs/design/animation_skeleton_model_cleanup.md`](docs/design/animation_skeleton_model_cleanup.md) | 清理历史债、拆分攻击数据、支撑手烘焙前 |
+| 动作 / 骨骼 / 模型历史（历史记录） | [`docs/history/bone_animation.md`](docs/history/bone_animation.md) | 查已删除资产 / 旧设计方案时 |
+
+> 文档状态标记：`当前实现`（默认，描述现状）/ `设计记录`（可能未实现）/ `历史记录`（不代表现状，见 `docs/history/`）。
 
 **扩展 AI 功能时**：阅读 [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。

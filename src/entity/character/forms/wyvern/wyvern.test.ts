@@ -1,6 +1,6 @@
 import {describe, it, expect} from 'vitest'
 import {Mesh} from 'three'
-import type {CharacterState} from '../../../../character/state_machine/types.ts'
+import {BASE_CLIP_STATES} from '../../../../character/state_machine/types.ts'
 import {findWeaponPreset, weaponAttacksOf} from '../../../../character/weapon/catalog.ts'
 import {breathModuleOf} from '../../../../character/weapon/breath_module.ts'
 import {composeClawAndBreath} from '../../../../character/combat/breath_runtime.ts'
@@ -16,10 +16,7 @@ import {isPoseWithPosition, type JointPose} from '../creature_runtime/pose.ts'
 import {createBoneAnimationPlayer} from '../../../../skeleton/anim/player.ts'
 import {createCharacterSkeletonBridge} from '../../appearance/skeleton_bridge.ts'
 
-const STATES: readonly CharacterState[] = [
-    'idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'dying',
-    'rolling', 'flinching', 'knockdown', 'getting_up', 'blocking', 'guard_broken', 'interacting',
-]
+const STATES = BASE_CLIP_STATES
 
 describe('双足飞龙体形（forms/wyvern）', () => {
     it('骨架含翼爪 / 四翼指 / 四节尾', () => {

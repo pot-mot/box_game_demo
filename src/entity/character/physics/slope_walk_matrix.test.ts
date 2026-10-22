@@ -14,8 +14,8 @@ import {
 } from './harness.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {GroundState} from './ground_state.ts'
-import {createAppearanceSystem} from '../appearance/system.ts'
-import type {CharacterModel} from '../appearance/types.ts'
+import {createAppearanceSystem} from '../forms/humanoid/system.ts'
+import type {CharacterModel} from '../forms/humanoid/types.ts'
 import type {TrackedBoxPart} from '../../../render/box_parts.ts'
 
 const FRAMES_3600 = 3600

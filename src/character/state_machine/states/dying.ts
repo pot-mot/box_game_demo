@@ -1,9 +1,7 @@
 import type {StateHandler} from '../types.ts'
+import {DYING_DURATION, DYING_FALL_DURATION} from '../../combat/constants.ts'
 
-export const DYING_DURATION = 0.6
-
-/** 倒下时长（秒）：与死亡 clip 的动作时长一致（0 → 90°），之后保持倒地直到死亡计时结束 */
-export const DYING_FALL_DURATION = 0.3
+export {DYING_DURATION, DYING_FALL_DURATION} from '../../combat/constants.ts'
 
 /** 缓动（easeInOutQuad，与原死亡 clip 的根旋转一致） */
 const easeInOutQuad = (p: number): number =>

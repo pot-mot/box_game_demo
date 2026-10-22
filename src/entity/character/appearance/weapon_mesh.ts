@@ -17,7 +17,12 @@ export type WeaponMeshId = typeof WEAPON_MESH_IDS[number]
 
 // ── 武器模型配置（每种武器仅携带自身需要的参数） ──
 
-export type WeaponMeshConfig =
+interface WeaponMeshCommon {
+    /** 双手共持时副握点沿武器本地 +Y 相对主握点的距离（缺省 0） */
+    readonly supportGripOffset?: number
+}
+
+export type WeaponMeshConfig = WeaponMeshCommon & (
     | { id: 'sword';        bladeLen: number; color: number; gripColor: number }
     | { id: 'heavy_sword';  bladeLen: number; color: number; gripColor: number }
     | { id: 'spear';        poleLen: number;  headLen: number; color: number; headColor: number }
@@ -37,6 +42,7 @@ export type WeaponMeshConfig =
     | { id: 'throwing_dart';len: number; color: number; tailColor: number }
     /** 空手 / 天然武器：无可视模型（仅命中盒 + 挂点） */
     | { id: 'none' }
+)
 
 /**
  * 武器固有握持姿态（**武器模型自身属性**，在 `createWeaponMesh` 内直接烘焙进武器 Group）：
@@ -114,8 +120,8 @@ export interface WeaponMeshResult {
     gripZ: number
     /** 双手共持时左手相对主握把沿本地 +Y（握把→武器前端）的距离 */
     supportGripOffset: number
-    /** 攻击判定箱本地盒参数（逐武器在 gen 中显式声明） */
-    hitBox: WeaponLocalHitBox
+    /** 攻击判定箱本地盒参数（近战 / 天然武器声明；远程武器为 null） */
+    hitBox: WeaponLocalHitBox | null
     cleanup: () => void
 }
 
@@ -157,6 +163,31 @@ function finish(
         gripZ,
         supportGripOffset: 0,
         hitBox,
+        cleanup: b.dispose,
+    }
+}
+
+/** 远程武器收尾：只创建命中/刀尖采样点，不生成近战攻击箱 */
+function finishVisual(
+    b: MeshBuilder,
+    hitX: number, hitY: number, hitZ: number,
+    tipX = hitX, tipY = hitY, tipZ = hitZ,
+    gripY = 0,
+    gripX = 0, gripZ = 0,
+): WeaponMeshResult {
+    const hitCenter = b.add(b.box(0.01, 0.01, 0.01), b.material(0xff0000, 1, 0), hitX, hitY, hitZ)
+    hitCenter.visible = false
+    const tip = b.add(b.box(0.01, 0.01, 0.01), b.material(0xff0000, 1, 0), tipX, tipY, tipZ)
+    tip.visible = false
+    return {
+        group: b.group,
+        hitCenter,
+        tip,
+        gripY,
+        gripX,
+        gripZ,
+        supportGripOffset: 0,
+        hitBox: null,
         cleanup: b.dispose,
     }
 }
@@ -343,10 +374,8 @@ const genBow = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'bow' }): WeaponMe
     b.add(b.cylinder(r, r, limbLen, 6), bm, 0, limbCy, limbCz, rxDown, 0, 0)
     b.add(b.cylinder(r * 1.7, r * 1.7, depth * 1.4, 8), gm, 0, 0, 0, Math.PI / 2, 0, 0)
     b.add(b.cylinder(0.006, 0.006, half * 2, 4), sm, 0, -depth, 0, Math.PI / 2, 0, 0)
-    /* 命中箱包裹弓身（Y-Z 平面）；弓为远程武器，命中箱不参与伤害，仅保持数据完整 */
-    /* 右手拉弦点位于弓身握把之后；左手副握点在弓身中央握把。 */
-    return finish(b, 0, 0, 0, 0, -depth, -half, -depth,
-        0, -depth / 2, 0, r * 2, depth, half)
+    /* 右手拉弦点位于弓身握把之后；左手副握点在弓身中央握把。远程武器不生成近战攻击箱。 */
+    return finishVisual(b, 0, 0, 0, 0, -depth, -half, -depth)
 }
 
 const genCrossbow = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'crossbow' }): WeaponMeshResult => {
@@ -361,8 +390,7 @@ const genCrossbow = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'crossbow' })
     b.add(b.box(sz * 0.8, 0.008, 0.008), mm, 0, sz * 0.37, 0)
     b.add(b.box(sz * 0.03, sz * 0.6, sz * 0.025), mm, 0, sz * 0.15, -sz * 0.075)
     b.add(b.box(sz * 0.05, sz * 0.12, sz * 0.1), mm, 0, -sz * 0.1, sz * 0.09)
-    return finish(b, 0, sz * 0.3, 0, 0, sz * 0.45, 0, -sz * 0.1,
-        0, sz * 0.05, 0, sz * 0.45, sz * 0.5, sz * 0.1, 0, sz * 0.09)
+    return finishVisual(b, 0, sz * 0.3, 0, 0, sz * 0.45, 0, -sz * 0.1, 0, sz * 0.09)
 }
 
 const genShotgun = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'shotgun' }): WeaponMeshResult => {
@@ -377,8 +405,7 @@ const genShotgun = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'shotgun' }): 
     b.add(b.box(sz * 0.1, sz * 0.45, sz * 0.13), wm, 0, -sz * 0.35, sz * 0.03)
     b.add(b.box(sz * 0.11, sz * 0.22, sz * 0.11), wm, 0, sz * 0.28, sz * 0.07)
     b.add(b.box(sz * 0.03, sz * 0.1, sz * 0.02), mm, 0, -sz * 0.1, sz * 0.08)
-    return finish(b, 0, sz * 0.3, 0, 0, sz * 0.72, 0, -sz * 0.1,
-        0, sz * 0.2, 0, sz * 0.13, sz * 0.65, sz * 0.12, 0, sz * 0.08)
+    return finishVisual(b, 0, sz * 0.3, 0, 0, sz * 0.72, 0, -sz * 0.1, 0, sz * 0.08)
 }
 
 const genStaff = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'staff' }): WeaponMeshResult => {
@@ -388,7 +415,7 @@ const genStaff = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'staff' }): Weap
 
     b.add(b.cylinder(pR, pR, cfg.poleLen), pm, 0, cfg.poleLen / 2, 0)
     b.add(b.sphere(cfg.orbRadius), om, 0, cfg.poleLen + cfg.orbRadius * 0.5, 0)
-    return finish(b, 0, cfg.poleLen * 0.5, 0, 0, cfg.poleLen * 0.5, 0, cfg.poleLen * 0.5)
+    return finishVisual(b, 0, cfg.poleLen * 0.5, 0, 0, cfg.poleLen * 0.5, 0, cfg.poleLen * 0.5)
 }
 
 const genMagicWand = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'magic_wand' }): WeaponMeshResult => {
@@ -398,7 +425,7 @@ const genMagicWand = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'magic_wand'
 
     b.add(b.cylinder(r, r * 0.8, cfg.len), wm, 0, cfg.len / 2, 0)
     b.add(b.sphere(0.03), gm, 0, cfg.len + 0.015, 0)
-    return finish(b, 0, cfg.len * 0.45, 0, 0, cfg.len * 0.45, 0, cfg.len * 0.3)
+    return finishVisual(b, 0, cfg.len * 0.45, 0, 0, cfg.len * 0.45, 0, cfg.len * 0.3)
 }
 
 const genThrowingAxe = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'throwing_axe' }): WeaponMeshResult => {
@@ -412,7 +439,7 @@ const genThrowingAxe = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'throwing_
     const headY = handleTop
     b.add(b.cylinder(gR, gR, gLen), gm, 0, handleTop - gLen / 2, 0)
     b.add(b.box(0.03, sz * 0.4, sz * 0.5), bm, 0, headY, 0)
-    return finish(b, 0, gLen * 0.5, 0, 0, headY + sz * 0.2, 0, handleTop - gLen / 2)
+    return finishVisual(b, 0, gLen * 0.5, 0, 0, headY + sz * 0.2, 0, handleTop - gLen / 2)
 }
 
 const genGrenade = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'grenade' }): WeaponMeshResult => {
@@ -427,7 +454,7 @@ const genGrenade = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'grenade' }): 
     b.add(b.cylinder(r * 1.02, r * 1.02, r * 0.12, 12), bandMat, 0, -r * 0.3, 0)
     /* 引信底部嵌入球顶，向上伸出 */
     b.add(b.cylinder(0.015, 0.015, r * 0.8, 8), fuseMat, 0, r, 0)
-    return finish(b, 0, 0, 0)
+    return finishVisual(b, 0, 0, 0)
 }
 
 const genMolotov = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'molotov' }): WeaponMeshResult => {
@@ -450,7 +477,7 @@ const genMolotov = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'molotov' }): 
     b.add(b.cylinder(neckR, bodyR, shoulderH, 12), glassMat, 0, (shoulderBottom + shoulderTop) / 2, 0)
     b.add(b.cylinder(neckR, neckR, neckH, 12), glassMat, 0, (neckBottom + neckTop) / 2, 0)
     b.add(b.cone(h * 0.13, h * 0.18, 12), fireMat, 0, neckTop - overlap + h * 0.09, 0)
-    return finish(b, 0, h * 0.4, 0, 0, h * 0.4, 0, h * 0.2)
+    return finishVisual(b, 0, h * 0.4, 0, 0, h * 0.4, 0, h * 0.2)
 }
 
 const genThrowingDart = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'throwing_dart' }): WeaponMeshResult => {
@@ -461,28 +488,12 @@ const genThrowingDart = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'throwing
     b.add(b.box(0.04, 0.02, 0.01), tailMat, 0, cfg.len * 0.7, 0.02, 0, 0, Math.PI / 5)
     b.add(b.box(0.04, 0.02, 0.01), tailMat, 0, cfg.len * 0.7, -0.02, 0, 0, -Math.PI / 5)
     b.add(b.cone(0.02, 0.04, 6), bodyMat, 0, cfg.len * 0.65, 0)
-    return finish(b, 0, cfg.len * 0.4, 0, 0, cfg.len * 0.4, 0, cfg.len * 0.25)
+    return finishVisual(b, 0, cfg.len * 0.4, 0, 0, cfg.len * 0.4, 0, cfg.len * 0.25)
 }
 
 /** 空手 / 天然武器：无可视几何，仅一个覆盖打击区（口 / 爪 / 蹄）的命中盒（拳 / 咬 / 爪由身体部件表达） */
 const genNone = (b: MeshBuilder, _cfg: WeaponMeshConfig & { id: 'none' }): WeaponMeshResult =>
     finish(b, 0, 0.2, 0, 0, 0.2, 0, 0, 0, 0.15, 0.15, 0.2, 0.2, 0.25)
-
-const supportGripOffsetOf = (config: WeaponMeshConfig): number => {
-    switch (config.id) {
-        case 'sword': return config.bladeLen > 0.4 ? config.bladeLen * 0.16 : 0
-        case 'heavy_sword': return config.bladeLen * 0.1
-        case 'spear': return config.poleLen * 0.14
-        case 'war_hammer': return -config.headSize * 0.23
-        /* 双刃斧：握把中心在模型原点下方（gripY ≈ -0.55×bladeSize），副握点取握把上方约 0.4×bladeSize */
-        case 'dual_axe': return -(config.bladeSize * 0.15 + config.bladeSize * 1.7 / 2) + config.bladeSize * 0.4
-        case 'bow': return config.size * 0.12
-        case 'crossbow': return config.size * 0.32
-        case 'shotgun': return config.size * 0.26
-        case 'staff': return config.poleLen * 0.3
-        default: return 0
-    }
-}
 
 // ── 主入口 ──
 
@@ -517,6 +528,6 @@ export const createWeaponMesh = (config: WeaponMeshConfig): WeaponMeshResult => 
         .applyEuler(new Euler(grip.rx, grip.ry, grip.rz))
     result.group.position.set(grip.x, grip.y, grip.z).sub(gripPoint)
     result.group.rotation.set(grip.rx, grip.ry, grip.rz)
-    result.supportGripOffset = supportGripOffsetOf(config)
+    result.supportGripOffset = config.supportGripOffset ?? 0
     return result
 }

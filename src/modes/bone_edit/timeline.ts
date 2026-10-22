@@ -256,7 +256,7 @@ export const setupTimelinePanel = (
         const profile = activeProfile()
         const track = authoringMode === 'tracks'
         for (const el of controls.trackOnly) el.style.display = track ? '' : 'none'
-        const weaponVisible = track
+        const weaponVisible = track && profile.supportsWeaponControl
         weaponControl.select.style.display = weaponVisible ? '' : 'none'
         weaponControl.setEnabled(weaponVisible)
         controls.handednessLabel.style.display = track && profile.supportsHandedness ? '' : 'none'

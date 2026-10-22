@@ -4,7 +4,15 @@ import {equipSkeletonWeapon, LEFT_WEAPON_MOUNT_JOINT, RIGHT_WEAPON_MOUNT_JOINT} 
 import {weaponSpecOf} from './weapon_control.ts'
 import {createJointVisuals} from '../../entity/skeleton/render/joint_groups.ts'
 import {skeletonFromDefinition} from '../../skeleton/anim/serialization.ts'
-import {buildCharacterSkeletonDefinition} from '../../entity/character/skeleton/preset.ts'
+import {buildCharacterSkeletonDefinition} from '../../entity/character/forms/humanoid/skeleton.ts'
+import {weaponsOfForm} from '../../character/weapon/catalog.ts'
+import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
+
+const SUPPORT_GRIP_MIN = 0.06
+const SUPPORT_GRIP_MAX = 0.4
+const TWO_HANDED_WEAPON_IDS = weaponsOfForm(HUMANOID_BODY_FORM_ID)
+    .filter(weapon => weapon.holdModes.includes('two_handed') && (weapon.mesh.supportGripOffset ?? 0) !== 0)
+    .map(weapon => weapon.id)
 
 /** 编辑器武器装载（真实场景图 + 预设骨架）：保证武器「挂得上、看得见、跟得动」，并按惯用手选挂点 / 镜像 */
 describe('编辑器武器装载（equipSkeletonWeapon）', () => {
@@ -68,13 +76,12 @@ describe('编辑器武器装载（equipSkeletonWeapon）', () => {
 
     it('双手武器的副握点按武器类型与模型比例和主手拉开距离', () => {
         const visuals = setup()
-        const cases = ['heavy_sword', 'spear', 'war_hammer', 'longbow', 'crossbow', 'shotgun', 'staff'] as const
-        for (const weaponId of cases) {
+        for (const weaponId of TWO_HANDED_WEAPON_IDS) {
             const weapon = equipSkeletonWeapon(visuals.groups, weaponSpecOf(weaponId)!)!
             const supportGrip = weapon.weaponGroup.localToWorld(new Vector3(0, weapon.supportGripOffset, 0))
             const mainGrip = weapon.weaponGroup.getWorldPosition(new Vector3())
-            expect(supportGrip.distanceTo(mainGrip), `${weaponId} 双手握点未拉开`).toBeGreaterThan(0.06)
-            expect(supportGrip.distanceTo(mainGrip), `${weaponId} 双手握点超出合理握距`).toBeLessThan(0.4)
+            expect(supportGrip.distanceTo(mainGrip), `${weaponId} 双手握点未拉开`).toBeGreaterThan(SUPPORT_GRIP_MIN)
+            expect(supportGrip.distanceTo(mainGrip), `${weaponId} 双手握点超出合理握距`).toBeLessThan(SUPPORT_GRIP_MAX)
             weapon.dispose()
         }
         visuals.cleanup()

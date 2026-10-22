@@ -1,6 +1,6 @@
 import {AmbientLight, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderer} from 'three'
-import {createCharacterModel} from '../../../entity/character/appearance/model.ts'
-import type {CharacterModel} from '../../../entity/character/appearance/types.ts'
+import {createHumanoidModel} from '../../../entity/character/forms/humanoid/body_form.ts'
+import type {CharacterModel} from '../../../entity/character/forms/humanoid/types.ts'
 import {weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {resolveArmorLoadout} from '../../../character/armor/catalog.ts'
 import type {ArmorLoadout} from '../../../character/armor/types.ts'
@@ -40,7 +40,7 @@ export const createEquipmentPreview = (): EquipmentPreview => {
     camera.position.set(0, 1.15, 3.1)
     camera.lookAt(new Vector3(0, 0.95, 0))
 
-    const model: CharacterModel = createCharacterModel({speed: 3, jumpHeight: 2, scale: 1}, 0)
+    const model: CharacterModel = createHumanoidModel({speed: 3, jumpHeight: 2, scale: 1}, 0)
     scene.add(model.group)
     /* 装备预览不展示物理碰撞箱（半胶囊可视化） */
     for (const m of model.colliderMeshes) m.visible = false

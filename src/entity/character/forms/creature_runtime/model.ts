@@ -16,8 +16,6 @@ export type CreatureShape =
     | {readonly kind: 'frustum'; readonly wTop: number; readonly wBottom: number; readonly h: number; readonly depthRatio?: number}
     | {readonly kind: 'tube'; readonly rTop: number; readonly rBottom: number; readonly h: number; readonly sides?: number; readonly depthRatio?: number}
     | {readonly kind: 'ellipsoid'; readonly rx: number; readonly ry: number; readonly rz: number; readonly widthSegments?: number; readonly heightSegments?: number}
-    | {readonly kind: 'capsule'; readonly radius: number; readonly h: number; readonly capSegments?: number; readonly radialSegments?: number}
-    | {readonly kind: 'cylinder'; readonly rTop: number; readonly rBottom: number; readonly h: number; readonly segments?: number}
     | {readonly kind: 'cone'; readonly r: number; readonly h: number; readonly segments?: number}
     | {readonly kind: 'sphere'; readonly r: number; readonly widthSegments?: number; readonly heightSegments?: number}
     /** 三角扇（薄片）：`points` 为关节局部顶点，按首点扇形三角化 */
@@ -131,8 +129,6 @@ const buildPartGeometry = (b: MeshBuilder, shape: CreatureShape): BufferGeometry
         case 'frustum': return b.frustum(shape.wTop, shape.wBottom, shape.h, shape.depthRatio ?? 1)
         case 'tube': return b.tube(shape.rTop, shape.rBottom, shape.h, shape.sides ?? 12, shape.depthRatio ?? 1)
         case 'ellipsoid': return b.ellipsoid(shape.rx, shape.ry, shape.rz, shape.widthSegments ?? 12, shape.heightSegments ?? 8)
-        case 'capsule': return b.capsule(shape.radius, shape.h, shape.capSegments ?? 6, shape.radialSegments ?? 12)
-        case 'cylinder': return b.cylinder(shape.rTop, shape.rBottom, shape.h, shape.segments ?? 8)
         case 'cone': return b.cone(shape.r, shape.h, shape.segments ?? 8)
         case 'sphere': return b.sphere(shape.r, shape.widthSegments ?? 8, shape.heightSegments ?? 6)
         case 'fan': {

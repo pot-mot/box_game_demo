@@ -2,7 +2,7 @@ import {describe, it, expect, vi} from 'vitest'
 import {Group} from 'three'
 import {testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor, shieldCoverOBB} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
-import type {CharacterModel} from '../appearance/types.ts'
+import type {CharacterModel} from '../forms/humanoid/types.ts'
 import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
 import {findWeaponPreset} from '../../../character/weapon/catalog.ts'
 import {SHIELD_BLOCK_MEDIUM} from '../../../character/weapon/constants.ts'
@@ -77,19 +77,19 @@ describe('testMeleeHit（武器 OBB × 受击箱 OBB）', () => {
 describe('武器命中箱 reach（命中箱前伸量几何属性）', () => {
     it('reach = 打击端相对握把的前伸量（center.y + half.y − gripY）', () => {
         const sword = createWeaponMesh({id: 'sword', bladeLen: 0.5, color: 0, gripColor: 0})
-        expect(sword.hitBox.reach).toBeCloseTo(sword.hitBox.center.y + sword.hitBox.half.y - sword.gripY)
+        expect(sword.hitBox!.reach).toBeCloseTo(sword.hitBox!.center.y + sword.hitBox!.half.y - sword.gripY)
         sword.cleanup()
         /* 握把偏低的武器（如战锤）须计入 gripY，否则会严重低估前伸量 */
         const hammer = createWeaponMesh({id: 'war_hammer', headSize: 0.35, color: 0, gripColor: 0})
-        expect(hammer.hitBox.reach).toBeCloseTo(hammer.hitBox.center.y + hammer.hitBox.half.y - hammer.gripY)
-        expect(hammer.hitBox.reach).toBeGreaterThan(0.4)
+        expect(hammer.hitBox!.reach).toBeCloseTo(hammer.hitBox!.center.y + hammer.hitBox!.half.y - hammer.gripY)
+        expect(hammer.hitBox!.reach).toBeGreaterThan(0.4)
         hammer.cleanup()
     })
 
     it('长杆武器 reach 显著大于短刃（不同武器攻击距离差异）', () => {
         const sword = createWeaponMesh({id: 'sword', bladeLen: 0.5, color: 0, gripColor: 0})
         const spear = createWeaponMesh({id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0, headColor: 0})
-        expect(spear.hitBox.reach).toBeGreaterThan(sword.hitBox.reach * 2)
+        expect(spear.hitBox!.reach).toBeGreaterThan(sword.hitBox!.reach * 2)
         sword.cleanup()
         spear.cleanup()
     })
@@ -100,7 +100,7 @@ describe('武器命中箱 reach（命中箱前伸量几何属性）', () => {
             const preset = findWeaponPreset(id)
             if (preset === undefined) throw new Error(`${id} 未注册`)
             const mesh = createWeaponMesh(preset.mesh)
-            const {center, half, reach} = mesh.hitBox
+            const {center, half, reach} = mesh.hitBox!
             const low = center.y - half.y
             const high = center.y + half.y
             /* 下沿低于握把（覆盖柄），上沿高于握把（覆盖打击端） */

@@ -3,7 +3,6 @@ import type {HoldMode} from '../../character/weapon/hold_mode.ts'
 import {DEFAULT_HANDEDNESS, type Handedness} from '../../character/handedness.ts'
 import {
     equipSkeletonWeapon,
-    RIGHT_WEAPON_MOUNT_JOINT,
     type SkeletonWeapon,
     type SkeletonWeaponSpec,
 } from './weapon_equip.ts'
@@ -243,6 +242,3 @@ export const createBoneEditWeaponControl = (
         },
     }
 }
-
-/** 右手武器挂点关节 id（编辑器装载用；保留导出便于测试与外部引用） */
-export {RIGHT_WEAPON_MOUNT_JOINT}

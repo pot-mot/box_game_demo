@@ -11,7 +11,7 @@ import {
 } from './catalog.ts'
 import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 import {orderedSegments} from './attack_chain.ts'
-import {getAttackClipById} from '../../entity/character/appearance/clips/attack_clips.ts'
+import {getAttackClipById} from '../../entity/character/forms/humanoid/clips/attack_clips.ts'
 
 const MELEE_IDS = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
 /* 本测试针对人形武器（人形关键帧 / 持握语义）；生物武器动画由体形分包提供 */

@@ -5,8 +5,8 @@
 
 ## 1. 背景与目标
 
-现有系统的人形假设散落多处：骨架 `entity/character/skeleton/preset.ts`、外观 `entity/character/appearance/*`、
-动画 `appearance/clips/base_clips.ts` + `pose_fns.ts` + `appearance/system.ts`、受击 `skeleton/hurt_blocks.ts`、
+现有系统的人形假设散落多处：骨架 `forms/humanoid/skeleton.ts`、外观 `entity/character/forms/humanoid/*`、
+动画 `forms/humanoid/clips/base_clips.ts` + `pose_fns.ts` + `forms/humanoid/system.ts`、受击 `forms/humanoid/hurt.ts`、
 碰撞（`physics/world.ts` 的上下半竖直胶囊）、装备槽（`character/armor/slots.ts`、`inventory/types.ts`、面板）、
 尺寸/HP（`CHARACTER_BASE_SIZE`、按 `weapon.type` 取 15/8）。
 
@@ -33,11 +33,11 @@ src/entity/character/
 │   └── body_form.md
 ├── forms/
 │   ├── humanoid/                  # 人形分包（自包含）
-│   │   ├── skeleton.ts            # 骨架定义（原 skeleton/preset.ts）
+│   │   ├── skeleton.ts            # 骨架定义（原 forms/humanoid/skeleton.ts）
 │   │   ├── hurt_blocks.ts         # 受击子块清单
 │   │   ├── appearance/            # 外观：部件装配 / 模型门面 / 护甲肢体网格
 │   │   ├── clips/                 # 人形动画：base_clips.ts / pose_fns.ts
-│   │   ├── animation_system.ts    # 人形 clip 调度（原 appearance/system.ts）
+│   │   ├── animation_system.ts    # 人形 clip 调度（原 forms/humanoid/system.ts）
 │   │   ├── states/                # 人形专属状态（若有）
 │   │   ├── ai/                    # 人形专属 AI 条目（若有）
 │   │   └── body_form.ts           # 组装为 BodyForm
@@ -71,12 +71,14 @@ export interface BodyForm {
     readonly assemble: (groups: ReadonlyMap<string, Group>, palette: BoxPartPalette) => BodyAppearance
     readonly palette?: BoxPartPalette            // 固定调色板（可选；体形固有配色）
 
-    // ── 动画（体形专属分包实现） ──
+    // ── 模型与动画（体形专属分包实现） ──
+    readonly createModel: (config: CharacterConfig, faction: number) => CreatureModel
     readonly createAnimation: (options: AppearanceSystemOptions) => AppearanceSystem
 
     // ── 物理与尺寸 ──
     readonly colliderLayout: readonly ColliderSpec[]
     readonly centerOffsetY: number
+    readonly eyeHeight: number
     readonly size: BodySize
     readonly baseHealth?: number
 
@@ -86,7 +88,9 @@ export interface BodyForm {
     // ── 装备与武器策略 ──
     readonly equipSlots: EquipSlotSet
     readonly defaultWeaponId: string
-    readonly allowedWeapons?: readonly string[]
+    readonly editor: {readonly weaponControl: boolean; readonly handedness: boolean}
+    readonly weapons: readonly WeaponConfig[]
+    readonly breathModules?: readonly BreathModuleConfig[]
 
     // ── 体形专属每帧/状态/AI 挂接（可选） ──
     readonly onFrame?: (entity: CharacterEntity, model: CharacterModel) => void
@@ -94,7 +98,7 @@ export interface BodyForm {
 ```
 
 - **不再有 `jointRefs` / `clipProvider`**：动画由 `createAnimation` 返回该体形自己的 `AppearanceSystem` 实现
-  （人形 = `forms/humanoid/animation_system.ts`；狼 / 马 / wyvern = 各自实现）。世界只调用 `onStateChange` / `update`。
+  （人形 = `forms/humanoid/system.ts`；狼 / 马 / wyvern = 各自实现）。世界只调用 `update`。
 - 渲染模型门面 `CharacterModel` 的通用部分（`group` / `jointGroups` / `jointParts` / `colliderMeshes` /
   `weaponGroup` 等 / `equip*` / `recolor` / `dispose`）为跨体形所需；**人形专属关节 getter**（`spine` / `headNeck` /
   四肢等）仅人形分包使用，其他体形在其自身分包内定义自己的模型类型（不强制实现人形 getter）。
@@ -130,15 +134,15 @@ export interface BodyForm {
 ## 9. 分阶段实施与状态
 
 - **W0** 本文档。✅ 已落地。
-- **W1** 抽象基座：humanoid BodyForm + `world.ts` / `appearance/model.ts` 经 plan 取用（行为不变）。✅ 已落地。
+- **W1** 抽象基座：humanoid BodyForm + `world.ts` / `forms/humanoid/model.ts` 经 plan 取用（行为不变）。✅ 已落地。
 - **W2** 武器目录泛化 + 空手类别（`none` 网格 + `unarmed` + `poseRef`）+ default 分配。✅ 已落地（人形空手可用；生物天然类别随体形分包在 W4-W6 落地）。
 - **W3** 装备槽 / 武器策略体形化 + 运行时 `setBodyForm` + 存档 v16 + 面板选择器。✅ 已落地（以狼等体形验证切换；单测 + e2e 通过）。
 - **W3.5 体形分包化**：`forms/<form>/` 分包结构落定；`BodyForm` 增 `createModel`（体形自带模型工厂）与 `createAnimation`（体形自带动画系统工厂）；世界经 plan 取模型 / 动画 / 碰撞 / 受击 / 装备，**不 import 任何 `forms/<form>/` 内部实现**；跨体形公共渲染契约抽为 `CreatureModel`（人形 `CharacterModel` 扩展之）。✅ 已落地。
-  > 注：人形专属实现（骨架 / 外观 / `clips` / `animation_system`）仍位于 `appearance/` 与 `skeleton/`，由 `forms/humanoid/body_form.ts` 组装引用；生物分包 `forms/wolf|horse|wyvern/` 为自包含实现（各带 `skeleton.ts` / 外观 / `pose_fns.ts` / `clips.ts`）。
+  > 注：人形专属实现（骨架 / 外观 / `clips` / `animation_system` / 支撑手烘焙）已全部位于 `forms/humanoid/`；生物分包 `forms/wolf|horse|wyvern/` 为自包含实现（各带 `skeleton.ts` / 外观 / `pose_fns.ts` / `clips.ts`）。
 - **W4 狼分包** `forms/wolf/`：四足骨架 / 步态 / 受击 / 碰撞 / 口部挂点（口含短剑·长剑横向咬持）+ 天然 `wolf_bite`（轻 1–2）+ 口含剑（轻 1–3）；重击均为单段蓄力；按段 id 烘焙独立 clip。✅ 已落地。
 - **W5 马分包** `forms/horse/`：四足高腿长颈；唯一武器 `horse_iron_hoof`（铁蹄），轻 1 前踢 / 轻 2 后踹 / 重击蓄力践踏；长枪 / 飞斧已移除。✅ 已落地。
 - **W6 wyvern 分包** `forms/wyvern/`：**双足飞龙（双足 + 双翼，共 4 肢）**；固定龙爪五段轻击；重击来自独立 `breath` 装备槽（火球 / 雷电 / 激光，三件物品仅 wyvern 可装备）。✅ 已落地。
-- **W7** 玩家操控（共享状态机，随 `moveSpeedOf` 生效）+ 面板按体形选择与武器白名单过滤 + e2e。✅ 已落地；展示 / 骨骼动画两个**编辑器**仍按人形骨架构建（生物体形接入编辑器为后续工作）。
+- **W7** 玩家操控（共享状态机，随 `moveSpeedOf` 生效）+ 面板按体形选择与武器白名单过滤 + e2e。✅ 已落地；骨骼动画编辑器已支持人形 / 狼 / 马 / 飞龙四体形；展示模式仍以人形展示为主。
 - **W8** 全量 `type-check` / `test` / `test:e2e` / `build` + 文档同步。✅ 已落地。
 - **W9 低多面体美术**：统一角色材质库 `render/character_materials.ts` + 通用低多面体 builder（`mesh_builder` 的 `frustum` / `materialById` / flatShading / 指定父节点）落地；护甲 / 兜帽、狼 / 马 / wyvern、种族肢体（骷髅 / 兽人 / 精灵）、近战武器迁移为低多面体（生物用皮毛 / 鳞片 / 翅膜 / 爪 / 牙 / 角，装备用金属 / 皮革 / 布料 / 木料等命名材质）；生物碰撞体与受击块重排（受击走显式 `hurtProfile.shape`，不注册 `jointParts`）；近战命中箱随几何同步（保持范围序）。✅ 已落地。
 - **W10 武器体形化 + 几何属性体形化 + 碰撞箱重构**：① 武器**只属于一种体形**（`WeaponModelConfig.formId`），数据下沉到 `forms/<form>/weapons.ts`（只复用 `weapon_mesh.ts` 网格生成器），`body_form/index.ts` 装配时经 `registerFormWeapons` 注册；人形 id 不变、生物用新 id（`wolf_bite` / `horse_iron_hoof` / `wyvern_claw` …）；切体形一律落新体形 `defaultWeaponId`；存档武器 id 与体形不符安全回退。② `BodyForm` 增 `eyeHeight`，AI / 导航 / 受击判定 / 分离一律经 `body_form/geometry.ts` 读体形属性（删除 `CHARACTER_BASE_SIZE` 在实体层的引用）。③ 生物碰撞布局改为「主竖直胶囊（落地）+ 横胶囊 / 悬空盒补形」（横胶囊由节点 90° 旋转实现），并修正马的攻击检测箱朝向、wyvern 段→姿势映射（按段 id 判别）、天然武器挂点（`mountJointId`）与命中盒。④ 翻滚根自转按体形（四足 `rollSpinTurns = 0` 低伏冲刺）。✅ 已落地。

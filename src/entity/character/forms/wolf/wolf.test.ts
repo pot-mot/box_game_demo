@@ -1,6 +1,6 @@
 import {describe, it, expect} from 'vitest'
 import {Euler, Vector3} from 'three'
-import type {CharacterState} from '../../../../character/state_machine/types.ts'
+import {BASE_CLIP_STATES} from '../../../../character/state_machine/types.ts'
 import {findWeaponPreset, weaponAttacksOf} from '../../../../character/weapon/catalog.ts'
 import {bodyFormOf, isKnownBodyFormId} from '../../body_form/index.ts'
 import {buildWolfSkeleton} from './skeleton.ts'
@@ -10,10 +10,7 @@ import {WOLF_HURT_BLOCKS} from './hurt.ts'
 import {wolfAttackPose} from './pose_fns.ts'
 import {isPoseWithPosition, type JointPose} from '../creature_runtime/pose.ts'
 
-const STATES: readonly CharacterState[] = [
-    'idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'dying',
-    'rolling', 'flinching', 'knockdown', 'getting_up', 'blocking', 'guard_broken', 'interacting',
-]
+const STATES = BASE_CLIP_STATES
 
 describe('狼体形（forms/wolf）', () => {
     it('已注册且骨架含四足 / 口部挂点 / 碰撞节点', () => {
@@ -66,9 +63,10 @@ describe('狼体形（forms/wolf）', () => {
         expect(records[1].time).toBeLessThanOrEqual(clip.duration)
     })
 
-    it('天然撕咬为默认武器且武器表仅撕咬 + 口含短剑 / 长剑', () => {
+    it('天然撕咬为默认武器，武器表全部归属狼体形且包含撕咬', () => {
         expect(WOLF_BODY_FORM.defaultWeaponId).toBe('wolf_bite')
-        expect(WOLF_BODY_FORM.weapons.map(w => w.id)).toEqual(['wolf_bite', 'wolf_short_sword', 'wolf_long_sword'])
+        expect(WOLF_BODY_FORM.weapons.every(w => w.formId === WOLF_BODY_FORM.id)).toBe(true)
+        expect(WOLF_BODY_FORM.weapons.map(w => w.id)).toContain('wolf_bite')
     })
 
     it('口含剑横咬：刃身朝前（+Z）且刃面水平', () => {

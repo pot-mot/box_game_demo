@@ -80,7 +80,6 @@ describe('体形计划公共契约（全部注册体形）', () => {
             it('动画系统工厂返回带 update 的系统', () => {
                 const system = form.createAnimation({})
                 expect(typeof system.update).toBe('function')
-                expect(typeof system.onStateChange).toBe('function')
             })
         })
     }

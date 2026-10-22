@@ -133,4 +133,4 @@ src/modes/showcase/
   - `src/entity/interactable/behaviors.test.ts` — 升降梯 `F` 停止 / 继续 / 端点反向、暂停不推进、信号清除暂停、提示随状态。
   - `src/modes/showcase/modules.test.ts` — 注册表与 `SHOWCASE_MODULE_IDS` 一一对应、标题/说明可本地化、id 唯一。
   - `src/modes/showcase/menu.test.ts` — 每个子模块渲染一张卡片、点击触发 `onSelect`、show/hide/dispose。
-- e2e：`e2e/showcase.spec.ts` — 二级菜单 7 张卡片、攻击模组展示（人形 Tab 30 行 + 切龙 Tab 2 行）、外观模块 12 行、AI 模块 10 单位、地形模块 12 配方、交互物模块 8 行（含激活回写状态）、图鉴 56 格、背包模块（背包 / 装备面板 + 玩家 HUD）、聚焦段计时行顺序、返回展示菜单、经设置菜单返回主页面。
+- e2e：`e2e/showcase.spec.ts` — 二级菜单 7 张卡片、攻击模组展示（人形 Tab 31 行 + 切龙 Tab 2 行）、外观模块 12 行、AI 模块 10 单位、地形模块 12 配方、交互物模块 8 行（含激活回写状态）、图鉴 56 格、背包模块（背包 / 装备面板 + 玩家 HUD）、聚焦段计时行顺序、返回展示菜单、经设置菜单返回主页面。

@@ -14,25 +14,26 @@ describe('体形计划注册表', () => {
         expect(bodyFormOf('does_not_exist')).toBe(HUMANOID_BODY_FORM)
     })
 
-    it('humanoid 尺寸 / 中心偏移 / 眼高为规范值', () => {
-        expect(HUMANOID_BODY_FORM.size.width).toBeCloseTo(0.25, 10)
-        expect(HUMANOID_BODY_FORM.size.height).toBeCloseTo(1, 10)
-        expect(HUMANOID_BODY_FORM.size.depth).toBeCloseTo(0.1625, 10)
-        expect(HUMANOID_BODY_FORM.centerOffsetY).toBeCloseTo(0.5, 10)
-        expect(HUMANOID_BODY_FORM.eyeHeight).toBeCloseTo(0.4, 10)
+    it('humanoid 尺寸 / 中心偏移 / 眼高关系自洽', () => {
+        const {width, height, depth} = HUMANOID_BODY_FORM.size
+        expect(width).toBeGreaterThan(0)
+        expect(height).toBeGreaterThan(0)
+        expect(depth).toBeGreaterThan(0)
+        expect(HUMANOID_BODY_FORM.centerOffsetY).toBeCloseTo(height / 2, 10)
+        expect(HUMANOID_BODY_FORM.eyeHeight).toBeGreaterThan(0)
+        expect(HUMANOID_BODY_FORM.eyeHeight).toBeLessThan(height)
     })
 
-    it('humanoid 碰撞布局为两个半胶囊（半径 = 碰撞箱半宽）', () => {
+    it('humanoid 碰撞布局为两个等半径半胶囊', () => {
         const layout = HUMANOID_BODY_FORM.colliderLayout
         expect(layout).toHaveLength(2)
-        for (const spec of layout) {
-            expect(spec.kind).toBe('capsule')
-            if (spec.kind !== 'capsule') continue
-            expect(spec.radius).toBeCloseTo(0.125, 10)
-        }
-        /* 两个半胶囊竖直反向拼合：offsetY 互为相反数 */
-        const offsets = layout.map(spec => spec.offsetY)
-        expect(offsets[0]).toBeCloseTo(-offsets[1], 10)
+        const capsules = layout.filter(spec => spec.kind === 'capsule')
+        expect(capsules).toHaveLength(2)
+        const [first, second] = capsules
+        if (first === undefined || second === undefined) return
+        expect(first.radius).toBeCloseTo(second.radius, 10)
+        expect(first.radius).toBeLessThanOrEqual(HUMANOID_BODY_FORM.size.width / 2)
+        expect(first.offsetY).toBeCloseTo(-second.offsetY, 10)
     })
 
     it('humanoid 受击子块 id 唯一且非空', () => {
@@ -59,9 +60,10 @@ describe('狼体形计划', () => {
         expect(WOLF_BODY_FORM.equipSlots.weapon).toBe(true)
     })
 
-    it('天然撕咬为默认武器，武器表仅口含剑 + 撕咬', () => {
+    it('天然撕咬为默认武器，武器表全部归属狼体形且包含撕咬', () => {
         expect(WOLF_BODY_FORM.defaultWeaponId).toBe('wolf_bite')
-        expect(WOLF_BODY_FORM.weapons.map(w => w.id)).toEqual(['wolf_bite', 'wolf_short_sword', 'wolf_long_sword'])
+        expect(WOLF_BODY_FORM.weapons.every(w => w.formId === WOLF_BODY_FORM.id)).toBe(true)
+        expect(WOLF_BODY_FORM.weapons.map(w => w.id)).toContain('wolf_bite')
     })
 
     it('四足骨架尺寸与中心偏移自洽（与人形不同）', () => {

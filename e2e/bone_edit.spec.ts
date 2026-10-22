@@ -70,7 +70,7 @@ test.describe('骨骼动画编辑模式', () => {
         await page.locator('button', {hasText: '骨骼动画'}).click()
         await expect(page.locator('#bone-timeline')).toBeVisible()
         /* 抽取代表性条目：行走/跳跃/近战链段（含巨剑轻 3 与重击段）/远程技能 */
-        for (const id of ['state/walking', 'state/jumping', 'short_sword_one_handed_light_1', 'heavy_sword_two_handed_light_3', 'long_sword_one_handed_heavy_1', 'long_sword_one_handed_heavy_2', 'longbow_shot']) {
+        for (const id of ['state/walking', 'state/jumping', 'short_sword_one_handed_light_1', 'heavy_sword_two_handed_light_3', 'long_sword_one_handed_heavy_1', 'long_sword_one_handed_heavy_2', 'longbow_shot', 'unarmed_one_handed_light_1']) {
             await expect(page.locator(`#bone-anim-select option[data-builtin-id="${id}"]`)).toBeAttached()
         }
     })
@@ -134,6 +134,10 @@ test.describe('骨骼动画编辑模式', () => {
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', '')
         await page.selectOption('#bone-anim-select', 'builtin:state/idle_held')
         await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'heavy_sword')
+
+        /* 选空手轻击 → 天然武器同样进动作库并自动装备空手 */
+        await page.selectOption('#bone-anim-select', 'builtin:unarmed_one_handed_light_1')
+        await expect(page.locator('#bone-timeline')).toHaveAttribute('data-weapon', 'unarmed')
 
         /* 手动覆盖为「无武器」 */
         await page.selectOption('#bone-weapon-select', 'none')

@@ -61,7 +61,7 @@
 ## 4. 盾击动作（禁止占位）
 
 - `src/entity/character/appearance/pose_fns.ts`：新增盾击 / 盾撞的姿态采样函数（非占位、与基础轨道一致）。
-- `src/entity/character/appearance/clips/`：新增盾击攻击 clip（轻 / 重各一套）。
+- `src/entity/character/forms/humanoid/clips/`：新增盾击攻击 clip（轻 / 重各一套）。
 - 段 id 由 `meleeSegmentId`（`melee_attacks.ts`）自动派生，引用上述新 pose key。
 - 动作规范遵循 `docs/bone_animation/动作设计规范.md`。
 
@@ -72,7 +72,7 @@
   - 新增 `genShieldSmall` / `genShieldMedium` / `genShieldLarge`（圆盾 / 鸢盾 / 塔盾）。
   - `WEAPON_MESH_GRIPS` 增对应握持姿态。
   - 各 `gen` 显式声明 `WeaponLocalHitBox`（命中箱），该几何同时作为**遮挡体近似**。
-- 挂载经 `rightWeaponMount` / `leftWeaponMount`（`appearance/model.ts` 的 weapon slot 机制）。
+- 挂载经 `rightWeaponMount` / `leftWeaponMount`（`forms/humanoid/model.ts` 的 weapon slot 机制）。
 - **盾面朝向（实现补充）**：盾面法线为武器本地 +Y，`GRIP_NEUTRAL` 下需手臂姿态补足朝向。基础状态由 `pose_fns.ts` 的 `orientShieldArms` 反解持盾臂武器骨骼 X 转角（净转角 = `SHIELD_FACE_NET_X` = π/2），使盾面竖直、平行于身体（`base_clips.ts` 离线烘焙进基础 clip，`AnimationContext.shieldHands` 指明持盾臂，覆盖待机 / 行走 / 格挡 / 瞬态）。副手盾挂背时 `model.setOffhandStowed` 叠加绕武器本地 X 的 `SHIELD_STOW_TILT_X`，使盾面法线水平、盾面竖直贴背。
 
 ## 6. 格挡槽 / 破防机制
@@ -109,7 +109,7 @@
 - `src/character/state_machine/types.ts`：`CHARACTER_STATES` 增 `'blocking'`、`'guard_broken'`。
 - `src/character/state_machine/states/`：新增 `blocking.ts`、`guard_broken.ts`。
 - `src/character/state_machine/machine.ts`：注册 `STATE_HANDLERS`。
-- `src/entity/character/appearance/system.ts`：`CLIP_STATES` 增两项。
+- `src/entity/character/forms/humanoid/system.ts`：`CLIP_STATES` 增两项。
 - 转换：
   - `idle / walking → blocking`：持盾且 `blockHeld` 且举盾时间到
   - `blocking → idle / walking`：松键
@@ -326,7 +326,7 @@ type ImpactLevel = typeof IMPACT_LEVELS[number]
 ## 21. 状态机
 
 - `src/character/state_machine/types.ts`：`CHARACTER_STATES` 增 `'knockdown'`、`'getting_up'`。
-- 新增 `states/knockdown.ts`、`states/getting_up.ts`；`machine.ts` 注册 `STATE_HANDLERS`；`appearance/system.ts` 的 `CLIP_STATES`、`pose_fns.ts`、`clips/` 同步新增姿态（禁止占位）。
+- 新增 `states/knockdown.ts`、`states/getting_up.ts`；`machine.ts` 注册 `STATE_HANDLERS`；`forms/humanoid/system.ts` 的 `CLIP_STATES`、`pose_fns.ts`、`clips/` 同步新增姿态（禁止占位）。
 - 转换：
   - `any → knockdown`：`pendingKnockdown && health > 0`（dying 优先级最高）。
   - `knockdown → getting_up`：`stateTime >= config.knockdownDuration`。

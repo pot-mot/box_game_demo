@@ -1,8 +1,9 @@
-import type {CharacterState} from '../../../../character/state_machine/types.ts'
+import type {BaseClipState} from '../../../../character/state_machine/types.ts'
 import type {AttackSegment} from '../../../../character/weapon/attack_chain.ts'
 import type {BoneAnimationClip} from '../../../../skeleton/anim/types.ts'
 import {bakePoseClip} from '../creature_runtime/pose.ts'
 import {hitWindowRatios} from '../creature_runtime/timing.ts'
+import {creatureStateMeta} from '../creature_runtime/state_timing.ts'
 import {buildWolfSkeleton} from './skeleton.ts'
 import {wolfAttackPose, wolfPose} from './pose_fns.ts'
 
@@ -11,32 +12,15 @@ const SKELETON = buildWolfSkeleton()
 /** 口部挂点由 `equipWeapon` 的挂点旋转决定武器朝向，不参与动作轨道 */
 const PRESERVED_JOINTS = ['mouthMount'] as const
 
-/** 各状态时长 / 是否循环（未列出 = 默认 1.2s 循环） */
-const STATE_META: Partial<Record<CharacterState, {duration: number; loop: boolean}>> = {
-    idle: {duration: 1.8, loop: true},
-    walking: {duration: 0.7, loop: true},
-    jumping: {duration: 0.35, loop: false},
-    falling: {duration: 0.45, loop: true},
-    swimming: {duration: 0.9, loop: true},
-    floating: {duration: 1.6, loop: true},
-    dying: {duration: 0.5, loop: false},
-    rolling: {duration: 0.5, loop: false},
-    flinching: {duration: 0.22, loop: false},
-    knockdown: {duration: 0.4, loop: false},
-    getting_up: {duration: 0.5, loop: false},
-    blocking: {duration: 1.6, loop: true},
-    guard_broken: {duration: 0.3, loop: false},
-    interacting: {duration: 1.4, loop: true},
-}
-const DEFAULT_META = {duration: 1.2, loop: true}
+const STATE_META = creatureStateMeta({"idle":1.8,"walking":0.7,"jumping":0.35,"falling":0.45,"swimming":0.9,"floating":1.6})
 
 const stateCache = new Map<string, BoneAnimationClip>()
 
 /** 狼基础状态 clip（按状态惰性烘焙并缓存） */
-export const wolfBaseClip = (state: CharacterState): BoneAnimationClip => {
+export const wolfBaseClip = (state: BaseClipState): BoneAnimationClip => {
     const cached = stateCache.get(state)
     if (cached !== undefined) return cached
-    const meta = STATE_META[state] ?? DEFAULT_META
+    const meta = STATE_META[state]
     const clip = bakePoseClip(`wolf_${state}`, meta.duration, meta.loop, SKELETON, wolfPose(state), PRESERVED_JOINTS)
     stateCache.set(state, clip)
     return clip

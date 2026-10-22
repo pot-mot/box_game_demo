@@ -1,6 +1,5 @@
 import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
-import type {CharacterState} from '../../character/state_machine/types.ts'
-import {getAttackClipById, getBaseClip} from '../../entity/character/appearance/builtin_catalog.ts'
+import {getAttackClipById, getBaseClip} from '../../entity/character/forms/humanoid/builtin_catalog.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../character/weapon/catalog.ts'
 import {
@@ -8,11 +7,11 @@ import {
     HUMANOID_BODY_FORM_ID,
     WOLF_BODY_FORM_ID,
     WYVERN_BODY_FORM_ID,
+    bodyFormOf,
 } from '../../entity/character/body_form/index.ts'
 import {wolfAttackClip, wolfBaseClip} from '../../entity/character/forms/wolf/clips.ts'
 import {horseAttackClip, horseBaseClip} from '../../entity/character/forms/horse/clips.ts'
 import {wyvernAttackClip, wyvernBaseClip} from '../../entity/character/forms/wyvern/clips.ts'
-import {WYVERN_BREATH_MODULES} from '../../entity/character/forms/wyvern/breath.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
@@ -80,7 +79,7 @@ export const builtinGroupLabelKey = (group: string): StringLocaleKey =>
 
 /**
  * 生产角色 clip 与编辑器预设骨架使用**同一套关节 id**（根关节统一为 `root`，
- * 静止局部位置由同一套 render 比例常量推导，见 base_clips.ts 与 entity/character/skeleton/preset.ts），
+ * 静止局部位置由同一套 render 比例常量推导，见 base_clips.ts 与 forms/humanoid/skeleton.ts），
  * 因此无需任何目标 id 重定向。
  */
 
@@ -129,35 +128,27 @@ const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'f
 /** 姿态公式区分持械/空手的状态（其余状态两种变体姿态相同，只列出一份） */
 const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']
 
-/** 基础状态条目数（含 idle/walking 的空手 / 持械变体），供测试校验动作库条目总数 */
-export const BASE_STATE_ENTRY_COUNT = BASE_STATE_ORDER.reduce(
-    (sum, state) => sum + (WEAPON_VARIANT_STATES.includes(state) ? 2 : 1), 0)
-
 /** 体形 clip 来源：人形走生产缓存，生物走各自 `forms/<form>/clips.ts` 烘焙缓存 */
 interface ClipProvider {
     readonly attackClip: (segment: AttackSegment) => BoneAnimationClip
     readonly baseClip: (state: BaseState, held: boolean) => BoneAnimationClip
     /** 基础状态是否有「持械 / 空手」两种变体（仅人形） */
     readonly weaponVariants: boolean
-    /** 是否跳过天然武器（人形天然武器动作由体形分包提供） */
-    readonly skipNaturalWeapons: boolean
 }
 
 const humanoidProvider: ClipProvider = {
     attackClip: segment => getAttackClipById(segment.poses[0]?.poseId ?? segment.id),
     baseClip: (state, held) => getBaseClip(state, held, 0),
     weaponVariants: true,
-    skipNaturalWeapons: true,
 }
 
 const creatureProvider = (
-    baseClip: (state: CharacterState) => BoneAnimationClip,
+    baseClip: (state: BaseState) => BoneAnimationClip,
     attackClip: (segment: AttackSegment) => BoneAnimationClip,
 ): ClipProvider => ({
     attackClip,
     baseClip: state => baseClip(state),
     weaponVariants: false,
-    skipNaturalWeapons: false,
 })
 
 const CLIP_PROVIDERS: Readonly<Record<string, ClipProvider>> = {
@@ -204,13 +195,9 @@ const buildBaseEntries = (provider: ClipProvider): BuiltinClipEntry[] => {
  * 人形攻击 clip 取段首个 pose 的生产缓存；生物体形使用各自分包按段 id 烘焙的 clip。
  */
 const buildAttackEntries = (formId: string, provider: ClipProvider): BuiltinClipEntry[] => {
-    /* 龙吐息是独立装备槽，不属于 `bodyForm.weapons`；编辑器仍应能直接预览三种吐息动作 */
-    const weapons = formId === WYVERN_BODY_FORM_ID
-        ? [...weaponsOfForm(formId), ...WYVERN_BREATH_MODULES]
-        : weaponsOfForm(formId)
+    /* 吐息是独立装备槽，不属于 `bodyForm.weapons`；编辑器仍应能直接预览 */
+    const weapons = [...weaponsOfForm(formId), ...(bodyFormOf(formId).breathModules ?? [])]
     return weapons.flatMap(weapon => {
-        /* 人形天然武器（空手 / 撕咬 / 吐息…）无可视模型且动画由体形分包提供，不入人形动作库 */
-        if (provider.skipNaturalWeapons && weapon.natural === true) return []
         const multiMode = weapon.holdModes.length > 1
         return weapon.holdModes.flatMap(holdMode => {
             const segments = orderedSegments(weaponAttacksOf(weapon, holdMode))

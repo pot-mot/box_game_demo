@@ -48,9 +48,9 @@ import {createAIMachine, notifyAIDamaged, updateAI} from '../ai/machine.ts'
 import {notifyAIKill, setOriginFromCharacter} from '../ai/origin.ts'
 import {DEFAULT_AI_BLOCK_COOLDOWN, DEFAULT_AI_BLOCK_DURATION, DEFAULT_CHASE_LEASH_RADIUS} from '../ai/constants.ts'
 import {processNav} from '../ai/nav/machine.ts'
-import {createCharacterMesh, updateCharacterMesh} from '../render'
+import {createCharacterMesh, updateCharacterMesh} from '../render/index.ts'
 import {COLLIDER_MESH_OPACITY} from '../render/constants.ts'
-import type {AppearanceSystem} from '../appearance/system.ts'
+import type {AppearanceSystem} from '../appearance/types.ts'
 
 import {createWeaponTrail, type WeaponTrail} from '../appearance/weapon_trail.ts'
 import type {CreatureModel} from '../appearance/types.ts'
@@ -76,12 +76,14 @@ import {type AttackHitBoxes, createAttackHitBoxes, syncWeaponDebugBox, syncHurtD
 import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP} from '../ai/constants.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
-import {cleanupWireframe, createWireframe} from '../../box/base/render'
+import {cleanupWireframe, createWireframe} from '../../box/base/render/index.ts'
 import {createCharacterPanel} from '../ui/panel.ts'
 import {phaseDurationOf, resolvePhases, FLINCH_DURATION, HEAVY_FLINCH_DURATION} from '../../../character/combat/attack_phases.ts'
 import {inRecoveryWindow} from '../../../character/combat/attack_runtime.ts'
 import {isWeakFlinchReceptive} from '../../../character/combat/impact.ts'
 import {rollSpinProgress} from '../../../character/combat/roll_skill.ts'
+import {FALLBACK_GUARD_BREAK_DURATION} from '../../../character/combat/constants.ts'
+import {INTERACTION_DURATION} from '../../../character/interaction/types.ts'
 
 /** Rapier 带 body/bodyHandle 反查的超类型 */
 type CharacterRigidBody = RAPIER.RigidBody
@@ -1511,7 +1513,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     ? entity.combat.knockdownDuration
                     : animState === 'getting_up'
                         ? entity.combat.getUpDuration
-                        : undefined
+                        : animState === 'flinching'
+                            ? entity.combat.flinchDuration
+                            : animState === 'rolling'
+                                ? entity.combat.rollSkill.config.duration
+                                : animState === 'interacting'
+                                    ? INTERACTION_DURATION
+                                    : animState === 'guard_broken'
+                                        ? (entity.combat.block?.guardBreakDuration ?? FALLBACK_GUARD_BREAK_DURATION)
+                                        : undefined
                 /* 进入起身首帧时按实际面朝重算翻身时长（180° = 0.25s），保证倒地段朝向漂移后仍按角速度对齐 */
                 const facingYaw = facingAngles.get(entity.id) ?? 0
                 if (animState === 'getting_up' && entity.stateMachine.stateTime === 0) {
@@ -1537,6 +1547,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     attackPhaseIndex: entity.combat.phaseIndex,
                     attackCharge: entity.combat.attackCharge,
                     attackHolding: entity.combat.attackHolding,
+                    weaponClassId: entity.combat.weapon.classId,
                     weaponHeld: model.weaponMesh !== null,
                     shieldHands,
                 })

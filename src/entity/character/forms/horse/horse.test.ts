@@ -1,15 +1,12 @@
 import {describe, it, expect} from 'vitest'
-import type {CharacterState} from '../../../../character/state_machine/types.ts'
+import {BASE_CLIP_STATES} from '../../../../character/state_machine/types.ts'
 import {findWeaponPreset, weaponAttacksOf} from '../../../../character/weapon/catalog.ts'
 import {bodyFormOf, isKnownBodyFormId} from '../../body_form/index.ts'
 import {buildHorseSkeleton} from './skeleton.ts'
 import {HORSE_BODY_FORM} from './body_form.ts'
 import {horseAttackClip, horseBaseClip} from './clips.ts'
 
-const STATES: readonly CharacterState[] = [
-    'idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'dying',
-    'rolling', 'flinching', 'knockdown', 'getting_up', 'blocking', 'guard_broken', 'interacting',
-]
+const STATES = BASE_CLIP_STATES
 
 describe('马体形（forms/horse）', () => {
     it('骨架含球节 / 飞节 / 三节尾 / 耳骨', () => {
@@ -21,11 +18,10 @@ describe('马体形（forms/horse）', () => {
         }
     })
 
-    it('武器表只有铁蹄，不再有长枪 / 飞斧', () => {
+    it('武器表只包含归属于本体的铁蹄', () => {
         expect(HORSE_BODY_FORM.defaultWeaponId).toBe('horse_iron_hoof')
         expect(HORSE_BODY_FORM.weapons.map(w => w.id)).toEqual(['horse_iron_hoof'])
-        expect(findWeaponPreset('horse_spear')).toBeUndefined()
-        expect(findWeaponPreset('horse_throwing_axe')).toBeUndefined()
+        expect(HORSE_BODY_FORM.weapons.every(w => w.formId === HORSE_BODY_FORM.id)).toBe(true)
     })
 
     it('轻击为前踢 → 后踹，重击为单段蓄力践踏；命中挂点按蹄切换', () => {

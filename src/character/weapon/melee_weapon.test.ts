@@ -1,8 +1,11 @@
 import {describe, it, expect} from 'vitest'
 import {findWeaponPreset, weaponsOfForm} from './catalog.ts'
-import {SHIELD_CLASS_IDS} from './attack_pose_edits.ts'
-import {ATTACK_CLIP_JSON} from './attack_clip_data.ts'
+import {ATTACK_CLIPS} from './attack_clips/index.ts'
 import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
+
+const SHIELD_CLASS_IDS = weaponsOfForm(HUMANOID_BODY_FORM_ID)
+    .filter(weapon => weapon.type === 'melee' && weapon.block !== undefined)
+    .map(weapon => weapon.classId)
 
 describe('人形近战武器（体形拥有 + 注册表查询）', () => {
     it('武器归属人形体形，且可在注册表按 id 查回同一实例', () => {
@@ -36,7 +39,7 @@ describe('人形近战武器（体形拥有 + 注册表查询）', () => {
             for (const key of ['light_1', 'light_2', 'heavy_1', 'heavy_2']) {
                 const segmentId = `${classId}_one_handed_${key}`
                 expect(segments[segmentId], segmentId).toBeDefined()
-                expect(ATTACK_CLIP_JSON[segmentId], segmentId).toBeDefined()
+                expect(ATTACK_CLIPS[segmentId], segmentId).toBeDefined()
             }
         }
     })

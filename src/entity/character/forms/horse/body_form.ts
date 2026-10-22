@@ -52,6 +52,7 @@ export const HORSE_BODY_FORM: BodyForm = {
     equipSlots: {armor: [], limb: [], weapon: true},
     weapons: HORSE_WEAPONS,
     defaultWeaponId: 'horse_iron_hoof',
+    editor: {weaponControl: true, handedness: false},
     /* 四足：翻滚改为低伏冲刺，不做前滚翻 */
     rollSpinTurns: 0,
 }

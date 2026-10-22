@@ -8,7 +8,7 @@ import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
 /**
  * 近战武器攻击链（武器类固有数据）：
  * 每个攻击段只声明**玩法数据**（时长/恢复/阶段时序/伤害倍率/冷却/连段拓扑）；
- * 动画是段 id 对应的显式骨骼关键帧（`attack_clip_data.ts` 基础轨道 + `attack_pose_edits.ts` 逐段修订），不再有抽象动画参数。
+ * 动画是段 id 对应的显式骨骼关键帧（`attack_clips/` 基础轨道 + `attack_clips/` 逐段修订），不再有抽象动画参数。
  *
  * **段 id 约定**：`{classId}_{holdMode}_{模板键}`（如 `long_sword_two_handed_light_1`）——
  * 每种持握模式拥有独立段 id 命名空间，三模式连段互不覆盖。
@@ -56,7 +56,7 @@ export type MeleeSegmentKey = typeof MELEE_SEGMENT_KEYS[number]
 
 /**
  * 空中段模板键（与地面段命名空间分离；段数可与地面不同）。
- * 空中段拥有自己的 clip 数据（`attack_clip_data.ts` 的 `_air_N` 条目）；`poseKeys` 只记录
+ * 空中段拥有自己的 clip 数据（`attack_clips/` 的 `_air_N` 条目）；`poseKeys` 只记录
  * 「该空中段的姿势基底取自哪个地面段」，仅在生成 clip 数据时使用，运行时不再引用地面 pose。
  */
 export const MELEE_AIR_SEGMENT_KEYS = ['air_1', 'air_2'] as const

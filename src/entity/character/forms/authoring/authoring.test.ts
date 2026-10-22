@@ -7,7 +7,7 @@ import {headTurn, hipSwing, kneeBend, legLift, spineBend} from '../humanoid/rig.
 import {wolfBodyLean, wolfKneeBend, wolfLegLift, wolfTailLift} from '../wolf/rig.ts'
 import {horseHeadNod, horseHipSwing, horseKneeBend, horseLegLift} from '../horse/rig.ts'
 import {wyvernHipSwing, wyvernKneeBend, wyvernLegLift, wyvernWingBase, wyvernWings} from '../wyvern/rig.ts'
-import {buildCharacterSkeletonDefinition} from '../../skeleton/preset.ts'
+import {buildCharacterSkeletonDefinition} from '../humanoid/skeleton.ts'
 import {BONE_EDIT_FORM_PROFILES} from '../../../../modes/bone_edit/form_catalog.ts'
 import {ensureScriptCache, invalidateScriptCache} from '../../../../modes/bone_edit/script_cache.ts'
 

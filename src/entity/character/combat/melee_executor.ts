@@ -66,7 +66,7 @@ export const shieldCoverOBB = (
 /**
  * 攻击判定：武器命中箱 OBB（由武器模型 matrixWorld 变换本地盒得到，随武器位置与姿态移动）
  * 与目标受击箱 OBB 相交检测。武器本地盒由武器构建时提供（略大于武器模型）。
- * 命中窗口由攻击动画事件轨道驱动（hitbox_on/off，见 attack_clip_data.ts），
+ * 命中窗口由攻击动画事件轨道驱动（hitbox_on/off，见 attack_clips/），
  * 不再由状态机计时窗口控制 —— 窗口与视觉动画天然同步。
  */
 export const testMeleeHit = (

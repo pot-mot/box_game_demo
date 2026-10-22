@@ -7,7 +7,7 @@ import type {TrackedBoxPart} from '../../../render/box_parts.ts'
 import type {HurtBlockProfile} from '../../../character/hurt_blocks.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
 import type {CreatureModel} from '../appearance/types.ts'
-import type {AppearanceSystem, AppearanceSystemOptions} from '../appearance/system.ts'
+import type {AppearanceSystem, AppearanceSystemOptions} from '../appearance/types.ts'
 
 /**
  * 体形计划（BodyForm）：一个体形的完整定义 —— 骨架 / 外观 / 碰撞布局 / 受击子块 /
@@ -106,6 +106,12 @@ export interface BodyForm {
     readonly weapons: readonly import('../../../character/weapon/catalog.ts').WeaponConfig[]
     /** 默认武器 id（须在 `weapons` 内；无武器 / 无持械体形回退，如空手 `unarmed` / 天然） */
     readonly defaultWeaponId: string
+
+    /** 骨骼编辑器能力声明（避免编辑器按体形 id 硬编码） */
+    readonly editor: {
+        readonly weaponControl: boolean
+        readonly handedness: boolean
+    }
 
     /** 该体形拥有的吐息模组（独立装备槽；缺省 = 无） */
     readonly breathModules?: readonly import('../../../character/weapon/breath_module.ts').BreathModuleConfig[]

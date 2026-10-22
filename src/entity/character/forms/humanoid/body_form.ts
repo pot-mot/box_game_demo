@@ -1,12 +1,14 @@
 import type {Group} from 'three'
 import type {BoxPartPalette} from '../../../../render/box_parts.ts'
 import {ARMOR_SLOTS, LIMB_SLOTS} from '../../../../character/armor/slots.ts'
-import {buildCharacterSkeletonDefinition, HUMANOID_JOINT_NAME_KEYS} from '../../skeleton/preset.ts'
-import {HUMANOID_HURT_BLOCKS} from '../../skeleton/hurt_blocks.ts'
-import {assembleCharacterAppearance} from '../../appearance/assemble.ts'
-import {createCharacterModel} from '../../appearance/model.ts'
-import {createAppearanceSystem} from '../../appearance/system.ts'
+import {buildCharacterSkeletonDefinition, HUMANOID_JOINT_NAME_KEYS} from './skeleton.ts'
+import {HUMANOID_HURT_BLOCKS} from './hurt.ts'
+import {assembleCharacterAppearance} from './assemble.ts'
+import {createCharacterModel} from './model.ts'
+import {createAppearanceSystem} from './system.ts'
 import type {BodyAppearance, BodyForm, ColliderSpec} from '../../body_form/types.ts'
+import type {CharacterConfig} from '../../../../character/types.ts'
+import type {CharacterModel} from './types.ts'
 import {HUMANOID_WEAPONS} from './weapons.ts'
 
 /** 人形体形 id */
@@ -53,4 +55,9 @@ export const HUMANOID_BODY_FORM: BodyForm = {
     equipSlots: {armor: ARMOR_SLOTS, limb: LIMB_SLOTS, weapon: true},
     weapons: HUMANOID_WEAPONS,
     defaultWeaponId: 'unarmed',
+    editor: {weaponControl: true, handedness: true},
 }
+
+/** 人形模型便捷工厂：调用方已确定是人形体形时使用 */
+export const createHumanoidModel = (config: CharacterConfig, faction: number): CharacterModel =>
+    createCharacterModel(config, faction, HUMANOID_BODY_FORM)

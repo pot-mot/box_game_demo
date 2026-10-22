@@ -30,8 +30,8 @@ export interface MeleeWeaponClassConfig {
     readonly id: string
     readonly type: 'melee'
     /**
-     * 天然武器类别（空手 / 撕咬 / 爪击 / 踢击）：无可视模型、无动画关键帧数据，
-     * 动作由所属**体形分包**提供（不进骨骼编辑器人形动作库）。
+     * 天然武器类别（空手 / 撕咬 / 爪击 / 踢击）：无可视模型；动作关键帧由所属 **体形分包** 提供，
+     * 人形空手与其它武器一样进入骨骼编辑器动作库。
      */
     readonly natural?: boolean
     /**

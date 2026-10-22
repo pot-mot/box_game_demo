@@ -18,7 +18,7 @@ import {advanceSegmentPhases, enterAttackSegment, resolveSegmentNextState, type 
  * - 起手固定走武器 `air` 链（空中键，与轻重链命名空间分离；远程武器空链 → 不起手）；
  * - 空中不蓄力（`attackHeld` 恒忽略）、无移动投射/斜坡逻辑，改为「保留跳跃惯性 + 低操控」；
  * - 段数/动量/操控由武器类的 `airAttack` 模组决定（段数可与地面不同）；
- * - 段动作是**自烘焙 clip**（`attack_clip_data.ts` 的 `_air_N` 条目），砸地等自身冲击由段的
+ * - 段动作是**自烘焙 clip**（`attack_clips/` 的 `_air_N` 条目），砸地等自身冲击由段的
  *   `impulses` 配置在指定段内时刻施加（见 `combat/attack_impulses.ts`）；
  * - 收招/落地后回到地面状态；**不回 jumping**（`jumping.enter` 会重置 vy，会造成二段跳）。
  */

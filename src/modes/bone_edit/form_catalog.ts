@@ -25,6 +25,7 @@ export interface BoneEditFormProfile {
     readonly motions: readonly ScriptedMotion[]
     /** 该体形的默认武器（切体形时自动同步） */
     readonly defaultWeaponId: string
+    readonly supportsWeaponControl: boolean
     readonly supportsHandedness: boolean
     readonly builtinClips: () => readonly BuiltinClipEntry[]
 }
@@ -42,7 +43,8 @@ const profileOf = (form: BodyForm): BoneEditFormProfile => ({
     preset: createBodyFormSkeletonPreset(form),
     motions: SCRIPT_MOTIONS[form.id] ?? [],
     defaultWeaponId: form.defaultWeaponId,
-    supportsHandedness: form.id === HUMANOID_BODY_FORM_ID,
+    supportsWeaponControl: form.editor.weaponControl,
+    supportsHandedness: form.editor.handedness,
     builtinClips: () => getBuiltinClips(form.id),
 })
 
