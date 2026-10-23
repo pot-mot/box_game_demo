@@ -1,7 +1,6 @@
 import type {ArmorMeshConfig, LimbMeshConfig} from '../equipment/mesh_config.ts'
 import type {EquipmentStats} from '../equipment/types.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
-import type {ArmorSlot, LimbSlot} from './slots.ts'
 
 /**
  * 单件装备（领域数据：槽位 + 数值修正 + 程序化外观配方）。
@@ -30,7 +29,7 @@ export type ArmorPieceConfig = EquipPieceConfig<string, ArmorMeshConfig>
 export type ArmorLoadout = Readonly<Record<string, string>>
 
 /** 已校验装备表：未知 id / 槽位不匹配的条目已被剔除 */
-export type ResolvedArmorLoadout = Readonly<Partial<Record<ArmorSlot, ArmorPieceConfig>>>
+export type ResolvedArmorLoadout = Readonly<Record<string, ArmorPieceConfig>>
 
 /** 单件肢体组件（种族肢体：默认顶替对应人类肢体，颜色随阵营调色板重着色） */
 export type LimbPieceConfig = EquipPieceConfig<string, LimbMeshConfig>
@@ -39,4 +38,4 @@ export type LimbPieceConfig = EquipPieceConfig<string, LimbMeshConfig>
 export type LimbLoadout = Readonly<Record<string, string>>
 
 /** 已校验肢体装备表：未知 id / 槽位不匹配的条目已被剔除 */
-export type ResolvedLimbLoadout = Readonly<Partial<Record<LimbSlot, LimbPieceConfig>>>
+export type ResolvedLimbLoadout = Readonly<Record<string, LimbPieceConfig>>

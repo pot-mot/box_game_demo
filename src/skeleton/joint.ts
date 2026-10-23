@@ -7,7 +7,7 @@ let nextJointId = 1
 export const IK_SOLVERS = ['ccd', 'fabrik'] as const
 export type IkSolverId = typeof IK_SOLVERS[number]
 
-/** 节点 IK 配置：末端节点 + 求解器 + 影响父级段数 */
+/** 节点 IK 配置：末端节点 + 求解器 + 影响父级段数（仅编辑器 Gizmo 拖拽使用，生产动画零运行时 IK） */
 export interface JointIkConfig {
     readonly solver: IkSolverId
     /** 影响父级段数（1 = 仅父节点，默认 2） */

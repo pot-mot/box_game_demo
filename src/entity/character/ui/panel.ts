@@ -15,7 +15,7 @@ import {HANDEDNESS, HANDEDNESS_LABELS, isHandedness} from '../../../character/ha
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
-import {ARMOR_SLOTS, ARMOR_SLOT_LABELS, LIMB_SLOTS, LIMB_SLOT_LABELS, type ArmorSlot, type LimbSlot} from '../../../character/armor/slots.ts'
+import {equipBodyPartLabelKey} from '../../../character/equipment/types.ts'
 import {armorPiecesOfSlot, armorPieceDisplayName, attackTermsOf, defenseTermsOf, findArmorPreset, findLimbPreset, limbPiecesOfSlot, moveSpeedTermsOf, poiseTermsOf, resolveArmorLoadout, resolveLimbLoadout, type StatTerm} from '../../../character/armor/catalog.ts'
 import type {ArmorLoadout, ArmorPieceConfig, LimbLoadout, LimbPieceConfig} from '../../../character/armor/types.ts'
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
@@ -213,11 +213,16 @@ const describeArmorPiece = (piece: ArmorPieceConfig | LimbPieceConfig): string =
  * 面板装备区行映射：一行两列（左护甲 / 右肢体），按用户语义顺序 头部 → 手臂 → 身体 → 腿部。
  * 「身体」肢体对应胸甲槽位（同一身体区域）。两套槽位独立，缺省均为空。
  */
-const EQUIP_ROWS: ReadonlyArray<{readonly armor: ArmorSlot; readonly limb: LimbSlot}> = [
+const EQUIP_ROWS: ReadonlyArray<{readonly armor: string; readonly limb: string}> = [
     {armor: 'head', limb: 'head'},
-    {armor: 'arms', limb: 'arms'},
+    {armor: 'torso', limb: 'torso'},
     {armor: 'chest', limb: 'body'},
+    {armor: 'arms', limb: 'arms'},
     {armor: 'legs', limb: 'legs'},
+    {armor: 'hooves', limb: 'claw'},
+    {armor: 'claw', limb: 'wing_claw'},
+    {armor: 'wing', limb: 'wing'},
+    {armor: 'tail', limb: 'tail'},
 ]
 
 /** 起手段冷却：取轻击链首段（角色的冷却覆写落在段定义上） */
@@ -477,11 +482,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     /* 攻击区字段集合（预填与回显共用） */
     const attackFields: AttackFields = {atkRange, atkDmg, atkCD, atkChargeMult, atkChargeTime, bulletSpeed, bulletKB, bulletLife, weaponTag}
 
-    /* 装备下拉（一行两列：左护甲 / 右肢体）：首项「无」= 空槽；选项文案列出数值影响（非零项才列出） */
-    const armorSelects: Record<ArmorSlot, HTMLSelectElement> = {head: document.createElement('select'), chest: document.createElement('select'), arms: document.createElement('select'), legs: document.createElement('select')}
-    const limbSelects: Record<LimbSlot, HTMLSelectElement> = {head: document.createElement('select'), arms: document.createElement('select'), body: document.createElement('select'), legs: document.createElement('select')}
+    /* 装备下拉：从当前体形槽位表动态生成，首项「无」= 空槽 */
+    const armorSelects = new Map<string, HTMLSelectElement>()
+    const limbSelects = new Map<string, HTMLSelectElement>()
 
-    /** 填充装备下拉（首项「无」+ 该槽位全部预设；护甲 / 肢体共用） */
+    /** 填充装备下拉（首项「无」+ 该槽位全部预设） */
     const fillEquipSelect = (select: HTMLSelectElement, pieces: readonly (ArmorPieceConfig | LimbPieceConfig)[]): void => {
         const noneOption = document.createElement('option')
         noneOption.value = ''
@@ -495,38 +500,56 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         }
     }
 
-    const equipRowEls: Array<{readonly armor: ArmorSlot; readonly limb: LimbSlot; readonly row: HTMLDivElement; readonly armorLabel: HTMLLabelElement; readonly limbLabel: HTMLLabelElement}> = []
+    const equipmentLabelKey = (kind: 'armor' | 'limb', bodyPart: string): StringLocaleKey | undefined => {
+        for (const form of Object.values(BODY_FORMS)) {
+            const slot = form.equipSlots.find(candidate => candidate.kind === kind && candidate.bodyPart === bodyPart)
+            if (slot?.nameKey !== undefined) return slot.nameKey
+        }
+        return equipBodyPartLabelKey(bodyPart)
+    }
+
+    const equipRowEls: Array<{readonly armor: string; readonly limb: string; readonly row: HTMLDivElement; readonly armorLabel: HTMLLabelElement; readonly limbLabel: HTMLLabelElement}> = []
     for (const {armor, limb} of EQUIP_ROWS) {
         const row = document.createElement('div')
         row.className = 'dc-row'
 
         const armorLabel = document.createElement('label')
         armorLabel.className = 'dc-label'
-        appendLocalizedText(armorLabel, ARMOR_SLOT_LABELS[armor])
+        const armorKey = equipmentLabelKey('armor', armor)
+        if (armorKey !== undefined) appendLocalizedText(armorLabel, armorKey)
+        else armorLabel.appendChild(document.createTextNode(armor))
         armorLabel.appendChild(document.createTextNode(' '))
-        armorSelects[armor].className = 'dc-select'
-        armorSelects[armor].style.cssText = 'max-width:180px'
-        fillEquipSelect(armorSelects[armor], armorPiecesOfSlot(armor))
-        armorLabel.appendChild(armorSelects[armor])
+        const armorSelect = document.createElement('select')
+        armorSelect.id = `armor-slot-${armor}`
+        armorSelect.className = 'dc-select'
+        armorSelect.style.cssText = 'max-width:180px'
+        fillEquipSelect(armorSelect, armorPiecesOfSlot(armor))
+        armorLabel.appendChild(armorSelect)
         row.appendChild(armorLabel)
+        armorSelects.set(armor, armorSelect)
 
         const limbLabel = document.createElement('label')
         limbLabel.className = 'dc-label'
         appendLocalizedText(limbLabel, 'character.limb_prefix')
-        appendLocalizedText(limbLabel, LIMB_SLOT_LABELS[limb])
+        const limbKey = equipmentLabelKey('limb', limb)
+        if (limbKey !== undefined) appendLocalizedText(limbLabel, limbKey)
+        else limbLabel.appendChild(document.createTextNode(limb))
         limbLabel.appendChild(document.createTextNode(' '))
         localizeTitle(limbLabel, 'character.limb_tip')
-        limbSelects[limb].className = 'dc-select'
-        limbSelects[limb].style.cssText = 'max-width:180px'
-        fillEquipSelect(limbSelects[limb], limbPiecesOfSlot(limb))
-        limbLabel.appendChild(limbSelects[limb])
+        const limbSelect = document.createElement('select')
+        limbSelect.id = `limb-slot-${limb}`
+        limbSelect.className = 'dc-select'
+        limbSelect.style.cssText = 'max-width:180px'
+        fillEquipSelect(limbSelect, limbPiecesOfSlot(limb))
+        limbLabel.appendChild(limbSelect)
         row.appendChild(limbLabel)
+        limbSelects.set(limb, limbSelect)
 
         el.appendChild(row)
         equipRowEls.push({armor, limb, row, armorLabel, limbLabel})
     }
 
-    /** 按体形计划的 equipSlots 隐藏不适用装备区域（无对应 kind+bodyPart 的体形整行隐藏） */
+    /** 按体形计划的 equipSlots 隐藏不适用装备区域 */
     const applyEquipVisibility = (planId: string | undefined): void => {
         const slots = bodyFormOf(planId).equipSlots
         for (const entry of equipRowEls) {
@@ -545,20 +568,18 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /** 读取当前护甲选择（空 value = 空槽） */
     const readArmorLoadout = (): ArmorLoadout => {
-        const loadout: Partial<Record<ArmorSlot, string>> = {}
-        for (const slot of ARMOR_SLOTS) {
-            const value = armorSelects[slot].value
-            if (value.length > 0) loadout[slot] = value
+        const loadout: Record<string, string> = {}
+        for (const [slot, select] of armorSelects) {
+            if (select.value.length > 0) loadout[slot] = select.value
         }
         return loadout
     }
 
     /** 读取当前肢体选择（空 value = 默认人类肢体） */
     const readLimbLoadout = (): LimbLoadout => {
-        const loadout: Partial<Record<LimbSlot, string>> = {}
-        for (const slot of LIMB_SLOTS) {
-            const value = limbSelects[slot].value
-            if (value.length > 0) loadout[slot] = value
+        const loadout: Record<string, string> = {}
+        for (const [slot, select] of limbSelects) {
+            if (select.value.length > 0) loadout[slot] = select.value
         }
         return loadout
     }
@@ -700,8 +721,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const getUpDurationInput = createLabeledNumberInput(blockRow(), 'character.get_up_duration', {min: '0', step: '0.1', value: '1.2'})
 
     /* 装备 / 武器下拉与基础值输入变更即时重算公式（武器决定攻击行的加值项） */
-    for (const slot of ARMOR_SLOTS) armorSelects[slot].onchange = refreshStatFormulas
-    for (const slot of LIMB_SLOTS) limbSelects[slot].onchange = refreshStatFormulas
+    for (const select of armorSelects.values()) select.onchange = refreshStatFormulas
+    for (const select of limbSelects.values()) select.onchange = refreshStatFormulas
     weaponSelect.addEventListener('change', refreshStatFormulas)
     offhandSelect.addEventListener('change', refreshStatFormulas)
     for (const entry of statFormulas) entry.base.addEventListener('input', refreshStatFormulas)
@@ -1234,13 +1255,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         holdModeSelect.value = humanoidBodyStateOf(sel.bodyState).holdMode
 
         /* 护甲 / 肢体与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
-        for (const slot of ARMOR_SLOTS) {
+        for (const [slot, select] of armorSelects) {
             const piece = findArmorPreset(sel.combat.equipment.armor[slot])
-            armorSelects[slot].value = piece !== undefined && piece.slot === slot ? piece.id : ''
+            select.value = piece !== undefined && piece.slot === slot ? piece.id : ''
         }
-        for (const slot of LIMB_SLOTS) {
+        for (const [slot, select] of limbSelects) {
             const piece = findLimbPreset(sel.combat.equipment.limb[slot])
-            limbSelects[slot].value = piece !== undefined && piece.slot === slot ? piece.id : ''
+            select.value = piece !== undefined && piece.slot === slot ? piece.id : ''
         }
         baseDefPhys.value = formatNumber(sel.combat.baseDefense.physical)
         baseDefMagic.value = formatNumber(sel.combat.baseDefense.magic)

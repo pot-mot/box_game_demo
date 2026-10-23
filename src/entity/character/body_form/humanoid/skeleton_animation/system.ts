@@ -2,8 +2,13 @@ import {isAttackState, type CharacterState} from '../../../../../character/state
 import type {AppearanceSystem, AppearanceSystemOptions, CreatureModel, AnimationContext, HumanoidAnimationContext} from '../../../appearance/types.ts'
 import {applyJointBlend, snapshotJoints, type JointSnapshot} from '../../../appearance/joint_blend.ts'
 import {createBoneAnimationPlayer, type BoneAnimationPlayer} from '../../../../../skeleton/anim/player.ts'
-import {sampleClip} from '../../../../../skeleton/anim/sampling.ts'
-import {getBaseClipForHoldMode, getWalkLegsClip, fallingSpeedTier} from './clips/base_clips.ts'
+import type {BoneAnimationClip} from '../../../../../skeleton/anim/types.ts'
+import {getBaseClipForHoldMode, getWalkLegsClip, fallingSpeedTier, WALK_LEG_JOINTS} from './clips/base_clips.ts'
+import {
+    jointEulersToSkeletonPose,
+    sampleComposition,
+    type AnimationComposition,
+} from '../../common/skeleton_animation/composition.ts'
 import {getAttackClipById} from '../skeleton_animation/clips/attack_clips.ts'
 import {createCharacterSkeletonBridge} from '../../../appearance/skeleton_bridge.ts'
 import type {SkeletonSceneBridge} from '../../../../skeleton/render/bridge.ts'
@@ -63,6 +68,9 @@ const SHIELD_ARM_KEY_SUFFIXES = new Map<readonly ('right' | 'left')[], string>([
     [BOTH_SHIELD_ARMS, ':srl'],
 ])
 
+/** 下半身行走覆盖层权重：只对双腿关节声明 1，其余关节不受影响 */
+const WALK_LEG_WEIGHTS: Readonly<Record<string, number>> = Object.fromEntries(WALK_LEG_JOINTS.map(jointId => [jointId, 1]))
+
 export const createAppearanceSystem = (options?: AppearanceSystemOptions): AppearanceSystem => {
     const onAttackEvent = options?.onAttackEvent
     let currentState: CharacterState | null = null
@@ -81,6 +89,10 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
     let chargingSeekScale = 1
     /* 格挡 / 蓄力攻击下半身行走叠加的相位累积（秒）：按水平速度步频推进，仅覆盖双腿 */
     let engagedWalkPhase = 0
+    /* 下半身行走组合缓存：基础 clip / 行走腿 clip 变化时才重建 */
+    let engagedWalkComposition: AnimationComposition | undefined
+    let engagedWalkBaseClip: BoneAnimationClip | undefined
+    let engagedWalkLegClip: BoneAnimationClip | undefined
 
     const teardownClip = (): void => {
         player?.pause()
@@ -88,6 +100,9 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
         bridge = undefined
         chargingPose = false
         engagedWalkPhase = 0
+        engagedWalkComposition = undefined
+        engagedWalkBaseClip = undefined
+        engagedWalkLegClip = undefined
     }
 
     /** 攻击段 → 单 clip（当前段只引用一个 pose 资产；多层组合未在生产使用）。 */
@@ -98,9 +113,9 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
 
     const setupClip = (state: CharacterState, model: CreatureModel, ctx: AnimationContext): void => {
         teardownClip()
-        bridge = createCharacterSkeletonBridge(model)
+        bridge = createCharacterSkeletonBridge(model, buildCharacterSkeletonDefinition())
         if (isAttackState(state)) {
-            /* 攻击段动作组合：段引用的 pose 层（含 hitbox 事件轨），按权重合成。
+            /* 攻击段动作：段引用的单个 pose clip（含 hitbox 事件轨）。
              * 蓄力按住时不自由推进，而按蓄力值定位「蓄力段」进度：近战 = 攻击 clip 的抬手段（武器各异），
              * 其余（拉弓 / 后引 / 后摆）= 攻击 clip 前段；松开后由攻击态正常推进，无缝续播挥斩。 */
             const segment = ctx.attackSegment
@@ -152,9 +167,25 @@ export const createAppearanceSystem = (options?: AppearanceSystemOptions): Appea
             engagedWalkPhase = 0
             return
         }
-        const clip = getWalkLegsClip(humanoidCtxOf(ctx).handedness)
+        const baseClip = player?.clip
+        if (baseClip === undefined) return
+        const legClip = getWalkLegsClip(humanoidCtxOf(ctx).handedness)
+        if (engagedWalkComposition === undefined || engagedWalkBaseClip !== baseClip || engagedWalkLegClip !== legClip) {
+            engagedWalkBaseClip = baseClip
+            engagedWalkLegClip = legClip
+            engagedWalkComposition = {
+                id: 'humanoid:engaged_walk',
+                duration: legClip.duration,
+                layers: [
+                    {source: {clip: legClip}, weight: 1, start: 0, end: legClip.duration, jointWeights: WALK_LEG_WEIGHTS},
+                ],
+            }
+        }
         engagedWalkPhase += dt * walkSpeedScale(ctx.horizontalSpeed)
-        bridge.applyPose(sampleClip(clip, engagedWalkPhase))
+        const phase = engagedWalkComposition.duration > 0
+            ? engagedWalkPhase % engagedWalkComposition.duration
+            : 0
+        bridge.applyPose(jointEulersToSkeletonPose(sampleComposition(engagedWalkComposition, phase), bridge))
     }
 
     const onStateChange = (from: CharacterState | null, to: CharacterState, model: CreatureModel, ctx: AnimationContext): void => {

@@ -2,6 +2,7 @@ import {Mesh, type Scene} from 'three'
 import type {PanelContext} from '../box/base/ui'
 import type {Skeleton, JointCascadeSettings} from '../../skeleton/skeleton.ts'
 import {syncBoneLengths} from '../../skeleton/bone.ts'
+import {connectJoint, disconnectJoint} from '../../skeleton/joint.ts'
 import {skeletonFromDefinition, type SkeletonDefinition} from '../../skeleton/anim/serialization.ts'
 import {createJointVisuals, type JointVisuals} from './render/joint_groups.ts'
 import type {SkeletonAppearance, SkeletonPreset} from './appearance.ts'
@@ -239,12 +240,37 @@ export const setupSkeletonEntities = (scene: Scene, presets: SkeletonPresetSourc
         updater,
     }
 
+    /** 重连父关节：Group 层级与领域骨架同时重挂，再用场景局部变换回写桥接骨架（世界位置保持） */
+    const reparentJoint = (jointId: string, parentId: string | undefined): void => {
+        const entity = getFocus()
+        if (entity === undefined) return
+        const joint = entity.skeleton.findJoint(jointId)
+        const childGroup = entity.visuals.groups.get(jointId)
+        if (joint === undefined || childGroup === undefined) return
+        if (parentId === undefined) {
+            if (joint.parent === undefined) return
+            disconnectJoint(joint)
+            entity.visuals.rootGroup.attach(childGroup)
+        } else {
+            if (parentId === jointId) return
+            const parent = entity.skeleton.findJoint(parentId)
+            const parentGroup = entity.visuals.groups.get(parentId)
+            if (parent === undefined || parentGroup === undefined) return
+            /* connectJoint 内部校验自环 / 祖先，非法重连直接抛错，不产生半完成状态 */
+            connectJoint(parent, joint)
+            parentGroup.attach(childGroup)
+        }
+        entity.visuals.bridge.syncFromScene()
+        entity.visuals.resizeBoneVisuals()
+    }
+
     const panel = createSkeletonPanel({
         getFocus,
         getSelection: (): SkeletonSelection | undefined => selection,
         getCascadeSettings: (): JointCascadeSettings => cascadeSettings,
         isEditingEnabled: (): boolean => viewSettings.editEnabled,
         refresh,
+        reparentJoint,
         reopen: (): void => {
             if (selection !== undefined) focusPanel(panel)
         },

@@ -1,5 +1,13 @@
 import type {SkeletonDefinition} from '../../../../../skeleton/anim/serialization.ts'
+import type {ColliderSpec} from '../../common/types.ts'
 import {buildBoneEdges} from '../../common/creature_runtime/skeleton_bones.ts'
+
+/** 狼碰撞布局（骨架唯一来源）：竖胶囊 + 躯干横胶囊 + 头部盒。 */
+export const WOLF_COLLIDER_LAYOUT: readonly ColliderSpec[] = [
+    {nodeId: 'bodyCollider', kind: 'capsule', radius: 0.2, halfHeight: 0.25, offsetY: 0},
+    {nodeId: 'torsoCollider', kind: 'capsule', radius: 0.2, halfHeight: 0.2, offsetY: 0},
+    {nodeId: 'headCollider', kind: 'box', half: {x: 0.12, y: 0.13, z: 0.2}, offsetY: 0},
+]
 
 const I: readonly [number, number, number, number] = [0, 0, 0, 1]
 /** 绕 X 轴 90°（把竖直胶囊转为沿身体前后轴的横胶囊） */

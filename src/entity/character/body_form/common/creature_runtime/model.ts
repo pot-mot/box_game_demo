@@ -1,4 +1,4 @@
-import {BoxGeometry, BufferAttribute, BufferGeometry, CapsuleGeometry, DynamicDrawUsage, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type Group, Mesh, MeshBasicMaterial, type MeshStandardMaterial} from 'three'
+import {BufferAttribute, BufferGeometry, CapsuleGeometry, DynamicDrawUsage, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type Group, Mesh, MeshBasicMaterial, type MeshStandardMaterial} from 'three'
 import type {SkeletonDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {skeletonFromDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {createJointHierarchy} from '../../../../../skeleton/render/joint_hierarchy.ts'
@@ -8,9 +8,8 @@ import {createWeaponMesh, WEAPON_MESH_GRIPS, type WeaponMeshConfig, type WeaponL
 import {COLLIDER_MESH_OPACITY} from '../../../render/constants.ts'
 import {WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
 import type {CreatureModel, WeaponEquipConfig} from '../../../appearance/types.ts'
-import type {BodyAppearance, ColliderSpec} from '../types.ts'
+import type {BodyAppearance, ColliderSpec, EquipmentAppearanceBuilder} from '../types.ts'
 import type {EquipSlotDef, EquipmentState} from '../../../../../character/equipment/types.ts'
-import {findArmorPreset, findLimbPreset} from '../../../../../character/armor/catalog.ts'
 
 /** 体形部件几何形状（半写实基元 + 自定义三角扇） */
 export type CreatureShape =
@@ -61,6 +60,8 @@ export interface CreatureModelSpec {
     readonly backMountId?: string
     readonly colliderLayout: readonly ColliderSpec[]
     readonly equipSlots?: readonly EquipSlotDef[]
+    /** 体形装备外观构建器（由 `appearance/equipment.ts` 提供；缺省 = 不显示装备外观） */
+    readonly equipmentAppearance?: EquipmentAppearanceBuilder
     readonly scale: number
 }
 
@@ -340,36 +341,21 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
         slot.mountJoint.add(result.group)
         slot.mountJoint.rotation.set(slot.mountRotation[0], slot.mountRotation[1], slot.mountRotation[2])
     }
-    /** 通用装备外观：在槽位声明的骨骼节点上挂轻量色块（体形固有部件承担主体外观） */
-    const equipmentMeshes: Mesh[] = []
+    /** 装备外观：由体形 `appearance/equipment.ts` 构建真实网格，模型只负责生命周期与换装 */
+    let equipmentAppearance: {dispose: () => void} | undefined
     const clearEquipmentVisuals = (): void => {
-        for (const mesh of equipmentMeshes) {
-            mesh.removeFromParent()
-            mesh.geometry.dispose()
-            if (mesh.material instanceof MeshBasicMaterial) mesh.material.dispose()
-        }
-        equipmentMeshes.length = 0
+        equipmentAppearance?.dispose()
+        equipmentAppearance = undefined
     }
     const equipEquipmentState = (state: EquipmentState): void => {
         clearEquipmentVisuals()
-        const slots = spec.equipSlots ?? []
-        const addPiece = (kind: 'armor' | 'limb', bodyPart: string, pieceId: string): void => {
-            const piece = kind === 'armor' ? findArmorPreset(pieceId) : findLimbPreset(pieceId)
-            if (piece === undefined || piece.slot !== bodyPart) return
-            const slot = slots.find(candidate => candidate.kind === kind && candidate.bodyPart === bodyPart)
-            if (slot === undefined) return
-            const meshInfo = piece.mesh
-            const color = 'color' in meshInfo && typeof meshInfo.color === 'number' ? meshInfo.color : 0x8a8f98
-            for (const jointId of slot.mountJointIds) {
-                const joint = groups.get(jointId)
-                if (joint === undefined) continue
-                const mesh = new Mesh(new BoxGeometry(0.22, 0.22, 0.22), new MeshBasicMaterial({color, transparent: true, opacity: 0.85}))
-                joint.add(mesh)
-                equipmentMeshes.push(mesh)
-            }
-        }
-        for (const [bodyPart, id] of Object.entries(state.armor)) addPiece('armor', bodyPart, id)
-        for (const [bodyPart, id] of Object.entries(state.limb)) addPiece('limb', bodyPart, id)
+        if (spec.equipmentAppearance === undefined) return
+        const builder = createMeshBuilder()
+        equipmentAppearance = spec.equipmentAppearance(state, {
+            groups,
+            builder,
+            equipSlots: spec.equipSlots ?? [],
+        })
     }
 
     const setOffhandStowed = (stowed: boolean): void => {

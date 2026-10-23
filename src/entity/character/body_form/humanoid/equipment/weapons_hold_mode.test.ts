@@ -13,9 +13,12 @@ import {HUMANOID_BODY_FORM_ID} from '../../index.ts'
 import {orderedSegments} from '../../../../../character/weapon/attack_chain.ts'
 import {getAttackClipById} from '../skeleton_animation/clips/attack_clips.ts'
 
-const MELEE_IDS = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
 /* 本测试针对人形武器（人形关键帧 / 持握语义）；生物武器动画由体形分包提供 */
 const ALL_WEAPON_PRESETS = weaponsOfForm(HUMANOID_BODY_FORM_ID)
+/* 普通近战 = 非盾（无 block）且非天然武器；由数据推导，避免新增武器时漏测 */
+const MELEE_IDS = ALL_WEAPON_PRESETS
+    .filter(weapon => weapon.type === 'melee' && weapon.block === undefined && weapon.natural !== true)
+    .map(weapon => weapon.id)
 
 describe('武器持握模式数组 + 攻击链 map', () => {
     it('每把武器至少声明一种持握模式，默认模式为数组首个', () => {

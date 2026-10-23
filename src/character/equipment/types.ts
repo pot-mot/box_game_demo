@@ -67,6 +67,24 @@ export type EquipmentVisual = WeaponMeshConfig | ArmorMeshConfig | LimbMeshConfi
  * - `allowedBodyFormIds` 声明允许装备的体形（空 = 全部体形）；
  * - `stats` 为数值契约，`mesh` 为外观配方。
  */
+/**
+ * 装备模组：同模组共享**同一套骨骼挂载配置**（槽位 + mountJointIds），
+ * 模组内的单件只声明数值与外观差异。槽位是游戏层限制，模组是装配层批量化单位。
+ */
+export interface EquipmentModuleDef<S extends string = string> {
+    /** 模组 id（体形内稳定唯一） */
+    readonly id: string
+    readonly kind: EquipKind
+    /** 所属槽位 bodyPart（与 `EquipSlotDef.bodyPart` 一致） */
+    readonly slot: S
+    /** 该模组全部装备共享的骨骼挂载节点 */
+    readonly mountJointIds: readonly string[]
+    /** 模组本地化名键（缺省回退槽位名） */
+    readonly nameKey?: StringLocaleKey
+    /** 模组内装备 id（只作目录校验 / 面板分组，防止空模组） */
+    readonly pieceIds: readonly string[]
+}
+
 export interface EquipmentDef<S extends string = string, M = EquipmentVisual> extends EquipmentStats {
     /** 装备 id（目录键，存档持久化） */
     readonly id: string

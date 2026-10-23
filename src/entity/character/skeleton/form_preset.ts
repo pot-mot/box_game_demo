@@ -8,7 +8,7 @@ export const createBodyFormSkeletonPreset = (
     form: BodyForm,
     palette: BoxPartPalette = form.palette ?? PRESET_PALETTE,
 ): SkeletonPreset => ({
-    createDefinition: form.buildSkeleton,
+    createDefinition: form.skeleton.build,
     mountAppearance: (groups) => {
         const appearance = form.assemble(groups, palette)
         return {

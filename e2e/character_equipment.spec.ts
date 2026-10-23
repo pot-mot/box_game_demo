@@ -32,7 +32,7 @@ test.describe('角色装备与属性面板', () => {
         await openCharacterPanel(page)
 
         const panel = page.locator('#character-panel')
-        const headSelect = panel.locator('label', {hasText: '头盔'}).locator('select')
+        const headSelect = panel.locator('#armor-slot-head')
         const basePhys = panel.locator('label', {hasText: '基础物防'}).locator('input')
         const baseMagic = panel.locator('label', {hasText: '基础魔防'}).locator('input')
 
@@ -49,7 +49,7 @@ test.describe('角色装备与属性面板', () => {
         await openCharacterPanel(page)
 
         const panel = page.locator('#character-panel')
-        const chestSelect = panel.locator('label', {hasText: '胸甲'}).locator('select')
+        const chestSelect = panel.locator('#armor-slot-chest')
 
         await chestSelect.selectOption('iron_plate')
         await panel.locator('button', {hasText: '应用'}).click()
@@ -86,8 +86,8 @@ test.describe('角色装备与属性面板', () => {
         await openCharacterPanel(page)
 
         const panel = page.locator('#character-panel')
-        const armsSelect = panel.locator('label', {hasText: '臂甲'}).locator('select')
-        const legsSelect = panel.locator('label', {hasText: '护腿'}).locator('select')
+        const armsSelect = panel.locator('#armor-slot-arms')
+        const legsSelect = panel.locator('#armor-slot-legs')
 
         await armsSelect.selectOption('battle_bracers')
         await legsSelect.selectOption('swift_boots')
@@ -100,7 +100,7 @@ test.describe('角色装备与属性面板', () => {
 
         const panel = page.locator('#character-panel')
         /* 装备区每行两列（左护甲右肢体），肢体下拉标签为「肢体·<槽位中文名>」；首个 = 头部 */
-        const headLimb = panel.locator('label', {hasText: '肢体'}).first().locator('select')
+        const headLimb = panel.locator('#limb-slot-head')
         await expect(headLimb).toHaveValue('')
 
         /* 兽人头颅：物防 2、移速 ×0.98；基础移速 3 → 2.94 */
@@ -110,7 +110,7 @@ test.describe('角色装备与属性面板', () => {
 
         /* 重新聚焦面板后回显肢体选择 */
         await page.locator('#element-list-panel [data-id][data-type="character"]').click()
-        await expect(page.locator('#character-panel label', {hasText: '肢体'}).first().locator('select')).toHaveValue('orc_head')
+        await expect(page.locator('#character-panel #limb-slot-head')).toHaveValue('orc_head')
     })
 
     test('基础模组：切到狼后按体形槽位显示装备区域，切回人形恢复', async ({page}) => {
@@ -118,24 +118,25 @@ test.describe('角色装备与属性面板', () => {
 
         const panel = page.locator('#character-panel')
         const bodyFormSelect = panel.locator('#body-form-select')
-        const headLimb = panel.locator('label', {hasText: '肢体'}).first()
+        const headLimb = panel.locator('#limb-slot-head')
 
         /* 人形：肢体装备区域可见 */
         await expect(bodyFormSelect).toHaveValue('humanoid')
         await expect(headLimb).toBeVisible()
 
-        /* 切到狼（有声明的 head / legs 槽，无 chest 槽）→ 按槽位显隐；Apply 后回显 */
+        /* 切到狼（有 head / torso / legs / claw 槽，无 chest 槽）→ 按槽位显隐；Apply 后回显 */
         await bodyFormSelect.selectOption('wolf')
         await panel.locator('button', {hasText: '应用'}).click()
         await page.locator('#element-list-panel [data-id][data-type="character"]').click()
         await expect(page.locator('#character-panel #body-form-select')).toHaveValue('wolf')
-        await expect(page.locator('#character-panel').locator('label', {hasText: '肢体'}).first()).toBeVisible()
-        await expect(page.locator('#character-panel').locator('label', {hasText: '躯干'}).first()).toBeHidden()
+        await expect(page.locator('#character-panel #limb-slot-head')).toBeVisible()
+        await expect(page.locator('#character-panel #armor-slot-torso')).toBeVisible()
+        await expect(page.locator('#character-panel #armor-slot-chest')).toBeHidden()
 
         /* 切回人形 → 肢体区域恢复显示 */
         await page.locator('#character-panel #body-form-select').selectOption('humanoid')
         await page.locator('#character-panel').locator('button', {hasText: '应用'}).click()
-        await expect(page.locator('#character-panel').locator('label', {hasText: '肢体'}).first()).toBeVisible()
+        await expect(page.locator('#character-panel #limb-slot-head')).toBeVisible()
     })
 
     test('基础模组：切到狼后武器仅限口含短剑/长剑，切到双足飞龙武器仅龙爪', async ({page}) => {

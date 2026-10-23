@@ -39,7 +39,7 @@ export interface CreatureModel {
 
     /** 关节 id → 关节 Group（骨骼层级，含武器挂点 / 受击 / 物理节点） */
     readonly jointGroups: ReadonlyMap<string, Group>
-    /** 关节 id → 该关节上挂载的部件（受击块按部件实际尺寸对齐） */
+    /** 关节 id → 该关节上挂载的部件（仅外观/拾取；受击块不读取该几何） */
     readonly jointParts: ReadonlyMap<string, TrackedBoxPart>
     /** 物理碰撞块的半胶囊可视化 mesh（edit 模式显示；play 模式隐藏） */
     readonly colliderMeshes: readonly Mesh[]

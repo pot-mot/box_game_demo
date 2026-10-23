@@ -1,6 +1,4 @@
 import type {HoldMode} from '../../character/weapon/hold_mode.ts'
-import type {LimbSlot} from '../../character/armor/slots.ts'
-import type {ArmorSlot} from '../../character/armor/slots.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
 
 // ── 展示清单 ──
@@ -80,9 +78,9 @@ export const RANGED_SPACING = 2.4
 export interface RaceShowcaseEntry {
     kind: 'race'
     /** 肢体槽位 → 肢体 id（`LIMB_PRESETS`） */
-    limb: Readonly<Partial<Record<LimbSlot, string>>>
+    limb: Readonly<Record<string, string>>
     /** 护甲槽位 → 护甲 id；缺省 = 不穿护甲 */
-    armor?: Readonly<Partial<Record<ArmorSlot, string>>>
+    armor?: Readonly<Record<string, string>>
     /** 展示名文案键（面板 / 头顶标签，经 `translate` 解析） */
     name: StringLocaleKey
     faction: number
@@ -92,9 +90,9 @@ export interface RaceShowcaseEntry {
 export interface ArmorSetShowcaseEntry {
     kind: 'armor_set'
     /** 护甲槽位 → 护甲 id（`ARMOR_PRESETS`） */
-    armor: Readonly<Partial<Record<ArmorSlot, string>>>
+    armor: Readonly<Record<string, string>>
     /** 肢体槽位 → 肢体 id；缺省 = 人类肢体（套装展示用） */
-    limb?: Readonly<Partial<Record<LimbSlot, string>>>
+    limb?: Readonly<Record<string, string>>
     /** 展示名文案键（面板 / 头顶标签，经 `translate` 解析） */
     name: StringLocaleKey
     faction: number
@@ -164,7 +162,7 @@ export interface ArmorSetShowcase {
     /** 整套名文案键 */
     readonly nameKey: StringLocaleKey
     /** 四槽护甲 id（head / chest / arms / legs） */
-    readonly armor: Readonly<Partial<Record<ArmorSlot, string>>>
+    readonly armor: Readonly<Record<string, string>>
     readonly faction: number
 }
 

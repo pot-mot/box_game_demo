@@ -1,8 +1,9 @@
 import type {HurtBlockProfile} from '../../../../../character/hurt_blocks.ts'
-import {PRESET_PART_SIZES} from '../skeleton/skeleton.ts'
-import {HAND_HEIGHT_RATIO} from '../state/constants.ts'
+import {PRESET_PART_SIZES} from './skeleton.ts'
 
 const s = PRESET_PART_SIZES
+/** 手部高度与前臂的比例（骨架数据；外观同比例，但受击块不读取外观） */
+const HAND_HEIGHT_RATIO = 0.7 / 4
 const handH = s.forearmH * HAND_HEIGHT_RATIO
 const forearmW = s.armW * 0.8
 const forearmD = s.armD * 0.8
@@ -13,8 +14,7 @@ const shinD = s.legD * 0.85
 
 /**
  * 人形受击子块清单（12 块）：头 / 躯干 / 上臂×2 / 前臂×2 / 手×2 / 大腿×2 / 小腿×2。
- * 每块 `jointId` 与 `assemble.ts` 的视觉部件挂载关节一致，运行时会读取该部件的实际尺寸
- * （长度 + 粗细）对齐；`shape.half` / `offsetLocal` 为无部件时的兜底常量。
+ * 尺寸与偏移全部由骨架预设常量决定；运行时只按关节矩阵世界化，不读取任何外观部件几何。
  */
 export const HUMANOID_HURT_BLOCKS: HurtBlockProfile = [
     {id: 'torso', jointId: 'spine', shape: {kind: 'box', half: {x: s.bodyW / 2, y: s.bodyH / 2, z: s.bodyD / 2}}, offsetLocal: {x: 0, y: s.bodyH / 2, z: 0}},

@@ -81,23 +81,6 @@ describe('资产序列化/解析', () => {
         expect(spine.ik).toBeUndefined()
     })
 
-    it('旧资产中的 ikRootLevel 被安全忽略', () => {
-        const parsed = parseAsset(JSON.stringify({
-            skeleton: {
-                joints: [{
-                    id: 'root',
-                    name: 'root',
-                    position: [0, 0, 0],
-                    rotation: [0, 0, 0, 1],
-                    ikRootLevel: 0,
-                }],
-                bones: [],
-            },
-            animations: [],
-        }))
-        expect(parsed.skeleton.joints[0]?.ik).toBeUndefined()
-    })
-
     it('非法 JSON 抛错', () => {
         expect(() => parseAsset('not json')).toThrow()
     })

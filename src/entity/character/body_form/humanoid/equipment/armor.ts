@@ -1,4 +1,4 @@
-import type {ArmorPieceConfig} from './types.ts'
+import type {ArmorPieceConfig} from '../../../../../character/armor/types.ts'
 
 /**
  * 护甲预设目录（初版数值待试玩调参）：
@@ -214,7 +214,6 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
     },
 }
 
-/** 本目录全部为人形专属外观配方；其他体形的护甲在各自 `equipment/` 分包声明 */
-export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = Object.fromEntries(
-    Object.entries(ARMOR_PIECES).map(([id, piece]) => [id, {...piece, allowedBodyFormIds: ['humanoid']}]),
-)
+/** 人形护甲预设（护甲数据随体形分包拥有；`character/armor/` 只保留跨体形目录与汇总） */
+export const HUMANOID_ARMOR_PIECES: readonly ArmorPieceConfig[] = Object.values(ARMOR_PIECES)
+    .map(piece => ({...piece, allowedBodyFormIds: ['humanoid']}))

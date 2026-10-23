@@ -3,6 +3,7 @@ import {WOLF_BODY_FORM, WOLF_BODY_FORM_ID} from './wolf/body_form.ts'
 import {HORSE_BODY_FORM, HORSE_BODY_FORM_ID} from './horse/body_form.ts'
 import {WYVERN_BODY_FORM, WYVERN_BODY_FORM_ID} from './wyvern/body_form.ts'
 import type {BodyForm} from './common/types.ts'
+import {validateEquipmentModules} from './common/equipment.ts'
 import type {WeaponConfig} from '../../../character/weapon/catalog.ts'
 import {registerFormWeapons} from '../../../character/weapon/catalog.ts'
 import {registerBreathModules} from '../../../character/weapon/breath_module.ts'
@@ -33,6 +34,16 @@ export const BODY_FORMS: Readonly<Record<string, BodyForm>> = {
 
 /** 全部体形 id（面板下拉枚举用） */
 export const BODY_FORM_IDS: readonly string[] = Object.keys(BODY_FORMS)
+
+/** 各体形装备模组（按体形 id 索引；同模组共享槽位骨骼配置） */
+export const EQUIPMENT_MODULES_BY_FORM: Readonly<Record<string, BodyForm['equipmentModules']>> =
+    Object.fromEntries(Object.values(BODY_FORMS).map(form => [form.id, form.equipmentModules]))
+
+/* 装配期校验：装备模组必须与槽位表一致（fail loudly，避免运行期出现无挂点的装备） */
+for (const form of Object.values(BODY_FORMS)) {
+    const errors = validateEquipmentModules(form.equipSlots, form.equipmentModules)
+    if (errors.length > 0) throw new Error(`体形 ${form.id} 装备模组校验失败：${errors.join('；')}`)
+}
 
 /* 把各体形的武器注册进武器目录（装配 BODY_FORMS 时一次性完成；武器数据由体形拥有） */
 for (const form of Object.values(BODY_FORMS)) {

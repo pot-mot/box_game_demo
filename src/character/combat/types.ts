@@ -190,6 +190,8 @@ export interface CombatComponent {
     attackBonus: DamageTypeProfile
     /** 装备提供的移速乘数（多件相乘，1 = 无修正；`moveSpeedOf` 与基础移速相乘） */
     moveSpeedMultiplier: number
+    /** 体形基础移速乘数（状态层提供；装备乘数在其上相乘） */
+    baseMoveSpeedMultiplier: number
 
     /* ── 格挡 / 盾牌 ── */
 
@@ -306,7 +308,7 @@ export const setCombatEquipment = (
     const pieces = resolveEquipmentPieces(equipment, bodyFormId)
     c.defense = equipmentDefenseOf(baseDefense, pieces)
     c.attackBonus = addDamageProfiles(c.baseAttack, equipmentAttackOf(pieces))
-    c.moveSpeedMultiplier = equipmentMoveSpeedOf(pieces)
+    c.moveSpeedMultiplier = c.baseMoveSpeedMultiplier * equipmentMoveSpeedOf(pieces)
     c.poiseMax = c.basePoiseMax + equipmentPoiseOf(pieces)
     if (c.poise > c.poiseMax) c.poise = c.poiseMax
 }
@@ -379,6 +381,7 @@ export const createCombatComponent = (
         defense: ZERO_PROFILE,
         attackBonus: ZERO_PROFILE,
         moveSpeedMultiplier: 1,
+        baseMoveSpeedMultiplier: 1,
         block: undefined,
         guard: 0,
         blocking: false,

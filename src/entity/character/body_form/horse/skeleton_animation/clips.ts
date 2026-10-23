@@ -3,20 +3,28 @@ import type {AttackSegment} from '../../../../../character/weapon/attack_chain.t
 import type {BoneAnimationClip} from '../../../../../skeleton/anim/types.ts'
 import {bakePoseClip} from '../../common/creature_runtime/pose.ts'
 import {hitWindowRatios} from '../../common/creature_runtime/timing.ts'
-import {creatureStateMeta} from '../../common/creature_runtime/state_timing.ts'
+import {bakeSingleAnimation, createAnimationModule, poseAnimationFactory} from '../../common/skeleton_animation/factory.ts'
+import {HORSE_STATE} from '../state/form_state.ts'
 import {buildHorseSkeleton} from '../skeleton/skeleton.ts'
 import {horseAttackPose, horsePose} from './pose_fns.ts'
 
 const SKELETON = buildHorseSkeleton()
 
-const STATE_META = creatureStateMeta({idle: 2.0, walking: 0.8, jumping: 0.4, falling: 0.45, swimming: 1.0, floating: 1.8})
+const STATE_META = HORSE_STATE.animation
 
 const stateCache = new Map<string, BoneAnimationClip>()
 export const horseBaseClip = (state: BaseClipState): BoneAnimationClip => {
     const cached = stateCache.get(state)
     if (cached !== undefined) return cached
     const meta = STATE_META[state]
-    const clip = bakePoseClip(`horse_${state}`, meta.duration, meta.loop, SKELETON, horsePose(state))
+    const animation = poseAnimationFactory.create({
+        id: `horse_${state}`,
+        duration: meta.duration,
+        loop: meta.loop,
+        pose: horsePose(state),
+    })
+    const module = createAnimationModule(`horse:base:${state}`, 'body_form.horse', [animation])
+    const clip = bakeSingleAnimation(SKELETON, module, animation.id)
     stateCache.set(state, clip)
     return clip
 }

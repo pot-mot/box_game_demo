@@ -1,5 +1,6 @@
 import {createSkeletonFromGroups, type SkeletonSceneBridge} from '../../skeleton/render/bridge.ts'
 import type {GroupJointBinding} from '../../skeleton/render/bridge.ts'
+import type {SkeletonDefinition} from '../../../skeleton/anim/serialization.ts'
 import type {CreatureModel} from './types.ts'
 
 /**
@@ -7,8 +8,21 @@ import type {CreatureModel} from './types.ts'
  * （领域 FK 缓存为唯一世界变换源，动画播放器 applyPose 自动写回 Group）。
  * 关节 id 与所属体形的 clip 关节 id 一致；跨体形通用。
  * 根位移由物理 body（syncPositions）管理，故 rootTranslationExternallyManaged = true。
+ * 传入骨架定义时同步节点 IK 配置（仅骨骼编辑器 Gizmo 求解使用；生产运行时零 IK）。
  */
-export const createCharacterSkeletonBridge = (model: CreatureModel): SkeletonSceneBridge => {
+export const createCharacterSkeletonBridge = (
+    model: CreatureModel,
+    definition?: SkeletonDefinition,
+): SkeletonSceneBridge => {
     const bindings: GroupJointBinding[] = [...model.jointGroups.entries()].map(([jointId, group]) => ({jointId, group}))
-    return createSkeletonFromGroups(bindings, true, {rootTranslationExternallyManaged: true})
+    const bridge = createSkeletonFromGroups(bindings, true, {rootTranslationExternallyManaged: true})
+    if (definition !== undefined) {
+        for (const jointDef of definition.joints) {
+            if (jointDef.ik === undefined) continue
+            const joint = bridge.findJoint(jointDef.id)
+            if (joint !== undefined) joint.ik = {...jointDef.ik}
+        }
+        bridge.updateWorldTransforms()
+    }
+    return bridge
 }

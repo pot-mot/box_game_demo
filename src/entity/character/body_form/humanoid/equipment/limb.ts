@@ -1,4 +1,4 @@
-import type {LimbPieceConfig} from './types.ts'
+import type {LimbPieceConfig} from '../../../../../character/armor/types.ts'
 
 /**
  * 肢体组件预设目录（骷髅 / 兽人 / 精灵 × 四槽位）：
@@ -100,7 +100,6 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
     },
 }
 
-/** 本目录全部为人形专属外观配方；其他体形的肢体在各自 `equipment/` 分包声明 */
-export const LIMB_PRESETS: Record<string, LimbPieceConfig> = Object.fromEntries(
-    Object.entries(LIMB_PIECES).map(([id, piece]) => [id, {...piece, allowedBodyFormIds: ['humanoid']}]),
-)
+/** 人形肢体预设（数据随体形分包拥有；`character/armor/` 只保留跨体形目录与汇总） */
+export const HUMANOID_LIMB_PIECES: readonly LimbPieceConfig[] = Object.values(LIMB_PIECES)
+    .map(piece => ({...piece, allowedBodyFormIds: ['humanoid']}))

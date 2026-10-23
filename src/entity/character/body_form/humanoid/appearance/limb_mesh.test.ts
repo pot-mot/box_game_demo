@@ -1,28 +1,8 @@
-import {describe, it, expect, beforeAll, afterAll, vi} from 'vitest'
+import {describe, it, expect, vi} from 'vitest'
 import {Mesh, MeshStandardMaterial} from 'three'
 import type {BoxPartPalette} from '../../../../../render/box_parts.ts'
 import {LIMB_RACES, createLimbMesh, type ArmorMeshResult, type LimbMeshConfig} from './armor_mesh.ts'
 import {factionColorOf, SELECT_PALETTE} from '../../../appearance/constants.ts'
-
-/* happy-dom 不支持 canvas 2d：注入最小桩使种族脸部纹理生成可在测试下运行（与 panel_info.test.ts 同法） */
-const originalGetContext = HTMLCanvasElement.prototype.getContext
-const canvasCtxStub = (): Record<string, unknown> => ({
-    fillStyle: '', strokeStyle: '', lineWidth: 0, lineCap: '',
-    fillRect: () => {}, beginPath: () => {}, fill: () => {}, stroke: () => {},
-    arc: () => {}, ellipse: () => {}, moveTo: () => {}, lineTo: () => {}, closePath: () => {},
-    quadraticCurveTo: () => {},
-})
-
-beforeAll(() => {
-    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-        value: () => canvasCtxStub(), configurable: true, writable: true,
-    })
-})
-afterAll(() => {
-    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-        value: originalGetContext, configurable: true, writable: true,
-    })
-})
 
 const PALETTE_A: BoxPartPalette = {skinColor: 0xf0c8a0, hairColor: 0x3a2218, bodyColor: 0xe06040, legColor: 0x303050}
 

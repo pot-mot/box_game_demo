@@ -1,4 +1,4 @@
-import {describe, it, expect, beforeAll, vi} from 'vitest'
+import {describe, it, expect} from 'vitest'
 import {Vector3} from 'three'
 import type {AnimationContext} from '../../../appearance/types.ts'
 import {createAppearanceSystem} from './system.ts'
@@ -11,25 +11,6 @@ import {SUPPORT_HAND_VISUAL_TOLERANCE} from '../../../../../test_setup.ts'
 
 /** 行走测试水平速度（m/s）：只用于触发步频与下半身叠加，不代表角色配置默认移速 */
 const WALK_SPEED = 3.7
-
-/** happy-dom 无 2d 上下文：stub canvas.getContext（脸部纹理绘制用） */
-const stubCanvas2d = (): void => {
-    const fakeCtx = new Proxy({}, {
-        get: (_t, prop) => {
-            if (prop === 'canvas') return null
-            return (): void => {}
-        },
-        set: () => true,
-    }) as unknown as CanvasRenderingContext2D
-    const originalCreate = document.createElement.bind(document)
-    vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
-        const el = originalCreate(tag, options)
-        if (tag === 'canvas') {
-            Object.defineProperty(el, 'getContext', {value: () => fakeCtx})
-        }
-        return el
-    })
-}
 
 interface CtxOverrides extends Partial<AnimationContext> {
     holdMode?: 'one_handed' | 'two_handed' | 'dual_wield'
@@ -57,10 +38,6 @@ const makeCtx = (overrides: CtxOverrides = {}): AnimationContext => {
 }
 
 describe('外观系统基础动画播放（play() 修复回归）', () => {
-    beforeAll(() => {
-        stubCanvas2d()
-    })
-
     it('进入 idle 后多帧推进：头部呼吸摆动（证明 clip 播放器在播放，未修复时静止首帧）', () => {
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const sys = createAppearanceSystem()

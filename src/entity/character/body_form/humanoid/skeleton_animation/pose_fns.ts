@@ -15,11 +15,13 @@ import {
     BLOCK_IDLE_SHOULDER,
     BLOCK_IDLE_ELBOW,
     SHIELD_FACE_NET_X,
+    WALK_CYCLE_FREQ,
+    JUMP_EXTEND_END as EXTEND_END,
+    FALL_END,
 } from '../state/constants.ts'
 import {BLOCKING_POSE_PERIOD, GUARD_BROKEN_POSE_DURATION, HIP_Y, WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
 import {FLINCH_DURATION} from '../../../../../character/combat/attack_phases.ts'
 import {
-    DEFAULT_KNOCKDOWN_DURATION,
     DEFAULT_GET_UP_DURATION,
     GET_UP_PLANT_END,
     GET_UP_PUSH_END,
@@ -28,6 +30,9 @@ import {ROLL_DURATION} from '../../../../../character/combat/roll_skill.ts'
 import {INTERACTION_DURATION} from '../../../../../character/interaction/types.ts'
 import type {HoldMode} from '../../../../../character/weapon/hold_mode.ts'
 import type {BaseClipState} from '../../../../../character/state_machine/types.ts'
+import {HUMANOID_CLIP_STATE_META as BASE_CLIP_META} from '../state/form_state.ts'
+
+export {BASE_CLIP_META}
 
 /** 关节欧拉姿态 */
 export interface JointEulerState {
@@ -71,7 +76,7 @@ export interface PoseContext {
 }
 
 /** 固定步频（rad/s）：原式在 3.6 m/s 匀速时频率 ≈5.9，取整 6 保持基准视觉 */
-const WALK_CYCLE_FREQ = 6
+
 
 const clamp01 = (v: number): number => Math.min(Math.max(v, 0), 1)
 
@@ -131,7 +136,6 @@ const walkingPose = (t: number, ctx: PoseContext): PoseState => {
 }
 
 const CROUCH_END = 0.1
-const EXTEND_END = 0.3
 
 const jumpingPose = (t: number, ctx: PoseContext): PoseState => {
     let hip = 0
@@ -254,7 +258,7 @@ const swimmingPose = (t: number, ctx: PoseContext): PoseState => {
     }
 }
 
-const FALL_END = 0.3
+
 
 /**
  * 死亡动画（保持直立）：只做四肢与躯干的松散塌陷，**不旋转根关节**。
@@ -667,19 +671,3 @@ export const orientShieldArms = (
 }
 
 /** 各状态 clip 时长/循环（评审决议：循环 wrap / 非循环 clamp） */
-export const BASE_CLIP_META: Record<keyof typeof BASE_POSE_SAMPLERS, {duration: number; loop: boolean}> = {
-    idle: {duration: (Math.PI * 2) / 1.8, loop: true},
-    walking: {duration: (Math.PI * 2) / WALK_CYCLE_FREQ, loop: true},
-    jumping: {duration: EXTEND_END, loop: false},
-    falling: {duration: 1, loop: true},
-    swimming: {duration: (Math.PI * 2) / 4, loop: true},
-    floating: {duration: (Math.PI * 2) / 1.6, loop: true},
-    dying: {duration: FALL_END, loop: false},
-    rolling: {duration: ROLL_DURATION, loop: false},
-    flinching: {duration: FLINCH_DURATION, loop: false},
-    interacting: {duration: INTERACTION_DURATION, loop: false},
-    knockdown: {duration: DEFAULT_KNOCKDOWN_DURATION, loop: false},
-    getting_up: {duration: DEFAULT_GET_UP_DURATION, loop: false},
-    blocking: {duration: BLOCKING_POSE_PERIOD, loop: true},
-    guard_broken: {duration: GUARD_BROKEN_POSE_DURATION, loop: false},
-}

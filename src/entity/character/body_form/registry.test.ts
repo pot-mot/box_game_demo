@@ -15,29 +15,29 @@ describe('体形计划注册表', () => {
     })
 
     it('humanoid 尺寸 / 中心偏移 / 眼高关系自洽', () => {
-        const {width, height, depth} = HUMANOID_BODY_FORM.size
+        const {width, height, depth} = HUMANOID_BODY_FORM.state.size
         expect(width).toBeGreaterThan(0)
         expect(height).toBeGreaterThan(0)
         expect(depth).toBeGreaterThan(0)
-        expect(HUMANOID_BODY_FORM.centerOffsetY).toBeCloseTo(height / 2, 10)
-        expect(HUMANOID_BODY_FORM.eyeHeight).toBeGreaterThan(0)
-        expect(HUMANOID_BODY_FORM.eyeHeight).toBeLessThan(height)
+        expect(HUMANOID_BODY_FORM.state.centerOffsetY).toBeCloseTo(height / 2, 10)
+        expect(HUMANOID_BODY_FORM.state.eyeHeight).toBeGreaterThan(0)
+        expect(HUMANOID_BODY_FORM.state.eyeHeight).toBeLessThan(height)
     })
 
     it('humanoid 碰撞布局为两个等半径半胶囊', () => {
-        const layout = HUMANOID_BODY_FORM.colliderLayout
+        const layout = HUMANOID_BODY_FORM.skeleton.colliderLayout
         expect(layout).toHaveLength(2)
         const capsules = layout.filter(spec => spec.kind === 'capsule')
         expect(capsules).toHaveLength(2)
         const [first, second] = capsules
         if (first === undefined || second === undefined) return
         expect(first.radius).toBeCloseTo(second.radius, 10)
-        expect(first.radius).toBeLessThanOrEqual(HUMANOID_BODY_FORM.size.width / 2)
+        expect(first.radius).toBeLessThanOrEqual(HUMANOID_BODY_FORM.state.size.width / 2)
         expect(first.offsetY).toBeCloseTo(-second.offsetY, 10)
     })
 
     it('humanoid 受击子块 id 唯一且非空', () => {
-        const ids = HUMANOID_BODY_FORM.hurtProfile.map(b => b.id)
+        const ids = HUMANOID_BODY_FORM.skeleton.hurtProfile.map(b => b.id)
         expect(ids.length).toBeGreaterThan(0)
         expect(new Set(ids).size).toBe(ids.length)
     })
@@ -75,8 +75,8 @@ describe('狼体形计划', () => {
     })
 
     it('四足骨架尺寸与中心偏移自洽（与人形不同）', () => {
-        expect(WOLF_BODY_FORM.centerOffsetY).toBeGreaterThan(0)
-        expect(WOLF_BODY_FORM.centerOffsetY).not.toBeCloseTo(HUMANOID_BODY_FORM.centerOffsetY, 3)
-        expect(WOLF_BODY_FORM.colliderLayout.length).toBeGreaterThanOrEqual(2)
+        expect(WOLF_BODY_FORM.state.centerOffsetY).toBeGreaterThan(0)
+        expect(WOLF_BODY_FORM.state.centerOffsetY).not.toBeCloseTo(HUMANOID_BODY_FORM.state.centerOffsetY, 3)
+        expect(WOLF_BODY_FORM.skeleton.colliderLayout.length).toBeGreaterThanOrEqual(2)
     })
 })

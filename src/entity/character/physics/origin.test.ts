@@ -77,7 +77,7 @@ describe('角色原点在脚底（非身体中心）', () => {
         const {id} = system.add(meleeSaveConfig(), 1, 2, 3)
         const entity = system.getAll().find(e => e.id === id)
         expect(entity).toBeDefined()
-        const halfH = HUMANOID_BODY_FORM.size.height * entity!.config.scale / 2
+        const halfH = HUMANOID_BODY_FORM.state.size.height * entity!.config.scale / 2
         expect(entity!.mesh.position.x).toBeCloseTo(1, 6)
         expect(entity!.mesh.position.y).toBeCloseTo(2, 6)
         expect(entity!.mesh.position.z).toBeCloseTo(3, 6)
@@ -104,7 +104,7 @@ describe('角色原点在脚底（非身体中心）', () => {
         expect(entity.mesh.position.y).toBeCloseTo(originBefore, 6)
         expect(entity.appearanceGroup.position.y).toBeCloseTo(originBefore, 6)
         /* 脚底锚定：新半高 = 1，物理中心从 0.5 上移到 1 */
-        expect(entity.body.translation().y).toBeCloseTo(originBefore + HUMANOID_BODY_FORM.size.height * 2 / 2, 6)
+        expect(entity.body.translation().y).toBeCloseTo(originBefore + HUMANOID_BODY_FORM.state.size.height * 2 / 2, 6)
     })
 
     it('v1 旧档（position = 身体中心）加载时迁移为脚底原点', () => {
@@ -119,7 +119,7 @@ describe('角色原点在脚底（非身体中心）', () => {
         const legacy: SaveData = {entities: [legacyEntity]}
         loadWorldFromData(legacy, systems, [])
         const entity = system.getAll()[0]
-        expect(entity.mesh.position.y).toBeCloseTo(2 - HUMANOID_BODY_FORM.size.height / 2, 6)
+        expect(entity.mesh.position.y).toBeCloseTo(2 - HUMANOID_BODY_FORM.state.size.height / 2, 6)
         expect(entity.body.translation().y).toBeCloseTo(2, 6)
     })
 
@@ -136,6 +136,6 @@ describe('角色原点在脚底（非身体中心）', () => {
         loadWorldFromData(current, systems, [])
         const entity = system.getAll()[0]
         expect(entity.mesh.position.y).toBeCloseTo(2, 6)
-        expect(entity.body.translation().y).toBeCloseTo(2 + HUMANOID_BODY_FORM.size.height / 2, 6)
+        expect(entity.body.translation().y).toBeCloseTo(2 + HUMANOID_BODY_FORM.state.size.height / 2, 6)
     })
 })

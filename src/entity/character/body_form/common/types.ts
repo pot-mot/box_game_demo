@@ -7,14 +7,15 @@ import type {HurtBlockProfile} from '../../../../character/hurt_blocks.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../../character/types.ts'
 import type {CreatureModel} from '../../appearance/types.ts'
 import type {AppearanceSystem, AppearanceSystemOptions} from '../../appearance/types.ts'
-import type {EquipSlotDef} from '../../../../character/equipment/types.ts'
+import type {EquipSlotDef, EquipmentModuleDef, EquipmentState} from '../../../../character/equipment/types.ts'
+import type {BodyFormStateDefinition, BodyClipStateMeta} from './state.ts'
+import type {MeshBuilder} from '../../appearance/mesh_builder.ts'
 
 /**
- * 体形计划（BodyForm）：一个体形的完整定义 —— 骨架 / 外观 / 碰撞布局 / 受击子块 /
- * 尺寸与中心偏移 / 基础生命 / 装备槽集合 / 武器策略 / 关节本地化名。
+ * 体形计划（BodyForm）：一个体形的完整定义 —— 状态 / 骨架 / 外观 / 动画 / 装备。
  *
- * 位于实体层（`entity/character/`），因为它组合了外观装配器、骨架预设与受击块等实体资源；
- * 纯领域数据（受击块类型、武器、护甲）仍在 `character/`。
+ * `state` 是原始数值与动画时长基线的唯一来源；`skeleton` 是关节、碰撞箱与受击箱的唯一来源；
+ * `appearance` 只消费二者的派生结果，不得反向影响碰撞/受击数据。
  */
 
 /** 体形碰撞形状（节点相对模型根驱动；尺寸为 scale=1） */
@@ -42,11 +43,38 @@ export interface BodySize {
     readonly depth: number
 }
 
+/** 体形骨架定义：关节层级 / 骨骼段 / 碰撞布局 / 受击块的唯一来源 */
+export interface BodySkeletonDefinition {
+    /** 骨架工厂（含物理碰撞节点；避免共享可变状态） */
+    readonly build: () => SkeletonDefinition
+    /** 关节 id → 本地化名键（缺省回退关节原始名） */
+    readonly jointNameKeys?: Readonly<Record<string, StringLocaleKey>>
+    /** 物理碰撞布局（含主碰撞体：首个 spec 的节点即地面/分离主引用） */
+    readonly colliderLayout: readonly ColliderSpec[]
+    /** 受击子块清单（尺寸只由骨架数据决定，不读取外观几何） */
+    readonly hurtProfile: HurtBlockProfile
+}
+
 /** 体形外观装配结果：通用外观 + 关节部件 + 碰撞可视化 */
 export interface BodyAppearance extends SkeletonAppearance {
     readonly jointParts: ReadonlyMap<string, TrackedBoxPart>
     readonly colliderMeshes: readonly Mesh[]
 }
+
+/** 装备外观构建上下文（由体形 appearance 分包提供） */
+export interface EquipmentAppearanceContext {
+    readonly groups: ReadonlyMap<string, Group>
+    readonly builder: MeshBuilder
+    readonly equipSlots: readonly EquipSlotDef[]
+}
+
+/** 装备外观句柄：换装 / 释放时统一回收几何与材质 */
+export interface EquipmentAppearanceHandle {
+    readonly dispose: () => void
+}
+
+/** 体形装备外观构建器：只创建视觉子节点，不修改骨架/动画/碰撞 */
+export type EquipmentAppearanceBuilder = (state: EquipmentState, ctx: EquipmentAppearanceContext) => EquipmentAppearanceHandle
 
 export interface BodyForm {
     /** 体形 id（持久化键 / 面板选择值） */
@@ -54,45 +82,32 @@ export interface BodyForm {
     /** 体形本地化显示名键 */
     readonly nameKey: StringLocaleKey
 
-    /** 骨架定义工厂（含物理碰撞节点；避免共享可变状态） */
-    readonly buildSkeleton: () => SkeletonDefinition
-    /** 关节 id → 本地化名键（缺省回退关节原始名） */
-    readonly jointNameKeys?: Readonly<Record<string, StringLocaleKey>>
+    /** 状态：基础属性、尺寸、动画基线、最终数值计算入口 */
+    readonly state: BodyFormStateDefinition
+    /** 骨架：关节 / 骨骼段 / 碰撞箱 / 受击箱的唯一真源 */
+    readonly skeleton: BodySkeletonDefinition
 
-    /** 物理碰撞布局（含主碰撞体：首个 spec 的节点即地面/分离主引用） */
-    readonly colliderLayout: readonly ColliderSpec[]
-    /** 脚底原点到刚体中心的 Y（scale=1；乘 config.scale） */
-    readonly centerOffsetY: number
-    /** 眼部高度（scale=1，脚底原点起算；视线扇形 / 瞄准目标点用） */
-    readonly eyeHeight: number
-    /** 基础尺寸（scale=1） */
-    readonly size: BodySize
-    /** 基础生命值（缺省 = 沿用武器类型档位：近战 15 / 远程 8） */
-    readonly baseHealth?: number
-
-    /** 受击子块清单 */
-    readonly hurtProfile: HurtBlockProfile
-
-    /** 外观装配器（挂部件 + 注册 jointParts + 碰撞可视化） */
+    /** 外观装配器（挂部件 + 注册 jointParts + 碰撞可视化；只读骨架派生数据） */
     readonly assemble: (groups: ReadonlyMap<string, Group>, palette: import('../../../../render/box_parts.ts').BoxPartPalette) => BodyAppearance
     /** 固定调色板（可选）：声明后外观不随阵营重着色（供体形固有的固定配色使用） */
     readonly palette?: import('../../../../render/box_parts.ts').BoxPartPalette
 
-    /** 体形渲染模型工厂（各体形分包自带；人形 = createCharacterModel，生物 = createCreatureModel） */
+    /** 体形渲染模型工厂（各体形分包自带） */
     readonly createModel: (config: CharacterConfig, faction: number) => CreatureModel
 
     /**
-     * 体形专属动画系统工厂 —— **每个体形分包自带**其 `base_clips.ts` / `pose_fns.ts` 与 clip 调度实现
-     * （人形 / 狼 / 马 / 双足飞龙 wyvern 骨骼与步态完全不同，不做跨体形参数化）。世界主循环只消费本接口
-     * （`onStateChange` / `update`），不感知具体体形的动画数据。
+     * 体形专属动画系统工厂 —— 每个体形分包自带其动画模组与 clip 调度实现。
+     * 世界主循环只消费本接口。
      */
     readonly createAnimation: (options: AppearanceSystemOptions) => AppearanceSystem
 
     /** 装备槽集合（limb / weapon / armor；槽位键 = kind:bodyPart） */
     readonly equipSlots: readonly EquipSlotDef[]
-    /** 该体形拥有的全部武器（武器只属于一种体形；由 `forms/<form>/weapons.ts` 声明） */
+    /** 装备模组（同模组共享槽位骨骼配置；每件装备只属于一个模组） */
+    readonly equipmentModules: readonly EquipmentModuleDef[]
+    /** 该体形拥有的全部武器（武器只属于一种体形） */
     readonly weapons: readonly import('../../../../character/weapon/catalog.ts').WeaponConfig[]
-    /** 默认武器 id（须在 `weapons` 内；无武器 / 无持械体形回退，如空手 `unarmed` / 天然） */
+    /** 默认武器 id（须在 `weapons` 内） */
     readonly defaultWeaponId: string
 
     /** 骨骼编辑器能力声明（避免编辑器按体形 id 硬编码） */
@@ -101,7 +116,7 @@ export interface BodyForm {
         readonly handedness: boolean
     }
 
-    /** 该体形可物品化的护甲 / 肢体预设（跨体形注册；缺省 = 仅人形目录） */
+    /** 该体形可物品化的护甲 / 肢体预设（注册进跨体形目录；缺省 = 仅人形目录） */
     readonly armorPieces?: readonly import('../../../../character/armor/types.ts').ArmorPieceConfig[]
     readonly limbPieces?: readonly import('../../../../character/armor/types.ts').LimbPieceConfig[]
 
@@ -110,10 +125,12 @@ export interface BodyForm {
 
     /**
      * 翻滚根自转圈数（可选；缺省 1 = 前滚翻一周，人形默认）。
-     * 四足（狼 / 马）宜设 0（低伏冲刺，不做前滚翻），飞龙可保留 1；由 `world.ts` 的翻滚根姿态合成读取。
      */
     readonly rollSpinTurns?: number
 
-    /** 每帧体形专属同步（可选；在受击块/碰撞体同步之外调用，如游泳俯卧根姿态） */
+    /** 每帧体形专属同步（可选；在受击块/碰撞体同步之外调用） */
     readonly onFrame?: (entity: CharacterEntity, model: CreatureModel) => void
 }
+
+/** 动画/状态系统读取体形基线时长（避免跨模块重复字面量） */
+export type BodyAnimationTiming = BodyClipStateMeta

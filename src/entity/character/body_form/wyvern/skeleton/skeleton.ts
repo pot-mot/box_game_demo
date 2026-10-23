@@ -1,5 +1,12 @@
 import type {SkeletonDefinition} from '../../../../../skeleton/anim/serialization.ts'
+import type {ColliderSpec} from '../../common/types.ts'
 import {buildBoneEdges} from '../../common/creature_runtime/skeleton_bones.ts'
+
+/** 飞龙碰撞布局（骨架唯一来源）：竖直胶囊 + 宽矮躯干盒；双翼/尾不参与物理。 */
+export const WYVERN_COLLIDER_LAYOUT: readonly ColliderSpec[] = [
+    {nodeId: 'bodyCollider', kind: 'capsule', radius: 0.3, halfHeight: 0.7, offsetY: 0},
+    {nodeId: 'torsoCollider', kind: 'box', half: {x: 0.42, y: 0.3, z: 0.55}, offsetY: 0},
+]
 
 const I: readonly [number, number, number, number] = [0, 0, 0, 1]
 const P = (x: number, y: number, z: number): readonly [number, number, number] => [x, y, z]

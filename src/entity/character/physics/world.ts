@@ -6,7 +6,6 @@ import {applyRenderPose, captureObjectRenderPose, resetObjectRenderPose} from '.
 import {createBodyEnvironment, resetBodyEnvironment} from '../../../physics/environment.ts'
 import {worldizeHurtBlock, zeroWorldHurtBlock, type WorldHurtBlock} from '../../../character/hurt_blocks.ts'
 import {bodyFormOf, isKnownBodyFormId, HUMANOID_BODY_FORM, weaponSelectableFor, type ColliderSpec} from '../body_form/index.ts'
-import {obbFromTransform, type OBB} from '../combat/obb.ts'
 import {type ContactTracker, createContactTracker, queryColliderContacts} from '../../../physics/contact_tracking.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
 import {moveSpeedOf} from '../../../character/types.ts'
@@ -15,9 +14,10 @@ import type {TendencyConfig} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
 import type {AttackResult} from '../../../character/combat/types.ts'
 import {createCombatComponent, setCombatBreath, setCombatEquipment, setCombatOffhand, setCombatWeapon, updateShieldBlock} from '../../../character/combat/types.ts'
-import {ZERO_PROFILE, type DefenseProfile} from '../../../character/combat/defense.ts'
+import type {DefenseProfile} from '../../../character/combat/defense.ts'
 import type {DamageTypeProfile} from '../../../character/combat/damage_type.ts'
 import {filterEquipmentState} from '../body_form/common/equip.ts'
+import {resolveBodyFormState} from '../body_form/common/state.ts'
 import {resolveArmorLoadout, resolveLimbLoadout} from '../../../character/armor/catalog.ts'
 import type {EquipmentState} from '../../../character/equipment/types.ts'
 import {EMPTY_EQUIPMENT_STATE, withEquipmentAt} from '../../../character/equipment/types.ts'
@@ -123,7 +123,7 @@ const _swimPitchQuat = new Quaternion()
 /** 读取角色持握模式（人形体形状态；非人形回退单持，仅用于通用分支判断） */
 const holdModeOf = (entity: CharacterEntity): HoldMode => humanoidBodyStateOf(entity.bodyState).holdMode
 
-/** 同步装备外观：人形走护甲 / 肢体装配，生物走通用槽位色块（体形固有部件承担主体外观） */
+/** 同步装备外观：每个体形由自身 `appearance/equipment` 构建真实网格 */
 const applyEquipmentVisuals = (model: import('../appearance/types.ts').CreatureModel, entity: CharacterEntity): void => {
     if (model.equipEquipmentState !== undefined) {
         model.equipEquipmentState(entity.combat.equipment)
@@ -184,7 +184,7 @@ const placeVisionFan = (
 
 /** 角色实体原点（脚底）到物理刚体中心（碰撞体中心）的 Y 向偏移（由体形计划提供） */
 const originToCenterY = (config: CharacterConfig): number =>
-    bodyFormOf(config.bodyFormId).centerOffsetY * config.scale
+    bodyFormOf(config.bodyFormId).state.centerOffsetY * config.scale
 
 /** 按体形碰撞 spec 生成 Rapier 碰撞体描述（尺寸随 scale 缩放；密度 0、类别 character） */
 const makeColliderDescForSpec = (spec: ColliderSpec, scale: number): RAPIER.ColliderDesc => {
@@ -649,7 +649,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         /* 碰撞体由体形计划声明（人形 = 上下半竖直胶囊，见 body_form）：首个碰撞体承担地面 / 分离主引用。
          * 竖直胶囊：平底 cuboid 跨过 trimesh 网格顶点线时会被内部棱幽灵水平法线卡死（上坡原地卡住），
          * 圆滑底面无挂点；rapier3d-compat 0.19/0.20 的 FIX_INTERNAL_EDGES 已损坏（开启即穿透）不可用 */
-        const colliders = plan.colliderLayout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, config.scale), body))
+        const colliders = plan.skeleton.colliderLayout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, config.scale), body))
         const mainCollider = colliders[0]
         /* 质量恒为 1（对齐 cannon-es master）：击退/磁力/浮力均按 mass=1 计算。
          * 不设置的话 Rapier 按密度 1 × 体积（≈0.04）计算，击退冲量会被放大 25 倍 */
@@ -658,13 +658,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const id = nextId++
         const stateMachine = createCharacterStateMachine()
         /* 生命值档位：体形可覆写（缺省 = 沿用武器类型档位：近战 15 / 远程 8） */
-        const maxHP = plan.baseHealth ?? (runtime.weapon.type === 'melee' ? 15 : 8)
+        const maxHP = typeof plan.state.baseHealth === 'function'
+            ? plan.state.baseHealth(runtime.weapon)
+            : plan.state.baseHealth
 
         const combat = createCombatComponent(
             runtime, faction,
             resolveTendency(tendencyConfig), tendencyConfig, maxHP,
             {
-                ...(config.poiseMax !== undefined ? {poiseMax: config.poiseMax} : {}),
+                poiseMax: config.poiseMax ?? plan.state.basePoise,
                 ...(config.poiseRegenDelay !== undefined ? {poiseRegenDelay: config.poiseRegenDelay} : {}),
                 ...(config.poiseRegenPerSec !== undefined ? {poiseRegenPerSec: config.poiseRegenPerSec} : {}),
                 ...(config.knockdownDuration !== undefined ? {knockdownDuration: config.knockdownDuration} : {}),
@@ -693,7 +695,23 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             setCombatBreath(combat, {module: breathModule, attacks: weaponAttacksOf(breathModule)})
         }
         /* 装备数值：按体形槽位校验后汇总（武器 / 护甲 / 肢体 / 天然武器均在此表） */
-        setCombatEquipment(combat, ZERO_PROFILE, resolvedEquipment, plan.id)
+        combat.baseDefense = plan.state.baseDefense
+        combat.baseAttack = plan.state.baseAttack
+        combat.baseMoveSpeedMultiplier = plan.state.baseMoveSpeedMultiplier
+        setCombatEquipment(combat, combat.baseDefense, resolvedEquipment, plan.id, combat.baseAttack)
+        /* 体形状态统一计算最终数值（基础 + 装备），世界层只应用结果 */
+        const finalState = resolveBodyFormState(
+            config.poiseMax !== undefined ? {...plan.state, basePoise: config.poiseMax} : plan.state,
+            runtime.weapon,
+            resolvedEquipment,
+            plan.id,
+        )
+        combat.maxHealth = finalState.maxHealth
+        combat.defense = finalState.defense
+        combat.attackBonus = finalState.attackBonus
+        combat.moveSpeedMultiplier = finalState.moveSpeedMultiplier
+        combat.poiseMax = finalState.poise
+        if (combat.poise > combat.poiseMax) combat.poise = combat.poiseMax
 
         const bodyState = config.bodyState ?? {}
         const humanoidState = humanoidBodyStateOf(bodyState)
@@ -738,8 +756,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             interactTargetX: 0,
             interactTargetZ: 0,
             environment: createBodyEnvironment(),
-            hurtProfile: plan.hurtProfile,
-            hurtBlocks: plan.hurtProfile.map(b => zeroWorldHurtBlock(b.id)),
+            hurtProfile: plan.skeleton.hurtProfile,
+            hurtBlocks: plan.skeleton.hurtProfile.map(b => zeroWorldHurtBlock(b.id)),
             stateMachine,
         }
 
@@ -1254,22 +1272,6 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
      * 在此叠加到速度。必须晚于 `stateMachine.update`——否则水平分量会被各 handler 的
      * `setLinvel` 绝对覆写抹掉（这正是水此前对角色「无效」的根因）。
      */
-    /* 受击子块世界化复用对象（闭包级，仅创建一次） */
-    const _hurtZero: {x: number; y: number; z: number} = {x: 0, y: 0, z: 0}
-    const _hurtHalf: {x: number; y: number; z: number} = {x: 0, y: 0, z: 0}
-
-    const copyOBBInto = (out: WorldHurtBlock, obb: OBB): void => {
-        out.kind = 'box'
-        out.center.x = obb.center.x; out.center.y = obb.center.y; out.center.z = obb.center.z
-        for (let a = 0; a < 3; a++) {
-            out.axes[a].x = obb.axes[a].x
-            out.axes[a].y = obb.axes[a].y
-            out.axes[a].z = obb.axes[a].z
-        }
-        out.half.x = obb.half.x; out.half.y = obb.half.y; out.half.z = obb.half.z
-        out.radius = 0; out.halfHeight = 0
-    }
-
     const copyWorldInto = (out: WorldHurtBlock, src: WorldHurtBlock): void => {
         out.kind = src.kind
         out.center.x = src.center.x; out.center.y = src.center.y; out.center.z = src.center.z
@@ -1294,15 +1296,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         model.group.updateMatrixWorld(true)
         for (let i = 0; i < profile.length && i < out.length; i++) {
             const def = profile[i]
-            const part = model.jointParts.get(def.jointId)
-            if (part !== undefined) {
-                const params = part.geometry.parameters as unknown as {width: number; height: number; depth: number}
-                _hurtHalf.x = params.width / 2
-                _hurtHalf.y = params.height / 2
-                _hurtHalf.z = params.depth / 2
-                copyOBBInto(out[i], obbFromTransform(part.mesh.matrixWorld.elements, _hurtZero, _hurtHalf))
-                continue
-            }
+            /* 受击块只由骨架数据声明；外形部件不参与尺寸计算 */
             const group = model.jointGroups.get(def.jointId)
             if (group === undefined) continue
             group.updateWorldMatrix(true, false)
@@ -1343,7 +1337,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 用体形碰撞节点相对模型根的变换驱动全部碰撞体；缺省节点时保留静态拼接。 */
     const syncCollidersFromNodes = (entity: CharacterEntity, model: CreatureModel): void => {
-        const layout = bodyFormOf(entity.config.bodyFormId).colliderLayout
+        const layout = bodyFormOf(entity.config.bodyFormId).skeleton.colliderLayout
         const scale = entity.config.scale
         const centerY = originToCenterY(entity.config)
         for (let i = 0; i < layout.length && i < entity.colliders.length; i++) {
@@ -2092,7 +2086,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             setHoldMode(entity.id, holdMode)
         }
         /* 防御 / 攻击：旧档缺字段回退零防御零攻击；装备汇总已在 spawnEntity 内完成 */
-        setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, entity.combat.equipment, plan.id, saveConfig.baseAttack ?? ZERO_PROFILE)
+        entity.combat.baseDefense = saveConfig.defense ?? plan.state.baseDefense
+        entity.combat.baseAttack = saveConfig.baseAttack ?? plan.state.baseAttack
+        entity.combat.baseMoveSpeedMultiplier = plan.state.baseMoveSpeedMultiplier
+        entity.combat.basePoiseMax = saveConfig.poiseMax ?? plan.state.basePoise
+        setCombatEquipment(entity.combat, entity.combat.baseDefense, entity.combat.equipment, plan.id, entity.combat.baseAttack)
         /* 载入即回满韧性（poiseMax 已含装备汇总） */
         entity.combat.poise = entity.combat.poiseMax
         /* 额外锁定点：旧档缺字段回退仅默认身体中心点；非法条目由 sanitizeLockPoints 安全剔除 */
@@ -2220,7 +2218,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
             for (const collider of entity.colliders) world.removeCollider(collider, true)
             /* 碰撞体参数与 spawnEntity 一致（随 scale 缩放）：按体形计划 colliderLayout 重建 */
-            const layout = bodyFormOf(entity.config.bodyFormId).colliderLayout
+            const layout = bodyFormOf(entity.config.bodyFormId).skeleton.colliderLayout
             const rebuilt = layout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, entity.config.scale), entity.body))
             entity.colliders = rebuilt
             entity.mainCollider = rebuilt[0]
@@ -2411,6 +2409,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         /* 3) 装备过滤 + 汇总（防御 / 加成 / 移速 / 韧性） */
         entity.combat.equipment = equipment
         setCombatEquipment(entity.combat, entity.combat.baseDefense, equipment, newFormId, entity.combat.baseAttack)
+        const finalState = resolveBodyFormState(
+            entity.config.poiseMax !== undefined ? {...plan.state, basePoise: entity.config.poiseMax} : plan.state,
+            entity.combat.weapon,
+            equipment,
+            newFormId,
+        )
+        entity.combat.defense = finalState.defense
+        entity.combat.attackBonus = finalState.attackBonus
+        entity.combat.moveSpeedMultiplier = finalState.moveSpeedMultiplier
+        entity.combat.poiseMax = finalState.poise
+        if (entity.combat.poise > entity.combat.poiseMax) entity.combat.poise = entity.combat.poiseMax
 
         /* 4) 重建外观模型（dispose 旧模型 → 按新 plan 建模型） */
         if (oldModel !== undefined) {
@@ -2424,15 +2433,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         appearanceSystems.set(entity.id, plan.createAnimation({onAttackEvent}))
 
         /* 5) 生命值档位：体形覆写（缺省沿用武器类型档位） */
-        const maxHP = plan.baseHealth ?? (entity.combat.weapon.type === 'melee' ? 15 : 8)
+        const maxHP = finalState.maxHealth
         entity.combat.maxHealth = maxHP
         if (entity.combat.health > maxHP) entity.combat.health = maxHP
 
         /* 6) 受击子块与碰撞体按新 plan 重建 */
-        entity.hurtProfile = plan.hurtProfile
-        entity.hurtBlocks = plan.hurtProfile.map(b => zeroWorldHurtBlock(b.id))
+        entity.hurtProfile = plan.skeleton.hurtProfile
+        entity.hurtBlocks = plan.skeleton.hurtProfile.map(b => zeroWorldHurtBlock(b.id))
         for (const collider of entity.colliders) world.removeCollider(collider, true)
-        const rebuilt = plan.colliderLayout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, entity.config.scale), entity.body))
+        const rebuilt = plan.skeleton.colliderLayout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, entity.config.scale), entity.body))
         entity.colliders = rebuilt
         entity.mainCollider = rebuilt[0]
         setBodyMass(entity.body, 1)

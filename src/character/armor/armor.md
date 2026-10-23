@@ -5,7 +5,7 @@
 
 ## 约定
 
-- 护甲四槽 `head/chest/arms/legs` + 肢体四槽 `head/arms/body/legs`；预设 `armor_pieces` / `limb_pieces`，目录与装备表校验 `catalog`。
+- 护甲四槽 `head/chest/arms/legs` + 肢体四槽 `head/arms/body/legs`；各体形预设位于 `body_form/<form>/equipment/armor.ts` / `limb.ts`，目录与装备表校验在 `character/armor/catalog.ts`。
 - **护甲 / 种族肢体低多面体化**：`armor_mesh.ts` 各 `gen*` 用统一材质库（`render/character_materials.ts`）经 `b.materialById` 取材质，几何以 `frustum` / 低分段 `cylinder`/`cone`/`sphere` 拼装（`flatShading` 棱面）。`ArmorMeshConfig.material?` 可显式指定材质（缺省按形状推导：金属甲 / 布料 / 皮革，见 `ARMOR_SHAPE_MATERIAL`）；种族肢体材质按种族推导（骷髅 `bone` / 兽人 · 精灵 `skin`）。护甲 / 肢体仍为**纯视觉子节点**，无碰撞箱。
 - **护甲厚度按材质**：躯干 / 四肢护甲的宽 / 深 = 身体对应部件尺寸 × **材质厚度系数**（`appearance/constants.ts` 的 `armorThicknessOf`：布 1.05 / 皮 1.1 / 鳞 1.15 / 铁 1.2 / 石 1.25）；护甲均为**方块造型**（`frustum` / `box`），不使用圆柱 / 球。**护甲按材质成套**：布 / 皮 / 铁 / 鳞 / 石 / 法师各四槽齐全（护甲名 keyed by id，见 `catalog.ts` 的 `ARMOR_NAME_KEYS`；每个预设须有对应物品 `items.ts` + 专属图标）。
 - 提供逐类别防御、逐类别攻击加成与移速乘数：`CombatComponent.setCombatEquipment` 统一重算有效防御 / `attackBonus` / `moveSpeedMultiplier`（护甲与肢体同一汇总口径）。
@@ -257,31 +257,14 @@ export const moveSpeedOf = (entity: CharacterEntity): number =>
 
 依赖方向：`character/armor/` → `character/combat/damage_type.ts` / `combat/defense.ts`（值）与 `entity/character/appearance/armor_mesh.ts`（仅类型，沿用 `melee_weapon.ts` → `weapon_mesh.ts` 的既有先例）；被 `entity/character/` 依赖，反向不成立。
 
-`slots.ts`：
-
-```ts
-export const ARMOR_SLOTS = ['head', 'chest', 'arms', 'legs'] as const
-export type ArmorSlot = typeof ARMOR_SLOTS[number]
-
-export const ARMOR_SLOT_LABELS: Record<ArmorSlot, string> = {
-    head: '头盔', chest: '胸甲', arms: '臂甲', legs: '护腿',
-}
-
-/** 肢体槽位：与护甲槽位是两套独立槽位，面板同一行左右并列（左护甲 / 右肢体） */
-export const LIMB_SLOTS = ['head', 'arms', 'body', 'legs'] as const
-export type LimbSlot = typeof LIMB_SLOTS[number]
-
-export const LIMB_SLOT_LABELS: Record<LimbSlot, string> = {
-    head: '头部', arms: '手臂', body: '身体', legs: '腿部',
-}
-```
+槽位不再由 `character/armor/` 硬编码；每个体形在 `body_form/<form>/state/equip_slots.ts`
+声明自己的 `limb / weapon / armor` 槽位（`kind:bodyPart`）。领域层只使用字符串槽位键。
 
 `types.ts`（护甲与肢体共用泛型装备结构）：
 
 ```ts
 import type {DamageTypeProfile} from '../combat/damage_type.ts'
-import type {ArmorMeshConfig, LimbMeshConfig} from '../../entity/character/appearance/armor_mesh.ts'
-import type {ArmorSlot, LimbSlot} from './slots.ts'
+import type {ArmorMeshConfig, LimbMeshConfig} from '../equipment/mesh_config.ts'
 
 /** 单件装备（领域数据：槽位 + 数值修正 + 程序化外观配方）；护甲与肢体共用 */
 export interface EquipPieceConfig<S extends string, M> {
@@ -295,40 +278,42 @@ export interface EquipPieceConfig<S extends string, M> {
     readonly mesh: M                             // 外观部件配方
 }
 
-export type ArmorPieceConfig = EquipPieceConfig<ArmorSlot, ArmorMeshConfig>
-export type ArmorLoadout = Readonly<Partial<Record<ArmorSlot, string>>>
-export type ResolvedArmorLoadout = Readonly<Partial<Record<ArmorSlot, ArmorPieceConfig>>>
+export type ArmorPieceConfig = EquipPieceConfig<string, ArmorMeshConfig>
+export type ArmorLoadout = Readonly<Record<string, string>>
+export type ResolvedArmorLoadout = Readonly<Record<string, ArmorPieceConfig>>
 
 /** 肢体组件：种族肢体（默认顶替对应人类肢体，颜色随阵营调色板） */
-export type LimbPieceConfig = EquipPieceConfig<LimbSlot, LimbMeshConfig>
-export type LimbLoadout = Readonly<Partial<Record<LimbSlot, string>>>
-export type ResolvedLimbLoadout = Readonly<Partial<Record<LimbSlot, LimbPieceConfig>>>
+export type LimbPieceConfig = EquipPieceConfig<string, LimbMeshConfig>
+export type LimbLoadout = Readonly<Record<string, string>>
+export type ResolvedLimbLoadout = Readonly<Record<string, LimbPieceConfig>>
 ```
 
 `catalog.ts`：
 
 ```ts
-export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = { /* armor_pieces.ts 汇总 */ }
-export const LIMB_PRESETS: Record<string, LimbPieceConfig> = { /* limb_pieces.ts 汇总 */ }
-export const ALL_ARMOR_PRESETS / ALL_LIMB_PRESETS = Object.values(...)
+/** 各体形装配时注册自己的预设；同 id 后注册覆盖先注册 */
+export const registerArmorPresets / registerLimbPresets = (pieces) => ...
+export const allArmorPresets / allLimbPresets = () => ...
 export const findArmorPreset / findLimbPreset = (id: string | undefined) => ...
 /** 某槽位可选装备（面板下拉用） */
 export const armorPiecesOfSlot / limbPiecesOfSlot = (slot) => ...
-/** 校验装备表：未知 id / 槽位不匹配 → 空槽（存档容错，不抛错）；肢体 undefined/null → 空 */
+/** 校验单类装备表：未知 id / 槽位不匹配 → 空槽（存档容错，不抛错） */
 export const resolveArmorLoadout / resolveLimbLoadout = (loadout) => ...
-/** 有效防御 = 基础防御 + 各护甲防御之和 + 各肢体防御之和 */
-export const totalDefenseOf = (base, resolvedArmor, resolvedLimbs?): DefenseProfile => ...
-/** 攻击加成 = 各护甲 + 各肢体攻击加成之和（与武器类别匹配时才计入） */
-export const totalAttackOf = (resolvedArmor, resolvedLimbs?): DamageTypeProfile => ...
-/** 移速乘数 = 各护甲 × 各肢体移速乘数之积（空装备表 = 1） */
-export const totalMoveSpeedOf = (resolvedArmor, resolvedLimbs?): number => ...
-/** 韧性上界加成 = 各护甲 + 各肢体 poise 之和（缺省 = 0） */
-export const totalPoiseOf = (resolvedArmor, resolvedLimbs?): number => ...
+/** 跨体形装备解析：未知 id / 槽位不匹配 / allowedBodyFormIds 不含本体形 → 剔除 */
+export const resolveEquipmentPieces = (state: EquipmentState, bodyFormId: string) => ...
+/** 有效防御 = 基础防御 + 已解析装备防御之和 */
+export const equipmentDefenseOf = (base, pieces): DefenseProfile => ...
+/** 攻击加成 = 已解析装备攻击加成之和 */
+export const equipmentAttackOf = (pieces): DamageTypeProfile => ...
+/** 移速乘数 = 已解析装备移速乘数之积（空列表 = 1） */
+export const equipmentMoveSpeedOf = (pieces): number => ...
+/** 韧性上界加成 = 已解析装备 poise 之和（缺省 = 0） */
+export const equipmentPoiseOf = (pieces): number => ...
+/** 面板公式逐项拆解（防御 / 攻击 / 韧性 / 移速） */
+export const defenseTermsOf / attackTermsOf / poiseTermsOf / moveSpeedTermsOf = (...) => StatTerm[]
 ```
 
-`resolvedLimbs` 为可选参数：不传时行为与仅护甲完全一致（向后兼容既有调用与测试）。
-
-`armor_pieces.ts`：初版数据（数值待试玩调参；护栏：四件满配逐类别防御 ≤ 9、单件攻击加成 ≤ 2）：
+人形预设数据位于 `src/entity/character/body_form/humanoid/equipment/armor.ts` / `limb.ts`（数值待试玩调参；护栏：四件满配逐类别防御 ≤ 9、单件攻击加成 ≤ 2）：
 
 | 槽位 | id | 名称 | 物防 | 魔防 | 物攻 | 魔攻 | 移速 |
 |------|----|------|-----:|-----:|-----:|-----:|-----:|
@@ -357,7 +342,7 @@ export const totalPoiseOf = (resolvedArmor, resolvedLimbs?): number => ...
 - **加速鞋**：`swift_boots`（疾行靴 ×1.15）与 `wind_boots`（疾风靴 ×1.25）占护腿槽位、无防御收益，作为移速流代价。
 - **重甲提供韧性**：重甲件额外提供 `poise`（汇总进角色 `poiseMax`，降低被削韧倒地的概率）——`iron_helmet` 2 / `iron_plate` 4 / `scale_mail` 5 / `battle_bracers` 1 / `iron_greaves` 2；其余件缺省 0。满配重甲（铁盔 + 鳞甲 + 战臂甲 + 铁胫甲）共 +10 韧性。
 
-### 4.1.1 肢体组件预设（`limb_pieces.ts`）
+### 4.1.1 肢体组件预设（`body_form/humanoid/equipment/limb.ts`）
 
 肢体组件复用护甲的全部数值机制，每个槽位提供三族（骷髅 / 兽人 / 精灵）。数值倾向：**骷髅**法抗 / 敏捷、**兽人**物防物攻厚重、**精灵**均衡魔攻灵动。护栏：单件逐类别防御 ≤ 2、攻击加成 ≤ 1（与护甲叠加不过度膨胀）。
 
@@ -455,7 +440,7 @@ removeLimbs: () => void
 `model.ts` 内的槽位 → 关节映射（entity 侧持有，护甲领域数据不接触关节 id）：
 
 ```ts
-const ARMOR_SLOT_JOINTS: Record<ArmorSlot, readonly string[]> = {
+const ARMOR_SLOT_JOINTS: Record<string, readonly string[]> = {
     head: ['headNeck'],
     chest: ['spine'],
     arms: ['rightArmElbow', 'leftArmElbow'],
@@ -552,13 +537,13 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 | `src/character/combat/damage_type.ts` | `DAMAGE_TYPES` / `DAMAGE_TYPE_LABELS` / `DamageTypeProfile` |
 | `src/character/combat/defense.ts` | `DefenseProfile` / `ZERO_PROFILE` / `addDamageProfiles` / `reduceByDefense` |
 | `src/character/combat/damage.test.ts` | 伤害结算单测 |
-| `src/character/armor/slots.ts` | 四槽位常量与中文名 |
 | `src/character/armor/types.ts` | 护甲配置（防御 / 攻击加成 / 移速）与装备表类型 |
-| `src/character/armor/catalog.ts` | 目录查询 / 校验 / 防御与攻击汇总 / 移速汇总 |
-| `src/character/armor/armor_pieces.ts` | 护甲预设数据（含臂甲与加速鞋） |
-| `src/character/armor/limb_pieces.ts` | 肢体组件预设（骷髅 / 兽人 / 精灵 × 四槽位） |
-| `src/character/armor/catalog.test.ts` | 目录、数值汇总与回退单测 |
-| `src/character/armor/limb_catalog.test.ts` | 肢体目录、数值护栏、回退与护甲+肢体合并汇总单测 |
+| `src/character/armor/catalog.ts` | 跨体形注册 / 查询 / 校验 / 数值汇总 / 面板逐项拆解 |
+| `src/entity/character/body_form/humanoid/equipment/armor.ts` | 人形护甲预设数据（含臂甲与加速鞋） |
+| `src/entity/character/body_form/humanoid/equipment/limb.ts` | 人形肢体组件预设（骷髅 / 兽人 / 精灵 × 四槽位） |
+| `src/character/armor/catalog.test.ts` | 跨体形注册、查询、去重、fail-closed 与数值汇总单测 |
+| `src/entity/character/body_form/humanoid/equipment/armor.test.ts` | 人形护甲护栏、装备解析、数值汇总与逐项拆解单测 |
+| `src/entity/character/body_form/humanoid/equipment/limb.test.ts` | 人形肢体护栏、种族覆盖、装备解析与护甲+肢体合并单测 |
 | `src/entity/character/appearance/limb_mesh.test.ts` | 种族肢体构建 / 粗壮度 / 阵营重着色单测 |
 | `src/entity/character/appearance/mesh_builder.ts` | 共享网格构建器（武器 / 护甲共用的几何 / 材质工厂与生命周期管理） |
 | `src/entity/character/appearance/mesh_builder.test.ts` | 构建器几何工厂 / 组装 / 释放单测 |
@@ -619,7 +604,7 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 **M5 装备数值扩展（臂甲 / 攻击加成 / 移速）**
 
 1. 类型层：`DamageTypeProfile`、`addDamageProfiles`、`ZERO_PROFILE`（攻击与防御共用档案）。
-2. 护甲：新增 `arms` 槽位；`ArmorPieceConfig` 增加 `attack` / `moveSpeedMultiplier`；新增臂甲 4 件与加速鞋 2 件；`totalAttackOf` / `totalMoveSpeedOf`。
+2. 护甲：新增 `arms` 槽位；`ArmorPieceConfig` 增加 `attack` / `moveSpeedMultiplier`；新增臂甲 4 件与加速鞋 2 件；`equipmentAttackOf` / `equipmentMoveSpeedOf`。
 3. 外观：前臂关节基座 + `bracer` / `boots` 形状（`joints` 白名单、`accent.z` 脚尖）。
 4. 运行时：`CombatComponent.attackBonus` / `moveSpeedMultiplier`；`moveSpeedOf` 接入五个状态；近战/远程伤害计入攻击加成。
 5. 接线：角色面板重构为「装备 / 属性」两模块（武器 + 护甲统一为装备模块，生命 + 基础防御 + 数值预览为属性模块）；护甲下拉描述列出防御 / 攻击加成 / 移速影响；行文本有效移速；存档 `armor.arms`。
@@ -632,8 +617,9 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 | 层级 | 文件 | 断言要点 |
 |------|------|----------|
 | 单测 | `combat/damage.test.ts` | 修饰器先结算、防御按类别生效、最小 1 保底、亚 1 点伤害不被放大、`baseAmount` 不变、无 `defense` 时行为与旧版一致 |
-| 单测 | `armor/catalog.test.ts` | 全部预设槽位合法、防御/攻击非负、移速乘数为正；四件满配数值护栏（防御 ≤ 9、攻击 ≤ 2）；法师头盔提供魔攻；重甲减速 / 加速鞋增速；`resolveArmorLoadout` 未知 id/槽位错配 → 空槽；`totalDefenseOf` / `totalAttackOf` / `totalMoveSpeedOf` 汇总 |
-| 单测 | `armor/limb_catalog.test.ts` | 肢体预设 id/槽位/种族合法、每槽含三族；单件数值护栏；种族倾向；`resolveLimbLoadout` 未知 id / 槽位错配 → 空槽、空/undefined → 空；护甲 + 肢体合并汇总、不传肢体向后兼容 |
+| 单测 | `armor/catalog.test.ts` | 跨体形注册 / 按 id 查回同一实例、未知 id 返回 undefined、重复注册去重；`resolveEquipmentPieces` 体形 / 槽位 fail-closed；`equipmentDefenseOf` / `equipmentAttackOf` / `equipmentMoveSpeedOf` / `equipmentPoiseOf` 汇总与空列表回退 |
+| 单测 | `body_form/humanoid/equipment/armor.test.ts` | 人形护甲 id/槽位/体形合法、数值非负、四件满配护栏；`resolveEquipmentPieces` + 汇总函数贯通；`resolveArmorLoadout` 与逐项拆解；本地化显示名 |
+| 单测 | `body_form/humanoid/equipment/limb.test.ts` | 人形肢体 id/槽位/种族合法、每个肢体槽覆盖三族；单件数值护栏；装备状态解析；护甲 + 肢体合并汇总 |
 | 单测 | `appearance/limb_mesh.test.ts` | 三族在全部肢体关节生成部件、cleanup 清空；未知关节空；骷髅 < 精灵 < 兽人粗壮度；纵向对齐不沉地；阵营调色板改变材质颜色；头部主块带种族脸部 map 且三族各异；头部含种族特征几何（部件数 > 主块、兽人獠牙前伸） |
 | 单测 | `appearance/mesh_builder.test.ts` | `trackMaterial` / `trackTexture` 登记外部资源，`dispose` 一并释放 |
 | 单测 | `weapon/melee_weapon.test.ts` / `ranged_weapon.test.ts` | 每个预设声明了合法 `damageType`；法杖 / 魔杖为 `magic` |
@@ -662,6 +648,15 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 - **面板回显与提交对称**：下拉空值 = 空槽；`refreshFullConfig` 与 `onApply` 的字段集合必须一致，防止只改一项清空其余槽位。
 
 ---
+
+## 九点五、体形槽位扩展（当前实现）
+
+- 槽位不再硬编码人形四槽：每个体形在 `body_form/<form>/state/equip_slots.ts` 声明自己的 `limb / weapon / armor` 槽位。
+- `character/armor/catalog.ts` 的解析 / 汇总函数按 `EquipmentState` 的 `kind:bodyPart` 动态遍历；
+  `ResolvedArmorLoadout` / `ResolvedLimbLoadout` 是 `Record<string, piece>`，不再使用 `ArmorSlot` / `LimbSlot` 固定联合。
+- 所有人形与非人形预设都归属各自体形：`body_form/<form>/equipment/armor.ts` / `limb.ts`，
+  由 `body_form/index.ts` 装配时经 `registerArmorPresets` / `registerLimbPresets` 注册。装备模组由 `body_form/common/equipment.ts` 按槽位批量生成。
+- 新增体形护甲 / 肢体时必须同时补齐：槽位表、单件数据、装备模组、物品定义（`inventory/items.ts`）与外观风格。
 
 ## 十、后续扩展（非本期）
 

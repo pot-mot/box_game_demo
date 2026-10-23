@@ -129,7 +129,7 @@ export const loadWorldFromData = (
             }
             case 'character': {
                 /* 旧档迁移：身体中心 Y → 脚底原点 Y（按体形计划的中心偏移；缺省 humanoid） */
-                const halfH = bodyFormOf(entity.config.bodyFormId).centerOffsetY * entity.config.scale
+                const halfH = bodyFormOf(entity.config.bodyFormId).state.centerOffsetY * entity.config.scale
                 const feetY = legacyCharacterPos ? y - halfH : y
                 const spawned = character?.add(entity.config, x, feetY, z, quat, {health: entity.health})
                 /* 朝向恢复（旧存档无 facing 字段时保持缺省 0） */

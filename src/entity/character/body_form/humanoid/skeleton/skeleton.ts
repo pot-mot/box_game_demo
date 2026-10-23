@@ -1,5 +1,6 @@
 import type {SkeletonDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {translate, type StringLocaleKey} from '../../../../../i18n/index.ts'
+import type {ColliderSpec} from '../../common/types.ts'
 import {
     MODEL_BASE_HEIGHT,
     MODEL_BASE_WIDTH,
@@ -124,6 +125,19 @@ export const humanoidJointDisplayName = (id: string, fallback: string): string =
     const key = HUMANOID_JOINT_NAME_KEYS[id]
     return key === undefined ? fallback : translate(key)
 }
+
+/**
+ * 人形碰撞布局（骨架唯一来源）：上下半竖直胶囊拼接等价单一胶囊。
+ * 半径 = 半宽；中间圆柱半高 = (总半高 − 半径)/2。
+ */
+const COLLIDER_RADIUS = MODEL_BASE_WIDTH / 2
+const COLLIDER_HALF_HEIGHT = MODEL_BASE_HEIGHT / 2 - COLLIDER_RADIUS
+const HALF_CAPSULE_HALF_HEIGHT = COLLIDER_HALF_HEIGHT / 2
+
+export const HUMANOID_COLLIDER_LAYOUT: readonly ColliderSpec[] = [
+    {nodeId: 'lowerBodyCollider', kind: 'capsule', radius: COLLIDER_RADIUS, halfHeight: HALF_CAPSULE_HALF_HEIGHT, offsetY: -HALF_CAPSULE_HALF_HEIGHT},
+    {nodeId: 'upperBodyCollider', kind: 'capsule', radius: COLLIDER_RADIUS, halfHeight: HALF_CAPSULE_HALF_HEIGHT, offsetY: HALF_CAPSULE_HALF_HEIGHT},
+]
 
 /** 预设部件尺寸（与骨架定义同构，供外观装配使用） */
 export const PRESET_PART_SIZES = {

@@ -28,7 +28,7 @@
 
 动画数据（entity/character/body_form/humanoid/skeleton_animation/attack_clips/）
 └─ 段 id → AuthoredAttackClip（times + 每关节欧拉角列 + 事件）
-   + body_form/humanoid/clips/generated/support_hand_attacks.ts（支撑手双轨）
+   + body_form/humanoid/skeleton_animation/clips/generated/support_hand_attacks.ts（支撑手双轨）
 
 状态机（character/state_machine/）
 └─ attacking / air_attacking 段子状态机
@@ -36,7 +36,7 @@
    ├─ 段推进 / 后摇窗口缓冲
    └─ 段末 next 转换
 
-表现层（entity/character/body_form/humanoid/clips/）
+表现层（entity/character/body_form/humanoid/skeleton_animation/clips/）
 └─ getAttackClipById：编译作者数据 → 合并支撑手 → 镜像惯用手 → 缓存
 ```
 
@@ -132,7 +132,7 @@ interface AuthoredAttackClip {
 | 段时长 / 恢复 / 阶段 / 伤害 / next | `melee_attacks.ts` / `ranged_attacks.ts` |
 | 命中窗口 | 作者数据 `events`（或生成器脚本中的窗口推导） |
 | 持握模式 | `body_form/<form>/equipment/weapons.ts` 的 `holdModes` + `attacks` |
-| 武器模型握点 / 副握距 | `forms/<form>/weapons.ts` 的 `mesh.supportGripOffset` + `weapon_mesh.ts` 握持表 |
+| 武器模型握点 / 副握距 | `body_form/<form>/equipment/weapons.ts` 的 `mesh.supportGripOffset` + `weapon_mesh.ts` 握持表 |
 | 惯用手 | `character/handedness.ts` + 存档字段 |
 | 盾牌 / 格挡 | `melee_weapon.ts` 的 `block` + `combat` 判定 |
 | 预览 / 精修动作 | `modes/bone_edit/` |
@@ -148,10 +148,10 @@ interface AuthoredAttackClip {
 | `catalog.ts` | 武器目录注册与查询（体形装配时填充） |
 | `weapon_runtime.ts` | 数值覆写 → 运行时武器配置 |
 | `melee_weapon.ts` / `ranged_weapon.ts` | 武器类 / 模型类型与构建器 |
-| `body_form/humanoid/clips/attack_clips.ts` | 作者数据编译 → 支撑手合并 → 镜像 → 缓存 |
-| `body_form/humanoid/clips/attack_clip_build.ts` | 作者格式 → `ClipJSON` |
-| `body_form/humanoid/clips/support_hand_merge.ts` | 支撑手双轨合并 |
-| `body_form/humanoid/clips/generated/` | 支撑手离线生成数据（禁止手改） |
+| `body_form/humanoid/skeleton_animation/clips/attack_clips.ts` | 作者数据编译 → 支撑手合并 → 镜像 → 缓存 |
+| `body_form/humanoid/skeleton_animation/clips/attack_clip_build.ts` | 作者格式 → `ClipJSON` |
+| `body_form/humanoid/skeleton_animation/clips/support_hand_merge.ts` | 支撑手双轨合并 |
+| `body_form/humanoid/skeleton_animation/clips/generated/` | 支撑手离线生成数据（禁止手改） |
 | `character/combat/attack_phases.ts` | 阶段名 / 时序 / 蓄力锚点 |
 | `character/state_machine/states/attacking/` | 段子状态调度与缓冲 |
 
@@ -159,10 +159,10 @@ interface AuthoredAttackClip {
 
 - `character/weapon/attack_chain.test.ts`：链结构、守卫、起手/转换。
 - `character/weapon/melee_weapon.test.ts` / `ranged_weapon.test.ts`：武器预设与数值约束。
-- `body_form/humanoid/clips/attack_data.test.ts`：作者数据与武器段一一对应、时间/时长/事件。
-- `body_form/humanoid/clips/support_hand_data.test.ts`：支撑手矩阵与 fingerprint。
-- `body_form/humanoid/clips/support_hand_bake.test.ts`：支撑手残差。
-- `body_form/humanoid/system.test.ts`：动画调度、蓄力、基础状态。
+- `body_form/humanoid/skeleton_animation/clips/attack_data.test.ts`：作者数据与武器段一一对应、时间/时长/事件。
+- `body_form/humanoid/skeleton_animation/clips/support_hand_data.test.ts`：支撑手矩阵与 fingerprint。
+- `body_form/humanoid/skeleton_animation/clips/support_hand_bake.test.ts`：支撑手残差。
+- `body_form/humanoid/skeleton_animation/system.test.ts`：动画调度、蓄力、基础状态。
 - `character/state_machine/machine.test.ts`：段推进、缓冲、受击/翻滚。
 
 ## 九、陷阱

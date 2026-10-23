@@ -5,9 +5,9 @@ import {humanoidBodyStateOf} from '../state/body_state.ts'
 import type {CharacterColorPalette, WeaponEquipConfig} from '../../../appearance/types.ts'
 import type {CharacterModel} from './types.ts'
 import type {ResolvedArmorLoadout, ResolvedLimbLoadout} from '../../../../../character/armor/types.ts'
-import {ARMOR_SLOTS, LIMB_SLOTS, type ArmorSlot, type LimbSlot} from '../../../../../character/armor/slots.ts'
 import {createWeaponMesh, isShieldMeshId, WEAPON_MESH_GRIPS, type WeaponMeshConfig, type WeaponLocalHitBox} from '../../../appearance/weapon_mesh.ts'
 import {createArmorMesh, createLimbMesh, ARMOR_BODY_PART_JOINTS, type ArmorBodyPart} from './armor_mesh.ts'
+import {resolveArmorLoadout, resolveLimbLoadout} from '../../../../../character/armor/catalog.ts'
 import {SELECT_PALETTE, WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
 import {SHIELD_STOW_TILT_X} from '../state/constants.ts'
 import {recolorTwoFaceBoxPart, recolorHeadBoxPart, type TrackedBoxPart} from '../../../../../render/box_parts.ts'
@@ -44,24 +44,8 @@ const requirePart = (jointParts: ReadonlyMap<string, TrackedBoxPart>, jointId: s
     return part.mesh
 }
 
-/** 护甲槽位 → 挂载关节：护甲件挂在被动画驱动的关节下，自动跟随姿态（纯视觉，不参与判定） */
-const ARMOR_SLOT_JOINTS: Readonly<Record<ArmorSlot, readonly string[]>> = {
-    head: ['headNeck'],
-    chest: ['spine'],
-    arms: ['rightArmElbow', 'leftArmElbow'],
-    legs: ['leftLegHip', 'rightLegHip', 'leftLegKnee', 'rightLegKnee'],
-}
-
-/** 肢体槽位 → 挂载关节：整段替换对应人类肢体（上/前臂、手、髋/膝、头、躯干） */
-const LIMB_SLOT_JOINTS: Readonly<Record<LimbSlot, readonly string[]>> = {
-    head: ['headNeck'],
-    arms: ['rightArmShoulder', 'rightArmElbow', 'rightHandPivot', 'leftArmShoulder', 'leftArmElbow', 'leftHandPivot'],
-    body: ['spine'],
-    legs: ['leftLegHip', 'rightLegHip', 'leftLegKnee', 'rightLegKnee', 'leftFoot', 'rightFoot'],
-}
-
-/** 肢体槽位 → 顶替（隐藏）的人类身体部位：装备肢体即 replace，缺省保留人类肢体 */
-const LIMB_SLOT_HIDDEN_PARTS: Readonly<Record<LimbSlot, readonly ArmorBodyPart[]>> = {
+/** 肢体部位 id → 顶替（隐藏）的人类身体部位：装备肢体即 replace，缺省保留人类肢体 */
+const LIMB_HIDDEN_PARTS_BY_BODY_PART: Readonly<Record<string, readonly ArmorBodyPart[]>> = {
     head: ['head'],
     arms: ['rightUpperArm', 'rightForearm', 'rightHand', 'leftUpperArm', 'leftForearm', 'leftHand'],
     body: ['torso'],
@@ -87,7 +71,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
     let currentPalette = fixedPalette ?? SELECT_PALETTE(faction)
 
     /* 关节 Group 层级 = 体形骨架定义的唯一映射（含手部 rightHandPivot/leftHandPivot 与武器挂点） */
-    const scaffold = skeletonFromDefinition(plan.buildSkeleton())
+    const scaffold = skeletonFromDefinition(plan.skeleton.build())
     const hierarchy = createJointHierarchy(scaffold)
     const groups = hierarchy.groups
     const group = requireGroup(groups, 'root')
@@ -203,14 +187,12 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
     const refreshHiddenBodyParts = (): void => {
         for (const [part, visible] of hiddenBodyParts) part.mesh.visible = visible
         hiddenBodyParts = new Map()
-        for (const slot of ARMOR_SLOTS) {
-            const piece = currentArmor[slot]
-            if (piece === undefined) continue
+        for (const piece of Object.values(currentArmor)) {
             for (const bodyPart of piece.mesh.hideBodyParts ?? []) hideBodyPart(bodyPart)
         }
-        for (const slot of LIMB_SLOTS) {
-            if (currentLimb[slot] === undefined) continue
-            for (const bodyPart of LIMB_SLOT_HIDDEN_PARTS[slot]) hideBodyPart(bodyPart)
+        for (const [bodyPart, piece] of Object.entries(currentLimb)) {
+            if (piece === undefined) continue
+            for (const hidden of LIMB_HIDDEN_PARTS_BY_BODY_PART[bodyPart] ?? []) hideBodyPart(hidden)
         }
     }
 
@@ -232,10 +214,11 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
     const equipArmor = (loadout: ResolvedArmorLoadout): void => {
         clearMounted(mountedArmor)
         currentArmor = loadout
-        for (const slot of ARMOR_SLOTS) {
-            const piece = loadout[slot]
+        for (const [bodyPart, piece] of Object.entries(loadout)) {
             if (piece === undefined) continue
-            for (const jointId of ARMOR_SLOT_JOINTS[slot]) {
+            const slot = plan.equipSlots.find(candidate => candidate.kind === 'armor' && candidate.bodyPart === bodyPart)
+            if (slot === undefined) continue
+            for (const jointId of slot.mountJointIds) {
                 const joint = groups.get(jointId)
                 if (joint === undefined) continue
                 const result = createArmorMesh(piece.mesh, jointId)
@@ -256,10 +239,11 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
     const equipLimbs = (loadout: ResolvedLimbLoadout): void => {
         clearMounted(mountedLimbs)
         currentLimb = loadout
-        for (const slot of LIMB_SLOTS) {
-            const piece = loadout[slot]
+        for (const [bodyPart, piece] of Object.entries(loadout)) {
             if (piece === undefined) continue
-            for (const jointId of LIMB_SLOT_JOINTS[slot]) {
+            const slot = plan.equipSlots.find(candidate => candidate.kind === 'limb' && candidate.bodyPart === bodyPart)
+            if (slot === undefined) continue
+            for (const jointId of slot.mountJointIds) {
                 const joint = groups.get(jointId)
                 if (joint === undefined) continue
                 const result = createLimbMesh(piece.mesh, jointId, currentPalette)
@@ -386,6 +370,10 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
         removeArmor,
         equipLimbs,
         removeLimbs,
+        equipEquipmentState: (state) => {
+            equipArmor(resolveArmorLoadout(state.armor))
+            equipLimbs(resolveLimbLoadout(state.limb))
+        },
         recolor,
         get weaponMesh() { return mainSlot().hitCenter },
         get weaponTip() { return mainSlot().tip },

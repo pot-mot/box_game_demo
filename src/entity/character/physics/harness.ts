@@ -68,8 +68,8 @@ export const makeChar = (
          * 平底 cuboid 跨过 trimesh 网格顶点线时会被内部棱幽灵水平法线卡死（上坡原地卡住），
          * 圆滑底面无挂点；rapier3d-compat 0.19/0.20 的 FIX_INTERNAL_EDGES 已损坏（开启即穿透）不可用 */
         RAPIER.ColliderDesc.capsule(
-            HUMANOID_BODY_FORM.size.height / 2 - HUMANOID_BODY_FORM.size.width / 2,
-            HUMANOID_BODY_FORM.size.width / 2,
+            HUMANOID_BODY_FORM.state.size.height / 2 - HUMANOID_BODY_FORM.state.size.width / 2,
+            HUMANOID_BODY_FORM.state.size.width / 2,
         )
             .setFriction(0)
             /* 密度 0（与生产一致） */
@@ -338,7 +338,7 @@ export const tickMulti = (
         if (separated.has(key)) continue
         separated.add(key)
 
-        const maxHalf = Math.max(HUMANOID_BODY_FORM.size.width, HUMANOID_BODY_FORM.size.depth) / 2
+        const maxHalf = Math.max(HUMANOID_BODY_FORM.state.size.width, HUMANOID_BODY_FORM.state.size.depth) / 2
         const aPos = bodyA.translation()
         const bPos = bodyB.translation()
         const sep = computeSeparation({

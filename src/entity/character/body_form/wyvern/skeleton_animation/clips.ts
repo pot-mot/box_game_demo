@@ -3,20 +3,28 @@ import type {AttackSegment} from '../../../../../character/weapon/attack_chain.t
 import type {BoneAnimationClip} from '../../../../../skeleton/anim/types.ts'
 import {bakePoseClip} from '../../common/creature_runtime/pose.ts'
 import {hitWindowRatios} from '../../common/creature_runtime/timing.ts'
-import {creatureStateMeta} from '../../common/creature_runtime/state_timing.ts'
+import {bakeSingleAnimation, createAnimationModule, poseAnimationFactory} from '../../common/skeleton_animation/factory.ts'
+import {WYVERN_STATE} from '../state/form_state.ts'
 import {buildWyvernSkeleton} from '../skeleton/skeleton.ts'
 import {wyvernAttackPose, wyvernPose} from './pose_fns.ts'
 
 const SKELETON = buildWyvernSkeleton()
 
-const STATE_META = creatureStateMeta({idle: 2.0, walking: 0.85, jumping: 0.4, falling: 0.5, swimming: 1.0, floating: 1.0})
+const STATE_META = WYVERN_STATE.animation
 
 const stateCache = new Map<string, BoneAnimationClip>()
 export const wyvernBaseClip = (state: BaseClipState): BoneAnimationClip => {
     const cached = stateCache.get(state)
     if (cached !== undefined) return cached
     const meta = STATE_META[state]
-    const clip = bakePoseClip(`wyvern_${state}`, meta.duration, meta.loop, SKELETON, wyvernPose(state))
+    const animation = poseAnimationFactory.create({
+        id: `wyvern_${state}`,
+        duration: meta.duration,
+        loop: meta.loop,
+        pose: wyvernPose(state),
+    })
+    const module = createAnimationModule(`wyvern:base:${state}`, 'body_form.wyvern', [animation])
+    const clip = bakeSingleAnimation(SKELETON, module, animation.id)
     stateCache.set(state, clip)
     return clip
 }

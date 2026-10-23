@@ -1,7 +1,7 @@
 import {Euler} from 'three'
 import type {PanelContext} from '../../box/base/ui'
 import type {JointCascadeSettings} from '../../../skeleton/skeleton.ts'
-import {connectJoint, disconnectJoint, createSkeletonJoint} from '../../../skeleton/joint.ts'
+import {connectJoint, createSkeletonJoint} from '../../../skeleton/joint.ts'
 import {setBoneLength, setBoneRoll} from '../../../skeleton/bone.ts'
 import {setSelectedVisual, clearSelectedVisuals} from '../render/joint_groups.ts'
 import type {SkeletonSelection, SkeletonEntity} from '../world.ts'
@@ -23,6 +23,8 @@ export interface SkeletonPanelContext {
     isEditingEnabled: () => boolean
     /** 领域编辑后刷新：FK + 写回场景图 + 部件缩放 */
     refresh: () => void
+    /** 重连父关节（视觉 Group 与领域骨架同步重挂；parentId = undefined 表示独立根） */
+    reparentJoint: (jointId: string, parentId: string | undefined) => void
     /** 重开面板（选中变化后由 world 调用） */
     reopen: () => void
 }
@@ -163,23 +165,37 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
         ikDepthInput.disabled = ikSolverSelect.value === ''
     })
 
-    /* 父关节重连 */
+    /* 父关节：可重连（选项排除自身与后代，避免自环） */
     container.appendChild(createSection('skeleton.parent'))
+    const excluded = new Set<string>([joint.id])
+    const pending = [...joint.children]
+    while (pending.length > 0) {
+        const child = pending.pop()
+        if (child === undefined || excluded.has(child.id)) continue
+        excluded.add(child.id)
+        pending.push(...child.children)
+    }
     const parentSelect = document.createElement('select')
+    parentSelect.id = 'skeleton-parent'
     parentSelect.className = 'dc-select'
-    const noneOption = document.createElement('option')
-    noneOption.value = ''
-    noneOption.textContent = translate('skeleton.parent_none')
-    parentSelect.appendChild(noneOption)
-    for (const other of skeleton.joints.values()) {
-        if (other.id === joint.id) continue
-        const el = document.createElement('option')
-        el.value = other.id
-        el.textContent = `${other.name}（${other.id}）`
-        parentSelect.appendChild(el)
+    const rootOption = document.createElement('option')
+    rootOption.value = ''
+    localizeText(rootOption, 'skeleton.parent_none')
+    parentSelect.appendChild(rootOption)
+    for (const candidate of skeleton.joints.values()) {
+        if (excluded.has(candidate.id)) continue
+        const option = document.createElement('option')
+        option.value = candidate.id
+        option.textContent = `${candidate.name}（${candidate.id}）`
+        parentSelect.appendChild(option)
     }
     parentSelect.value = joint.parent?.id ?? ''
     container.appendChild(parentSelect)
+    const parentHint = document.createElement('div')
+    parentHint.className = 'dc-hint'
+    parentHint.style.cssText = 'margin-top:2px'
+    localizeText(parentHint, 'skeleton.parent_hint')
+    container.appendChild(parentHint)
 
     /* 添加子关节 */
     container.appendChild(createSection('skeleton.add_child'))
@@ -226,14 +242,8 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
         } else {
             joint.ik = undefined
         }
-        const newParentId = parentSelect.value === '' ? undefined : parentSelect.value
-        if (joint.parent?.id !== newParentId) {
-            if (joint.parent !== undefined) disconnectJoint(joint)
-            if (newParentId !== undefined) {
-                const newParent = skeleton.findJoint(newParentId)
-                if (newParent !== undefined) connectJoint(newParent, joint)
-            }
-        }
+        const parentId = parentSelect.value === '' ? undefined : parentSelect.value
+        if (parentId !== joint.parent?.id) ctx.reparentJoint(joint.id, parentId)
         ctx.refresh()
         ctx.reopen()
     })

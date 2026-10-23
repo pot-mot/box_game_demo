@@ -1,9 +1,6 @@
 import {addDamageProfiles, ZERO_PROFILE} from '../combat/defense.ts'
 import type {DamageType, DamageTypeProfile} from '../combat/damage_type.ts'
 import type {DefenseProfile} from '../combat/defense.ts'
-import {ARMOR_PRESETS} from './armor_pieces.ts'
-import {LIMB_PRESETS} from './limb_pieces.ts'
-import {ARMOR_SLOTS, LIMB_SLOTS, type ArmorSlot, type LimbSlot} from './slots.ts'
 import type {EquipmentState} from '../equipment/types.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import type {
@@ -19,9 +16,6 @@ import type {
  * 装备目录：护甲与肢体组件的装备表校验、目录查询与数值汇总（防御 / 攻击加成 / 移速）。
  * 未知 id / 槽位不匹配一律回退空槽（存档容错，不抛错）；肢体与护甲共用同一汇总函数。
  */
-
-export {ARMOR_PRESETS} from './armor_pieces.ts'
-export {LIMB_PRESETS} from './limb_pieces.ts'
 
 /** 逐项数值来源（本地化显示名 + 该项贡献值）：供面板公式拆解逐项展示 */
 export interface StatTerm {
@@ -76,6 +70,7 @@ const ARMOR_NAME_KEYS: Record<string, StringLocaleKey> = {
 
 /** 护甲 / 肢体预设本地化显示名（未知 id 回退预设数据 `name`） */
 export const armorPieceDisplayName = (piece: ArmorPieceConfig | LimbPieceConfig): string => {
+    if (piece.nameKey !== undefined) return translate(piece.nameKey)
     const key = ARMOR_NAME_KEYS[piece.id]
     return key === undefined ? piece.name : translate(key)
 }
@@ -92,40 +87,34 @@ export const registerLimbPresets = (pieces: readonly LimbPieceConfig[]): void =>
     for (const piece of pieces) EXTRA_LIMB_PRESETS.set(piece.id, piece)
 }
 
-/** 全部护甲预设（人形基础 + 体形注册；面板下拉与测试枚举用） */
-export const allArmorPresets = (): readonly ArmorPieceConfig[] => [
-    ...Object.values(ARMOR_PRESETS),
-    ...EXTRA_ARMOR_PRESETS.values(),
-]
+/** 全部护甲预设（各体形注册；按 id 去重，面板下拉与测试枚举用） */
+export const allArmorPresets = (): readonly ArmorPieceConfig[] => [...EXTRA_ARMOR_PRESETS.values()]
 
-/** 全部肢体预设（人形基础 + 体形注册；面板下拉与测试枚举用） */
-export const allLimbPresets = (): readonly LimbPieceConfig[] => [
-    ...Object.values(LIMB_PRESETS),
-    ...EXTRA_LIMB_PRESETS.values(),
-]
+/** 全部肢体预设（各体形注册；按 id 去重，面板下拉与测试枚举用） */
+export const allLimbPresets = (): readonly LimbPieceConfig[] => [...EXTRA_LIMB_PRESETS.values()]
 
 /** 按 id 查护甲预设 */
 export const findArmorPreset = (id: string | undefined): ArmorPieceConfig | undefined =>
-    id === undefined ? undefined : (ARMOR_PRESETS[id] ?? EXTRA_ARMOR_PRESETS.get(id))
+    id === undefined ? undefined : EXTRA_ARMOR_PRESETS.get(id)
 
 /** 按 id 查肢体预设 */
 export const findLimbPreset = (id: string | undefined): LimbPieceConfig | undefined =>
-    id === undefined ? undefined : (LIMB_PRESETS[id] ?? EXTRA_LIMB_PRESETS.get(id))
+    id === undefined ? undefined : EXTRA_LIMB_PRESETS.get(id)
 
 /** 某槽位可选护甲（面板下拉用） */
-export const armorPiecesOfSlot = (slot: ArmorSlot): readonly ArmorPieceConfig[] =>
+export const armorPiecesOfSlot = (slot: string): readonly ArmorPieceConfig[] =>
     allArmorPresets().filter(piece => piece.slot === slot)
 
 /** 某槽位可选肢体（面板下拉用） */
-export const limbPiecesOfSlot = (slot: LimbSlot): readonly LimbPieceConfig[] =>
+export const limbPiecesOfSlot = (slot: string): readonly LimbPieceConfig[] =>
     allLimbPresets().filter(piece => piece.slot === slot)
 
 /** 校验护甲装备表：未知 id / 槽位与 id 不符 → 空槽 */
 export const resolveArmorLoadout = (loadout: ArmorLoadout | undefined): ResolvedArmorLoadout => {
-    const resolved: Partial<Record<ArmorSlot, ArmorPieceConfig>> = {}
+    const resolved: Record<string, ArmorPieceConfig> = {}
     if (loadout === undefined) return resolved
-    for (const slot of ARMOR_SLOTS) {
-        const piece = findArmorPreset(loadout[slot])
+    for (const [slot, id] of Object.entries(loadout)) {
+        const piece = findArmorPreset(id)
         if (piece !== undefined && piece.slot === slot) resolved[slot] = piece
     }
     return resolved
@@ -133,90 +122,13 @@ export const resolveArmorLoadout = (loadout: ArmorLoadout | undefined): Resolved
 
 /** 校验肢体装备表：未知 id / 槽位与 id 不符 / null → 空槽（回退默认人类肢体） */
 export const resolveLimbLoadout = (loadout: LimbLoadout | undefined): ResolvedLimbLoadout => {
-    const resolved: Partial<Record<LimbSlot, LimbPieceConfig>> = {}
+    const resolved: Record<string, LimbPieceConfig> = {}
     if (loadout === undefined) return resolved
-    for (const slot of LIMB_SLOTS) {
-        const piece = findLimbPreset(loadout[slot])
+    for (const [slot, id] of Object.entries(loadout)) {
+        const piece = findLimbPreset(id)
         if (piece !== undefined && piece.slot === slot) resolved[slot] = piece
     }
     return resolved
-}
-
-/** 有效防御 = 基础防御 + 各槽位护甲之和 + 各槽位肢体之和 */
-export const totalDefenseOf = (
-    base: DefenseProfile,
-    resolved: ResolvedArmorLoadout,
-    resolvedLimbs?: ResolvedLimbLoadout,
-): DefenseProfile => {
-    let total: DamageTypeProfile = base
-    for (const slot of ARMOR_SLOTS) {
-        const piece = resolved[slot]
-        if (piece !== undefined) total = addDamageProfiles(total, piece.defense)
-    }
-    if (resolvedLimbs !== undefined) {
-        for (const slot of LIMB_SLOTS) {
-            const piece = resolvedLimbs[slot]
-            if (piece !== undefined) total = addDamageProfiles(total, piece.defense)
-        }
-    }
-    return total
-}
-
-/** 攻击加成 = 各槽位护甲与肢体攻击加成之和（与武器类别匹配时才计入伤害） */
-export const totalAttackOf = (
-    resolved: ResolvedArmorLoadout,
-    resolvedLimbs?: ResolvedLimbLoadout,
-): DamageTypeProfile => {
-    let total: DamageTypeProfile = ZERO_PROFILE
-    for (const slot of ARMOR_SLOTS) {
-        const piece = resolved[slot]
-        if (piece !== undefined) total = addDamageProfiles(total, piece.attack)
-    }
-    if (resolvedLimbs !== undefined) {
-        for (const slot of LIMB_SLOTS) {
-            const piece = resolvedLimbs[slot]
-            if (piece !== undefined) total = addDamageProfiles(total, piece.attack)
-        }
-    }
-    return total
-}
-
-/** 移速乘数 = 各槽位护甲与肢体移速乘数之积（空装备表 = 1） */
-export const totalMoveSpeedOf = (
-    resolved: ResolvedArmorLoadout,
-    resolvedLimbs?: ResolvedLimbLoadout,
-): number => {
-    let multiplier = 1
-    for (const slot of ARMOR_SLOTS) {
-        const piece = resolved[slot]
-        if (piece !== undefined) multiplier *= piece.moveSpeedMultiplier
-    }
-    if (resolvedLimbs !== undefined) {
-        for (const slot of LIMB_SLOTS) {
-            const piece = resolvedLimbs[slot]
-            if (piece !== undefined) multiplier *= piece.moveSpeedMultiplier
-        }
-    }
-    return multiplier
-}
-
-/** 韧性加成 = 各槽位护甲与肢体韧性之和（缺省 0） */
-export const totalPoiseOf = (
-    resolved: ResolvedArmorLoadout,
-    resolvedLimbs?: ResolvedLimbLoadout,
-): number => {
-    let total = 0
-    for (const slot of ARMOR_SLOTS) {
-        const piece = resolved[slot]
-        if (piece !== undefined) total += piece.poise ?? 0
-    }
-    if (resolvedLimbs !== undefined) {
-        for (const slot of LIMB_SLOTS) {
-            const piece = resolvedLimbs[slot]
-            if (piece !== undefined) total += piece.poise ?? 0
-        }
-    }
-    return total
 }
 
 /** 已装备的护甲与肢体（按槽位顺序），供逐项数值来源展示 */
@@ -224,17 +136,10 @@ const equippedPieces = (
     resolved: ResolvedArmorLoadout,
     resolvedLimbs?: ResolvedLimbLoadout,
 ): readonly (ArmorPieceConfig | LimbPieceConfig)[] => {
-    const pieces: (ArmorPieceConfig | LimbPieceConfig)[] = []
-    for (const slot of ARMOR_SLOTS) {
-        const piece = resolved[slot]
-        if (piece !== undefined) pieces.push(piece)
-    }
-    if (resolvedLimbs !== undefined) {
-        for (const slot of LIMB_SLOTS) {
-            const piece = resolvedLimbs[slot]
-            if (piece !== undefined) pieces.push(piece)
-        }
-    }
+    const pieces: (ArmorPieceConfig | LimbPieceConfig)[] = [
+        ...Object.values(resolved),
+    ]
+    if (resolvedLimbs !== undefined) pieces.push(...Object.values(resolvedLimbs))
     return pieces
 }
 

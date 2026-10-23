@@ -1,139 +1,125 @@
-import {describe, it, expect} from 'vitest'
+import {beforeAll, describe, it, expect} from 'vitest'
 import {
-    attackTermsOf,
-    defenseTermsOf,
+    allArmorPresets,
+    allLimbPresets,
+    armorPiecesOfSlot,
+    equipmentAttackOf,
+    equipmentDefenseOf,
+    equipmentMoveSpeedOf,
+    equipmentPoiseOf,
     findArmorPreset,
-    moveSpeedTermsOf,
-    poiseTermsOf,
-    resolveArmorLoadout,
-    resolveLimbLoadout,
-    totalAttackOf,
-    totalDefenseOf,
-    totalMoveSpeedOf,
+    findLimbPreset,
+    limbPiecesOfSlot,
+    registerArmorPresets,
+    registerLimbPresets,
+    resolveEquipmentPieces,
 } from './catalog.ts'
-import {ZERO_PROFILE} from '../combat/defense.ts'
+import {ZERO_PROFILE, addDamageProfiles} from '../combat/defense.ts'
+import type {ArmorPieceConfig, LimbPieceConfig} from './types.ts'
 
-describe('findArmorPreset', () => {
-    it('未知 id / undefined 返回 undefined', () => {
-        expect(findArmorPreset('iron_helmet')?.name).toBe('铁盔')
+const ARMOR_A: ArmorPieceConfig = {
+    id: 'test_armor_a', name: '测试甲', slot: 'head',
+    defense: {physical: 2, magic: 0},
+    attack: {physical: 1, magic: 0},
+    moveSpeedMultiplier: 0.9,
+    poise: 3,
+    allowedBodyFormIds: ['test_form'],
+    mesh: {id: 'helmet', color: 0xffffff},
+}
+
+const ARMOR_B: ArmorPieceConfig = {
+    id: 'test_armor_b', name: '测试乙', slot: 'head',
+    defense: {physical: 0, magic: 1},
+    attack: {physical: 0, magic: 2},
+    moveSpeedMultiplier: 1.1,
+    allowedBodyFormIds: ['test_form'],
+    mesh: {id: 'helmet', color: 0xffffff},
+}
+
+const LIMB_A: LimbPieceConfig = {
+    id: 'test_limb_a', name: '测试肢体', slot: 'head',
+    defense: {physical: 1, magic: 1},
+    attack: {physical: 0, magic: 1},
+    moveSpeedMultiplier: 1.2,
+    poise: 2,
+    allowedBodyFormIds: ['test_form'],
+    mesh: {race: 'orc', color: 0x00ff00},
+}
+
+beforeAll(() => {
+    registerArmorPresets([ARMOR_A, ARMOR_B])
+    registerLimbPresets([LIMB_A])
+})
+
+describe('体形注册目录（跨体形）', () => {
+    it('注册后可按 id 查回同一实例，并出现在全局 / 槽位查询中', () => {
+        expect(findArmorPreset('test_armor_a')).toBe(ARMOR_A)
+        expect(findLimbPreset('test_limb_a')).toBe(LIMB_A)
+        expect(allArmorPresets()).toContain(ARMOR_A)
+        expect(allLimbPresets()).toContain(LIMB_A)
+        expect(armorPiecesOfSlot('head')).toContain(ARMOR_A)
+        expect(limbPiecesOfSlot('head')).toContain(LIMB_A)
+    })
+
+    it('未知 / 缺省 id 安全返回 undefined', () => {
         expect(findArmorPreset('no_such_armor')).toBeUndefined()
         expect(findArmorPreset(undefined)).toBeUndefined()
+        expect(findLimbPreset('no_such_limb')).toBeUndefined()
+        expect(findLimbPreset(undefined)).toBeUndefined()
+    })
+
+    it('重复注册同 id 只保留最后一份（不产生重复项）', () => {
+        registerArmorPresets([{...ARMOR_A, name: '测试甲改'}])
+        expect(allArmorPresets().filter(piece => piece.id === ARMOR_A.id)).toHaveLength(1)
+        expect(findArmorPreset(ARMOR_A.id)?.name).toBe('测试甲改')
+        registerArmorPresets([ARMOR_A])
     })
 })
 
-describe('resolveArmorLoadout（存档容错）', () => {
-    it('合法装备表按槽位解析（四个槽位）', () => {
-        const resolved = resolveArmorLoadout({
-            head: 'iron_helmet', chest: 'iron_plate', arms: 'iron_bracers', legs: 'iron_greaves',
-        })
-        expect(resolved.head?.id).toBe('iron_helmet')
-        expect(resolved.chest?.id).toBe('iron_plate')
-        expect(resolved.arms?.id).toBe('iron_bracers')
-        expect(resolved.legs?.id).toBe('iron_greaves')
+describe('resolveEquipmentPieces（体形 fail-closed）', () => {
+    it('按体形过滤：其他体形的装备不生效', () => {
+        const pieces = resolveEquipmentPieces({
+            armor: {head: 'test_armor_a'},
+            limb: {head: 'test_limb_a'},
+            weapon: {},
+        }, 'other_form')
+        expect(pieces).toEqual([])
     })
 
-    it('未知 id 回退空槽（不抛错）', () => {
-        const resolved = resolveArmorLoadout({head: 'no_such_armor', chest: 'iron_plate'})
-        expect(resolved.head).toBeUndefined()
-        expect(resolved.chest?.id).toBe('iron_plate')
+    it('槽位与装备声明的 slot 不匹配时剔除', () => {
+        const pieces = resolveEquipmentPieces({
+            armor: {chest: 'test_armor_a'},
+            limb: {},
+            weapon: {},
+        }, 'test_form')
+        expect(pieces).toEqual([])
     })
 
-    it('槽位与护甲 id 不匹配时回退空槽（头盔 id 放护腿槽）', () => {
-        const resolved = resolveArmorLoadout({legs: 'mage_hood'})
-        expect(resolved.legs).toBeUndefined()
-    })
-
-    it('空 / undefined 装备表解析为空', () => {
-        expect(resolveArmorLoadout(undefined)).toEqual({})
-        expect(resolveArmorLoadout({})).toEqual({})
-    })
-})
-
-describe('totalDefenseOf', () => {
-    it('有效防御 = 基础防御 + 各槽位护甲之和', () => {
-        const resolved = resolveArmorLoadout({head: 'iron_helmet', chest: 'iron_plate'})
-        expect(totalDefenseOf({physical: 1, magic: 1}, resolved)).toEqual({physical: 6, magic: 1})
-    })
-
-    it('空装备表 = 基础防御', () => {
-        expect(totalDefenseOf(ZERO_PROFILE, resolveArmorLoadout(undefined))).toEqual(ZERO_PROFILE)
-        expect(totalDefenseOf({physical: 2, magic: 3}, {})).toEqual({physical: 2, magic: 3})
-    })
-
-    it('法系护甲叠加魔法防御', () => {
-        const resolved = resolveArmorLoadout({head: 'mage_hood', chest: 'mage_robe', legs: 'mage_leggings'})
-        expect(totalDefenseOf(ZERO_PROFILE, resolved)).toEqual({physical: 0, magic: 7})
+    it('合法护甲 + 肢体按槽位解析，未知 id 安全忽略', () => {
+        const pieces = resolveEquipmentPieces({
+            armor: {head: 'test_armor_a', chest: 'no_such_armor'},
+            limb: {head: 'test_limb_a'},
+            weapon: {},
+        }, 'test_form')
+        expect(pieces).toEqual([ARMOR_A, LIMB_A])
     })
 })
 
-describe('totalAttackOf / totalMoveSpeedOf', () => {
-    it('攻击加成 = 各槽位护甲攻击加成之和（按类别）', () => {
-        const resolved = resolveArmorLoadout({head: 'mage_hood', arms: 'battle_bracers'})
-        expect(totalAttackOf(resolved)).toEqual({physical: 2, magic: 1})
+describe('数值汇总（护甲 / 肢体同一口径）', () => {
+    it('防御 = 基础 + 逐件防御；攻击 = 逐件攻击之和', () => {
+        const base = {physical: 1, magic: 1}
+        expect(equipmentDefenseOf(base, [ARMOR_A, LIMB_A])).toEqual(
+            addDamageProfiles(addDamageProfiles(base, ARMOR_A.defense), LIMB_A.defense),
+        )
+        expect(equipmentAttackOf([ARMOR_A, ARMOR_B, LIMB_A])).toEqual({physical: 1, magic: 3})
     })
 
-    it('空装备表攻击加成为零', () => {
-        expect(totalAttackOf(resolveArmorLoadout(undefined))).toEqual(ZERO_PROFILE)
-    })
-
-    it('移速乘数 = 各槽位护甲移速乘数之积', () => {
-        const resolved = resolveArmorLoadout({chest: 'iron_plate', legs: 'swift_boots'})
-        expect(totalMoveSpeedOf(resolved)).toBeCloseTo(0.9 * 1.15, 6)
-    })
-
-    it('空装备表移速乘数 = 1；重甲满配 < 1、加速鞋 > 1', () => {
-        expect(totalMoveSpeedOf(resolveArmorLoadout(undefined))).toBe(1)
-        const heavy = resolveArmorLoadout({
-            head: 'iron_helmet', chest: 'iron_plate', arms: 'battle_bracers', legs: 'iron_greaves',
-        })
-        expect(totalMoveSpeedOf(heavy)).toBeLessThan(1)
-        expect(totalMoveSpeedOf(resolveArmorLoadout({legs: 'wind_boots'}))).toBeGreaterThan(1)
-    })
-})
-
-describe('逐项数值来源（StatTerm）', () => {
-    it('防御加值仅列出非零项并带本地化名称', () => {
-        const resolved = resolveArmorLoadout({head: 'iron_helmet', chest: 'iron_plate'})
-        expect(defenseTermsOf('physical', resolved)).toEqual([
-            {name: '铁盔', value: 2},
-            {name: '铁胸甲', value: 3},
-        ])
-        /* 铁盔 / 铁胸甲均无魔法防御 → 空列表 */
-        expect(defenseTermsOf('magic', resolved)).toEqual([])
-    })
-
-    it('攻击加值按类别筛选（法师兜帽仅魔法、战臂甲仅物理）', () => {
-        const resolved = resolveArmorLoadout({head: 'mage_hood', arms: 'battle_bracers'})
-        expect(attackTermsOf('physical', resolved)).toEqual([{name: '战臂甲', value: 2}])
-        expect(attackTermsOf('magic', resolved)).toEqual([{name: '法师兜帽', value: 1}])
-    })
-
-    it('移速乘区仅列出非 1 的装备', () => {
-        const resolved = resolveArmorLoadout({chest: 'iron_plate', legs: 'swift_boots'})
-        expect(moveSpeedTermsOf(resolved)).toEqual([
-            {name: '铁胸甲', value: 0.9},
-            {name: '疾行靴', value: 1.15},
-        ])
-    })
-
-    it('肢体与护甲共用同一来源汇总（防御 / 移速 / 韧性）', () => {
-        const resolved = resolveArmorLoadout({head: 'iron_helmet'})
-        const limbs = resolveLimbLoadout({head: 'orc_head'})
-        expect(poiseTermsOf(resolved, limbs)).toEqual([{name: '铁盔', value: 2}])
-        expect(defenseTermsOf('physical', resolved, limbs)).toEqual([
-            {name: '铁盔', value: 2},
-            {name: '兽人头颅', value: 2},
-        ])
-        expect(moveSpeedTermsOf(resolved, limbs)).toEqual([
-            {name: '铁盔', value: 0.98},
-            {name: '兽人头颅', value: 0.98},
-        ])
-    })
-
-    it('空装备表返回空列表', () => {
-        expect(defenseTermsOf('physical', resolveArmorLoadout(undefined))).toEqual([])
-        expect(attackTermsOf('physical', {})).toEqual([])
-        expect(moveSpeedTermsOf({})).toEqual([])
-        expect(poiseTermsOf({})).toEqual([])
+    it('移速乘数逐件相乘、韧性逐件相加；空列表回退基础值', () => {
+        expect(equipmentMoveSpeedOf([ARMOR_A, ARMOR_B, LIMB_A])).toBeCloseTo(0.9 * 1.1 * 1.2, 10)
+        expect(equipmentPoiseOf([ARMOR_A, LIMB_A])).toBe(5)
+        expect(equipmentDefenseOf(ZERO_PROFILE, [])).toEqual(ZERO_PROFILE)
+        expect(equipmentAttackOf([])).toEqual(ZERO_PROFILE)
+        expect(equipmentMoveSpeedOf([])).toBe(1)
+        expect(equipmentPoiseOf([])).toBe(0)
     })
 })

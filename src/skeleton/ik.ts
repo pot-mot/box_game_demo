@@ -204,7 +204,7 @@ export const solveFabrik = (
     }
 }
 
-/** 按节点配置的求解器求解链（统一入口） */
+/** 按节点配置的求解器求解链（统一入口；仅供编辑器 Gizmo 拖拽求解，生产动画不使用运行时 IK） */
 export const solveIkChain = (
     skeleton: Skeleton,
     chain: readonly SkeletonJoint[],

@@ -22,7 +22,7 @@
     4. `light` → 无受击反应（仅扣韧）。
 - **弱硬直可受状态**（`WEAK_FLINCH_RECEPTIVE_STATES = ['idle','walking','jumping','falling','interacting']`）：攻击 / 翻滚等承诺动作状态不受 `medium` 打断，但仍会被 `heavy` / 倒地打断。
 - **韧性回充**（`world.ts` 主循环）：`poiseRegenDelayTimer` 递减到 0 后，`poise` 以 `poiseRegenPerSec` 每秒恢复至 `poiseMax`；`hitImmunityTimer`（倒地/起身无敌）在主循环递减兜底。
-- **数值汇总**：`setCombatEquipment` 统一重算 `defense = baseDefense + 装备防御`、`attackBonus = baseAttack + 装备攻击加成`、`moveSpeedMultiplier = 装备移速乘数之积`、`poiseMax = basePoiseMax + totalPoiseOf(护甲, 肢体)`（并 clamp `poise`）。`basePoiseMax` 由角色配置 `CharacterConfig.poiseMax` 传入（见 `character.md`）；`baseDefense` / `baseAttack` 由面板与存档传入。
+- **数值汇总**：`setCombatEquipment` 统一重算 `defense = baseDefense + 装备防御`、`attackBonus = baseAttack + 装备攻击加成`、`moveSpeedMultiplier = 装备移速乘数之积`、`poiseMax = basePoiseMax + equipmentPoiseOf(已解析装备)`（并 clamp `poise`）。`basePoiseMax` 由角色配置 `CharacterConfig.poiseMax` 传入（见 `character.md`）；`baseDefense` / `baseAttack` 由面板与存档传入。
 - **面板状态 / 属性行公式**：面板只可编辑「当前值 / 基础值」输入框，结果 / 加值 / 乘区均为只读文本，按当前装备 / 武器选择实时计算，展示形态 `结果 | (基础值 + 逐项加值) × 逐项乘区`（状态类结果 = 最大值，置于 `当前值 / ` 之后；攻击行的加值含主手武器伤害）。「当前韧性」经 `CharacterEntitySystem.setPoise(id, value)` 写入，自动夹取到 `0..poiseMax`（受击扣除 / 延迟回充仍由战斗系统驱动）。
 - 免疫判定 `isDamageImmune(target)` 同时查翻滚无敌 `invincibleTimer` 与倒地/起身无敌 `hitImmunityTimer`；倒地与起身期间**完全免疫**（含伤害与击退），状态机期间忽略 `pendingFlinch` / `pendingKnockdown`。
 

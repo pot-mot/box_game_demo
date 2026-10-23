@@ -18,6 +18,15 @@ export const WEAPON_WALK_ARM_SWING = 0.12
 /** 基础状态 clip 关键帧烘焙采样率（fps） */
 export const CLIP_SAMPLE_FPS = 60
 
+/** 行走步态周期频率（用于步行 clip 时长与相位） */
+export const WALK_CYCLE_FREQ = 6
+
+/** 跳跃伸展动作结束时长（秒） */
+export const JUMP_EXTEND_END = 0.3
+
+/** 死亡倒下动作结束时长（秒） */
+export const FALL_END = 0.3
+
 /** 格挡 / 蓄力期间叠加下半身行走动画的最低水平速度（m/s） */
 export const ENGAGED_WALK_MIN_SPEED = 0.3
 

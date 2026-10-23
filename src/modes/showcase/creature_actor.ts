@@ -65,7 +65,7 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
     const labelHeight = bounds.max.y + 0.35
 
     /* 调试箱（物理碰撞箱 / 受击箱 / 攻击箱）：默认全隐 */
-    const debug = createActorDebug(scene, model, form.hurtProfile)
+    const debug = createActorDebug(scene, model, form.skeleton.hurtProfile)
 
     /* —— 站立 / 行走交替时间线 —— */
     let currentState: 'idle' | 'walking' = 'idle'

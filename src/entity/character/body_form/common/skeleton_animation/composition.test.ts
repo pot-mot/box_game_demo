@@ -134,3 +134,44 @@ describe('骨骼动画组合模型', () => {
         expect(animationModuleCacheKey('skel', 'v1')).toContain('v1')
     })
 })
+
+describe('单关节权重与 clip 组合源', () => {
+    const full: SkeletonAnimation = {
+        id: 'full', duration: 1, loop: false,
+        sample: progress => ({a: [progress, 0, 0], b: [0, progress, 0]}),
+    }
+    const legs: SkeletonAnimation = {
+        id: 'legs', duration: 1, loop: false,
+        sample: progress => ({b: [0, 0, progress * 2]}),
+    }
+
+    it('同层可只为部分关节贡献：列出关节按独立权重，未列出关节沿用层权重', () => {
+        const composition: AnimationComposition = {
+            id: 'joint-weight', duration: 1,
+            layers: [
+                {source: full, weight: 1, start: 0, end: 1, jointWeights: {b: 0}},
+                {source: legs, weight: 1, start: 0, end: 1, jointWeights: {b: 1}},
+            ],
+        }
+        const pose = sampleComposition(composition, 0.5)
+        expect((pose.a as readonly number[])[0]).toBeCloseTo(0.5, 8)
+        expect((pose.b as readonly number[])[1]).toBeCloseTo(0, 8)
+        expect((pose.b as readonly number[])[2]).toBeCloseTo(1, 8)
+    })
+
+    it('已烘焙 clip 可作为组合源', () => {
+        const module: AnimationModule = {
+            id: 'clip-source', nameKey: 'bone_edit.state.idle',
+            animations: [full], compositions: [],
+        }
+        const clip = bakeAnimationModule(SKELETON, module, 30).get('full')!
+        const composition: AnimationComposition = {
+            id: 'clip-mix', duration: 1,
+            layers: [{source: {clip}, weight: 1, start: 0, end: 1}],
+        }
+        const pose = sampleComposition(composition, 0.5)
+        const a = pose.a
+        if (a === undefined || !('rotation' in a)) throw new Error('clip 组合源应返回带位置的关节姿态')
+        expect(a.rotation[0]).toBeCloseTo(0.5, 2)
+    })
+})

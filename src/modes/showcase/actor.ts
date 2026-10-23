@@ -166,7 +166,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         {speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: ACTOR_SCALE},
         faction,
     )
-    const hurtProfile = bodyFormOf(init.bodyFormId).hurtProfile
+    const hurtProfile = bodyFormOf(init.bodyFormId).skeleton.hurtProfile
     /* 近战三模式分开展示副手：
      * - 单持：不装备副手武器（单持模组本身即主手单手使用）；
      * - 双持：同类武器握在左手；

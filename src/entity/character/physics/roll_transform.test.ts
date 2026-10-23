@@ -82,7 +82,7 @@ describe('翻滚根旋转与绕身体中心补偿', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         const entity = system.getAll().find(e => e.id === id)!
         const group = entity.appearanceGroup
-        const halfH = (HUMANOID_BODY_FORM.size.height * entity.config.scale) / 2
+        const halfH = (HUMANOID_BODY_FORM.state.size.height * entity.config.scale) / 2
         /* 模型原点在脚底、总高 MODEL_BASE_HEIGHT，视觉中心在本地 Y = 半高（× scale 得世界偏移基数） */
         const modelCenterOffset = (MODEL_BASE_HEIGHT * entity.config.scale) / 2
 

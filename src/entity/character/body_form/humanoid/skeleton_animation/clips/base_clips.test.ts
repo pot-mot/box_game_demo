@@ -1,4 +1,4 @@
-import {describe, it, expect, beforeAll, vi} from 'vitest'
+import {describe, it, expect} from 'vitest'
 import {Euler, Quaternion, Vector3} from 'three'
 import {buildBaseClip, getBaseClipForHoldMode, CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
@@ -8,25 +8,6 @@ import {sampleClip} from '../../../../../../skeleton/anim/sampling.ts'
 import type {BoneAnimationClip} from '../../../../../../skeleton/anim/types.ts'
 import {createCharacterSkeletonBridge} from '../../../../appearance/skeleton_bridge.ts'
 import {createHumanoidModel} from '../../body_form.ts'
-
-/** happy-dom 无 2d 上下文：stub document.createElement 的 canvas.getContext（脸部纹理绘制用） */
-const stubCanvas2d = (): void => {
-    const fakeCtx = new Proxy({}, {
-        get: (_t, prop) => {
-            if (prop === 'canvas') return null
-            return (): void => {}
-        },
-        set: () => true,
-    }) as unknown as CanvasRenderingContext2D
-    const originalCreate = document.createElement.bind(document)
-    vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
-        const el = originalCreate(tag, options)
-        if (tag === 'canvas') {
-            Object.defineProperty(el, 'getContext', {value: () => fakeCtx})
-        }
-        return el
-    })
-}
 
 /** 姿态欧拉 → 四元数（与 base_clips 相同的 XYZ 顺序） */
 const quatOf = (state: PoseState, jointId: (typeof CHARACTER_JOINT_IDS)[number]): Quaternion => {
@@ -199,10 +180,6 @@ describe('基础状态 clip 生成器', () => {
 })
 
 describe('角色模型桥接（createCharacterSkeletonBridge）', () => {
-    beforeAll(() => {
-        stubCanvas2d()
-    })
-
     it('绑定全部可动画关节（含 rightHandPivot + leftHandPivot 手部骨骼，Group 层级自动建连）', () => {
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const bridge = createCharacterSkeletonBridge(model)

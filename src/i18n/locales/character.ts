@@ -105,6 +105,34 @@ export type CharacterLocale = {
     'limb.elf_arms': string
     'limb.elf_body': string
     'limb.elf_legs': string
+    'armor.wolf_head_guard': string
+    'armor.wolf_hide': string
+    'armor.wolf_leg_wraps': string
+    'armor.wolf_claw_guard': string
+    'limb.wolf_claw_wrap': string
+    'limb.wolf_tail_guard': string
+    'limb.wolf_torso_harness': string
+    'limb.wolf_head_guard': string
+    'limb.wolf_leg_guards': string
+    'armor.horse_head_armor': string
+    'armor.horse_barding': string
+    'armor.horse_hoof_shoes': string
+    'armor.horse_leg_guards': string
+    'limb.horse_iron_legs': string
+    'limb.horse_tail_banner': string
+    'limb.horse_head_plume': string
+    'limb.horse_torso_barding': string
+    'armor.wyvern_head_crest': string
+    'armor.wyvern_scale_plate': string
+    'armor.wyvern_wing_guards': string
+    'armor.wyvern_tail_spikes': string
+    'armor.wyvern_leg_guards': string
+    'limb.wyvern_wing_claw_blade': string
+    'limb.wyvern_head_horns': string
+    'limb.wyvern_tail_blade': string
+    'limb.wyvern_wing_guard': string
+    'limb.wyvern_torso_plates': string
+    'limb.wyvern_leg_guards': string
 
     /* ── 角色面板 ── */
     'character.title': string
@@ -320,6 +348,34 @@ export const characterZh: CharacterLocale = {
     'limb.elf_arms': '精灵手臂',
     'limb.elf_body': '精灵身躯',
     'limb.elf_legs': '精灵腿脚',
+    'armor.wolf_head_guard': '狼首骨甲',
+    'armor.wolf_hide': '狼皮胸甲',
+    'armor.wolf_leg_wraps': '狼腿束带',
+    'armor.wolf_claw_guard': '狼爪护刃',
+    'limb.wolf_claw_wrap': '狼爪束甲',
+    'limb.wolf_tail_guard': '狼尾护甲',
+    'limb.wolf_torso_harness': '狼躯束具',
+    'limb.wolf_head_guard': '狼首护具',
+    'limb.wolf_leg_guards': '狼腿护具',
+    'armor.horse_head_armor': '马首面甲',
+    'armor.horse_barding': '马身具装',
+    'armor.horse_hoof_shoes': '马蹄铁',
+    'armor.horse_leg_guards': '马腿铁甲',
+    'limb.horse_iron_legs': '马铁腿甲',
+    'limb.horse_tail_banner': '马尾长缨',
+    'limb.horse_head_plume': '马首翎羽',
+    'limb.horse_torso_barding': '马躯革甲',
+    'armor.wyvern_head_crest': '龙首甲冠',
+    'armor.wyvern_scale_plate': '龙鳞胸甲',
+    'armor.wyvern_wing_guards': '龙翼护甲',
+    'armor.wyvern_tail_spikes': '龙尾棘甲',
+    'armor.wyvern_leg_guards': '龙腿鳞甲',
+    'limb.wyvern_wing_claw_blade': '龙翼爪刃',
+    'limb.wyvern_head_horns': '龙首角饰',
+    'limb.wyvern_tail_blade': '龙尾刃甲',
+    'limb.wyvern_wing_guard': '龙翼肢甲',
+    'limb.wyvern_torso_plates': '龙躯腹甲',
+    'limb.wyvern_leg_guards': '龙腿肢甲',
 
     /* ── 角色面板 ── */
     'character.title': '角色控制',
@@ -532,6 +588,34 @@ export const characterEn: CharacterLocale = {
     'limb.elf_arms': 'Elf Arms',
     'limb.elf_body': 'Elf Torso',
     'limb.elf_legs': 'Elf Legs',
+    'armor.wolf_head_guard': 'Wolf Bone Helm',
+    'armor.wolf_hide': 'Wolf Hide Vest',
+    'armor.wolf_leg_wraps': 'Wolf Leg Wraps',
+    'armor.wolf_claw_guard': 'Wolf Claw Guards',
+    'limb.wolf_claw_wrap': 'Wolf Claw Wraps',
+    'limb.wolf_tail_guard': 'Wolf Tail Guard',
+    'limb.wolf_torso_harness': 'Wolf Torso Harness',
+    'limb.wolf_head_guard': 'Wolf Head Guard',
+    'limb.wolf_leg_guards': 'Wolf Leg Guards',
+    'armor.horse_head_armor': 'Horse Faceplate',
+    'armor.horse_barding': 'Horse Barding',
+    'armor.horse_hoof_shoes': 'Horse Hoof Shoes',
+    'armor.horse_leg_guards': 'Horse Leg Armor',
+    'limb.horse_iron_legs': 'Horse Iron Legs',
+    'limb.horse_tail_banner': 'Horse Tail Banner',
+    'limb.horse_head_plume': 'Horse Head Plume',
+    'limb.horse_torso_barding': 'Horse Torso Harness',
+    'armor.wyvern_head_crest': 'Wyvern Head Crest',
+    'armor.wyvern_scale_plate': 'Wyvern Scale Plate',
+    'armor.wyvern_wing_guards': 'Wyvern Wing Guards',
+    'armor.wyvern_tail_spikes': 'Wyvern Tail Spikes',
+    'armor.wyvern_leg_guards': 'Wyvern Leg Guards',
+    'limb.wyvern_wing_claw_blade': 'Wyvern Wing Claw Blades',
+    'limb.wyvern_head_horns': 'Wyvern Head Horns',
+    'limb.wyvern_tail_blade': 'Wyvern Tail Blade',
+    'limb.wyvern_wing_guard': 'Wyvern Wing Guards',
+    'limb.wyvern_torso_plates': 'Wyvern Torso Plates',
+    'limb.wyvern_leg_guards': 'Wyvern Leg Guards',
 
     /* ── Character panel ── */
     'character.title': 'Character Control',
