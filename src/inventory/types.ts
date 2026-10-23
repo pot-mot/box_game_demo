@@ -1,18 +1,8 @@
 import type {StringLocaleKey} from '../i18n/index.ts'
+import type {EquipSlotKey} from '../character/equipment/types.ts'
 
-/** 背包装备槽位 */
-export const EQUIP_SLOTS = ['main_hand', 'off_hand', 'head', 'chest', 'arms', 'legs', 'breath'] as const
-export type EquipSlot = typeof EQUIP_SLOTS[number]
-
-export const EQUIP_SLOT_LABELS: Record<EquipSlot, StringLocaleKey> = {
-    main_hand: 'equip_slot.main_hand',
-    off_hand: 'equip_slot.off_hand',
-    head: 'equip_slot.head',
-    chest: 'equip_slot.chest',
-    arms: 'equip_slot.arms',
-    legs: 'equip_slot.legs',
-    breath: 'equip_slot.breath',
-}
+/** 背包装备槽位键（`kind:bodyPart`，由当前体形 `equipSlots` 提供；未知键安全丢弃） */
+export type EquipSlot = EquipSlotKey
 
 /** 形状旋转（0..3，顺时针 90°） */
 export const PLACEMENT_ROTATIONS = [0, 1, 2, 3] as const
@@ -39,7 +29,7 @@ export interface InventoryState {
     width: number
     height: number
     stacks: ItemStack[]
-    /** 槽位 → 物品实例 id（装备中的物品仍在 stacks 中） */
+    /** 槽位键 → 物品实例 id（装备中的物品仍在 stacks 中） */
     equipment: Partial<Record<EquipSlot, string>>
 }
 
@@ -61,3 +51,9 @@ export interface InventorySaveData {
     }>
     equipment: Partial<Record<EquipSlot, string>>
 }
+
+/** 物品装备类别（与装备域 `EquipKind` 一致；`block` 等非装备物品无此字段） */
+export type ItemEquipKind = 'limb' | 'weapon' | 'armor'
+
+/** 物品装备槽本地化名键（体形自定义部位；缺省回退 kind + bodyPart） */
+export type EquipSlotLabelKey = StringLocaleKey

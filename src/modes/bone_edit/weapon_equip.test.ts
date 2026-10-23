@@ -4,7 +4,7 @@ import {equipSkeletonWeapon, LEFT_WEAPON_MOUNT_JOINT, RIGHT_WEAPON_MOUNT_JOINT} 
 import {weaponSpecOf} from './weapon_control.ts'
 import {createJointVisuals} from '../../entity/skeleton/render/joint_groups.ts'
 import {skeletonFromDefinition} from '../../skeleton/anim/serialization.ts'
-import {buildCharacterSkeletonDefinition} from '../../entity/character/forms/humanoid/skeleton.ts'
+import {buildCharacterSkeletonDefinition} from '../../entity/character/body_form/humanoid/skeleton/skeleton.ts'
 import {weaponsOfForm} from '../../character/weapon/catalog.ts'
 import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 

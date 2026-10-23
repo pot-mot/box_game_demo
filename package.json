@@ -10,7 +10,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
-    "bake:support-hands": "node --experimental-strip-types scripts/bake_support_hands.mjs"
+    "bake:support-hands": "node --experimental-strip-types scripts/bake_support_hands.mjs",
+    "check:architecture": "node scripts/check_architecture.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.0",

@@ -1,6 +1,6 @@
 /**
  * 攻击阶段模型（仅玩法时序与中断语义）。
- * 动画不再通过参数表达——每个攻击段的骨骼动画是显式关键帧数据（`character/weapon/attack_clips/`，
+ * 动画不再通过参数表达——每个攻击段的骨骼动画是显式关键帧数据（`entity/character/body_form/humanoid/skeleton_animation/attack_clips/`，
  * 由骨骼动画系统播放）。本模块只保留阶段名、时长分摊与可中断性，供状态机与 HUD 使用。
  */
 

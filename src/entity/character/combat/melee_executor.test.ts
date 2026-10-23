@@ -2,7 +2,7 @@ import {describe, it, expect, vi} from 'vitest'
 import {Group} from 'three'
 import {testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor, shieldCoverOBB} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
-import type {CharacterModel} from '../forms/humanoid/types.ts'
+import type {CharacterModel} from '../body_form/humanoid/appearance/types.ts'
 import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
 import {findWeaponPreset} from '../../../character/weapon/catalog.ts'
 import {SHIELD_BLOCK_MEDIUM} from '../../../character/weapon/constants.ts'
@@ -382,10 +382,10 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
-        executor.setHitWindow(true, 'offhand')
+        executor.setHitWindow(true, 'off_hand')
         executor.update(0.016, combat, attacker, {} as ExecutorContext)
         expect(combat.attackedTargets.has(2)).toBe(false)
-        executor.setHitWindow(true, 'main')
+        executor.setHitWindow(true, 'main_hand')
         executor.update(0.016, combat, attacker, {} as ExecutorContext)
         expect(combat.attackedTargets.has(2)).toBe(true)
     })
@@ -418,7 +418,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
-        executor.setHitWindow(true, 'offhand')
+        executor.setHitWindow(true, 'off_hand')
         executor.update(0.016, combat, attacker, {} as ExecutorContext)
         expect(targetCombat.health).toBe(200 - 99)
     })

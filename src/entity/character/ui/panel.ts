@@ -24,9 +24,10 @@ import {DAMAGE_TYPE_LABELS} from '../../../character/combat/damage_type.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, isOriginSubStrategy, PEACE_SUB_STRATEGIES, ORIGIN_SUB_STRATEGIES, type BoxSpawnEntry, type OriginSubStrategy} from '../../../character/ai_strategy/types.ts'
 import {BOX_PRESET_IDS, isBoxPresetId, type BoxPresetId} from '../../../types/boxPreset.ts'
 import type {LockPointConfig} from '../../../character/lock_point.ts'
-import {CHARACTER_JOINT_IDS} from '../forms/humanoid/clips/base_clips.ts'
-import {buildCharacterSkeletonDefinition, humanoidJointDisplayName} from '../forms/humanoid/skeleton.ts'
+import {CHARACTER_JOINT_IDS} from '../body_form/humanoid/skeleton_animation/clips/base_clips.ts'
+import {buildCharacterSkeletonDefinition, humanoidJointDisplayName} from '../body_form/humanoid/skeleton/skeleton.ts'
 import {BODY_FORM_IDS, BODY_FORMS, bodyFormOf, type BodyForm} from '../body_form/index.ts'
+import {humanoidBodyStateOf} from '../body_form/humanoid/state/body_state.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import {localizeText, localizeTitle, appendLocalizedText, localizeApply} from '../../../i18n/dom.ts'
 
@@ -525,12 +526,12 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         equipRowEls.push({armor, limb, row, armorLabel, limbLabel})
     }
 
-    /** 按体形计划的 equipSlots 隐藏不适用装备区域（无护甲 / 肢体槽的体形整行隐藏） */
+    /** 按体形计划的 equipSlots 隐藏不适用装备区域（无对应 kind+bodyPart 的体形整行隐藏） */
     const applyEquipVisibility = (planId: string | undefined): void => {
         const slots = bodyFormOf(planId).equipSlots
         for (const entry of equipRowEls) {
-            const hasArmor = slots.armor.includes(entry.armor)
-            const hasLimb = slots.limb.includes(entry.limb)
+            const hasArmor = slots.some(slot => slot.kind === 'armor' && slot.bodyPart === entry.armor)
+            const hasLimb = slots.some(slot => slot.kind === 'limb' && slot.bodyPart === entry.limb)
             entry.armorLabel.style.display = hasArmor ? '' : 'none'
             entry.limbLabel.style.display = hasLimb ? '' : 'none'
             entry.row.style.display = hasArmor || hasLimb ? '' : 'none'
@@ -1190,7 +1191,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         speed.value = String(sel.config.speed)
         jumpH.value = String(sel.config.jumpHeight)
         scale.value = String(sel.config.scale)
-        handednessSelect.value = sel.config.handedness ?? 'right'
+        handednessSelect.value = humanoidBodyStateOf(sel.bodyState).handedness
         bodyFormSelect.value = bodyFormOf(sel.config.bodyFormId).id
         applyEquipVisibility(sel.config.bodyFormId)
 
@@ -1230,15 +1231,15 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             : ''
         updateOffhandAvailability()
         rebuildHoldModeOptions()
-        holdModeSelect.value = sel.holdMode
+        holdModeSelect.value = humanoidBodyStateOf(sel.bodyState).holdMode
 
         /* 护甲 / 肢体与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
         for (const slot of ARMOR_SLOTS) {
-            const piece = findArmorPreset(sel.combat.armor[slot])
+            const piece = findArmorPreset(sel.combat.equipment.armor[slot])
             armorSelects[slot].value = piece !== undefined && piece.slot === slot ? piece.id : ''
         }
         for (const slot of LIMB_SLOTS) {
-            const piece = findLimbPreset(sel.combat.limb[slot])
+            const piece = findLimbPreset(sel.combat.equipment.limb[slot])
             limbSelects[slot].value = piece !== undefined && piece.slot === slot ? piece.id : ''
         }
         baseDefPhys.value = formatNumber(sel.combat.baseDefense.physical)
@@ -1411,13 +1412,20 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
                     scale: parseFloat(scale.value),
-                    ...(isHandedness(handednessValue) ? {handedness: handednessValue} : {}),
+                    ...(isHandedness(handednessValue) ? {bodyState: {...cur.bodyState, handedness: handednessValue}} : {}),
                     ...poiseCfg,
                 }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
                     baseDefense: readBaseDefense(),
                     baseAttack: readBaseAttack(),
-                    armor: armorLoadout,
-                    limb: limbLoadout,
+                    equipment: {
+                        limb: limbLoadout,
+                        weapon: {
+                            ...Object.fromEntries(Object.entries(cur.combat.equipment.weapon).filter(([key]) => key !== 'main_hand' && key !== 'off_hand')),
+                            main_hand: newAttack.weaponId,
+                            ...(newOffhand !== null ? {off_hand: newOffhand.weaponId} : {}),
+                        },
+                        armor: armorLoadout,
+                    },
                 }, newOffhand)
                 /* 当前韧性：0..最大韧性（换装导致上界变化时由 setPoise 夹取） */
                 const poiseValue = parseFloat(poiseInput.value)

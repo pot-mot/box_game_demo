@@ -12,10 +12,10 @@ globalThis.document = {
 }
 
 await import('../src/entity/character/body_form/index.ts')
-const {BASE_POSE_SAMPLERS} = await import('../src/entity/character/forms/humanoid/pose_fns.ts')
-const {buildBaseClip} = await import('../src/entity/character/forms/humanoid/clips/base_clips.ts')
-const {ATTACK_CLIPS} = await import('../src/character/weapon/attack_clips/index.ts')
-const {compileAttackClip} = await import('../src/entity/character/forms/humanoid/clips/attack_clip_build.ts')
+const {BASE_POSE_SAMPLERS} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/pose_fns.ts')
+const {buildBaseClip} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/clips/base_clips.ts')
+const {ATTACK_CLIPS} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/attack_clips/index.ts')
+const {compileAttackClip} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/clips/attack_clip_build.ts')
 const {clipFromJSON} = await import('../src/skeleton/anim/serialization.ts')
 const {
     TWO_HANDED_WEAPONS,
@@ -25,9 +25,9 @@ const {
     isTwoHandedAttackClip,
     supportGripLocalOf,
     weaponOfClip,
-} = await import('../src/entity/character/forms/humanoid/clips/support_hand_bake.ts')
+} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/clips/support_hand_bake.ts')
 
-const outDir = path.resolve('src/entity/character/forms/humanoid/clips/generated')
+const outDir = path.resolve('src/entity/character/body_form/humanoid/skeleton_animation/clips/generated')
 
 const base = {}
 for (const weapon of TWO_HANDED_WEAPONS) {

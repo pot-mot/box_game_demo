@@ -26,6 +26,7 @@ dist-ssr
 # Test artifacts
 test-results/
 playwright-report/
+.vitest/
 
 # 游戏存档
 saved

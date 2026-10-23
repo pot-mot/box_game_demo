@@ -27,7 +27,7 @@ const config = (): CharacterSaveConfig => ({
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attack: {weaponId: 'long_sword', damage: 3},
+    equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {}},
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
     maxHealth: 15,

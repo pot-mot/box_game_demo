@@ -5,6 +5,7 @@
 export type CatalogLocale = {
     'item_category.weapon': string
     'item_category.armor': string
+    'item_category.limb': string
     'item_category.breath': string
     'item_category.block': string
     'item_category.consumable': string
@@ -17,6 +18,12 @@ export type CatalogLocale = {
     'equip_slot.arms': string
     'equip_slot.legs': string
     'equip_slot.breath': string
+    'equip_slot.claw': string
+    'equip_slot.torso': string
+    'equip_slot.tail': string
+    'equip_slot.hooves': string
+    'equip_slot.wing_claw': string
+    'equip_slot.wing': string
     'item.weapon_short_sword.name': string
     'item.weapon_short_sword.desc': string
     'item.item_breath_fireball.name': string
@@ -82,6 +89,7 @@ export type CatalogLocale = {
 export const catalogZh: CatalogLocale = {
     'item_category.weapon': '武器',
     'item_category.armor': '护甲',
+    'item_category.limb': '肢体',
     'item_category.breath': '龙息',
     'item_category.block': '方块',
     'item_category.consumable': '消耗品',
@@ -94,6 +102,12 @@ export const catalogZh: CatalogLocale = {
     'equip_slot.arms': '手臂',
     'equip_slot.legs': '腿部',
     'equip_slot.breath': '吐息',
+    'equip_slot.claw': '爪部',
+    'equip_slot.torso': '躯干',
+    'equip_slot.tail': '尾部',
+    'equip_slot.hooves': '蹄部',
+    'equip_slot.wing_claw': '翼爪',
+    'equip_slot.wing': '翼部',
     'item.weapon_short_sword.name': '短剑',
     'item.weapon_short_sword.desc': '短剑（轻快短兵）',
     'item.item_breath_fireball.name': '火球吐息',
@@ -159,6 +173,7 @@ export const catalogZh: CatalogLocale = {
 export const catalogEn: CatalogLocale = {
     'item_category.weapon': 'Weapon',
     'item_category.armor': 'Armor',
+    'item_category.limb': 'Limb',
     'item_category.breath': 'Dragon Breath',
     'item_category.block': 'Block',
     'item_category.consumable': 'Consumable',
@@ -171,6 +186,12 @@ export const catalogEn: CatalogLocale = {
     'equip_slot.arms': 'Arms',
     'equip_slot.legs': 'Legs',
     'equip_slot.breath': 'Breath',
+    'equip_slot.claw': 'Claw',
+    'equip_slot.torso': 'Torso',
+    'equip_slot.tail': 'Tail',
+    'equip_slot.hooves': 'Hooves',
+    'equip_slot.wing_claw': 'Wing Claw',
+    'equip_slot.wing': 'Wing',
     'item.weapon_short_sword.name': 'Short Sword',
     'item.weapon_short_sword.desc': 'Short Sword (light and quick)',
     'item.item_breath_fireball.name': 'Fireball Breath',

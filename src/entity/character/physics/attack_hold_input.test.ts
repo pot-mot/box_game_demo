@@ -49,7 +49,7 @@ const saveConfig = (weaponId: string): CharacterSaveConfig => ({
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attack: {weaponId, damage: 2},
+    equipment: {limb: {}, weapon: {main_hand: weaponId}, armor: {}},
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
     maxHealth: 20,

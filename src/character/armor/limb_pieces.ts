@@ -8,7 +8,7 @@ import type {LimbPieceConfig} from './types.ts'
  * - 数值护栏：单件逐类别防御 ≤ 2、攻击加成 ≤ 1，避免与护甲叠加后过度膨胀。
  * - 种族倾向：骷髅法抗敏捷、兽人物防物攻厚重、精灵均衡魔攻灵动。
  */
-export const LIMB_PRESETS: Record<string, LimbPieceConfig> = {
+const LIMB_PIECES: Record<string, LimbPieceConfig> = {
     /* ── 骷髅（骨白主色 / 法抗 · 敏捷） ── */
     skeleton_head: {
         id: 'skeleton_head', name: '骷髅头颅', slot: 'head',
@@ -99,3 +99,8 @@ export const LIMB_PRESETS: Record<string, LimbPieceConfig> = {
         mesh: {race: 'elf', color: 0xe8d3b0, accentColor: 0x8fbf6f},
     },
 }
+
+/** 本目录全部为人形专属外观配方；其他体形的肢体在各自 `equipment/` 分包声明 */
+export const LIMB_PRESETS: Record<string, LimbPieceConfig> = Object.fromEntries(
+    Object.entries(LIMB_PIECES).map(([id, piece]) => [id, {...piece, allowedBodyFormIds: ['humanoid']}]),
+)

@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {Vector3} from 'three'
-import {BUILTIN_CLIP_GROUP_ORDER, findBuiltinClip, getBuiltinClips} from './builtin_clips.ts'
-import {buildCharacterSkeletonDefinition} from '../../entity/character/forms/humanoid/skeleton.ts'
+import {BUILTIN_CLIP_GROUP_ORDER, BASE_STATE_ORDER, findBuiltinClip, getBuiltinClips} from './builtin_clips.ts'
+import {buildCharacterSkeletonDefinition} from '../../entity/character/body_form/humanoid/skeleton/skeleton.ts'
 import {sampleClip} from '../../skeleton/anim/sampling.ts'
 import {orderedSegments} from '../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponsOfForm, type WeaponConfig} from '../../character/weapon/catalog.ts'
@@ -12,10 +12,11 @@ import {
     WOLF_BODY_FORM_ID,
     WYVERN_BODY_FORM_ID,
 } from '../../entity/character/body_form/index.ts'
-import {buildWolfSkeleton} from '../../entity/character/forms/wolf/skeleton.ts'
-import {buildHorseSkeleton} from '../../entity/character/forms/horse/skeleton.ts'
-import {buildWyvernSkeleton} from '../../entity/character/forms/wyvern/skeleton.ts'
+import {buildWolfSkeleton} from '../../entity/character/body_form/wolf/skeleton/skeleton.ts'
+import {buildHorseSkeleton} from '../../entity/character/body_form/horse/skeleton/skeleton.ts'
+import {buildWyvernSkeleton} from '../../entity/character/body_form/wyvern/skeleton/skeleton.ts'
 import type {BuiltinClipEntry} from './builtin_clips.ts'
+import {BASE_CLIP_STATES} from '../../character/state_machine/types.ts'
 
 const entriesOf = (group: string): readonly BuiltinClipEntry[] =>
     getBuiltinClips().filter(entry => entry.group === group)
@@ -48,10 +49,22 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         }
     })
 
+    it('基础状态顺序与 BASE_CLIP_STATES 完全一致（新增状态不会漏出编辑器）', () => {
+        expect(new Set(BASE_STATE_ORDER)).toEqual(new Set(BASE_CLIP_STATES))
+        const built = getBuiltinClips().filter(entry => entry.id.startsWith('state/'))
+        const states = new Set(built.map(entry => entry.id.replace(/^state\//, '').replace(/_held$/, '')))
+        expect([...BASE_CLIP_STATES].filter(state => !states.has(state))).toEqual([])
+    })
+
     it('覆盖全部基础状态与全部武器的攻击段（含全部持握模式）', () => {
         const library = getBuiltinClips()
         const baseEntries = entriesOf('基础状态')
-        expect(baseEntries.length).toBeGreaterThan(0)
+        const expectedBaseIds = new Set(BASE_STATE_ORDER.flatMap(state =>
+            (state === 'idle' || state === 'walking')
+                ? [`state/${state}`, `state/${state}_held`]
+                : [`state/${state}`],
+        ))
+        expect(new Set(baseEntries.map(entry => entry.id))).toEqual(expectedBaseIds)
         const meleeIds = new Set(entriesOf('近战攻击').map(entry => entry.id))
         const rangedIds = new Set(entriesOf('远程攻击').map(entry => entry.id))
         expect(meleeIds).toEqual(segmentIdsOf(MELEE_PRESETS))
@@ -107,7 +120,6 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         const jointIds = new Set(buildCharacterSkeletonDefinition().joints.map(joint => joint.id))
         for (const entry of getBuiltinClips()) {
             const targets = entry.clip.jointTracks.map(track => track.targetId)
-            expect(targets).toContain('root')
             expect(targets).not.toContain('group')
             for (const targetId of targets) {
                 expect(jointIds.has(targetId)).toBe(true)

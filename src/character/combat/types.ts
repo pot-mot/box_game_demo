@@ -1,12 +1,14 @@
 import type { Faction, AttackTendency, TendencyConfig } from '../faction.ts'
 import type { AttackSegment, WeaponAttacks } from '../weapon/attack_chain.ts'
 import type { WeaponConfig } from '../weapon/catalog.ts'
+import { defaultHoldMode } from '../weapon/catalog.ts'
 import { composeClawAndBreath, type BreathRuntime } from './breath_runtime.ts'
 import type { WeaponRuntime } from '../weapon/weapon_runtime.ts'
 import type { ShieldBlockConfig } from '../weapon/constants.ts'
 import type { HoldMode } from '../weapon/hold_mode.ts'
-import type { ArmorLoadout, LimbLoadout } from '../armor/types.ts'
-import { resolveArmorLoadout, resolveLimbLoadout, totalAttackOf, totalDefenseOf, totalMoveSpeedOf, totalPoiseOf } from '../armor/catalog.ts'
+import type { EquipmentState } from '../equipment/types.ts'
+import { EMPTY_EQUIPMENT_STATE } from '../equipment/types.ts'
+import { equipmentAttackOf, equipmentDefenseOf, equipmentMoveSpeedOf, equipmentPoiseOf, resolveEquipmentPieces } from '../armor/catalog.ts'
 import { createRollSkillRuntime, type RollSkillRuntime } from './roll_skill.ts'
 import type { DamageEvent, DamageModifier } from './damage.ts'
 import { addDamageProfiles, ZERO_PROFILE, type DefenseProfile } from './defense.ts'
@@ -41,10 +43,14 @@ export type AttackResult = typeof ATTACK_RESULT_CODES[number]
  * 连段推进由段自身声明的 next 转换决定（见 `states/attacking/`）。
  */
 export interface CombatComponent {
-    /** 装备武器（含伤害 / 远程弹道数值覆写） */
+    /** 装备状态（limb / weapon / armor 分层；槽位键 = kind:bodyPart） */
+    equipment: EquipmentState
+    /** 槽位 bodyPart → 武器运行时（主手 / 副手 / 翼爪 / 吐息 …；天然武器也在此表） */
+    readonly weapons: Map<string, WeaponRuntime>
+    /** 当前驱动攻击链的主武器（= 主攻击槽位武器；无槽位体形为默认武器） */
     weapon: WeaponConfig
     /**
-     * 副手武器运行时（单持 / 双持时装备；双手共持时挂背；undefined = 无副手武器）。
+     * 副手武器运行时（双持 / 副手槽时装备；双手共持时挂背；undefined = 无副手武器）。
      * 副手不携带独立攻击链：双持连段由**主手武器类**的 `dual_wield` 链驱动，
      * 副手只提供外观、命中箱与伤害 / 击退数值（与主手同类，数值可能因模型覆写不同）。
      */
@@ -178,11 +184,7 @@ export interface CombatComponent {
     baseDefense: DefenseProfile
     /** 基础攻击加成（角色固有，存档持久化；逐类别，攻击时与武器类别匹配才计入伤害） */
     baseAttack: DamageTypeProfile
-    /** 装备的护甲（槽位 → 护甲 id；缺省 = 空槽） */
-    armor: ArmorLoadout
-    /** 装备的肢体组件（槽位 → 肢体 id；缺省 = 默认人类肢体，纯外观 + 数值） */
-    limb: LimbLoadout
-    /** 有效防御 = 基础防御 + 各护甲与肢体之和；`setCombatEquipment` 统一重算，applyDamage 按伤害事件类别取用 */
+    /** 有效防御 = 基础防御 + 全部护甲与肢体之和；`setCombatEquipment` 统一重算，applyDamage 按伤害事件类别取用 */
     defense: DefenseProfile
     /** 有效攻击加成 = 基础攻击 + 各护甲与肢体之和（攻击时与武器类别匹配才计入伤害） */
     attackBonus: DamageTypeProfile
@@ -211,10 +213,12 @@ export interface CombatComponent {
 }
 
 /**
- * 换装/数值覆写变更：整体替换武器运行时（攻击链同步跟随）。
+ * 换装/数值覆写变更：整体替换主攻击武器运行时（攻击链同步跟随）。
+ * `bodyPart` 提供时同步写入槽位武器表（如 `main_hand` / `wing_claw`）。
  * `holdMode` 供盾牌来源重解析：双手共持时副手武器挂背、其盾不再计为可用盾。
  */
-export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime, holdMode?: HoldMode): void => {
+export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime, holdMode?: HoldMode, bodyPart?: string): void => {
+    if (bodyPart !== undefined) c.weapons.set(bodyPart, runtime)
     c.weapon = runtime.weapon
     c.baseAttacks = runtime.attacks
     /* 换武器 / 换持握模式后必须重新组合吐息重击链，否则已装备的吐息会被静默丢弃 */
@@ -243,6 +247,8 @@ export const setCombatAttackSet = (
 /** 设置 / 卸下吐息模组，并重建“主武器轻链 + 吐息重链”的组合攻击链 */
 export const setCombatBreath = (c: CombatComponent, breath: BreathRuntime | undefined): void => {
     c.breath = breath
+    if (breath === undefined) c.weapons.delete('breath')
+    else c.weapons.set('breath', {weapon: breath.module, holdMode: defaultHoldMode(breath.module), attacks: breath.attacks})
     const composed = composeClawAndBreath(c.baseAttacks, breath)
     c.attacks = composed.attacks
     c.attackWeapons = composed.attackWeapons
@@ -252,8 +258,10 @@ export const setCombatBreath = (c: CombatComponent, breath: BreathRuntime | unde
 }
 
 /** 变更副手武器（undefined = 卸下；双持可用性判定见 world.ts 的 setHoldMode） */
-export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | undefined, holdMode?: HoldMode): void => {
+export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | undefined, holdMode?: HoldMode, bodyPart = 'off_hand'): void => {
     c.offhand = runtime
+    if (runtime === undefined) c.weapons.delete(bodyPart)
+    else c.weapons.set(bodyPart, runtime)
     updateShieldBlock(c, holdMode)
 }
 
@@ -282,26 +290,24 @@ export const updateShieldBlock = (c: CombatComponent, holdMode?: HoldMode): void
 }
 
 /**
- * 变更基础防御 / 基础攻击 / 护甲 / 肢体：校验装备表并重算有效防御、有效攻击加成与移速乘数
- * （未知 id 安全回退空槽，不抛错）。肢体 / 基础攻击缺省（undefined）表示保持原值不变。
+ * 变更基础防御 / 基础攻击 / 装备状态：按当前体形校验装备并重算有效防御、有效攻击加成与移速乘数
+ * （未知 id / 部位或体形不匹配安全丢弃，不抛错）。`baseAttack` 缺省（undefined）表示保持原值不变。
  */
 export const setCombatEquipment = (
     c: CombatComponent,
     baseDefense: DefenseProfile,
-    armor: ArmorLoadout,
-    limb?: LimbLoadout,
+    equipment: EquipmentState,
+    bodyFormId: string,
     baseAttack?: DamageTypeProfile,
 ): void => {
     c.baseDefense = baseDefense
-    c.armor = armor
-    if (limb !== undefined) c.limb = limb
+    c.equipment = equipment
     if (baseAttack !== undefined) c.baseAttack = baseAttack
-    const resolvedArmor = resolveArmorLoadout(c.armor)
-    const resolvedLimb = resolveLimbLoadout(c.limb)
-    c.defense = totalDefenseOf(baseDefense, resolvedArmor, resolvedLimb)
-    c.attackBonus = addDamageProfiles(c.baseAttack, totalAttackOf(resolvedArmor, resolvedLimb))
-    c.moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
-    c.poiseMax = c.basePoiseMax + totalPoiseOf(resolvedArmor, resolvedLimb)
+    const pieces = resolveEquipmentPieces(equipment, bodyFormId)
+    c.defense = equipmentDefenseOf(baseDefense, pieces)
+    c.attackBonus = addDamageProfiles(c.baseAttack, equipmentAttackOf(pieces))
+    c.moveSpeedMultiplier = equipmentMoveSpeedOf(pieces)
+    c.poiseMax = c.basePoiseMax + equipmentPoiseOf(pieces)
     if (c.poise > c.poiseMax) c.poise = c.poiseMax
 }
 
@@ -316,6 +322,8 @@ export const createCombatComponent = (
 ): CombatComponent => {
     const basePoiseMax = attrs.poiseMax ?? DEFAULT_POISE_MAX
     const combat: CombatComponent = {
+        equipment: EMPTY_EQUIPMENT_STATE,
+        weapons: new Map(),
         weapon: runtime.weapon,
         offhand: undefined,
         attacks: runtime.attacks,
@@ -368,8 +376,6 @@ export const createCombatComponent = (
         isDead: false,
         baseDefense: ZERO_PROFILE,
         baseAttack: ZERO_PROFILE,
-        armor: {},
-        limb: {},
         defense: ZERO_PROFILE,
         attackBonus: ZERO_PROFILE,
         moveSpeedMultiplier: 1,

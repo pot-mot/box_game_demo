@@ -10,7 +10,6 @@ import {setupFragmentEntities} from '../../../entity/fragment/common/physics/wor
 import {setupCharacterEntities} from '../../../entity/character/physics/world.ts'
 import type {EntityInfoSource} from '../../../entity/box/base/types/entity_info.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
-import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {OriginSubStrategy} from '../../../character/ai_strategy/origin.ts'
 import {createFixedStepStepper} from '../../../physics/fixed_step.ts'
@@ -39,7 +38,7 @@ import {
 type SteppableSystem = EntityInfoSource & {readonly preSync?: (dt: number, time: number) => void}
 
 interface UnitSpec {
-    readonly attack: AttackConfig
+    readonly weaponId: string
     readonly strategy: CombatSubStrategy
     readonly origin: OriginSubStrategy
 }
@@ -50,18 +49,18 @@ interface UnitSpec {
  * 原点策略覆盖四档（居民 / 战斗者 / 狩猎者 / 漫游者），观察领地迁移差异。
  */
 const AI_UNITS: readonly UnitSpec[] = [
-    {attack: {weaponId: 'short_sword', damage: 4}, strategy: 'aggressive', origin: 'resident'},
-    {attack: {weaponId: 'war_hammer', damage: 6}, strategy: 'aggressive', origin: 'fighter'},
-    {attack: {weaponId: 'spear', damage: 5}, strategy: 'tactical', origin: 'hunter'},
-    {attack: {weaponId: 'longbow', damage: 3, ranged: {range: 12, bulletSpeed: 22, bulletKnockback: 3, bulletLifetime: 3}}, strategy: 'tactical', origin: 'roamer'},
-    {attack: {weaponId: 'staff', damage: 4, ranged: {range: 10, bulletSpeed: 16, bulletKnockback: 2, bulletLifetime: 2.5}}, strategy: 'cowardly', origin: 'resident'},
+    {weaponId: 'short_sword', strategy: 'aggressive', origin: 'resident'},
+    {weaponId: 'war_hammer', strategy: 'aggressive', origin: 'fighter'},
+    {weaponId: 'spear', strategy: 'tactical', origin: 'hunter'},
+    {weaponId: 'longbow', strategy: 'tactical', origin: 'roamer'},
+    {weaponId: 'staff', strategy: 'cowardly', origin: 'resident'},
 ]
 
 const makeConfig = (faction: number, unit: UnitSpec): CharacterSaveConfig => ({
     speed: AI_CHARACTER_SPEED,
     jumpHeight: AI_CHARACTER_JUMP_HEIGHT,
     scale: 1,
-    attack: unit.attack,
+    equipment: {limb: {}, weapon: {main_hand: unit.weaponId}, armor: {}},
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction,
     maxHealth: AI_CHARACTER_MAX_HEALTH,

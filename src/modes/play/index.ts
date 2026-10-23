@@ -13,6 +13,7 @@ import {createPlayerHUD} from './player_hud.ts'
 import {createDeathScreen} from './death_screen.ts'
 import {orderedSegments, segmentDisplayName} from '../../character/weapon/attack_chain.ts'
 import {HOLD_MODE_LABELS} from '../../character/weapon/hold_mode.ts'
+import {humanoidBodyStateOf} from '../../entity/character/body_form/humanoid/state/body_state.ts'
 import {weaponDisplayName} from '../../character/weapon/catalog.ts'
 import {translate} from '../../i18n/index.ts'
 import {segmentCooldownRemaining} from '../../character/combat/attack_runtime.ts'
@@ -190,7 +191,7 @@ export const setupPlayMode = (
                 timers,
                 skillTimers,
                 weaponLabel: weaponDisplayName(player.combat.weapon),
-                holdModeLabel: translate(HOLD_MODE_LABELS[player.holdMode]),
+                holdModeLabel: translate(HOLD_MODE_LABELS[humanoidBodyStateOf(player.bodyState).holdMode]),
                 charge: player.combat.attackCharge,
                 charging: player.combat.attackHolding || player.combat.attackCharge > 0,
             })

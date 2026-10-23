@@ -93,7 +93,6 @@ describe('validateSaveData', () => {
             {type: 'fragment/common', config: {mass: 0.1, friction: 0.3, lifetime: 5, maxLifetime: 5}, data: {renderVertices: [0, 0, 0, 1, 1, 1, 1, 0, 0], renderIndices: [0, 1, 2], hullVertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]], hullFaces: [[0, 1, 2]], centroid: [0, 0, 0], massRatio: 1, boxSize: [1, 1, 1]}},
             {type: 'character', config: {
                 speed: 6, jumpHeight: 2, scale: 1,
-                attack: {weaponId: 'long_sword', damage: 3, cooldown: 0.5},
                 tendency: {tendencyId: 'hostileExceptSelf'},
                 faction: 0, maxHealth: 15, isPlayer: false,
             }, health: 15},
@@ -156,7 +155,6 @@ describe('validateSaveData', () => {
                 type: 'character',
                 config: {
                     speed: 6, jumpHeight: 2, scale: 1,
-                    attack: {weaponId: 'long_sword', damage: 3, cooldown: 0.5},
                     tendency: {tendencyId: 'hostileExceptSelf'},
                     faction: 0, maxHealth: 15,
                 },
@@ -197,20 +195,18 @@ describe('validateSaveData', () => {
             expect(result.entities[0].config.isPlayer).toBe(false)
             expect(result.entities[0].config.navEnabled).toBe(true)
             expect(result.entities[0].config.tendency.tendencyId).toBe('hostileExceptSelf')
-            expect(result.entities[0].config.attack.weaponId).toBe('long_sword')
-            expect(result.entities[0].health).toBe(15)
+                        expect(result.entities[0].health).toBe(15)
             expect(result.entities[0].position).toEqual([0, 0, 0])
             expect(result.entities[0].quaternion).toEqual([0, 0, 0, 1])
         }
     })
 
-    it('character 基础防御 / 护甲 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
+    it('character 装备状态 — 合法值保留，非法结构安全回退空装备（不抛错）', () => {
         const characterConfig = (extra: Record<string, unknown>) => ({
             entities: [{
                 type: 'character',
                 config: {
                     speed: 6, jumpHeight: 2, scale: 1,
-                    attack: {weaponId: 'long_sword', damage: 3},
                     tendency: {tendencyId: 'hostileExceptSelf'},
                     faction: 0, maxHealth: 15, isPlayer: false,
                     ...extra,
@@ -221,30 +217,66 @@ describe('validateSaveData', () => {
 
         const valid = validateSaveData(characterConfig({
             defense: {physical: 2, magic: 1},
-            armor: {head: 'iron_helmet', chest: 'iron_plate', arms: 'iron_bracers', legs: 'iron_greaves'},
+            equipment: {
+                limb: {arms: 'orc_arms'},
+                weapon: {main_hand: 'long_sword', off_hand: 'shield_small'},
+                armor: {head: 'iron_helmet'},
+            },
         }))
         const e0 = valid.entities[0]
         if (e0.type === 'character') {
             expect(e0.config.defense).toEqual({physical: 2, magic: 1})
-            expect(e0.config.armor).toEqual({head: 'iron_helmet', chest: 'iron_plate', arms: 'iron_bracers', legs: 'iron_greaves'})
+            expect(e0.config.equipment).toEqual({
+                limb: {arms: 'orc_arms'},
+                weapon: {main_hand: 'long_sword', off_hand: 'shield_small'},
+                armor: {head: 'iron_helmet'},
+            })
         }
 
-        /* 未知护甲 id 属于运行时容错范畴：校验层保留字符串，加载时由 resolveArmorLoadout 回退空槽 */
-        const unknownId = validateSaveData(characterConfig({armor: {chest: 'no_such_armor'}}))
+        /* 未知装备 id 属于运行时容错范畴：校验层保留字符串，加载时由装备解析层剔除 */
+        const unknownId = validateSaveData(characterConfig({equipment: {armor: {chest: 'no_such_armor'}}}))
         const e1 = unknownId.entities[0]
         if (e1.type === 'character') {
-            expect(e1.config.armor?.chest).toBe('no_such_armor')
+            expect(e1.config.equipment?.armor.chest).toBe('no_such_armor')
         }
 
-        /* 负防御 / 非对象结构：整体回退 undefined，不抛错 */
+        /* 负防御 / 非对象结构：整体回退 undefined / 空装备，不抛错 */
         expect(() => validateSaveData(characterConfig({defense: {physical: -1, magic: 0}}))).not.toThrow()
         expect(() => validateSaveData(characterConfig({defense: 5}))).not.toThrow()
-        expect(() => validateSaveData(characterConfig({armor: {head: 42}}))).not.toThrow()
-        const invalid = validateSaveData(characterConfig({defense: 5, armor: {head: 42}}))
+        expect(() => validateSaveData(characterConfig({equipment: {armor: {head: 42}}}))).not.toThrow()
+        const invalid = validateSaveData(characterConfig({defense: 5, equipment: {armor: {head: 42}}}))
         const e2 = invalid.entities[0]
         if (e2.type === 'character') {
             expect(e2.config.defense).toBeUndefined()
-            expect(e2.config.armor).toBeUndefined()
+            expect(e2.config.equipment).toEqual({limb: {}, weapon: {}, armor: {}})
+        }
+    })
+
+    it('character 体形专属状态 — 合法键值保留，非法结构安全回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        const valid = validateSaveData(characterConfig({bodyState: {holdMode: 'dual_wield', handedness: 'left'}}))
+        const e0 = valid.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.config.bodyState).toEqual({holdMode: 'dual_wield', handedness: 'left'})
+        }
+
+        expect(() => validateSaveData(characterConfig({bodyState: {holdMode: 42}}))).not.toThrow()
+        const invalid = validateSaveData(characterConfig({bodyState: {holdMode: 42}}))
+        const e1 = invalid.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.bodyState).toBeUndefined()
         }
     })
 
@@ -254,7 +286,6 @@ describe('validateSaveData', () => {
                 type: 'character',
                 config: {
                     speed: 6, jumpHeight: 2, scale: 1,
-                    attack: {weaponId: 'long_sword', damage: 3},
                     tendency: {tendencyId: 'hostileExceptSelf'},
                     faction: 0, maxHealth: 15, isPlayer: false,
                     ...extra,
@@ -279,46 +310,12 @@ describe('validateSaveData', () => {
         }
     })
 
-    it('character 肢体组件 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
-        const characterConfig = (extra: Record<string, unknown>) => ({
-            entities: [{
-                type: 'character',
-                config: {
-                    speed: 6, jumpHeight: 2, scale: 1,
-                    attack: {weaponId: 'long_sword', damage: 3},
-                    tendency: {tendencyId: 'hostileExceptSelf'},
-                    faction: 0, maxHealth: 15, isPlayer: false,
-                    ...extra,
-                },
-                health: 15,
-            }],
-        })
-
-        /* 四槽位 roundtrip；未知肢体 id 属于运行时容错范畴（校验层保留字符串） */
-        const valid = validateSaveData(characterConfig({
-            limb: {head: 'orc_head', arms: 'skeleton_arms', body: 'elf_body', legs: 'orc_legs'},
-        }))
-        const e0 = valid.entities[0]
-        if (e0.type === 'character') {
-            expect(e0.config.limb).toEqual({head: 'orc_head', arms: 'skeleton_arms', body: 'elf_body', legs: 'orc_legs'})
-        }
-
-        /* 非对象 / 值类型错误：整体回退 undefined，不抛错 */
-        expect(() => validateSaveData(characterConfig({limb: {head: 42}}))).not.toThrow()
-        const invalid = validateSaveData(characterConfig({limb: {head: 42}}))
-        const e1 = invalid.entities[0]
-        if (e1.type === 'character') {
-            expect(e1.config.limb).toBeUndefined()
-        }
-    })
-
     it('character 锁定点 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
         const characterConfig = (extra: Record<string, unknown>) => ({
             entities: [{
                 type: 'character',
                 config: {
                     speed: 6, jumpHeight: 2, scale: 1,
-                    attack: {weaponId: 'long_sword', damage: 3},
                     tendency: {tendencyId: 'hostileExceptSelf'},
                     faction: 0, maxHealth: 15, isPlayer: false,
                     ...extra,
@@ -359,7 +356,6 @@ describe('validateSaveData', () => {
                 type: 'character',
                 config: {
                     speed: 6, jumpHeight: 2, scale: 1,
-                    attack: {weaponId: 'long_sword', damage: 3},
                     tendency: {tendencyId: 'hostileExceptSelf'},
                     faction: 0, maxHealth: 15, isPlayer: false,
                     ...extra,
@@ -408,7 +404,6 @@ describe('validateSaveData', () => {
                 type: 'character',
                 config: {
                     speed: 6, jumpHeight: 2, scale: 1,
-                    attack: {weaponId: 'long_sword', damage: 3},
                     tendency: {tendencyId: 'hostileExceptSelf'},
                     faction: 0, maxHealth: 15, isPlayer: false,
                     ...extra,
@@ -452,71 +447,14 @@ describe('validateSaveData', () => {
         }
     })
 
-    it('character 持握模式 / 副手武器 — 可选字段：合法值保留，非法结构安全回退 undefined（不抛错）', () => {
-        const characterConfig = (extra: Record<string, unknown>) => ({
-            entities: [{
-                type: 'character',
-                config: {
-                    speed: 6, jumpHeight: 2, scale: 1,
-                    attack: {weaponId: 'long_sword', damage: 3},
-                    tendency: {tendencyId: 'hostileExceptSelf'},
-                    faction: 0, maxHealth: 15, isPlayer: false,
-                    ...extra,
-                },
-                health: 15,
-            }],
-        })
-
-        const valid = validateSaveData(characterConfig({
-            holdMode: 'dual_wield',
-            offhand: {weaponId: 'short_sword', damage: 2},
-        }))
-        const e0 = valid.entities[0]
-        if (e0.type === 'character') {
-            expect(e0.config.holdMode).toBe('dual_wield')
-            expect(e0.config.offhand).toEqual({weaponId: 'short_sword', damage: 2})
-        }
-
-        /* 盾牌作为主手 / 副手武器：id 属已知预设，校验层原样往返，不破坏格挡能力 */
-        const shield = validateSaveData(characterConfig({
-            attack: {weaponId: 'shield_medium', damage: 3},
-            holdMode: 'one_handed',
-            offhand: {weaponId: 'shield_small', damage: 2},
-        }))
-        const es = shield.entities[0]
-        if (es.type === 'character') {
-            expect(es.config.attack.weaponId).toBe('shield_medium')
-            expect(es.config.offhand).toEqual({weaponId: 'shield_small', damage: 2})
-        }
-
-        /* 未知武器 id 属于运行时容错范畴：校验层保留字符串，world.add 加载时安全丢弃 */
-        const unknownId = validateSaveData(characterConfig({offhand: {weaponId: 'no_such_weapon'}}))
-        const e1 = unknownId.entities[0]
-        if (e1.type === 'character') {
-            expect(e1.config.offhand?.weaponId).toBe('no_such_weapon')
-        }
-
-        /* 非法持握模式 / 非法副手结构：回退 undefined，不抛错 */
-        expect(() => validateSaveData(characterConfig({holdMode: 'nope'}))).not.toThrow()
-        expect(() => validateSaveData(characterConfig({offhand: 5}))).not.toThrow()
-        expect(() => validateSaveData(characterConfig({offhand: {weaponId: 42}}))).not.toThrow()
-        const invalid = validateSaveData(characterConfig({holdMode: 'nope', offhand: {weaponId: 42}}))
-        const e2 = invalid.entities[0]
-        if (e2.type === 'character') {
-            expect(e2.config.holdMode).toBeUndefined()
-            expect(e2.config.offhand).toBeUndefined()
-        }
-    })
-
-    it('character 旧存档缺 defense / armor / lockPoints / holdMode / offhand 字段：缺省为 undefined', () => {
+    it('character 缺省字段：defense / equipment / lockPoints / bodyState 均为缺省值', () => {
         const result = validateSaveData({entities: [{type: 'character'}]})
         const entity = result.entities[0]
         if (entity.type === 'character') {
             expect(entity.config.defense).toBeUndefined()
-            expect(entity.config.armor).toBeUndefined()
+            expect(entity.config.equipment).toEqual({limb: {}, weapon: {}, armor: {}})
             expect(entity.config.lockPoints).toBeUndefined()
-            expect(entity.config.holdMode).toBeUndefined()
-            expect(entity.config.offhand).toBeUndefined()
+            expect(entity.config.bodyState).toBeUndefined()
         }
     })
 
@@ -573,8 +511,8 @@ describe('validateSaveData', () => {
         const result = validateSaveData(data)
         if (result.entities[0].type === 'character') {
             expect(result.entities[0].config.scale).toBe(1)
-            /* attack 缺失 → 默认武器配置（不会因旧字段崩溃） */
-            expect(result.entities[0].config.attack.weaponId).toBe('long_sword')
+            /* equipment 缺失 → 空装备（天然 / 默认武器由运行时按体形补齐） */
+            expect(result.entities[0].config.equipment).toEqual({limb: {}, weapon: {}, armor: {}})
         }
     })
 

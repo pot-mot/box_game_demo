@@ -6,8 +6,6 @@ import {FragmentConfigSchema} from '../entity/fragment/common/validation.ts'
 import {DEFAULT_TERRAIN_CONFIG} from '../entity/terrain/base/validation.ts'
 import {DEFAULT_FRAGMENT_CONFIG} from '../entity/fragment/common/validation.ts'
 import {CHARACTER_CONFIG_DEFAULTS} from '../entity/character/constants.ts'
-import {HOLD_MODES} from '../character/weapon/hold_mode.ts'
-import {HANDEDNESS} from '../character/handedness.ts'
 import {SURFACE_MATERIAL_IDS} from '../render/materials/ids.ts'
 import {BUILDING_PROP_KINDS} from '../entity/building_generator/props/kinds.ts'
 import {BREAKABLE_SOURCES} from '../entity/interactable/kinds.ts'
@@ -183,31 +181,14 @@ const SavableItem = z.object({
     quaternion: Quat,
 })
 
-/* 攻击配置：装备武器 id + 数值覆写；动作/时长/动画由武器模组的攻击链决定，不在此描述。
-   宽松校验（武器 id 不做白名单硬校验）：未知武器 id 由运行时回退默认武器，旧档缺字段则安全回退默认配置 */
-const RangedOverrideSchema = z.object({
-    range: z.number(),
-    bulletSpeed: z.number(),
-    bulletKnockback: z.number(),
-    bulletLifetime: z.number(),
-})
-
-/* 蓄力调参覆写（满蓄力倍率 % / 最长蓄力时间 s）：非法结构由运行时安全回退武器预设，不抛错 */
-const ChargeOverrideSchema = z.object({
-    maxChargeMultiplier: z.number().optional(),
-    maxChargeTime: z.number().optional(),
-}).optional().catch(undefined)
-
-const AttackConfigSchema = z.object({
-    weaponId: z.string(),
-    damage: z.number().optional(),
-    cooldown: z.number().optional(),
-    charge: ChargeOverrideSchema,
-    ranged: RangedOverrideSchema.optional(),
-})
-
-/* 副手武器配置：结构非法整体回退 undefined（运行时无副手）；未知武器 id 由 world.add 安全丢弃 */
-const OffhandConfigSchema = AttackConfigSchema.optional().catch(undefined)
+/* 装备状态：limb / weapon / armor 三层的 槽位 bodyPart → 物品 id 映射。
+   宽松校验：未知 id / 体形不匹配由运行时解析层安全剔除，不在此做白名单硬校验。 */
+const EquipRecordSchema = z.record(z.string(), z.string()).catch({}).default({})
+const EquipmentStateSchema = z.object({
+    limb: EquipRecordSchema,
+    weapon: EquipRecordSchema,
+    armor: EquipRecordSchema,
+}).catch({limb: {}, weapon: {}, armor: {}}).default({limb: {}, weapon: {}, armor: {}})
 
 const TendencyConfigSchema = z.object({
     tendencyId: z.enum(['hostileAll', 'hostileExceptSelf', 'hostileTo', 'hostileExcept', 'pacifist']),
@@ -226,21 +207,8 @@ const BaseAttackProfileSchema = z.object({
     magic: z.number().min(0).default(0),
 }).optional().catch(undefined)
 
-/* 护甲装备表：槽位 → 护甲 id；非法结构整体回退 undefined（运行时空护甲），未知 id 由运行时回退空槽 */
-const ArmorLoadoutSchema = z.object({
-    head: z.string().optional(),
-    chest: z.string().optional(),
-    arms: z.string().optional(),
-    legs: z.string().optional(),
-}).optional().catch(undefined)
-
-/* 肢体装备表：槽位 → 肢体 id；非法结构整体回退 undefined（运行时默认人类肢体），未知 id 由运行时回退空槽 */
-const LimbLoadoutSchema = z.object({
-    head: z.string().optional(),
-    arms: z.string().optional(),
-    body: z.string().optional(),
-    legs: z.string().optional(),
-}).optional().catch(undefined)
+/* 体形专属状态：不透明键值（人形解释 holdMode / handedness）；非法结构回退空对象 */
+const BodyStateSchema = z.record(z.string(), z.string()).optional().catch(undefined)
 
 /* 额外锁定点：关节 id + 关节本地偏移；非法结构整体回退 undefined（运行时仅保留默认身体中心点），不抛错 */
 const LockPointSchema = z.object({
@@ -250,7 +218,6 @@ const LockPointSchema = z.object({
 const LockPointsSchema = z.array(LockPointSchema).optional().catch(undefined)
 
 /** character 存档共享默认值（供内联 schema .default() 和外层 CHARACTER_SAVE_CONFIG_DEFAULTS 共用） */
-const CHARACTER_SAVE_ATTACK_DEFAULT = {weaponId: 'long_sword', damage: 3}
 const CHARACTER_SAVE_TENDENCY_DEFAULT = {tendencyId: 'hostileExceptSelf' as const}
 
 const CharacterConfigInner = z.object({
@@ -259,19 +226,12 @@ const CharacterConfigInner = z.object({
     scale: z.number().positive().default(CHARACTER_CONFIG_DEFAULTS.scale),
     peaceStrategy: z.enum(['patrol', 'build']).optional(),
     combatStrategy: z.enum(['tactical', 'aggressive', 'cowardly']).optional(),
-    /* 持握模式：非法值安全回退 undefined（由运行时按武器默认模式处理），不抛错 */
-    holdMode: z.enum(HOLD_MODES).optional().catch(undefined),
-    /* 惯用手：非法值安全回退 undefined（运行时按右撇子处理），不抛错 */
-    handedness: z.enum(HANDEDNESS).optional().catch(undefined),
-    attack: AttackConfigSchema.default(CHARACTER_SAVE_ATTACK_DEFAULT),
-    offhand: OffhandConfigSchema,
     tendency: TendencyConfigSchema.default(CHARACTER_SAVE_TENDENCY_DEFAULT),
     faction: z.number().default(0),
     maxHealth: z.number().positive().default(100),
     defense: DefenseProfileSchema,
     baseAttack: BaseAttackProfileSchema,
-    armor: ArmorLoadoutSchema,
-    limb: LimbLoadoutSchema,
+    equipment: EquipmentStateSchema,
     lockPoints: LockPointsSchema,
     /* 韧性 / 倒地属性：非法值安全回退 undefined（运行时用默认），不抛错 */
     poiseMax: z.number().positive().optional().catch(undefined),
@@ -281,7 +241,8 @@ const CharacterConfigInner = z.object({
     getUpDuration: z.number().min(0).optional().catch(undefined),
     /* 体形计划 id：非法值安全回退 undefined（运行时回退 humanoid），未知 id 由 bodyFormOf 安全回退 */
     bodyFormId: z.string().optional().catch(undefined),
-    breathModuleId: z.string().optional().catch(undefined),
+    /* 体形专属状态（人形 holdMode / handedness） */
+    bodyState: BodyStateSchema,
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),
     /* 行为原点策略 / 间隔 / 追击半径：非法值安全回退 undefined（运行时用默认），不抛错 */
@@ -299,10 +260,10 @@ const CHARACTER_SAVE_CONFIG_DEFAULTS = {
     speed: CHARACTER_CONFIG_DEFAULTS.speed,
     jumpHeight: CHARACTER_CONFIG_DEFAULTS.jumpHeight,
     scale: CHARACTER_CONFIG_DEFAULTS.scale,
-    attack: CHARACTER_SAVE_ATTACK_DEFAULT,
     tendency: CHARACTER_SAVE_TENDENCY_DEFAULT,
     faction: 0,
     maxHealth: 100,
+    equipment: {limb: {}, weapon: {}, armor: {}},
     isPlayer: false,
     navEnabled: true,
 }

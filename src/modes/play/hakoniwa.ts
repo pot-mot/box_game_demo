@@ -2,7 +2,7 @@ import type {CharacterEntitySystem} from '../../entity/character/physics/world.t
 import type {ItemEntityContext} from '../../entity/item/types.ts'
 import type {InteractableContext, InteractableEntity} from '../../entity/interactable/types.ts'
 import type {BuildingGeneratorContext} from '../../entity/building_generator/types/index.ts'
-import {EQUIP_SLOTS, type EquipSlot, type InventoryState} from '../../inventory/types.ts'
+import type {EquipSlot, InventoryState} from '../../inventory/types.ts'
 import {
     addItem,
     equipStack,
@@ -13,10 +13,11 @@ import {
     moveStack,
     removeAt,
     unequipSlot,
+    equipItemIdOf,
 } from '../../inventory/index.ts'
 import {getInputRegistry} from '../../input/registry.ts'
-import {DEFAULT_WEAPON_ID} from '../../character/weapon/catalog.ts'
-import type {ArmorLoadout} from '../../character/armor/types.ts'
+import {equipSlotKey, withEquipmentAt, type EquipmentState} from '../../character/equipment/types.ts'
+import type {EquipSlotDef} from '../../character/equipment/types.ts'
 import {bodyFormOf} from '../../entity/character/body_form/index.ts'
 import {createInventoryPanel, type InventoryPanel} from './inventory_ui/panel.ts'
 import {createContainerPanel, type ContainerPanel} from './container_ui/panel.ts'
@@ -51,18 +52,36 @@ export const setupHakoniwa = (
     const input = getInputRegistry()
     const inventory: InventoryState = inventoryFromSave(saved?.inventory)
     const knownTeleports = new Set<string>(saved?.knownTeleports ?? [])
+
+    const playerForm = (): ReturnType<typeof bodyFormOf> | undefined => {
+        const player = characterSystem.getPlayerCharacter()
+        return player !== undefined ? bodyFormOf(player.config.bodyFormId) : undefined
+    }
+    const allowedSlots = (): readonly EquipSlotDef[] => playerForm()?.equipSlots ?? []
+    const slotKeys = (): readonly EquipSlot[] => allowedSlots().map(slot => equipSlotKey(slot.kind, slot.bodyPart))
+    const equipContext = () => {
+        const form = playerForm()
+        return {bodyFormId: form?.id, allowedSlots: slotKeys()}
+    }
+
     const panel: InventoryPanel = createInventoryPanel({
         getInventory: () => inventory,
+        getSlots: () => allowedSlots(),
         onMove: (instanceId, placement) => moveStack(inventory, instanceId, placement),
         onEquip: (instanceId, slot) => {
-            const player = characterSystem.getPlayerCharacter()
-            const bodyFormId = player !== undefined ? bodyFormOf(player.config.bodyFormId).id : undefined
             if (slot === undefined) {
                 const def = findItemDef(findStack(inventory, instanceId)?.defId ?? '')
-                const target: EquipSlot = def?.category === 'weapon' ? 'main_hand' : (def?.equipSlot ?? 'main_hand')
-                return equipStack(inventory, instanceId, target, {bodyFormId})
+                const form = playerForm()
+                if (def === undefined || form === undefined) return false
+                const fallback = def.equipSlot !== undefined
+                    ? equipSlotKey(def.equipKind ?? (def.category === 'weapon' ? 'weapon' : def.category === 'limb' ? 'limb' : 'armor'), def.equipSlot)
+                    : (form.equipSlots.find(candidate => candidate.kind === 'weapon')?.bodyPart !== undefined
+                        ? equipSlotKey('weapon', form.equipSlots.find(candidate => candidate.kind === 'weapon')!.bodyPart)
+                        : undefined)
+                if (fallback === undefined) return false
+                return equipStack(inventory, instanceId, fallback, equipContext())
             }
-            return equipStack(inventory, instanceId, slot, {bodyFormId})
+            return equipStack(inventory, instanceId, slot, equipContext())
         },
         onUnequip: (slot) => unequipSlot(inventory, slot),
         onDrop: (instanceId) => dropToWorld(instanceId),
@@ -80,16 +99,16 @@ export const setupHakoniwa = (
     }
 
     const previewData = (): EquipPreviewData => {
-        const armor: Partial<Record<EquipSlot, string>> = {}
-        for (const slot of EQUIP_SLOTS) {
-            const def = equippedDef(slot)
-            if (def?.armorId !== undefined) armor[slot] = def.armorId
+        const armor: Partial<Record<string, string>> = {}
+        for (const [key, instanceId] of Object.entries(inventory.equipment)) {
+            if (instanceId === undefined || !key.startsWith('armor:')) continue
+            const def = findItemDef(findStack(inventory, instanceId)?.defId ?? '')
+            if (def?.armorId !== undefined) armor[key.slice('armor:'.length)] = def.armorId
         }
-        const main = equippedDef('main_hand')
-        const off = equippedDef('off_hand')
         return {
-            mainWeaponId: main?.weaponId,
-            offhandWeaponId: off?.weaponId,
+            bodyFormId: playerForm()?.id,
+            mainWeaponId: equippedDef('weapon:main_hand')?.weaponId,
+            offhandWeaponId: equippedDef('weapon:off_hand')?.weaponId,
             armor,
         }
     }
@@ -100,38 +119,35 @@ export const setupHakoniwa = (
         preview.render()
     }
 
-    /** 把装备映射同步到角色：主手 / 副手武器与四槽护甲 */
+    /** 把背包装备映射同步到角色：按当前体形槽位构建装备状态并应用 */
     const applyEquipment = (): void => {
         const player = characterSystem.getPlayerCharacter()
-        if (player === undefined) return
-        const mainDef = equippedDef('main_hand')
-        const offDef = equippedDef('off_hand')
+        const form = playerForm()
+        if (player === undefined || form === undefined) return
+        let state: EquipmentState = {limb: {}, weapon: {}, armor: {}}
+        for (const instanceId of Object.values(inventory.equipment)) {
+            if (instanceId === undefined) continue
+            const def = findItemDef(findStack(inventory, instanceId)?.defId ?? '')
+            if (def === undefined || def.equipKind === undefined || def.equipSlot === undefined) continue
+            const slot = equipSlotKey(def.equipKind, def.equipSlot)
+            if (!slotKeys().includes(slot)) continue
+            const itemId = equipItemIdOf(def)
+            if (itemId === undefined) continue
+            state = withEquipmentAt(state, def.equipKind, def.equipSlot, itemId)
+        }
+        const primarySlot = form.equipSlots.find(candidate => candidate.kind === 'weapon' && candidate.bodyPart === 'main_hand')
+            ?? form.equipSlots.find(candidate => candidate.kind === 'weapon')
+        const mainWeaponId = (primarySlot !== undefined ? state.weapon[primarySlot.bodyPart] : undefined) ?? form.defaultWeaponId
+        const offWeaponId = state.weapon.off_hand
         characterSystem.updateCharacterConfig(
             player.id,
             {},
-            {weaponId: mainDef?.weaponId ?? DEFAULT_WEAPON_ID},
-            undefined, undefined, undefined, undefined, undefined,
-            offDef?.weaponId !== undefined ? {weaponId: offDef.weaponId} : null,
+            {weaponId: mainWeaponId},
+            undefined, undefined, undefined, undefined,
+            {equipment: state},
+            offWeaponId !== undefined ? {weaponId: offWeaponId} : null,
         )
-        const armor: Partial<Record<'head' | 'chest' | 'arms' | 'legs', string>> = {}
-        for (const slot of EQUIP_SLOTS) {
-            if (slot !== 'head' && slot !== 'chest' && slot !== 'arms' && slot !== 'legs') continue
-            const def = equippedDef(slot)
-            if (def?.armorId !== undefined) armor[slot] = def.armorId
-        }
-        characterSystem.updateCharacterConfig(
-            player.id, {},
-            undefined, undefined, undefined, undefined, undefined,
-            {armor: armor as ArmorLoadout},
-        )
-        /* 吐息仅 wyvern 可用：非龙体形自动卸下并退回背包 */
-        const plan = bodyFormOf(player.config.bodyFormId)
-        if (plan.equipSlots.breath === true) {
-            characterSystem.setBreathModule(player.id, equippedDef('breath')?.breathModuleId)
-        } else {
-            if (inventory.equipment.breath !== undefined) unequipSlot(inventory, 'breath')
-            characterSystem.setBreathModule(player.id, undefined)
-        }
+        characterSystem.setBreathModule(player.id, state.weapon.breath)
         refreshPreview()
     }
 

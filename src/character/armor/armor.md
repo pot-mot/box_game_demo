@@ -204,9 +204,9 @@ export const applyDamage = (
 baseDefense: DefenseProfile
 /** 基础攻击加成（角色固有，存档持久化） */
 baseAttack: DamageTypeProfile
-/** 装备的护甲（槽位 → 护甲 id；缺省 = 空槽） */
-armor: ArmorLoadout
-/** 有效防御 = 基础防御 + 各护甲之和；applyDamage 按事件类别取用 */
+/** 装备状态（limb / weapon / armor 分层；槽位键 = kind:bodyPart） */
+equipment: EquipmentState
+/** 有效防御 = 基础防御 + 全部护甲与肢体之和；applyDamage 按事件类别取用 */
 defense: DefenseProfile
 /** 有效攻击加成 = 基础攻击加成 + 装备攻击加成（逐类别，与武器类别匹配才计入） */
 attackBonus: DamageTypeProfile
@@ -217,24 +217,22 @@ moveSpeedMultiplier: number
 统一入口（与 `setCombatWeapon` 同风格）：
 
 ```ts
-/** 变更基础防御 / 护甲 / 肢体 / 基础攻击：校验并重算防御、攻击加成、移速与韧性上界（未知 id 安全回退空槽，不抛错） */
+/** 变更基础防御 / 装备 / 基础攻击：按当前体形校验并重算防御、攻击加成、移速与韧性上界（未知 id 安全丢弃，不抛错） */
 export const setCombatEquipment = (
     c: CombatComponent,
     baseDefense: DefenseProfile,
-    armor: ArmorLoadout,
-    limb?: LimbLoadout,
+    equipment: EquipmentState,
+    bodyFormId: string,
     baseAttack?: DamageTypeProfile,
 ): void => {
     c.baseDefense = baseDefense
-    c.armor = armor
-    if (limb !== undefined) c.limb = limb
+    c.equipment = equipment
     if (baseAttack !== undefined) c.baseAttack = baseAttack
-    const resolvedArmor = resolveArmorLoadout(c.armor)
-    const resolvedLimb = c.limb ? resolveLimbLoadout(c.limb) : undefined
-    c.defense = totalDefenseOf(baseDefense, resolvedArmor, resolvedLimb)
-    c.attackBonus = addDamageProfiles(c.baseAttack, totalAttackOf(resolvedArmor, resolvedLimb))
-    c.moveSpeedMultiplier = totalMoveSpeedOf(resolvedArmor, resolvedLimb)
-    c.poiseMax = c.basePoiseMax + totalPoiseOf(resolvedArmor, resolvedLimb)
+    const pieces = resolveEquipmentPieces(equipment, bodyFormId)
+    c.defense = equipmentDefenseOf(baseDefense, pieces)
+    c.attackBonus = addDamageProfiles(c.baseAttack, equipmentAttackOf(pieces))
+    c.moveSpeedMultiplier = equipmentMoveSpeedOf(pieces)
+    c.poiseMax = c.basePoiseMax + equipmentPoiseOf(pieces)
     if (c.poise > c.poiseMax) c.poise = c.poiseMax
 }
 ```

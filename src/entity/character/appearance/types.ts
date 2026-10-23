@@ -47,29 +47,32 @@ export interface CreatureModel {
     /** 装配武器（主手 + 可选副手，会先移除旧武器；offhandStowed = 副手挂背） */
     equipWeapon: (config: WeaponEquipConfig) => void
 
-    /** 副手武器挂背 / 回手（仅换父节点，不重建几何；无副手武器时空操作） */
-    setOffhandStowed: (stowed: boolean) => void
+    /** 副手武器挂背 / 回手（仅换父节点，不重建几何；无副手武器时可省略） */
+    setOffhandStowed?: (stowed: boolean) => void
 
     /**
      * 切换惯用手：主 / 副手槽位内容互换、重挂武器挂点并重设非对称网格镜像。
      * 动作镜像由 clip 层按 handedness 处理（模型本身不播放动画）。无副手 / 单手体形可为空操作。
      */
-    setHandedness: (handedness: Handedness) => void
+    setHandedness?: (handedness: Handedness) => void
 
     /** 移除全部武器 */
     removeWeapon: () => void
 
-    /** 装备护甲（会先移除旧护甲；空槽 = 移除该槽；无护甲体形可为空操作） */
-    equipArmor: (loadout: ResolvedArmorLoadout) => void
+    /** 装备护甲（人形能力；无护甲体形不实现） */
+    equipArmor?: (loadout: ResolvedArmorLoadout) => void
 
-    /** 移除全部护甲 */
-    removeArmor: () => void
+    /** 移除全部护甲（人形能力） */
+    removeArmor?: () => void
 
-    /** 装备肢体组件（会先移除旧肢体；空槽 = 回退默认；无肢体体形可为空操作） */
-    equipLimbs: (loadout: ResolvedLimbLoadout) => void
+    /** 装备肢体组件（人形能力；无肢体体形不实现） */
+    equipLimbs?: (loadout: ResolvedLimbLoadout) => void
 
-    /** 移除全部肢体组件 */
-    removeLimbs: () => void
+    /** 通用装备外观同步（按体形槽位挂载外观；人形内部转 equipArmor/equipLimbs） */
+    equipEquipmentState?: (state: import('../../../character/equipment/types.ts').EquipmentState) => void
+
+    /** 移除全部肢体组件（人形能力） */
+    removeLimbs?: () => void
 
     /** 当前武器命中检测标记点（null = 未装备），供 melee_executor 使用 */
     readonly weaponMesh: Mesh | null
@@ -88,16 +91,16 @@ export interface CreatureModel {
     /** 武器模型原点对齐主握把后，副握点沿本地 +Y 相对主握点的距离 */
     readonly weaponSupportGripOffset: number
 
-    /** 副手武器命中检测标记点（null = 无副手） */
-    readonly offhandWeaponMesh: Mesh | null
+    /** 副手武器命中检测标记点（null = 无副手；无副手能力的体形可省略） */
+    readonly offhandWeaponMesh?: Mesh | null
     /** 副手武器刀尖采样点（null = 无副手） */
-    readonly offhandWeaponTip: Mesh | null
+    readonly offhandWeaponTip?: Mesh | null
     /** 副手武器模型根节点（null = 无副手） */
-    readonly offhandWeaponGroup: Group | null
+    readonly offhandWeaponGroup?: Group | null
     /** 副手武器攻击判定箱本地盒参数（null = 无副手） */
-    readonly offhandWeaponHitBox: WeaponLocalHitBox | null
+    readonly offhandWeaponHitBox?: WeaponLocalHitBox | null
     /** 副手握把中心在武器本地 Y 轴上的坐标（无副手 = 0） */
-    readonly offhandWeaponGripY: number
+    readonly offhandWeaponGripY?: number
 
     /** 逐帧更新依赖骨骼变换的程序化部件（翅膜拉伸等；无此类部件时 undefined） */
     readonly updateDeform?: () => void
@@ -109,6 +112,38 @@ export interface CreatureModel {
     dispose: () => void
 }
 
+/** 通用体形模型门面（跨体形公共契约） */
+export type FormModel = CreatureModel
+
+/** 人形模型：在通用门面之上要求副手 / 护甲 / 肢体 / 惯用手能力 */
+export interface HumanoidModel extends FormModel {
+    readonly setOffhandStowed: (stowed: boolean) => void
+    readonly setHandedness: (handedness: Handedness) => void
+    readonly equipArmor: (loadout: ResolvedArmorLoadout) => void
+    readonly removeArmor: () => void
+    readonly equipLimbs: (loadout: ResolvedLimbLoadout) => void
+    readonly removeLimbs: () => void
+    readonly offhandWeaponMesh: Mesh | null
+    readonly offhandWeaponTip: Mesh | null
+    readonly offhandWeaponGroup: Group | null
+    readonly offhandWeaponHitBox: WeaponLocalHitBox | null
+    readonly offhandWeaponGripY: number
+}
+
+/** 人形专属动画上下文：仅人形动画系统读取；非人形体形不携带 */
+export interface HumanoidAnimationContext {
+    /** 当前持握模式（决定上半身姿态组合与双持分支） */
+    readonly holdMode: HoldMode
+    /** 惯用手（决定主 / 副手槽位与动作镜像） */
+    readonly handedness: Handedness
+    /** 当前装备武器的 classId（支撑手预烘焙数据键；空手 = undefined） */
+    readonly weaponClassId?: string
+    /**
+     * 各手持盾状态（主手 / 副手可能同时各持一盾，副手盾双手共持时挂背不计入）：
+     * `blocking` 姿态据此决定举起哪只手臂；基础姿态据此校正所持盾的盾面朝向。
+     */
+    readonly shieldHands: Readonly<{main: boolean; off: boolean}>
+}
 
 /** 动画上下文，由 animation system 每帧传入（horizontalSpeed 用于行走步频变速与下落腿张开的体态随速度） */
 export interface AnimationContext {
@@ -120,10 +155,8 @@ export interface AnimationContext {
     readonly stateDuration?: number
     /** 水平速度（m/s）：行走播放变速（步频随速度）、falling 腿张开随速度 */
     readonly horizontalSpeed: number
-    /** 当前持握模式（决定上半身姿态组合与双手/双持 IK 分支） */
-    readonly holdMode: HoldMode
-    /** 惯用手（决定主 / 副手槽位、动作镜像与双手 IK 支撑侧；缺省 = 右撇子） */
-    readonly handedness: Handedness
+    /** 人形专属上下文（非人形体形缺省） */
+    readonly humanoid?: HumanoidAnimationContext
     /**
      * 当前攻击段（仅 attacking 状态有效）—— 武器模组拥有的段定义：
      * id 作为动画键（段切换触发姿态混合）、时长/恢复/阶段/tilt 供攻击 clip 生成器使用。
@@ -141,15 +174,8 @@ export interface AnimationContext {
     readonly attackCharge: number
     /** 是否正冻结在蓄力锚点阶段（按住中）：为真时动画改为按蓄力值定位到攻击 clip 的蓄力段（近战抬手段 / 远程前段） */
     readonly attackHolding: boolean
-    /** 当前装备武器的 classId（支撑手预烘焙数据键；空手 = undefined） */
-    readonly weaponClassId?: string
     /** 是否持有武器（idle/walking 据此降低持械臂摆幅） */
     readonly weaponHeld: boolean
-    /**
-     * 各手持盾状态（主手 / 副手可能同时各持一盾，副手盾双手共持时挂背不计入）：
-     * `blocking` 姿态据此决定举起哪只手臂；基础姿态据此校正所持盾的盾面朝向。
-     */
-    readonly shieldHands: Readonly<{main: boolean; off: boolean}>
 }
 
 /** 攻击动画事件回调（hitbox_on/off → 近战命中窗口开关） */

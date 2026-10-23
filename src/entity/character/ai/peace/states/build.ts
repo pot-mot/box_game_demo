@@ -1,7 +1,7 @@
 import {v3Set, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {PeaceStateHandler} from '../types.ts'
 import {isBuildConfig, type BoxSpawnEntry} from '../../../../../character/ai_strategy/types.ts'
-import {formCenterOffsetY} from '../../../body_form/geometry.ts'
+import {formCenterOffsetY} from '../../../body_form/common/geometry.ts'
 
 const _pos: RapVector3 = {x: 0, y: 0, z: 0}
 

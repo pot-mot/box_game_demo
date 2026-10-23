@@ -7,7 +7,7 @@ import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 /**
  * 攻击链领域模型（武器模组拥有）：
  * - 攻击段（AttackSegment）= 武器的一次可播放动作的**玩法数据**（时长/阶段时序/伤害倍率/冷却/连段）；
- *   动画是段 id 对应的显式骨骼关键帧数据（基础轨道在 `attack_clips/`，姿势修订在 `attack_clips/`）；
+ *   动画是段 id 对应的显式骨骼关键帧数据（人形作者数据在 `body_form/humanoid/skeleton_animation/attack_clips/`，其他体形由体形 clip provider 提供）；
  * - 攻击链（WeaponAttackChain）= 一个攻击键的起手候选 + 主干段播放顺序；
  * - 连段推进 = **段自身声明的 next 转换函数**（按声明顺序求值，第一个守卫通过者胜出），
  *   状态机只负责调度与消费，不再用「槽位下标 / comboChain 字符串索引」表达连段。
@@ -56,20 +56,6 @@ export interface AttackTransition {
 }
 
 /**
- * 段动作组合中的单个 pose 引用（Q4：「段引用若干 pose + 权重 + 时间进度」的落地）。
- * pose 资产来自 `character/weapon/attack_clips/`（基础轨道）及 `attack_clips/`（逐段修订）；
- * 播放时段进度由 `attacking` 时间线推进，各层按 `progressOffset` 映射到自身时间轴。
- */
-export interface SegmentPoseLayer {
-    /** pose 资产 id（攻击关键帧数据的键，如 `short_sword_one_handed_light_1`） */
-    readonly poseId: string
-    /** 影响程度：与其它层按关节归一化加权（0 不参与，1 = 完全覆盖其余层） */
-    readonly weight: number
-    /** 时间进度偏移（0-1，默认 0）：该层采样进度 = 段总进度 + offset（循环环绕） */
-    readonly progressOffset?: number
-}
-
-/**
  * 攻击段冲击（数据驱动，任意段可配多个）：段内时间轴到达 `at` 时对**施术者自身**叠加一次速度冲量，
  * 用于砸地 / 突进 / 反冲等「动作推进到某一程度时推动自己」的编排。
  * 时间与阶段时间线、动画 clip 同一时钟（段总时长 = clip 时长）。
@@ -99,11 +85,10 @@ export interface AttackSegment {
     readonly duration: number
     /** 恢复时长（秒） */
     readonly recovery: number
-    /** 阶段序列（strike / draw / aim / release …；recovery 阶段时长取本段 recovery）；
-     *  动画由 `poses` 声明的 pose 组合表达（骨骼关键帧资产见 `attack_clips/` / `attack_clips/`） */
+    /** 阶段序列（strike / draw / aim / release …；recovery 阶段时长取本段 recovery） */
     readonly phases: readonly AttackPhase[]
-    /** 动作组合：本段播放的 pose 层（各层按影响程度加权、按时间进度采样同一段时间轴） */
-    readonly poses: readonly SegmentPoseLayer[]
+    /** 动画资产 id（人形攻击 clip / 体形 provider 的段动画键）；段与动画解耦，不再有多层加权 */
+    readonly poseId: string
     /** 伤害倍率（相对武器基础伤害） */
     readonly damageMultiplier: number
     /** 冲击力等级（决定目标受击效果：轻无效果 / 中弱硬直 / 重强硬直 / 倒地） */
@@ -123,6 +108,11 @@ export interface AttackSegment {
      * 缺省 = 角色当前主武器；运行时按该 id 切换执行器与数值来源。
      */
     readonly attackWeaponId?: string
+    /**
+     * 本段命中窗口的默认武器槽位键（`kind:bodyPart`，如 `weapon:main_hand` / `weapon:breath`）。
+     * 动画事件未显式声明 slotKey 时，执行器按此槽位选择武器与命中箱。
+     */
+    readonly attackSlotKey?: string
     /** 冷却（秒，0 = 无冷却；非 0 时从段触发时刻开始计时，只挡起手） */
     readonly cooldown: number
     /**
@@ -267,6 +257,21 @@ export const withChargeTuningMap = (attacks: HoldModeAttacks, tuning: ChargeTuni
     for (const mode of HOLD_MODES) {
         const set = attacks[mode]
         if (set !== undefined) out[mode] = withChargeTuning(set, tuning)
+    }
+    return out
+}
+
+/** 为未声明 `attackSlotKey` 的段补默认槽位（武器模型解析时调用；不改武器类共享数据） */
+export const withAttackSlotKeyMap = (attacks: HoldModeAttacks, slotKey: string): HoldModeAttacks => {
+    const out: Partial<Record<HoldMode, WeaponAttacks>> = {}
+    for (const mode of HOLD_MODES) {
+        const set = attacks[mode]
+        if (set === undefined) continue
+        const segments: Record<string, AttackSegment> = {}
+        for (const [id, segment] of Object.entries(set.segments)) {
+            segments[id] = segment.attackSlotKey === undefined ? {...segment, attackSlotKey: slotKey} : segment
+        }
+        out[mode] = {...set, segments}
     }
     return out
 }

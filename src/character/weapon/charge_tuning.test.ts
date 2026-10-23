@@ -24,7 +24,8 @@ describe('蓄力调参（一次函数）', () => {
             detectBox: {size: {x: 0.1, y: 0.1, z: 0.1}, offset: {x: 0, y: 0, z: 0}},
         }, {one_handed: {}})
         const overridden = resolveMeleeWeapon(weaponClass, {
-            id: 'x', classId: 'x', formId: 'humanoid', name: 'x', nameKey: 'weapon.unarmed', mesh: {id: 'none'},
+            id: 'x', classId: 'x', formId: 'humanoid', name: 'x', nameKey: 'weapon.unarmed',
+            equipBodyParts: ['main_hand'], mesh: {id: 'none'},
             charge: {maxChargeMultiplier: 300, maxChargeTime: 2},
         })
 

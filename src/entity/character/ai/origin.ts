@@ -1,6 +1,6 @@
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {AIContext} from './types.ts'
-import {formCenterOffsetY} from '../body_form/geometry.ts'
+import {formCenterOffsetY} from '../body_form/common/geometry.ts'
 
 /** 由角色物理体反算脚底原点 Y（body 中心 - 体形中心偏移）写入 `ctx.origin` */
 export const setOriginFromCharacter = (ctx: AIContext, character: CharacterEntity): void => {

@@ -364,8 +364,11 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             stateTime,
             /* 展示场景站立攻击：速度恒 0（生产为物理体实时速度） */
             horizontalSpeed: 0,
-            holdMode,
-            handedness: DEFAULT_HANDEDNESS,
+            humanoid: {
+                holdMode,
+                handedness: DEFAULT_HANDEDNESS,
+                shieldHands: {main: isShield && mode === 'idle', off: false},
+            },
             /* 蓄力前置同样携带 attackSegment（外观据此取该段攻击 clip 的抬手段） */
             attackSegment: (inAttacking || inCharging) ? segment : undefined,
             attackPhase: ctxPhaseName,
@@ -379,8 +382,6 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             attackCharge: inCharging ? chargeProgress() : 0,
             attackHolding: inCharging,
             weaponHeld: model.weaponMesh !== null,
-            /* 盾牌：待机时举盾（主手盾），演示格挡姿态；攻击时交回攻击 clip */
-            shieldHands: {main: isShield && mode === 'idle', off: false},
         }
         system.update(dt, model, mode === 'idle' ? (isShield ? 'blocking' : 'idle') : 'attacking', ctx)
 

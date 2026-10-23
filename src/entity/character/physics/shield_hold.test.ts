@@ -5,6 +5,7 @@ import {createSharedWorld, type SharedWorld} from '../../../physics/world.ts'
 import {clearAllForces} from '../../../physics/rapier_utils.ts'
 import {FIXED_TIME_STEP} from '../../../physics/constants.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
+import {humanoidBodyStateOf} from '../body_form/humanoid/state/body_state.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 
 /**
@@ -51,8 +52,7 @@ const saveConfig = (weaponId: string, offhandId?: string): CharacterSaveConfig =
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attack: {weaponId, damage: 2},
-    ...(offhandId !== undefined ? {offhand: {weaponId: offhandId, damage: 2}} : {}),
+    equipment: {limb: {}, weapon: {main_hand: weaponId, ...(offhandId !== undefined ? {off_hand: offhandId} : {})}, armor: {}},
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
     maxHealth: 20,
@@ -197,7 +197,7 @@ describe('盾攻击键路由', () => {
         expect(p.combat.block).toBeDefined()
 
         expect(system.setHoldMode(p.id, 'two_handed')).toBe(true)
-        expect(p.holdMode).toBe('two_handed')
+        expect(humanoidBodyStateOf(p.bodyState).holdMode).toBe('two_handed')
         /* 副手盾挂背：不再计为可用盾 */
         expect(p.combat.block).toBeUndefined()
 

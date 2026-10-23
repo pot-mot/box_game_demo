@@ -8,7 +8,7 @@ import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
 /**
  * 近战武器攻击链（武器类固有数据）：
  * 每个攻击段只声明**玩法数据**（时长/恢复/阶段时序/伤害倍率/冷却/连段拓扑）；
- * 动画是段 id 对应的显式骨骼关键帧（`attack_clips/` 基础轨道 + `attack_clips/` 逐段修订），不再有抽象动画参数。
+ * 动画是段 id 对应的显式骨骼关键帧（作者数据按体形/武器拆分），不再有抽象动画参数。
  *
  * **段 id 约定**：`{classId}_{holdMode}_{模板键}`（如 `long_sword_two_handed_light_1`）——
  * 每种持握模式拥有独立段 id 命名空间，三模式连段互不覆盖。
@@ -263,7 +263,7 @@ export const buildMeleeAttacks = (
                 heavy && heavyCharge !== undefined,
             ),
             /* 动作组合：默认单层（段 id 即 pose 资产 id），可继续追加分层 pose 与权重 */
-            poses: [{poseId: poseRef(id), weight: 1}],
+            poseId: poseRef(id),
             damageMultiplier: heavy ? MELEE_HEAVY_DAMAGE_MULTIPLIER : 1,
             impact: impactOverride?.impact ?? (heavy ? MELEE_HEAVY_IMPACT : MELEE_LIGHT_IMPACT),
             poiseDamage: impactOverride?.poiseDamage ?? (heavy ? MELEE_HEAVY_POISE_DAMAGE : MELEE_LIGHT_POISE_DAMAGE),
@@ -289,7 +289,7 @@ export const buildMeleeAttacks = (
         segments[segment.id] = segment
     }
 
-    /* 空中段：独立命名空间 + 自烘焙 clip（`poses[0].poseId === 段 id`，运行时不再引用地面 pose）；
+    /* 空中段：独立命名空间 + 自烘焙 clip（`poseId` 默认指向段自身，运行时不再引用地面 pose）；
      * poseKeys 必须与 steps 一一对应且指向本模式实际生成的地面段（= 该空中段 clip 的姿势基底出处，fail loudly） */
     if (air.poseKeys.length !== air.steps.length) {
         throw new Error(`近战空中攻击模组错误（${classId}/${holdMode}）：poseKeys 数量（${air.poseKeys.length}）须与 steps 数量（${air.steps.length}）一致`)
@@ -311,7 +311,7 @@ export const buildMeleeAttacks = (
             duration: MELEE_AIR_DURATION,
             recovery: MELEE_AIR_RECOVERY,
             phases: airSegmentPhases(),
-            poses: [{poseId: id, weight: 1}],
+            poseId: id,
             damageMultiplier: MELEE_AIR_DAMAGE_MULTIPLIER,
             impact: impactOverride?.impact ?? MELEE_AIR_IMPACT,
             poiseDamage: impactOverride?.poiseDamage ?? MELEE_AIR_POISE_DAMAGE,

@@ -60,16 +60,7 @@ const rangedSaveConfig = (): CharacterSaveConfig => ({
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attack: {
-        weaponId: 'longbow',
-        damage: 2,
-        ranged: {
-            range: 10,
-            bulletSpeed: 20,
-            bulletKnockback: 3,
-            bulletLifetime: 3,
-        },
-    },
+    equipment: {limb: {}, weapon: {main_hand: 'longbow'}, armor: {}},
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
     maxHealth: 20,

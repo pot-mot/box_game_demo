@@ -7,7 +7,7 @@ import {downgradeImpact} from '../../../character/combat/impact.ts'
 import type {CombatComponent} from '../../../character/combat/types.ts'
 import type {CharacterConfig} from '../../../character/types.ts'
 import type {ShieldCoverBox} from '../../../character/weapon/constants.ts'
-import {formCenterOffsetY, formHurtHalf} from '../body_form/geometry.ts'
+import {formCenterOffsetY, formHurtHalf} from '../body_form/common/geometry.ts'
 import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from './obb.ts'
 import {obbIntersectsHurt} from './shapes.ts'
 import type {CreatureModel} from '../appearance/types.ts'
@@ -157,14 +157,10 @@ const hitHurtBlocksOf = (
         : undefined
 }
 
-/** 近战武器槽：主手 / 副手（双持）；命中窗口按槽独立开关 */
-export const MELEE_WEAPON_SLOTS = ['main', 'offhand'] as const
-export type MeleeWeaponSlot = typeof MELEE_WEAPON_SLOTS[number]
-
-/** 近战执行器：命中窗口由攻击动画事件轨道驱动（setHitWindow），窗口内每帧 OBB SAT 判定 */
+/** 近战命中窗口按武器槽（`kind:bodyPart` 或体形部位 id）独立开关 */
 export interface MeleeExecutor extends SkillExecutor {
-    /** 开关命中窗口；weapon 缺省 = 同时作用于主手与副手 */
-    setHitWindow: (active: boolean, weapon?: MeleeWeaponSlot) => void
+    /** 开关命中窗口；slotKey 缺省 = 同时作用于全部已装备武器槽 */
+    setHitWindow: (active: boolean, slotKey?: string) => void
 }
 
 export const createMeleeExecutor = (
@@ -174,13 +170,20 @@ export const createMeleeExecutor = (
     onHit?: MeleeHitCallback,
     getWorldTargets?: () => readonly WorldDamageTarget[],
 ): MeleeExecutor => {
-    /** 命中窗口状态（主手 / 副手各一）：由攻击动画事件轨道（hitbox_on/off）开关 */
-    let mainWindowActive = false
-    let offhandWindowActive = false
+    /** 命中窗口状态：默认窗口（事件未指定槽位）+ 逐槽位独立窗口 */
+    let defaultWindowActive = false
+    const slotWindows = new Map<string, boolean>()
 
-    const setHitWindow = (active: boolean, weapon?: MeleeWeaponSlot): void => {
-        if (weapon === undefined || weapon === 'main') mainWindowActive = active
-        if (weapon === undefined || weapon === 'offhand') offhandWindowActive = active
+    /** 槽位键归一化为武器表键（bodyPart；兼容 `weapon:main_hand` 形式） */
+    const bodyPartOfSlot = (slotKey: string): string => slotKey.startsWith('weapon:') ? slotKey.slice('weapon:'.length) : slotKey
+
+    const setHitWindow = (active: boolean, slotKey?: string): void => {
+        if (slotKey === undefined) {
+            defaultWindowActive = active
+            slotWindows.clear()
+            return
+        }
+        slotWindows.set(bodyPartOfSlot(slotKey), active)
     }
 
     const start = (
@@ -204,7 +207,7 @@ export const createMeleeExecutor = (
             : combat.weapon
         if (weapon.type !== 'melee') return
         /* 命中窗口全部关闭（动画事件轨 hitbox_off 或攻击尚未进入打击阶段）时不检测 */
-        if (!mainWindowActive && !offhandWindowActive) return
+        if (!defaultWindowActive && ![...slotWindows.values()].some(Boolean)) return
         const model = getModel(entity.id)
         if (!model) return
 
@@ -344,23 +347,34 @@ export const createMeleeExecutor = (
             }
         }
 
-        if (mainWindowActive) {
+        /** 某槽位的命中窗口是否开启（默认窗口对所有已装备槽生效） */
+        const windowActiveOf = (slotKey: string): boolean => defaultWindowActive || slotWindows.get(slotKey) === true
+
+        /** 解析槽位对应的武器运行时 / 模型挂点（无该槽位数据时回退主武器） */
+        const strikeSlot = (slotKey: string): void => {
+            if (!windowActiveOf(slotKey)) return
+            if (slotKey === 'off_hand') {
+                /* 副手武器缺失（异常数据）时回退主手数值，保证命中不丢失 */
+                const offhand = combat.weapons.get('off_hand')?.weapon ?? combat.offhand?.weapon
+                const offhandWeapon = offhand !== undefined && offhand.type === 'melee' ? offhand : weapon
+                strikeWith(model.offhandWeaponGroup ?? null, model.offhandWeaponHitBox ?? null, offhandWeapon)
+                return
+            }
+            const slotRuntime = combat.weapons.get(slotKey)
+            const slotWeapon = slotRuntime !== undefined && slotRuntime.weapon.type === 'melee' ? slotRuntime.weapon : weapon
             const mountIds = combat.activeSegment?.hitMountJointIds
             if (mountIds !== undefined && mountIds.length > 0) {
                 for (const mountId of mountIds) {
                     const mountGroup = model.jointGroups.get(mountId)
-                    if (mountGroup !== undefined) strikeWith(mountGroup, model.weaponHitBox, weapon)
+                    if (mountGroup !== undefined) strikeWith(mountGroup, model.weaponHitBox, slotWeapon)
                 }
             } else {
-                strikeWith(model.weaponGroup, model.weaponHitBox, weapon)
+                strikeWith(model.weaponGroup, model.weaponHitBox, slotWeapon)
             }
         }
-        if (offhandWindowActive) {
-            /* 副手武器缺失（异常数据）时回退主手数值，保证命中不丢失 */
-            const offhand = combat.offhand?.weapon
-            const offhandWeapon = offhand !== undefined && offhand.type === 'melee' ? offhand : weapon
-            strikeWith(model.offhandWeaponGroup, model.offhandWeaponHitBox, offhandWeapon)
-        }
+
+        const slotKeys = new Set<string>(['main_hand', 'off_hand', ...combat.weapons.keys(), ...slotWindows.keys()])
+        for (const slotKey of slotKeys) strikeSlot(slotKey)
     }
 
     const end = (

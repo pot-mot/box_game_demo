@@ -51,10 +51,7 @@ const meleeSaveConfig = (overrides?: Partial<CharacterSaveConfig>): CharacterSav
     speed: 6,
     jumpHeight: 2,
     scale: 1,
-    attack: {
-        weaponId: 'long_sword',
-        damage: 3,
-    },
+    equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {}},
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
     maxHealth: 15,
@@ -134,19 +131,19 @@ describe('角色 panelInfo 同步', () => {
     it('add() 带护甲与基础防御：有效防御 = 基础 + 各护甲之和，未知护甲 id 安全回退', () => {
         const {id} = system.add(meleeSaveConfig({
             defense: {physical: 1, magic: 0},
-            armor: {head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'}},
         }), 0, 0, 0)
         const entity = system.getAll().find(e => e.id === id)!
         /* chest 未知 id 回退空槽：物理 1+2，魔法 0+2 */
         expect(entity.combat.defense).toEqual({physical: 3, magic: 2})
         /* 原始装备表保留（未知 id 不写回） */
-        expect(entity.combat.armor).toEqual({head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'})
+        expect(entity.combat.equipment.armor).toEqual({head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'})
     })
 
     it('add() 装备攻击加成与移速乘数：按类别区分、多件相乘并反映到列表行', () => {
         const {id} = system.add(meleeSaveConfig({
             /* 法师兜帽（魔攻+1）、战臂甲（物攻+2、移速×0.97）、疾行靴（移速×1.15） */
-            armor: {head: 'mage_hood', arms: 'battle_bracers', legs: 'swift_boots'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'mage_hood', arms: 'battle_bracers', legs: 'swift_boots'}},
         }), 0, 0, 0)
         const entity = system.getAll().find(e => e.id === id)!
         expect(entity.combat.attackBonus).toEqual({physical: 2, magic: 1})
@@ -156,7 +153,7 @@ describe('角色 panelInfo 同步', () => {
     it('add() 带基础攻击加成：有效攻击加成 = 基础攻击 + 装备加成', () => {
         const {id} = system.add(meleeSaveConfig({
             baseAttack: {physical: 2, magic: 3},
-            armor: {arms: 'battle_bracers'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {arms: 'battle_bracers'}},
         }), 0, 0, 0)
         const entity = system.getAll().find(e => e.id === id)!
         expect(entity.combat.baseAttack).toEqual({physical: 2, magic: 3})
@@ -169,7 +166,7 @@ describe('角色 panelInfo 同步', () => {
         const entity = system.getAll().find(e => e.id === id)!
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
             baseAttack: {physical: 1, magic: 4},
-            armor: {head: 'mage_hood'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'mage_hood'}},
         })
         expect(entity.combat.baseAttack).toEqual({physical: 1, magic: 4})
         /* 法师兜帽魔攻 +1 → 有效魔法攻击 4 + 1 = 5 */
@@ -180,7 +177,7 @@ describe('角色 panelInfo 同步', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
             baseDefense: {physical: 0, magic: 1},
-            armor: {chest: 'iron_plate'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {chest: 'iron_plate'}},
         })
         const entity = system.getAll().find(e => e.id === id)!
         expect(entity.combat.defense).toEqual({physical: 3, magic: 1})
@@ -190,7 +187,7 @@ describe('角色 panelInfo 同步', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
             baseDefense: {physical: 0, magic: 1},
-            armor: {chest: 'iron_plate', arms: 'iron_bracers', legs: 'wind_boots'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {chest: 'iron_plate', arms: 'iron_bracers', legs: 'wind_boots'}},
         })
         const entity = system.getAll().find(e => e.id === id)!
         expect(entity.combat.defense).toEqual({physical: 5, magic: 2})
@@ -221,7 +218,7 @@ describe('角色 panelInfo 同步', () => {
 
         /* 装备铁盔（poise 2）+ 铁胸甲（poise 4）：上界重算为 30 + 6 */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
-            armor: {head: 'iron_helmet', chest: 'iron_plate'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'iron_helmet', chest: 'iron_plate'}},
         })
         expect(entity.combat.poiseMax).toBe(36)
 
@@ -236,11 +233,11 @@ describe('角色 panelInfo 同步', () => {
         const before = countMeshes(entity)
 
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
-            armor: {head: 'iron_helmet', chest: 'iron_plate'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'iron_helmet', chest: 'iron_plate'}},
         })
         expect(countMeshes(entity)).toBeGreaterThan(before)
 
-        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {armor: {}})
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {}}})
         expect(countMeshes(entity)).toBe(before)
     })
 
@@ -250,7 +247,7 @@ describe('角色 panelInfo 同步', () => {
 
         /* 疾行靴顶替小腿；铁盔 / 铁胸甲为叠加件，头部与躯干保持可见 */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
-            armor: {head: 'iron_helmet', chest: 'iron_plate', legs: 'swift_boots'},
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'iron_helmet', chest: 'iron_plate', legs: 'swift_boots'}},
         })
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
         expect(findJointPart(entity, 'spine')!.visible).toBe(true)
@@ -260,7 +257,7 @@ describe('角色 panelInfo 同步', () => {
         expect(findJointPart(entity, 'leftLegKnee')!.visible).toBe(false)
 
         /* 卸下后小腿还原可见 */
-        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {armor: {}})
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {}}})
         expect(findJointPart(entity, 'rightLegKnee')!.visible).toBe(true)
         expect(findJointPart(entity, 'leftLegKnee')!.visible).toBe(true)
     })
@@ -274,16 +271,16 @@ describe('角色 panelInfo 同步', () => {
 
         /* 兽人头颅（物防2）+ 骷髅躯干（物防1/魔防1）→ 有效防御 物3 魔1；头与躯干被顶替 */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
-            limb: {head: 'orc_head', body: 'skeleton_body'},
+            equipment: {limb: {head: 'orc_head', body: 'skeleton_body'}, weapon: {main_hand: 'long_sword'}, armor: {}},
         })
         expect(countMeshes(entity)).toBeGreaterThan(before)
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(false)
         expect(findJointPart(entity, 'spine')!.visible).toBe(false)
         expect(entity.combat.defense).toEqual({physical: 3, magic: 1})
-        expect(entity.combat.limb).toEqual({head: 'orc_head', body: 'skeleton_body'})
+        expect(entity.combat.equipment.limb).toEqual({head: 'orc_head', body: 'skeleton_body'})
 
         /* 卸下肢体 → 数值回落、人类部位还原、外观部件不残留 */
-        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {limb: {}})
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {}}})
         expect(countMeshes(entity)).toBe(before)
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
         expect(findJointPart(entity, 'spine')!.visible).toBe(true)
@@ -296,19 +293,22 @@ describe('角色 panelInfo 同步', () => {
 
         /* 疾行靴顶替小腿（护甲） + 兽人头颅顶替头部（肢体） */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
-            armor: {legs: 'swift_boots'},
-            limb: {head: 'orc_head'},
+            equipment: {limb: {head: 'orc_head'}, weapon: {main_hand: 'long_sword'}, armor: {legs: 'swift_boots'}},
         })
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(false)
         expect(findJointPart(entity, 'rightLegKnee')!.visible).toBe(false)
 
         /* 仅卸下护甲：小腿还原，头部仍被肢体顶替 */
-        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {armor: {}})
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            equipment: {limb: {head: 'orc_head'}, weapon: {main_hand: 'long_sword'}, armor: {}},
+        })
         expect(findJointPart(entity, 'rightLegKnee')!.visible).toBe(true)
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(false)
 
         /* 卸下肢体：头部还原 */
-        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {limb: {}})
+        system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
+            equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {}},
+        })
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
     })
 

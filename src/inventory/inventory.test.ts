@@ -36,34 +36,34 @@ describe('装备与卸下', () => {
         const inv = createInventory()
         const w = addItem(inv, 'weapon_long_sword', 1).instanceId!
         const a = addItem(inv, 'armor_iron_helmet', 1).instanceId!
-        expect(equipStack(inv, w, 'main_hand')).toBe(true)
-        expect(equipStack(inv, a, 'head')).toBe(true)
-        expect(inv.equipment.main_hand).toBe(w)
-        expect(inv.equipment.head).toBe(a)
+        expect(equipStack(inv, w, 'weapon:main_hand')).toBe(true)
+        expect(equipStack(inv, a, 'armor:head')).toBe(true)
+        expect(inv.equipment['weapon:main_hand']).toBe(w)
+        expect(inv.equipment['armor:head']).toBe(a)
         expect(inv.stacks.find(s => s.instanceId === w)?.grid).toBeUndefined()
     })
 
     it('护甲不能装备到错误槽位', () => {
         const inv = createInventory()
         const a = addItem(inv, 'armor_iron_helmet', 1).instanceId!
-        expect(equipStack(inv, a, 'legs')).toBe(false)
+        expect(equipStack(inv, a, 'armor:legs')).toBe(false)
     })
 
     it('卸下后回到背包格位', () => {
         const inv = createInventory()
         const w = addItem(inv, 'weapon_long_sword', 1).instanceId!
-        equipStack(inv, w, 'main_hand')
-        expect(unequipSlot(inv, 'main_hand')).toBe(true)
-        expect(inv.equipment.main_hand).toBeUndefined()
+        equipStack(inv, w, 'weapon:main_hand')
+        expect(unequipSlot(inv, 'weapon:main_hand')).toBe(true)
+        expect(inv.equipment['weapon:main_hand']).toBeUndefined()
         expect(inv.stacks.find(s => s.instanceId === w)?.grid).toBeDefined()
     })
 
     it('移除装备中的物品同步清理装备映射', () => {
         const inv = createInventory()
         const w = addItem(inv, 'weapon_long_sword', 1).instanceId!
-        equipStack(inv, w, 'main_hand')
+        equipStack(inv, w, 'weapon:main_hand')
         removeAt(inv, w)
-        expect(inv.equipment.main_hand).toBeUndefined()
+        expect(inv.equipment['weapon:main_hand']).toBeUndefined()
     })
 })
 
@@ -72,10 +72,10 @@ describe('背包存档往返', () => {
         const inv = createInventory(6, 4)
         const w = addItem(inv, 'weapon_long_sword', 1, () => 'w1').instanceId!
         addItem(inv, 'material_stone', 4, () => 'm1')
-        equipStack(inv, w, 'main_hand')
+        equipStack(inv, w, 'weapon:main_hand')
         const restored = inventoryFromSave(inventoryToSave(inv))
         expect(restored.width).toBe(6)
-        expect(restored.equipment.main_hand).toBe('w1')
+        expect(restored.equipment['weapon:main_hand']).toBe('w1')
         expect(restored.stacks.find(s => s.instanceId === 'm1')?.count).toBe(4)
     })
 
@@ -117,9 +117,9 @@ describe('跨容器转移（箱子存取）', () => {
         const bag = createInventory()
         const chest = createInventory(6, 4)
         const id = addItem(bag, 'weapon_long_sword', 1, () => 'w1').instanceId!
-        equipStack(bag, id, 'main_hand')
+        equipStack(bag, id, 'weapon:main_hand')
         expect(transferStack(bag, chest, id)).toBe(true)
-        expect(bag.equipment.main_hand).toBeUndefined()
+        expect(bag.equipment['weapon:main_hand']).toBeUndefined()
         expect(chest.stacks.some(s => s.instanceId === id)).toBe(true)
     })
 
@@ -137,15 +137,15 @@ describe('龙吐息装备槽', () => {
     it('三件吐息物品只能装备到 breath 槽，且仅 wyvern 可装备', () => {
         const inv = createInventory()
         const fireball = addItem(inv, 'item_breath_fireball', 1, () => 'b1').instanceId!
-        expect(equipStack(inv, fireball, 'breath', {bodyFormId: 'wolf'})).toBe(false)
-        expect(equipStack(inv, fireball, 'breath', {bodyFormId: 'wyvern'})).toBe(true)
-        expect(inv.equipment.breath).toBe('b1')
-        expect(unequipSlot(inv, 'breath')).toBe(true)
+        expect(equipStack(inv, fireball, 'weapon:breath', {bodyFormId: 'wolf'})).toBe(false)
+        expect(equipStack(inv, fireball, 'weapon:breath', {bodyFormId: 'wyvern'})).toBe(true)
+        expect(inv.equipment['weapon:breath']).toBe('b1')
+        expect(unequipSlot(inv, 'weapon:breath')).toBe(true)
     })
 
     it('吐息物品不可进入主手 / 副手槽', () => {
         const inv = createInventory()
         const laser = addItem(inv, 'item_breath_laser', 1).instanceId!
-        expect(equipStack(inv, laser, 'main_hand', {bodyFormId: 'wyvern'})).toBe(false)
+        expect(equipStack(inv, laser, 'weapon:main_hand', {bodyFormId: 'wyvern'})).toBe(false)
     })
 })

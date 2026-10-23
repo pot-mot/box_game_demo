@@ -7,7 +7,7 @@ import type {ArmorPieceConfig} from './types.ts'
  * - 移速修正 —— 重甲（铁盔 / 铁胸甲 / 铁胫甲 / 战臂甲 / 鳞甲）减速，疾行靴 / 疾风靴加速，多件相乘。
  * - 顶替部位 —— 仅靴以 `hideBodyParts` 隐藏小腿（其余护甲保留身体部件、纯叠加覆盖，视觉效果更自然）。
  */
-export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
+const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
     /* ── 头盔 ── */
     cloth_cap: {
         id: 'cloth_cap', name: '布帽', slot: 'head',
@@ -213,3 +213,8 @@ export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = {
         mesh: {id: 'greaves', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
     },
 }
+
+/** 本目录全部为人形专属外观配方；其他体形的护甲在各自 `equipment/` 分包声明 */
+export const ARMOR_PRESETS: Record<string, ArmorPieceConfig> = Object.fromEntries(
+    Object.entries(ARMOR_PIECES).map(([id, piece]) => [id, {...piece, allowedBodyFormIds: ['humanoid']}]),
+)

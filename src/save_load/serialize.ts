@@ -3,14 +3,14 @@ import type {FragmentData} from '../entity/destroyed/types'
 import type {TerrainContext} from '../entity/terrain/base/types'
 import type {GameMode} from '../modes/constants'
 import type {EntityType} from '../entity/constants.ts'
-import type {AttackConfig} from '../character/archetypes.ts'
-import type {WeaponAttacks} from '../character/weapon/attack_chain.ts'
-import {chainOf} from '../character/weapon/attack_chain.ts'
-import type {WeaponConfig} from '../character/weapon/catalog.ts'
 import type {LockPointConfig} from '../character/lock_point.ts'
 import type {SaveData, SavableEntity, FragmentDataJSON, QuatJSON, ModeInfoJSON, CameraInfoJSON, EntitySourceMap} from './types.ts'
 import {SAVE_FORMAT_VERSION} from './types.ts'
 import {bodyFormOf} from '../entity/character/body_form/index.ts'
+import {findWeaponPreset} from '../character/weapon/catalog.ts'
+import {findArmorPreset, findLimbPreset} from '../character/armor/catalog.ts'
+import type {EquipmentState} from '../character/equipment/types.ts'
+import {EMPTY_EQUIPMENT_STATE, equipmentEntriesOf, withEquipmentAt} from '../character/equipment/types.ts'
 
 /** 将 {x, y, z} 转为 [x, y, z] */
 const vec3ToTuple = (v: {x: number; y: number; z: number}): [number, number, number] =>
@@ -31,35 +31,25 @@ const fragmentDataToJSON = (fd: FragmentData): FragmentDataJSON => ({
     boxSize: fd.boxSize,
 })
 
-/* 起手（轻击链首段）冷却：角色的数值覆写落在段定义上，取链上第一段的冷却作为「起手段冷却」 */
-const entryCooldownOf = (attacks: WeaponAttacks): number => {
-    const entryId = chainOf(attacks, 'light').entries[0]?.segmentId
-    return entryId === undefined ? 0 : (attacks.segments[entryId]?.cooldown ?? 0)
-}
-
-/** 由战斗组件的武器 + 攻击链导出攻击配置（动作/时长由武器模组决定，不落存档） */
-const attackConfigOf = (weapon: WeaponConfig, attacks: WeaponAttacks): AttackConfig => {
-    /* 起手段冷却为 0（普通攻击默认无冷却）时省略字段 */
-    const cooldown = entryCooldownOf(attacks)
-    /* 蓄力调参：写入当前武器的有效值（近战 heavyCharge / 远程 charge），加载时作为覆写回填 */
-    const chargeTuning = weapon.type === 'melee' ? weapon.heavyCharge : weapon.charge
-    const charge = chargeTuning === undefined
-        ? undefined
-        : {maxChargeMultiplier: chargeTuning.maxChargeMultiplier, maxChargeTime: chargeTuning.maxChargeTime}
-    return {
-        weaponId: weapon.id,
-        damage: weapon.damage,
-        ...(cooldown !== 0 ? {cooldown} : {}),
-        ...(charge !== undefined ? {charge} : {}),
-        ...(weapon.type === 'ranged'
-            ? {ranged: {
-                range: weapon.range,
-                bulletSpeed: weapon.projectileSpeed,
-                bulletKnockback: weapon.knockbackForce,
-                bulletLifetime: weapon.projectileLifetime,
-            }}
-            : {}),
+/** 导出可持久化装备：剔除未声明槽位、跨体形武器、天然武器与未知 id */
+const equipmentToSave = (state: EquipmentState, bodyFormId: string): EquipmentState => {
+    const plan = bodyFormOf(bodyFormId)
+    const allowedSlots = new Set(plan.equipSlots.map(slot => `${slot.kind}:${slot.bodyPart}`))
+    let out: EquipmentState = EMPTY_EQUIPMENT_STATE
+    for (const entry of equipmentEntriesOf(state)) {
+        if (!allowedSlots.has(entry.key)) continue
+        if (entry.kind === 'weapon') {
+            const weapon = findWeaponPreset(entry.itemId)
+            if (weapon === undefined || weapon.formId !== plan.id || weapon.natural === true) continue
+            if (!weapon.equipBodyParts.includes(entry.bodyPart)) continue
+        } else {
+            const piece = entry.kind === 'armor' ? findArmorPreset(entry.itemId) : findLimbPreset(entry.itemId)
+            if (piece === undefined || piece.slot !== entry.bodyPart) continue
+            if (piece.allowedBodyFormIds !== undefined && !piece.allowedBodyFormIds.includes(plan.id)) continue
+        }
+        out = withEquipmentAt(out, entry.kind, entry.bodyPart, entry.itemId)
     }
+    return out
 }
 
 /** 收集当前世界所有可序列化实体的状态 */
@@ -182,29 +172,19 @@ export const collectWorldState = (
                     speed: e.config.speed,
                     jumpHeight: e.config.jumpHeight,
                     scale: e.config.scale,
-                    /* 体形计划（基础模组）：缺省 humanoid，旧代码读到缺字段安全回退 */
+                    /* 体形计划（基础模组）：缺省 humanoid */
                     bodyFormId: e.config.bodyFormId,
-                    breathModuleId: e.config.breathModuleId,
+                    /* 体形专属状态（人形：holdMode / handedness） */
+                    bodyState: e.bodyState,
                     peaceStrategy: e.peaceStrategy,
                     combatStrategy: e.combatStrategy,
-                    /* 攻击配置：装备武器 + 数值覆写（攻击动作由武器模组的攻击链决定） */
-                    attack: attackConfigOf(e.combat.weapon, e.combat.attacks),
-                    /* 副手武器配置（可选）：单持 / 双持时装备，双手共持时挂背 */
-                    ...(e.combat.offhand !== undefined
-                        ? {offhand: attackConfigOf(e.combat.offhand.weapon, e.combat.offhand.attacks)}
-                        : {}),
-                    /* 持握模式（持久化；换武器时重置为武器默认模式） */
-                    holdMode: e.holdMode,
-                    /* 惯用手（持久化；缺省 = 右撇子） */
-                    handedness: e.config.handedness,
                     tendency: e.combat.tendencyConfig,
                     faction: e.combat.faction,
                     maxHealth: e.combat.maxHealth,
-                    /* 基础防御 + 基础攻击 + 护甲 + 肢体装备（旧代码读到缺字段安全回退零防御零攻击空装备） */
+                    /* 基础防御 + 基础攻击 + 装备状态（limb / weapon / armor 分层） */
                     defense: e.combat.baseDefense,
                     baseAttack: e.combat.baseAttack,
-                    armor: e.combat.armor,
-                    limb: e.combat.limb,
+                    equipment: equipmentToSave(e.combat.equipment, bodyFormOf(e.config.bodyFormId).id),
                     /* 额外锁定点（拷贝为 JSON-safe 元组；缺省 = 仅默认身体中心点） */
                     lockPoints: e.lockPoints.map((point): LockPointConfig => ({
                         jointId: point.jointId,

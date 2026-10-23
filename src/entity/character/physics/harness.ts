@@ -120,7 +120,7 @@ export const makeChar = (
         interactTargetZ: 0,
         /* 测试专用最小 combat（真实组件，仅倾向设为无条件敌对；避免手写字段随组件结构漂移） */
         combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 100),
-        holdMode: runtime.holdMode,
+        bodyState: {holdMode: runtime.holdMode},
         environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),
     }

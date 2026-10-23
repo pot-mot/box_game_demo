@@ -5,7 +5,7 @@
 
 基于 Three.js + rapier3d-compat 的游戏项目：物理交互沙盒 + 角色动作战斗 + 编辑 / 游玩 / 展示 / 骨骼动画四套模式。
 
-> **改动任一模块前，先读该模块根目录下的**同名文档**（如 `src/physics/physics.md`；子文档在其子目录，如 `src/character/weapon/bone_animation/`）。见文末[模块文档索引](#模块文档索引)。按需惰性加载，不要预读全部。** 本文件只保留全局、跨模块、必须每次在场的规则。
+> **改动任一模块前，先读该模块根目录下的**同名文档**（如 `src/physics/physics.md`；子文档在其子目录，如 `src/entity/character/body_form/humanoid/skeleton_animation/bone_animation/`）。见文末[模块文档索引](#模块文档索引)。按需惰性加载，不要预读全部。** 本文件只保留全局、跨模块、必须每次在场的规则。
 
 ## 命令
 
@@ -89,7 +89,8 @@
 5. **状态机驱动角色** — `entity/character/physics/world.ts` 在 play / 展示模式每物理步调用 `stateMachine.update(FIXED_TIME_STEP, entity)`（编辑模式由 `tick` 按渲染 delta 调用）→ 状态直接操作 `entity.body`（`setLinvel` 等）→ `syncTrueTransforms()` 写真实位置供碰撞体同步 → 渲染帧 `syncPositions(alpha)` 写插值后的可视变换。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/control/player_control.ts` 的 `move()` 每渲染帧读取动作并调用 `characterSystem.setPlayerMove()`（跳跃 / 翻滚边沿锁存到物理步消费）→ `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。详见 [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md)。
 6. **两套操作方案** — 所有具备操作能力的模式只归入 `modes/control/` 的两套共享方案（玩家主控 `createPlayerControl` / 纯摄像机 `createCameraControl`），新增模式不得另写相机/移动逻辑。详见 [`src/modes/control/control.md`](src/modes/control/control.md)。
 7. **惯用手 canonical 右撇子** — 骨架与全部动作数据（含存档姿势）恒定表示右撇子（主手 = 解剖右 = `-X`、副手/支撑手 = 解剖左 = `+X`）；左撇子（`CharacterConfig.handedness = 'left'`）只是**取用时镜像**视图：clip 经 `skeleton/anim/mirror.ts` 的 `mirrorClip` 派生（缓存键含 handedness，逐帧零开销）、武器/护甲/肢体挂点与网格（`scale.x=-1`）随 `mainHandSide`/`offHandSide` 切换、双手 IK 支撑侧换到相反侧。**禁止**新增左撇子专有动作数据或按「屏幕左右」写死关节映射。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md)。
-8. **武器按体形分包** — 每个武器**只属于一种体形**（`WeaponModelConfig.formId`），数据声明在 `forms/<form>/weapons.ts`（只复用 `appearance/weapon_mesh.ts` 的网格生成器）；体形 `BodyForm.weapons` 暴露其武器表，`body_form/index.ts` 装配时经 `catalog.ts` 的 `registerFormWeapons` 注册。**禁止**跨体形直接复用武器条目；切体形一律落到新体形 `defaultWeaponId`。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md)。
+8. **body_form 五子包** — 每个体形拥有 `state/`（属性/计算/装备槽/bodyState）、`skeleton/`（唯一关节/IK/碰撞/受击节点）、`skeleton_animation/`（动画工厂/组合/模组/clip 烘焙）、`appearance/`（mesh/材质/外观）、`equipment/`（limb/armor/weapon 模组）。装备只影响 state 与 appearance，不修改 skeleton/动画；动画不能增删骨骼节点；碰撞/受击箱由 skeleton 节点控制。
+9. **武器按体形分包** — 每个武器**只属于一种体形**（`WeaponModelConfig.formId`），数据声明在 `body_form/<form>/equipment/weapons.ts`（只复用 `appearance/weapon_mesh.ts` 的网格生成器）；体形 `BodyForm.weapons` 暴露其武器表，`body_form/index.ts` 装配时经 `catalog.ts` 的 `registerFormWeapons` 注册。**禁止**跨体形直接复用武器条目；切体形一律落到新体形 `defaultWeaponId`。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md)。
 
 ## 高危红线（跨模块，必须遵守）
 
@@ -112,7 +113,7 @@ src/
 ├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/）
 ├── character/                   # 角色领域模型：ai_strategy / interaction / weapon / combat / armor / state_machine / handedness
 ├── entity/
-│   ├── character/               # 角色实体（body_form / forms / appearance / combat / projectile / physics / ai / combat_vfx / ui）
+│   ├── character/               # 角色实体（body_form/common + 体形分包 / appearance / combat / projectile / physics / ai / combat_vfx / ui）
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（人形无关，预设外部注入）
 │   ├── interactable/            # 交互物实体系统（行为 + 信号联动 + 可破坏 + 网格 + 编辑面板）
 │   ├── item/                    # 掉落物实体（sensor body 漂浮小立方体，拾取经交互）
@@ -130,7 +131,7 @@ src/
 
 ## 模块文档索引
 
-每个模块只有一份以模块命名的文档，位于模块根目录（子主题文档在其子目录，如武器动作 `src/character/weapon/bone_animation/`）。**跨模块不变量只写在本文件（下「架构规则」「高危红线」）；模块文档只写该模块特有内容，不重复全局规则。**
+每个模块只有一份以模块命名的文档，位于模块根目录（子主题文档在其子目录，如武器动作 `src/entity/character/body_form/humanoid/skeleton_animation/bone_animation/`）。**跨模块不变量只写在本文件（下「架构规则」「高危红线」）；模块文档只写该模块特有内容，不重复全局规则。**
 
 | 模块 / 主题 | 文档 | 何时读 |
 |---|---|---|
@@ -143,12 +144,14 @@ src/
 | 武器 | [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) | 武器类/模型、持握、攻击段、蓄力、空中攻击、动作 |
 | 战斗运行时 | [`src/character/combat/combat.md`](src/character/combat/combat.md) | 伤害类别、防御、无敌帧 |
 | 护甲 / 肢体 | [`src/character/armor/armor.md`](src/character/armor/armor.md) | 护甲槽位、防御/加成 |
+| 装备模型 | [`src/character/equipment/types.ts`](src/character/equipment/types.ts) | `EquipSlotDef` / `EquipmentDef` / `EquipmentState` / `kind:bodyPart` 槽位键 |
 | 交互领域 | [`src/character/interaction/interaction.md`](src/character/interaction/interaction.md) | 交互类型层、时长 |
 | 状态机 | [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md) | 新增状态、死亡/翻滚/倒地起身、攻击段、空中攻击 |
 | 骨骼动画 | [`src/skeleton/skeleton.md`](src/skeleton/skeleton.md) | 骨骼/IK/组合动画 |
+| 动画组合 | [`src/entity/character/body_form/common/skeleton_animation/composition.ts`](src/entity/character/body_form/common/skeleton_animation/composition.ts) | SkeletonAnimation / AnimationComposition / AnimationModule / 烘焙 clip |
 | 角色 AI | [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) | 寻路索敌、导航避障、朝向 |
 | 方块人外观（共享工具） | [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md) | 跨体形网格构建器、武器网格、桥接 |
-| 人形分包 | [`src/entity/character/forms/humanoid/humanoid.md`](src/entity/character/forms/humanoid/humanoid.md) | 人形骨架/模型/动画/clip/支撑手烘焙 |
+| 人形分包 | [`src/entity/character/body_form/humanoid/humanoid.md`](src/entity/character/body_form/humanoid/humanoid.md) | 人形骨架/模型/动画/clip/支撑手烘焙 |
 | 体形计划 | [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md) | 基础模组（骨架/碰撞布局/受击子块/装备槽/武器策略）、运行时切换 |
 | 弹丸 | [`src/entity/character/projectile/projectile.md`](src/entity/character/projectile/projectile.md) | 弹丸物理/视觉/对象池 |
 | 角色物理 | [`src/entity/character/physics/physics.md`](src/entity/character/physics/physics.md) | body/mesh 同步、移动平台载客 |
@@ -168,13 +171,10 @@ src/
 | 全局 UI 风格 | [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)、[`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | 任何面板/HUD |
 | 全局 i18n | [`docs/i18n.md`](docs/i18n.md) | 文案 |
 | 全局动作规范 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 调动作 |
-| 盾牌 / 格挡（设计） | [`docs/design/shield_block.md`](docs/design/shield_block.md) | 实现盾牌 / 格挡前 |
 | AI 行为原点策略（设计记录，已实现） | [`docs/design/ai_origin_strategy.md`](docs/design/ai_origin_strategy.md) | 调整原点策略 / 追击半径设计前 |
 | 箱庭重构 + 生成对齐（设计，未实现） | [`docs/design/diorama.md`](docs/design/diorama.md) | 移除建筑箱庭 / 实现组合式箱庭 / 调整生成对齐前 |
 | 固定物理步 + 渲染插值 + 相机去平滑（设计记录，已实现） | [`docs/design/fixed_step_interpolation.md`](docs/design/fixed_step_interpolation.md) | 调整物理步进 / 角色位移抖动 / 相机跟随前 |
-| 动作 / 骨骼 / 模型清理（执行计划） | [`docs/design/animation_skeleton_model_cleanup.md`](docs/design/animation_skeleton_model_cleanup.md) | 清理历史债、拆分攻击数据、支撑手烘焙前 |
-| 动作 / 骨骼 / 模型历史（历史记录） | [`docs/history/bone_animation.md`](docs/history/bone_animation.md) | 查已删除资产 / 旧设计方案时 |
 
-> 文档状态标记：`当前实现`（默认，描述现状）/ `设计记录`（可能未实现）/ `历史记录`（不代表现状，见 `docs/history/`）。
+> 文档状态标记：`当前实现`（默认，描述现状）/ `设计记录`（可能未实现）。已完成的执行计划与旧设计不再保留在活跃索引中。
 
 **扩展 AI 功能时**：阅读 [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) → 按"新增 AI 功能指南"章节操作 → 更新配置表 → 添加测试 → 同步更新文档。

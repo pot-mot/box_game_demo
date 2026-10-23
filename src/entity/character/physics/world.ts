@@ -17,17 +17,18 @@ import type {AttackResult} from '../../../character/combat/types.ts'
 import {createCombatComponent, setCombatBreath, setCombatEquipment, setCombatOffhand, setCombatWeapon, updateShieldBlock} from '../../../character/combat/types.ts'
 import {ZERO_PROFILE, type DefenseProfile} from '../../../character/combat/defense.ts'
 import type {DamageTypeProfile} from '../../../character/combat/damage_type.ts'
-import type {ArmorLoadout, LimbLoadout} from '../../../character/armor/types.ts'
-import {filterEquipLoadouts} from '../body_form/equip.ts'
+import {filterEquipmentState} from '../body_form/common/equip.ts'
 import {resolveArmorLoadout, resolveLimbLoadout} from '../../../character/armor/catalog.ts'
+import type {EquipmentState} from '../../../character/equipment/types.ts'
+import {EMPTY_EQUIPMENT_STATE, withEquipmentAt} from '../../../character/equipment/types.ts'
+import {humanoidBodyStateOf, withHumanoidHoldMode} from '../body_form/humanoid/state/body_state.ts'
 import {canStartAttack, tickSegmentCooldowns} from '../../../character/combat/attack_runtime.ts'
-import {createTestWeaponRuntime, TEST_WEAPON_ID} from '../../../character/combat/test_weapon.ts'
 import {createWeaponRuntime, isKnownWeaponId, type WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import {availableHoldModes, defaultHoldMode, weaponAttacksOf, weaponDisplayName} from '../../../character/weapon/catalog.ts'
 import {breathModuleOf} from '../../../character/weapon/breath_module.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import type {HoldMode} from '../../../character/weapon/hold_mode.ts'
-import {DEFAULT_HANDEDNESS, isHandedness} from '../../../character/handedness.ts'
+import {isHandedness} from '../../../character/handedness.ts'
 import type {ShieldBlockConfig} from '../../../character/weapon/constants.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
 import {segmentTotalDuration, isChargeableKey, type AttackKey, type GroundAttackKey} from '../../../character/weapon/attack_chain.ts'
@@ -58,7 +59,7 @@ import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
 import {ROTATION_SPEED, SELECT_PALETTE, VELOCITY_DIR_THRESHOLD} from '../appearance/constants.ts'
 import {DEFAULT_CHARACTER_CONFIG} from '../validation.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
-import {formBodyRadius, formEyeHeight} from '../body_form/geometry.ts'
+import {formBodyRadius, formEyeHeight} from '../body_form/common/geometry.ts'
 import {categoryCollisionGroups, collisionCategoryOf} from '../../../physics/collision_category.ts'
 import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.ts'
 import type {GroundContactLike} from './ground_state.ts'
@@ -119,9 +120,21 @@ const _shieldQuat = new Quaternion()
 const SWIM_PRONE_PITCH = Math.PI * 0.38
 const _swimPitchQuat = new Quaternion()
 
-/** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写；test_weapon 走测试专用链） */
+/** 读取角色持握模式（人形体形状态；非人形回退单持，仅用于通用分支判断） */
+const holdModeOf = (entity: CharacterEntity): HoldMode => humanoidBodyStateOf(entity.bodyState).holdMode
+
+/** 同步装备外观：人形走护甲 / 肢体装配，生物走通用槽位色块（体形固有部件承担主体外观） */
+const applyEquipmentVisuals = (model: import('../appearance/types.ts').CreatureModel, entity: CharacterEntity): void => {
+    if (model.equipEquipmentState !== undefined) {
+        model.equipEquipmentState(entity.combat.equipment)
+        return
+    }
+    model.equipArmor?.(resolveArmorLoadout(entity.combat.equipment.armor))
+    model.equipLimbs?.(resolveLimbLoadout(entity.combat.equipment.limb))
+}
+
+/** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写） */
 const weaponRuntimeOf = (attack: AttackConfig, holdMode?: HoldMode): WeaponRuntime => {
-    if (attack.weaponId === TEST_WEAPON_ID) return createTestWeaponRuntime(holdMode)
     return createWeaponRuntime(attack.weaponId, {
         damage: attack.damage,
         cooldown: attack.cooldown,
@@ -244,7 +257,7 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     add: (config: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}) => {id: number}
     getAll: () => readonly CharacterEntity[]
     setTransform: (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}) => void
-    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; baseAttack?: DamageTypeProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null) => void
+    updateCharacterConfig: (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; baseAttack?: DamageTypeProfile; equipment?: EquipmentState}, newOffhand?: AttackConfig | null) => void
     /** 运行时切换体形（基础模组）；未知 id 或同体形返回 false */
     setBodyForm: (id: number, planId: string) => boolean
     /** 设置 / 卸下吐息模组（仅支持 breath 槽的体形；未知 id 视为卸下） */
@@ -335,7 +348,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             ...(entity.combat.weapon.mountJointId !== undefined ? {mainMountJointId: entity.combat.weapon.mountJointId} : {}),
             ...(entity.combat.weapon.mountRotation !== undefined ? {mainMountRotation: entity.combat.weapon.mountRotation} : {}),
             ...(entity.combat.weapon.type === 'melee'
-                ? {offhand: entity.combat.offhand?.weapon.mesh, offhandStowed: entity.holdMode === 'two_handed'}
+                ? {offhand: entity.combat.offhand?.weapon.mesh, offhandStowed: holdModeOf(entity) === 'two_handed'}
                 : {}),
         })
     }
@@ -465,13 +478,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     /** 清除全部在飞子弹（同时移除物理刚体与场景 mesh），供世界还原 / 载入存档时调用 */
     const clearBullets = (): void => { rangedExecutor.clear() }
     /* 攻击动画事件轨道 → 近战命中窗口（hitbox_on/off，与视觉动画同步）；
-     * 事件 params.weapon 指定主手/副手（双持），缺省 = 两手同时开关（如状态切换的合成关闭事件） */
+     * 事件 params.slotKey 指定槽位（双持 main_hand / off_hand，多槽 wing_claw / breath 等），
+     * 缺省 = 全部已装备武器槽同时开关（如状态切换的合成关闭事件） */
     const onAttackEvent = (record: BoneEventRecord): void => {
-        const slot = record.params?.weapon === 'offhand' ? 'offhand'
-            : record.params?.weapon === 'main' ? 'main'
-            : undefined
-        if (record.eventName === 'hitbox_on') meleeExecutor.setHitWindow(true, slot)
-        if (record.eventName === 'hitbox_off') meleeExecutor.setHitWindow(false, slot)
+        const slotKey = typeof record.params?.slotKey === 'string' ? record.params.slotKey : undefined
+        if (record.eventName === 'hitbox_on') meleeExecutor.setHitWindow(true, slotKey)
+        if (record.eventName === 'hitbox_off') meleeExecutor.setHitWindow(false, slotKey)
     }
     /** 追踪当前激活的近战攻击（用于 start/end 生命周期） */
     const activatedAttacks = new Map<number, 'melee' | 'ranged'>()
@@ -589,6 +601,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         chaseLeashRadius: number = DEFAULT_CHASE_LEASH_RADIUS,
         aiBlockDuration: number = DEFAULT_AI_BLOCK_DURATION,
         aiBlockCooldown: number = DEFAULT_AI_BLOCK_COOLDOWN,
+        equipment: EquipmentState = EMPTY_EQUIPMENT_STATE,
     ): CharacterEntity => {
         /* 体形计划（骨架 / 外观 / 碰撞布局 / 受击子块 / 装备槽 / 武器策略）：缺省 = 人形 */
         const plan = bodyFormOf(config.bodyFormId)
@@ -659,10 +672,31 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             },
         )
         setCombatOffhand(combat, offhandRuntime)
-        const breathModule = plan.equipSlots.breath === true ? breathModuleOf(config.breathModuleId) : undefined
+        /* 主武器写入槽位表（非天然武器才落存档）；执行器按任意武器槽解析命中 */
+        const mainEquipSlot = runtime.weapon.equipBodyParts.find(part =>
+            plan.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === part),
+        ) ?? plan.equipSlots.find(slot => slot.kind === 'weapon')?.bodyPart
+        let resolvedEquipment = equipment
+        if (mainEquipSlot !== undefined) {
+            combat.weapons.set(mainEquipSlot, runtime)
+            if (runtime.weapon.natural !== true) {
+                resolvedEquipment = withEquipmentAt(resolvedEquipment, 'weapon', mainEquipSlot, runtime.weapon.id)
+            }
+        }
+        if (offhandRuntime !== undefined) {
+            resolvedEquipment = withEquipmentAt(resolvedEquipment, 'weapon', 'off_hand', offhandRuntime.weapon.id)
+        }
+        const breathModule = plan.breathModules !== undefined
+            ? breathModuleOf(resolvedEquipment.weapon.breath)
+            : undefined
         if (breathModule !== undefined) {
             setCombatBreath(combat, {module: breathModule, attacks: weaponAttacksOf(breathModule)})
         }
+        /* 装备数值：按体形槽位校验后汇总（武器 / 护甲 / 肢体 / 天然武器均在此表） */
+        setCombatEquipment(combat, ZERO_PROFILE, resolvedEquipment, plan.id)
+
+        const bodyState = config.bodyState ?? {}
+        const humanoidState = humanoidBodyStateOf(bodyState)
 
         const entity: CharacterEntity = {
             id,
@@ -698,7 +732,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             knockdownFallDirZ: 0,
             knockdownFallAngle: 0,
             combat,
-            holdMode: defaultHoldMode(runtime.weapon),
+            bodyState: plan.id === HUMANOID_BODY_FORM.id ? withHumanoidHoldMode(bodyState, humanoidState.holdMode) : bodyState,
             lockPoints: [],
             interactTargetActive: false,
             interactTargetX: 0,
@@ -1032,7 +1066,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (main !== undefined && main.type === 'melee' && main.block !== undefined) return ['light', 'heavy']
         /* 副手盾仅在单持 / 双持时握在手中；双手共持时挂背，不接管按键 */
         const off = player.combat.offhand
-        if (off !== undefined && player.holdMode !== 'two_handed'
+        if (off !== undefined && holdModeOf(player) !== 'two_handed'
             && off.weapon.type === 'melee' && off.weapon.block !== undefined) return ['heavy']
         return []
     }
@@ -1503,7 +1537,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const offWeapon = entity.combat.offhand
                 const shieldHands = {
                     main: mainWeapon.type === 'melee' && mainWeapon.block !== undefined,
-                    off: entity.holdMode !== 'two_handed'
+                    off: holdModeOf(entity) !== 'two_handed'
                         && offWeapon !== undefined && offWeapon.weapon.type === 'melee' && offWeapon.weapon.block !== undefined,
                 }
 
@@ -1538,8 +1572,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     stateTime: animStateTime,
                     ...(stateDuration !== undefined ? {stateDuration} : {}),
                     horizontalSpeed: hSpeed,
-                    holdMode: entity.holdMode,
-                    handedness: entity.config.handedness ?? DEFAULT_HANDEDNESS,
+                    ...(bodyFormOf(entity.config.bodyFormId).id === HUMANOID_BODY_FORM.id
+                        ? {humanoid: {
+                            holdMode: holdModeOf(entity),
+                            handedness: humanoidBodyStateOf(entity.bodyState).handedness,
+                            weaponClassId: entity.combat.weapon.classId,
+                            shieldHands,
+                        }}
+                        : {}),
                     attackSegment: inAttacking ? activeSegment : undefined,
                     attackPhase: ctxPhaseName,
                     attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
@@ -1547,9 +1587,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     attackPhaseIndex: entity.combat.phaseIndex,
                     attackCharge: entity.combat.attackCharge,
                     attackHolding: entity.combat.attackHolding,
-                    weaponClassId: entity.combat.weapon.classId,
                     weaponHeld: model.weaponMesh !== null,
-                    shieldHands,
                 })
 
                 const vx = entity.body.linvel().x
@@ -1792,7 +1830,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
 
                     /* 副手攻击判定箱（双持）：跟随副手武器模型 */
-                    if (showDebug && meleeWeapon !== undefined && model.offhandWeaponGroup !== null && model.offhandWeaponHitBox !== null) {
+                    if (showDebug && meleeWeapon !== undefined && model.offhandWeaponGroup != null && model.offhandWeaponHitBox != null) {
                         model.offhandWeaponGroup.updateMatrixWorld()
                         syncWeaponDebugBox(hitBoxes.offhandWeaponBox, model.offhandWeaponGroup.matrixWorld,
                             model.offhandWeaponHitBox.center, model.offhandWeaponHitBox.half)
@@ -2014,15 +2052,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const add = (saveConfig: CharacterSaveConfig, x: number, y: number, z: number, quat?: {x: number; y: number; z: number; w: number}, opts?: {health?: number}): {id: number} => {
+        const plan = bodyFormOf(saveConfig.bodyFormId)
         const cfg: CharacterConfig = {
             speed: saveConfig.speed,
             jumpHeight: saveConfig.jumpHeight,
             scale: saveConfig.scale,
             /* 体形计划：已知 id 才写入（未知 / 缺省安全回退 humanoid） */
             ...(saveConfig.bodyFormId !== undefined && isKnownBodyFormId(saveConfig.bodyFormId) ? {bodyFormId: saveConfig.bodyFormId} : {}),
-            ...(saveConfig.breathModuleId !== undefined ? {breathModuleId: saveConfig.breathModuleId} : {}),
-            /* 惯用手：非法 / 缺省安全回退 undefined（运行时按右撇子处理） */
-            ...(isHandedness(saveConfig.handedness) ? {handedness: saveConfig.handedness} : {}),
+            /* 体形专属状态（人形 holdMode / handedness） */
+            ...(saveConfig.bodyState !== undefined ? {bodyState: saveConfig.bodyState} : {}),
             /* 韧性 / 倒地属性：旧档缺字段回退默认（createCombatComponent 内 clamp 默认值） */
             ...(saveConfig.poiseMax !== undefined ? {poiseMax: saveConfig.poiseMax} : {}),
             ...(saveConfig.poiseRegenDelay !== undefined ? {poiseRegenDelay: saveConfig.poiseRegenDelay} : {}),
@@ -2030,23 +2068,38 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             ...(saveConfig.knockdownDuration !== undefined ? {knockdownDuration: saveConfig.knockdownDuration} : {}),
             ...(saveConfig.getUpDuration !== undefined ? {getUpDuration: saveConfig.getUpDuration} : {}),
         }
-        /* 副手：未知武器 id 安全丢弃（回退无副手），避免未知 id 被静默替换成默认武器带入存档 */
-        const offhandAttack = saveConfig.offhand !== undefined && isKnownWeaponId(saveConfig.offhand.weaponId)
-            ? saveConfig.offhand
-            : undefined
-        const entity = spawnEntity(cfg, saveConfig.attack, offhandAttack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true, saveConfig.originStrategy ?? 'resident', saveConfig.originInterval ?? DEFAULT_ROAMER_INTERVAL, saveConfig.chaseLeashRadius ?? DEFAULT_CHASE_LEASH_RADIUS, saveConfig.aiBlockDuration ?? DEFAULT_AI_BLOCK_DURATION, saveConfig.aiBlockCooldown ?? DEFAULT_AI_BLOCK_COOLDOWN)
-        /* 持握模式：存档支持时应用，武器不支持时 setHoldMode 回退默认模式（不抛错） */
-        if (saveConfig.holdMode !== undefined) setHoldMode(entity.id, saveConfig.holdMode)
-        /* 防御 / 攻击 / 护甲 / 肢体：旧档缺字段回退零防御零攻击空装备；未知 id 由 resolve*Loadout 安全剔除 */
-        setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {}, saveConfig.limb ?? {}, saveConfig.baseAttack ?? ZERO_PROFILE)
+        /* 装备：只保留当前体形声明的槽位；天然武器 / 未知 id 由装备解析层剔除 */
+        const equipment = filterEquipmentState(plan.equipSlots, saveConfig.equipment ?? EMPTY_EQUIPMENT_STATE)
+        /* 主武器槽：优先 main_hand，其次默认武器的部位，再取首个已装备武器槽；空则回退体形默认武器 */
+        const weaponSlots = plan.equipSlots.filter(slot => slot.kind === 'weapon')
+        const defaultWeapon = plan.weapons.find(weapon => weapon.id === plan.defaultWeaponId) ?? plan.weapons[0]
+        const defaultSlot = defaultWeapon?.equipBodyParts[0]
+        const mainSlot = weaponSlots.some(slot => slot.bodyPart === 'main_hand')
+            ? 'main_hand'
+            : (defaultSlot !== undefined && weaponSlots.some(slot => slot.bodyPart === defaultSlot)
+                ? defaultSlot
+                : (weaponSlots.find(slot => equipment.weapon[slot.bodyPart] !== undefined)?.bodyPart ?? defaultSlot ?? weaponSlots[0]?.bodyPart))
+        const requestedMainId = (mainSlot !== undefined ? equipment.weapon[mainSlot] : undefined) ?? plan.defaultWeaponId
+        const mainWeaponId = isKnownWeaponId(requestedMainId) ? requestedMainId : plan.defaultWeaponId
+        const requestedOffId = plan.id === HUMANOID_BODY_FORM.id ? equipment.weapon.off_hand : undefined
+        const offWeaponId = requestedOffId !== undefined && isKnownWeaponId(requestedOffId) ? requestedOffId : undefined
+        const attack: AttackConfig = {weaponId: mainWeaponId}
+        const offhandAttack: AttackConfig | undefined = offWeaponId !== undefined ? {weaponId: offWeaponId} : undefined
+        const entity = spawnEntity(cfg, attack, offhandAttack, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true, saveConfig.originStrategy ?? 'resident', saveConfig.originInterval ?? DEFAULT_ROAMER_INTERVAL, saveConfig.chaseLeashRadius ?? DEFAULT_CHASE_LEASH_RADIUS, saveConfig.aiBlockDuration ?? DEFAULT_AI_BLOCK_DURATION, saveConfig.aiBlockCooldown ?? DEFAULT_AI_BLOCK_COOLDOWN, equipment)
+        /* 持握模式：从体形状态读取，武器不支持时 setHoldMode 回退默认模式（不抛错） */
+        if (plan.id === HUMANOID_BODY_FORM.id) {
+            const {holdMode} = humanoidBodyStateOf(cfg.bodyState)
+            setHoldMode(entity.id, holdMode)
+        }
+        /* 防御 / 攻击：旧档缺字段回退零防御零攻击；装备汇总已在 spawnEntity 内完成 */
+        setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, entity.combat.equipment, plan.id, saveConfig.baseAttack ?? ZERO_PROFILE)
         /* 载入即回满韧性（poiseMax 已含装备汇总） */
         entity.combat.poise = entity.combat.poiseMax
         /* 额外锁定点：旧档缺字段回退仅默认身体中心点；非法条目由 sanitizeLockPoints 安全剔除 */
         entity.lockPoints = sanitizeLockPoints(saveConfig.lockPoints)
         const model = appearanceModels.get(entity.id)
         if (model) {
-            model.equipArmor(resolveArmorLoadout(entity.combat.armor))
-            model.equipLimbs(resolveLimbLoadout(entity.combat.limb))
+            applyEquipmentVisuals(model, entity)
         }
         entity.combat.maxHealth = saveConfig.maxHealth
         entity.combat.health = opts?.health ?? saveConfig.maxHealth
@@ -2119,9 +2172,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (entity === undefined) return false
         const supported = availableHoldModes(entity.combat.weapon, entity.combat.offhand?.weapon).includes(holdMode)
         const mode = supported ? holdMode : defaultHoldMode(entity.combat.weapon)
-        if (entity.holdMode !== mode) {
+        if (holdModeOf(entity) !== mode) {
             setCombatWeapon(entity.combat, runtimeForHoldMode(entity.combat.weapon, mode), mode)
-            entity.holdMode = mode
+            entity.bodyState = withHumanoidHoldMode(entity.bodyState, mode)
             entity.combat.activeSegment = undefined
             entity.combat.bufferedSegment = undefined
             entity.combat.segmentCooldowns.clear()
@@ -2136,10 +2189,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (entity === undefined) return undefined
         const modes = availableHoldModes(entity.combat.weapon, entity.combat.offhand?.weapon)
         if (modes.length === 0) return undefined
-        const index = modes.indexOf(entity.holdMode)
+        const index = modes.indexOf(holdModeOf(entity))
         const next = modes[(index + 1) % modes.length] ?? modes[0]
         setHoldMode(entity.id, next)
-        return entity.holdMode
+        return holdModeOf(entity)
     }
 
     /** 设置额外锁定点：非法条目安全剔除（不抛错），默认身体中心点不受影响 */
@@ -2149,7 +2202,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.lockPoints = sanitizeLockPoints(points)
     }
 
-    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; baseAttack?: DamageTypeProfile; armor?: ArmorLoadout; limb?: LimbLoadout}, newOffhand?: AttackConfig | null): void => {
+    const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; baseAttack?: DamageTypeProfile; equipment?: EquipmentState}, newOffhand?: AttackConfig | null): void => {
         const entity = characters.find(c => c.id === id)
         if (!entity) return
         if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
@@ -2187,10 +2240,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 entity.wireframe = newWire
             }
         }
-        if (charCfg.handedness !== undefined) {
+        const nextHandedness = charCfg.bodyState?.handedness
+        if (nextHandedness !== undefined && isHandedness(nextHandedness)) {
             /* 惯用手切换：主 / 副手槽位与网格镜像迁移（武器网格不重建）；动作镜像由 clip 层随 ctx 生效 */
-            entity.config.handedness = charCfg.handedness
-            appearanceModels.get(entity.id)?.setHandedness(charCfg.handedness)
+            entity.bodyState = {...entity.bodyState, handedness: nextHandedness}
+            appearanceModels.get(entity.id)?.setHandedness?.(nextHandedness)
         }
         if (newAttackSlot || newOffhand !== undefined) {
             const plan = bodyFormOf(entity.config.bodyFormId)
@@ -2200,10 +2254,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (newAttackSlot !== undefined) {
                 const mainWeapon = weaponRuntimeOf(newAttackSlot)
                 if (weaponSelectableFor(plan, mainWeapon.weapon)) {
-                    setCombatWeapon(entity.combat, mainWeapon)
-                    if (plan.equipSlots.breath === true) {
-                        const module = breathModuleOf(entity.config.breathModuleId)
-                        if (module !== undefined) setCombatBreath(entity.combat, {module, attacks: weaponAttacksOf(module)})
+                    const slot = mainWeapon.weapon.equipBodyParts.find(part =>
+                        plan.equipSlots.some(s => s.kind === 'weapon' && s.bodyPart === part) && part !== 'off_hand',
+                    ) ?? mainWeapon.weapon.equipBodyParts[0]
+                    setCombatWeapon(entity.combat, mainWeapon, undefined, slot)
+                    if (slot !== undefined) {
+                        entity.combat.equipment = withEquipmentAt(entity.combat.equipment, 'weapon', slot, mainWeapon.weapon.id)
                     }
                     changed = true
                 }
@@ -2212,14 +2268,20 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const offWeapon = newOffhand === null ? undefined : weaponRuntimeOf(newOffhand)
                 if (offWeapon === undefined || weaponSelectableFor(plan, offWeapon.weapon)) {
                     setCombatOffhand(entity.combat, offWeapon)
+                    entity.combat.equipment = withEquipmentAt(
+                        entity.combat.equipment,
+                        'weapon',
+                        'off_hand',
+                        offWeapon?.weapon.id,
+                    )
                     changed = true
                 }
             }
             if (changed) {
                 /* 持握模式重置为该武器支持的首个模式（面板随后可再显式 setHoldMode），清空段冷却与当前段 */
-                entity.holdMode = defaultHoldMode(entity.combat.weapon)
+                entity.bodyState = withHumanoidHoldMode(entity.bodyState, defaultHoldMode(entity.combat.weapon))
                 /* 新模式可能使副手盾挂背（双手共持）：重解析盾来源 */
-                updateShieldBlock(entity.combat, entity.holdMode)
+                updateShieldBlock(entity.combat, holdModeOf(entity))
                 entity.combat.activeSegment = undefined
                 entity.combat.bufferedSegment = undefined
                 entity.combat.segmentCooldowns.clear()
@@ -2242,7 +2304,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (charCfg.poiseMax !== undefined) {
             entity.config.poiseMax = charCfg.poiseMax
             entity.combat.basePoiseMax = charCfg.poiseMax
-            setCombatEquipment(entity.combat, entity.combat.baseDefense, entity.combat.armor)
+            setCombatEquipment(entity.combat, entity.combat.baseDefense, entity.combat.equipment, bodyFormOf(entity.config.bodyFormId).id)
         }
         if (charCfg.poiseRegenDelay !== undefined) {
             entity.config.poiseRegenDelay = charCfg.poiseRegenDelay
@@ -2265,47 +2327,42 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.combat.tendencyConfig = newTendencyConfig
         }
         if (newEquipment) {
-            /* 基础防御 / 基础攻击 / 护甲 / 肢体变更：重算防御、攻击加成与移速并同步外观（未传项保持原值）。
-             * 按**当前体形**装备槽过滤（切体形后提交的旧槽位装备须剔除，避免无槽体形获得护甲数值）。 */
+            /* 基础防御 / 基础攻击 / 装备变更：重算防御、攻击加成与移速并同步外观（未传项保持原值）。
+             * 按**当前体形**装备槽过滤（切体形后提交的旧槽位装备须剔除，避免无槽体形获得装备数值）。 */
             const plan = bodyFormOf(entity.config.bodyFormId)
-            const filtered = filterEquipLoadouts(
-                plan.equipSlots,
-                newEquipment.armor ?? entity.combat.armor ?? {},
-                newEquipment.limb ?? entity.combat.limb ?? {},
-            )
+            const filtered = newEquipment.equipment !== undefined
+                ? filterEquipmentState(plan.equipSlots, newEquipment.equipment)
+                : entity.combat.equipment
             setCombatEquipment(
                 entity.combat,
                 newEquipment.baseDefense ?? entity.combat.baseDefense,
-                filtered.armor,
-                filtered.limb,
+                filtered,
+                plan.id,
                 newEquipment.baseAttack,
             )
             const model = appearanceModels.get(entity.id)
             if (model) {
-                if (newEquipment.armor !== undefined) model.equipArmor(resolveArmorLoadout(entity.combat.armor))
-                if (newEquipment.limb !== undefined) model.equipLimbs(resolveLimbLoadout(entity.combat.limb))
+                if (newEquipment.equipment !== undefined) {
+                    applyEquipmentVisuals(model, entity)
+                }
             }
         }
         refreshPlayerLabel()
     }
 
-    /** 设置 / 卸下吐息模组（仅 breath 槽体形；未知 id 视为卸下） */
+    /** 设置 / 卸下吐息模组（仅声明 breath 武器槽的体形；未知 id 视为卸下） */
     const setBreathModule = (id: number, breathModuleId: string | undefined): void => {
         const entity = characters.find(c => c.id === id)
         if (entity === undefined) return
         const plan = bodyFormOf(entity.config.bodyFormId)
-        if (plan.equipSlots.breath !== true) {
-            delete entity.config.breathModuleId
-            setCombatBreath(entity.combat, undefined)
-            return
-        }
-        const module = breathModuleOf(breathModuleId)
+        const hasBreathSlot = plan.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'breath')
+        const module = hasBreathSlot ? breathModuleOf(breathModuleId) : undefined
         if (module === undefined) {
-            delete entity.config.breathModuleId
+            entity.combat.equipment = withEquipmentAt(entity.combat.equipment, 'weapon', 'breath', undefined)
             setCombatBreath(entity.combat, undefined)
             return
         }
-        entity.config.breathModuleId = module.id
+        entity.combat.equipment = withEquipmentAt(entity.combat.equipment, 'weapon', 'breath', module.id)
         setCombatBreath(entity.combat, {module, attacks: weaponAttacksOf(module)})
     }
 
@@ -2332,21 +2389,28 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (plan.id === HUMANOID_BODY_FORM.id) delete entity.config.bodyFormId
         else entity.config.bodyFormId = plan.id
 
-        /* 2) 武器策略：武器只属于一种体形 → 切体形一律落到新体形默认武器（不跨体形沿用） */
-        setCombatWeapon(entity.combat, weaponRuntimeOf({weaponId: plan.defaultWeaponId}))
-        entity.holdMode = defaultHoldMode(entity.combat.weapon)
+        /* 2) 武器策略：武器只属于一种体形 → 切体形一律落到新体形默认武器（不跨体形沿用）。
+         * 装备状态按新体形槽位过滤；天然默认武器不进装备表。 */
+        const newFormId = plan.id
+        let equipment = filterEquipmentState(plan.equipSlots, entity.combat.equipment)
+        const defaultSlot = plan.weapons.find(w => w.id === plan.defaultWeaponId)?.equipBodyParts[0]
+        const defaultRuntime = weaponRuntimeOf({weaponId: plan.defaultWeaponId})
+        setCombatWeapon(entity.combat, defaultRuntime, undefined, defaultSlot)
+        equipment = withEquipmentAt(equipment, 'weapon', defaultSlot ?? 'main_hand', plan.defaultWeaponId)
         setCombatOffhand(entity.combat, undefined)
-        /* 吐息只属于 wyvern：非 wyvern 体形不应用（配置保留，切回龙时恢复） */
-        if (plan.equipSlots.breath === true) {
-            const module = breathModuleOf(entity.config.breathModuleId)
-            setCombatBreath(entity.combat, module !== undefined ? {module, attacks: weaponAttacksOf(module)} : undefined)
-        } else {
-            setCombatBreath(entity.combat, undefined)
+        equipment = withEquipmentAt(equipment, 'weapon', 'off_hand', undefined)
+        /* 吐息只属于 wyvern：非 wyvern 体形不应用（装备表已按新槽位过滤） */
+        const breathModule = plan.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'breath')
+            ? breathModuleOf(equipment.weapon.breath)
+            : undefined
+        setCombatBreath(entity.combat, breathModule !== undefined ? {module: breathModule, attacks: weaponAttacksOf(breathModule)} : undefined)
+        entity.bodyState = newFormId === HUMANOID_BODY_FORM.id ? entity.bodyState : {}
+        if (newFormId === HUMANOID_BODY_FORM.id) {
+            entity.bodyState = withHumanoidHoldMode(entity.bodyState, defaultHoldMode(defaultRuntime.weapon))
         }
-
-        /* 3) 装备过滤：剔除该体形不支持的护甲 / 肢体槽，重算防御 / 加成 / 移速 */
-        const {armor, limb} = filterEquipLoadouts(plan.equipSlots, entity.combat.armor, entity.combat.limb)
-        setCombatEquipment(entity.combat, entity.combat.baseDefense, armor, limb, entity.combat.baseAttack)
+        /* 3) 装备过滤 + 汇总（防御 / 加成 / 移速 / 韧性） */
+        entity.combat.equipment = equipment
+        setCombatEquipment(entity.combat, entity.combat.baseDefense, equipment, newFormId, entity.combat.baseAttack)
 
         /* 4) 重建外观模型（dispose 旧模型 → 按新 plan 建模型） */
         if (oldModel !== undefined) {
@@ -2378,11 +2442,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         model.group.position.set(bodyPos.x, originY, bodyPos.z)
         if (oldFacingQuat !== undefined) model.group.quaternion.copy(oldFacingQuat)
         scene.add(model.group)
-        model.equipArmor(resolveArmorLoadout(entity.combat.armor))
-        model.equipLimbs(resolveLimbLoadout(entity.combat.limb))
+        applyEquipmentVisuals(model, entity)
         syncWeaponAppearance(entity)
         model.recolor(SELECT_PALETTE(entity.combat.faction))
-        updateShieldBlock(entity.combat, entity.holdMode)
+        updateShieldBlock(entity.combat, holdModeOf(entity))
         /* 材质效果重绑到新外观（旧快照作废） */
         materialEffects.set(entity.id, createMaterialEffects(entity))
 

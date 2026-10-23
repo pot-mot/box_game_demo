@@ -1,19 +1,20 @@
-import {HUMANOID_BODY_FORM, HUMANOID_BODY_FORM_ID} from '../forms/humanoid/body_form.ts'
-import {WOLF_BODY_FORM, WOLF_BODY_FORM_ID} from '../forms/wolf/body_form.ts'
-import {HORSE_BODY_FORM, HORSE_BODY_FORM_ID} from '../forms/horse/body_form.ts'
-import {WYVERN_BODY_FORM, WYVERN_BODY_FORM_ID} from '../forms/wyvern/body_form.ts'
-import type {BodyForm} from './types.ts'
+import {HUMANOID_BODY_FORM, HUMANOID_BODY_FORM_ID} from './humanoid/body_form.ts'
+import {WOLF_BODY_FORM, WOLF_BODY_FORM_ID} from './wolf/body_form.ts'
+import {HORSE_BODY_FORM, HORSE_BODY_FORM_ID} from './horse/body_form.ts'
+import {WYVERN_BODY_FORM, WYVERN_BODY_FORM_ID} from './wyvern/body_form.ts'
+import type {BodyForm} from './common/types.ts'
 import type {WeaponConfig} from '../../../character/weapon/catalog.ts'
 import {registerFormWeapons} from '../../../character/weapon/catalog.ts'
 import {registerBreathModules} from '../../../character/weapon/breath_module.ts'
+import {registerArmorPresets, registerLimbPresets} from '../../../character/armor/catalog.ts'
 
 /**
  * 某体形是否可选择某武器：武器只属于一种体形，故**仅当武器归属该体形时可选**。
- * （武器数据由各体形 `forms/<form>/weapons.ts` 拥有，见 `BodyForm.weapons`。）
+ * （武器数据由各体形 `body_form/<form>/weapons.ts` 拥有，见 `BodyForm.weapons`。）
  */
 export const weaponSelectableFor = (form: BodyForm, weapon: WeaponConfig): boolean => weapon.formId === form.id
 
-export type {BodyForm, BodyAppearance, BodySize, ColliderSpec, EquipSlotSet} from './types.ts'
+export type {BodyForm, BodyAppearance, BodySize, ColliderSpec} from './common/types.ts'
 export {
     HUMANOID_BODY_FORM, HUMANOID_BODY_FORM_ID,
     WOLF_BODY_FORM, WOLF_BODY_FORM_ID, HORSE_BODY_FORM, HORSE_BODY_FORM_ID, WYVERN_BODY_FORM, WYVERN_BODY_FORM_ID,
@@ -37,6 +38,8 @@ export const BODY_FORM_IDS: readonly string[] = Object.keys(BODY_FORMS)
 for (const form of Object.values(BODY_FORMS)) {
     registerFormWeapons(form.id, form.weapons)
     if (form.breathModules !== undefined) registerBreathModules(form.breathModules)
+    if (form.armorPieces !== undefined) registerArmorPresets(form.armorPieces)
+    if (form.limbPieces !== undefined) registerLimbPresets(form.limbPieces)
 }
 
 /** 按 id 取体形计划；未知 / 缺省 id 安全回退人形（存档容错） */

@@ -1,5 +1,5 @@
 import type {BoneAnimationClip} from '../../skeleton/anim/types.ts'
-import {getAttackClipById, getBaseClip} from '../../entity/character/forms/humanoid/builtin_catalog.ts'
+import {getAttackClipById, getBaseClip} from '../../entity/character/body_form/humanoid/skeleton_animation/builtin_catalog.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../character/weapon/catalog.ts'
 import {
@@ -9,9 +9,9 @@ import {
     WYVERN_BODY_FORM_ID,
     bodyFormOf,
 } from '../../entity/character/body_form/index.ts'
-import {wolfAttackClip, wolfBaseClip} from '../../entity/character/forms/wolf/clips.ts'
-import {horseAttackClip, horseBaseClip} from '../../entity/character/forms/horse/clips.ts'
-import {wyvernAttackClip, wyvernBaseClip} from '../../entity/character/forms/wyvern/clips.ts'
+import {wolfAttackClip, wolfBaseClip} from '../../entity/character/body_form/wolf/skeleton_animation/clips.ts'
+import {horseAttackClip, horseBaseClip} from '../../entity/character/body_form/horse/skeleton_animation/clips.ts'
+import {wyvernAttackClip, wyvernBaseClip} from '../../entity/character/body_form/wyvern/skeleton_animation/clips.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
@@ -122,8 +122,16 @@ const BASE_STATE_LABELS: Record<BaseState, StringLocaleKey> = {
     guard_broken: 'bone_edit.state.guard_broken',
 }
 
-/** 基础状态展示顺序（待机 → 移动 → 受击/倒地） */
-const BASE_STATE_ORDER: readonly BaseState[] = ['idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'rolling', 'flinching', 'dying', 'knockdown', 'getting_up', 'interacting', 'blocking', 'guard_broken']
+/** 基础状态展示优先级：Record 保证新增状态漏配时编译失败（待机 → 移动 → 受击/倒地） */
+const BASE_STATE_PRIORITY: Record<BaseState, number> = {
+    idle: 0, walking: 1, jumping: 2, falling: 3, swimming: 4, floating: 5,
+    rolling: 6, flinching: 7, dying: 8, knockdown: 9, getting_up: 10,
+    interacting: 11, blocking: 12, guard_broken: 13,
+}
+
+/** 基础状态展示顺序（导出供测试校验覆盖全部 `BASE_CLIP_STATES`） */
+export const BASE_STATE_ORDER: readonly BaseState[] = (Object.keys(BASE_STATE_PRIORITY) as BaseState[])
+    .sort((a, b) => BASE_STATE_PRIORITY[a] - BASE_STATE_PRIORITY[b])
 
 /** 姿态公式区分持械/空手的状态（其余状态两种变体姿态相同，只列出一份） */
 const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']
@@ -137,7 +145,7 @@ interface ClipProvider {
 }
 
 const humanoidProvider: ClipProvider = {
-    attackClip: segment => getAttackClipById(segment.poses[0]?.poseId ?? segment.id),
+    attackClip: segment => getAttackClipById(segment.poseId),
     baseClip: (state, held) => getBaseClip(state, held, 0),
     weaponVariants: true,
 }

@@ -11,7 +11,7 @@ export const RANGED_DEFAULT_POISE_DAMAGE = 2
 /**
  * 远程武器攻击段（武器模组固有数据）：
  * 每把远程武器拥有 1 个主干段（轻击键触发），只声明**玩法时序**（阶段名/时长/移速/可中断）；
- * 动画是段 id 对应的显式骨骼关键帧（`attack_clips/` 基础轨道 + `attack_clips/` 逐段修订），不再有抽象动画参数。
+ * 动画是段 id 对应的显式骨骼关键帧（作者数据按体形/武器拆分），不再有抽象动画参数。
  * **是否可蓄力与蓄力时长由武器类的 `charge`（最大倍率/最长时间）决定**，本文件只提供攻击时序。
  */
 
@@ -167,7 +167,7 @@ export const buildRangedAttacks = (
         recovery: 0,
         phases: spec.phases,
         /* 动作组合：默认单层（段 id 即 pose 资产 id） */
-        poses: [{poseId: spec.segmentId, weight: 1}],
+        poseId: spec.segmentId,
         damageMultiplier: 1,
         impact: RANGED_DEFAULT_IMPACT,
         poiseDamage: RANGED_DEFAULT_POISE_DAMAGE,

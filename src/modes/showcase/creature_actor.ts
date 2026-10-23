@@ -4,7 +4,6 @@ import {bodyFormOf} from '../../entity/character/body_form/index.ts'
 import type {AnimationContext, CreatureModel} from '../../entity/character/appearance/types.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/types.ts'
 import {createActorDebug} from './actor_debug.ts'
-import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
 import {ACTOR_JUMP_HEIGHT, ACTOR_SCALE, ACTOR_SPEED, DIMMED_OPACITY, RACE_SHOWCASE_HOLD_SECONDS} from './constants.ts'
 import type {NameLabel} from './label.ts'
 import type {ShowcaseActorHandle} from './actor_handle.ts'
@@ -76,8 +75,6 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
         const ctx: AnimationContext = {
             stateTime,
             horizontalSpeed: currentState === 'walking' ? ACTOR_SPEED : 0,
-            holdMode: 'one_handed',
-            handedness: DEFAULT_HANDEDNESS,
             attackSegment: undefined,
             attackPhase: undefined,
             attackPhaseProgress: 0,
@@ -86,7 +83,6 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
             attackCharge: 0,
             attackHolding: false,
             weaponHeld: false,
-            shieldHands: {main: false, off: false},
         }
         system.update(dt, model, currentState, ctx)
     }

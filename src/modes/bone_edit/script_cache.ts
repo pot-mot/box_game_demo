@@ -1,7 +1,7 @@
 import type {SkeletonDefinition} from '../../skeleton/anim/serialization.ts'
-import type {ScriptedMotion} from '../../entity/character/forms/authoring/motion.ts'
-import type {ScriptBakeResult} from '../../entity/character/forms/authoring/motion.ts'
-import {bakeScriptedMotions} from '../../entity/character/forms/authoring/bake.ts'
+import type {ScriptedMotion} from '../../entity/character/body_form/common/authoring/motion.ts'
+import type {ScriptBakeResult} from '../../entity/character/body_form/common/authoring/motion.ts'
+import {bakeScriptedMotions} from '../../entity/character/body_form/common/authoring/bake.ts'
 
 /** 单个体形的脚本烘焙缓存（fingerprint = 骨架定义签名，骨架变化后自动重烘焙） */
 export interface FormScriptCacheEntry {

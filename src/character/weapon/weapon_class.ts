@@ -1,4 +1,4 @@
-import type {WeaponMeshConfig} from '../../entity/character/appearance/weapon_mesh.ts'
+import type {WeaponMeshConfig} from './mesh_config.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
 import type {ChargeTuning} from './charge_tuning.ts'
 
@@ -25,6 +25,11 @@ export interface WeaponModelConfig {
     readonly name: string
     /** 武器名本地化键（UI 展示统一经此取用） */
     readonly nameKey: StringLocaleKey
+    /**
+     * 该武器可装备的部位 id（对应体形 `EquipSlotDef.bodyPart`，如 `main_hand` / `off_hand` /
+     * `claw` / `head` / `hooves` / `wing_claw` / `breath`）。天然武器不在物品表，但仍声明部位。
+     */
+    readonly equipBodyParts: readonly string[]
     /** 程序化武器模型（主手 / 右手） */
     readonly mesh: WeaponMeshConfig
     /**

@@ -54,7 +54,7 @@ const PLAYER_CONFIG: CharacterSaveConfig = {
     speed: PLAYER_SPEED,
     jumpHeight: PLAYER_JUMP_HEIGHT,
     scale: 1,
-    attack: {weaponId: 'long_sword', damage: 3},
+    equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {}},
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
     maxHealth: 100,

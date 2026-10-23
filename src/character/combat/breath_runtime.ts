@@ -21,7 +21,7 @@ export const composeClawAndBreath = (
     for (const segmentId of heavy.steps) {
         const segment = breath.attacks.segments[segmentId]
         if (segment === undefined) continue
-        segments[segmentId] = {...segment, attackWeaponId: breath.module.id}
+        segments[segmentId] = {...segment, attackWeaponId: breath.module.id, attackSlotKey: 'weapon:breath'}
         attackWeapons.set(segmentId, breath.module)
     }
     return {

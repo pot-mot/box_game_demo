@@ -2,15 +2,15 @@ import {BoxGeometry, Group, Mesh} from 'three'
 import type {Material} from 'three'
 import type {ShowcaseModule} from '../module.ts'
 import {setupShowcaseScene} from '../scene.ts'
-import {createHumanoidModel} from '../../../entity/character/forms/humanoid/body_form.ts'
-import {createAppearanceSystem} from '../../../entity/character/forms/humanoid/system.ts'
+import {createHumanoidModel} from '../../../entity/character/body_form/humanoid/body_form.ts'
+import {createAppearanceSystem} from '../../../entity/character/body_form/humanoid/skeleton_animation/system.ts'
 import type {AnimationContext} from '../../../entity/character/appearance/types.ts'
 import {weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {DEFAULT_HANDEDNESS} from '../../../character/handedness.ts'
 import {resolveArmorLoadout} from '../../../character/armor/catalog.ts'
 import {ITEM_DEFS, ITEM_CATEGORIES, ITEM_CATEGORY_LABELS, itemDisplayName, itemDisplayDescription} from '../../../inventory/items.ts'
 import type {ItemCategory, ItemDef} from '../../../inventory/items.ts'
-import {EQUIP_SLOT_LABELS} from '../../../inventory/types.ts'
+import {equipBodyPartLabelKey} from '../../../character/equipment/types.ts'
 import {createGridBoxMaterial} from '../../../render/gridMaterial.ts'
 import {scaleBoxUVs} from '../../../render/texture.ts'
 import {TILE_SIZE} from '../../../render/constants.ts'
@@ -32,6 +32,7 @@ import {createIcon} from '../../../ui/icons/icon.ts'
 const CATEGORY_COLORS: Record<ItemCategory, number> = {
     weapon: 0xc96a5a,
     armor: 0x5a7fc9,
+    limb: 0x7a9a6a,
     breath: 0xc95ab0,
     block: 0x8a97a8,
     consumable: 0x5abf86,
@@ -85,7 +86,10 @@ const applyItemToModel = (model: ReturnType<typeof createHumanoidModel>, def: It
 /** 详情副名：类别（+ 装备槽 / 方块实体类型） */
 const subLineOf = (def: ItemDef): string => {
     const category = translate(ITEM_CATEGORY_LABELS[def.category])
-    if (def.equipSlot !== undefined) return `${category} · ${translate(EQUIP_SLOT_LABELS[def.equipSlot])}`
+    if (def.equipSlot !== undefined) {
+        const key = equipBodyPartLabelKey(def.equipSlot)
+        return `${category} · ${key !== undefined ? translate(key) : def.equipSlot}`
+    }
     if (def.boxPreset !== undefined) return `${category} · ${def.boxPreset}`
     if (def.areaPreset !== undefined) return `${category} · ${def.areaPreset}`
     if (def.blockType !== undefined) return `${category} · ${def.blockType}`
@@ -322,8 +326,7 @@ export const catalogModule: ShowcaseModule = {
                 const ctx: AnimationContext = {
                     stateTime,
                     horizontalSpeed: 0,
-                    holdMode: 'one_handed',
-                    handedness: DEFAULT_HANDEDNESS,
+                    humanoid: {holdMode: 'one_handed', handedness: DEFAULT_HANDEDNESS, shieldHands: {main: false, off: false}},
                     attackSegment: undefined,
                     attackPhase: undefined,
                     attackPhaseProgress: 0,
@@ -332,7 +335,6 @@ export const catalogModule: ShowcaseModule = {
                     attackCharge: 0,
                     attackHolding: false,
                     weaponHeld: model.weaponMesh !== null,
-                    shieldHands: {main: false, off: false},
                 }
                 system.update(dt, model, 'idle', ctx)
             } else {

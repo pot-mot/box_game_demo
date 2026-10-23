@@ -4,14 +4,18 @@ import type {BodyEnvironment} from '../physics/environment.ts'
 import type {HurtBlockProfile, WorldHurtBlock} from './hurt_blocks.ts'
 import type {CharacterStateMachine} from './state_machine/types.ts'
 import type { CombatComponent } from './combat/types.ts'
-import type { HoldMode } from './weapon/hold_mode.ts'
-import type { Handedness } from './handedness.ts'
-import type {LockPointConfig} from './lock_point.ts'
+import type { LockPointConfig} from './lock_point.ts'
 import type {PeaceSubStrategy} from './ai_strategy/types.ts'
 import type {CombatSubStrategy} from './ai_strategy/types.ts'
 import type {OriginSubStrategy} from './ai_strategy/types.ts'
 
 export type {PeaceSubStrategy, CombatSubStrategy, OriginSubStrategy}
+
+/**
+ * 体形专属状态（不透明键值）：通用层只负责持久化与传递，
+ * 只有对应体形分包解释其键（如人形的 `holdMode` / `handedness`）。
+ */
+export type BodyState = Readonly<Record<string, string>>
 
 export interface CharacterConfig {
     speed: number
@@ -20,10 +24,8 @@ export interface CharacterConfig {
     scale: number
     /** 体形计划 id（基础模组，缺省 = humanoid）：决定骨架 / 外观 / 碰撞布局 / 受击子块 / 装备槽 / 武器策略 */
     bodyFormId?: string
-    /** 惯用手（缺省 = 右撇子）：决定主 / 副手槽位与动作镜像 */
-    handedness?: Handedness
-    /** 吐息模组 id（仅 wyvern；缺省 = 未装备） */
-    breathModuleId?: string
+    /** 体形专属状态（人形：holdMode / handedness；其他体形不携带这些键） */
+    bodyState?: BodyState
     /** 韧性上限基础值（缺省 = 常量 `DEFAULT_POISE_MAX`；有效上限再叠加装备加成） */
     poiseMax?: number
     /** 受击后韧性停止回充的延迟（秒，缺省 = 常量 `DEFAULT_POISE_REGEN_DELAY`） */
@@ -103,11 +105,8 @@ export interface CharacterEntity {
 
     combat: CombatComponent
 
-    /**
-     * 当前持握模式（持久化状态，非每帧推导）：由 `setHoldMode` 切换，
-     * 换武器时重置为该武器支持的首个模式。动画系统按它选择上半身姿态与双手 IK。
-     */
-    holdMode: HoldMode
+    /** 体形专属状态（人形：holdMode / handedness；其他体形为空） */
+    bodyState: BodyState
 
     /**
      * 额外锁定点（持久化）：默认锁定点恒为身体中心、不在数组内；

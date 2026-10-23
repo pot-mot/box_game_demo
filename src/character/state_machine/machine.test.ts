@@ -6,7 +6,7 @@ import {CHARACTER_STATES, type CharacterStateMachine} from './types.ts'
 import {createWeaponRuntime, type WeaponRuntime} from '../weapon/weapon_runtime.ts'
 import {createCombatComponent} from '../combat/types.ts'
 import {ROLL_COOLDOWN} from '../combat/roll_skill.ts'
-import {createTestWeaponRuntime, TEST_WEAPON_CHARGE_HOLD} from '../combat/test_weapon.ts'
+import {createTestWeaponRuntime, TEST_WEAPON_CHARGE_HOLD} from '../../test_fixtures/test_weapon.ts'
 import {orderedSegments} from '../weapon/attack_chain.ts'
 import {MELEE_HEAVY_WINDUP} from '../weapon/melee_attacks.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
@@ -63,7 +63,7 @@ const makeMock = (runtime: WeaponRuntime = createWeaponRuntime('long_sword')): C
         rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
         isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
         combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15),
-        holdMode: runtime.holdMode,
+        bodyState: {holdMode: runtime.holdMode},
         lockPoints: [],
         environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),

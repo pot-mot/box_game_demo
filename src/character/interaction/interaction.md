@@ -135,7 +135,7 @@ interacting: {duration: INTERACTION_DURATION, loop: false}
 
 ### 4.2 外观系统（`src/entity/character/appearance/system.ts`）
 
-- `CLIP_STATES` 与 `ClipState` 增加 `'interacting'`。
+- `BASE_CLIP_STATES` 与 `ClipState` 增加 `'interacting'`。
 - 无需特殊分支，走基础 clip 单层播放。
 
 > `adjustArmsForHoldMode` 仅对 idle/walking 生效，交互动画不受持握模式影响（有意：交互动作为通用伸手）。

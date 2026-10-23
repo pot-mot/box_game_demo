@@ -7,12 +7,9 @@ import type {ItemEntityContext} from '../entity/item/types.ts'
 import type {InventorySaveData} from '../inventory/types.ts'
 import type {FragmentConfig, FragmentEntityContext} from '../entity/fragment/common/types'
 import type {CharacterEntitySystem} from '../entity/character/physics/world.ts'
-import type {AttackConfig} from '../character/archetypes.ts'
-import type {HoldMode} from '../character/weapon/hold_mode.ts'
-import type {Handedness} from '../character/handedness.ts'
 import type {DefenseProfile} from '../character/combat/defense.ts'
 import type {DamageTypeProfile} from '../character/combat/damage_type.ts'
-import type {ArmorLoadout, LimbLoadout} from '../character/armor/types.ts'
+import type {EquipmentState} from '../character/equipment/types.ts'
 import type {LockPointConfig} from '../character/lock_point.ts'
 
 /** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」；
@@ -32,8 +29,11 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  * v15 起 character 增加 AI 反应式举盾窗口 aiBlockDuration、举盾冷却 aiBlockCooldown（均可选，旧档安全回退默认）；
  * v16 起 character 增加体形计划 bodyFormId（可选，缺省 / 未知 id 安全回退 humanoid）；
  * v17 起 character 增加吐息模组 breathModuleId（可选，未知 id 安全视为未装备）。
+ * v18 起 character 改用 `bodyFormId + bodyState + equipment`（limb/weapon/armor 分层）：
+ *  删除顶层 attack / offhand / holdMode / handedness / armor / limb / breathModuleId；
+ *  天然武器不写入 equipment；旧版本文件在加载时按元素粒度跳过（不做字段迁移）。
  */
-export const SAVE_FORMAT_VERSION = 17
+export const SAVE_FORMAT_VERSION = 18
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -137,26 +137,12 @@ export interface CharacterSaveConfig {
     scale: number
     /** 体形计划 id（基础模组）：缺省 / 未知 id 加载时安全回退 humanoid */
     bodyFormId?: string
-    /** 吐息模组 id（仅 wyvern；缺省 = 未装备） */
-    breathModuleId?: string
+    /** 体形专属状态（人形：holdMode / handedness；其他体形不携带这些键） */
+    bodyState?: Readonly<Record<string, string>>
+    /** 装备状态（limb / weapon / armor 分层；槽位键 = kind:bodyPart） */
+    equipment?: EquipmentState
     peaceStrategy?: 'patrol' | 'build'
     combatStrategy?: 'tactical' | 'aggressive' | 'cowardly'
-    /** 攻击配置：装备武器 + 数值覆写（动作/时长/动画由武器模组的攻击链决定） */
-    attack: AttackConfig
-    /**
-     * 副手武器配置（可选）：单持 / 双持时装备，双手共持时挂背；主手为远程时不展示。
-     * 缺省 = 无副手武器；未知武器 id 加载时安全丢弃（回退无副手），不抛错。
-     */
-    offhand?: AttackConfig
-    /**
-     * 持握模式（持久化）：缺省 = 武器默认模式；旧存档无此字段时安全回退默认，
-     * 武器不支持时由 `setHoldMode` 回退默认模式（不抛错）。
-     */
-    holdMode?: HoldMode
-    /**
-     * 惯用手（持久化）：缺省 = 右撇子（canonical 骨架）；旧存档无此字段时安全回退右撇子，非法值加载时安全丢弃。
-     */
-    handedness?: Handedness
     tendency: {
         tendencyId: 'hostileAll' | 'hostileExceptSelf' | 'hostileTo' | 'hostileExcept' | 'pacifist'
         targetFactions?: number[]
@@ -167,10 +153,6 @@ export interface CharacterSaveConfig {
     defense?: DefenseProfile
     /** 基础攻击加成（逐攻击类别，角色固有；缺省 = 0/0，旧存档无此字段时安全回退） */
     baseAttack?: DamageTypeProfile
-    /** 护甲装备（槽位 → 护甲 id；缺省 / 未知 id = 空槽，不抛错） */
-    armor?: ArmorLoadout
-    /** 肢体组件装备（槽位 → 肢体 id；缺省 / 未知 id = 默认人类肢体，不抛错） */
-    limb?: LimbLoadout
     /** 额外锁定点（关节 id + 关节本地偏移；缺省 = 仅默认身体中心点，非法条目加载时安全剔除） */
     lockPoints?: LockPointConfig[]
     /** 韧性上界基础值（缺省 = 默认，旧存档无此字段时安全回退） */

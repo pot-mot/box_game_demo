@@ -1,9 +1,9 @@
-import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
+import type { WeaponMeshConfig } from './mesh_config.ts'
 import type { StringLocaleKey } from '../../i18n/index.ts'
 import type { DamageType } from '../combat/damage_type.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
-import { withChargeTuningMap } from './attack_chain.ts'
+import { withAttackSlotKeyMap, withChargeTuningMap } from './attack_chain.ts'
 import { buildMeleeAttacks, DEFAULT_HEAVY_CHARGE, DEFAULT_MELEE_AIR_ATTACK, type BuildMeleeAttacksOptions, type HeavyChargeConfig, type MeleeAirAttackConfig, type MeleeAirSegmentKey, type MeleeSegmentKey } from './melee_attacks.ts'
 import type { AttackImpulse } from './attack_chain.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
@@ -73,7 +73,7 @@ export interface MeleeWeaponClassConfig {
     readonly impulses?: Partial<Record<MeleeSegmentKey | MeleeAirSegmentKey, readonly AttackImpulse[]>>
     /**
      * 盾牌格挡能力（可选；仅盾类声明）。声明后该武器可长按攻击键举盾格挡，
-     * 提供遮挡减免与格挡槽；短按仍照常出招（盾击）。详见 `constants.ts` 与 `docs/design/shield_block.md`。
+     * 提供遮挡减免与格挡槽；短按仍照常出招（盾击）。详见 `constants.ts`。
      */
     readonly block?: ShieldBlockConfig
 }
@@ -88,6 +88,8 @@ export interface MeleeWeaponConfig extends MeleeWeaponClassConfig {
     readonly name: string
     /** 武器名本地化键（UI 展示统一经此取用） */
     readonly nameKey: StringLocaleKey
+    /** 该武器可装备的部位 id（体形 `EquipSlotDef.bodyPart`） */
+    readonly equipBodyParts: readonly string[]
     /** 程序化武器模型（主手 / 右手） */
     readonly mesh: WeaponMeshConfig
 }
@@ -125,18 +127,21 @@ export const resolveMeleeWeapon = (weaponClass: MeleeWeaponClassConfig, model: W
     const heavyCharge: HeavyChargeConfig = model.charge === undefined
         ? (weaponClass.heavyCharge ?? DEFAULT_HEAVY_CHARGE)
         : {...(weaponClass.heavyCharge ?? DEFAULT_HEAVY_CHARGE), ...model.charge}
+    const slotKey = model.equipBodyParts[0]
+    const attacks = model.charge === undefined
+        ? weaponClass.attacks
+        : withChargeTuningMap(weaponClass.attacks, heavyCharge)
     return {
         ...weaponClass,
         heavyCharge,
         /* 仅在单武器有蓄力覆写时重烘焙攻击链（否则沿用类共享数据） */
-        attacks: model.charge === undefined
-            ? weaponClass.attacks
-            : withChargeTuningMap(weaponClass.attacks, heavyCharge),
+        attacks: slotKey !== undefined ? withAttackSlotKeyMap(attacks, `weapon:${slotKey}`) : attacks,
         classId: model.classId,
         id: model.id,
         formId: model.formId,
         name: model.name,
         nameKey: model.nameKey,
+        equipBodyParts: model.equipBodyParts,
         mesh: model.mesh,
     }
 }

@@ -1,15 +1,16 @@
 import {AmbientLight, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderer} from 'three'
-import {createHumanoidModel} from '../../../entity/character/forms/humanoid/body_form.ts'
-import type {CharacterModel} from '../../../entity/character/forms/humanoid/types.ts'
+import {bodyFormOf} from '../../../entity/character/body_form/index.ts'
+import type {FormModel} from '../../../entity/character/appearance/types.ts'
 import {weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {resolveArmorLoadout} from '../../../character/armor/catalog.ts'
 import type {ArmorLoadout} from '../../../character/armor/types.ts'
-import type {EquipSlot} from '../../../inventory/types.ts'
 
 export interface EquipPreviewData {
+    /** 预览体形（缺省 humanoid） */
+    bodyFormId?: string
     mainWeaponId?: string
     offhandWeaponId?: string
-    armor: Partial<Record<EquipSlot, string>>
+    armor: Partial<Record<string, string>>
 }
 
 export interface EquipmentPreview {
@@ -40,10 +41,12 @@ export const createEquipmentPreview = (): EquipmentPreview => {
     camera.position.set(0, 1.15, 3.1)
     camera.lookAt(new Vector3(0, 0.95, 0))
 
-    const model: CharacterModel = createHumanoidModel({speed: 3, jumpHeight: 2, scale: 1}, 0)
+    let model: FormModel = bodyFormOf(undefined).createModel({speed: 3, jumpHeight: 2, scale: 1}, 0)
+    let modelFormId = bodyFormOf(undefined).id
     scene.add(model.group)
     /* 装备预览不展示物理碰撞箱（半胶囊可视化） */
-    for (const m of model.colliderMeshes) m.visible = false
+    const hideColliders = (): void => { for (const m of model.colliderMeshes) m.visible = false }
+    hideColliders()
 
     let yaw = 0
     let distance = 3.1
@@ -76,6 +79,15 @@ export const createEquipmentPreview = (): EquipmentPreview => {
     }, {passive: false})
 
     const setEquipment = (data: EquipPreviewData): void => {
+        const form = bodyFormOf(data.bodyFormId)
+        if (form.id !== modelFormId) {
+            scene.remove(model.group)
+            model.dispose()
+            model = form.createModel({speed: 3, jumpHeight: 2, scale: 1}, 0)
+            modelFormId = form.id
+            scene.add(model.group)
+            hideColliders()
+        }
         const main = weaponPresetOrDefault(data.mainWeaponId).mesh
         const offhand = data.offhandWeaponId !== undefined ? weaponPresetOrDefault(data.offhandWeaponId).mesh : undefined
         model.equipWeapon({main, ...(offhand !== undefined ? {offhand} : {})})
@@ -84,7 +96,7 @@ export const createEquipmentPreview = (): EquipmentPreview => {
             const id = data.armor[slot]
             if (id !== undefined) loadout[slot] = id
         }
-        model.equipArmor(resolveArmorLoadout(loadout as ArmorLoadout))
+        model.equipArmor?.(resolveArmorLoadout(loadout as ArmorLoadout))
     }
 
     const render = (): void => renderer.render(scene, camera)

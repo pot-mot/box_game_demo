@@ -31,7 +31,7 @@ import {
     TEST_WEAPON_CHARGE_HOLD,
     createTestWeaponRuntime,
     TEST_WEAPON_ID,
-} from '../combat/test_weapon.ts'
+} from '../../test_fixtures/test_weapon.ts'
 
 const MELEE_WEAPON_IDS = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
 const RANGED_WEAPON_IDS = ['longbow', 'crossbow', 'shotgun', 'staff', 'magic_wand', 'throwing_axe', 'grenade', 'molotov', 'throwing_dart']
@@ -404,11 +404,11 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
     it('追加条件变体段：起手候选守卫 + 挂到某个段的 next 上（无需改状态机）', () => {
         const charge: AttackSegment = {
             id: 'demo_axe_charge', key: 'light', step: 1, label: '蓄力重劈',
-            duration: 0.4, recovery: 0.3, phases: [], poses: [{poseId: 'demo_axe_charge', weight: 1}], damageMultiplier: 2, impact: 'heavy', poiseDamage: 4, cooldown: 1, next: [],
+            duration: 0.4, recovery: 0.3, phases: [], poseId: 'demo_axe_charge', damageMultiplier: 2, impact: 'heavy', poiseDamage: 4, cooldown: 1, next: [],
         }
         const thrust: AttackSegment = {
             id: 'demo_axe_thrust', key: 'light', step: 2, label: '方向突刺',
-            duration: 0.25, recovery: 0.2, phases: [], poses: [{poseId: 'demo_axe_thrust', weight: 1}], damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0, next: [],
+            duration: 0.25, recovery: 0.2, phases: [], poseId: 'demo_axe_thrust', damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0, next: [],
         }
         const attacks = buildMeleeAttacks('demo_axe', 'dual_wield', {
             extraSegments: [charge, thrust],
@@ -429,7 +429,7 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
     it('追加段 id 与模板段冲突时构建失败（fail loudly）', () => {
         const duplicate: AttackSegment = {
             id: 'demo_sword_one_handed_light_1', key: 'light', step: 1,
-            duration: 0.2, recovery: 0.2, phases: [], poses: [{poseId: 'demo_sword_one_handed_light_1', weight: 1}], damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0, next: [],
+            duration: 0.2, recovery: 0.2, phases: [], poseId: 'demo_sword_one_handed_light_1', damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0, next: [],
         }
         expect(() => buildMeleeAttacks('demo_sword', 'one_handed', {extraSegments: [duplicate]})).toThrow()
     })
@@ -485,10 +485,10 @@ describe('武器运行时（createWeaponRuntime）', () => {
         expect(createWeaponRuntime('nope').weapon.id).toBe('long_sword')
     })
 
-    it('测试武器经额外注册表可解析出真实攻击链', () => {
+    it('测试武器夹具直接解析出真实攻击链（不进入生产武器目录）', () => {
         const runtime = createTestWeaponRuntime()
         expect(runtime.weapon.id).toBe(TEST_WEAPON_ID)
-        expect(findWeaponPreset(TEST_WEAPON_ID)?.type).toBe('melee')
+        expect(findWeaponPreset(TEST_WEAPON_ID)).toBeUndefined()
         const attacks: WeaponAttacks = runtime.attacks
         expect(Object.keys(attacks.segments)).toHaveLength(7)
     })
@@ -518,7 +518,7 @@ describe('空中攻击链（跳跃中按攻击键，武器种类独立模组）'
                 const attacks = weaponAttacksOf(weapon, mode)
                 for (const segmentId of chainOf(attacks, 'air').steps) {
                     const segment = findSegment(attacks, segmentId)!
-                    expect(segment.poses[0].poseId, segmentId).toBe(segmentId)
+                    expect(segment.poseId, segmentId).toBe(segmentId)
                 }
             }
         }
@@ -527,7 +527,7 @@ describe('空中攻击链（跳跃中按攻击键，武器种类独立模组）'
     it('武器种类独立模组：巨剑两段、长枪单段、战锤单段砸地（段内冲击）', () => {
         expect(chainOf(weaponAttacksOf(MELEE_WEAPON_PRESETS.heavy_sword, 'two_handed'), 'air').steps)
             .toEqual(['heavy_sword_two_handed_air_1', 'heavy_sword_two_handed_air_2'])
-        expect(findSegment(weaponAttacksOf(MELEE_WEAPON_PRESETS.spear), 'spear_one_handed_air_1')?.poses[0].poseId)
+        expect(findSegment(weaponAttacksOf(MELEE_WEAPON_PRESETS.spear), 'spear_one_handed_air_1')?.poseId)
             .toBe('spear_one_handed_air_1')
         const hammerAir = findSegment(weaponAttacksOf(MELEE_WEAPON_PRESETS.war_hammer), 'war_hammer_one_handed_air_1')
         expect(hammerAir?.impulses?.length).toBe(1)

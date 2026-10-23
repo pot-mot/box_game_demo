@@ -42,13 +42,14 @@ export const findItemDef = (id: string | undefined): ItemDef | undefined
 ```
 
 - `ITEM_DEFS` 覆盖**全部武器模型**（近战 6 + 远程 9）、**全部护甲预设**、**龙吐息三件物品**、**全部方块实体**；`items.test.ts` 对照武器 / 护甲目录与 `ENTITY_TYPE_VALUES` 锁定完整性——新增武器 / 护甲 / 吐息 / 方块须同步补条目。本地化名复用 `weapon.*` / `armor.*` / `breath.*` 名称键，描述共用 `item.weapon_generic.desc` / `item.armor_generic.desc`。
-- **物品图标**：每件物品的 `icon` 为专属图标（登记于 `src/ui/icons/sprite.ts` 的 `ICON_NAMES`，命名 `item-*`），`items.test.ts` 锁定「图标均已登记且逐件唯一」；背包网格（`modes/play/inventory_ui/grid_render.ts`）与图鉴（`modes/showcase/modules/catalog.ts`）据此呈现。
+- **物品图标**：每件物品的 `icon` 登记于 `src/ui/icons/sprite.ts` 的 `ICON_NAMES`（命名 `item-*`）；`items.test.ts` 校验图标均已登记，同类物品允许复用图标。背包网格（`modes/play/inventory_ui/grid_render.ts`）与图鉴（`modes/showcase/modules/catalog.ts`）据此呈现。
 - `grid.ts` 纯函数（带单测）：`rotatedShape` / `canPlace` / `findPlacement` / `buildOccupancy`（`rot` = 0..3 顺时针 90°）。
 
 ## 背包实例与操作（`types.ts` / `inventory.ts`）
 
 ```ts
-export const EQUIP_SLOTS = ['main_hand', 'off_hand', 'head', 'chest', 'arms', 'legs', 'breath'] as const
+/** 槽位键 = kind:bodyPart，由当前体形 `BodyForm.equipSlots` 提供 */
+export type EquipSlot = EquipSlotKey
 export interface ItemStack { instanceId: string; defId: string; count: number; grid?: Placement }
 export interface InventoryState {
     width: number; height: number
@@ -61,9 +62,9 @@ export const addItem / removeAt / moveStack / equipStack / unequipSlot / equippe
 ```
 
 - `addItem` 自动 `findPlacement`，支持堆叠合并；背包满返回 `{ok:false, reason:'full'}`。
-- 装备：目标槽已占则交换；武器 → `main_hand`/`off_hand`，护甲 → 对应槽，龙吐息 → `breath`。
-- `equipStack(inv, instanceId, slot, {bodyFormId})`：吐息物品声明 `equipBodyFormId = 'wyvern'`，非龙体形直接被拒绝；`item_breath_fireball` / `item_breath_lightning` / `item_breath_laser` 三件物品分别映射 `breath_fireball` / `breath_lightning` / `breath_laser`。
-- `applyEquipment` 仅在 wyvern 体形把吐息模组写入 `characterSystem.setBreathModule`；切到其他体形时自动尝试卸下并退回背包。
+- 装备：目标槽已占则交换；槽位键为 `kind:bodyPart`（如 `weapon:main_hand` / `armor:head` / `weapon:breath`）。物品声明 `equipKind` / `equipSlot`，武器与护甲/肢体再按体形槽表与 `allowedBodyFormIds` 校验。
+- `equipStack(inv, instanceId, slotKey, {bodyFormId, allowedSlots})`：先校验槽位键是否属于当前体形，再按物品 `equipKind` / 武器 `formId` 与 `equipBodyParts` / 护甲肢体 `allowedBodyFormIds` 校验；未知槽位 / 跨体形装备直接拒绝。吐息物品三件分别映射 `breath_fireball` / `breath_lightning` / `breath_laser`，仅 wyvern 的 `weapon:breath` 槽接受。
+- `applyEquipment` 从背包槽位构建 `EquipmentState`（limb / weapon / armor），经 `updateCharacterConfig` 同步数值/外观，并在有 `weapon:breath` 时调用 `setBreathModule`。
 
 ## 掉落与拾取（`entity/item/`）
 
@@ -85,18 +86,18 @@ export const addItem / removeAt / moveStack / equipStack / unequipSlot / equippe
 
 ## 装备 UI（`modes/play/equipment_ui/`）
 
-- 与背包共用大面板：`open_inventory`（B）开背包，`open_equipment`（默认 E）开并聚焦装备视图，面板内可切标签。6 槽 `main_hand / off_hand / head / chest / arms / legs` 绝对定位环绕模型画布。
+- 与背包共用大面板：`open_inventory`（B）开背包，`open_equipment`（默认 E）开并聚焦装备视图，面板内可切标签。装备槽由 `getSlots()` 返回的 `BodyForm.equipSlots` 驱动，按 `bodyPart` 锚点环绕模型画布；`main_hand` / `off_hand` 不再是全局硬编码槽。
 - 预览 `createEquipmentPreview(): {canvas, setEquipment, render, dispose}`：独立 `WebGLRenderer(alpha:true)` + 独立场景/相机/灯光，**惰性创建**；`createCharacterModel(config, 0)` 后 `equipWeapon` / `equipArmor(resolveArmorLoadout(loadout))`，默认静止姿态。拖拽旋转 / 滚轮缩放后按需 `render()`，**不启动额外 RAF**。
-- 槽交互：`canEquip(stack, slot)` 校验类别（武器槽收武器、护甲槽收对应 `armorId`），拖入装备、拖回网格卸下、点击槽查看并卸下；装备后立即 `applyEquipment` 同步数值与外观并刷新预览。`holdMode` 选择器显示在主手槽旁，仅武器支持多模式时可选。
+- 槽交互：`equipStack` 按槽位键 + 物品类别 + 体形校验，拖入装备、拖回网格卸下、点击槽查看并卸下；装备后立即 `applyEquipment` 同步数值与外观并刷新预览。`holdMode` 属于人形 `bodyState`，由角色属性面板维护，不在背包面板硬编码。
 - 唯一数据源 `InventoryState`；每次变更后重算并 `applyEquipment` + `preview.setEquipment`。
 
 ## 与角色装备 / 战斗互通（`modes/play/equipment.ts`）
 
-- `applyEquipment(characterSystem, playerId, inventory, slot)`：`main_hand` → `updateCharacterConfig`（武器 + 持握重解析）；`off_hand` → `setCombatOffhand`；`head/chest/arms/legs` → 组装 `ArmorLoadout` → `setCombatEquipment` + `model.equipArmor`。卸下时恢复空槽（主手回 `DEFAULT_WEAPON_ID`）。
-- 角色存档以 `attack/offhand/armor/holdMode` 为准；`inventory.equipment` 记录实例，加载后据此校正（旧档无 `inventory` 时不动）。
+- `applyEquipment`（`modes/play/hakoniwa.ts`）：遍历 `inventory.equipment` 构建 `EquipmentState`，主武器槽 → `updateCharacterConfig({weaponId})` + `equipment`，副手 → `newOffhand`，护甲 / 肢体随 `equipment` 同步到 `setCombatEquipment` + 外观装配；空主手回退体形 `defaultWeaponId`。
+- 角色存档以 `equipment`（limb / weapon / armor）+ `bodyState` 为准；`inventory.equipment` 记录实例 id，加载后按当前体形槽表校正（v18 起槽位键为 `kind:bodyPart`）。
 
 ## 存档
 
 - 类型 `InventorySaveData {width,height,items[],equipment}`，字段 `ModeInfoJSON.play.inventory?` 与 `teleports?: string[]`。
 - `validation.ts`：`inventory` / `teleports` 均 `.optional().catch(undefined)` 且逐字段 `.catch`；非法格位由 `inventoryFromSave` 重新归位，未知 `defId` / 装备槽丢弃。
-- 掉落物为独立实体类型 `SavableItem {type:'item'; config; position; quaternion}`；`SAVE_FORMAT_VERSION` 递增到 8，`EntitySourceMap` 加 `'interactable'` 与 `'item'`。
+- 掉落物为独立实体类型 `SavableItem {type:'item'; config; position; quaternion}`；当前 `SAVE_FORMAT_VERSION = 18`。

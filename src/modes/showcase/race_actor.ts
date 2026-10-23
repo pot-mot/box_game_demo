@@ -1,11 +1,11 @@
 import {Group, Mesh, Sprite} from 'three'
 import type {Material, Scene} from 'three'
-import {createHumanoidModel} from '../../entity/character/forms/humanoid/body_form.ts'
-import {createAppearanceSystem} from '../../entity/character/forms/humanoid/system.ts'
+import {createHumanoidModel} from '../../entity/character/body_form/humanoid/body_form.ts'
+import {createAppearanceSystem} from '../../entity/character/body_form/humanoid/skeleton_animation/system.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/types.ts'
 import type {AnimationContext} from '../../entity/character/appearance/types.ts'
-import type {CharacterModel} from '../../entity/character/forms/humanoid/types.ts'
-import {HUMANOID_HURT_BLOCKS} from '../../entity/character/forms/humanoid/hurt.ts'
+import type {CharacterModel} from '../../entity/character/body_form/humanoid/appearance/types.ts'
+import {HUMANOID_HURT_BLOCKS} from '../../entity/character/body_form/humanoid/skeleton/hurt.ts'
 import {createActorDebug} from './actor_debug.ts'
 import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
 import {resolveLimbLoadout, resolveArmorLoadout} from '../../character/armor/catalog.ts'
@@ -84,8 +84,7 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
             stateTime,
             horizontalSpeed: currentState === 'walking' ? ACTOR_SPEED : 0,
             /* 空手：持握模式对基础姿态无影响（无武器），取单持 */
-            holdMode: 'one_handed',
-            handedness: DEFAULT_HANDEDNESS,
+            humanoid: {holdMode: 'one_handed', handedness: DEFAULT_HANDEDNESS, shieldHands: {main: false, off: false}},
             attackSegment: undefined,
             attackPhase: undefined,
             attackPhaseProgress: 0,
@@ -94,7 +93,6 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
             attackCharge: 0,
             attackHolding: false,
             weaponHeld: false,
-            shieldHands: {main: false, off: false},
         }
         system.update(dt, model, currentState, ctx)
     }

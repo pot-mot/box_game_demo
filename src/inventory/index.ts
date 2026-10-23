@@ -1,6 +1,4 @@
 export {
-    EQUIP_SLOTS,
-    EQUIP_SLOT_LABELS,
     PLACEMENT_ROTATIONS,
     INVENTORY_DEFAULT_WIDTH,
     INVENTORY_DEFAULT_HEIGHT,
@@ -25,6 +23,7 @@ export {
     removeAt,
     moveStack,
     equipStack,
+    equipItemIdOf,
     unequipSlot,
     equippedStacks,
     transferStack,

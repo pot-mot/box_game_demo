@@ -8,7 +8,7 @@ import {
     RAY_HORIZONTAL_ANGLES, RAY_PITCH_ANGLES, SIDE_SCAN_ANGLES,
     WALKABLE_NORMAL_MIN_Y,
 } from './constants.ts'
-import {formCenterOffsetY} from '../../body_form/geometry.ts'
+import {formCenterOffsetY} from '../../body_form/common/geometry.ts'
 
 /** 坑洞探针向下投射的最大距离：只需判断最近命中是否在跳跃高度内 */
 const PROBE_MAX_TOI = 1000

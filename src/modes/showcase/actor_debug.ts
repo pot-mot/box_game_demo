@@ -104,12 +104,12 @@ export const createActorDebug = (
             attackBox.visible = mainGroup !== null && mainBox !== null
             const offGroup = model.offhandWeaponGroup
             const offBox = model.offhandWeaponHitBox
-            if (offGroup !== null && offBox !== null) {
+            if (offGroup != null && offBox != null) {
                 offGroup.updateWorldMatrix(true, false)
                 syncWeaponDebugBox(offhandAttackBox, offGroup.matrixWorld, offBox.center, offBox.half)
                 offhandAttackBox.matrixWorldNeedsUpdate = true
             }
-            offhandAttackBox.visible = offGroup !== null && offBox !== null
+            offhandAttackBox.visible = offGroup != null && offBox != null
         }
     }
 

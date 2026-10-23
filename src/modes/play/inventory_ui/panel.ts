@@ -1,5 +1,7 @@
 import type {EquipSlot, InventoryState} from '../../../inventory/types.ts'
-import {EQUIP_SLOTS, EQUIP_SLOT_LABELS, INVENTORY_CELL_PX} from '../../../inventory/types.ts'
+import {INVENTORY_CELL_PX} from '../../../inventory/types.ts'
+import type {EquipSlotDef} from '../../../character/equipment/types.ts'
+import {equipSlotKey} from '../../../character/equipment/types.ts'
 import {findItemDef, itemDisplayName, itemDisplayDescription} from '../../../inventory/items.ts'
 import {findStack} from '../../../inventory/inventory.ts'
 import type {Placement} from '../../../inventory/types.ts'
@@ -9,6 +11,8 @@ import {renderInventoryGrid} from './grid_render.ts'
 
 export interface InventoryPanelCallbacks {
     getInventory: () => InventoryState
+    /** 当前体形声明的装备槽（由 body_form 提供） */
+    getSlots: () => readonly EquipSlotDef[]
     /** 拖动到新格位（返回是否成功，失败由调用方负责刷新） */
     onMove: (instanceId: string, placement: Placement) => boolean
     onEquip: (instanceId: string, slot?: EquipSlot) => boolean
@@ -90,25 +94,34 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         })
     }
 
-    const SLOT_ANCHORS: Record<EquipSlot, {left: string; top: string}> = {
+    /** 部位 → 环绕预览的显示锚点（仅表现层；不同体形共用同一套身体部位语义） */
+    const SLOT_ANCHORS: Record<string, {left: string; top: string}> = {
         head: {left: '50%', top: '2%'},
         chest: {left: '2%', top: '45%'},
+        torso: {left: '2%', top: '45%'},
+        body: {left: '50%', top: '55%'},
         main_hand: {left: '78%', top: '38%'},
         off_hand: {left: '2%', top: '72%'},
         arms: {left: '78%', top: '62%'},
         legs: {left: '50%', top: '88%'},
+        tail: {left: '88%', top: '78%'},
+        claw: {left: '12%', top: '82%'},
+        hooves: {left: '12%', top: '82%'},
+        wing_claw: {left: '12%', top: '62%'},
+        wing: {left: '88%', top: '52%'},
         breath: {left: '22%', top: '22%'},
     }
 
     const renderEquipment = (): void => {
         const inv = cb.getInventory()
         slotsLayer.replaceChildren()
-        for (const slot of EQUIP_SLOTS) {
+        for (const slotDef of cb.getSlots()) {
+            const slot = equipSlotKey(slotDef.kind, slotDef.bodyPart)
             const id = inv.equipment[slot]
             const stack = id !== undefined ? findStack(inv, id) : undefined
             const def = stack !== undefined ? findItemDef(stack.defId) : undefined
             const el = document.createElement('div')
-            const anchor = SLOT_ANCHORS[slot]
+            const anchor = SLOT_ANCHORS[slotDef.bodyPart] ?? {left: '50%', top: '50%'}
             el.style.cssText = [
                 'position:absolute', `left:${anchor.left}`, `top:${anchor.top}`, 'transform:translate(-50%,-50%)',
                 'pointer-events:auto', 'cursor:pointer', 'width:110px',
@@ -116,11 +129,13 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
                 'background:color-mix(in srgb, var(--dc-bg-0) 70%, transparent)', 'font-size:11px', 'text-align:center', 'overflow:hidden',
                 'text-overflow:ellipsis', 'white-space:nowrap',
             ].join(';')
-            const slotLabel = translate(EQUIP_SLOT_LABELS[slot])
+            const slotLabel = slotDef.nameKey !== undefined ? translate(slotDef.nameKey) : slotDef.bodyPart
             const itemLabel = def === undefined ? '—' : itemDisplayName(def)
             el.textContent = `${slotLabel}: ${itemLabel}`
             el.title = `${slotLabel}: ${itemLabel}`
             el.dataset.slot = slot
+            el.dataset.kind = slotDef.kind
+            el.dataset.bodyPart = slotDef.bodyPart
             el.addEventListener('click', () => {
                 if (id !== undefined && cb.onUnequip(slot)) {
                     cb.onEquipmentChanged()
@@ -165,8 +180,10 @@ export const createInventoryPanel = (cb: InventoryPanelCallbacks): InventoryPane
         equipBtn.textContent = equipped ? translate('play.inventory.equipped') : translate('play.inventory.equip')
         equipBtn.disabled = equipped
         equipBtn.onclick = () => {
-            const slot = def.category === 'weapon' ? 'main_hand' : (def.equipSlot ?? 'main_hand')
-            if (cb.onEquip(stack.instanceId, slot)) {
+            const slot = def.equipKind !== undefined && def.equipSlot !== undefined
+                ? equipSlotKey(def.equipKind, def.equipSlot)
+                : undefined
+            if (slot !== undefined && cb.onEquip(stack.instanceId, slot)) {
                 cb.onEquipmentChanged()
                 render()
             }

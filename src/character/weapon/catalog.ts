@@ -25,9 +25,6 @@ export const DEFAULT_WEAPON_ID = 'long_sword'
 const WEAPONS_BY_FORM = new Map<string, WeaponConfig[]>()
 const WEAPON_BY_ID = new Map<string, WeaponConfig>()
 
-/** 额外武器注册表（测试专用武器，如 test_weapon）：参与 `findWeaponPreset`，不进入体形武器表 */
-const EXTRA_WEAPON_PRESETS = new Map<string, WeaponConfig>()
-
 /** 注册某体形的武器表（`body_form/index.ts` 装配时调用；同 id 覆盖，列表按体形归并） */
 export const registerFormWeapons = (formId: string, weapons: readonly WeaponConfig[]): void => {
     const list = WEAPONS_BY_FORM.get(formId) ?? []
@@ -38,20 +35,14 @@ export const registerFormWeapons = (formId: string, weapons: readonly WeaponConf
     WEAPONS_BY_FORM.set(formId, list)
 }
 
-/** 注册额外武器预设（测试夹具用；同 id 覆盖） */
-export const registerWeaponPreset = (preset: WeaponConfig): void => {
-    EXTRA_WEAPON_PRESETS.set(preset.id, preset)
-}
-
 /** 某体形的全部武器（面板下拉 / 存档校验用） */
 export const weaponsOfForm = (formId: string): readonly WeaponConfig[] => WEAPONS_BY_FORM.get(formId) ?? []
 
 /** 全部已注册武器（近战在前、远程在后按体形注册顺序） */
 export const allWeaponPresets = (): readonly WeaponConfig[] => [...WEAPON_BY_ID.values()]
 
-/** 按 id 查武器（体形注册表 → 额外注册表） */
-export const findWeaponPreset = (weaponId: string): WeaponConfig | undefined =>
-    WEAPON_BY_ID.get(weaponId) ?? EXTRA_WEAPON_PRESETS.get(weaponId)
+/** 按 id 查武器（体形注册表） */
+export const findWeaponPreset = (weaponId: string): WeaponConfig | undefined => WEAPON_BY_ID.get(weaponId)
 
 /** 按 id 查武器，未知 id 回退默认武器（存档 / 面板容错） */
 export const weaponPresetOrDefault = (weaponId: string | undefined): WeaponConfig => {

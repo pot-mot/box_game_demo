@@ -1,48 +1,10 @@
 import {Euler, Vector3, type Group, type Mesh} from 'three'
 import {createMeshBuilder, type MeshBuilder} from './mesh_builder.ts'
 
-// ── 武器模型 ID 常量 ──
+import {WEAPON_MESH_IDS, type WeaponMeshConfig, type WeaponMeshId, type WeaponLocalHitBox} from '../../../character/weapon/mesh_config.ts'
 
-const WEAPON_MESH_IDS = [
-    'sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer',
-    'shield_small', 'shield_medium', 'shield_large',
-    'bow', 'crossbow', 'shotgun',
-    'staff', 'magic_wand',
-    'throwing_axe', 'grenade', 'molotov', 'throwing_dart',
-    /* 空手 / 天然攻击（拳、咬、爪、吐息）：无可视模型，仅保留命中盒与挂点，
-     * 外观由身体部件（手 / 口 / 爪）表达 */
-    'none',
-] as const satisfies readonly string[]
-export type WeaponMeshId = typeof WEAPON_MESH_IDS[number]
-
-// ── 武器模型配置（每种武器仅携带自身需要的参数） ──
-
-interface WeaponMeshCommon {
-    /** 双手共持时副握点沿武器本地 +Y 相对主握点的距离（缺省 0） */
-    readonly supportGripOffset?: number
-}
-
-export type WeaponMeshConfig = WeaponMeshCommon & (
-    | { id: 'sword';        bladeLen: number; color: number; gripColor: number }
-    | { id: 'heavy_sword';  bladeLen: number; color: number; gripColor: number }
-    | { id: 'spear';        poleLen: number;  headLen: number; color: number; headColor: number }
-    | { id: 'dual_axe';     bladeSize: number; color: number; gripColor: number }
-    | { id: 'war_hammer';   headSize: number; color: number; gripColor: number }
-    | { id: 'shield_small';  width: number; height: number; thickness: number; round: boolean; color: number; gripColor: number; bossColor: number }
-    | { id: 'shield_medium'; width: number; height: number; thickness: number; round: boolean; color: number; gripColor: number; bossColor: number }
-    | { id: 'shield_large';  width: number; height: number; thickness: number; round: boolean; color: number; gripColor: number; bossColor: number }
-    | { id: 'bow';          size: number; color: number; stringColor: number }
-    | { id: 'crossbow';     size: number; color: number; metalColor: number }
-    | { id: 'shotgun';      size: number; color: number; metalColor: number }
-    | { id: 'staff';        poleLen: number; orbRadius: number; color: number; orbColor: number }
-    | { id: 'magic_wand';   len: number; color: number; gemColor: number }
-    | { id: 'throwing_axe'; bladeSize: number; color: number; gripColor: number }
-    | { id: 'grenade';      radius: number; color: number; bandColor: number }
-    | { id: 'molotov';      size: number; color: number; fireColor: number }
-    | { id: 'throwing_dart';len: number; color: number; tailColor: number }
-    /** 空手 / 天然武器：无可视模型（仅命中盒 + 挂点） */
-    | { id: 'none' }
-)
+export {WEAPON_MESH_IDS}
+export type {WeaponMeshConfig, WeaponMeshId, WeaponLocalHitBox}
 
 /**
  * 武器固有握持姿态（**武器模型自身属性**，在 `createWeaponMesh` 内直接烘焙进武器 Group）：
@@ -93,17 +55,6 @@ const SHIELD_MESH_IDS: readonly WeaponMeshId[] = ['shield_small', 'shield_medium
 export const isShieldMeshId = (id: WeaponMeshId): boolean => SHIELD_MESH_IDS.includes(id)
 
 // ── 攻击判定箱（武器本地命中箱） ──
-
-/** 武器本地命中箱：每个武器在自己的 `gen` 中显式声明（不再由 `finish` 统一外扩），
- * 单个盒按武器几何近似包裹整把武器（含柄）；运行时经武器 group 的 matrixWorld
- * 变换为世界空间 OBB 参与伤害判定 */
-export interface WeaponLocalHitBox {
-    readonly center: { readonly x: number; readonly y: number; readonly z: number }
-    readonly half: { readonly x: number; readonly y: number; readonly z: number }
-    /** 命中箱沿武器本地 +Y 轴（自握把原点延伸方向）的最大前伸量，
-     * 即武器打击部位距**握把**的最远距离，供攻击检测箱推导实际攻击距离 */
-    readonly reach: number
-}
 
 // ── 生成器返回值 ──
 

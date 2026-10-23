@@ -4,6 +4,7 @@ import type {DefenseProfile} from '../combat/defense.ts'
 import {ARMOR_PRESETS} from './armor_pieces.ts'
 import {LIMB_PRESETS} from './limb_pieces.ts'
 import {ARMOR_SLOTS, LIMB_SLOTS, type ArmorSlot, type LimbSlot} from './slots.ts'
+import type {EquipmentState} from '../equipment/types.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import type {
     ArmorLoadout,
@@ -79,27 +80,45 @@ export const armorPieceDisplayName = (piece: ArmorPieceConfig | LimbPieceConfig)
     return key === undefined ? piece.name : translate(key)
 }
 
-/** 全部护甲预设（面板下拉与测试枚举用） */
-export const ALL_ARMOR_PRESETS: readonly ArmorPieceConfig[] = Object.values(ARMOR_PRESETS)
+/** 体形注册的额外护甲 / 肢体预设（非人形体形在 body_form/index.ts 装配时注册） */
+const EXTRA_ARMOR_PRESETS = new Map<string, ArmorPieceConfig>()
+const EXTRA_LIMB_PRESETS = new Map<string, LimbPieceConfig>()
 
-/** 全部肢体预设（面板下拉与测试枚举用） */
-export const ALL_LIMB_PRESETS: readonly LimbPieceConfig[] = Object.values(LIMB_PRESETS)
+export const registerArmorPresets = (pieces: readonly ArmorPieceConfig[]): void => {
+    for (const piece of pieces) EXTRA_ARMOR_PRESETS.set(piece.id, piece)
+}
+
+export const registerLimbPresets = (pieces: readonly LimbPieceConfig[]): void => {
+    for (const piece of pieces) EXTRA_LIMB_PRESETS.set(piece.id, piece)
+}
+
+/** 全部护甲预设（人形基础 + 体形注册；面板下拉与测试枚举用） */
+export const allArmorPresets = (): readonly ArmorPieceConfig[] => [
+    ...Object.values(ARMOR_PRESETS),
+    ...EXTRA_ARMOR_PRESETS.values(),
+]
+
+/** 全部肢体预设（人形基础 + 体形注册；面板下拉与测试枚举用） */
+export const allLimbPresets = (): readonly LimbPieceConfig[] => [
+    ...Object.values(LIMB_PRESETS),
+    ...EXTRA_LIMB_PRESETS.values(),
+]
 
 /** 按 id 查护甲预设 */
 export const findArmorPreset = (id: string | undefined): ArmorPieceConfig | undefined =>
-    id === undefined ? undefined : ARMOR_PRESETS[id]
+    id === undefined ? undefined : (ARMOR_PRESETS[id] ?? EXTRA_ARMOR_PRESETS.get(id))
 
 /** 按 id 查肢体预设 */
 export const findLimbPreset = (id: string | undefined): LimbPieceConfig | undefined =>
-    id === undefined ? undefined : LIMB_PRESETS[id]
+    id === undefined ? undefined : (LIMB_PRESETS[id] ?? EXTRA_LIMB_PRESETS.get(id))
 
 /** 某槽位可选护甲（面板下拉用） */
 export const armorPiecesOfSlot = (slot: ArmorSlot): readonly ArmorPieceConfig[] =>
-    ALL_ARMOR_PRESETS.filter(piece => piece.slot === slot)
+    allArmorPresets().filter(piece => piece.slot === slot)
 
 /** 某槽位可选肢体（面板下拉用） */
 export const limbPiecesOfSlot = (slot: LimbSlot): readonly LimbPieceConfig[] =>
-    ALL_LIMB_PRESETS.filter(piece => piece.slot === slot)
+    allLimbPresets().filter(piece => piece.slot === slot)
 
 /** 校验护甲装备表：未知 id / 槽位与 id 不符 → 空槽 */
 export const resolveArmorLoadout = (loadout: ArmorLoadout | undefined): ResolvedArmorLoadout => {
@@ -256,3 +275,43 @@ export const moveSpeedTermsOf = (
     equippedPieces(resolved, resolvedLimbs)
         .map(piece => ({name: armorPieceDisplayName(piece), value: piece.moveSpeedMultiplier}))
         .filter(term => term.value !== 1)
+
+/* ── 通用装备状态解析（跨体形；按 kind:bodyPart 校验） ── */
+
+/**
+ * 解析装备状态中的护甲 / 肢体条目：未知 id、部位不匹配、体形不匹配一律剔除。
+ * 同一部位的多层装备（kind 不同）各自独立保留。
+ */
+export const resolveEquipmentPieces = (
+    state: EquipmentState,
+    bodyFormId: string,
+): readonly (ArmorPieceConfig | LimbPieceConfig)[] => {
+    const pieces: (ArmorPieceConfig | LimbPieceConfig)[] = []
+    const allowed = (piece: ArmorPieceConfig | LimbPieceConfig): boolean =>
+        piece.allowedBodyFormIds === undefined || piece.allowedBodyFormIds.includes(bodyFormId)
+    for (const [slot, id] of Object.entries(state.armor)) {
+        const piece = findArmorPreset(id)
+        if (piece !== undefined && piece.slot === slot && allowed(piece)) pieces.push(piece)
+    }
+    for (const [slot, id] of Object.entries(state.limb)) {
+        const piece = findLimbPreset(id)
+        if (piece !== undefined && piece.slot === slot && allowed(piece)) pieces.push(piece)
+    }
+    return pieces
+}
+
+/** 有效防御 = 基础防御 + 全部已解析护甲 / 肢体防御 */
+export const equipmentDefenseOf = (base: DefenseProfile, pieces: readonly (ArmorPieceConfig | LimbPieceConfig)[]): DefenseProfile =>
+    pieces.reduce((total, piece) => addDamageProfiles(total, piece.defense), base)
+
+/** 有效攻击加成 = 全部已解析护甲 / 肢体攻击加成之和 */
+export const equipmentAttackOf = (pieces: readonly (ArmorPieceConfig | LimbPieceConfig)[]): DamageTypeProfile =>
+    pieces.reduce((total, piece) => addDamageProfiles(total, piece.attack), ZERO_PROFILE)
+
+/** 有效移速乘数 = 全部已解析护甲 / 肢体移速乘数之积 */
+export const equipmentMoveSpeedOf = (pieces: readonly (ArmorPieceConfig | LimbPieceConfig)[]): number =>
+    pieces.reduce((multiplier, piece) => multiplier * piece.moveSpeedMultiplier, 1)
+
+/** 有效韧性加成 = 全部已解析护甲 / 肢体韧性之和 */
+export const equipmentPoiseOf = (pieces: readonly (ArmorPieceConfig | LimbPieceConfig)[]): number =>
+    pieces.reduce((total, piece) => total + (piece.poise ?? 0), 0)

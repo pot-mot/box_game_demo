@@ -1,6 +1,6 @@
 import type {BoxPartPalette} from '../../../render/box_parts.ts'
 import type {SkeletonPreset} from '../../skeleton/appearance.ts'
-import type {BodyForm} from '../body_form/types.ts'
+import type {BodyForm} from '../body_form/common/types.ts'
 import {PRESET_PALETTE} from '../appearance/constants.ts'
 
 /** 把任意体形计划包装为骨骼编辑器可消费的骨架预设（定义 + 外观装配） */

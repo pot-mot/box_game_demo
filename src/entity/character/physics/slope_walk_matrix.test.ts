@@ -14,8 +14,8 @@ import {
 } from './harness.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {GroundState} from './ground_state.ts'
-import {createAppearanceSystem} from '../forms/humanoid/system.ts'
-import type {CharacterModel} from '../forms/humanoid/types.ts'
+import {createAppearanceSystem} from '../body_form/humanoid/skeleton_animation/system.ts'
+import type {CharacterModel} from '../body_form/humanoid/appearance/types.ts'
 import type {TrackedBoxPart} from '../../../render/box_parts.ts'
 
 const FRAMES_3600 = 3600
@@ -231,8 +231,7 @@ describe('郊狼过程动画与摄像机平滑', () => {
                 sys.update(DT, model, state, {
                     stateTime: entity.stateMachine.stateTime,
                     horizontalSpeed: hSpeed,
-                    holdMode: 'one_handed',
-                    handedness: 'right',
+                    humanoid: {holdMode: 'one_handed', handedness: 'right', shieldHands: {main: false, off: false}},
                     attackSegment: undefined,
                     attackPhase: undefined,
                     attackPhaseProgress: 0,
@@ -241,7 +240,6 @@ describe('郊狼过程动画与摄像机平滑', () => {
                     attackCharge: 0,
                     attackHolding: false,
                     weaponHeld: false,
-                    shieldHands: {main: false, off: false},
                 })
                 if (state !== prevState) prevState = state
                 if (i < WARMUP_FRAMES) continue

@@ -1,11 +1,11 @@
-import type { WeaponMeshConfig } from '../../entity/character/appearance/weapon_mesh.ts'
+import type { WeaponMeshConfig } from './mesh_config.ts'
 import type { StringLocaleKey } from '../../i18n/index.ts'
 import type { DamageType } from '../combat/damage_type.ts'
 import type { ImpactLevel } from '../combat/impact.ts'
 import type { CollisionCategory } from '../../physics/collision_category.ts'
 import type { HoldMode } from './hold_mode.ts'
 import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
-import { withChargeTuningMap } from './attack_chain.ts'
+import { withAttackSlotKeyMap, withChargeTuningMap } from './attack_chain.ts'
 import { buildRangedAttacks } from './ranged_attacks.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
 import type { ProjectileVisualSpec } from './projectile_visual.ts'
@@ -124,6 +124,8 @@ export interface RangedWeaponConfig extends RangedWeaponClassConfig {
     readonly name: string
     /** 武器名本地化键（UI 展示统一经此取用） */
     readonly nameKey: StringLocaleKey
+    /** 该武器可装备的部位 id（体形 `EquipSlotDef.bodyPart`） */
+    readonly equipBodyParts: readonly string[]
     /** 程序化武器模型（主手 / 右手） */
     readonly mesh: WeaponMeshConfig
 }
@@ -149,18 +151,21 @@ export const resolveRangedWeapon = (weaponClass: RangedWeaponClassConfig, model:
         : model.charge === undefined
             ? weaponClass.charge
             : {...weaponClass.charge, ...model.charge}
+    const slotKey = model.equipBodyParts[0]
+    const attacks = model.charge !== undefined && weaponClass.charge !== undefined && charge !== undefined
+        ? withChargeTuningMap(weaponClass.attacks, charge)
+        : weaponClass.attacks
     return {
         ...weaponClass,
         charge,
         /* 仅在单武器有蓄力覆写时重烘焙攻击链（否则沿用类共享数据） */
-        attacks: model.charge !== undefined && weaponClass.charge !== undefined && charge !== undefined
-            ? withChargeTuningMap(weaponClass.attacks, charge)
-            : weaponClass.attacks,
+        attacks: slotKey !== undefined ? withAttackSlotKeyMap(attacks, `weapon:${slotKey}`) : attacks,
         classId: model.classId,
         id: model.id,
         formId: model.formId,
         name: model.name,
         nameKey: model.nameKey,
+        equipBodyParts: model.equipBodyParts,
         mesh: model.mesh,
     }
 }

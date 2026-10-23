@@ -15,6 +15,8 @@ export interface BoneAnimationPlayer {
     pause: () => void
     stop: () => void
     seek: (time: number) => void
+    /** 按进度（0-1）定位；等价于 seek(progress × duration) */
+    seekProgress: (progress: number) => void
     /** 整体均匀变速（playbackRate，>= 0）：对齐可变阶段时长/行走滑步用 */
     setSpeed: (speed: number) => void
     readonly isPlaying: boolean
@@ -133,6 +135,10 @@ export const createBoneAnimationPlayer = (skeleton: Skeleton, clip: BoneAnimatio
         applyPoseAt(time)
     }
 
+    const seekProgress = (progress: number): void => {
+        seek(progress * clip.duration)
+    }
+
     const setSpeed = (s: number): void => {
         speed = Math.max(s, 0)
     }
@@ -144,6 +150,7 @@ export const createBoneAnimationPlayer = (skeleton: Skeleton, clip: BoneAnimatio
         pause,
         stop,
         seek,
+        seekProgress,
         setSpeed,
         get isPlaying() { return playing },
         get time() { return time },

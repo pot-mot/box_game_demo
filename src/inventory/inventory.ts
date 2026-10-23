@@ -1,5 +1,9 @@
 import type {EquipSlot, InventorySaveData, InventoryState, ItemStack, Placement, PlacementRot} from './types.ts'
-import {EQUIP_SLOTS, INVENTORY_DEFAULT_HEIGHT, INVENTORY_DEFAULT_WIDTH} from './types.ts'
+import {INVENTORY_DEFAULT_HEIGHT, INVENTORY_DEFAULT_WIDTH} from './types.ts'
+import {parseEquipSlotKey} from '../character/equipment/types.ts'
+import {findWeaponPreset} from '../character/weapon/catalog.ts'
+import {breathModuleOf} from '../character/weapon/breath_module.ts'
+import {findArmorPreset, findLimbPreset} from '../character/armor/catalog.ts'
 import {findItemDef, isKnownItemId, type ItemDef} from './items.ts'
 import {buildOccupancy, canPlace, findPlacement, shapeInfo} from './grid.ts'
 
@@ -101,16 +105,45 @@ export const moveStack = (inv: InventoryState, instanceId: string, placement: Pl
     return true
 }
 
-const slotAccepts = (def: ItemDef, slot: EquipSlot, bodyFormId: string | undefined): boolean => {
-    if (def.equipBodyFormId !== undefined && bodyFormId !== undefined && def.equipBodyFormId !== bodyFormId) return false
-    if (def.category === 'weapon') return slot === 'main_hand' || slot === 'off_hand'
-    if (def.category === 'armor' || def.category === 'breath') return def.equipSlot === slot
+const slotAccepts = (def: ItemDef, slot: EquipSlot, bodyFormId: string | undefined, allowedSlots?: readonly EquipSlot[]): boolean => {
+    const parsed = parseEquipSlotKey(slot)
+    if (parsed === undefined) return false
+    if (allowedSlots !== undefined && !allowedSlots.includes(slot)) return false
+    if (def.equipKind !== parsed.kind) return false
+    if (bodyFormId !== undefined && def.equipBodyFormId !== undefined && def.equipBodyFormId !== bodyFormId) return false
+    if (def.category === 'weapon') {
+        const weapon = findWeaponPreset(def.weaponId ?? '')
+        if (weapon === undefined) return false
+        if (bodyFormId !== undefined && weapon.formId !== bodyFormId) return false
+        return weapon.equipBodyParts.includes(parsed.bodyPart)
+    }
+    if (def.category === 'breath') {
+        const module = breathModuleOf(def.breathModuleId)
+        if (module === undefined) return false
+        if (bodyFormId !== undefined && module.formId !== bodyFormId) return false
+        return parsed.bodyPart === 'breath'
+    }
+    if (def.category === 'armor') {
+        const piece = findArmorPreset(def.armorId)
+        if (piece === undefined || piece.slot !== parsed.bodyPart) return false
+        return piece.allowedBodyFormIds === undefined || bodyFormId === undefined || piece.allowedBodyFormIds.includes(bodyFormId)
+    }
+    if (def.category === 'limb') {
+        const piece = findLimbPreset(def.limbId)
+        if (piece === undefined || piece.slot !== parsed.bodyPart) return false
+        return piece.allowedBodyFormIds === undefined || bodyFormId === undefined || piece.allowedBodyFormIds.includes(bodyFormId)
+    }
     return false
 }
 
-/** 装备上下文：吐息等体形专属物品需要当前体形 id */
+/** 物品 id → 装备目录 id（武器 / 护甲 / 肢体 / 吐息共用） */
+export const equipItemIdOf = (def: ItemDef): string | undefined =>
+    def.weaponId ?? def.armorId ?? def.limbId ?? def.breathModuleId
+
+/** 装备上下文：当前体形 id 与体形声明的槽位键（由 body_form 提供） */
 export interface EquipContext {
     readonly bodyFormId?: string
+    readonly allowedSlots?: readonly EquipSlot[]
 }
 
 /** 装备：占用槽位；若已有装备则尝试放回背包（无空位则失败） */
@@ -123,7 +156,7 @@ export const equipStack = (
     const stack = findStack(inv, instanceId)
     if (stack === undefined) return false
     const def = findItemDef(stack.defId)
-    if (def === undefined || !slotAccepts(def, slot, context.bodyFormId)) return false
+    if (def === undefined || !slotAccepts(def, slot, context.bodyFormId, context.allowedSlots)) return false
 
     const prevId = inv.equipment[slot]
     if (prevId !== undefined && prevId !== instanceId) {
@@ -223,7 +256,7 @@ export const inventoryToSave = (inv: InventoryState): InventorySaveData => ({
 })
 
 /** JSON-safe 存档 → 背包（未知 defId / 非法格位 / 未知装备槽安全丢弃，绝不抛错） */
-export const inventoryFromSave = (data: InventorySaveData | undefined): InventoryState => {
+export const inventoryFromSave = (data: InventorySaveData | undefined, context: EquipContext = {}): InventoryState => {
     if (data === undefined) return createInventory()
     const inv = createInventory(clampInt(data.width, 1, 16), clampInt(data.height, 1, 12))
     const seen = new Set<string>()
@@ -248,13 +281,12 @@ export const inventoryFromSave = (data: InventorySaveData | undefined): Inventor
         inv.stacks.push(stack)
     }
 
-    for (const slot of EQUIP_SLOTS) {
-        const id = data.equipment[slot]
+    for (const [slot, id] of Object.entries(data.equipment) as Array<[EquipSlot, string | undefined]>) {
         if (id === undefined) continue
         const stack = findStack(inv, id)
         if (stack === undefined) continue
         const def = findItemDef(stack.defId)
-        if (def === undefined || !slotAccepts(def, slot, undefined)) continue
+        if (def === undefined || !slotAccepts(def, slot, context.bodyFormId, context.allowedSlots)) continue
         inv.equipment[slot] = id
         stack.grid = undefined
     }

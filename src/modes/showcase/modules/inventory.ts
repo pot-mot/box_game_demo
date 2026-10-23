@@ -11,8 +11,8 @@ import {setupInteractables, defaultInteractableConfig} from '../../../entity/int
 import type {InteractableContext, InteractableEntity} from '../../../entity/interactable/index.ts'
 import type {InteractionTarget} from '../../../character/interaction/types.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
-import {ARMOR_SLOTS, type ArmorSlot} from '../../../character/armor/slots.ts'
-import {DEFAULT_WEAPON_ID} from '../../../character/weapon/catalog.ts'
+import {HUMANOID_BODY_FORM} from '../../../entity/character/body_form/index.ts'
+import {equipSlotKey, withEquipmentAt, type EquipmentState} from '../../../character/equipment/types.ts'
 import {getInputRegistry} from '../../../input/registry.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../../input/types.ts'
 import {createInventoryPanel, type InventoryPanel} from '../../play/inventory_ui/panel.ts'
@@ -27,9 +27,10 @@ import {
     moveStack,
     removeAt,
     unequipSlot,
+    equipItemIdOf,
 } from '../../../inventory/index.ts'
 import {ITEM_DEFS} from '../../../inventory/items.ts'
-import {EQUIP_SLOTS, type EquipSlot, type InventoryState} from '../../../inventory/types.ts'
+import type {EquipSlot, InventoryState} from '../../../inventory/types.ts'
 import {localizeText, localizeApply} from '../../../i18n/dom.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import {
@@ -48,7 +49,7 @@ const PLAYER_CONFIG: CharacterSaveConfig = {
     speed: PLAYER_SPEED,
     jumpHeight: PLAYER_JUMP_HEIGHT,
     scale: 1,
-    attack: {weaponId: 'short_sword', damage: 3},
+    equipment: {limb: {}, weapon: {main_hand: 'short_sword'}, armor: {}},
     tendency: {tendencyId: 'hostileExceptSelf'},
     faction: 0,
     maxHealth: 100,
@@ -99,50 +100,56 @@ export const inventoryModule: ShowcaseModule = {
             const stack = inventory.stacks.find(s => s.defId === defId)
             if (stack !== undefined) equipStack(inventory, stack.instanceId, slot)
         }
-        equipDef('weapon_short_sword', 'main_hand')
-        equipDef('armor_iron_helmet', 'head')
-        equipDef('armor_iron_plate', 'chest')
-        equipDef('armor_iron_bracers', 'arms')
-        equipDef('armor_iron_greaves', 'legs')
+        equipDef('weapon_short_sword', 'weapon:main_hand')
+        equipDef('armor_iron_helmet', 'armor:head')
+        equipDef('armor_iron_plate', 'armor:chest')
+        equipDef('armor_iron_bracers', 'armor:arms')
+        equipDef('armor_iron_greaves', 'armor:legs')
 
         const equippedDef = (slot: EquipSlot) => {
             const id = inventory.equipment[slot]
             return id === undefined ? undefined : findItemDef(findStack(inventory, id)?.defId ?? '')
         }
         const previewData = (): EquipPreviewData => {
-            const armor: Partial<Record<EquipSlot, string>> = {}
-            for (const slot of EQUIP_SLOTS) {
-                const def = equippedDef(slot)
-                if (def?.armorId !== undefined) armor[slot] = def.armorId
+            const armor: Partial<Record<string, string>> = {}
+            for (const [key, instanceId] of Object.entries(inventory.equipment)) {
+                if (instanceId === undefined || !key.startsWith('armor:')) continue
+                const def = findItemDef(findStack(inventory, instanceId)?.defId ?? '')
+                if (def?.armorId !== undefined) armor[key.slice('armor:'.length)] = def.armorId
             }
             return {
-                mainWeaponId: equippedDef('main_hand')?.weaponId,
-                offhandWeaponId: equippedDef('off_hand')?.weaponId,
+                bodyFormId: 'humanoid',
+                mainWeaponId: equippedDef('weapon:main_hand')?.weaponId,
+                offhandWeaponId: equippedDef('weapon:off_hand')?.weaponId,
                 armor,
             }
         }
 
         const preview: EquipmentPreview = createEquipmentPreview()
 
-        /** 把装备映射同步到场景内玩家（主手 / 副手武器 + 四槽护甲）与预览小窗 */
+        /** 把装备映射同步到场景内玩家（主手 / 副手武器 + 分层装备）与预览小窗 */
         const applyEquipment = (): void => {
             const player = characterSystem.getPlayerCharacter()
             if (player !== undefined) {
-                const main = equippedDef('main_hand')
-                const off = equippedDef('off_hand')
+                let state: EquipmentState = {limb: {}, weapon: {}, armor: {}}
+                for (const instanceId of Object.values(inventory.equipment)) {
+                    if (instanceId === undefined) continue
+                    const def = findItemDef(findStack(inventory, instanceId)?.defId ?? '')
+                    if (def === undefined || def.equipKind === undefined || def.equipSlot === undefined) continue
+                    const itemId = equipItemIdOf(def)
+                    if (itemId === undefined) continue
+                    state = withEquipmentAt(state, def.equipKind, def.equipSlot, itemId)
+                }
+                const mainWeaponId = state.weapon.main_hand ?? HUMANOID_BODY_FORM.defaultWeaponId
+                const offWeaponId = state.weapon.off_hand
                 characterSystem.updateCharacterConfig(
                     playerId,
                     {},
-                    {weaponId: main?.weaponId ?? DEFAULT_WEAPON_ID},
-                    undefined, undefined, undefined, undefined, undefined,
-                    off?.weaponId !== undefined ? {weaponId: off.weaponId} : null,
+                    {weaponId: mainWeaponId},
+                    undefined, undefined, undefined, undefined,
+                    {equipment: state},
+                    offWeaponId !== undefined ? {weaponId: offWeaponId} : null,
                 )
-                const armor: Partial<Record<ArmorSlot, string>> = {}
-                for (const slot of ARMOR_SLOTS) {
-                    const def = equippedDef(slot)
-                    if (def?.armorId !== undefined) armor[slot] = def.armorId
-                }
-                characterSystem.updateCharacterConfig(playerId, {}, undefined, undefined, undefined, undefined, undefined, {armor})
             }
             preview.setEquipment(previewData())
             preview.render()
@@ -151,14 +158,15 @@ export const inventoryModule: ShowcaseModule = {
         /* —— 背包面板（初始显示，`Tab` / 装备键可开关） —— */
         const panel: InventoryPanel = createInventoryPanel({
             getInventory: () => inventory,
+            getSlots: () => HUMANOID_BODY_FORM.equipSlots,
             onMove: (instanceId, placement) => moveStack(inventory, instanceId, placement),
             onEquip: (instanceId, slot) => {
                 if (slot === undefined) {
                     const def = findItemDef(findStack(inventory, instanceId)?.defId ?? '')
-                    const target: EquipSlot = def?.category === 'weapon' ? 'main_hand' : (def?.equipSlot ?? 'main_hand')
-                    return equipStack(inventory, instanceId, target, {bodyFormId: 'humanoid'})
+                    if (def === undefined || def.equipKind === undefined || def.equipSlot === undefined) return false
+                    return equipStack(inventory, instanceId, equipSlotKey(def.equipKind, def.equipSlot), {bodyFormId: 'humanoid', allowedSlots: HUMANOID_BODY_FORM.equipSlots.map(s => equipSlotKey(s.kind, s.bodyPart))})
                 }
-                return equipStack(inventory, instanceId, slot, {bodyFormId: 'humanoid'})
+                return equipStack(inventory, instanceId, slot, {bodyFormId: 'humanoid', allowedSlots: HUMANOID_BODY_FORM.equipSlots.map(s => equipSlotKey(s.kind, s.bodyPart))})
             },
             onUnequip: (slot) => unequipSlot(inventory, slot),
             onDrop: (instanceId) => { removeAt(inventory, instanceId) },

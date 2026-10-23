@@ -10,11 +10,11 @@ import {
     type BodyForm,
 } from '../../entity/character/body_form/index.ts'
 import {createBodyFormSkeletonPreset} from '../../entity/character/skeleton/form_preset.ts'
-import type {ScriptedMotion} from '../../entity/character/forms/authoring/motion.ts'
-import {HUMANOID_SCRIPT_MOTIONS} from '../../entity/character/forms/humanoid/script_motions.ts'
-import {WOLF_SCRIPT_MOTIONS} from '../../entity/character/forms/wolf/script_motions.ts'
-import {HORSE_SCRIPT_MOTIONS} from '../../entity/character/forms/horse/script_motions.ts'
-import {WYVERN_SCRIPT_MOTIONS} from '../../entity/character/forms/wyvern/script_motions.ts'
+import type {ScriptedMotion} from '../../entity/character/body_form/common/authoring/motion.ts'
+import {HUMANOID_SCRIPT_MOTIONS} from '../../entity/character/body_form/humanoid/skeleton_animation/script_motions.ts'
+import {WOLF_SCRIPT_MOTIONS} from '../../entity/character/body_form/wolf/skeleton_animation/script_motions.ts'
+import {HORSE_SCRIPT_MOTIONS} from '../../entity/character/body_form/horse/skeleton_animation/script_motions.ts'
+import {WYVERN_SCRIPT_MOTIONS} from '../../entity/character/body_form/wyvern/skeleton_animation/script_motions.ts'
 import {getBuiltinClips, type BuiltinClipEntry} from './builtin_clips.ts'
 
 /** 骨骼编辑器的一个体形配置：骨架预设 + 代码注册脚本 + 控件能力 */

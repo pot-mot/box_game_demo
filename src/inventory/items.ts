@@ -1,15 +1,16 @@
-import type {EquipSlot} from './types.ts'
+import type {ItemEquipKind} from './types.ts'
 import type {BoxPresetId} from '../types/boxPreset.ts'
 import type {AreaPresetId} from '../types/areaPreset.ts'
 import {translate, type StringLocaleKey} from '../i18n/index.ts'
 import type {IconName} from '../ui/icons/sprite.ts'
 
-export const ITEM_CATEGORIES = ['weapon', 'armor', 'breath', 'block', 'consumable', 'material', 'key'] as const
+export const ITEM_CATEGORIES = ['weapon', 'armor', 'limb', 'breath', 'block', 'consumable', 'material', 'key'] as const
 export type ItemCategory = typeof ITEM_CATEGORIES[number]
 
 export const ITEM_CATEGORY_LABELS: Record<ItemCategory, StringLocaleKey> = {
     weapon: 'item_category.weapon',
     armor: 'item_category.armor',
+    limb: 'item_category.limb',
     breath: 'item_category.breath',
     block: 'item_category.block',
     consumable: 'item_category.consumable',
@@ -33,10 +34,14 @@ export interface ItemDef {
     readonly maxStack: number
     readonly weaponId?: string
     readonly armorId?: string
+    readonly limbId?: string
     readonly breathModuleId?: string
-    /** 仅允许该体形装备（如吐息物品只允许 wyvern） */
+    /** 装备类别（武器 / 护甲 / 肢体；非装备物品缺省） */
+    readonly equipKind?: ItemEquipKind
+    /** 允许装备的体形 id（缺省 = 由装备目录判定） */
     readonly equipBodyFormId?: string
-    readonly equipSlot?: EquipSlot
+    /** 装备部位 id（护甲 / 肢体；武器由武器配置声明） */
+    readonly equipSlot?: string
     /** 方块物品放置时生成的实体类型（`box` / `area`；仅 `block` 类别） */
     readonly blockType?: string
     /** 箱子特性预设（仅 `blockType === 'box'` 的方块物品） */
@@ -47,7 +52,7 @@ export interface ItemDef {
     readonly description: string
 }
 
-const weapon = (id: string, name: string, shape: readonly string[], weaponId: string, damage: string, icon: IconName): ItemDef => ({
+const weapon = (id: string, name: string, shape: readonly string[], weaponId: string, damage: string, icon: IconName, slot = 'main_hand'): ItemDef => ({
     id,
     name,
     category: 'weapon',
@@ -55,12 +60,13 @@ const weapon = (id: string, name: string, shape: readonly string[], weaponId: st
     shape,
     maxStack: 1,
     weaponId,
-    equipSlot: 'main_hand',
+    equipKind: 'weapon',
+    equipSlot: slot,
     dropSize: [0.35, 0.35, 0.9],
     description: `${name}（${damage}）`,
 })
 
-const armor = (id: string, name: string, shape: readonly string[], armorId: string, slot: EquipSlot, effect: string, icon: IconName): ItemDef => ({
+const armor = (id: string, name: string, shape: readonly string[], armorId: string, slot: string, effect: string, icon: IconName): ItemDef => ({
     id,
     name,
     category: 'armor',
@@ -68,9 +74,25 @@ const armor = (id: string, name: string, shape: readonly string[], armorId: stri
     shape,
     maxStack: 1,
     armorId,
+    equipKind: 'armor',
     equipSlot: slot,
     dropSize: [0.35, 0.35, 0.35],
     description: `${name}（${effect}）`,
+})
+
+const limb = (id: string, name: string, shape: readonly string[], limbId: string, slot: string, icon: IconName, bodyFormId: string): ItemDef => ({
+    id,
+    name,
+    category: 'limb',
+    icon,
+    shape,
+    maxStack: 1,
+    limbId,
+    equipKind: 'limb',
+    equipSlot: slot,
+    equipBodyFormId: bodyFormId,
+    dropSize: [0.3, 0.3, 0.3],
+    description: name,
 })
 
 const breath = (
@@ -88,6 +110,7 @@ const breath = (
     shape,
     maxStack: 1,
     breathModuleId,
+    equipKind: 'weapon',
     equipSlot: 'breath',
     equipBodyFormId: 'wyvern',
     dropSize: [0.28, 0.28, 0.28],
@@ -142,6 +165,12 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     weapon('weapon_grenade', '手雷', ['#'], 'grenade', '范围爆炸', 'item-grenade'),
     weapon('weapon_molotov', '燃烧瓶', ['#', '#'], 'molotov', '范围灼烧', 'item-molotov'),
     weapon('weapon_throwing_dart', '飞镖', ['#', '#'], 'throwing_dart', '轻巧暗器', 'item-throwing-dart'),
+    /* ── 非人形武器（体形锁定；仅对应体形可装备） ── */
+    weapon('weapon_wolf_claw_blade', '爪刃', ['#', '#'], 'wolf_claw_blade', '狼爪刃', 'item-short-sword', 'claw'),
+    weapon('weapon_wolf_short_sword', '口含短剑', ['#', '#', '#'], 'wolf_short_sword', '口含短兵', 'item-short-sword', 'head'),
+    weapon('weapon_wolf_long_sword', '口含长剑', ['#', '#', '#', '#'], 'wolf_long_sword', '口含长剑', 'item-long-sword', 'head'),
+    weapon('weapon_horse_head_blade', '衔刃', ['#', '#', '#', '#'], 'horse_head_blade', '马口衔刃', 'item-long-sword', 'head'),
+    weapon('weapon_wyvern_wing_blade', '翼刃', ['#', '#', '#'], 'wyvern_wing_blade', '龙翼刃', 'item-long-sword', 'wing_claw'),
     /* ── 龙吐息（独立 breath 装备槽，仅 wyvern 可装备） ── */
     breath('item_breath_fireball', '火球吐息', ['##', '##'], 'breath_fireball', '抛射火球并爆炸', 'item-breath-fireball'),
     breath('item_breath_lightning', '雷电吐息', ['#.', '##', '.#'], 'breath_lightning', '高速弹与链式传导', 'item-breath-lightning'),
@@ -174,6 +203,39 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     armor('armor_stone_plate', '石胸甲', ['##', '##'], 'stone_plate', 'chest', '重型防御', 'item-stone-plate'),
     armor('armor_stone_bracers', '石护腕', ['#', '#'], 'stone_bracers', 'arms', '重型防御', 'item-stone-bracers'),
     armor('armor_stone_legs', '石护腿', ['#', '#'], 'stone_legs', 'legs', '重型防御', 'item-stone-legs'),
+    /* ── 人形肢体组件 ── */
+    limb('limb_skeleton_head', '骷髅头颅', ['#'], 'skeleton_head', 'head', 'item-cloth-cap', 'humanoid'),
+    limb('limb_skeleton_arms', '骷髅臂骨', ['#'], 'skeleton_arms', 'arms', 'item-cloth-bracers', 'humanoid'),
+    limb('limb_skeleton_body', '骷髅躯干', ['#'], 'skeleton_body', 'body', 'item-cloth-vest', 'humanoid'),
+    limb('limb_skeleton_legs', '骷髅腿骨', ['#'], 'skeleton_legs', 'legs', 'item-cloth-pants', 'humanoid'),
+    limb('limb_orc_head', '兽人头颅', ['#'], 'orc_head', 'head', 'item-iron-helmet', 'humanoid'),
+    limb('limb_orc_arms', '兽人臂膀', ['#'], 'orc_arms', 'arms', 'item-iron-bracers', 'humanoid'),
+    limb('limb_orc_body', '兽人躯干', ['#'], 'orc_body', 'body', 'item-iron-plate', 'humanoid'),
+    limb('limb_orc_legs', '兽人腿脚', ['#'], 'orc_legs', 'legs', 'item-iron-greaves', 'humanoid'),
+    limb('limb_elf_head', '精灵头颅', ['#'], 'elf_head', 'head', 'item-mage-hood', 'humanoid'),
+    limb('limb_elf_arms', '精灵手臂', ['#'], 'elf_arms', 'arms', 'item-mage-wraps', 'humanoid'),
+    limb('limb_elf_body', '精灵身躯', ['#'], 'elf_body', 'body', 'item-mage-robe', 'humanoid'),
+    limb('limb_elf_legs', '精灵腿脚', ['#'], 'elf_legs', 'legs', 'item-mage-leggings', 'humanoid'),
+    /* ── 非人形护甲 / 肢体 ── */
+    armor('armor_wolf_head_guard', '狼首骨甲', ['#'], 'wolf_head_guard', 'head', '轻便护甲', 'item-cloth-cap'),
+    armor('armor_wolf_hide', '狼皮胸甲', ['##', '##'], 'wolf_hide', 'torso', '物理防御', 'item-leather-armor'),
+    armor('armor_wolf_leg_wraps', '狼腿束带', ['#', '#'], 'wolf_leg_wraps', 'legs', '轻便护腿', 'item-cloth-pants'),
+    limb('limb_wolf_claw_wrap', '狼爪束甲', ['#'], 'wolf_claw_wrap', 'claw', 'item-cloth-bracers', 'wolf'),
+    limb('limb_wolf_tail_guard', '狼尾护甲', ['#'], 'wolf_tail_guard', 'tail', 'item-cloth-pants', 'wolf'),
+    limb('limb_wolf_torso_harness', '狼躯束具', ['##'], 'wolf_torso_harness', 'torso', 'item-leather-armor', 'wolf'),
+    armor('armor_horse_head_armor', '马首面甲', ['#'], 'horse_head_armor', 'head', '物理防御', 'item-iron-helmet'),
+    armor('armor_horse_barding', '马身具装', ['##', '##'], 'horse_barding', 'torso', '重型防御', 'item-iron-plate'),
+    armor('armor_horse_hoof_shoes', '马蹄铁', ['#'], 'horse_hoof_shoes', 'hooves', '蹄部护甲', 'item-iron-greaves'),
+    limb('limb_horse_iron_legs', '马铁腿甲', ['#', '#'], 'horse_iron_legs', 'legs', 'item-iron-greaves', 'horse'),
+    limb('limb_horse_tail_banner', '马尾长缨', ['#'], 'horse_tail_banner', 'tail', 'item-cloth-pants', 'horse'),
+    limb('limb_horse_head_plume', '马首翎羽', ['#'], 'horse_head_plume', 'head', 'item-cloth-cap', 'horse'),
+    armor('armor_wyvern_head_crest', '龙首甲冠', ['#'], 'wyvern_head_crest', 'head', '复合防御', 'item-scale-helm'),
+    armor('armor_wyvern_scale_plate', '龙鳞胸甲', ['##', '##'], 'wyvern_scale_plate', 'torso', '复合防御', 'item-scale-mail'),
+    armor('armor_wyvern_wing_guards', '龙翼护甲', ['##'], 'wyvern_wing_guards', 'wing', '翼部护甲', 'item-scale-bracers'),
+    armor('armor_wyvern_tail_spikes', '龙尾棘甲', ['#'], 'wyvern_tail_spikes', 'tail', '尾部护甲', 'item-scale-legs'),
+    limb('limb_wyvern_wing_claw_blade', '龙翼爪刃', ['#', '#'], 'wyvern_wing_claw_blade', 'wing_claw', 'item-short-sword', 'wyvern'),
+    limb('limb_wyvern_head_horns', '龙首角饰', ['#'], 'wyvern_head_horns', 'head', 'item-iron-helmet', 'wyvern'),
+    limb('limb_wyvern_tail_blade', '龙尾刃甲', ['#', '#'], 'wyvern_tail_blade', 'tail', 'item-long-sword', 'wyvern'),
     /* ── 方块 ── */
     block('block_common', '普通方块', ['#'], 'box', '基础物理方块', 'item-block', {box: 'common'}),
     block('block_destruction', '可破坏方块', ['#'], 'box', '受击碎裂', 'item-block-destruction', {box: 'destructible'}),
@@ -224,6 +286,11 @@ const ITEM_NAME_KEYS: Record<string, StringLocaleKey> = {
     weapon_grenade: 'weapon.grenade',
     weapon_molotov: 'weapon.molotov',
     weapon_throwing_dart: 'weapon.throwing_dart',
+    weapon_wolf_claw_blade: 'weapon.wolf_claw_blade',
+    weapon_wolf_short_sword: 'weapon.wolf_short_sword',
+    weapon_wolf_long_sword: 'weapon.wolf_long_sword',
+    weapon_horse_head_blade: 'weapon.horse_head_blade',
+    weapon_wyvern_wing_blade: 'weapon.wyvern_wing_blade',
     armor_cloth_cap: 'item.armor_cloth_cap.name',
     armor_iron_helmet: 'item.armor_iron_helmet.name',
     armor_cloth_vest: 'item.armor_cloth_vest.name',
@@ -279,6 +346,11 @@ const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
     weapon_grenade: 'item.weapon_generic.desc',
     weapon_molotov: 'item.weapon_generic.desc',
     weapon_throwing_dart: 'item.weapon_generic.desc',
+    weapon_wolf_claw_blade: 'item.weapon_generic.desc',
+    weapon_wolf_short_sword: 'item.weapon_generic.desc',
+    weapon_wolf_long_sword: 'item.weapon_generic.desc',
+    weapon_horse_head_blade: 'item.weapon_generic.desc',
+    weapon_wyvern_wing_blade: 'item.weapon_generic.desc',
     armor_cloth_cap: 'item.armor_cloth_cap.desc',
     armor_iron_helmet: 'item.armor_iron_helmet.desc',
     armor_cloth_vest: 'item.armor_cloth_vest.desc',

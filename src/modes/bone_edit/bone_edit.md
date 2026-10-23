@@ -35,9 +35,9 @@
 ## 3. 语义动作约定
 
 - 原子函数：`forms/<form>/rig.ts`，返回 `JointEulers`（关节 id → 欧拉角三元组，或 `{rotation, position}`），表示相对静止姿态的偏移。每个函数只操作 1–2 个关节：躯干俯仰、颈/头偏转、张口、耳/尾、髋摆、膝屈、球节/飞节/跗关节与翼根/肘/腕/爪；四足与翼的关节 id 均按 canonical 解剖左右（`fl/fr/rl/rr`、`l/r`）命名。
-- 合成：`forms/authoring/pose_compose.ts` 的 `mergePoses` 对同关节旋转分量相加、位置后写覆盖。
+- 合成：`body_form/common/authoring/pose_compose.ts` 的 `mergePoses` 对同关节旋转分量相加、位置后写覆盖。
 - 注册：`forms/<form>/script_motions.ts`，每项含稳定 `id`、i18n `nameKey`、`duration`、`loop`、`pose(t, total)`；当前四体形各注册 2–3 个示例（挥手/鞠躬/行军、摇尾/潜行/长嚎、点头/快步/刨蹄、振翼/咆哮/潜近），只用于编辑器预览，不进入生产动作。
-- JIT：`forms/authoring/bake.ts` 校验 duration/重复 id/未知关节/有限数值，生成 `script:<formId>:<motionId>` clip；单动作失败只进入 `errors`，不阻断同体形其他动作。
+- JIT：`body_form/common/authoring/bake.ts` 校验 duration/重复 id/未知关节/有限数值，生成 `script:<formId>:<motionId>` clip；单动作失败只进入 `errors`，不阻断同体形其他动作。
 - 新增体形：在 `BODY_FORMS` 注册体形 → 补 `rig.ts` + `script_motions.ts` → 在 `form_catalog.ts` 的 `SCRIPT_MOTIONS` 映射动作并配置能力标记。
 
 ## 4. 可测试契约
@@ -48,7 +48,7 @@
 - 函数面板 `#bone-script-panel` 输出：`data-form`、`data-baked-count`、`data-error-count`、`data-selected-script`；动作行带 `data-script-id`、`data-baked`。
 - 进度条 `#bone-script-progress` 输出 `data-time` / `data-duration`。
 - 体形下拉 `#bone-form-select`；模式按钮 `#bone-mode-tracks` / `#bone-mode-script`；脚本操作 `#bone-script-rebake` / `#bone-script-to-tracks`。
-- 单测：`forms/authoring/authoring.test.ts`（合成/烘焙/四体形/缓存）、`form_store.test.ts`（体形库隔离）。
+- 单测：`body_form/common/authoring/authoring.test.ts`（合成/烘焙/四体形/缓存）、`form_store.test.ts`（体形库隔离）。
 - e2e：`e2e/bone_edit.spec.ts` 覆盖双模式、体形切换、非人形控件隐藏与脚本转轨道。
 
 ## 5. 非目标
