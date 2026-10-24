@@ -9,6 +9,7 @@ import {editZh} from './locales/edit.ts'
 
 /** 简体中文文案表（结构与 `MainLocale` 完全一致，缺键 / 多键编译报错） */
 export const localeZhCn: MainLocale = {
+    'input.action.toggle_debug_hud': '调试面板显隐',
     /* ── 通用 ── */
     'common.apply': '应用',
     'common.delete': '删除',

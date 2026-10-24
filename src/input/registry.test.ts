@@ -25,6 +25,7 @@ const EXPECTED_DEFAULTS: Record<InputAction, readonly (readonly string[])[]> = {
     open_map: [['KeyM']],
     save_world: [['ControlLeft', 'KeyS'], ['MetaLeft', 'KeyS']],
     load_world: [['ControlLeft', 'KeyO'], ['MetaLeft', 'KeyO']],
+    toggle_debug_hud: [['Backquote']],
     mouse_orbit: [['Mouse0']],
     mouse_pan: [['Mouse2']],
     spawn_entity: [['ControlLeft', 'Mouse0'], ['ControlRight', 'Mouse0']],

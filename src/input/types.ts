@@ -28,6 +28,8 @@ export const INPUT_ACTIONS = [
     'open_map',
     'save_world',
     'load_world',
+    /* 游玩模式调试 HUD 显隐（默认 ~） */
+    'toggle_debug_hud',
     'mouse_orbit',
     'mouse_pan',
     'spawn_entity',
@@ -69,6 +71,7 @@ export const ACTION_LABELS: Record<InputAction, StringLocaleKey> = {
     open_map: 'input.action.open_map',
     save_world: 'input.action.save_world',
     load_world: 'input.action.load_world',
+    toggle_debug_hud: 'input.action.toggle_debug_hud',
     mouse_orbit: 'input.action.mouse_orbit',
     mouse_pan: 'input.action.mouse_pan',
     spawn_entity: 'input.action.spawn_entity',
@@ -84,7 +87,7 @@ export const ACTION_GROUPS: readonly { readonly name: StringLocaleKey; readonly 
     {name: 'input.group.character', actions: ['jump', 'roll', 'cycle_hold_mode', 'interact']},
     {name: 'input.group.edit_tools', actions: ['cycle_spawn_up', 'cycle_spawn_down']},
     {name: 'input.group.ui', actions: ['delete_entity', 'close_panel', 'open_inventory', 'open_equipment', 'open_map']},
-    {name: 'input.group.system', actions: ['save_world', 'load_world']},
+    {name: 'input.group.system', actions: ['save_world', 'load_world', 'toggle_debug_hud']},
 ]
 
 /** 不可修改的鼠标操作展示项 */

@@ -153,6 +153,7 @@ type CoreLocale = {
     'input.action.attack_light': string
     'input.action.attack_heavy': string
     'input.action.showcase_focus': string
+    'input.action.toggle_debug_hud': string
 
     /* ── 实体面板通用 ── */
     'panel.pos': string

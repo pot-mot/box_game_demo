@@ -9,6 +9,7 @@ import {editEn} from './locales/edit.ts'
 
 /** English locale table (structure must match `MainLocale`; missing/extra keys fail compilation) */
 export const localeEn: MainLocale = {
+    'input.action.toggle_debug_hud': 'Toggle Debug HUD',
     /* ── Common ── */
     'common.apply': 'Apply',
     'common.delete': 'Delete',

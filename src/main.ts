@@ -302,7 +302,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     }
 
     // --- UI ---
-    const cameraInfoUpdate = mode === 'showcase' ? () => {} : setupCameraInfo(camera)
+    /* play 模式不显示独立相机信息面板（相机角度并入 ~ 调试 HUD） */
+    const cameraInfoUpdate = mode === 'showcase' || mode === 'play' ? () => {} : setupCameraInfo(camera)
 
     // --- 存档（保存后立即下载为文件）---
     const exportSaveWorld = (): void => {

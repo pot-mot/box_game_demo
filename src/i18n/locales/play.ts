@@ -15,6 +15,10 @@ export type PlayLocale = {
     'play.hud.loadout': (weapon: string, hold: string) => string
     'play.hud.charge_pct': (pct: string) => string
     'play.hud.state': (name: string, time: string) => string
+    'play.debug.title': string
+    'play.debug.position': (x: string, y: string, z: string) => string
+    'play.debug.facing': (deg: string) => string
+    'play.debug.camera': (yaw: string, pitch: string) => string
     'play.death.title': string
     'play.death.restart': string
     'play.death.menu': string
@@ -36,6 +40,10 @@ export type PlayLocale = {
 }
 
 export const playZh: PlayLocale = {
+    'play.debug.title': '调试信息',
+    'play.debug.position': (x, y, z) => `坐标: ${x}, ${y}, ${z}`,
+    'play.debug.facing': (deg) => `朝向: ${deg}°`,
+    'play.debug.camera': (yaw, pitch) => `相机: 偏航 ${yaw}°  俯仰 ${pitch}°`,
     'play.hud.hp': '玩家生命',
     'play.hud.poise': '韧性',
     'play.hud.guard': '格挡',
@@ -69,6 +77,10 @@ export const playZh: PlayLocale = {
 }
 
 export const playEn: PlayLocale = {
+    'play.debug.title': 'DEBUG',
+    'play.debug.position': (x, y, z) => `POS: ${x}, ${y}, ${z}`,
+    'play.debug.facing': (deg) => `FACING: ${deg}°`,
+    'play.debug.camera': (yaw, pitch) => `CAM: yaw ${yaw}°  pitch ${pitch}°`,
     'play.hud.hp': 'PLAYER HP',
     'play.hud.poise': 'POISE',
     'play.hud.guard': 'GUARD',

@@ -22,6 +22,7 @@
 - **远程蓄力（弓 / 投掷类）**：左键**按住**进入蓄力（角色冻结在拉弓/后引姿态，HUD 显示 `CHARGE` 进度条），**松开**出手；力度决定弓的射程·速度·伤害、投掷物的远近·伤害。按住后拖拽旋转视角（或窗口失焦）会取消本次蓄力，不出手。连弩 / 霰弹枪 / 法杖 / 魔杖不支持蓄力，仍为松开即发。
 - 无玩家（未标记玩家或玩家死亡）：相机回退自由飞行（`src/modes/control/free_flight.ts` 的 `applyFreeFlightMovement`，按住 `boost` 动作加速）。
 - 近战命中触发短促相机震动（`index.ts` 的 `applyHitShake`，叠加在相机更新之后）。
+- play 模式不创建独立 `camera-info` 面板（`main.ts` 跳过 `setupCameraInfo`），相机偏航 / 俯仰角改由调试 HUD 展示。
 
 ## 移动与翻滚（玩家主控方案）
 
@@ -65,7 +66,8 @@
 
 - 世界空间血条（`health_bar.ts`，投影到角色头顶）在血条下沿追加**韧性条**：`drawBar` 接收 `poise` / `maxPoise`，条高 `POISE_BAR_H`，颜色按剩余比例（> 0.25 用 `--dc-info`，否则 `--dc-danger`）。韧性每帧连续回充，`BarEntry` 记录 `lastPoise` / `lastMaxPoise`，仅当变化超过 `POISE_DRAW_STEP` 阈值才重绘，避免每帧重建纹理。
 - 世界空间血条在**持盾单位**下方再追加一条**格挡槽条**（`GUARD_BAR_H`，`--dc-warning`）：仅当 `block?.guardMax > 0` 时占位（血条区相应压缩），`BarEntry` 记录 `lastGuard` / `lastMaxGuard`，随 `guard` 变化重绘。
-- 玩家 HUD（`player_hud.ts`）在 HP 文本下显示韧性标签（i18n `play.hud.poise`）+ 竖向填充条；**持盾时**再显示格挡槽标签（i18n `play.hud.guard`）+ 填充条（`guardMax > 0` 才占位，破防后 `guard = 0` 仍显示）。`index.ts` 每帧传入 `player.combat.poise` / `poiseMax` 与 `guard` / `guardMaxOf(player.combat)`。
+- 玩家基础 HUD（`player_hud.ts`，生命 / 韧性 / 格挡 / 蓄力）在 play 模式**永久显示**（有玩家即显示）。韧性部分在 HP 文本下显示韧性标签（i18n `play.hud.poise`）+ 竖向填充条；**持盾时**再显示格挡槽标签（i18n `play.hud.guard`）+ 填充条（`guardMax > 0` 才占位，破防后 `guard = 0` 仍显示）。`index.ts` 每帧传入 `player.combat.poise` / `poiseMax` 与 `guard` / `guardMaxOf(player.combat)`。
+- 调试 HUD（`player_debug_hud.ts`）**默认隐藏**，由输入动作 `toggle_debug_hud`（默认 `~` / `Backquote`，可在操作设置面板中重绑）控制显隐；展示状态 / 装备、玩家渲染插值坐标、玩家朝向、相机偏航 / 俯仰角与攻击 / 翻滚计时。显隐状态独立于玩家存在性，玩家丢失时强制隐藏、重新获得玩家后按上次状态恢复；隐藏时跳过计时数据构建，不产生每帧无谓分配。
 
 ## 验证
 

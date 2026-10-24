@@ -27,6 +27,8 @@ export const DEFAULT_BINDINGS: BindingsMap = {
     open_map: [['KeyM']],
     save_world: [['ControlLeft', 'KeyS'], ['MetaLeft', 'KeyS']],
     load_world: [['ControlLeft', 'KeyO'], ['MetaLeft', 'KeyO']],
+    /* 游玩模式调试 HUD：默认 ~（反引号键） */
+    toggle_debug_hud: [['Backquote']],
     /* 鼠标视角：左键拖拽旋转 / 右键拖拽平移（纯摄像机方案），均可在操作设置中修改 */
     mouse_orbit: [['Mouse0']],
     mouse_pan: [['Mouse2']],
