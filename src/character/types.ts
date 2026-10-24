@@ -11,34 +11,12 @@ import type {OriginSubStrategy} from './ai_strategy/types.ts'
 
 export type {PeaceSubStrategy, CombatSubStrategy, OriginSubStrategy}
 
-/**
- * 体形专属状态（不透明键值）：通用层只负责持久化与传递，
- * 只有对应体形分包解释其键（如人形的 `holdMode` / `handedness`）。
- */
-export type BodyState = Readonly<Record<string, string>>
-
-export interface CharacterConfig {
-    speed: number
-    jumpHeight: number
-    /** 整体缩放（碰撞箱和模型等比缩放） */
-    scale: number
-    /** 体形计划 id（基础模组，缺省 = humanoid）：决定骨架 / 外观 / 碰撞布局 / 受击子块 / 装备槽 / 武器策略 */
-    bodyFormId?: string
-    /** 体形专属状态（人形：holdMode / handedness；其他体形不携带这些键） */
-    bodyState?: BodyState
-    /** 韧性上限基础值（缺省 = 常量 `DEFAULT_POISE_MAX`；有效上限再叠加装备加成） */
-    poiseMax?: number
-    /** 受击后韧性停止回充的延迟（秒，缺省 = 常量 `DEFAULT_POISE_REGEN_DELAY`） */
-    poiseRegenDelay?: number
-    /** 延迟结束后每秒回充的韧性值（缺省 = 常量 `DEFAULT_POISE_REGEN_PER_SEC`） */
-    poiseRegenPerSec?: number
-    /** 倒地状态持续时间（秒，缺省 = 常量 `DEFAULT_KNOCKDOWN_DURATION`） */
-    knockdownDuration?: number
-    /** 起身状态持续时间（秒，缺省 = 常量 `DEFAULT_GET_UP_DURATION`） */
-    getUpDuration?: number
-}
+export type {BodyState, CharacterConfig, CharacterState} from './state/types.ts'
+import type {BodyState, CharacterConfig, CharacterState} from './state/types.ts'
 
 export interface CharacterEntity {
+    /** 唯一权威数据存储；下列同名属性在生产运行时是委托到 state 的访问器 */
+    readonly state: CharacterState
     id: number
     config: CharacterConfig
     /** 碰撞体胶囊 mesh（edit 模式可见，play 模式隐藏） */

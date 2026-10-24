@@ -8,7 +8,7 @@ import {isHoldMode} from '../../../../../character/weapon/hold_mode.ts'
  * 人形体形状态：持握模式与惯用手属于**人类体形**，不放在通用 `CharacterConfig` 顶层。
  * 通用层只把它当作不透明 `BodyState` 持久化；只有人形动画 / 外观系统解释这两个键。
  */
-export interface HumanoidBodyState {
+export interface HumanoidBodyState extends BodyState {
     readonly holdMode: HoldMode
     readonly handedness: Handedness
 }

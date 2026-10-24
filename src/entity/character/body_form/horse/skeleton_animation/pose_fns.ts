@@ -1,5 +1,5 @@
 import type {AttackSegment} from '../../../../../character/weapon/attack_chain.ts'
-import type {CharacterState} from '../../../../../character/state_machine/types.ts'
+import type {CharacterStateName} from '../../../../../character/state_machine/types.ts'
 import {attackPhaseProgress} from '../../common/creature_runtime/timing.ts'
 import {poseAt, type JointEulers, type PoseFunction} from '../../common/creature_runtime/pose.ts'
 import {breath, clamp01, easeInCubic, easeOutCubic, footSwing, phaseOffset, smoothstep, TAU} from '../../common/creature_runtime/gait.ts'
@@ -194,11 +194,11 @@ const gettingUp: PoseFunction = (t) => {
     }
 }
 
-const POSES: Partial<Record<CharacterState, PoseFunction>> = {
+const POSES: Partial<Record<CharacterStateName, PoseFunction>> = {
     walking, jumping, falling, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
 }
 
-export const horsePose = (state: CharacterState): PoseFunction => POSES[state] ?? idle
+export const horsePose = (state: CharacterStateName): PoseFunction => POSES[state] ?? idle
 
 export const horseAttackPose = (segment: AttackSegment): PoseFunction => (t) => {
     const phase = attackPhaseProgress(t, segment)

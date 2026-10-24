@@ -8,7 +8,7 @@ import type {Handedness} from '../../../character/handedness.ts'
 import type {ResolvedArmorLoadout, ResolvedLimbLoadout} from '../../../character/armor/types.ts'
 import type {BoxPartPalette} from '../../../render/box_parts.ts'
 import type {BoneEventRecord} from '../../../skeleton/anim/types.ts'
-import type {CharacterState} from '../../../character/state_machine/types.ts'
+import type {CharacterStateName} from '../../../character/state_machine/types.ts'
 
 /** 角色配色 palette（方块人部件共享，见 render/box_parts） */
 export type CharacterColorPalette = BoxPartPalette
@@ -155,6 +155,14 @@ export interface AnimationContext {
     readonly stateDuration?: number
     /** 水平速度（m/s）：行走播放变速（步频随速度）、falling 腿张开随速度 */
     readonly horizontalSpeed: number
+    /** 垂直速度（m/s，向上为正）：falling / 跳跃参数化 */
+    readonly verticalSpeed?: number
+    /** 朝向角速度（rad/s）：转向侧倾参数 */
+    readonly turnRate?: number
+    /** 瞄准方向（世界水平单位向量）：瞄准偏置参数 */
+    readonly aimDirection?: {readonly x: number; readonly y: number; readonly z: number}
+    /** 当前朝向 yaw（rad）：计算瞄准相对偏置 */
+    readonly facingYaw?: number
     /** 人形专属上下文（非人形体形缺省） */
     readonly humanoid?: HumanoidAnimationContext
     /**
@@ -185,5 +193,5 @@ export interface AppearanceSystemOptions {
 
 /** 体形动画系统：世界主循环只调用 update */
 export interface AppearanceSystem {
-    update: (dt: number, model: CreatureModel, state: CharacterState, ctx: AnimationContext) => void
+    update: (dt: number, model: CreatureModel, state: CharacterStateName, ctx: AnimationContext) => void
 }

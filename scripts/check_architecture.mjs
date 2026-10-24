@@ -1,4 +1,4 @@
-import {readFileSync, readdirSync, statSync} from 'node:fs'
+import {existsSync, readFileSync, readdirSync, statSync} from 'node:fs'
 import {dirname, join, normalize, relative} from 'node:path'
 
 const root = process.cwd()
@@ -33,6 +33,14 @@ for (const file of sourceFiles) {
             /src\/entity\/character\/body_form\/(humanoid|wolf|horse|wyvern)\//.test(target)) {
             violations.add(`common->form:${fileRel}`)
         }
+        if (fileRel.startsWith('src/entity/skeleton/') &&
+            /src\/(entity\/character|character)\//.test(target)) {
+            violations.add(`skeleton->character:${fileRel}`)
+        }
+        if (fileRel.startsWith('src/entity/character/body_form/') &&
+            /src\/skeleton\/anim\/player\.ts$/.test(target)) {
+            violations.add(`clip-player-in-body-form:${fileRel}`)
+        }
     }
 }
 
@@ -44,6 +52,15 @@ if (/export const EQUIP_SLOTS/.test(inventoryTypes)) violations.add('legacy-glob
 
 const bodyFormTypes = readFileSync(join(root, 'src', 'entity', 'character', 'body_form', 'common', 'types.ts'), 'utf8')
 if (/readonly weapon: boolean/.test(bodyFormTypes)) violations.add('legacy-weapon-boolean')
+
+const animationCommon = join(root, 'src', 'entity', 'character', 'body_form', 'common', 'skeleton_animation')
+if (existsSync(join(animationCommon, 'composition.ts')) || existsSync(join(animationCommon, 'factory.ts'))) {
+    violations.add('legacy-time-composition')
+}
+const formAnimationText = readFileSync(join(animationCommon, 'form_animation.ts'), 'utf8')
+if (/createFormAnimationSystem|createBoneAnimationPlayer|defineFormAnimation/.test(formAnimationText)) {
+    violations.add('legacy-clip-runtime')
+}
 
 const unknown = [...violations].filter(v => !allowed.has(v))
 console.log(`架构审计：${violations.size} 个已知/当前违规，${allowed.size} 个债务基线条目`)

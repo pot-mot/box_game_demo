@@ -1,4 +1,4 @@
-import type {BodyFormStateDefinition} from '../../common/state.ts'
+import type {BodyFormBase} from '../../common/base.ts'
 import type {BaseClipState} from '../../../../../character/state_machine/types.ts'
 import type {WeaponConfig} from '../../../../../character/weapon/catalog.ts'
 import {ZERO_PROFILE} from '../../../../../character/combat/defense.ts'
@@ -35,8 +35,8 @@ export const HUMANOID_CLIP_STATE_META: Readonly<Record<BaseClipState, {duration:
     guard_broken: {duration: GUARD_BROKEN_POSE_DURATION, loop: false},
 }
 
-/** 人形状态基线：基础属性、尺寸、动画时长；最终数值由 `resolveBodyFormState` 计算 */
-export const HUMANOID_STATE: BodyFormStateDefinition = {
+/** 人形基础定义：基础属性、尺寸、动画时长；最终数值由 `resolveBodyFormBase` 计算 */
+export const HUMANOID_BASE: BodyFormBase = {
     size: HUMANOID_SIZE,
     centerOffsetY: HUMANOID_SIZE.height / 2,
     eyeHeight: HUMANOID_EYE_HEIGHT,

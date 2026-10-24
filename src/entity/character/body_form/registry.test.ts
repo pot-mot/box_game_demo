@@ -14,14 +14,26 @@ describe('体形计划注册表', () => {
         expect(bodyFormOf('does_not_exist')).toBe(HUMANOID_BODY_FORM)
     })
 
+    it('人形肢体槽挂载其顶替的全部肢体段', () => {
+        const arms = HUMANOID_BODY_FORM.equipSlots.find(slot => slot.kind === 'limb' && slot.bodyPart === 'arms')
+        const legs = HUMANOID_BODY_FORM.equipSlots.find(slot => slot.kind === 'limb' && slot.bodyPart === 'legs')
+        expect(arms?.mountJointIds).toEqual(expect.arrayContaining([
+            'rightArmShoulder', 'rightArmElbow', 'rightHandPivot',
+            'leftArmShoulder', 'leftArmElbow', 'leftHandPivot',
+        ]))
+        expect(legs?.mountJointIds).toEqual(expect.arrayContaining([
+            'rightLegHip', 'rightLegKnee', 'leftLegHip', 'leftLegKnee',
+        ]))
+    })
+
     it('humanoid 尺寸 / 中心偏移 / 眼高关系自洽', () => {
-        const {width, height, depth} = HUMANOID_BODY_FORM.state.size
+        const {width, height, depth} = HUMANOID_BODY_FORM.base.size
         expect(width).toBeGreaterThan(0)
         expect(height).toBeGreaterThan(0)
         expect(depth).toBeGreaterThan(0)
-        expect(HUMANOID_BODY_FORM.state.centerOffsetY).toBeCloseTo(height / 2, 10)
-        expect(HUMANOID_BODY_FORM.state.eyeHeight).toBeGreaterThan(0)
-        expect(HUMANOID_BODY_FORM.state.eyeHeight).toBeLessThan(height)
+        expect(HUMANOID_BODY_FORM.base.centerOffsetY).toBeCloseTo(height / 2, 10)
+        expect(HUMANOID_BODY_FORM.base.eyeHeight).toBeGreaterThan(0)
+        expect(HUMANOID_BODY_FORM.base.eyeHeight).toBeLessThan(height)
     })
 
     it('humanoid 碰撞布局为两个等半径半胶囊', () => {
@@ -32,7 +44,7 @@ describe('体形计划注册表', () => {
         const [first, second] = capsules
         if (first === undefined || second === undefined) return
         expect(first.radius).toBeCloseTo(second.radius, 10)
-        expect(first.radius).toBeLessThanOrEqual(HUMANOID_BODY_FORM.state.size.width / 2)
+        expect(first.radius).toBeLessThanOrEqual(HUMANOID_BODY_FORM.base.size.width / 2)
         expect(first.offsetY).toBeCloseTo(-second.offsetY, 10)
     })
 
@@ -75,8 +87,8 @@ describe('狼体形计划', () => {
     })
 
     it('四足骨架尺寸与中心偏移自洽（与人形不同）', () => {
-        expect(WOLF_BODY_FORM.state.centerOffsetY).toBeGreaterThan(0)
-        expect(WOLF_BODY_FORM.state.centerOffsetY).not.toBeCloseTo(HUMANOID_BODY_FORM.state.centerOffsetY, 3)
+        expect(WOLF_BODY_FORM.base.centerOffsetY).toBeGreaterThan(0)
+        expect(WOLF_BODY_FORM.base.centerOffsetY).not.toBeCloseTo(HUMANOID_BODY_FORM.base.centerOffsetY, 3)
         expect(WOLF_BODY_FORM.skeleton.colliderLayout.length).toBeGreaterThanOrEqual(2)
     })
 })

@@ -17,7 +17,7 @@ import {createCombatComponent, setCombatBreath, setCombatEquipment, setCombatOff
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
 import type {DamageTypeProfile} from '../../../character/combat/damage_type.ts'
 import {filterEquipmentState} from '../body_form/common/equip.ts'
-import {resolveBodyFormState} from '../body_form/common/state.ts'
+import {resolveBodyFormBase} from '../body_form/common/base.ts'
 import {resolveArmorLoadout, resolveLimbLoadout} from '../../../character/armor/catalog.ts'
 import type {EquipmentState} from '../../../character/equipment/types.ts'
 import {EMPTY_EQUIPMENT_STATE, withEquipmentAt} from '../../../character/equipment/types.ts'
@@ -33,8 +33,10 @@ import type {ShieldBlockConfig} from '../../../character/weapon/constants.ts'
 import {sanitizeLockPoints, type LockPointConfig} from '../../../character/lock_point.ts'
 import {segmentTotalDuration, isChargeableKey, type AttackKey, type GroundAttackKey} from '../../../character/weapon/attack_chain.ts'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
+import {createCharacterStateMachineData} from '../../../character/state/types.ts'
+import {CharacterRuntime} from '../runtime.ts'
 import {isAirborneAttackState} from '../../../character/state_machine/states/air_attacking.ts'
-import type {CharacterState} from '../../../character/state_machine/types.ts'
+import type {CharacterStateName} from '../../../character/state_machine/types.ts'
 import {DYING_DURATION} from '../../../character/state_machine/states/dying.ts'
 import type {AIContext, CombatState, PeaceState, SpawnBoxCallback} from '../ai/types.ts'
 import type {CombatSubStrategy, PeaceSubStrategy, OriginSubStrategy} from '../../../character/ai_strategy/types.ts'
@@ -184,7 +186,7 @@ const placeVisionFan = (
 
 /** 角色实体原点（脚底）到物理刚体中心（碰撞体中心）的 Y 向偏移（由体形计划提供） */
 const originToCenterY = (config: CharacterConfig): number =>
-    bodyFormOf(config.bodyFormId).state.centerOffsetY * config.scale
+    bodyFormOf(config.bodyFormId).base.centerOffsetY * config.scale
 
 /** 按体形碰撞 spec 生成 Rapier 碰撞体描述（尺寸随 scale 缩放；密度 0、类别 character） */
 const makeColliderDescForSpec = (spec: ColliderSpec, scale: number): RAPIER.ColliderDesc => {
@@ -325,6 +327,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const appearanceSystems = new Map<number, AppearanceSystem>()
     const weaponTrails = new Map<number, WeaponTrail>()
     const facingAngles = new Map<number, number>()
+    const previousFacingAngles = new Map<number, number>()
+    const smoothedTurnRates = new Map<number, number>()
     /** 盾遮挡体：每持盾角色的无父刚体 parentless sensor 碰撞体 + 其当前 `ShieldBlockConfig`（配置引用变化时重建） */
     const shieldColliders = new Map<number, {collider: RAPIER.Collider; block: ShieldBlockConfig}>()
     /**
@@ -505,7 +509,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let playerShieldHoldTime = 0
 
     /** 角色 FSM 状态 → 本地化键 */
-    const CHARACTER_STATE_KEYS: Record<CharacterState, StringLocaleKey> = {
+    const CHARACTER_STATE_KEYS: Record<CharacterStateName, StringLocaleKey> = {
         idle: 'entity.state.idle',
         walking: 'entity.state.walking',
         jumping: 'entity.state.jumping',
@@ -656,17 +660,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setBodyMass(body, 1)
 
         const id = nextId++
-        const stateMachine = createCharacterStateMachine()
+        const stateMachineData = createCharacterStateMachineData()
+        const stateMachine = createCharacterStateMachine(stateMachineData)
         /* 生命值档位：体形可覆写（缺省 = 沿用武器类型档位：近战 15 / 远程 8） */
-        const maxHP = typeof plan.state.baseHealth === 'function'
-            ? plan.state.baseHealth(runtime.weapon)
-            : plan.state.baseHealth
+        const maxHP = typeof plan.base.baseHealth === 'function'
+            ? plan.base.baseHealth(runtime.weapon)
+            : plan.base.baseHealth
 
         const combat = createCombatComponent(
             runtime, faction,
             resolveTendency(tendencyConfig), tendencyConfig, maxHP,
             {
-                poiseMax: config.poiseMax ?? plan.state.basePoise,
+                poiseMax: config.poiseMax ?? plan.base.basePoise,
                 ...(config.poiseRegenDelay !== undefined ? {poiseRegenDelay: config.poiseRegenDelay} : {}),
                 ...(config.poiseRegenPerSec !== undefined ? {poiseRegenPerSec: config.poiseRegenPerSec} : {}),
                 ...(config.knockdownDuration !== undefined ? {knockdownDuration: config.knockdownDuration} : {}),
@@ -695,13 +700,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             setCombatBreath(combat, {module: breathModule, attacks: weaponAttacksOf(breathModule)})
         }
         /* 装备数值：按体形槽位校验后汇总（武器 / 护甲 / 肢体 / 天然武器均在此表） */
-        combat.baseDefense = plan.state.baseDefense
-        combat.baseAttack = plan.state.baseAttack
-        combat.baseMoveSpeedMultiplier = plan.state.baseMoveSpeedMultiplier
+        combat.baseDefense = plan.base.baseDefense
+        combat.baseAttack = plan.base.baseAttack
+        combat.baseMoveSpeedMultiplier = plan.base.baseMoveSpeedMultiplier
         setCombatEquipment(combat, combat.baseDefense, resolvedEquipment, plan.id, combat.baseAttack)
         /* 体形状态统一计算最终数值（基础 + 装备），世界层只应用结果 */
-        const finalState = resolveBodyFormState(
-            config.poiseMax !== undefined ? {...plan.state, basePoise: config.poiseMax} : plan.state,
+        const finalState = resolveBodyFormBase(
+            config.poiseMax !== undefined ? {...plan.base, basePoise: config.poiseMax} : plan.base,
             runtime.weapon,
             resolvedEquipment,
             plan.id,
@@ -714,52 +719,32 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (combat.poise > combat.poiseMax) combat.poise = combat.poiseMax
 
         const bodyState = config.bodyState ?? {}
-        const humanoidState = humanoidBodyStateOf(bodyState)
-
-        const entity: CharacterEntity = {
+        const state = plan.createState({
             id,
             config,
-            mesh,
-            wireframe: undefined,
-            appearanceGroup: model.group,
-            body,
-            mainCollider,
-            colliders,
-            isOnGround: true,
-            groundNormal: { x: 0, y: 1, z: 0 },
-            groundKeepTimer: 0,
-            groundBodyHandle: null,
-            airborneTime: 0,
-            groundedTime: 0,
-            rowText: '',
             isPlayer: isPlayer ?? false,
-            navEnabled,
-            peaceStrategy,
-            combatStrategy,
-            originStrategy,
-            originInterval,
-            chaseLeashRadius,
-            aiBlockDuration,
-            aiBlockCooldown,
-            isDying: false,
-            dyingTimer: 0,
-            dyingFallDirX: 0,
-            dyingFallDirZ: 0,
-            dyingFallAngle: 0,
-            knockdownFallDirX: 0,
-            knockdownFallDirZ: 0,
-            knockdownFallAngle: 0,
+            bodyState,
             combat,
-            bodyState: plan.id === HUMANOID_BODY_FORM.id ? withHumanoidHoldMode(bodyState, humanoidState.holdMode) : bodyState,
-            lockPoints: [],
-            interactTargetActive: false,
-            interactTargetX: 0,
-            interactTargetZ: 0,
+            stateMachine: stateMachineData,
             environment: createBodyEnvironment(),
+            ai: {
+                navEnabled,
+                peaceStrategy,
+                combatStrategy,
+                originStrategy,
+                originInterval,
+                chaseLeashRadius,
+                aiBlockDuration,
+                aiBlockCooldown,
+            },
             hurtProfile: plan.skeleton.hurtProfile,
             hurtBlocks: plan.skeleton.hurtProfile.map(b => zeroWorldHurtBlock(b.id)),
+        })
+        const entity: CharacterEntity = new CharacterRuntime(
+            state,
+            {body, mesh, wireframe: undefined, appearanceGroup: model.group, mainCollider, colliders},
             stateMachine,
-        }
+        )
 
         bodyCharMap.set(body.handle, entity)
         charById.set(entity.id, entity)
@@ -1024,6 +1009,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         attackHitBoxes.get(entity.id)?.dispose()
         attackHitBoxes.delete(entity.id)
         facingAngles.delete(entity.id)
+        previousFacingAngles.delete(entity.id)
+        smoothedTurnRates.delete(entity.id)
         destroyShieldCollider(entity.id)
 
         characters.splice(idx, 1)
@@ -1562,11 +1549,49 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const animStateTime = animState === 'getting_up'
                     ? Math.max(entity.stateMachine.stateTime - Math.max(entity.combat.getUpTurnDuration, 0), 0)
                     : entity.stateMachine.stateTime
+                const isHumanoid = bodyFormOf(entity.config.bodyFormId).id === HUMANOID_BODY_FORM.id
+                const facingYawForAnim = facingAngles.get(entity.id) ?? 0
+                const previousFacing = previousFacingAngles.get(entity.id) ?? facingYawForAnim
+                let turnDelta = facingYawForAnim - previousFacing
+                turnDelta = ((turnDelta + Math.PI) % (Math.PI * 2)) - Math.PI
+                const targetTurnRate = dt > 0 ? Math.max(-8, Math.min(8, turnDelta / dt)) : 0
+                const previousTurnRate = smoothedTurnRates.get(entity.id) ?? 0
+                const turnRate = previousTurnRate + (targetTurnRate - previousTurnRate) * Math.min(1, dt * 12)
+                smoothedTurnRates.set(entity.id, turnRate)
+                previousFacingAngles.set(entity.id, facingYawForAnim)
+                const aimDirection = {
+                    x: Math.sin(facingYawForAnim),
+                    y: 0,
+                    z: Math.cos(facingYawForAnim),
+                }
+                const stateProgress = stateDuration !== undefined && stateDuration > 0
+                    ? animStateTime / stateDuration
+                    : 0
+                const attackTotalProgress = inAttacking && totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0
+                const animParams = entity.state.animation.params
+                animParams.horizontalSpeed = hSpeed
+                animParams.verticalSpeed = linvel.y
+                animParams.turnRate = turnRate
+                animParams.aimDirection = aimDirection
+                animParams.facingYaw = facingYawForAnim
+                animParams.attackCharge = entity.combat.attackCharge
+                animParams.attackTotalProgress = attackTotalProgress
+                animParams.stateProgress = stateProgress
+                if (isHumanoid) {
+                    animParams.holdMode = holdModeOf(entity)
+                    animParams.handedness = humanoidBodyStateOf(entity.bodyState).handedness
+                    animParams.weaponClassId = entity.combat.weapon.classId
+                    animParams.shieldHands = shieldHands
+                }
                 sys.update(dt, model, animState, {
                     stateTime: animStateTime,
                     ...(stateDuration !== undefined ? {stateDuration} : {}),
                     horizontalSpeed: hSpeed,
-                    ...(bodyFormOf(entity.config.bodyFormId).id === HUMANOID_BODY_FORM.id
+                    verticalSpeed: linvel.y,
+                    turnRate,
+                    facingYaw: facingYawForAnim,
+                    aimDirection,
+                    ...(isHumanoid
                         ? {humanoid: {
                             holdMode: holdModeOf(entity),
                             handedness: humanoidBodyStateOf(entity.bodyState).handedness,
@@ -1577,7 +1602,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     attackSegment: inAttacking ? activeSegment : undefined,
                     attackPhase: ctxPhaseName,
                     attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
-                    attackTotalProgress: inAttacking && totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0,
+                    attackTotalProgress,
                     attackPhaseIndex: entity.combat.phaseIndex,
                     attackCharge: entity.combat.attackCharge,
                     attackHolding: entity.combat.attackHolding,
@@ -2086,10 +2111,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             setHoldMode(entity.id, holdMode)
         }
         /* 防御 / 攻击：旧档缺字段回退零防御零攻击；装备汇总已在 spawnEntity 内完成 */
-        entity.combat.baseDefense = saveConfig.defense ?? plan.state.baseDefense
-        entity.combat.baseAttack = saveConfig.baseAttack ?? plan.state.baseAttack
-        entity.combat.baseMoveSpeedMultiplier = plan.state.baseMoveSpeedMultiplier
-        entity.combat.basePoiseMax = saveConfig.poiseMax ?? plan.state.basePoise
+        entity.combat.baseDefense = saveConfig.defense ?? plan.base.baseDefense
+        entity.combat.baseAttack = saveConfig.baseAttack ?? plan.base.baseAttack
+        entity.combat.baseMoveSpeedMultiplier = plan.base.baseMoveSpeedMultiplier
+        entity.combat.basePoiseMax = saveConfig.poiseMax ?? plan.base.basePoise
         setCombatEquipment(entity.combat, entity.combat.baseDefense, entity.combat.equipment, plan.id, entity.combat.baseAttack)
         /* 载入即回满韧性（poiseMax 已含装备汇总） */
         entity.combat.poise = entity.combat.poiseMax
@@ -2409,8 +2434,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         /* 3) 装备过滤 + 汇总（防御 / 加成 / 移速 / 韧性） */
         entity.combat.equipment = equipment
         setCombatEquipment(entity.combat, entity.combat.baseDefense, equipment, newFormId, entity.combat.baseAttack)
-        const finalState = resolveBodyFormState(
-            entity.config.poiseMax !== undefined ? {...plan.state, basePoise: entity.config.poiseMax} : plan.state,
+        const finalState = resolveBodyFormBase(
+            entity.config.poiseMax !== undefined ? {...plan.base, basePoise: entity.config.poiseMax} : plan.base,
             entity.combat.weapon,
             equipment,
             newFormId,

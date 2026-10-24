@@ -1,23 +1,16 @@
 import type {CharacterEntity} from '../types.ts'
 import type {AttackKey} from '../weapon/attack_chain.ts'
+import type {CharacterStateName} from './state_names.ts'
 
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'attacking', 'air_attacking', 'dying', 'rolling', 'flinching', 'interacting', 'knockdown', 'getting_up', 'blocking', 'guard_broken'] as const
-export type CharacterState = typeof CHARACTER_STATES[number]
-
-/** 攻击态（由攻击 clip / 段驱动，不属于基础状态采样器） */
-export const ATTACK_STATES = ['attacking', 'air_attacking'] as const
-export type AttackState = typeof ATTACK_STATES[number]
-
-const ATTACK_STATE_SET: ReadonlySet<CharacterState> = new Set(ATTACK_STATES)
-
-export const isAttackState = (state: CharacterState): state is AttackState =>
-    ATTACK_STATE_SET.has(state)
-
-/** 由基础姿态采样器驱动的状态 */
-export type BaseClipState = Exclude<CharacterState, AttackState>
-
-export const BASE_CLIP_STATES: readonly BaseClipState[] =
-    CHARACTER_STATES.filter((state): state is BaseClipState => !isAttackState(state))
+export {
+    CHARACTER_STATES,
+    ATTACK_STATES,
+    BASE_CLIP_STATES,
+    isAttackState,
+    type CharacterStateName,
+    type AttackState,
+    type BaseClipState,
+} from './state_names.ts'
 
 export interface CharacterInput {
     dx: number
@@ -48,13 +41,13 @@ export interface CharacterInput {
 
 export interface MachineContext {
     readonly stateTime: number
-    readonly previousState: CharacterState | null
+    readonly previousState: CharacterStateName | null
     /** 当前攻击阶段名（仅在 attacking 状态期间有效，其他状态为 undefined） */
     readonly attackPhase: string | undefined
 }
 
 export interface Transition {
-    to: CharacterState
+    to: CharacterStateName
     guard: (input: CharacterInput, entity: CharacterEntity, ctx: MachineContext) => boolean
 }
 
@@ -66,10 +59,10 @@ export interface StateHandler {
 }
 
 export interface CharacterStateMachine {
-    readonly currentState: CharacterState
-    readonly previousState: CharacterState | null
+    readonly currentState: CharacterStateName
+    readonly previousState: CharacterStateName | null
     readonly stateTime: number
-    onStateChange: ((from: CharacterState, to: CharacterState) => void) | null
+    onStateChange: ((from: CharacterStateName, to: CharacterStateName) => void) | null
 
     setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean, swimLift?: number): void
     update(dt: number, entity: CharacterEntity): void

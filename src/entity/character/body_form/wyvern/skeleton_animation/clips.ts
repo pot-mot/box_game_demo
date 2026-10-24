@@ -3,10 +3,9 @@ import type {AttackSegment} from '../../../../../character/weapon/attack_chain.t
 import type {BoneAnimationClip} from '../../../../../skeleton/anim/types.ts'
 import {bakePoseClip} from '../../common/creature_runtime/pose.ts'
 import {hitWindowRatios} from '../../common/creature_runtime/timing.ts'
-import {bakeSingleAnimation, createAnimationModule, poseAnimationFactory} from '../../common/skeleton_animation/factory.ts'
 import {compileAuthoredAttackClip} from '../../common/skeleton_animation/authored_attack.ts'
 import {ATTACK_CLIPS} from './attack_clips/index.ts'
-import {WYVERN_STATE} from '../state/form_state.ts'
+import {WYVERN_BASE} from '../state/form_base.ts'
 import {buildWyvernSkeleton} from '../skeleton/skeleton.ts'
 import {wyvernAttackPose, wyvernPose} from './pose_fns.ts'
 
@@ -15,21 +14,21 @@ const SKELETON = buildWyvernSkeleton()
 /** 双足飞龙当前没有独立武器挂点旋转需要保留（口部挂点由公式/作者数据完整驱动）。 */
 export const WYVERN_PRESERVED_JOINTS: readonly string[] = []
 
-const STATE_META = WYVERN_STATE.animation
+const STATE_META = WYVERN_BASE.animation
 
 const stateCache = new Map<string, BoneAnimationClip>()
 export const wyvernBaseClip = (state: BaseClipState): BoneAnimationClip => {
     const cached = stateCache.get(state)
     if (cached !== undefined) return cached
     const meta = STATE_META[state]
-    const animation = poseAnimationFactory.create({
-        id: `wyvern_${state}`,
-        duration: meta.duration,
-        loop: meta.loop,
-        pose: wyvernPose(state),
-    })
-    const module = createAnimationModule(`wyvern:base:${state}`, 'body_form.wyvern', [animation])
-    const clip = bakeSingleAnimation(SKELETON, module, animation.id)
+    const clip = bakePoseClip(
+        `wyvern_${state}`,
+        meta.duration,
+        meta.loop,
+        SKELETON,
+        wyvernPose(state),
+        WYVERN_PRESERVED_JOINTS,
+    )
     stateCache.set(state, clip)
     return clip
 }

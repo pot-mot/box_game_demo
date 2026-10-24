@@ -6,8 +6,8 @@ import {createHumanoidModel} from '../body_form.ts'
 import {weaponAttacksOf, weaponPresetOrDefault} from '../../../../../character/weapon/catalog.ts'
 import {orderedSegments} from '../../../../../character/weapon/attack_chain.ts'
 import {phaseDurationOf, resolvePhases} from '../../../../../character/combat/attack_phases.ts'
-import {getAttackClipById} from '../skeleton_animation/clips/attack_clips.ts'
 import {SUPPORT_HAND_VISUAL_TOLERANCE} from '../../../../../test_setup.ts'
+import {SHIELD_FACE_NET_X} from '../state/constants.ts'
 
 /** 行走测试水平速度（m/s）：只用于触发步频与下半身叠加，不代表角色配置默认移速 */
 const WALK_SPEED = 3.7
@@ -122,12 +122,117 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
         }
     })
 
+    it('facingYaw 与 aimDirection 一致时头部不产生常驻偏转', () => {
+        const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        const sys = HUMANOID_ANIMATION.createSystem()
+        const facing = 1.13
+        for (let i = 0; i < 12; i++) {
+            sys.update(1 / 60, model, 'idle', makeCtx({
+                stateTime: i / 60,
+                facingYaw: facing,
+                aimDirection: {x: Math.sin(facing), y: 0, z: Math.cos(facing)},
+                turnRate: 0,
+            }))
+        }
+        expect(Math.abs(model.headNeck.rotation.y)).toBeLessThan(1e-4)
+        model.dispose()
+    })
+
+    it('双手持握在跳跃瞬态保持（左臂覆盖层跟随右臂）', () => {
+        const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        const sys = HUMANOID_ANIMATION.createSystem()
+        for (let i = 0; i < 12; i++) {
+            sys.update(1 / 60, model, 'jumping', makeCtx({
+                stateTime: i / 60,
+                holdMode: 'two_handed',
+                weaponHeld: true,
+            }))
+        }
+        expect(model.leftArmShoulder.rotation.x).toBeCloseTo(model.rightArmShoulder.rotation.x, 5)
+        expect(model.leftArmElbow.rotation.x).toBeCloseTo(model.rightArmElbow.rotation.x, 5)
+        model.dispose()
+    })
+
+    it('双手共持在有支撑手数据时副手手部链仍复制主手', () => {
+        const preset = weaponPresetOrDefault('heavy_sword')
+        const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        model.equipWeapon({main: preset.mesh})
+        const sys = HUMANOID_ANIMATION.createSystem()
+        for (let i = 0; i < 20; i++) {
+            sys.update(1 / 60, model, 'idle', makeCtx({
+                stateTime: i / 60,
+                holdMode: 'two_handed',
+                weaponHeld: true,
+                weaponClassId: preset.classId,
+            }))
+        }
+        expect(model.leftHandPivot.rotation.x).toBeCloseTo(model.rightHandPivot.rotation.x, 5)
+        expect(model.leftWristPivot.rotation.x).toBeCloseTo(model.rightWristPivot.rotation.x, 5)
+        expect(model.leftWeaponMount.rotation.x).toBeCloseTo(model.rightWeaponMount.rotation.x, 5)
+        model.dispose()
+    })
+
+    it('双持 idle / walking 副手保持持握戒备位', () => {
+        const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        const sys = HUMANOID_ANIMATION.createSystem()
+        for (const state of ['idle', 'walking'] as const) {
+            for (let i = 0; i < 20; i++) {
+                sys.update(1 / 60, model, state, makeCtx({
+                    stateTime: i / 60,
+                    holdMode: 'dual_wield',
+                    weaponHeld: true,
+                    horizontalSpeed: state === 'walking' ? WALK_SPEED : 0,
+                }))
+            }
+            expect(model.leftArmElbow.rotation.x, `${state} 副手未进入持握戒备位`).toBeLessThan(-0.5)
+        }
+        model.dispose()
+    })
+
+    it('双持下落时副手保持自身姿态，不复制主手', () => {
+        const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        const sys = HUMANOID_ANIMATION.createSystem()
+        for (let i = 0; i < 12; i++) {
+            sys.update(1 / 60, model, 'falling', makeCtx({
+                stateTime: i / 60,
+                holdMode: 'dual_wield',
+                weaponHeld: true,
+                horizontalSpeed: 0,
+            }))
+        }
+        expect(model.rightArmShoulder.rotation.z).toBeLessThan(0)
+        expect(model.leftArmShoulder.rotation.z).toBeGreaterThan(0)
+        model.dispose()
+    })
+
+    it('盾臂经覆盖组合校正盾面朝向（基础 clip 不再烘焙盾臂）', () => {
+        const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        const sys = HUMANOID_ANIMATION.createSystem()
+        for (let i = 0; i < 12; i++) {
+            sys.update(1 / 60, model, 'blocking', makeCtx({
+                stateTime: i / 60,
+                holdMode: 'one_handed',
+                shieldHands: {main: false, off: true},
+                weaponHeld: true,
+            }))
+        }
+        const net = model.leftArmShoulder.rotation.x + model.leftArmElbow.rotation.x + model.leftWeaponMount.rotation.x
+        const normalizedNet = Math.atan2(Math.sin(net), Math.cos(net))
+        expect(normalizedNet).toBeCloseTo(Math.atan2(Math.sin(SHIELD_FACE_NET_X), Math.cos(SHIELD_FACE_NET_X)), 5)
+        /* 副手盾：举盾侧必须是左臂（格挡屈肘），不能被基础姿态默认成右臂 */
+        expect(model.leftArmElbow.rotation.x).toBeLessThan(-1)
+        expect(model.rightArmElbow.rotation.x).toBeGreaterThan(-1)
+        model.dispose()
+    })
+
     it('格挡时叠加下半身行走步态（水平移动 → 双腿摆动；静止 → 静态格挡腿姿）', () => {
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const sys = HUMANOID_ANIMATION.createSystem()
         /* 静止格挡：双腿保持静态格挡姿态（rightLegHip.rx = 0.06） */
         for (let i = 0; i < 10; i++) sys.update(1 / 60, model, 'blocking', makeCtx({stateTime: i / 60, horizontalSpeed: 0}))
         const staticHip = model.rightLegHip.rotation.x
+        /* 静止格挡必须保留格挡腿姿，而不是回退到静止姿态 */
+        expect(Math.abs(staticHip)).toBeGreaterThan(1e-3)
         /* 移动格挡：叠加行走步态覆盖双腿，髋角随步态相位摆动 */
         let varied = false
         for (let i = 0; i < 30; i++) {
@@ -161,6 +266,29 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
         model.dispose()
     })
 
+    it('普通攻击 + 移动时叠加下半身行走步态（不依赖蓄力保持）', () => {
+        const preset = weaponPresetOrDefault('long_sword')
+        const seg = orderedSegments(weaponAttacksOf(preset, 'one_handed'))
+            .find(s => s.id === 'long_sword_one_handed_light_1')!
+        const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
+        model.equipWeapon({main: preset.mesh})
+        const sys = HUMANOID_ANIMATION.createSystem()
+        const samples: number[] = []
+        for (let i = 0; i < 30; i++) {
+            sys.update(1 / 60, model, 'attacking', makeCtx({
+                stateTime: i / 60,
+                horizontalSpeed: WALK_SPEED,
+                attackSegment: seg,
+                attackPhase: 'strike',
+                attackHolding: false,
+                weaponHeld: true,
+            }))
+            samples.push(model.rightLegHip.rotation.x)
+        }
+        expect(new Set(samples.map(value => value.toFixed(4))).size).toBeGreaterThan(2)
+        model.dispose()
+    })
+
     it('近战蓄力：满蓄力姿势 = 松开后的抬手段末（不同武器均无回位跳变，回归）', () => {
         /* 覆盖抬手姿势差异最大的几类：长枪（前刺）、战锤（举械）、小盾（盾击）、长剑（单持 / 双手） */
         const cases = [
@@ -176,10 +304,8 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
             const phases = resolvePhases(heavy.phases)
             const windup = phaseDurationOf(phases[0]!, heavy.duration, heavy.recovery)
             const total = heavy.duration + heavy.recovery
-            const clipDuration = getAttackClipById(heavy.poseId).duration
-            /* 松开蓄力后播放器按 dt 正常推进：预补偿 12 帧推进量，使末帧恰好停在目标进度 */
+            /* 进度式系统直接使用 attackTotalProgress，不需要补偿播放器推进量 */
             const frames = 12
-            const advance = frames / 60 / clipDuration
             const run = (overrides: Partial<AnimationContext>) => {
                 const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
                 model.equipWeapon({main: preset.mesh})
@@ -200,7 +326,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
                 const held = run({attackHolding: true, attackCharge: charge, attackPhase: 'windup'})
                 const released = run({
                     attackHolding: false,
-                    attackTotalProgress: Math.max(0, charge * windup / total - advance),
+                    attackTotalProgress: charge * windup / total,
                     attackPhase: 'strike',
                 })
                 for (const axis of ['x', 'y', 'z'] as const) {

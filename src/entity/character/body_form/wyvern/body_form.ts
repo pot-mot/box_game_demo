@@ -10,7 +10,8 @@ import {WYVERN_BREATH_MODULES} from './equipment/breath.ts'
 import {WYVERN_WEAPONS} from './equipment/weapons.ts'
 import {WYVERN_EQUIPMENT_MODULES} from './equipment/modules.ts'
 import {WYVERN_EQUIP_SLOTS} from './state/equip_slots.ts'
-import {WYVERN_STATE} from './state/form_state.ts'
+import {WYVERN_BASE} from './state/form_base.ts'
+import {createWyvernState} from './state/runtime.ts'
 import {WYVERN_ARMOR_PIECES} from './equipment/armor.ts'
 import {WYVERN_LIMB_PIECES} from './equipment/limb.ts'
 
@@ -23,7 +24,8 @@ export const WYVERN_BODY_FORM_ID = 'wyvern'
 export const WYVERN_BODY_FORM: BodyForm = {
     id: WYVERN_BODY_FORM_ID,
     nameKey: 'body_form.wyvern',
-    state: WYVERN_STATE,
+    base: WYVERN_BASE,
+    createState: createWyvernState,
     skeleton: {
         build: buildWyvernSkeleton,
         colliderLayout: WYVERN_COLLIDER_LAYOUT,

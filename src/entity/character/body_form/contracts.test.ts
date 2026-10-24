@@ -3,7 +3,7 @@ import type {Group} from 'three'
 import {BODY_FORMS, BODY_FORM_IDS, bodyFormOf} from './index.ts'
 import {isKnownWeaponId} from '../../../character/weapon/weapon_runtime.ts'
 import {validateEquipmentModules} from './common/equipment.ts'
-import {resolveBodyFormState} from './common/state.ts'
+import {resolveBodyFormBase} from './common/base.ts'
 import {addDamageProfiles} from '../../../character/combat/defense.ts'
 import {EMPTY_EQUIPMENT_STATE} from '../../../character/equipment/types.ts'
 import {weaponAttacksOf} from '../../../character/weapon/catalog.ts'
@@ -61,11 +61,11 @@ describe('体形计划公共契约（全部注册体形）', () => {
             })
 
             it('状态基线自洽：尺寸 / 中心偏移 / 眼高', () => {
-                expect(form.state.size.width).toBeGreaterThan(0)
-                expect(form.state.size.height).toBeGreaterThan(0)
-                expect(form.state.size.depth).toBeGreaterThan(0)
-                expect(form.state.centerOffsetY).toBeGreaterThanOrEqual(0)
-                expect(form.state.eyeHeight).toBeGreaterThan(0)
+                expect(form.base.size.width).toBeGreaterThan(0)
+                expect(form.base.size.height).toBeGreaterThan(0)
+                expect(form.base.size.depth).toBeGreaterThan(0)
+                expect(form.base.centerOffsetY).toBeGreaterThanOrEqual(0)
+                expect(form.base.eyeHeight).toBeGreaterThan(0)
             })
 
             it('装备模组与槽位 / 挂载骨骼一致', () => {
@@ -80,22 +80,22 @@ describe('体形计划公共契约（全部注册体形）', () => {
                     armor: armor === undefined ? {} : {[armor.slot]: armor.id},
                     limb: {},
                 }
-                const final = resolveBodyFormState(form.state, weapon, equipment, form.id)
-                const expectedHealth = typeof form.state.baseHealth === 'function'
-                    ? form.state.baseHealth(weapon)
-                    : form.state.baseHealth
+                const final = resolveBodyFormBase(form.base, weapon, equipment, form.id)
+                const expectedHealth = typeof form.base.baseHealth === 'function'
+                    ? form.base.baseHealth(weapon)
+                    : form.base.baseHealth
                 expect(final.maxHealth).toBe(expectedHealth)
                 expect(final.defense).toEqual(
-                    armor === undefined ? form.state.baseDefense : addDamageProfiles(form.state.baseDefense, armor.defense),
+                    armor === undefined ? form.base.baseDefense : addDamageProfiles(form.base.baseDefense, armor.defense),
                 )
                 expect(final.attackBonus).toEqual(
-                    armor === undefined ? form.state.baseAttack : addDamageProfiles(form.state.baseAttack, armor.attack),
+                    armor === undefined ? form.base.baseAttack : addDamageProfiles(form.base.baseAttack, armor.attack),
                 )
                 expect(final.moveSpeedMultiplier).toBeCloseTo(
-                    form.state.baseMoveSpeedMultiplier * (armor?.moveSpeedMultiplier ?? 1),
+                    form.base.baseMoveSpeedMultiplier * (armor?.moveSpeedMultiplier ?? 1),
                     10,
                 )
-                expect(final.poise).toBe(form.state.basePoise + (armor?.poise ?? 0))
+                expect(final.poise).toBe(form.base.basePoise + (armor?.poise ?? 0))
             })
 
             it('每个声明槽位都有可装备内容', () => {

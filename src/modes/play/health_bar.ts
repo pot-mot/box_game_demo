@@ -142,7 +142,7 @@ export const setupHealthBars = (
                 const form = bodyFormOf(c.config.bodyFormId)
                 entry.sprite.position.set(
                     c.mesh.position.x,
-                    c.mesh.position.y + form.state.centerOffsetY * c.config.scale + form.state.size.height * c.config.scale + 0.3,
+                    c.mesh.position.y + form.base.centerOffsetY * c.config.scale + form.base.size.height * c.config.scale + 0.3,
                     c.mesh.position.z,
                 )
                 entry.sprite.scale.set(FIXED_SCALE, FIXED_SCALE * (BAR_H / BAR_W), 1)

@@ -1,7 +1,7 @@
 import {Vector3, type PerspectiveCamera} from 'three'
 import type {InteractionProvider, InteractionTarget} from '../../../character/interaction/types.ts'
 import {INTERACTION_ACTIVATE_TIME} from '../../../character/interaction/types.ts'
-import type {CharacterState} from '../../../character/state_machine/types.ts'
+import type {CharacterStateName} from '../../../character/state_machine/types.ts'
 import {getInputRegistry} from '../../../input/registry.ts'
 import {pickInteraction} from './resolve.ts'
 import {createInteractionPrompt} from './prompt.ts'
@@ -9,7 +9,7 @@ import {createInteractionPrompt} from './prompt.ts'
 /** 交互控制器所需的最小角色视图（便于单测注入，不依赖完整实体系统） */
 export interface InteractionActorView {
     readonly body: {readonly translation: () => {readonly x: number; readonly y: number; readonly z: number}}
-    readonly stateMachine: {readonly currentState: CharacterState}
+    readonly stateMachine: {readonly currentState: CharacterStateName}
 }
 
 export interface PlayInteractionCharacterSource {

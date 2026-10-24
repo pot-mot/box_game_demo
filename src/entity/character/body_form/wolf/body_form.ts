@@ -9,7 +9,8 @@ import {buildWolfSkeleton, WOLF_COLLIDER_LAYOUT} from './skeleton/skeleton.ts'
 import {WOLF_WEAPONS} from './equipment/weapons.ts'
 import {WOLF_EQUIPMENT_MODULES} from './equipment/modules.ts'
 import {WOLF_EQUIP_SLOTS} from './state/equip_slots.ts'
-import {WOLF_STATE} from './state/form_state.ts'
+import {WOLF_BASE} from './state/form_base.ts'
+import {createWolfState} from './state/runtime.ts'
 import {WOLF_ARMOR_PIECES} from './equipment/armor.ts'
 import {WOLF_LIMB_PIECES} from './equipment/limb.ts'
 
@@ -22,7 +23,8 @@ export const WOLF_BODY_FORM_ID = 'wolf'
 export const WOLF_BODY_FORM: BodyForm = {
     id: WOLF_BODY_FORM_ID,
     nameKey: 'body_form.wolf',
-    state: WOLF_STATE,
+    base: WOLF_BASE,
+    createState: createWolfState,
     skeleton: {
         build: buildWolfSkeleton,
         colliderLayout: WOLF_COLLIDER_LAYOUT,

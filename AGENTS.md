@@ -14,6 +14,7 @@
 - `pnpm preview` — 预览构建产物
 - `pnpm type-check` — `tsc --noEmit` 仅类型检查
 - `pnpm test` — `vitest run` 全量单元测试
+- `pnpm verify` — 全量测试 + 构建 + 架构检查（收尾唯一验收入口）
 - `pnpm vitest run <测试文件>` — 只跑指定单元测试（开发期首选）
 - `pnpm bake:support-hands` — 重新生成人形双手共持支撑手离线烘焙数据（修改 `pose_fns` / 武器网格 / 基础状态时长后必须运行）
 - `pnpm format:attack-clips` — 压缩人形攻击作者数据的 `times` / 每关节 `joints` / `positions` 数组为单行
@@ -87,8 +88,10 @@
 5. **状态机驱动角色** — `entity/character/physics/world.ts` 在 play / 展示模式每物理步调用 `stateMachine.update(FIXED_TIME_STEP, entity)`（编辑模式由 `tick` 按渲染 delta 调用）→ 状态直接操作 `entity.body`（`setLinvel` 等）→ `syncTrueTransforms()` 写真实位置供碰撞体同步 → 渲染帧 `syncPositions(alpha)` 写插值后的可视变换。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/control/player_control.ts` 的 `move()` 每渲染帧读取动作并调用 `characterSystem.setPlayerMove()`（跳跃 / 翻滚边沿锁存到物理步消费）→ `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。详见 [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md)。
 6. **两套操作方案** — 所有具备操作能力的模式只归入 `modes/control/` 的两套共享方案（玩家主控 `createPlayerControl` / 纯摄像机 `createCameraControl`），新增模式不得另写相机/移动逻辑。详见 [`src/modes/control/control.md`](src/modes/control/control.md)。
 7. **惯用手 canonical 右撇子** — 骨架与全部动作数据（含存档姿势）恒定表示右撇子（主手 = 解剖右 = `-X`、副手/支撑手 = 解剖左 = `+X`）；左撇子（`CharacterConfig.handedness = 'left'`）只是**取用时镜像**视图：clip 经 `skeleton/anim/mirror.ts` 的 `mirrorClip` 派生（缓存键含 handedness，逐帧零开销）、武器/护甲/肢体挂点与网格（`scale.x=-1`）随 `mainHandSide`/`offHandSide` 切换、支撑手烘焙侧换到相反侧。**禁止**新增左撇子专有动作数据或按「屏幕左右」写死关节映射。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md)。
-8. **body_form 五子包** — 每个体形拥有 `state/`（基础属性/最终数值计算/装备槽/bodyState/动画状态时长）、`skeleton/`（唯一关节/碰撞/受击节点）、`skeleton_animation/`（动画工厂/组合/模组/clip 烘焙）、`appearance/`（mesh/材质/外观/装备外观）、`equipment/`（limb/armor/weapon 模组）。`state` 与 `skeleton` 分别是数值与骨架/碰撞/受击的**唯一真源**：碰撞/受击箱只读取骨架数据，禁止读取 appearance 几何；装备只影响 state 与 appearance，不修改 skeleton/动画；动画不能增删骨骼节点；父级可经 `connectJoint` 显式重连（禁止自环 / 后代挂到祖先）。
+8. **body_form 五子包** — 每个体形拥有 `state/`（静态 `base` + 具体 `CharacterState` 实现 + 装备槽/bodyState/动画状态时长）、`skeleton/`（唯一关节/碰撞/受击节点）、`skeleton_animation/`（动画组合/模组/叶子烘焙）、`appearance/`（mesh/材质/外观/装备外观）、`equipment/`（limb/armor/weapon 模组）。静态体形定义统一叫 `BodyForm.base`（原 `state`）；运行时角色数据只存在于 `CharacterState`。`skeleton` 与 `State` 分别是骨架/碰撞/受击与数值/运行数据的**唯一真源**：碰撞/受击箱只读取骨架数据，禁止读取 appearance 几何；装备只影响 state 与 appearance，不修改 skeleton/动画；动画不能增删骨骼节点；父级可经 `connectJoint` 显式重连（禁止自环 / 后代挂到祖先）。
 9. **武器按体形分包** — 每个武器**只属于一种体形**（`WeaponModelConfig.formId`），数据声明在 `body_form/<form>/equipment/weapons.ts`（只复用 `appearance/weapon_mesh.ts` 的网格生成器）；体形 `BodyForm.weapons` 暴露其武器表，`body_form/index.ts` 装配时经 `catalog.ts` 的 `registerFormWeapons` 注册。**禁止**跨体形直接复用武器条目；切体形一律落到新体形 `defaultWeaponId`。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md)。
+10. **state 单一真源** — `character/state` 声明基础接口，每个 `body_form/<form>/state` 实现具体 state。state 是角色**唯一权威数据存储**：属性、装备、全部计时器、状态机信息、物理量、AI、交互、环境、动画参数与动画当前信息都只存于 state。Rapier / Three 等引擎句柄放在 `CharacterRuntime`，不得进入 state。`CharacterEntity` 同名属性只能是委托到 state 的访问器，禁止另存副本；新代码优先 `entity.state.*`。详见 [`docs/design/character_state.md`](docs/design/character_state.md)。
+11. **动画组合 + 进度控制** — 所有体形、所有骨骼动画统一为动画组合树；子组合权重只在引用边，边可带每关节权重；normal 贡献按有效权重归一化加权平均，additive 在归一化后叠加；叶子可为烘焙 clip。组合**不得**持有时间/时长/倍速，只用 progress；绝对时间与倍速只由动作/运行时在根驱动。动作模组必须覆盖其声明要控制的全部 joints 且节点内权重 1；与移动/跳跃共存由父组合按关节分配权重。持握是跨状态常驻组合。详见 [`docs/design/animation_composition.md`](docs/design/animation_composition.md)。
 
 ## 高危红线（跨模块，必须遵守）
 
@@ -100,6 +103,8 @@
 - **角色主碰撞体是胶囊（禁用平底 cuboid 触地）**；补形碰撞体可用横胶囊 / 悬空盒（平底 cuboid 跨 trimesh 棱线会被幽灵法线卡死）；地形一律 `RAPIER.ColliderDesc.trimesh`；**heightfield 与 `FIX_INTERNAL_EDGES` 禁用**。
 - **碰撞类别 fail-closed** — 新增碰撞体必须显式 `setCollisionGroups` 并用 `physics/collision_category.ts` 的 `categoryCollisionGroups(group, mask, category)` 标注类别；未声明者 membership 全 1 会被解析为 `ground` 并挡下子弹。
 - **存档兼容** — 改存档结构必须同步 `save_load/types.ts` / `validation.ts` / `serialize.ts`，可选字段旧档缺失一律安全回退默认、未知 id 安全丢弃，不得抛错。见 [`src/save_load/save_load.md`](src/save_load/save_load.md)。
+- **state 唯一权威** — 角色游戏数据只能存在 `CharacterState`；禁止在 `CharacterEntity`、动画、骨骼、战斗、AI 中另存副本。引擎句柄只在 `CharacterRuntime`。动画系统只写 `state.animation.current`，不得回写参数。见 [`docs/design/character_state.md`](docs/design/character_state.md)。
+- **动画组合禁止时间与整身变体** — 动画组合只能使用 progress，禁止出现时间/时长/倍速；禁止整身离散变体烘焙（falling 档、盾臂、武器类、持握模式、支撑手合并）与播放倍速步态。所有体形共用组合树，动作按关节权重与移动/跳跃共存。见 [`docs/design/animation_composition.md`](docs/design/animation_composition.md)。
 
 ## 项目结构
 
@@ -110,7 +115,7 @@ src/
 ├── render/                      # Three.js 渲染（materials/ 为基础表面材质库）
 ├── input/                       # 输入注册表（键盘 + 鼠标动作抽象、绑定、操作设置面板）
 ├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/）
-├── character/                   # 角色领域模型：ai_strategy / interaction / weapon / combat / armor / state_machine / handedness
+├── character/                   # 角色领域模型：state / ai_strategy / interaction / weapon / combat / armor / state_machine / handedness
 ├── entity/
 │   ├── character/               # 角色实体（body_form/common + 体形分包 / appearance / combat / projectile / physics / ai / combat_vfx / ui）
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（人形无关，预设外部注入）
@@ -140,6 +145,7 @@ src/
 | 存档 | [`src/save_load/save_load.md`](src/save_load/save_load.md) | 存档结构/版本/兼容 |
 | UI 面板 | [`src/ui/ui.md`](src/ui/ui.md) | 面板样式、图标、迁移 |
 | 角色领域（lock_point/faction/原型/惯用手） | [`src/character/character.md`](src/character/character.md) | 锁定点、阵营、惯用手 |
+| 角色状态（模块） | [`src/character/state/state.md`](src/character/state/state.md) | state 子域、所有权、访问器 |
 | 武器 | [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) | 武器类/模型、持握、攻击段、蓄力、空中攻击、动作 |
 | 战斗运行时 | [`src/character/combat/combat.md`](src/character/combat/combat.md) | 伤害类别、防御、无敌帧 |
 | 护甲 / 肢体 | [`src/character/armor/armor.md`](src/character/armor/armor.md) | 护甲槽位、防御/加成 |
@@ -147,10 +153,13 @@ src/
 | 交互领域 | [`src/character/interaction/interaction.md`](src/character/interaction/interaction.md) | 交互类型层、时长 |
 | 状态机 | [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md) | 新增状态、死亡/翻滚/倒地起身、攻击段、空中攻击 |
 | 骨骼动画 | [`src/skeleton/skeleton.md`](src/skeleton/skeleton.md) | 骨骼/IK/组合动画 |
-| 动画组合 | [`src/entity/character/body_form/common/skeleton_animation/composition.ts`](src/entity/character/body_form/common/skeleton_animation/composition.ts) | SkeletonAnimation / AnimationComposition / AnimationModule / 烘焙 clip |
+| 动画组合（权威） | [`docs/design/animation_composition.md`](docs/design/animation_composition.md) | 组合树/进度/权重/additive/叶子/事件/参数 |
+| 角色状态（权威） | [`docs/design/character_state.md`](docs/design/character_state.md) | state 单一真源、子域、所有权、命名、迁移 |
+| 动画组合（实现） | [`src/entity/character/body_form/common/skeleton_animation/progress_composition.ts`](src/entity/character/body_form/common/skeleton_animation/progress_composition.ts) | 进度式组合求值、normal/additive、层级权重、事件 |
+| 通用体形进度动画 | [`src/entity/character/body_form/common/skeleton_animation/progress_creature.ts`](src/entity/character/body_form/common/skeleton_animation/progress_creature.ts) | wolf/horse/wyvern 基础/攻击组合树、步态速度、转向瞄准、falling 收腿 |
 | 角色 AI | [`src/entity/character/ai/ai.md`](src/entity/character/ai/ai.md) | 寻路索敌、导航避障、朝向 |
 | 方块人外观（共享工具） | [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md) | 跨体形网格构建器、武器网格、桥接 |
-| 人形分包 | [`src/entity/character/body_form/humanoid/humanoid.md`](src/entity/character/body_form/humanoid/humanoid.md) | 人形骨架/模型/动画/clip/支撑手烘焙 |
+| 人形分包 | [`src/entity/character/body_form/humanoid/humanoid.md`](src/entity/character/body_form/humanoid/humanoid.md) | 人形骨架/模型/进度组合树/支撑手烘焙 |
 | 体形计划 | [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md) | 基础模组（骨架/碰撞布局/受击子块/装备槽/武器策略）、运行时切换 |
 | 弹丸 | [`src/entity/character/projectile/projectile.md`](src/entity/character/projectile/projectile.md) | 弹丸物理/视觉/对象池 |
 | 角色物理 | [`src/entity/character/physics/physics.md`](src/entity/character/physics/physics.md) | body/mesh 同步、移动平台载客 |

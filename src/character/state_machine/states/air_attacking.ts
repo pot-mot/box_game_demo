@@ -1,5 +1,5 @@
 import type {CharacterEntity} from '../../types.ts'
-import type {CharacterInput, CharacterState, StateHandler} from '../types.ts'
+import type {CharacterInput, CharacterStateName, StateHandler} from '../types.ts'
 import type {CombatComponent} from '../../combat/types.ts'
 import {segmentTotalDuration} from '../../weapon/attack_chain.ts'
 import {DEFAULT_MELEE_AIR_ATTACK, type MeleeAirAttackConfig} from '../../weapon/melee_attacks.ts'
@@ -28,10 +28,10 @@ import {advanceSegmentPhases, enterAttackSegment, resolveSegmentNextState, type 
  * 是「攻击键是否映射为 air 键」的唯一依据（按状态判定，而非 isSupportedOn——
  * 胶囊跨 trimesh 棱线时接触法线会瞬时读陡，idle/walking 也会短暂 isSupportedOn=false）。
  */
-const AIRBORNE_ATTACK_STATES: readonly CharacterState[] = ['jumping', 'falling', 'air_attacking']
+const AIRBORNE_ATTACK_STATES: readonly CharacterStateName[] = ['jumping', 'falling', 'air_attacking']
 
 /** 当前状态是否处于空中攻击态（决定玩家攻击键是否映射为 air 键） */
-export const isAirborneAttackState = (state: CharacterState): boolean =>
+export const isAirborneAttackState = (state: CharacterStateName): boolean =>
     AIRBORNE_ATTACK_STATES.includes(state)
 
 /** 当前武器空中攻击模组（非近战武器无模组，回退默认值） */

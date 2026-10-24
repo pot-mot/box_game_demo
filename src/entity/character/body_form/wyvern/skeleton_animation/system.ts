@@ -1,15 +1,13 @@
-import {skeletonFromDefinition} from '../../../../../skeleton/anim/serialization.ts'
-import {defineFormAnimation, type FormAnimation} from '../../common/skeleton_animation/form_animation.ts'
+import {defineCreatureProgressAnimation} from '../../common/skeleton_animation/progress_creature.ts'
 import {buildWyvernSkeleton} from '../skeleton/skeleton.ts'
 import {wyvernAttackClip, wyvernBaseClip, WYVERN_PRESERVED_JOINTS} from './clips.ts'
 
-const WYVERN_REST_POSE = skeletonFromDefinition(buildWyvernSkeleton()).readPose()
-
-/** 双足飞龙动画定义：运行时与骨骼编辑器共用；作者数据缺失段回退公式动画。 */
-export const WYVERN_ANIMATION: FormAnimation = defineFormAnimation({
+/** 双足飞龙动画定义：运行时统一走进度组合树；baseClip/attackClip 仅服务骨骼编辑器。 */
+export const WYVERN_ANIMATION = defineCreatureProgressAnimation({
     skeleton: buildWyvernSkeleton,
-    baseClip: state => wyvernBaseClip(state),
-    attackClip: segment => wyvernAttackClip(segment),
-    restPose: () => WYVERN_REST_POSE,
-    preservedJointIds: WYVERN_PRESERVED_JOINTS,
+    baseClip: wyvernBaseClip,
+    attackClip: wyvernAttackClip,
+    turnAim: {body: 'body', neck: 'neck', head: 'head'},
+    preservedJoints: WYVERN_PRESERVED_JOINTS,
+    fallingJoints: ['lHip', 'lKnee', 'rHip', 'rKnee'],
 })

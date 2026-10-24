@@ -5,10 +5,11 @@ import type {SkeletonAppearance} from '../../../skeleton/appearance.ts'
 import type {TrackedBoxPart} from '../../../../render/box_parts.ts'
 import type {HurtBlockProfile} from '../../../../character/hurt_blocks.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../../character/types.ts'
+import type {CharacterState, CharacterStateInit} from '../../../../character/state/types.ts'
 import type {CreatureModel} from '../../appearance/types.ts'
 import type {FormAnimation} from './skeleton_animation/form_animation.ts'
 import type {EquipSlotDef, EquipmentModuleDef, EquipmentState} from '../../../../character/equipment/types.ts'
-import type {BodyFormStateDefinition, BodyClipStateMeta} from './state.ts'
+import type {BodyFormBase, BodyClipStateMeta} from './base.ts'
 import type {MeshBuilder} from '../../appearance/mesh_builder.ts'
 
 /**
@@ -82,8 +83,10 @@ export interface BodyForm {
     /** 体形本地化显示名键 */
     readonly nameKey: StringLocaleKey
 
-    /** 状态：基础属性、尺寸、动画基线、最终数值计算入口 */
-    readonly state: BodyFormStateDefinition
+    /** 基础定义：基础属性、尺寸、动画基线、最终数值计算入口 */
+    readonly base: BodyFormBase
+    /** 具体体形 state 工厂：生产角色生成时唯一入口 */
+    readonly createState: (init: CharacterStateInit) => CharacterState
     /** 骨架：关节 / 骨骼段 / 碰撞箱 / 受击箱的唯一真源 */
     readonly skeleton: BodySkeletonDefinition
 

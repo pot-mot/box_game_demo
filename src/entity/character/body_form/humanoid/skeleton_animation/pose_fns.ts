@@ -30,7 +30,7 @@ import {ROLL_DURATION} from '../../../../../character/combat/roll_skill.ts'
 import {INTERACTION_DURATION} from '../../../../../character/interaction/types.ts'
 import type {HoldMode} from '../../../../../character/weapon/hold_mode.ts'
 import type {BaseClipState} from '../../../../../character/state_machine/types.ts'
-import {HUMANOID_CLIP_STATE_META as BASE_CLIP_META} from '../state/form_state.ts'
+import {HUMANOID_CLIP_STATE_META as BASE_CLIP_META} from '../state/form_base.ts'
 
 export {BASE_CLIP_META}
 
@@ -71,6 +71,8 @@ const GRIP_BONE_POSE: JointEulerState = {rx: WEAPON_GRIP_FLEX, ry: 0, rz: 0}
 export interface PoseContext {
     readonly weaponHeld: boolean
     readonly horizontalSpeed: number
+    /** 垂直速度（m/s，向上为正）：falling 收腿 / 抬头参数 */
+    readonly verticalSpeed?: number
     /** 格挡举盾手（blocking 姿态决定抬起哪只手臂；undefined = 默认主手 / 右臂） */
     readonly blockArm?: 'right' | 'left'
 }
@@ -185,6 +187,8 @@ const fallingPose = (t: number, ctx: PoseContext): PoseState => {
     const armZ = 0.3 + Math.sin(t * 0.8) * 0.1
     /* 腿随水平速度张开（legSpread = min(speed,4) × 0.04） */
     const legSpread = Math.min(ctx.horizontalSpeed, 4) * 0.04
+    /* 下坠越快，双腿越收（垂直速度参数） */
+    const fallTuck = Math.min(Math.max(0, -(ctx.verticalSpeed ?? 0)) / 10, 1) * 0.25
     /* 持械时武器骨骼保持握持屈角，与待机 / 行走等常规状态一致 */
     const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
@@ -198,10 +202,10 @@ const fallingPose = (t: number, ctx: PoseContext): PoseState => {
         leftHandPivot: ZERO,
         leftWristPivot: ZERO,
         leftWeaponMount: grip,
-        rightLegHip: {rx: -0.15 - legSpread, ry: 0, rz: 0},
-        rightLegKnee: {rx: 0.1, ry: 0, rz: 0},
-        leftLegHip: {rx: -0.15 + legSpread, ry: 0, rz: 0},
-        leftLegKnee: {rx: 0.1, ry: 0, rz: 0},
+        rightLegHip: {rx: -0.15 - legSpread + fallTuck, ry: 0, rz: 0},
+        rightLegKnee: {rx: 0.1 + fallTuck, ry: 0, rz: 0},
+        leftLegHip: {rx: -0.15 + legSpread + fallTuck, ry: 0, rz: 0},
+        leftLegKnee: {rx: 0.1 + fallTuck, ry: 0, rz: 0},
         headNeck: {rx: 0.15, ry: 0, rz: 0},
         spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
         root: {rotation: ZERO},
@@ -625,11 +629,22 @@ export const BASE_POSE_SAMPLERS: Record<BaseClipState, PoseSampler> = {
     guard_broken: (t, ctx) => guardBrokenPose(t, ctx),
 }
 
+/** 持握必须保持的基础状态（死亡 / 倒地 / 起身 / 格挡除外：前者松手，后者由盾臂姿态接管） */
+const HOLD_PERSISTENT_STATES: ReadonlySet<BaseClipState> = new Set<BaseClipState>([
+    'idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'rolling', 'flinching', 'interacting', 'guard_broken',
+])
+
+/** 双持副手持握戒备位：仅常态生效；falling / rolling / flinching 保留各自姿态 */
+const DUAL_WIELD_READY_STATES: ReadonlySet<BaseClipState> = new Set<BaseClipState>([
+    'idle', 'walking', 'jumping', 'swimming', 'floating', 'interacting', 'guard_broken',
+])
+
 /**
  * 持握模式对上半身手臂姿态的调整：
  * - 单持 / 空手：维持基础姿态（右臂持械、左臂自然下垂）；
- * - 双手共持 / 双持：左臂与右臂同向前伸/挥摆（双手持握同一武器 / 各握一把武器）。
- * 仅对 idle / walking 的持械变体生效；跳跃/下落/死亡/受击等瞬态不施加。
+ * - 双手共持：左臂与右臂同向前伸/挥摆（双手握同一把武器）；
+ * - 双持：左右手各握一把武器，左臂保持自身姿态，禁止复制主手。
+ * 持握在跳跃 / 下落 / 受击等瞬态保持。
  */
 export const adjustArmsForHoldMode = (
     pose: PoseState,
@@ -638,7 +653,18 @@ export const adjustArmsForHoldMode = (
     state: BaseClipState,
 ): PoseState => {
     if (!weaponHeld || holdMode === undefined || holdMode === 'one_handed') return pose
-    if (state !== 'idle' && state !== 'walking' && state !== 'swimming' && state !== 'floating') return pose
+    if (holdMode === 'dual_wield') {
+        if (!DUAL_WIELD_READY_STATES.has(state)) return pose
+        return {
+            ...pose,
+            leftArmShoulder: {rx: WEAPON_READY_SHOULDER, ry: 0, rz: 0},
+            leftArmElbow: {rx: WEAPON_READY_ELBOW, ry: 0, rz: 0},
+            leftHandPivot: ZERO,
+            leftWristPivot: ZERO,
+            leftWeaponMount: GRIP_BONE_POSE,
+        }
+    }
+    if (!HOLD_PERSISTENT_STATES.has(state)) return pose
     return {
         ...pose,
         leftArmShoulder: pose.rightArmShoulder,

@@ -165,7 +165,7 @@ export const collectWorldState = (
         for (const e of character.getAll()) {
             /* position 存脚底原点（实体原点语义）：物理身体中心回退半高 */
             const bodyPos = e.body.translation()
-            const halfH = bodyFormOf(e.config.bodyFormId).state.centerOffsetY * e.config.scale
+            const halfH = bodyFormOf(e.config.bodyFormId).base.centerOffsetY * e.config.scale
             entities.push({
                 type: 'character',
                 config: {

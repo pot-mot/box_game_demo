@@ -13,7 +13,8 @@ import {HUMANOID_EQUIPMENT_MODULES} from './equipment/modules.ts'
 import {HUMANOID_ARMOR_PIECES} from './equipment/armor.ts'
 import {HUMANOID_LIMB_PIECES} from './equipment/limb.ts'
 import {HUMANOID_EQUIP_SLOTS} from './state/equip_slots.ts'
-import {HUMANOID_STATE} from './state/form_state.ts'
+import {HUMANOID_BASE} from './state/form_base.ts'
+import {createHumanoidState} from './state/runtime.ts'
 
 /** 人形体形 id */
 export const HUMANOID_BODY_FORM_ID = 'humanoid'
@@ -25,7 +26,8 @@ export const HUMANOID_BODY_FORM_ID = 'humanoid'
 export const HUMANOID_BODY_FORM: BodyForm = {
     id: HUMANOID_BODY_FORM_ID,
     nameKey: 'body_form.humanoid',
-    state: HUMANOID_STATE,
+    base: HUMANOID_BASE,
+    createState: createHumanoidState,
     skeleton: {
         build: buildCharacterSkeletonDefinition,
         jointNameKeys: HUMANOID_JOINT_NAME_KEYS,

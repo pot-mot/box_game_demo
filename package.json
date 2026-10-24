@@ -11,7 +11,8 @@
     "test": "vitest run",
     "bake:support-hands": "node --experimental-strip-types scripts/bake_support_hands.mjs",
     "format:attack-clips": "node scripts/format_attack_clips.mjs",
-    "check:architecture": "node scripts/check_architecture.mjs"
+    "check:architecture": "node scripts/check_architecture.mjs",
+    "verify": "pnpm test && pnpm build && pnpm check:architecture"
   },
   "devDependencies": {
     "@types/three": "^0.185.1",

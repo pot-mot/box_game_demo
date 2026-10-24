@@ -3,7 +3,7 @@ import {PerspectiveCamera} from 'three'
 import {createInputRegistry} from '../../../input/registry.ts'
 import {FIXED_TIME_STEP} from '../../../physics/constants.ts'
 import {INTERACTION_ACTIVATE_TIME, type InteractionProvider} from '../../../character/interaction/types.ts'
-import type {CharacterState} from '../../../character/state_machine/types.ts'
+import type {CharacterStateName} from '../../../character/state_machine/types.ts'
 import {setupPlayInteraction, type PlayInteractionCharacterSource} from './index.ts'
 
 const pressInteract = (): void => {
@@ -20,7 +20,7 @@ describe('play 交互：渲染帧采样 / 物理步消费', () => {
 
     it('0 物理步渲染帧清理边沿后，仍在首个物理步消费交互输入', () => {
         const camera = new PerspectiveCamera()
-        let state: CharacterState = 'idle'
+        let state: CharacterStateName = 'idle'
         const setPlayerInteract = vi.fn()
         const source: PlayInteractionCharacterSource = {
             getPlayerCharacter: () => ({

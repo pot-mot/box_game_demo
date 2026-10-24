@@ -3,12 +3,13 @@ import {resolvePhases} from '../combat/attack_phases.ts'
 import {resolveEntrySegment} from '../weapon/attack_chain.ts'
 import {attackContextOf} from '../combat/attack_runtime.ts'
 import type {
-    CharacterState,
+    CharacterStateName,
     CharacterInput,
     CharacterStateMachine,
     MachineContext,
     StateHandler,
 } from './types.ts'
+import {createCharacterStateMachineData, type CharacterStateMachineData} from '../state/types.ts'
 import {idleHandler} from './states/idle.ts'
 import {walkingHandler} from './states/walking.ts'
 import {jumpingHandler} from './states/jumping.ts'
@@ -27,7 +28,7 @@ import {blockingHandler} from './states/blocking.ts'
 import {guardBrokenHandler} from './states/guard_broken.ts'
 import {updateGroundTimers} from './ground.ts'
 
-const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
+const STATE_HANDLERS: Record<CharacterStateName, StateHandler> = {
     idle: idleHandler,
     walking: walkingHandler,
     jumping: jumpingHandler,
@@ -46,16 +47,15 @@ const STATE_HANDLERS: Record<CharacterState, StateHandler> = {
     guard_broken: guardBrokenHandler,
 }
 
-export const createCharacterStateMachine = (): CharacterStateMachine => {
-    let currentState: CharacterState = 'idle'
-    let previousState: CharacterState | null = null
-    let stateTime = 0
-    let onStateChange: ((from: CharacterState, to: CharacterState) => void) | null = null
+export const createCharacterStateMachine = (
+    data: CharacterStateMachineData = createCharacterStateMachineData(),
+): CharacterStateMachine => {
+    let onStateChange: ((from: CharacterStateName, to: CharacterStateName) => void) | null = null
     const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false, interact: false, block: false, swimLift: 0}
 
     const makeContext = (entity?: CharacterEntity): MachineContext => {
         let attackPhase: string | undefined
-        if (entity !== undefined && (currentState === 'attacking' || currentState === 'air_attacking')) {
+        if (entity !== undefined && (data.currentState === 'attacking' || data.currentState === 'air_attacking')) {
             const segment = entity.combat.activeSegment
             if (segment !== undefined) {
                 const phases = resolvePhases(segment.phases)
@@ -65,8 +65,8 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
             }
         }
         return {
-            stateTime,
-            previousState,
+            stateTime: data.stateTime,
+            previousState: data.previousState,
             attackPhase,
         }
     }
@@ -86,7 +86,7 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     }
 
     const update = (dt: number, entity: CharacterEntity): void => {
-        const handler = STATE_HANDLERS[currentState]
+        const handler = STATE_HANDLERS[data.currentState]
         const ctx = makeContext(entity)
         updateGroundTimers(entity, dt)
         /* 格挡保持：统一由输入同步到战斗组件，供 blocking 状态守卫与盾判定读取 */
@@ -96,16 +96,16 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
         if (
             entity.combat.pendingKnockdown
             && entity.combat.health > 0
-            && currentState !== 'dying'
-            && currentState !== 'knockdown'
-            && currentState !== 'getting_up'
+            && data.currentState !== 'dying'
+            && data.currentState !== 'knockdown'
+            && data.currentState !== 'getting_up'
         ) {
             handler.exit(entity, ctx)
-            previousState = currentState
-            currentState = 'knockdown'
-            stateTime = 0
-            STATE_HANDLERS[currentState].enter(entity, makeContext(entity))
-            onStateChange?.(previousState, currentState)
+            data.previousState = data.currentState
+            data.currentState = 'knockdown'
+            data.stateTime = 0
+            STATE_HANDLERS[data.currentState].enter(entity, makeContext(entity))
+            onStateChange?.(data.previousState, data.currentState)
             return
         }
 
@@ -114,30 +114,30 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
             entity.combat.block !== undefined
             && entity.combat.guard <= 0
             && entity.combat.health > 0
-            && currentState !== 'dying'
-            && currentState !== 'knockdown'
-            && currentState !== 'getting_up'
-            && currentState !== 'guard_broken'
+            && data.currentState !== 'dying'
+            && data.currentState !== 'knockdown'
+            && data.currentState !== 'getting_up'
+            && data.currentState !== 'guard_broken'
         ) {
             handler.exit(entity, ctx)
-            previousState = currentState
-            currentState = 'guard_broken'
-            stateTime = 0
-            STATE_HANDLERS[currentState].enter(entity, makeContext(entity))
-            onStateChange?.(previousState, currentState)
+            data.previousState = data.currentState
+            data.currentState = 'guard_broken'
+            data.stateTime = 0
+            STATE_HANDLERS[data.currentState].enter(entity, makeContext(entity))
+            onStateChange?.(data.previousState, data.currentState)
             return
         }
 
         for (const t of handler.transitions) {
             if (t.guard(input, entity, ctx)) {
                 handler.exit(entity, ctx)
-                previousState = currentState
-                currentState = t.to
-                stateTime = 0
-                if (currentState === 'attacking' || currentState === 'air_attacking') {
+                data.previousState = data.currentState
+                data.currentState = t.to
+                data.stateTime = 0
+                if (data.currentState === 'attacking' || data.currentState === 'air_attacking') {
                     /* 起手解析：攻击键的起手候选按守卫（蓄力/方向变体）+ 冷却解析（转换 guard 已验证存在候选）；
                      * 空中攻击固定走 `air` 链（与地面轻重链分离） */
-                    const key = currentState === 'air_attacking' ? 'air' : input.attackKey
+                    const key = data.currentState === 'air_attacking' ? 'air' : input.attackKey
                     entity.combat.activeSegment = key !== undefined
                         ? resolveEntrySegment(
                             entity.combat.attacks,
@@ -152,20 +152,20 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
                         : undefined
                 }
                 const newCtx = makeContext(entity)
-                STATE_HANDLERS[currentState].enter(entity, newCtx)
-                onStateChange?.(previousState, currentState)
+                STATE_HANDLERS[data.currentState].enter(entity, newCtx)
+                onStateChange?.(data.previousState, data.currentState)
                 return
             }
         }
 
-        stateTime += dt
-        STATE_HANDLERS[currentState].update(dt, input, entity, makeContext(entity))
+        data.stateTime += dt
+        STATE_HANDLERS[data.currentState].update(dt, input, entity, makeContext(entity))
     }
 
     const reset = (): void => {
-        currentState = 'idle'
-        previousState = null
-        stateTime = 0
+        data.currentState = 'idle'
+        data.previousState = null
+        data.stateTime = 0
         input.dx = 0
         input.dz = 0
         input.jump = false
@@ -180,9 +180,9 @@ export const createCharacterStateMachine = (): CharacterStateMachine => {
     }
 
     return {
-        get currentState() { return currentState },
-        get previousState() { return previousState },
-        get stateTime() { return stateTime },
+        get currentState() { return data.currentState },
+        get previousState() { return data.previousState },
+        get stateTime() { return data.stateTime },
         get onStateChange() { return onStateChange },
         set onStateChange(v) { onStateChange = v },
         setInput,

@@ -54,9 +54,9 @@ const createCharEntity = (
     jumpHeightVal: number = 2,
 ): CharacterEntity => {
     const scale = scaleVal
-    const bw = HUMANOID_BODY_FORM.state.size.width * scale
-    const bh = HUMANOID_BODY_FORM.state.size.height * scale
-    const bd = HUMANOID_BODY_FORM.state.size.depth * scale
+    const bw = HUMANOID_BODY_FORM.base.size.width * scale
+    const bh = HUMANOID_BODY_FORM.base.size.height * scale
+    const bd = HUMANOID_BODY_FORM.base.size.depth * scale
 
     const mesh = new Mesh(
         new BoxGeometry(bw, bh, bd),
@@ -524,9 +524,9 @@ describe('NavFSM 导航状态机', () => {
 
 const createCharOnBox = (boxTopY: number): CharacterEntity => {
     const scale = 1
-    const bh = HUMANOID_BODY_FORM.state.size.height * scale
-    const bw = HUMANOID_BODY_FORM.state.size.width * scale
-    const bd = HUMANOID_BODY_FORM.state.size.depth * scale
+    const bh = HUMANOID_BODY_FORM.base.size.height * scale
+    const bw = HUMANOID_BODY_FORM.base.size.width * scale
+    const bd = HUMANOID_BODY_FORM.base.size.depth * scale
     const bodyY = boxTopY + bh / 2
 
     const mesh = new Mesh(new BoxGeometry(bw, bh, bd), new MeshBasicMaterial({visible: false}))

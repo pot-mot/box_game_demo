@@ -1,15 +1,13 @@
-import {skeletonFromDefinition} from '../../../../../skeleton/anim/serialization.ts'
-import {defineFormAnimation, type FormAnimation} from '../../common/skeleton_animation/form_animation.ts'
+import {defineCreatureProgressAnimation} from '../../common/skeleton_animation/progress_creature.ts'
 import {buildHorseSkeleton} from '../skeleton/skeleton.ts'
 import {horseAttackClip, horseBaseClip, HORSE_PRESERVED_JOINTS} from './clips.ts'
 
-const HORSE_REST_POSE = skeletonFromDefinition(buildHorseSkeleton()).readPose()
-
-/** 马动画定义：运行时与骨骼编辑器共用；作者数据缺失段回退公式动画。 */
-export const HORSE_ANIMATION: FormAnimation = defineFormAnimation({
+/** 马动画定义：运行时统一走进度组合树；baseClip/attackClip 仅服务骨骼编辑器。 */
+export const HORSE_ANIMATION = defineCreatureProgressAnimation({
     skeleton: buildHorseSkeleton,
-    baseClip: state => horseBaseClip(state),
-    attackClip: segment => horseAttackClip(segment),
-    restPose: () => HORSE_REST_POSE,
-    preservedJointIds: HORSE_PRESERVED_JOINTS,
+    baseClip: horseBaseClip,
+    attackClip: horseAttackClip,
+    turnAim: {body: 'body', neck: 'neck', head: 'head'},
+    preservedJoints: HORSE_PRESERVED_JOINTS,
+    fallingJoints: ['flHip', 'flKnee', 'frHip', 'frKnee', 'rlHip', 'rlKnee', 'rrHip', 'rrKnee'],
 })

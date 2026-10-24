@@ -1,3 +1,4 @@
+import {createTestCharacterState} from '../state/test_state.ts'
 import {describe, it, expect} from 'vitest'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from './machine.ts'
@@ -67,6 +68,7 @@ const makeMock = (runtime: WeaponRuntime = createWeaponRuntime('long_sword')): C
         lockPoints: [],
         environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),
+        state: createTestCharacterState({}),
     }
 }
 

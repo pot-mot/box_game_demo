@@ -1,10 +1,10 @@
-import type {BodyFormStateDefinition} from '../../common/state.ts'
+import type {BodyFormBase} from '../../common/base.ts'
 import {ZERO_PROFILE} from '../../../../../character/combat/defense.ts'
 import {DEFAULT_POISE_MAX} from '../../../../../character/combat/constants.ts'
 import {creatureStateMeta} from '../../common/creature_runtime/state_timing.ts'
 
 /** 飞龙状态基线：双足双翼尺寸 / 基础生命 / 动画步态时长。 */
-export const WYVERN_STATE: BodyFormStateDefinition = {
+export const WYVERN_BASE: BodyFormBase = {
     size: {width: 1.0, height: 2.0, depth: 1.6},
     centerOffsetY: 1.0,
     eyeHeight: 1.5,

@@ -7,14 +7,14 @@
   配置在**末端节点**上，`resolveIkChain(end, chainDepth)` 向上回溯指定父级段数（默认 2）；
   `solveIkChain` 按 solver 分发到 CCD / FABRIK。**只有骨骼动画编辑器的 Gizmo 拖拽会调用求解器**；
   生产动画系统写入骨架后不做任何 IK 求解（运行时无 IK，见根 `AGENTS.md` 高危红线）。
-- **骨骼动画组合**：`anim/composition.ts` 的 `composePoses(layers)` / `applyComposedPose(skeleton, layers)` 按
-  **关节归一化加权平均**合成任意层（`PoseLayer = {clip, weight, progress}`）；
-  `body_form/common/skeleton_animation/composition.ts` 进一步支持起止时间、**单关节权重 `jointWeights`**、
-  clip 组合源、嵌套组合扁平化与动画模组整体烘焙。
-- 基础状态的分层（下半身/体态 + 按持握模式的上半身）在 `body_form/humanoid/skeleton_animation/clips/base_clips.ts`
-  中离线预组合为单 clip（`getBaseClipForHoldMode`，运行时单层播放），并按 `weaponClassId` 合并预烘焙支撑手双轨；
-  攻击段由 `character/weapon/attack_clips/` 作者数据编译并合并 `generated/support_hand_attacks.ts`。
-  下半身行走覆盖层在生产中经 `AnimationComposition` + 单关节权重合成。
+- **骨骼动画组合**：生产运行时统一使用 `body_form/common/skeleton_animation/progress_composition.ts`：
+  层级边权重、每关节权重、normal 归一化、additive、coverage/rest、progress 映射与事件。
+  旧时间轴 `composition.ts` / `factory.ts` 已删除；编辑器仍可用 clip 预览，但不得作为运行时第二条通路。
+- 人形基础/攻击动画由 `humanoid/skeleton_animation/progress_graph.ts` 组为单一进度组合树，
+  `progress_system.ts` 每物理步求值；基础 clip、攻击身体 clip、支撑手/持握/盾臂/行走腿/转向瞄准均为组合层。
+  攻击作者数据由 `character/weapon/attack_clips/` 编译；支撑手来自 `generated/support_hand_attacks.ts`。
+- 狼 / 马 / 双足飞龙由 `common/skeleton_animation/progress_creature.ts` 统一求值：
+  基础 / 攻击 clip 为叶子，叠加转向/瞄准与 falling 垂直收腿层；运行时不再使用 clip player。
 - **编辑器骨架预设注入**：`entity/skeleton/world.ts` 只接受 `SkeletonPresetSource`，体形定义与外观由
   `entity/character/skeleton/form_preset.ts` 注入，骨骼实体层不反向依赖具体体形。
 - **骨架定义必须同时声明 `joints`（父子层级）与 `bones`（连接段）**：人形与狼 / 马 / 飞龙一致；

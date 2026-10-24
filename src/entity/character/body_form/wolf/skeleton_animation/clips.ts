@@ -3,10 +3,9 @@ import type {AttackSegment} from '../../../../../character/weapon/attack_chain.t
 import type {BoneAnimationClip} from '../../../../../skeleton/anim/types.ts'
 import {bakePoseClip} from '../../common/creature_runtime/pose.ts'
 import {hitWindowRatios} from '../../common/creature_runtime/timing.ts'
-import {bakeSingleAnimation, createAnimationModule, poseAnimationFactory} from '../../common/skeleton_animation/factory.ts'
 import {compileAuthoredAttackClip} from '../../common/skeleton_animation/authored_attack.ts'
 import {ATTACK_CLIPS} from './attack_clips/index.ts'
-import {WOLF_STATE} from '../state/form_state.ts'
+import {WOLF_BASE} from '../state/form_base.ts'
 import {buildWolfSkeleton} from '../skeleton/skeleton.ts'
 import {wolfAttackPose, wolfPose} from './pose_fns.ts'
 
@@ -15,7 +14,7 @@ const SKELETON = buildWolfSkeleton()
 /** 口部挂点由 `equipWeapon` 的挂点旋转决定武器朝向，不参与动作轨道 */
 export const WOLF_PRESERVED_JOINTS = ['mouthMount'] as const
 
-const STATE_META = WOLF_STATE.animation
+const STATE_META = WOLF_BASE.animation
 
 const stateCache = new Map<string, BoneAnimationClip>()
 
@@ -24,14 +23,14 @@ export const wolfBaseClip = (state: BaseClipState): BoneAnimationClip => {
     const cached = stateCache.get(state)
     if (cached !== undefined) return cached
     const meta = STATE_META[state]
-    const animation = poseAnimationFactory.create({
-        id: `wolf_${state}`,
-        duration: meta.duration,
-        loop: meta.loop,
-        pose: wolfPose(state),
-    })
-    const module = createAnimationModule(`wolf:base:${state}`, 'body_form.wolf', [animation])
-    const clip = bakeSingleAnimation(SKELETON, module, animation.id)
+    const clip = bakePoseClip(
+        `wolf_${state}`,
+        meta.duration,
+        meta.loop,
+        SKELETON,
+        wolfPose(state),
+        WOLF_PRESERVED_JOINTS,
+    )
     stateCache.set(state, clip)
     return clip
 }

@@ -1,5 +1,5 @@
 import type {AttackSegment} from '../../../../../character/weapon/attack_chain.ts'
-import type {CharacterState} from '../../../../../character/state_machine/types.ts'
+import type {CharacterStateName} from '../../../../../character/state_machine/types.ts'
 import {attackPhaseProgress} from '../../common/creature_runtime/timing.ts'
 import {isPoseWithPosition, poseAt, type JointEulers, type JointPose, type PoseFunction} from '../../common/creature_runtime/pose.ts'
 import {breath, clamp01, easeInCubic, easeInOutCubic, easeOutCubic, footSwing, phaseOffset, smoothstep, TAU, type FootCycle} from '../../common/creature_runtime/gait.ts'
@@ -245,11 +245,11 @@ const gettingUp: PoseFunction = (t) => {
     }
 }
 
-const POSES: Partial<Record<CharacterState, PoseFunction>> = {
+const POSES: Partial<Record<CharacterStateName, PoseFunction>> = {
     walking, jumping, falling, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
 }
 
-export const wyvernPose = (state: CharacterState): PoseFunction => POSES[state] ?? idle
+export const wyvernPose = (state: CharacterStateName): PoseFunction => POSES[state] ?? idle
 
 const rightWingStrike = (segment: AttackSegment, t: number, sign: number): JointEulers => {
     const phase = attackPhaseProgress(t, segment)

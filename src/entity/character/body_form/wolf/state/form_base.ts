@@ -1,10 +1,10 @@
-import type {BodyFormStateDefinition} from '../../common/state.ts'
+import type {BodyFormBase} from '../../common/base.ts'
 import {ZERO_PROFILE} from '../../../../../character/combat/defense.ts'
 import {DEFAULT_POISE_MAX} from '../../../../../character/combat/constants.ts'
 import {creatureStateMeta} from '../../common/creature_runtime/state_timing.ts'
 
-/** 狼状态基线：四足尺寸 / 基础生命 / 动画步态时长（最终数值由 `resolveBodyFormState` 计算） */
-export const WOLF_STATE: BodyFormStateDefinition = {
+/** 狼基础定义：四足尺寸 / 基础生命 / 动画步态时长（最终数值由 `resolveBodyFormBase` 计算） */
+export const WOLF_BASE: BodyFormBase = {
     size: {width: 0.5, height: 0.9, depth: 1.3},
     centerOffsetY: 0.45,
     eyeHeight: 0.55,

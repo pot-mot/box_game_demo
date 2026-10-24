@@ -18,9 +18,9 @@ import {HUMANOID_BODY_FORM} from '../body_form/index.ts'
 
 /** 目标受击箱半长夹具（人形体形）：testMeleeHit 现按目标体形 `size` 取半长 */
 const TARGET_HALVES = {
-    x: HUMANOID_BODY_FORM.state.size.width / 2,
-    y: HUMANOID_BODY_FORM.state.size.height / 2,
-    z: HUMANOID_BODY_FORM.state.size.depth / 2,
+    x: HUMANOID_BODY_FORM.base.size.width / 2,
+    y: HUMANOID_BODY_FORM.base.size.height / 2,
+    z: HUMANOID_BODY_FORM.base.size.depth / 2,
 }
 
 

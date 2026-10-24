@@ -37,11 +37,11 @@
 - 命中箱由各 gen 显式声明（`WeaponLocalHitBox`），`reach = center.y + half.y − gripY`。
 - `supportGripOffset` 由武器数据声明（`body_form/<form>/equipment/weapons.ts`）。
 
-## 格挡 / 蓄力时的下半身叠加
+## 格挡 / 攻击移动时的下半身叠加
 
-- `blocking` 与「重击蓄力保持」在水平移动时会以 `ENGAGED_WALK_MIN_SPEED` 为阈值叠加下半身行走步态。
-- 叠加经 `AnimationComposition` + **单关节权重**合成：只写腿链关节（髋 / 膝），不覆盖上半身格挡 / 攻击姿态；
-  实现见人形动画系统的 `applyEngagedWalk`。
+- `blocking` 与 `attacking`（含蓄力与普通攻击）在水平移动时会以 `ENGAGED_WALK_MIN_SPEED` 为阈值叠加下半身行走步态。
+- 叠加是 humanoid 单一组合树中的腿层：只写腿链关节（髋 / 膝），不覆盖上半身格挡 / 攻击姿态；
+  实现见 `humanoid/skeleton_animation/progress_graph.ts`。
 
 ## 陷阱
 

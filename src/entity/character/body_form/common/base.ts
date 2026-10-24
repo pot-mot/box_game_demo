@@ -17,10 +17,10 @@ import type {BodySize} from './types.ts'
 export type BodyClipStateMeta = Readonly<Record<BaseClipState, {readonly duration: number; readonly loop: boolean}>>
 
 /**
- * 体形原始状态（非外在数值的唯一来源）：
- * 基础属性 + 尺寸 + 动画时长基线；最终数值由 `resolveBodyFormState` 统一计算。
+ * 体形基础定义（装备/武器修正前的唯一来源）：
+ * 基础属性 + 尺寸 + 动画时长基线；最终数值由 `resolveBodyFormBase` 统一计算。
  */
-export interface BodyFormStateDefinition {
+export interface BodyFormBase {
     readonly size: BodySize
     /** 脚底原点到刚体中心的 Y（scale=1） */
     readonly centerOffsetY: number
@@ -41,7 +41,7 @@ export interface BodyFormStateDefinition {
 }
 
 /** 体形最终数值（基础属性 + 装备 + 武器） */
-export interface BodyFormFinalState {
+export interface BodyFormResolved {
     readonly maxHealth: number
     readonly defense: DefenseProfile
     readonly attackBonus: DamageTypeProfile
@@ -50,26 +50,26 @@ export interface BodyFormFinalState {
 }
 
 /** 计算体形最终数值：装备按体形槽位 fail-closed 解析后汇总 */
-export const resolveBodyFormState = (
-    definition: BodyFormStateDefinition,
+export const resolveBodyFormBase = (
+    base: BodyFormBase,
     weapon: WeaponConfig,
     equipment: EquipmentState,
     bodyFormId: string,
-): BodyFormFinalState => {
+): BodyFormResolved => {
     const pieces = resolveEquipmentPieces(equipment, bodyFormId)
     return {
-        maxHealth: typeof definition.baseHealth === 'function'
-            ? definition.baseHealth(weapon)
-            : definition.baseHealth,
-        defense: equipmentDefenseOf(definition.baseDefense, pieces),
-        attackBonus: addDamageProfiles(definition.baseAttack, equipmentAttackOf(pieces)),
-        moveSpeedMultiplier: definition.baseMoveSpeedMultiplier * equipmentMoveSpeedOf(pieces),
-        poise: definition.basePoise + equipmentPoiseOf(pieces),
+        maxHealth: typeof base.baseHealth === 'function'
+            ? base.baseHealth(weapon)
+            : base.baseHealth,
+        defense: equipmentDefenseOf(base.baseDefense, pieces),
+        attackBonus: addDamageProfiles(base.baseAttack, equipmentAttackOf(pieces)),
+        moveSpeedMultiplier: base.baseMoveSpeedMultiplier * equipmentMoveSpeedOf(pieces),
+        poise: base.basePoise + equipmentPoiseOf(pieces),
     }
 }
 
 /** 零基础档案（供体形按需组合；避免各状态文件重复字面量） */
-export const ZERO_BASE_STATE = {
+export const ZERO_BASE = {
     baseDefense: ZERO_PROFILE,
     baseAttack: ZERO_PROFILE,
 } as const

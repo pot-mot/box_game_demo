@@ -9,7 +9,8 @@ import {HORSE_HURT_BLOCKS} from './skeleton/hurt.ts'
 import {HORSE_WEAPONS} from './equipment/weapons.ts'
 import {HORSE_EQUIPMENT_MODULES} from './equipment/modules.ts'
 import {HORSE_EQUIP_SLOTS} from './state/equip_slots.ts'
-import {HORSE_STATE} from './state/form_state.ts'
+import {HORSE_BASE} from './state/form_base.ts'
+import {createHorseState} from './state/runtime.ts'
 import {HORSE_ARMOR_PIECES} from './equipment/armor.ts'
 import {HORSE_LIMB_PIECES} from './equipment/limb.ts'
 
@@ -22,7 +23,8 @@ export const HORSE_BODY_FORM_ID = 'horse'
 export const HORSE_BODY_FORM: BodyForm = {
     id: HORSE_BODY_FORM_ID,
     nameKey: 'body_form.horse',
-    state: HORSE_STATE,
+    base: HORSE_BASE,
+    createState: createHorseState,
     skeleton: {
         build: buildHorseSkeleton,
         colliderLayout: HORSE_COLLIDER_LAYOUT,

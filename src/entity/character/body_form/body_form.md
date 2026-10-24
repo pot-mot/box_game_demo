@@ -2,11 +2,11 @@
 
 ## 约定
 
-- **BodyForm** 是「一个体形」的注册与选择单位：一个体形的 **状态 / 骨架 / 外观 / 动画 / 装备** 五类资源的聚合。
+- **BodyForm** 是「一个体形」的注册与选择单位：一个体形的 **基础定义 / 骨架 / 外观 / 动画 / 装备** 五类资源的聚合。
   新增体形 = 新增一份 plan + 一个 `body_form/<form>/` 分包。
 - **单一真源**：
-  - `BodyForm.state`（`state/form_state.ts`）：基础属性、尺寸、中心偏移、眼高、基础移速 / 韧性、状态时长基线。
-    最终数值统一经 `common/state.ts` 的 `resolveBodyFormState(...)` 计算（基础 + 装备）。
+  - `BodyForm.base`（`state/form_base.ts`）：基础属性、尺寸、中心偏移、眼高、基础移速 / 韧性、状态时长基线。
+    最终数值统一经 `common/base.ts` 的 `resolveBodyFormBase(...)` 计算（基础 + 装备）。
   - `BodyForm.skeleton`（`skeleton/`）：关节层级、骨骼段、**碰撞布局**、**受击子块**的唯一来源。
     碰撞箱 / 受击箱只读取骨架节点与骨架数据，**禁止**读取 appearance 部件几何。
   - `BodyForm.assemble` / `createModel`（`appearance/`）：网格、材质、装备外观；只消费骨架派生数据。
@@ -24,8 +24,8 @@
 
 不同体形（人 / 狼 / 马 / 双足飞龙 wyvern）的骨骼、步态、动作、受击分区、AI 行为条目差异极大：
 
-- 体形专有的骨架 / 外观 / `form_state.ts` / `equip_slots.ts` / `equipment/` / `base_clips.ts` / `pose_fns.ts` / 动画系统
-  一律落在 `body_form/<form>/`，**各自独立实现**；
+- 体形专有的骨架 / 外观 / `state/form_base.ts` / `state/runtime.ts` / `equip_slots.ts` / `equipment/` / `base_clips.ts` / `pose_fns.ts` / 动画系统
+  一律落在 `body_form/<form>/`，**各自独立实现**；`state/runtime.ts` 是该体形 `CharacterState` 的具体实现入口。
 - 允许各体形提供自己的 `FormAnimationProvider`（基础 / 攻击 clip、静止姿态、可选叠加层），但**禁止**用「体形 id 分支」把不同体形塞进人形动画代码；
 - 世界主循环只消费 `BodyForm.animation.createSystem(...)` 返回的 `AppearanceSystem`（`update`）与 `createModel`，
   不 import 任何 `body_form/<form>/` 内部实现。
@@ -53,25 +53,27 @@
   经 `mesh_builder` 挂到骨架关节组；支持武器位 + 碰撞可视化 + `alignYTo` 沿骨骼段定向）；
   装备外观由 `spec.equipmentAppearance` 注入（各体形 `appearance/equipment.ts` 构建真实网格），
   模型只负责生命周期与换装，不再生成统一占位色块。
-- `skeleton_animation/form_animation.ts`：`createFormAnimationSystem(provider)` / `defineFormAnimation(provider)`
-  （状态 / 段 → clip 播放；状态 / 段切换姿态混合；行走 / 游泳按 `walkSpeedScale(horizontalSpeed)` 同步步频；
-  稀疏作者 clip 播放前回填静止姿态；播放后调用 `model.updateDeform()`；**不执行运行时 IK**）。
+- `skeleton_animation/progress_creature.ts`：`defineCreatureProgressAnimation(config)` / `createCreatureProgressSystem(config)`
+  （基础 / 攻击 clip 作为进度组合叶子；行走 / 游泳按 `walkSpeedScale(horizontalSpeed)`；攻击 hitbox 事件；
+  转向 / 瞄准 additive 层；falling 垂直速度收腿；播放后 `model.updateDeform()`；**不执行运行时 IK**）。
+- `skeleton_animation/form_animation.ts`：编辑器 clip 预览类型与 `FormAnimation` 接口；运行时不再使用 clip player。
 - `skeleton_animation/authored_attack.ts`：跨体形作者攻击数据格式与编译器（`AuthoredAttackClip`）。
-- `creature_runtime/state.ts`：`BodyFormStateDefinition` / `resolveBodyFormState`（基础属性 + 装备 → 最终数值）。
+- `common/base.ts`：`BodyFormBase` / `BodyFormResolved` / `resolveBodyFormBase`（基础属性 + 装备 → 最终数值）。
 - `creature_runtime/equipment.ts`：生物装备外观公共装配器（体形提供尺寸 / 材质风格）。
 - `creature_runtime/pose.ts`：`bakePoseClip`（逐帧欧拉角 / 带位置姿态 → clip）。
-- `skeleton_animation/`：`composition.ts`（动画组合 / 单关节权重 / 模组烘焙）、`factory.ts`（姿态动画工厂）。
+- `skeleton_animation/`：`progress_composition.ts` / `progress_clip_leaf.ts`（进度组合求值与 clip 叶子）、`progress_creature.ts`（通用体形进度运行时）。
 
 各体形分包只提供自己的骨架、状态、部件、`pose_fns`、`clips`、`attack_clips`、装备模块与外观风格。
 
 ## BodyForm 字段（`common/types.ts`）
 
-`id` / `nameKey` / `state` / `skeleton` / `assemble` / `palette?` / `createModel` / `animation` /
+`id` / `nameKey` / `base` / `createState` / `skeleton` / `assemble` / `palette?` / `createModel` / `animation` /
 `equipSlots` / `equipmentModules` / `armorPieces?` / `limbPieces?` / `weapons` / `defaultWeaponId` /
 `editor` / `breathModules?` / `rollSpinTurns?` / `onFrame?`。
 
-- `state`：`size` / `centerOffsetY` / `eyeHeight` / `baseHealth` / `baseDefense` / `baseAttack` /
-  `baseMoveSpeedMultiplier` / `basePoise` / `animation`。读取尺寸 / 眼高一律走 `state`（或 `common/geometry.ts` 派生函数）。
+- `base`：`size` / `centerOffsetY` / `eyeHeight` / `baseHealth` / `baseDefense` / `baseAttack` /
+  `baseMoveSpeedMultiplier` / `basePoise` / `animation`。读取尺寸 / 眼高一律走 `base`（或 `common/geometry.ts` 派生函数）。
+- `createState`：由 `body_form/<form>/state/runtime.ts` 提供，构造该体形的具体 `CharacterState`；生产生成只走此入口。
 - `skeleton`：`build` / `jointNameKeys?` / `colliderLayout` / `hurtProfile`。
 - `equipmentModules`：由槽位 + 单件装备批量化生成；模块 `mountJointIds` 必须与槽位一致。
 - `weapons`：该体形拥有的全部武器；`weaponSelectableFor(form, weapon) = weapon.formId === form.id`。
@@ -105,7 +107,7 @@
 
 1. 重设 `config.bodyFormId`（humanoid 用缺省表示）；
 2. 武器策略落到新体形 `defaultWeaponId`，装备按 `filterEquipmentState(plan.equipSlots, …)` 过滤；
-3. 状态基线（防御 / 攻击 / 移速 / 韧性 / 生命）从 `plan.state` 重建最终数值；
+3. 基础定义（防御 / 攻击 / 移速 / 韧性 / 生命）从 `plan.state` 重建最终数值；
 4. dispose 旧模型并按新 plan 重建（`plan.createModel`），动画系统按新 plan 重建；
 5. 受击子块与碰撞体按新 `skeleton.hurtProfile` / `skeleton.colliderLayout` 重建；
 6. 重新装配武器 / 护甲 / 肢体 / 持握 / 阵营色 + 重绑材质效果；
@@ -117,7 +119,7 @@
 - `physics/world.ts`：
   - `originToCenterY(config)` 读 `bodyFormOf(config.bodyFormId).state.centerOffsetY`。
   - `spawnEntity` 按 `plan.skeleton.colliderLayout` 建碰撞体（首个 = `mainCollider`；全部存 `entity.colliders`）；
-    `hurtProfile` 取 `plan.skeleton.hurtProfile`；最终数值走 `resolveBodyFormState`。
+    `hurtProfile` 取 `plan.skeleton.hurtProfile`；最终数值走 `resolveBodyFormBase`。
   - `refreshHurtBlocks` 只按 `profile` + 关节矩阵世界化，不读取 `model.jointParts` 几何。
   - `syncCollidersFromNodes` 遍历 `plan.skeleton.colliderLayout` 用节点相对根变换驱动。
 - `CharacterEntity.colliders: RAPIER.Collider[]`（`mainCollider = colliders[0]`）。

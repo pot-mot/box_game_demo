@@ -6,9 +6,9 @@ import type {EquipSlotDef} from '../../../../../character/equipment/types.ts'
  */
 export const HUMANOID_EQUIP_SLOTS: readonly EquipSlotDef[] = [
     {kind: 'limb', bodyPart: 'head', mountJointIds: ['headNeck'], nameKey: 'limb_slot.head'},
-    {kind: 'limb', bodyPart: 'arms', mountJointIds: ['rightArmShoulder', 'leftArmShoulder'], nameKey: 'limb_slot.arms'},
+    {kind: 'limb', bodyPart: 'arms', mountJointIds: ['rightArmShoulder', 'rightArmElbow', 'rightHandPivot', 'leftArmShoulder', 'leftArmElbow', 'leftHandPivot'], nameKey: 'limb_slot.arms'},
     {kind: 'limb', bodyPart: 'body', mountJointIds: ['spine'], nameKey: 'limb_slot.body'},
-    {kind: 'limb', bodyPart: 'legs', mountJointIds: ['rightLegHip', 'leftLegHip'], nameKey: 'limb_slot.legs'},
+    {kind: 'limb', bodyPart: 'legs', mountJointIds: ['rightLegHip', 'rightLegKnee', 'leftLegHip', 'leftLegKnee'], nameKey: 'limb_slot.legs'},
     {kind: 'weapon', bodyPart: 'main_hand', mountJointIds: ['rightWeaponMount', 'leftWeaponMount'], nameKey: 'equip_slot.main_hand'},
     {kind: 'weapon', bodyPart: 'off_hand', mountJointIds: ['rightWeaponMount', 'leftWeaponMount'], nameKey: 'equip_slot.off_hand'},
     {kind: 'armor', bodyPart: 'head', mountJointIds: ['headNeck'], nameKey: 'armor_slot.head'},

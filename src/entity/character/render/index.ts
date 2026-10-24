@@ -6,7 +6,7 @@ import {COLLIDER_CAPSULE_CAP_SEGMENTS, COLLIDER_CAPSULE_RADIAL_SEGMENTS, COLLIDE
 /** 创建与物理主碰撞体参数一致的可视化胶囊（按**体形** `size` 生成，半径 = 半宽、总高 = height×scale）：
  * 原点在胶囊底部（脚底）：几何体整体上移半高，与外观模型/实体原点语义一致 */
 const makeCapsuleGeometry = (config: CharacterConfig): CapsuleGeometry => {
-    const size = bodyFormOf(config.bodyFormId).state.size
+    const size = bodyFormOf(config.bodyFormId).base.size
     const scale = config.scale
     const radius = (size.width * scale) / 2
     /* CapsuleGeometry 的 length 是中间圆柱段高度（非负） */

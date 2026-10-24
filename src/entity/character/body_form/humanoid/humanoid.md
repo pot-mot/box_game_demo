@@ -11,17 +11,21 @@
   `createHumanoidModel(config, faction)` 是固定人形体形的便捷入口。
 - **骨架唯一真源**：`skeleton/skeleton.ts` 的 `buildCharacterSkeletonDefinition()`；碰撞布局在同文件
   `HUMANOID_COLLIDER_LAYOUT`，受击块在 `skeleton/hurt.ts`。
-- **状态基线**：`state/form_state.ts` 提供尺寸 / 中心偏移 / 眼高 / 基础生命 / 动画状态时长；
-  最终数值由 `common/state.ts` 统一计算。
-- **动画契约**：`BodyForm.animation` 暴露 `createSystem` / `baseClip` / `attackClip`，运行时与骨骼编辑器共用
-  `HUMANOID_ANIMATION`；不再提供 `createAppearanceSystem` 兼容导出。
-- **动作分层**：基础状态由 `skeleton_animation/pose_fns.ts` 公式 → `base_clips.ts` 烘焙；攻击段由
-  `skeleton_animation/attack_clips/` 作者数据 → `common/skeleton_animation/authored_attack.ts` 通用编译器编译；
-  `attack_clips.ts` 合并支撑手并镜像。
+- **基础定义**：`state/form_base.ts` 提供尺寸 / 中心偏移 / 眼高 / 基础生命 / 动画状态时长；
+  最终数值由 `common/base.ts` 统一计算。
+- **具体 state**：`state/runtime.ts` 的 `createHumanoidState` 是生产角色生成入口，负责持握 / 惯用手归一化；唯一数据存储见 `character/state`。
+- **动画契约**：`BodyForm.animation` 暴露 `createSystem` / `baseClip` / `attackClip`。运行时由
+  `progress_system.ts` 求值单一组合树；`baseClip` / `attackClip` 仅服务骨骼编辑器预览。
+- **动作分层**：基础状态由 `pose_fns.ts` → `base_clips.ts` 烘焙为**规范基础 clip**；
+  持握 / 盾臂 / 基础支撑手 / falling 腿部由 `progress_graph.ts` 组为单棵进度组合树；
+  攻击段由作者数据编译为身体 clip + 独立支撑手层 + 行走腿层；运行时统一由 `progress_system.ts` 求值。
+  编辑器仍使用 `baseClip` / `attackClip` 的整身预览。
 - **攻击作者数据是稀疏的**：只写需要控制的关节。未声明 = 本段不控制 = 进入攻击时回到骨架静止姿态；
   编译器禁止补恒等轨道。
 - **支撑手离线烘焙**：攻击与基础状态的左肩/左肘轨来自 `clips/generated/`；生成器 `scripts/bake_support_hands.mjs`，
-  命令 `pnpm bake:support-hands`。生产运行动画只采样预烘焙 clip，**无运行时 IK**（节点 IK 仅服务骨骼编辑器 Gizmo）。
+  命令 `pnpm bake:support-hands`。基础与攻击支撑手都作为独立组合层参与求值。
+  生产运行动画只采样预烘焙 clip，**无运行时 IK**（节点 IK 仅服务骨骼编辑器 Gizmo）。
+- **falling 参数化**：腿部不再按速度档烘焙，由 `horizontalSpeed` / `verticalSpeed` 在进度组合中实时求值。
 - **惯用手 / 持握模式**：属于人形 `bodyState`（`holdMode` / `handedness`），不放在通用 `CharacterConfig` 顶层；
   骨架与数据恒为 canonical 右撇子，左撇子由 `mirrorClip` + 挂点/网格镜像派生。
 - **装备槽**：`state/equip_slots.ts` 声明 limb / weapon / armor 槽；`equipment/modules.ts` 按槽位生成装备模组；
@@ -33,7 +37,8 @@
 
 | 文件 | 内容 |
 |---|---|
-| `state/form_state.ts` | 人形状态基线（尺寸 / HP / 动画时长） |
+| `state/form_base.ts` | 人形基础定义（尺寸 / HP / 动画时长） |
+| `state/runtime.ts` | 人形 `CharacterState` 具体实现（持握 / 惯用手归一化） |
 | `state/equip_slots.ts` | 人形装备槽表 |
 | `skeleton/skeleton.ts` | 人形骨架定义、碰撞布局、关节显示名、部件尺寸 |
 | `skeleton/hurt.ts` | 人形 12 受击子块（只由骨架数据声明） |
@@ -44,7 +49,9 @@
 | `skeleton_animation/pose_fns.ts` | 基础状态姿态公式 |
 | `skeleton_animation/clips/base_clips.ts` | 基础状态 clip 烘焙、缓存、支撑手合并 |
 | `skeleton_animation/clips/attack_clips.ts` | 攻击作者数据编译、支撑手合并、镜像、缓存 |
-| `skeleton_animation/system.ts` | 人形动画 provider（基础/攻击 clip 选择、动画键、蓄力定位、下半身行走叠加） |
+| `skeleton_animation/system.ts` | 人形动画 provider（运行时用 progress system；保留编辑器 base/attack clip） |
+| `skeleton_animation/progress_graph.ts` | 基础/攻击进度组合树、支撑手/持握/盾臂/falling/转向瞄准层 |
+| `skeleton_animation/progress_system.ts` | 单一组合树求值、状态混合、攻击事件 |
 | `skeleton_animation/attack_clips/docs/` | 人形动作设计文档（基础状态 + 逐武器动作） |
 | `skeleton_animation/clips/support_hand_merge.ts` | 支撑手双轨合并 |
 | `skeleton_animation/clips/support_hand_bake.ts` | 离线烘焙算法（仅生成器/验证测试使用） |
