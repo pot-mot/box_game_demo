@@ -8,7 +8,7 @@ import {canStartAirAttack} from './air_attacking.ts'
 export const jumpingHandler: StateHandler = {
     enter: (entity) => {
         const linvel = entity.body.linvel()
-        entity.body.setLinvel({x: linvel.x, y: Math.sqrt(2 * 9.82 * entity.config.jumpHeight), z: linvel.z}, true)
+        entity.body.setLinvel({x: linvel.x, y: Math.sqrt(2 * 9.82 * entity.state.config.jumpHeight), z: linvel.z}, true)
     },
     update: (_dt, input, entity) => {
         const len = Math.hypot(input.dx, input.dz)
@@ -72,15 +72,15 @@ export const jumpingHandler: StateHandler = {
         },
         {
             to: 'rolling',
-            guard: (input, entity) => input.roll && entity.combat.rollSkill.cooldownTimer <= 0,
+            guard: (input, entity) => input.roll && entity.state.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'flinching',
-            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0,
         },
         {
             /* 空中攻击：跳跃中按攻击键且武器声明了空中链（死亡/受击优先级更高，故置于末尾） */

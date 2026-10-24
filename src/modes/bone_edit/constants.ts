@@ -8,7 +8,7 @@ export const TIMELINE_MIN_HEIGHT = 120
 export const TIMELINE_MAX_HEIGHT = 600
 
 /** 时间轴缩放（px/秒）基准与范围（Ctrl+滚轮） */
-export const TIMELINE_PX_PER_SEC = 120
+export const TIMELINE_PX_PER_SEC = 320
 export const TIMELINE_MIN_PX_PER_SEC = 20
 export const TIMELINE_MAX_PX_PER_SEC = 800
 
@@ -90,9 +90,6 @@ export const ANIM_OPTION_WEAPON_NONE = 'none'
 
 // ── 骨骼页编辑模式 / 体形切换 ──
 
-/** 轨道编辑 / 函数编排模式按钮 DOM id（测试断言面） */
-export const BONE_MODE_TRACKS_ID = 'bone-mode-tracks'
-export const BONE_MODE_SCRIPT_ID = 'bone-mode-script'
 
 /** 骨骼体形下拉 DOM id（测试断言面） */
 export const BONE_FORM_SELECT_ID = 'bone-form-select'
@@ -104,9 +101,6 @@ export const BONE_SHOW_JOINTS_ID = 'bone-show-joints'
 export const BONE_SHOW_BONES_ID = 'bone-show-bones'
 export const BONE_SHOW_MODEL_ID = 'bone-show-model'
 
-/** 函数编排面板 DOM id（测试断言面） */
-export const BONE_SCRIPT_LIST_ID = 'bone-script-list'
-export const BONE_SCRIPT_REBAKE_ID = 'bone-script-rebake'
-export const BONE_SCRIPT_TO_TRACKS_ID = 'bone-script-to-tracks'
-export const BONE_SCRIPT_STATUS_ID = 'bone-script-status'
-export const BONE_SCRIPT_PROGRESS_ID = 'bone-script-progress'
+
+/** 时间轴缩放输入框 DOM id（px/秒；回车生效） */
+export const BONE_TIMELINE_ZOOM_ID = 'bone-timeline-zoom'

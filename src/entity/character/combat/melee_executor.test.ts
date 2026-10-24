@@ -15,6 +15,7 @@ import type {CharacterEntity} from '../../../character/types.ts'
 import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {HUMANOID_BODY_FORM} from '../body_form/index.ts'
+import {createTestCharacterState} from '../../../character/state/test_state.ts'
 
 /** 目标受击箱半长夹具（人形体形）：testMeleeHit 现按目标体形 `size` 取半长 */
 const TARGET_HALVES = {
@@ -163,7 +164,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
     const makeSegment = (): AttackSegment => weaponAttacksOf(weaponPresetOrDefault('short_sword')).segments['short_sword_one_handed_light_1']
 
     /** 构造执行器用例所需的最小实体（body 只保留执行器读取的 translation） */
-    const makeEntity = (): CharacterEntity => {
+    const makeEntity = (id = 1): CharacterEntity => {
         const combat = createCombatComponent(
             createWeaponRuntime('short_sword'),
             0,
@@ -172,40 +173,40 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
             15,
         )
         combat.activeSegment = makeSegment()
-        const entity = {
-            id: 1,
+        const state = createTestCharacterState({
+            id,
             config: {speed: 6, jumpHeight: 2, scale: 1},
+            combat,
+            bodyState: {holdMode: 'one_handed'},
+        })
+        state.physics.isOnGround = true
+        const entity: CharacterEntity = {
+            state,
             mesh: null!,
             wireframe: undefined,
             appearanceGroup: null!,
-            body: {translation: () => ({x: 0, y: 0, z: 0})},
+            body: {translation: () => ({x: 0, y: 0, z: 0})} as unknown as CharacterEntity['body'],
             mainCollider: undefined as unknown as RAPIER.Collider,
-            isOnGround: true,
-            groundNormal: {x: 0, y: 1, z: 0},
-            groundKeepTimer: 0,
-            airborneTime: 0, groundedTime: 0,
-            rowText: '',
-            navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
-            isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
-            combat,
+            colliders: [],
             stateMachine: createCharacterStateMachine(),
         }
+
         /* body 是执行器读取的最小替身：集中窄化一次，避免测试体散落类型转换 */
-        return entity as unknown as CharacterEntity
+        return entity
     }
 
     it('窗口关闭时 update 早退（getModel 不被调用）', () => {
         const getModel = vi.fn()
         const executor = createMeleeExecutor(() => [], getModel, () => 0)
         const entity = makeEntity()
-        executor.update(0.016, entity.combat, entity, {} as ExecutorContext)
+        executor.update(0.016, entity.state.combat, entity, {} as ExecutorContext)
         expect(getModel).not.toHaveBeenCalled()
         executor.setHitWindow(true)
-        executor.update(0.016, entity.combat, entity, {} as ExecutorContext)
+        executor.update(0.016, entity.state.combat, entity, {} as ExecutorContext)
         expect(getModel).toHaveBeenCalled()
         executor.setHitWindow(false)
         getModel.mockClear()
-        executor.update(0.016, entity.combat, entity, {} as ExecutorContext)
+        executor.update(0.016, entity.state.combat, entity, {} as ExecutorContext)
         expect(getModel).not.toHaveBeenCalled()
     })
 
@@ -231,14 +232,13 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         setCombatOffhand(combat, createWeaponRuntime('dual_axe', {}, 'dual_wield'))
         combat.activeSegment = runtime.attacks.segments['dual_axe_dual_wield_light_1']
         const attacker = makeEntity()
-        attacker.combat = combat
+        attacker.state.combat = combat
 
         const targetCombat = createCombatComponent(
             createWeaponRuntime('short_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
         )
-        const target = makeEntity()
-        target.id = 2
-        target.combat = targetCombat
+        const target = makeEntity(2)
+        target.state.combat = targetCombat
 
         /* 主手置于远处（必然落空），副手置于目标处（命中） */
         const mainGroup = new Group()
@@ -264,15 +264,14 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
         combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
         const attacker = makeEntity()
-        attacker.combat = combat
+        attacker.state.combat = combat
 
         const targetCombat = createCombatComponent(
             createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
         )
         targetCombat.defense = {physical: 4, magic: 0}
-        const target = makeEntity()
-        target.id = 2
-        target.combat = targetCombat
+        const target = makeEntity(2)
+        target.state.combat = targetCombat
 
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
@@ -294,15 +293,14 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
         combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
         const attacker = makeEntity()
-        attacker.combat = combat
+        attacker.state.combat = combat
 
         const targetCombat = createCombatComponent(
             createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
         )
         targetCombat.invincibleTimer = 0.3
-        const target = makeEntity()
-        target.id = 2
-        target.combat = targetCombat
+        const target = makeEntity(2)
+        target.state.combat = targetCombat
 
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
@@ -336,14 +334,13 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
         combat.attackBonus = {physical: 2, magic: 9}
         const attacker = makeEntity()
-        attacker.combat = combat
+        attacker.state.combat = combat
 
         const targetCombat = createCombatComponent(
             createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 30,
         )
-        const target = makeEntity()
-        target.id = 2
-        target.combat = targetCombat
+        const target = makeEntity(2)
+        target.state.combat = targetCombat
 
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
@@ -365,9 +362,8 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
         combat.activeSegment = runtime.attacks.segments['dual_axe_dual_wield_light_1']
         const attacker = makeEntity()
-        attacker.combat = combat
-        const target = makeEntity()
-        target.id = 2
+        attacker.state.combat = combat
+        const target = makeEntity(2)
 
         /* 主手命中、副手远离：只有主手窗口打开时才会结算 */
         const mainGroup = new Group()
@@ -397,14 +393,13 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         setCombatOffhand(combat, createWeaponRuntime('dual_axe', {damage: 99}, 'dual_wield'))
         combat.activeSegment = runtime.attacks.segments['dual_axe_dual_wield_light_1']
         const attacker = makeEntity()
-        attacker.combat = combat
+        attacker.state.combat = combat
 
         const targetCombat = createCombatComponent(
             createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 200,
         )
-        const target = makeEntity()
-        target.id = 2
-        target.combat = targetCombat
+        const target = makeEntity(2)
+        target.state.combat = targetCombat
 
         const mainGroup = new Group()
         mainGroup.position.set(100, 0, 0)
@@ -428,7 +423,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
         combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
         const attacker = makeEntity()
-        attacker.combat = combat
+        attacker.state.combat = combat
 
         const targetCombat = createCombatComponent(
             createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
@@ -437,9 +432,8 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         targetCombat.block = block
         targetCombat.blocking = true
         targetCombat.guard = block.guardMax
-        const target = makeEntity()
-        target.id = 2
-        target.combat = targetCombat
+        const target = makeEntity(2)
+        target.state.combat = targetCombat
 
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
@@ -464,7 +458,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
         combat.activeSegment = runtime.attacks.segments['war_hammer_one_handed_light_1']
         const attacker = makeEntity()
-        attacker.combat = combat
+        attacker.state.combat = combat
 
         const targetCombat = createCombatComponent(
             createWeaponRuntime('long_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
@@ -473,9 +467,8 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         targetCombat.block = block
         targetCombat.blocking = false
         targetCombat.guard = block.guardMax
-        const target = makeEntity()
-        target.id = 2
-        target.combat = targetCombat
+        const target = makeEntity(2)
+        target.state.combat = targetCombat
 
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {

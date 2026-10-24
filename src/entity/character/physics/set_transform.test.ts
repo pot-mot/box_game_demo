@@ -74,7 +74,7 @@ describe('角色 setTransform 瞬移与朝向映射', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.setTransform(id, {x: 1, y: 2, z: 3}, {x: 0, y: 90, z: 0})
         expect(system.getFacing(id)).toBeCloseTo(90, 6)
-        const entity = system.getAll().find(e => e.id === id)
+        const entity = system.getAll().find(e => e.state.identity.id === id)
         expect(entity).toBeDefined()
         /* mesh 只绕 Y 轴旋转（角色竖直胶囊锁定旋转） */
         expect(entity!.mesh.rotation.y).toBeCloseTo(Math.PI / 2, 6)
@@ -89,7 +89,7 @@ describe('角色 setTransform 瞬移与朝向映射', () => {
     it('setTransform 保留 X/Z 倾斜并按合成旋转求水平朝向', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         system.setTransform(id, {x: 0, y: 0, z: 0}, {x: 15, y: 90, z: -10})
-        const entity = system.getAll().find(e => e.id === id)
+        const entity = system.getAll().find(e => e.state.identity.id === id)
         expect(entity).toBeDefined()
         /*
          * rotDeg 为 XYZ 欧拉角，合成为完整旋转（X/Z 视觉倾斜不清零）；
@@ -149,7 +149,7 @@ describe('角色 setTransform 瞬移与朝向映射', () => {
         /* 编辑期先把角色转向左（270°），再切到狼体形：新模型必须保持该朝向 */
         system.setTransform(id, {x: 0, y: 0, z: 0}, {x: 0, y: 270, z: 0})
         expect(system.setBodyForm(id, 'wolf')).toBe(true)
-        const entity = system.getAll().find(e => e.id === id)
+        const entity = system.getAll().find(e => e.state.identity.id === id)
         expect(entity).toBeDefined()
         const forward = new Vector3(0, 0, 1).applyQuaternion(entity!.appearanceGroup.quaternion)
         const yawDeg = ((Math.atan2(forward.x, forward.z) * 180 / Math.PI) % 360 + 360) % 360

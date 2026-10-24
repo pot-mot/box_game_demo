@@ -259,7 +259,7 @@ const jumpingHandler: NavStateHandler = {
         }
 
         /* 跳跃过程中保持方向，但不再重复触发 jump */
-        if (entity.isOnGround && ctx.stateTime > 0.3) {
+        if (entity.state.physics.isOnGround && ctx.stateTime > 0.3) {
             /* 已落地，检查前方 */
             const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config, ctx.ignoredMesh)
             if (sense.result === 'clear') {
@@ -282,7 +282,7 @@ const jumpingHandler: NavStateHandler = {
             to: 'navigating',
             guard: (ctx, entity, sensor, intendedDX, intendedDZ) => {
                 if (ctx.stateTime < 0.3) return false
-                if (!entity.isOnGround) return false
+                if (!entity.state.physics.isOnGround) return false
                 const fLen = Math.hypot(intendedDX, intendedDZ)
                 if (fLen < 0.001) return true
                 const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config, ctx.ignoredMesh)
@@ -293,7 +293,7 @@ const jumpingHandler: NavStateHandler = {
             to: 'stuck',
             guard: (ctx, entity, sensor, intendedDX, intendedDZ) => {
                 if (ctx.stateTime < 0.5) return false
-                if (!entity.isOnGround) return false
+                if (!entity.state.physics.isOnGround) return false
                 const fLen = Math.hypot(intendedDX, intendedDZ)
                 if (fLen < 0.001) return false
                 const sense = sensor.sense(entity, intendedDX / fLen, intendedDZ / fLen, ctx.config, ctx.ignoredMesh)

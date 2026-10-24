@@ -9,11 +9,11 @@ import type {CharacterEntity} from '../types.ts'
 
 /** 支撑面法线 Y 分量是否达到阈值（isOnGround 且足够平坦） */
 export const isSupportedOn = (entity: CharacterEntity, minNy: number): boolean =>
-    entity.isOnGround && entity.groundNormal.y > minNy
+    entity.state.physics.isOnGround && entity.state.physics.groundNormal.y > minNy
 
 /** 无支撑或坡度过陡（≤ SLOPE_WALK_THRESHOLD），应进入 falling */
 export const shouldFall = (entity: CharacterEntity): boolean =>
-    !entity.isOnGround || entity.groundNormal.y <= SLOPE_WALK_THRESHOLD
+    !entity.state.physics.isOnGround || entity.state.physics.groundNormal.y <= SLOPE_WALK_THRESHOLD
 
 /**
  * 每帧维护连续悬空/支撑计时（状态机 update 开头调用）：
@@ -21,10 +21,10 @@ export const shouldFall = (entity: CharacterEntity): boolean =>
  * 用于状态切换防抖：下坡弹跳等短暂悬空（< 阈值）不会触发 falling。
  */
 export const updateGroundTimers = (entity: CharacterEntity, dt: number): void => {
-    if (shouldFall(entity)) entity.airborneTime += dt
-    else entity.airborneTime = 0
-    if (isSupportedOn(entity, SLOPE_RECOVER_THRESHOLD)) entity.groundedTime += dt
-    else entity.groundedTime = 0
+    if (shouldFall(entity)) entity.state.physics.airborneTime += dt
+    else entity.state.physics.airborneTime = 0
+    if (isSupportedOn(entity, SLOPE_RECOVER_THRESHOLD)) entity.state.physics.groundedTime += dt
+    else entity.state.physics.groundedTime = 0
 }
 
 /**
@@ -34,8 +34,8 @@ export const updateGroundTimers = (entity: CharacterEntity, dt: number): void =>
  */
 export const applySlopeSink = (entity: CharacterEntity): void => {
     if (!isSupportedOn(entity, SLOPE_WALK_THRESHOLD)) return
-    if (entity.groundKeepTimer >= GROUND_KEEP_TIME) return
-    const n = entity.groundNormal
+    if (entity.state.physics.groundKeepTimer >= GROUND_KEEP_TIME) return
+    const n = entity.state.physics.groundNormal
     const linvel = entity.body.linvel()
     entity.body.setLinvel({
         x: linvel.x - n.x * SLOPE_SINK_SPEED,
@@ -47,7 +47,7 @@ export const applySlopeSink = (entity: CharacterEntity): void => {
 /** 沿支撑面投影速度（v·n = 0，保持水平速度分量）；无支撑或法线低于 minNy 时不投影，返回 false */
 export const projectToSlope = (entity: CharacterEntity, vx: number, vz: number, minNy: number): boolean => {
     if (!isSupportedOn(entity, minNy)) return false
-    const n = entity.groundNormal
+    const n = entity.state.physics.groundNormal
     const vy = -(vx * n.x + vz * n.z) / n.y
     entity.body.setLinvel({x: vx, y: vy, z: vz}, true)
     return true
@@ -66,7 +66,7 @@ export const projectToSlopeAtSpeed = (
     minNy: number,
 ): boolean => {
     if (!isSupportedOn(entity, minNy)) return false
-    const n = entity.groundNormal
+    const n = entity.state.physics.groundNormal
     const t = dx * n.x + dz * n.z
     const k = speed / Math.sqrt(1 + (t * t) / (n.y * n.y))
     entity.body.setLinvel({x: dx * k, y: -t * k / n.y, z: dz * k}, true)

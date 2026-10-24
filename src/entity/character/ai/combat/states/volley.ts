@@ -12,15 +12,15 @@ export const volleyHandler: CombatStateHandler = {
         ctx.combatStrafeTimer = 1.5
     },
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-        if (!target || target.combat.isDead) { setInput(0, 0, false); return }
+        const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+        if (!target || target.state.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.translation()
         const tp = target.body.translation()
         v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
         const dist = v3Length(_dir)
 
-        const weapon = character.combat.weapon
+        const weapon = character.state.combat.weapon
         if (weapon.type !== 'ranged') { setInput(0, 0, false); return }
 
         if (dist < 0.01) { setInput(0, 0, false); return }
@@ -34,10 +34,10 @@ export const volleyHandler: CombatStateHandler = {
             ctx.combatStrafeTimer = 1.5
         }
 
-        const canStart = canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
+        const canStart = canStartAttack(character.state.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
         const strafeX = -adz * ctx.combatStrafeDir
         const strafeZ = adx * ctx.combatStrafeDir
-        if (character.combat.attackActive) {
+        if (character.state.combat.attackActive) {
             /* 环形射击身份：攻击动作期间保持横向绕走，朝向锁到目标 */
             ctx.combatAimActive = true
             setInput(strafeX * 0.7 + adx * 0.15, strafeZ * 0.7 + adz * 0.15, false)
@@ -50,20 +50,20 @@ export const volleyHandler: CombatStateHandler = {
             setInput(strafeX * 0.7 + adx * 0.15, strafeZ * 0.7 + adz * 0.15, false)
         }
 
-        let nearestId = target.id
+        let nearestId = target.state.identity.id
         let nearestDist = dist
         for (const other of allCharacters) {
-            if (other.id === character.id || other.combat.isDead) continue
-            if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
+            if (other.state.identity.id === character.state.identity.id || other.state.combat.isDead) continue
+            if (!character.state.combat.attackTendency(character.state.combat.faction, other.state.combat.faction)) continue
             const ox = other.body.translation().x - pos.x
             const oz = other.body.translation().z - pos.z
             const od = Math.hypot(ox, oz)
             if (od < weapon.detectionRange && od < nearestDist * 0.6) {
                 nearestDist = od
-                nearestId = other.id
+                nearestId = other.state.identity.id
             }
         }
-        if (nearestId !== target.id) {
+        if (nearestId !== target.state.identity.id) {
             ctx.combatTargetId = nearestId
         }
     },
@@ -84,11 +84,11 @@ export const volleyHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 if (ctx.combatStrategy !== 'cowardly') return false
                 if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 if (weapon.type !== 'ranged') return false
                 return Math.hypot(tp.x - pos.x, tp.z - pos.z) < weapon.retreatRange
             },
@@ -96,12 +96,12 @@ export const volleyHandler: CombatStateHandler = {
         {
             to: 'approach',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 if (weapon.type !== 'ranged') return false
                 return v3Length(_dir) > weapon.idealRange * 1.3
             },
@@ -109,12 +109,12 @@ export const volleyHandler: CombatStateHandler = {
         {
             to: 'kite',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 if (weapon.type !== 'ranged') return false
                 return v3Length(_dir) < weapon.retreatRange
             },
@@ -122,12 +122,12 @@ export const volleyHandler: CombatStateHandler = {
         {
             to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return true
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return true
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const detRange = character.combat.weapon.detectionRange
+                const detRange = character.state.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

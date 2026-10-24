@@ -1,6 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {Euler, Quaternion, Vector3} from 'three'
-import {buildBaseClip, getBaseClipForHoldMode, CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
+import {buildBaseClip, CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
+import {previewHumanoidClip} from '../preview.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
 import {WEAPON_GRIP_FLEX} from '../../../../appearance/constants.ts'
 import {GET_UP_PLANT_END, GET_UP_PUSH_END} from '../../../../../../character/combat/constants.ts'
@@ -108,7 +109,17 @@ describe('基础状态 clip 生成器', () => {
         for (const [state, arm] of [
             ['idle', 'right'], ['idle', 'left'], ['blocking', 'right'], ['blocking', 'left'],
         ] as const) {
-            const clip = getBaseClipForHoldMode(state, true, 'one_handed', 0, [arm])
+            const clip = previewHumanoidClip({
+                kind: 'base',
+                state,
+                variant: {
+                    weaponHeld: true,
+                    horizontalSpeed: 0,
+                    holdMode: 'one_handed',
+                    handedness: 'right',
+                    shieldHands: {main: arm === 'right', off: arm === 'left'},
+                },
+            })
             const normal = shieldNormal(clip, arm, 0)
             expect(Math.abs(normal.y), `${state}:${arm}`).toBeLessThan(0.05)
             expect(normal.z, `${state}:${arm}`).toBeGreaterThan(0.99)

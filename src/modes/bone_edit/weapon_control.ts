@@ -89,7 +89,7 @@ export interface BoneEditWeaponControl {
     readonly getHandedness: () => Handedness
     /** 切换惯用手：改挂主手挂点侧并重装武器（动作数据不变） */
     readonly setHandedness: (next: Handedness) => void
-    /** 启用/停用武器控制（函数编排模式关闭时卸下武器） */
+    /** 启用/停用武器控制（体形不支持武器控制时卸下武器） */
     readonly setEnabled: (enabled: boolean) => void
     /** 当前装备武器 id（DOM 可测试面：data-weapon） */
     readonly currentWeaponId: () => string | undefined

@@ -33,7 +33,7 @@ export const fleeHandler: CombatStateHandler = {
         ctx.combatFleeDir.z = fl > 0.001 ? fz / fl : 0
     },
     update: (dt, ctx, character, allCharacters, setInput) => {
-        const weapon = character.combat.weapon
+        const weapon = character.state.combat.weapon
         /* 目标存在判定用脱战滞回阈值（与 chase/approach/attack/kite/volley 一致）：
          * 若与进入战斗的 detectionRange 同值，AI 会在侦测边界上 flee↔combat 逐帧抖动 */
         const detRange = weapon.detectionRange * COMBAT_LOSE_RANGE_FACTOR
@@ -44,8 +44,8 @@ export const fleeHandler: CombatStateHandler = {
         let nearestDx = 0
         let nearestDz = 0
         for (const other of allCharacters) {
-            if (other.id === character.id || other.combat.isDead) continue
-            if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
+            if (other.state.identity.id === character.state.identity.id || other.state.combat.isDead) continue
+            if (!character.state.combat.attackTendency(character.state.combat.faction, other.state.combat.faction)) continue
             const ox = other.body.translation().x - pos.x
             const oz = other.body.translation().z - pos.z
             const od = Math.hypot(ox, oz)
@@ -79,7 +79,7 @@ export const fleeHandler: CombatStateHandler = {
         /* 射击相位的瞄准目标必须与 world 的朝向锁定一致（`combatTargetId`）：
          * 否则会出现「面向 A、却按最近敌人 B 判定瞄准」→ 判定未对准而静默不开火 */
         const aimTarget = ctx.combatTargetId !== undefined
-            ? allCharacters.find(c => c.id === ctx.combatTargetId && !c.combat.isDead)
+            ? allCharacters.find(c => c.state.identity.id === ctx.combatTargetId && !c.state.combat.isDead)
             : undefined
         if (aimTarget !== undefined) {
             const tp = aimTarget.body.translation()
@@ -91,10 +91,10 @@ export const fleeHandler: CombatStateHandler = {
                 const ndx = adx / adist
                 const ndz = adz / adist
                 /* 射击相位：武器就绪（冷却）+ 开火节流到点 + 目标在射程内 → 站定转身瞄准 → 开火 */
-                if (!character.combat.attackActive
+                if (!character.state.combat.attackActive
                     && ctx.combatShotTimer <= 0
                     && adist <= rangedWeapon.range
-                    && canStartAttack(character.combat, {dx: ndx, dz: ndz, holdDuration: 0, attackKey: 'light'})) {
+                    && canStartAttack(character.state.combat, {dx: ndx, dz: ndz, holdDuration: 0, attackKey: 'light'})) {
                     if (aimAndFireAt(ctx, character, aimTarget, setInput) === 'firing') {
                         ctx.combatShotTimer = COMBAT_SHOT_INTERVAL
                     }
@@ -104,7 +104,7 @@ export const fleeHandler: CombatStateHandler = {
         }
 
         /* 射击动作进行中：站定不移动（明确的「射击」相位；朝向由 world 锁到目标） */
-        if (character.combat.attackActive) {
+        if (character.state.combat.attackActive) {
             ctx.combatAimActive = true
             setInput(0, 0, false)
             return
@@ -122,15 +122,15 @@ export const fleeHandler: CombatStateHandler = {
                 if (ctx.combatStateTime < ctx.combatConfig.fleeDuration) return false
                 if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
                 /* 需要有有效目标（仍在侦测半径内才回头还击；边界滞回只用于「无目标→放弃」） */
-                const detRange = character.combat.weapon.detectionRange
+                const detRange = character.state.combat.weapon.detectionRange
                 const pos = character.body.translation()
                 for (const other of allCharacters) {
-                    if (other.id === character.id || other.combat.isDead) continue
-                    if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
+                    if (other.state.identity.id === character.state.identity.id || other.state.combat.isDead) continue
+                    if (!character.state.combat.attackTendency(character.state.combat.faction, other.state.combat.faction)) continue
                     const ox = other.body.translation().x - pos.x
                     const oz = other.body.translation().z - pos.z
                     if (Math.hypot(ox, oz) < detRange) {
-                        ctx.combatTargetId = other.id
+                        ctx.combatTargetId = other.state.identity.id
                         ctx.combatBurstAttackCount++
                         return true
                     }
@@ -145,12 +145,12 @@ export const fleeHandler: CombatStateHandler = {
                 if (ctx.combatStateTime < ctx.combatConfig.fleeDuration) return false
                 if (ctx.combatBurstAttackCount < ctx.combatConfig.attackBurstCount) {
                     /* 若无可达目标，放弃 */
-                    const detRange = character.combat.weapon.detectionRange * COMBAT_LOSE_RANGE_FACTOR
+                    const detRange = character.state.combat.weapon.detectionRange * COMBAT_LOSE_RANGE_FACTOR
                     const pos = character.body.translation()
                     let hasTarget = false
                     for (const other of allCharacters) {
-                        if (other.id === character.id || other.combat.isDead) continue
-                        if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
+                        if (other.state.identity.id === character.state.identity.id || other.state.combat.isDead) continue
+                        if (!character.state.combat.attackTendency(character.state.combat.faction, other.state.combat.faction)) continue
                         if (Math.hypot(other.body.translation().x - pos.x, other.body.translation().z - pos.z) < detRange) {
                             hasTarget = true
                             break
@@ -165,11 +165,11 @@ export const fleeHandler: CombatStateHandler = {
             /* 没有敌人在脱战滞回范围内（detectionRange × COMBAT_LOSE_RANGE_FACTOR）→ inactive */
             to: 'inactive',
             guard: (_ctx, character, allCharacters) => {
-                const detRange = character.combat.weapon.detectionRange * COMBAT_LOSE_RANGE_FACTOR
+                const detRange = character.state.combat.weapon.detectionRange * COMBAT_LOSE_RANGE_FACTOR
                 const pos = character.body.translation()
                 for (const other of allCharacters) {
-                    if (other.id === character.id || other.combat.isDead) continue
-                    if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
+                    if (other.state.identity.id === character.state.identity.id || other.state.combat.isDead) continue
+                    if (!character.state.combat.attackTendency(character.state.combat.faction, other.state.combat.faction)) continue
                     if (Math.hypot(other.body.translation().x - pos.x, other.body.translation().z - pos.z) < detRange) {
                         return false
                     }

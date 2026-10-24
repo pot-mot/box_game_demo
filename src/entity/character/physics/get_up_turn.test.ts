@@ -74,27 +74,27 @@ describe('起身前翻身（躺地转到正面朝下）', () => {
 
     it('后倒（仰面）→ 起身前 0.25s 翻身到俯卧，再爬起并保持新面朝', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(candidate => candidate.id === id)!
+        const entity = system.getAll().find(candidate => candidate.state.identity.id === id)!
         /* 默认向后倒：面朝 +Z，倒向 -Z（仰面），起身前需水平转 180° */
-        entity.combat.pendingKnockdown = true
+        entity.state.combat.pendingKnockdown = true
         for (let i = 0; i < 120 && entity.stateMachine.currentState !== 'getting_up'; i++) system.update(DT)
         expect(entity.stateMachine.currentState).toBe('getting_up')
-        expect(entity.combat.getUpTurnDuration).toBeCloseTo(0.25, 6)
+        expect(entity.state.combat.getUpTurnDuration).toBeCloseTo(0.25, 6)
 
         /* 翻身过程中：身体仍伏地，前方向从朝上转向地面 */
         while (entity.stateMachine.stateTime < 0.1) system.update(DT)
-        expect(entity.knockdownFallAngle).toBeCloseTo(Math.PI / 2, 6)
+        expect(entity.state.timers.knockdownFallAngle).toBeCloseTo(Math.PI / 2, 6)
         expect(forwardOf(entity).y).toBeGreaterThan(0)
 
         /* 翻身结束：正面朝下（前方向 -Y≈-1） */
-        while (entity.stateMachine.stateTime < entity.combat.getUpTurnDuration + DT) system.update(DT)
-        expect(entity.knockdownFallAngle).toBeGreaterThan(Math.PI / 2 - 0.05)
+        while (entity.stateMachine.stateTime < entity.state.combat.getUpTurnDuration + DT) system.update(DT)
+        expect(entity.state.timers.knockdownFallAngle).toBeGreaterThan(Math.PI / 2 - 0.05)
         expect(forwardOf(entity).y).toBeLessThan(-0.9)
 
         /* 爬起结束：站直且保持翻身后的面朝（+Z → -Z） */
         for (let i = 0; i < 300 && entity.stateMachine.currentState === 'getting_up'; i++) system.update(DT)
         expect(entity.stateMachine.currentState).not.toBe('getting_up')
-        expect(entity.knockdownFallAngle).toBe(0)
+        expect(entity.state.timers.knockdownFallAngle).toBe(0)
         expect(forwardOf(entity).z).toBeLessThan(-0.9)
     })
 })

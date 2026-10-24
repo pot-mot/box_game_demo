@@ -140,14 +140,14 @@ export const setupPlayMode = (
             debugHud.setVisible(debugHudVisible)
 
             hud.update({
-                health: player.combat.health,
-                maxHealth: player.combat.maxHealth,
-                poise: player.combat.poise,
-                poiseMax: player.combat.poiseMax,
-                guard: player.combat.guard,
-                guardMax: guardMaxOf(player.combat),
-                charge: player.combat.attackCharge,
-                charging: player.combat.attackHolding || player.combat.attackCharge > 0,
+                health: player.state.combat.health,
+                maxHealth: player.state.combat.maxHealth,
+                poise: player.state.combat.poise,
+                poiseMax: player.state.combat.poiseMax,
+                guard: player.state.combat.guard,
+                guardMax: guardMaxOf(player.state.combat),
+                charge: player.state.combat.attackCharge,
+                charging: player.state.combat.attackHolding || player.state.combat.attackCharge > 0,
             })
 
             if (debugHudVisible) {
@@ -168,7 +168,7 @@ export const setupPlayMode = (
                     : emptyCell('0.0s')
 
                 /* 翻滚技能（移动技能）：只有动作与冷却两段，动作期间用状态机驻留时间填充 */
-                const roll = player.combat.rollSkill
+                const roll = player.state.combat.rollSkill
                 const rollCfg = roll.config
                 const rolling = player.stateMachine.currentState === 'rolling'
                 skillTimers.push({
@@ -180,9 +180,9 @@ export const setupPlayMode = (
                     cooldown: cooldownCell(roll.cooldownTimer, rollCfg.cooldown),
                 })
 
-                for (const segment of orderedSegments(player.combat.attacks)) {
-                    const isActive = player.combat.attackActive && player.combat.activeSegment?.id === segment.id
-                    const t = player.combat.attackTimer
+                for (const segment of orderedSegments(player.state.combat.attacks)) {
+                    const isActive = player.state.combat.attackActive && player.state.combat.activeSegment?.id === segment.id
+                    const t = player.state.combat.attackTimer
 
                     /* 动作计时：attackTimer 处于 [0, duration] 区间时填充 */
                     const action: TimerCellData = isActive && segment.duration > 0 && t <= segment.duration
@@ -199,7 +199,7 @@ export const setupPlayMode = (
                         label: segmentDisplayName(segment),
                         action,
                         recovery,
-                        cooldown: cooldownCell(segmentCooldownRemaining(player.combat, segment.id), segment.cooldown),
+                        cooldown: cooldownCell(segmentCooldownRemaining(player.state.combat, segment.id), segment.cooldown),
                     })
                 }
 
@@ -213,12 +213,12 @@ export const setupPlayMode = (
                     stateTime: player.stateMachine.stateTime,
                     timers,
                     skillTimers,
-                    weaponLabel: weaponDisplayName(player.combat.weapon),
-                    holdModeLabel: translate(HOLD_MODE_LABELS[humanoidBodyStateOf(player.bodyState).holdMode]),
+                    weaponLabel: weaponDisplayName(player.state.combat.weapon),
+                    holdModeLabel: translate(HOLD_MODE_LABELS[humanoidBodyStateOf(player.state.bodyState).holdMode]),
                     positionX: pos?.x ?? player.mesh.position.x,
                     positionY: pos?.y ?? player.mesh.position.y,
                     positionZ: pos?.z ?? player.mesh.position.z,
-                    facingDeg: characterSystem.getFacing(player.id),
+                    facingDeg: characterSystem.getFacing(player.state.identity.id),
                     cameraYawDeg,
                     cameraPitchDeg,
                 })

@@ -3,27 +3,50 @@ import {shouldReactiveBlock} from './shield_block.ts'
 import type {AIContext} from '../types.ts'
 import type {CharacterEntity} from '../../../../character/types.ts'
 import type {ShieldBlockConfig} from '../../../../character/weapon/constants.ts'
+import type {CombatComponent} from '../../../../character/combat/types.ts'
+import {createTestCharacterState} from '../../../../character/state/test_state.ts'
 
 const BLOCK = {} as ShieldBlockConfig
 
 const ctx = (targetId?: number): AIContext => ({combatTargetId: targetId} as unknown as AIContext)
 
-const char = (partial: {block?: boolean; guard?: number; z?: number; aiBlockDuration?: number}): CharacterEntity => ({
-    combat: {block: partial.block === false ? undefined : BLOCK, guard: partial.guard ?? 10, isDead: false},
-    body: {translation: () => ({x: 0, y: 0, z: partial.z ?? 0})},
-    aiBlockDuration: partial.aiBlockDuration ?? 0.4,
-} as unknown as CharacterEntity)
+const char = (partial: {block?: boolean; guard?: number; z?: number; aiBlockDuration?: number}): CharacterEntity => {
+    const state = createTestCharacterState({
+        id: 1,
+        combat: {
+            block: partial.block === false ? undefined : BLOCK,
+            guard: partial.guard ?? 10,
+            isDead: false,
+        } as unknown as CombatComponent,
+    })
+    state.ai.aiBlockDuration = partial.aiBlockDuration ?? 0.4
+    return {
+        state,
+        body: {translation: () => ({x: 0, y: 0, z: partial.z ?? 0})} as unknown as CharacterEntity['body'],
+        mesh: null!, wireframe: undefined, appearanceGroup: null!,
+        mainCollider: undefined!, colliders: [],
+        stateMachine: null!,
+    }
+}
 
-const target = (partial: {z?: number; attackActive?: boolean; attackDirX?: number; attackDirZ?: number}): CharacterEntity => ({
-    id: 2,
-    combat: {
-        isDead: false,
-        attackActive: partial.attackActive ?? true,
-        attackDirX: partial.attackDirX ?? 0,
-        attackDirZ: partial.attackDirZ ?? -1,
-    },
-    body: {translation: () => ({x: 0, y: 0, z: partial.z ?? 2})},
-} as unknown as CharacterEntity)
+const target = (partial: {z?: number; attackActive?: boolean; attackDirX?: number; attackDirZ?: number}): CharacterEntity => {
+    const state = createTestCharacterState({
+        id: 2,
+        combat: {
+            isDead: false,
+            attackActive: partial.attackActive ?? true,
+            attackDirX: partial.attackDirX ?? 0,
+            attackDirZ: partial.attackDirZ ?? -1,
+        } as unknown as CombatComponent,
+    })
+    return {
+        state,
+        body: {translation: () => ({x: 0, y: 0, z: partial.z ?? 2})} as unknown as CharacterEntity['body'],
+        mesh: null!, wireframe: undefined, appearanceGroup: null!,
+        mainCollider: undefined!, colliders: [],
+        stateMachine: null!,
+    }
+}
 
 describe('AI 反应式盾格挡', () => {
     it('目标在范围内起手且朝向我方 → 举盾', () => {

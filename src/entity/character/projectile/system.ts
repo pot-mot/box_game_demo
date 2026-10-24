@@ -180,10 +180,10 @@ export const createProjectileSystem = (
 
         const isMagic = spec.kind === 'magic_orb'
         const color = projectileColorOf(spec, weapon.mesh)
-        p.ownerId = owner.id
-        p.ownerFaction = owner.combat.faction
-        p.ownerAttackTendency = owner.combat.attackTendency
-        p.damage = (weapon.damage + owner.combat.attackBonus[weapon.damageType]) * damageScale
+        p.ownerId = owner.state.identity.id
+        p.ownerFaction = owner.state.combat.faction
+        p.ownerAttackTendency = owner.state.combat.attackTendency
+        p.damage = (weapon.damage + owner.state.combat.attackBonus[weapon.damageType]) * damageScale
         p.damageType = weapon.damageType
         p.impact = impact ?? RANGED_DEFAULT_IMPACT
         p.poiseDamage = poiseDamage ?? RANGED_DEFAULT_POISE_DAMAGE
@@ -214,7 +214,7 @@ export const createProjectileSystem = (
     }
 
     const getOwnerEntity = (ownerId: number, allCharacters: readonly CharacterEntity[]): CharacterEntity | undefined =>
-        allCharacters.find(c => c.id === ownerId)
+        allCharacters.find(c => c.state.identity.id === ownerId)
 
     /** 雷电链：从命中点向附近未命中目标传导，伤害逐跳衰减 */
     const chainFrom = (
@@ -234,10 +234,10 @@ export const createProjectileSystem = (
             let nearest: CharacterEntity | undefined
             let nearestDist = p.chainRadius
             for (const target of allCharacters) {
-                if (target.id === p.ownerId || target.combat.isDead) continue
-                if (p.hitCharacterIds.has(target.id)) continue
-                if (!p.ownerAttackTendency(p.ownerFaction, target.combat.faction)) continue
-                if (isDamageImmune(target.combat)) continue
+                if (target.state.identity.id === p.ownerId || target.state.combat.isDead) continue
+                if (p.hitCharacterIds.has(target.state.identity.id)) continue
+                if (!p.ownerAttackTendency(p.ownerFaction, target.state.combat.faction)) continue
+                if (isDamageImmune(target.state.combat)) continue
                 const tp = target.body.translation()
                 const dist = Math.hypot(tp.x - cx, tp.y - cy, tp.z - cz)
                 if (dist > nearestDist) continue
@@ -246,11 +246,11 @@ export const createProjectileSystem = (
             }
             if (nearest === undefined) return
             const tp = nearest.body.translation()
-            p.hitCharacterIds.add(nearest.id)
+            p.hitCharacterIds.add(nearest.state.identity.id)
             effects.hit(tp.x, tp.y, tp.z, p.impactColor)
-            applyDamage(nearest.combat, {
+            applyDamage(nearest.state.combat, {
                 sourceId: p.ownerId,
-                targetId: nearest.id,
+                targetId: nearest.state.identity.id,
                 damageType: p.damageType,
                 baseAmount: damage,
                 finalAmount: damage,
@@ -328,7 +328,7 @@ export const createProjectileSystem = (
         index: number,
     ): void => {
         effects.hit(hx, hy, hz, p.impactColor)
-        const block = owner.combat.block
+        const block = owner.state.combat.block
         if (block !== undefined) {
             const blockedDamage = p.damage * block.blockDamageMultiplier
             v3Set(_tmpVec, owner.body.translation().x - hx, 0, owner.body.translation().z - hz)
@@ -336,9 +336,9 @@ export const createProjectileSystem = (
             const hasDir = blen > 0.0001
             const dirX = hasDir ? _tmpVec.x / blen : 0
             const dirZ = hasDir ? _tmpVec.z / blen : 0
-            applyDamage(owner.combat, {
+            applyDamage(owner.state.combat, {
                 sourceId: p.ownerId,
-                targetId: owner.id,
+                targetId: owner.state.identity.id,
                 damageType: p.damageType,
                 baseAmount: blockedDamage,
                 finalAmount: blockedDamage,
@@ -347,7 +347,7 @@ export const createProjectileSystem = (
                 poiseDamage: p.poiseDamage * block.poiseMultiplier,
                 ...(hasDir ? {dirX, dirZ} : {}),
             })
-            owner.combat.guard = Math.max(0, owner.combat.guard - blockedDamage)
+            owner.state.combat.guard = Math.max(0, owner.state.combat.guard - blockedDamage)
             if (p.knockbackForce > 0 && hasDir) {
                 const kb = p.knockbackForce * block.blockKnockbackMultiplier
                 owner.body.applyImpulseAtPoint(
@@ -380,8 +380,8 @@ export const createProjectileSystem = (
                 let nearestDx = 0
                 let nearestDz = 0
                 for (const target of allCharacters) {
-                    if (target.id === p.ownerId || target.combat.isDead) continue
-                    if (!p.ownerAttackTendency(p.ownerFaction, target.combat.faction)) continue
+                    if (target.state.identity.id === p.ownerId || target.state.combat.isDead) continue
+                    if (!p.ownerAttackTendency(p.ownerFaction, target.state.combat.faction)) continue
                     const tp = target.body.translation()
                     const dx = tp.x - bulletPos.x
                     const dy = tp.y - bulletPos.y
@@ -436,15 +436,15 @@ export const createProjectileSystem = (
                             if (collisionCategoryOf(collider.collisionGroups()) !== 'shield') return false
                             const ownerId = getShieldOwner(collider.handle)
                             if (ownerId === undefined || ownerId === p.ownerId) return false
-                            const owner = allCharacters.find(c => c.id === ownerId)
-                            if (owner === undefined || owner.combat.isDead) return false
-                            if (!owner.combat.blocking || owner.combat.guard <= 0) return false
-                            return p.ownerAttackTendency(p.ownerFaction, owner.combat.faction)
+                            const owner = allCharacters.find(c => c.state.identity.id === ownerId)
+                            if (owner === undefined || owner.state.combat.isDead) return false
+                            if (!owner.state.combat.blocking || owner.state.combat.guard <= 0) return false
+                            return p.ownerAttackTendency(p.ownerFaction, owner.state.combat.faction)
                         },
                     )
                     if (sweep) {
                         const ownerId = getShieldOwner(sweep.collider.handle)
-                        const owner = ownerId !== undefined ? allCharacters.find(c => c.id === ownerId) : undefined
+                        const owner = ownerId !== undefined ? allCharacters.find(c => c.state.identity.id === ownerId) : undefined
                         if (owner !== undefined) {
                             const toi = sweep.time_of_impact
                             resolveShieldBlock(
@@ -465,7 +465,7 @@ export const createProjectileSystem = (
              * 翻滚无敌目标视为穿过（不消耗、不结算，可命中其后目标） */
             if (!hit && !maskIncludesCategory(p.passThroughMask, 'character')) {
                 for (const target of allCharacters) {
-                    if (target.id === p.ownerId || target.combat.isDead) continue
+                    if (target.state.identity.id === p.ownerId || target.state.combat.isDead) continue
 
                     const tp = target.body.translation()
                     v3Set(_tmpVec,
@@ -477,7 +477,7 @@ export const createProjectileSystem = (
 
                     /* 命中判定：有受击子块时按「本帧位移线段（prev→cur）× 任一子块」扫掠检测
                      * （避免高速弹单点采样跨过较小的肢体受击块而漏判）；无则回退宽容半径 */
-                    const blocks = target.hurtBlocks
+                    const blocks = target.state.hurtBlocks
                     let hitHurtBlocks: readonly string[] | undefined
                     if (blocks !== undefined && blocks.length > 0) {
                         let hit: string[] | undefined
@@ -492,16 +492,16 @@ export const createProjectileSystem = (
                         hitHurtBlocks = FALLBACK_HURT_BLOCK
                     }
                     if (hitHurtBlocks === undefined) continue
-                    if (p.hitCharacterIds.has(target.id)) continue
+                    if (p.hitCharacterIds.has(target.state.identity.id)) continue
 
-                    if (p.ownerAttackTendency(p.ownerFaction, target.combat.faction)) {
-                        if (isDamageImmune(target.combat)) continue
+                    if (p.ownerAttackTendency(p.ownerFaction, target.state.combat.faction)) {
+                        if (isDamageImmune(target.state.combat)) continue
 
                         /* 盾格挡补扫 —— 盾遮挡体位于宽容半径内，正面来弹跨入半径的当帧未必扫到盾（盾在角色
                          * 中心之前、半径之内）。命中举盾目标时，沿「弹丸 → 身体中心」补做一次盾形状扫描，
                          * 命中即按格挡结算并消耗子弹（爆炸弹丸无视盾）。 */
                         if (p.explosionRadius <= 0 && getShieldOwner !== undefined
-                            && target.combat.block !== undefined && target.combat.blocking && target.combat.guard > 0
+                            && target.state.combat.block !== undefined && target.state.combat.blocking && target.state.combat.guard > 0
                             && !maskIncludesCategory(p.passThroughMask, 'shield')) {
                             v3Set(_sweepOrigin, bulletPos.x, bulletPos.y, bulletPos.z)
                             v3Set(_sweepVelocity, tp.x - bulletPos.x, tp.y - bulletPos.y, tp.z - bulletPos.z)
@@ -511,7 +511,7 @@ export const createProjectileSystem = (
                                 undefined, undefined, p.collider, p.body,
                                 (collider) => {
                                     if (collisionCategoryOf(collider.collisionGroups()) !== 'shield') return false
-                                    return getShieldOwner(collider.handle) === target.id
+                                    return getShieldOwner(collider.handle) === target.state.identity.id
                                 },
                             )
                             if (blockSweep) {
@@ -549,9 +549,9 @@ export const createProjectileSystem = (
                             const dirX = hasDir ? _tmpVec.x / len : 0
                             const dirZ = hasDir ? _tmpVec.z / len : 0
 
-                            applyDamage(target.combat, {
+                            applyDamage(target.state.combat, {
                                 sourceId: p.ownerId,
-                                targetId: target.id,
+                                targetId: target.state.identity.id,
                                 damageType: p.damageType,
                                 baseAmount: p.damage,
                                 finalAmount: p.damage,
@@ -573,13 +573,13 @@ export const createProjectileSystem = (
                                     true,
                                 )
                             }
-                            p.hitCharacterIds.add(target.id)
+                            p.hitCharacterIds.add(target.state.identity.id)
                             chainFrom(p, tp.x, tp.y, tp.z, allCharacters)
                         }
                     }
 
                     /* 激光等穿透弹：命中后继续飞行，同一段可贯穿多个目标 */
-                    if (p.explosionRadius <= 0 && p.pierceRemaining > 0 && p.hitCharacterIds.has(target.id)) {
+                    if (p.explosionRadius <= 0 && p.pierceRemaining > 0 && p.hitCharacterIds.has(target.state.identity.id)) {
                         p.pierceRemaining -= 1
                         continue
                     }

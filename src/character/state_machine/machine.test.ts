@@ -12,7 +12,6 @@ import {orderedSegments} from '../weapon/attack_chain.ts'
 import {MELEE_HEAVY_WINDUP} from '../weapon/melee_attacks.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../combat/attack_phases.ts'
 import {INTERACTION_DURATION} from '../interaction/types.ts'
-import {createBodyEnvironment} from '../../physics/environment.ts'
 import type {CharacterEntity} from '../types.ts'
 
 const DT = 1 / 60
@@ -49,26 +48,22 @@ const makeMock = (runtime: WeaponRuntime = createWeaponRuntime('long_sword')): C
         handle: 1,
     }
 
-    return {
+    const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+    const characterState = createTestCharacterState({
         id: 1,
         config: {speed: 6, jumpHeight: 2, scale: 1},
+        combat,
+        bodyState: {holdMode: runtime.holdMode},
+    })
+    characterState.physics.isOnGround = true
+    return {
+        state: characterState,
         mesh: null!, wireframe: undefined,
         appearanceGroup: {rotation: {y: 0}} as unknown as CharacterEntity['appearanceGroup'],
         body: mockBody as unknown as CharacterEntity['body'],
         mainCollider: undefined as unknown as RAPIER.Collider,
         colliders: [],
-        isOnGround: true,
-        groundNormal: {x: 0, y: 1, z: 0},
-        groundKeepTimer: 0,
-        airborneTime: 0, groundedTime: 0,
-        rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
-        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
-        combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15),
-        bodyState: {holdMode: runtime.holdMode},
-        lockPoints: [],
-        environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),
-        state: createTestCharacterState({}),
     }
 }
 
@@ -88,7 +83,7 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('test_weapon_tap')
+        expect(e.state.combat.activeSegment?.id).toBe('test_weapon_tap')
     })
 
     it('轻击键长按 >= 阈值起手 = 蓄力段（守卫变体优先）', () => {
@@ -96,7 +91,7 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', TEST_WEAPON_CHARGE_HOLD)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('test_weapon_charge')
+        expect(e.state.combat.activeSegment?.id).toBe('test_weapon_charge')
     })
 
     it('重击键起手 = 重链起手段（键组映射）', () => {
@@ -104,7 +99,7 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('test_weapon_heavy_1')
+        expect(e.state.combat.activeSegment?.id).toBe('test_weapon_heavy_1')
     })
 
     it('重击蓄力：按下冻结在重击起手并累积蓄力，松开后挂蓄力冷却（短按无冷却）', () => {
@@ -114,38 +109,38 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         const tapped = makeMock(weapon)
         tapped.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0)
         tapped.stateMachine.update(DT, tapped)
-        expect(tapped.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
-        expect(tapped.combat.attackHolding).toBe(false)
-        expect(tapped.combat.attackCharge).toBe(0)
-        expect(tapped.combat.segmentCooldowns.has('long_sword_one_handed_heavy_1')).toBe(false)
+        expect(tapped.state.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
+        expect(tapped.state.combat.attackHolding).toBe(false)
+        expect(tapped.state.combat.attackCharge).toBe(0)
+        expect(tapped.state.combat.segmentCooldowns.has('long_sword_one_handed_heavy_1')).toBe(false)
 
         /* 按住：冻结在重击 windup（抬手）起始帧并累积蓄力 */
         const e = makeMock(weapon)
         e.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0, true)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
         /* 第二帧进入 attacking handler：冻结（attackHolding）并开始累积 */
         e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
         e.stateMachine.update(DT, e)
-        expect(e.combat.attackHolding).toBe(true)
-        const frozenTimer = e.combat.attackTimer
+        expect(e.state.combat.attackHolding).toBe(true)
+        const frozenTimer = e.state.combat.attackTimer
         for (let i = 0; i < 59; i++) {
             e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
             e.stateMachine.update(DT, e)
         }
-        expect(e.combat.attackHolding).toBe(true)
-        expect(e.combat.attackTimer).toBeCloseTo(frozenTimer, 5)
-        expect(e.combat.attackCharge).toBeGreaterThan(0.8)
+        expect(e.state.combat.attackHolding).toBe(true)
+        expect(e.state.combat.attackTimer).toBeCloseTo(frozenTimer, 5)
+        expect(e.state.combat.attackCharge).toBeGreaterThan(0.8)
 
         /* 松开：退出保持、挂蓄力冷却；段从已蓄力的抬手进度继续，而不是回到 READY 重播 */
-        const chargeAtRelease = e.combat.attackCharge
+        const chargeAtRelease = e.state.combat.attackCharge
         e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, false)
         e.stateMachine.update(DT, e)
-        expect(e.combat.attackHolding).toBe(false)
-        expect(e.combat.segmentCooldowns.get('long_sword_one_handed_heavy_1')).toBeGreaterThan(0)
-        expect(e.combat.phaseIndex).toBe(0)
-        expect(e.combat.attackTimer).toBeCloseTo(chargeAtRelease * MELEE_HEAVY_WINDUP, 6)
+        expect(e.state.combat.attackHolding).toBe(false)
+        expect(e.state.combat.segmentCooldowns.get('long_sword_one_handed_heavy_1')).toBeGreaterThan(0)
+        expect(e.state.combat.phaseIndex).toBe(0)
+        expect(e.state.combat.attackTimer).toBeCloseTo(chargeAtRelease * MELEE_HEAVY_WINDUP, 6)
     })
 
     it('蓄力释放即结束蓄力：再次按住不再续蓄、不再冻结（chargeCommitted）', () => {
@@ -157,22 +152,22 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
             e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
             e.stateMachine.update(DT, e)
         }
-        const chargeAtRelease = e.combat.attackCharge
+        const chargeAtRelease = e.state.combat.attackCharge
         expect(chargeAtRelease).toBeGreaterThan(0.25)
         e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, false)
         e.stateMachine.update(DT, e)
-        expect(e.combat.chargeCommitted).toBe(true)
-        expect(e.combat.attackTimer).toBeCloseTo(chargeAtRelease * MELEE_HEAVY_WINDUP, 6)
+        expect(e.state.combat.chargeCommitted).toBe(true)
+        expect(e.state.combat.attackTimer).toBeCloseTo(chargeAtRelease * MELEE_HEAVY_WINDUP, 6)
 
         /* 再次按住：不再冻结、蓄力值不变（不会「一段一段增长」），时间线照常推进 */
-        const timerAfterRelease = e.combat.attackTimer
+        const timerAfterRelease = e.state.combat.attackTimer
         for (let i = 0; i < 20; i++) {
             e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
             e.stateMachine.update(DT, e)
         }
-        expect(e.combat.attackHolding).toBe(false)
-        expect(e.combat.attackCharge).toBeCloseTo(chargeAtRelease, 6)
-        expect(e.combat.attackTimer).toBeGreaterThan(timerAfterRelease)
+        expect(e.state.combat.attackHolding).toBe(false)
+        expect(e.state.combat.attackCharge).toBeCloseTo(chargeAtRelease, 6)
+        expect(e.state.combat.attackTimer).toBeGreaterThan(timerAfterRelease)
     })
 
     it('近战重击蓄力时长下限 = 抬手段（2:1:2.5 中的「2」）：配置更短也完整播完前摇', () => {
@@ -187,13 +182,13 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
             e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
             e.stateMachine.update(DT, e)
         }
-        expect(e.combat.attackCharge).toBeGreaterThan(0)
-        expect(e.combat.attackCharge).toBeLessThan(1)
+        expect(e.state.combat.attackCharge).toBeGreaterThan(0)
+        expect(e.state.combat.attackCharge).toBeLessThan(1)
         e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, false)
         let strikeFrame = -1
         for (let i = 0; i < 120 && strikeFrame < 0; i++) {
             e.stateMachine.update(DT, e)
-            if (e.combat.phaseIndex === 1) strikeFrame = i
+            if (e.state.combat.phaseIndex === 1) strikeFrame = i
         }
         expect(strikeFrame).toBeGreaterThanOrEqual(0)
         /* 按 → 挥斩总时长不低于前摇（下限），即没有把前摇整段跳过 */
@@ -211,21 +206,21 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         const e = makeMock(createWeaponRuntime('heavy_sword', {}, 'two_handed'))
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
-        expect(e.combat.activeSegment?.id).toBe('heavy_sword_two_handed_light_1')
+        expect(e.state.combat.activeSegment?.id).toBe('heavy_sword_two_handed_light_1')
         for (const expected of ['heavy_sword_two_handed_light_2', 'heavy_sword_two_handed_light_3', 'heavy_sword_two_handed_light_1']) {
             e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
-            for (let i = 0; i < 90 && e.combat.activeSegment?.id !== expected; i++) {
+            for (let i = 0; i < 90 && e.state.combat.activeSegment?.id !== expected; i++) {
                 e.stateMachine.update(DT, e)
             }
-            expect(e.combat.activeSegment?.id).toBe(expected)
+            expect(e.state.combat.activeSegment?.id).toBe(expected)
             expect(e.stateMachine.currentState).toBe('attacking')
         }
     })
 
     it('起手段全冷却时不进入 attacking', () => {
         const e = makeTest()
-        e.combat.segmentCooldowns.set('test_weapon_charge', 1)
-        e.combat.segmentCooldowns.set('test_weapon_tap', 1)
+        e.state.combat.segmentCooldowns.set('test_weapon_charge', 1)
+        e.state.combat.segmentCooldowns.set('test_weapon_tap', 1)
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('idle')
@@ -235,12 +230,12 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         const e = makeTest()
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
-        expect(e.combat.activeSegment?.id).toBe('test_weapon_tap')
+        expect(e.state.combat.activeSegment?.id).toBe('test_weapon_tap')
         /* 按住攻击键并带方向：缓冲逐帧解析为突刺段（hasMoveInput 通过） */
         e.stateMachine.setInput(1, 0, false, true, false, 'light', 0)
         run(e.stateMachine, e, 30)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('test_weapon_thrust')
+        expect(e.state.combat.activeSegment?.id).toBe('test_weapon_thrust')
     })
 
     it('段末缓冲：同键组 + 无移动输入 → 兜底轻 2 段', () => {
@@ -250,14 +245,14 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         run(e.stateMachine, e, 30)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('test_weapon_light_2')
+        expect(e.state.combat.activeSegment?.id).toBe('test_weapon_light_2')
     })
 
     it('蓄力段无链：播完无缓冲回 idle', () => {
         const e = makeTest()
         e.stateMachine.setInput(0, 0, false, true, false, 'light', TEST_WEAPON_CHARGE_HOLD)
         e.stateMachine.update(DT, e)
-        expect(e.combat.activeSegment?.id).toBe('test_weapon_charge')
+        expect(e.state.combat.activeSegment?.id).toBe('test_weapon_charge')
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0)
         run(e.stateMachine, e, 60)
         expect(e.stateMachine.currentState).toBe('idle')
@@ -268,17 +263,17 @@ describe('连段守卫（test_weapon 蓄力/方向组合键）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', TEST_WEAPON_CHARGE_HOLD)
         e.stateMachine.update(DT, e)
         /* 触发即挂该段冷却（单测无主循环递减，冷却值保持满值） */
-        const charge = e.combat.attacks.segments['test_weapon_charge']
-        expect(e.combat.segmentCooldowns.get('test_weapon_charge')).toBe(charge.cooldown)
+        const charge = e.state.combat.attacks.segments['test_weapon_charge']
+        expect(e.state.combat.segmentCooldowns.get('test_weapon_charge')).toBe(charge.cooldown)
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0)
         run(e.stateMachine, e, 60)
         expect(e.stateMachine.currentState).toBe('idle')
-        expect(e.combat.segmentCooldowns.get('test_weapon_charge') ?? 0).toBeGreaterThan(0)
+        expect(e.state.combat.segmentCooldowns.get('test_weapon_charge') ?? 0).toBeGreaterThan(0)
         /* 点按仍可起手（兜底段冷却独立） */
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('test_weapon_tap')
+        expect(e.state.combat.activeSegment?.id).toBe('test_weapon_tap')
     })
 })
 
@@ -292,7 +287,7 @@ describe('平地移动', () => {
 
     it('装备移速乘数：walking 速度 = 基础移速 × 乘数', () => {
         const e = makeMock()
-        e.combat.moveSpeedMultiplier = 0.5
+        e.state.combat.moveSpeedMultiplier = 0.5
         e.stateMachine.setInput(1, 0, false, false)
         run(e.stateMachine, e, 2)
         expect(e.stateMachine.currentState).toBe('walking')
@@ -305,7 +300,7 @@ describe('斜坡 falling 判定', () => {
         e.stateMachine.setInput(1, 0, false, false)
         run(e.stateMachine, e, 9)
         expect(e.stateMachine.currentState).toBe('walking')
-        e.groundNormal = {x: 0, y: 0.04, z: 0.999}
+        e.state.physics.groundNormal = {x: 0, y: 0.04, z: 0.999}
         /* airborneTime 累积 0.15s 后进入 falling */
         run(e.stateMachine, e, 9)
         expect(e.stateMachine.currentState).toBe('falling')
@@ -324,7 +319,7 @@ describe('斜坡 falling 判定', () => {
         let prev = e.stateMachine.currentState
         let flips = 0
         for (let i = 0; i < 120; i++) {
-            e.groundNormal = i % 2 === 0 ? {x: 0, y: 0.6, z: 0.8} : {x: 0, y: 0.04, z: 0.999}
+            e.state.physics.groundNormal = i % 2 === 0 ? {x: 0, y: 0.6, z: 0.8} : {x: 0, y: 0.04, z: 0.999}
             e.stateMachine.update(DT, e)
             if (e.stateMachine.currentState !== prev) {
                 flips++
@@ -340,7 +335,7 @@ describe('斜坡 falling 判定', () => {
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('falling')
 
-        e.groundNormal = {x: 0, y: 0.2, z: 0.98}
+        e.state.physics.groundNormal = {x: 0, y: 0.2, z: 0.98}
         run(e.stateMachine, e, 5)
         expect(e.stateMachine.currentState).toBe('falling')
         /* 浮点累计在 0.1s 边界可能差一帧，循环等待恢复 */
@@ -355,23 +350,23 @@ describe('falling 行为', () => {
     const enterFalling = (e: CharacterEntity): void => {
         e.stateMachine.setInput(1, 0, false, false)
         run(e.stateMachine, e, 9)
-        e.groundNormal = {x: 0, y: 0.04, z: 0.999}
+        e.state.physics.groundNormal = {x: 0, y: 0.04, z: 0.999}
         run(e.stateMachine, e, 9)
         expect(e.stateMachine.currentState).toBe('falling')
         /* 进入后置于 falling 滑动投影区（ny > FALL_SLIDE_MIN_NY） */
-        e.groundNormal = {x: 0, y: 0.4, z: 0.9165}
+        e.state.physics.groundNormal = {x: 0, y: 0.4, z: 0.9165}
     }
 
     it('有支撑时沿坡面滑动（v·n = 0）', () => {
         const e = makeMock()
         enterFalling(e)
-        e.isOnGround = true
+        e.state.physics.isOnGround = true
         const b = getMockBody(e)
         b.setLinvel({x: 5, y: -3, z: 0})
         e.stateMachine.setInput(0, 0, false, false)
         e.stateMachine.update(DT, e)
         const v = b.linvel()
-        const n = e.groundNormal
+        const n = e.state.physics.groundNormal
         const dot = v.x * n.x + v.y * n.y + v.z * n.z
         expect(Math.abs(dot)).toBeLessThan(0.001)
     })
@@ -379,7 +374,7 @@ describe('falling 行为', () => {
     it('总速度（含 vy）钳制在 2×speed 内', () => {
         const e = makeMock()
         enterFalling(e)
-        e.isOnGround = false
+        e.state.physics.isOnGround = false
         const b = getMockBody(e)
         b.setLinvel({x: 15, y: -20, z: 0})
         e.stateMachine.update(DT, e)
@@ -390,8 +385,8 @@ describe('falling 行为', () => {
     it('贴墙接触（ny ≤ FALL_SLIDE_MIN_NY）不投影，保留下落速度', () => {
         const e = makeMock()
         enterFalling(e)
-        e.isOnGround = true
-        e.groundNormal = {x: 0, y: 0.15, z: 0.9887}
+        e.state.physics.isOnGround = true
+        e.state.physics.groundNormal = {x: 0, y: 0.15, z: 0.9887}
         const b = getMockBody(e)
         b.setLinvel({x: 0, y: -3, z: 0})
         e.stateMachine.update(DT, e)
@@ -401,14 +396,14 @@ describe('falling 行为', () => {
     it('陡坡接触（ny > FALL_SLIDE_MIN_NY）投影滑动 v·n = 0', () => {
         const e = makeMock()
         enterFalling(e)
-        e.isOnGround = true
-        e.groundNormal = {x: 0, y: 0.4, z: 0.9165}
+        e.state.physics.isOnGround = true
+        e.state.physics.groundNormal = {x: 0, y: 0.4, z: 0.9165}
         const b = getMockBody(e)
         b.setLinvel({x: 5, y: -3, z: 0})
         e.stateMachine.setInput(0, 0, false, false)
         e.stateMachine.update(DT, e)
         const v = b.linvel()
-        const n = e.groundNormal
+        const n = e.state.physics.groundNormal
         const dot = v.x * n.x + v.y * n.y + v.z * n.z
         expect(Math.abs(dot)).toBeLessThan(0.001)
     })
@@ -430,8 +425,8 @@ describe('原地站定开火', () => {
 describe('攻击/翻滚在陡坡结束', () => {
     it('attacking 在陡坡（ny=0.4）攻击结束进入 falling', () => {
         const e = makeMock()
-        e.isOnGround = true
-        e.groundNormal = {x: 0, y: 0.04, z: 0.999}
+        e.state.physics.isOnGround = true
+        e.state.physics.groundNormal = {x: 0, y: 0.04, z: 0.999}
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
@@ -453,8 +448,8 @@ describe('攻击/翻滚在陡坡结束', () => {
 
     it('rolling 在陡坡（ny=0.4）翻滚结束进入 falling', () => {
         const e = makeMock()
-        e.isOnGround = true
-        e.groundNormal = {x: 0, y: 0.04, z: 0.999}
+        e.state.physics.isOnGround = true
+        e.state.physics.groundNormal = {x: 0, y: 0.04, z: 0.999}
         e.stateMachine.setInput(1, 0, false, false, true)
         e.stateMachine.update(DT, e)
         e.stateMachine.update(DT, e)
@@ -470,7 +465,7 @@ describe('攻击/翻滚在陡坡结束', () => {
         e.stateMachine.update(DT, e)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('rolling')
-        expect(e.combat.rollSkill.cooldownTimer).toBe(ROLL_COOLDOWN)
+        expect(e.state.combat.rollSkill.cooldownTimer).toBe(ROLL_COOLDOWN)
         run(e.stateMachine, e, 40)
         expect(e.stateMachine.currentState).toBe('walking')
     })
@@ -479,8 +474,8 @@ describe('攻击/翻滚在陡坡结束', () => {
 describe('斜坡防滑', () => {
     it('idle 在可站立斜坡上逐帧清零物理灌入的速度', () => {
         const e = makeMock()
-        e.isOnGround = true
-        e.groundNormal = {x: 0, y: 0.6, z: 0.8}
+        e.state.physics.isOnGround = true
+        e.state.physics.groundNormal = {x: 0, y: 0.6, z: 0.8}
         e.stateMachine.setInput(0, 0, false, false)
         const b = getMockBody(e)
         for (let i = 0; i < 60; i++) {
@@ -495,8 +490,8 @@ describe('斜坡防滑', () => {
 
     it('attacking 在可站立斜坡上逐帧清零物理灌入的速度', () => {
         const e = makeMock()
-        e.isOnGround = true
-        e.groundNormal = {x: 0, y: 0.6, z: 0.8}
+        e.state.physics.isOnGround = true
+        e.state.physics.groundNormal = {x: 0, y: 0.6, z: 0.8}
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
@@ -513,7 +508,7 @@ describe('斜坡防滑', () => {
 
     it('idle 无支撑时保留阻尼衰减（不误清速度）', () => {
         const e = makeMock()
-        e.isOnGround = false
+        e.state.physics.isOnGround = false
         const b = getMockBody(e)
         b.setLinvel({x: 3, y: 0, z: 0})
         e.stateMachine.update(DT, e)
@@ -541,8 +536,8 @@ describe('跳跃', () => {
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('jumping')
         /* 模拟脱离支撑（coyote 过期）但仍在上升段 */
-        e.isOnGround = false
-        e.groundNormal = {x: 0, y: 1, z: 0}
+        e.state.physics.isOnGround = false
+        e.state.physics.groundNormal = {x: 0, y: 1, z: 0}
         const b = getMockBody(e)
         for (let i = 0; i < 30; i++) {
             const v = b.linvel()
@@ -571,7 +566,7 @@ describe('输入缓冲连段（轻/重双链）', () => {
 
     /** 逐帧跑到 activeSegment 为指定段（限帧防死循环） */
     const runUntilSegment = (e: CharacterEntity, segmentId: string, maxFrames = 90): void => {
-        for (let i = 0; i < maxFrames && e.combat.activeSegment?.id !== segmentId; i++) {
+        for (let i = 0; i < maxFrames && e.state.combat.activeSegment?.id !== segmentId; i++) {
             e.stateMachine.update(DT, e)
         }
     }
@@ -583,14 +578,14 @@ describe('输入缓冲连段（轻/重双链）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         run(e.stateMachine, e, 35)
         /* 段中（轻 1 总时长 1.1s = 动作 0.6s + 恢复 0.5s，已进入挥击、未到段末） */
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
-        expect(e.combat.phaseIndex).toBe(1)
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
+        expect(e.state.combat.phaseIndex).toBe(1)
         /* 段末推进到轻 2（链中下一段），不出 attacking 状态 */
         runUntilSegment(e, 'long_sword_one_handed_light_2')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
         expect(e.stateMachine.currentState).toBe('attacking')
         /* 推进时计时器重置 */
-        expect(e.combat.attackTimer).toBeLessThan(0.1)
+        expect(e.state.combat.attackTimer).toBeLessThan(0.1)
     })
 
     it('缓冲缺失则当前段完整播完后收招', () => {
@@ -599,7 +594,7 @@ describe('输入缓冲连段（轻/重双链）', () => {
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0)
         run(e.stateMachine, e, 70)
         expect(e.stateMachine.currentState).toBe('idle')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
     })
 
     it('轻链无限循环：按住轻击 轻1→轻2→轻1', () => {
@@ -607,9 +602,9 @@ describe('输入缓冲连段（轻/重双链）', () => {
         enterAttacking(e)
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         runUntilSegment(e, 'long_sword_one_handed_light_2')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
         runUntilSegment(e, 'long_sword_one_handed_light_1')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
         expect(e.stateMachine.currentState).toBe('attacking')
     })
 
@@ -617,12 +612,12 @@ describe('输入缓冲连段（轻/重双链）', () => {
         const e = makeMock()
         enterAttacking(e)
         /* 普通攻击 cooldown = 0：触发时不挂冷却 */
-        expect(e.combat.segmentCooldowns.size).toBe(0)
+        expect(e.state.combat.segmentCooldowns.size).toBe(0)
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
         runUntilSegment(e, 'long_sword_one_handed_light_2')
         runUntilSegment(e, 'long_sword_one_handed_light_1')
         /* 循环链回到轻 1：全程无冷却阻塞；轻 2（链中段）同样恒 0 */
-        expect(e.combat.segmentCooldowns.size).toBe(0)
+        expect(e.state.combat.segmentCooldowns.size).toBe(0)
     })
 
     it('预输入只在后摇窗口接受：抬手 / 挥斩阶段的按键一律忽略', () => {
@@ -633,18 +628,18 @@ describe('输入缓冲连段（轻/重双链）', () => {
             e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
             e.stateMachine.update(DT, e)
         }
-        expect(e.combat.phaseIndex).toBe(0)
-        expect(e.combat.bufferedSegment).toBeUndefined()
+        expect(e.state.combat.phaseIndex).toBe(0)
+        expect(e.state.combat.bufferedSegment).toBeUndefined()
         /* 挥斩阶段（phaseIndex 1）继续按住：仍不写缓冲 */
         for (let i = 0; i < 20; i++) {
             e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
             e.stateMachine.update(DT, e)
         }
-        expect(e.combat.phaseIndex).toBe(1)
-        expect(e.combat.bufferedSegment).toBeUndefined()
+        expect(e.state.combat.phaseIndex).toBe(1)
+        expect(e.state.combat.bufferedSegment).toBeUndefined()
         /* 进入后摇（末阶段）后按住：才写入缓冲，段末推进到轻 2 */
         runUntilSegment(e, 'long_sword_one_handed_light_2')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
         expect(e.stateMachine.currentState).toBe('attacking')
     })
 
@@ -654,7 +649,7 @@ describe('输入缓冲连段（轻/重双链）', () => {
         /* 轻 1 段中改按重击键 */
         e.stateMachine.setInput(0, 0, false, true, false, 'heavy', 0)
         runUntilSegment(e, 'long_sword_one_handed_heavy_1')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_1')
         expect(e.stateMachine.currentState).toBe('attacking')
     })
 })
@@ -685,7 +680,7 @@ describe('受击硬直与保护窗口', () => {
         e.stateMachine.update(DT, e)
         e.stateMachine.setInput(1, 0, false, false, false, 'heavy', 0, true)
         e.stateMachine.update(DT, e)
-        expect(e.combat.attackHolding).toBe(true)
+        expect(e.state.combat.attackHolding).toBe(true)
         const b = getMockBody(e)
         expect(b.linvel().x).toBeCloseTo(6 * 0.5, 5)
     })
@@ -698,7 +693,7 @@ describe('受击硬直与保护窗口', () => {
         expect(e.stateMachine.currentState).toBe('attacking')
         e.stateMachine.setInput(1, 0, false, false, false, 'heavy', 0)
         e.stateMachine.update(DT, e)
-        expect(e.combat.attackHolding).toBe(false)
+        expect(e.state.combat.attackHolding).toBe(false)
         const b = getMockBody(e)
         expect(b.linvel().x).toBeCloseTo(6 * 0.3, 5)
     })
@@ -708,19 +703,19 @@ describe('受击硬直与保护窗口', () => {
         enterAttacking(e)
         /* 持续按住攻击：若无硬直中断会走缓冲连段，验证硬直优先级更高 */
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
-        e.combat.pendingFlinch = true
+        e.state.combat.pendingFlinch = true
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('flinching')
-        expect(e.combat.attackActive).toBe(false)
-        expect(e.combat.bufferedSegment).toBeUndefined()
-        expect(e.combat.pendingFlinch).toBe(false)
+        expect(e.state.combat.attackActive).toBe(false)
+        expect(e.state.combat.bufferedSegment).toBeUndefined()
+        expect(e.state.combat.pendingFlinch).toBe(false)
     })
 
     it('硬直播完退回 idle，退出时挂 FLINCH_IMMUNITY_DURATION 保护窗口', () => {
         const e = makeMock()
         enterAttacking(e)
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0)
-        e.combat.pendingFlinch = true
+        e.state.combat.pendingFlinch = true
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('flinching')
         /* FLINCH_DURATION = 0.1s，逐帧跑到退出（限帧防死循环） */
@@ -729,7 +724,7 @@ describe('受击硬直与保护窗口', () => {
         }
         expect(e.stateMachine.currentState).toBe('idle')
         /* 退出时挂免硬直窗口（状态机不递减，由 world 主循环递减），防无限连段锁死 */
-        expect(e.combat.flinchImmunityTimer).toBeCloseTo(FLINCH_IMMUNITY_DURATION)
+        expect(e.state.combat.flinchImmunityTimer).toBeCloseTo(FLINCH_IMMUNITY_DURATION)
     })
 })
 
@@ -747,20 +742,20 @@ describe('远程蓄力（按住冻结 + 累积 + 松开推进）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0, true)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('attacking')
-        expect(e.combat.activeSegment?.id).toBe('longbow_shot')
+        expect(e.state.combat.activeSegment?.id).toBe('longbow_shot')
 
         /* 推进到 aim 阶段（draw 0.12s）后应冻结 */
         hold(e, 12)
-        expect(e.combat.attackHolding).toBe(true)
-        const frozenTimer = e.combat.attackTimer
-        const frozenPhase = e.combat.phaseIndex
+        expect(e.state.combat.attackHolding).toBe(true)
+        const frozenTimer = e.state.combat.attackTimer
+        const frozenPhase = e.state.combat.phaseIndex
 
         /* 继续按住 30 帧：时间线不变，蓄力持续增长 */
         hold(e, 30)
-        expect(e.combat.attackHolding).toBe(true)
-        expect(e.combat.attackTimer).toBeCloseTo(frozenTimer, 5)
-        expect(e.combat.phaseIndex).toBe(frozenPhase)
-        expect(e.combat.attackCharge).toBeGreaterThan(0.5)
+        expect(e.state.combat.attackHolding).toBe(true)
+        expect(e.state.combat.attackTimer).toBeCloseTo(frozenTimer, 5)
+        expect(e.state.combat.phaseIndex).toBe(frozenPhase)
+        expect(e.state.combat.attackCharge).toBeGreaterThan(0.5)
     })
 
     it('松开攻击键：退出保持并恢复推进；蓄力保留', () => {
@@ -768,13 +763,13 @@ describe('远程蓄力（按住冻结 + 累积 + 松开推进）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0, true)
         e.stateMachine.update(DT, e)
         hold(e, 40)
-        const charge = e.combat.attackCharge
+        const charge = e.state.combat.attackCharge
         expect(charge).toBeGreaterThan(0.5)
 
         hold(e, 8, false)
-        expect(e.combat.attackHolding).toBe(false)
-        expect(e.combat.attackCharge).toBeCloseTo(charge, 5)
-        expect(e.combat.phaseIndex).toBeGreaterThanOrEqual(1)
+        expect(e.state.combat.attackHolding).toBe(false)
+        expect(e.state.combat.attackCharge).toBeCloseTo(charge, 5)
+        expect(e.state.combat.phaseIndex).toBeGreaterThanOrEqual(1)
     })
 
     it('AI（attackHeld 恒 false）：不冻结、不蓄力', () => {
@@ -782,15 +777,15 @@ describe('远程蓄力（按住冻结 + 累积 + 松开推进）', () => {
         e.stateMachine.setInput(0, 0, false, true, false, 'light', 0, false)
         e.stateMachine.update(DT, e)
         hold(e, 20, false)
-        expect(e.combat.attackHolding).toBe(false)
-        expect(e.combat.attackCharge).toBe(0)
+        expect(e.state.combat.attackHolding).toBe(false)
+        expect(e.state.combat.attackCharge).toBe(0)
     })
 })
 
 describe('交互状态（interacting）', () => {
     it('交互脉冲 + 目标活跃时进入 interacting，动作时长后回到 idle', () => {
         const e = makeMock()
-        e.interactTargetActive = true
+        e.state.interaction.active = true
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, true)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('interacting')
@@ -803,7 +798,7 @@ describe('交互状态（interacting）', () => {
 
     it('无交互目标时交互键不进入 interacting', () => {
         const e = makeMock()
-        e.interactTargetActive = false
+        e.state.interaction.active = false
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, true)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('idle')
@@ -816,7 +811,7 @@ describe('空中攻击（air_attacking）', () => {
         e.stateMachine.setInput(0, 0, true, false)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('jumping')
-        e.isOnGround = false
+        e.state.physics.isOnGround = false
     }
     const pressAttack = (e: CharacterEntity, key: 'light' | 'heavy' = 'light'): void => {
         e.stateMachine.setInput(0, 0, false, true, false, key, 0)
@@ -828,8 +823,8 @@ describe('空中攻击（air_attacking）', () => {
         jumpOff(e)
         pressAttack(e)
         expect(e.stateMachine.currentState).toBe('air_attacking')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_air_1')
-        expect(e.combat.attackActive).toBe(true)
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_air_1')
+        expect(e.state.combat.attackActive).toBe(true)
     })
 
     it('空中攻击与按下的攻击键无关（按重击键同样走 air 链）', () => {
@@ -837,7 +832,7 @@ describe('空中攻击（air_attacking）', () => {
         jumpOff(e)
         pressAttack(e, 'heavy')
         expect(e.stateMachine.currentState).toBe('air_attacking')
-        expect(e.combat.activeSegment?.id).toBe('long_sword_one_handed_air_1')
+        expect(e.state.combat.activeSegment?.id).toBe('long_sword_one_handed_air_1')
     })
 
     it('空中段播完仍悬空 → falling；落地 → idle', () => {
@@ -850,8 +845,8 @@ describe('空中攻击（air_attacking）', () => {
         }
         expect(e.stateMachine.currentState).toBe('falling')
         /* 落地并等待 groundedTime 越过防抖阈值后回到 idle */
-        e.isOnGround = true
-        e.groundNormal = {x: 0, y: 1, z: 0}
+        e.state.physics.isOnGround = true
+        e.state.physics.groundNormal = {x: 0, y: 1, z: 0}
         for (let i = 0; i < 40 && e.stateMachine.currentState !== 'idle'; i++) {
             e.stateMachine.setInput(0, 0, false, false)
             e.stateMachine.update(DT, e)
@@ -863,20 +858,20 @@ describe('空中攻击（air_attacking）', () => {
         const e = makeMock(createWeaponRuntime('heavy_sword', {}, 'two_handed'))
         jumpOff(e)
         pressAttack(e)
-        expect(e.combat.activeSegment?.id).toBe('heavy_sword_two_handed_air_1')
+        expect(e.state.combat.activeSegment?.id).toBe('heavy_sword_two_handed_air_1')
         /* 动作阶段（抬手/挥斩）不接预输入：推进到后摇（末阶段）后再按攻击键 */
-        for (let i = 0; i < 70 && e.combat.phaseIndex < 2; i++) {
+        for (let i = 0; i < 70 && e.state.combat.phaseIndex < 2; i++) {
             e.stateMachine.setInput(0, 0, false, false)
             e.stateMachine.update(DT, e)
         }
-        expect(e.combat.phaseIndex).toBe(2)
+        expect(e.state.combat.phaseIndex).toBe(2)
         pressAttack(e)
-        expect(e.combat.bufferedSegment?.id).toBe('heavy_sword_two_handed_air_2')
-        for (let i = 0; i < 70 && e.combat.activeSegment?.id !== 'heavy_sword_two_handed_air_2'; i++) {
+        expect(e.state.combat.bufferedSegment?.id).toBe('heavy_sword_two_handed_air_2')
+        for (let i = 0; i < 70 && e.state.combat.activeSegment?.id !== 'heavy_sword_two_handed_air_2'; i++) {
             e.stateMachine.setInput(0, 0, false, false)
             e.stateMachine.update(DT, e)
         }
-        expect(e.combat.activeSegment?.id).toBe('heavy_sword_two_handed_air_2')
+        expect(e.state.combat.activeSegment?.id).toBe('heavy_sword_two_handed_air_2')
     })
 
     it('战锤跳跃攻击砸地：段内冲击（impulses@0.5s）施加向下冲量，起手不下坠', () => {
@@ -884,28 +879,28 @@ describe('空中攻击（air_attacking）', () => {
         jumpOff(e)
         pressAttack(e)
         expect(e.stateMachine.currentState).toBe('air_attacking')
-        expect(e.combat.activeSegment?.key).toBe('air')
-        const impulse = e.combat.activeSegment?.impulses?.[0]
+        expect(e.state.combat.activeSegment?.key).toBe('air')
+        const impulse = e.state.combat.activeSegment?.impulses?.[0]
         expect(impulse?.at).toBeGreaterThan(0)
         const jumpVy = getMockBody(e).linvel().y
         /* 起手瞬间不施加（段内 0.5s 才到打击帧） */
-        expect(e.combat.impulsesFired).toBe(0)
+        expect(e.state.combat.impulsesFired).toBe(0)
         expect(jumpVy).toBeGreaterThan(0)
 
         let frames = 0
-        while (e.combat.impulsesFired === 0 && frames < 90) {
+        while (e.state.combat.impulsesFired === 0 && frames < 90) {
             e.stateMachine.update(DT, e)
             frames += 1
         }
         /* 施加帧 ≈ 段内 0.5s（30 帧） */
-        expect(e.combat.impulsesFired).toBe(1)
+        expect(e.state.combat.impulsesFired).toBe(1)
         expect(frames).toBeGreaterThanOrEqual(Math.floor((impulse?.at ?? 0) / DT) - 1)
         expect(frames).toBeLessThanOrEqual(Math.ceil((impulse?.at ?? 0) / DT) + 1)
         /* 速度增量 = -impulse.speed（叠加在起跳惯性上） */
         expect(getMockBody(e).linvel().y).toBeCloseTo(jumpVy - (impulse?.speed ?? 0), 5)
         /* 每段只施加一次 */
         run(e.stateMachine, e, 5)
-        expect(e.combat.impulsesFired).toBe(1)
+        expect(e.state.combat.impulsesFired).toBe(1)
         expect(getMockBody(e).linvel().y).toBeCloseTo(jumpVy - (impulse?.speed ?? 0), 5)
     })
 
@@ -914,18 +909,18 @@ describe('空中攻击（air_attacking）', () => {
         jumpOff(sword)
         pressAttack(sword)
         run(sword.stateMachine, sword, 60)
-        expect(sword.combat.activeSegment?.impulses).toBeUndefined()
-        expect(sword.combat.impulsesFired).toBe(0)
+        expect(sword.state.combat.activeSegment?.impulses).toBeUndefined()
+        expect(sword.state.combat.impulsesFired).toBe(0)
 
         /* 落地后再到打击帧：跳过向下冲量（不向地面注入速度） */
         const landed = makeMock(createWeaponRuntime('war_hammer'))
         jumpOff(landed)
         pressAttack(landed)
-        landed.isOnGround = true
-        landed.groundNormal = {x: 0, y: 1, z: 0}
+        landed.state.physics.isOnGround = true
+        landed.state.physics.groundNormal = {x: 0, y: 1, z: 0}
         getMockBody(landed).setLinvel({x: 0, y: 0, z: 0})
         run(landed.stateMachine, landed, 35)
-        expect(landed.combat.impulsesFired).toBe(1)
+        expect(landed.state.combat.impulsesFired).toBe(1)
         expect(getMockBody(landed).linvel().y).toBe(0)
     })
 
@@ -938,8 +933,8 @@ describe('空中攻击（air_attacking）', () => {
             e.stateMachine.setInput(0, 0, false, false, false, 'heavy', 0, true)
             e.stateMachine.update(DT, e)
         }
-        expect(e.combat.attackHolding).toBe(false)
-        expect(e.combat.attackCharge).toBe(0)
+        expect(e.state.combat.attackHolding).toBe(false)
+        expect(e.state.combat.attackCharge).toBe(0)
     })
 
     it('远程武器无空中链：跳跃中按攻击键不起手（保持 jumping）', () => {
@@ -947,7 +942,7 @@ describe('空中攻击（air_attacking）', () => {
         jumpOff(e)
         pressAttack(e)
         expect(e.stateMachine.currentState).toBe('jumping')
-        expect(e.combat.attackActive).toBe(false)
+        expect(e.state.combat.attackActive).toBe(false)
     })
 
     it('攻击键映射依据：仅跳跃/下落/空中攻击态视为空中（防止地面误走 air 链）', () => {

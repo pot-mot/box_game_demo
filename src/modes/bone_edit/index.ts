@@ -184,8 +184,8 @@ export const setupBoneEditMode = (
     /* 点击选中（画布内、Gizmo 未消费时） */
     const selectionPointer = setupBoneEditPointer(world, camera, renderer.domElement, onPicked, dragCoordinator)
 
-    /* 右侧常驻视图/编辑面板 */
-    const viewPanel = setupBoneViewPanel(world, timeline.container)
+    /* 左侧常驻视图/编辑面板 */
+    const viewPanel = setupBoneViewPanel(world)
 
     /** 退出清理：移除指针监听器 + 释放几何/材质 */
     const exit = (): void => {

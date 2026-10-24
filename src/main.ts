@@ -115,7 +115,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     )
 
     /* 环境场通道：角色注册自己的环境累加器，area 场据此绕开状态机速度覆写影响角色 */
-    physicsEnv.registerEnvironmentProvider((body) => characterSystem.getCharacterByBody(body)?.environment)
+    physicsEnv.registerEnvironmentProvider((body) => characterSystem.getCharacterByBody(body)?.state.environment)
 
     // 按 type 索引
     const systems: EntitySystem[] = [boxes, fragments, areas, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem]

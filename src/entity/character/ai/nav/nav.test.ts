@@ -9,6 +9,7 @@ import type {CharacterEntity} from '../../../../character/types.ts'
 import {createWeaponRuntime} from '../../../../character/weapon/weapon_runtime.ts'
 import {createCombatComponent, type CombatComponent} from '../../../../character/combat/types.ts'
 import {HUMANOID_BODY_FORM} from '../../body_form/index.ts'
+import {createTestCharacterState} from '../../../../character/state/test_state.ts'
 
 const FIXED_DT = 1 / 60
 
@@ -71,36 +72,21 @@ const createCharEntity = (
         translation: (): {x: number; y: number; z: number} => pos,
     } as unknown as CharacterEntity['body']
 
-    return {
+    const state = createTestCharacterState({
         id,
         config: {speed: speedVal, jumpHeight: jumpHeightVal, scale},
+        combat: createCombatStub(),
+        rowText: `Test #${id}`,
+    })
+    state.physics.isOnGround = true
+    return {
+        state,
         mesh,
         wireframe: undefined,
         appearanceGroup: new Object3D() as unknown as CharacterEntity['appearanceGroup'],
         body,
         mainCollider: undefined as unknown as RAPIER.Collider,
-        isOnGround: true,
-        groundNormal: {x: 0, y: 1, z: 0},
-        groundKeepTimer: 0,
-        airborneTime: 0,
-        groundedTime: 0,
-        rowText: `Test #${id}`,
-        isPlayer: false,
-        navEnabled: true,
-        peaceStrategy: 'patrol' as const,
-        combatStrategy: 'tactical' as const,
-        originStrategy: 'resident' as const,
-        originInterval: 20,
-        chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
-        isDying: false,
-        dyingTimer: 0,
-        dyingFallDirX: 0,
-        dyingFallDirZ: 0,
-        dyingFallAngle: 0,
-        knockdownFallDirX: 0,
-        knockdownFallDirZ: 0,
-        knockdownFallAngle: 0,
-        combat: createCombatStub(),
+        colliders: [],
         stateMachine: {
             currentState: 'idle',
             previousState: null,
@@ -110,7 +96,7 @@ const createCharEntity = (
             update: () => {},
             reset: () => {},
         },
-    } as unknown as CharacterEntity
+    }
 }
 
 /* ── A 组：传感器输出测试 ── */
@@ -166,7 +152,7 @@ describe('NavSensor 传感器检测', () => {
 
         const result = sensor.sense(entity, 1, 0, navConfig)
         expect(result.result).toBe('blocked_low')
-        expect(result.obstacleHeight).toBeLessThanOrEqual(entity.config.jumpHeight)
+        expect(result.obstacleHeight).toBeLessThanOrEqual(entity.state.config.jumpHeight)
     })
 
     it('4. 前方地形断裂 → 探针未命中且落差超跳跃高度 → blocked_pit', () => {
@@ -327,8 +313,8 @@ describe('NavFSM 导航状态机', () => {
                 expect(Math.abs(r.dx) + Math.abs(r.dz)).toBeGreaterThan(0)
             }
             /* 模拟角色沿偏转方向移动 */
-            mockBodyOf(entity).position.x += r.dx * entity.config.speed * FIXED_DT
-            mockBodyOf(entity).position.z += r.dz * entity.config.speed * FIXED_DT
+            mockBodyOf(entity).position.x += r.dx * entity.state.config.speed * FIXED_DT
+            mockBodyOf(entity).position.z += r.dz * entity.state.config.speed * FIXED_DT
         }
 
         /* 60 步后不应卡在 stuck */
@@ -465,7 +451,7 @@ describe('NavFSM 导航状态机', () => {
             expect(r.dx).toBeGreaterThan(0)
             expect(navCtx.state).toBe('navigating')
             /* 模拟移动 */
-            mockBodyOf(entity).position.x += r.dx * entity.config.speed * FIXED_DT
+            mockBodyOf(entity).position.x += r.dx * entity.state.config.speed * FIXED_DT
         }
 
         /* 位置应有前进 */
@@ -508,7 +494,7 @@ describe('NavFSM 导航状态机', () => {
             expect(r.dx).toBeGreaterThan(0)
 
             /* 模拟移动 */
-            mockBodyOf(entity).position.x += r.dx * entity.config.speed * FIXED_DT
+            mockBodyOf(entity).position.x += r.dx * entity.state.config.speed * FIXED_DT
 
             if (r.dx === 0 && r.dz === 0) blocked = true
         }
@@ -539,25 +525,25 @@ const createCharOnBox = (boxTopY: number): CharacterEntity => {
         translation: (): {x: number; y: number; z: number} => pos,
     } as unknown as CharacterEntity['body']
 
+    const state = createTestCharacterState({
+        id: 99,
+        config: {speed: 3, jumpHeight: 2, scale},
+        combat: createCombatStub(),
+        rowText: 'OnBox',
+    })
+    state.physics.isOnGround = true
     return {
-        id: 99, config: {speed: 3, jumpHeight: 2, scale},
+        state,
         mesh, wireframe: undefined,
         appearanceGroup: new Object3D() as unknown as CharacterEntity['appearanceGroup'],
         body,
         mainCollider: undefined as unknown as RAPIER.Collider,
-        isOnGround: true,
-        groundNormal: {x: 0, y: 1, z: 0}, groundKeepTimer: 0,
-        airborneTime: 0, groundedTime: 0, rowText: 'OnBox',
-        isPlayer: false, navEnabled: true,
-        peaceStrategy: 'patrol' as const, combatStrategy: 'tactical' as const,
-        originStrategy: 'resident' as const, originInterval: 20, chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
-        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
-        combat: createCombatStub(),
+        colliders: [],
         stateMachine: {
             currentState: 'idle', previousState: null, stateTime: 0,
             onStateChange: null, setInput: () => {}, update: () => {}, reset: () => {},
         },
-    } as unknown as CharacterEntity
+    }
 }
 
 const createSlopeMesh = (x: number, y: number, z: number, angleDeg: number): Mesh => {

@@ -6,7 +6,7 @@ import {skeletonFromDefinition} from '../../../../../../skeleton/anim/serializat
 import {sampleClip} from '../../../../../../skeleton/anim/sampling.ts'
 import {buildCharacterSkeletonDefinition} from '../../skeleton/skeleton.ts'
 import {getAttackClipById} from './attack_clips.ts'
-import {getBaseClipForHoldMode} from './base_clips.ts'
+import {previewHumanoidClip} from '../preview.ts'
 import {SUPPORT_HAND_BASE} from './generated/support_hand_base.ts'
 import {SUPPORT_HAND_ATTACKS} from './generated/support_hand_attacks.ts'
 import {TWO_HANDED_WEAPONS, isTwoHandedAttackClip, supportGripLocalOf, weaponOfClip} from './support_hand_bake.ts'
@@ -62,7 +62,17 @@ describe('支撑手离线烘焙残差', () => {
             if (gripLocal === undefined) continue
             for (const state of ['idle', 'walking', 'jumping'] as const) {
                 expect(SUPPORT_HAND_BASE[weapon.classId]?.[state], `${weapon.classId}/${state}`).toBeDefined()
-                const clip = getBaseClipForHoldMode(state, true, 'two_handed', 0, [], 'right', weapon.classId)
+                const clip = previewHumanoidClip({
+                    kind: 'base',
+                    state,
+                    variant: {
+                        weaponHeld: true,
+                        horizontalSpeed: 0,
+                        holdMode: 'two_handed',
+                        handedness: 'right',
+                        weaponClassId: weapon.classId,
+                    },
+                })
                 expect(maxMountDistance(clip, gripLocal), `${weapon.classId}/${state}`)
                     .toBeLessThan(SUPPORT_HAND_VISUAL_TOLERANCE)
             }

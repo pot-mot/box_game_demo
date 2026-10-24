@@ -82,31 +82,12 @@ describe('骨架实体聚焦隔离', () => {
         expect(world.getSelection()).toBeUndefined()
     })
 
-    it('父关节下拉排除自身与后代，并在应用后同步领域骨架与场景层级', () => {
+    it('不提供父级重连与删除入口（骨架结构只读）', () => {
         const world = setup()
         const entity = world.addPreset('a')
-        world.select({kind: 'joint', id: 'root'})
-        const rootSelect = document.querySelector<HTMLSelectElement>('#skeleton-parent')
-        expect(rootSelect).not.toBeNull()
-        expect([...rootSelect!.options].map(option => option.value)).toEqual([''])
-
         world.select({kind: 'joint', id: 'child'})
-        const parentSelect = document.querySelector<HTMLSelectElement>('#skeleton-parent')
-        expect(parentSelect).not.toBeNull()
-        expect([...parentSelect!.options].map(option => option.value)).toEqual(['', 'root'])
-        expect(parentSelect!.value).toBe('root')
-
-        parentSelect!.value = ''
-        document.querySelector<HTMLButtonElement>('#skeleton-panel .dc-btn--primary')!.click()
-        const child = entity.skeleton.findJoint('child')!
-        expect(child.parent).toBeUndefined()
-        expect(entity.visuals.groups.get('child')!.parent).toBe(entity.visuals.rootGroup)
-
-        world.select({kind: 'joint', id: 'child'})
-        const reconnect = document.querySelector<HTMLSelectElement>('#skeleton-parent')!
-        reconnect.value = 'root'
-        document.querySelector<HTMLButtonElement>('#skeleton-panel .dc-btn--primary')!.click()
+        expect(document.querySelector('#skeleton-parent')).toBeNull()
+        expect(document.querySelector('#skeleton-panel .dc-btn--danger')).toBeNull()
         expect(entity.skeleton.findJoint('child')!.parent?.id).toBe('root')
-        expect(entity.visuals.groups.get('child')!.parent).toBe(entity.visuals.groups.get('root'))
     })
 })

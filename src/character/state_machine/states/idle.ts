@@ -30,22 +30,22 @@ export const idleHandler: StateHandler = {
         },
         {
             to: 'interacting',
-            guard: (input, entity) => input.interact && entity.interactTargetActive === true,
+            guard: (input, entity) => input.interact && entity.state.interaction.active === true,
         },
         {
             to: 'blocking',
             /* 持盾且长按格挡键（blockHeld）且格挡槽未空时举盾 */
-            guard: (_input, entity) => entity.combat.blockHeld
-                && entity.combat.block !== undefined
-                && entity.combat.guard > 0
-                && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.blockHeld
+                && entity.state.combat.block !== undefined
+                && entity.state.combat.guard > 0
+                && entity.state.combat.health > 0,
         },
         { to: 'walking', guard: (input) => Math.hypot(input.dx, input.dz) > 0.001 },
         {
             to: 'attacking',
             /* 起手解析：攻击键的起手候选按守卫（蓄力/方向组合键）与冷却求值，存在候选才进入 */
             guard: (input, entity) => input.attack
-                && canStartAttack(entity.combat, {
+                && canStartAttack(entity.state.combat, {
                     dx: input.dx,
                     dz: input.dz,
                     holdDuration: input.attackHoldDuration,
@@ -59,20 +59,20 @@ export const idleHandler: StateHandler = {
         },
         {
             to: 'rolling',
-            guard: (input, entity) => input.roll && entity.combat.rollSkill.cooldownTimer <= 0,
+            guard: (input, entity) => input.roll && entity.state.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'flinching',
-            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0,
         },
         {
             to: 'falling',
             guard: (_input, entity) =>
-                shouldFall(entity) && entity.airborneTime >= STATE_FLIP_MIN_TIME,
+                shouldFall(entity) && entity.state.physics.airborneTime >= STATE_FLIP_MIN_TIME,
         },
     ],
 }

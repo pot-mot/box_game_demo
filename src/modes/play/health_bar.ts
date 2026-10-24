@@ -93,16 +93,16 @@ export const setupHealthBars = (
         if (player) {
             const ppos = player.body.translation()
             for (const c of allChars) {
-                if (c.combat.isDead || c.id === player.id) continue
+                if (c.state.combat.isDead || c.state.identity.id === player.state.identity.id) continue
                 const ct = c.body.translation()
                 const dx = ct.x - ppos.x
                 const dy = ct.y - ppos.y
                 const dz = ct.z - ppos.z
                 const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
                 if (dist > DISPLAY_RADIUS) continue
-                visible.add(c.id)
+                visible.add(c.state.identity.id)
 
-                let entry = bars.get(c.id)
+                let entry = bars.get(c.state.identity.id)
                 if (!entry) {
                     const canvas = document.createElement('canvas')
                     canvas.width = BAR_W
@@ -112,37 +112,37 @@ export const setupHealthBars = (
                     const sprite = new Sprite(mat)
                     sprite.renderOrder = 999
                     scene.add(sprite)
-                    entry = {sprite, lastHealth: -1, lastMaxHealth: -1, lastPoise: -1, lastMaxPoise: -1, lastGuard: -1, lastMaxGuard: -1, characterId: c.id}
-                    bars.set(c.id, entry)
+                    entry = {sprite, lastHealth: -1, lastMaxHealth: -1, lastPoise: -1, lastMaxPoise: -1, lastGuard: -1, lastMaxGuard: -1, characterId: c.state.identity.id}
+                    bars.set(c.state.identity.id, entry)
                 }
 
-                const guardMax = c.combat.block?.guardMax ?? 0
-                if (c.combat.health !== entry.lastHealth || c.combat.maxHealth !== entry.lastMaxHealth
-                    || c.combat.poiseMax !== entry.lastMaxPoise
-                    || Math.abs(c.combat.poise - entry.lastPoise) >= POISE_DRAW_STEP
+                const guardMax = c.state.combat.block?.guardMax ?? 0
+                if (c.state.combat.health !== entry.lastHealth || c.state.combat.maxHealth !== entry.lastMaxHealth
+                    || c.state.combat.poiseMax !== entry.lastMaxPoise
+                    || Math.abs(c.state.combat.poise - entry.lastPoise) >= POISE_DRAW_STEP
                     || guardMax !== entry.lastMaxGuard
-                    || Math.abs(c.combat.guard - entry.lastGuard) >= POISE_DRAW_STEP) {
+                    || Math.abs(c.state.combat.guard - entry.lastGuard) >= POISE_DRAW_STEP) {
                     if (entry.sprite.material instanceof SpriteMaterial) {
                         const canvas = entry.sprite.material.map?.image
                         if (canvas instanceof HTMLCanvasElement) {
                             const ctx = canvas.getContext('2d')
-                            if (ctx) drawBar(ctx, c.combat.health, c.combat.maxHealth, c.combat.poise, c.combat.poiseMax, c.combat.guard, guardMax)
+                            if (ctx) drawBar(ctx, c.state.combat.health, c.state.combat.maxHealth, c.state.combat.poise, c.state.combat.poiseMax, c.state.combat.guard, guardMax)
                         }
                         entry.sprite.material.map!.needsUpdate = true
                     }
-                    entry.lastHealth = c.combat.health
-                    entry.lastMaxHealth = c.combat.maxHealth
-                    entry.lastPoise = c.combat.poise
-                    entry.lastMaxPoise = c.combat.poiseMax
-                    entry.lastGuard = c.combat.guard
+                    entry.lastHealth = c.state.combat.health
+                    entry.lastMaxHealth = c.state.combat.maxHealth
+                    entry.lastPoise = c.state.combat.poise
+                    entry.lastMaxPoise = c.state.combat.poiseMax
+                    entry.lastGuard = c.state.combat.guard
                     entry.lastMaxGuard = guardMax
                 }
 
                 /* 血条锚定「渲染插值后的身体中心」（滞后一拍），与角色可视位置一致 */
-                const form = bodyFormOf(c.config.bodyFormId)
+                const form = bodyFormOf(c.state.config.bodyFormId)
                 entry.sprite.position.set(
                     c.mesh.position.x,
-                    c.mesh.position.y + form.base.centerOffsetY * c.config.scale + form.base.size.height * c.config.scale + 0.3,
+                    c.mesh.position.y + form.base.centerOffsetY * c.state.config.scale + form.base.size.height * c.state.config.scale + 0.3,
                     c.mesh.position.z,
                 )
                 entry.sprite.scale.set(FIXED_SCALE, FIXED_SCALE * (BAR_H / BAR_W), 1)

@@ -70,7 +70,7 @@ describe('角色渲染插值（滞后一拍）', () => {
 
     it('物理步末捕获、渲染帧按 alpha 在上一 / 当前状态之间插值', () => {
         const {id} = system.add(saveConfig(), 0, 1, 0)
-        const entity = system.getAll().find(e => e.id === id)
+        const entity = system.getAll().find(e => e.state.identity.id === id)
         expect(entity).toBeDefined()
         if (entity === undefined) return
 
@@ -97,7 +97,7 @@ describe('角色渲染插值（滞后一拍）', () => {
 
     it('resetRenderState 后不从上一次位置插值滑行', () => {
         const {id} = system.add(saveConfig(), 0, 1, 0)
-        const entity = system.getAll().find(e => e.id === id)
+        const entity = system.getAll().find(e => e.state.identity.id === id)
         expect(entity).toBeDefined()
         if (entity === undefined) return
 

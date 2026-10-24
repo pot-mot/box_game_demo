@@ -4,7 +4,6 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import {createCharacterStateMachine} from '../machine.ts'
 import {createCombatComponent} from '../../combat/types.ts'
 import {createWeaponRuntime} from '../../weapon/weapon_runtime.ts'
-import {createBodyEnvironment} from '../../../physics/environment.ts'
 import {moveSpeedOf, type CharacterEntity} from '../../types.ts'
 
 const DT = 1 / 60
@@ -27,28 +26,22 @@ const makeMock = (weaponId = 'shield_medium'): CharacterEntity => {
         handle: 1,
     }
     const runtime = createWeaponRuntime(weaponId)
-    return {
+    const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+    const characterState = createTestCharacterState({
         id: 1,
         config: {speed: 6, jumpHeight: 2, scale: 1},
+        combat,
+        bodyState: {holdMode: runtime.holdMode},
+    })
+    characterState.physics.isOnGround = true
+    return {
+        state: characterState,
         mesh: null!, wireframe: undefined,
         appearanceGroup: {rotation: {y: 0}} as unknown as CharacterEntity['appearanceGroup'],
         body: mockBody as unknown as CharacterEntity['body'],
         mainCollider: undefined as unknown as RAPIER.Collider,
         colliders: [],
-        isOnGround: true,
-        groundNormal: {x: 0, y: 1, z: 0},
-        groundKeepTimer: 0,
-        airborneTime: 0, groundedTime: 0,
-        rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
-        isDying: false, dyingTimer: 0,
-        dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0,
-        knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
-        combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15),
-        bodyState: {holdMode: runtime.holdMode},
-        lockPoints: [],
-        environment: createBodyEnvironment(),
         stateMachine: createCharacterStateMachine(),
-        state: createTestCharacterState({}),
     }
 }
 
@@ -65,8 +58,8 @@ const advanceUntil = (entity: CharacterEntity, state: CharacterEntity['stateMach
 describe('格挡 / 破防状态', () => {
     it('持盾装备时解析格挡配置并把格挡槽初始化为上限', () => {
         const e = makeMock()
-        expect(e.combat.block).toBeDefined()
-        expect(e.combat.guard).toBeCloseTo(e.combat.block!.guardMax, 6)
+        expect(e.state.combat.block).toBeDefined()
+        expect(e.state.combat.guard).toBeCloseTo(e.state.combat.block!.guardMax, 6)
     })
 
     it('block 输入从 idle 进入 blocking，退出时清除 blocking 标记', () => {
@@ -74,17 +67,17 @@ describe('格挡 / 破防状态', () => {
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, false, true)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('blocking')
-        expect(e.combat.blocking).toBe(true)
+        expect(e.state.combat.blocking).toBe(true)
 
         e.stateMachine.setInput(0, 0, false, false)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('idle')
-        expect(e.combat.blocking).toBe(false)
+        expect(e.state.combat.blocking).toBe(false)
     })
 
     it('无盾时 block 输入不进入 blocking', () => {
         const e = makeMock('long_sword')
-        expect(e.combat.block).toBeUndefined()
+        expect(e.state.combat.block).toBeUndefined()
         e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, false, true)
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('idle')
@@ -98,7 +91,7 @@ describe('格挡 / 破防状态', () => {
 
         e.stateMachine.setInput(13, 0, false, false, false, undefined, 0, false, false, true)
         e.stateMachine.update(DT, e)
-        const expected = moveSpeedOf(e) * e.combat.block!.moveSpeedMultiplier
+        const expected = moveSpeedOf(e) * e.state.combat.block!.moveSpeedMultiplier
         expect(e.body.linvel().x).toBeCloseTo(expected, 5)
     })
 
@@ -108,22 +101,22 @@ describe('格挡 / 破防状态', () => {
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('blocking')
 
-        e.combat.guard = 0
+        e.state.combat.guard = 0
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('guard_broken')
-        expect(e.combat.blocking).toBe(false)
+        expect(e.state.combat.blocking).toBe(false)
 
-        const duration = e.combat.block!.guardBreakDuration
+        const duration = e.state.combat.block!.guardBreakDuration
         const t = advanceUntil(e, 'idle')
         expect(t).toBeDefined()
         expect(t!).toBeGreaterThanOrEqual(duration)
-        expect(e.combat.guard).toBeCloseTo(e.combat.block!.guardMax, 6)
+        expect(e.state.combat.guard).toBeCloseTo(e.state.combat.block!.guardMax, 6)
     })
 
     it('倒地优先于破防（同时满足时进入 knockdown）', () => {
         const e = makeMock()
-        e.combat.guard = 0
-        e.combat.pendingKnockdown = true
+        e.state.combat.guard = 0
+        e.state.combat.pendingKnockdown = true
         e.stateMachine.update(DT, e)
         expect(e.stateMachine.currentState).toBe('knockdown')
     })

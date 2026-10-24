@@ -14,13 +14,15 @@ export interface LockOnCandidate {
 
 /** 锁定所需的目标角色最小接口（避免直接依赖 CharacterEntity 全量类型） */
 export interface LockOnActor {
-    readonly id: number
-    /** 额外锁定点（默认身体中心点不在数组内，运行时恒存在且下标为 0） */
-    readonly lockPoints: readonly LockPointConfig[]
-    readonly combat: {
-        readonly isDead: boolean
-        readonly faction: Faction
-        readonly attackTendency: AttackTendency
+    readonly state: {
+        readonly identity: {readonly id: number}
+        /** 额外锁定点（默认身体中心点不在数组内，运行时恒存在且下标为 0） */
+        readonly lockPoints: readonly LockPointConfig[]
+        readonly combat: {
+            readonly isDead: boolean
+            readonly faction: Faction
+            readonly attackTendency: AttackTendency
+        }
     }
     readonly body: {
         readonly translation: () => { readonly x: number; readonly y: number; readonly z: number }
@@ -92,7 +94,7 @@ const resolveLockPointPositions = (actor: LockOnActor, out: Vector3[]): number =
     }
     const center = actor.body.translation()
     acquire().set(center.x, center.y, center.z)
-    for (const point of actor.lockPoints) {
+    for (const point of actor.state.lockPoints) {
         const joint = actor.appearanceGroup.getObjectByName(point.jointId)
         if (joint === undefined) continue
         /* 关节 matrixWorld 可能滞后于本帧动画写入，先刷新祖先与自身 */
@@ -145,12 +147,12 @@ export const createPlayerLockOn = (
         const viewYaw = Math.atan2(viewDirection.x, viewDirection.z)
         candidates.length = 0
         for (const other of characterSystem.getAll()) {
-            if (other.id === player.id || other.combat.isDead) continue
-            if (!player.combat.attackTendency(player.combat.faction, other.combat.faction)) continue
+            if (other.state.identity.id === player.state.identity.id || other.state.combat.isDead) continue
+            if (!player.state.combat.attackTendency(player.state.combat.faction, other.state.combat.faction)) continue
             const pointCount = resolveLockPointPositions(other, pointPool)
             for (let index = 0; index < pointCount; index++) {
                 const point = pointPool[index]
-                candidates.push({actorId: other.id, pointIndex: index, x: point.x, z: point.z})
+                candidates.push({actorId: other.state.identity.id, pointIndex: index, x: point.x, z: point.z})
             }
         }
         const best = selectLockOnTarget(playerPos.x, playerPos.z, viewYaw, candidates)
@@ -168,8 +170,8 @@ export const createPlayerLockOn = (
             release()
             return undefined
         }
-        const target = characterSystem.getAll().find(c => c.id === targetId)
-        if (!target || target.combat.isDead) {
+        const target = characterSystem.getAll().find(c => c.state.identity.id === targetId)
+        if (!target || target.state.combat.isDead) {
             release()
             return undefined
         }

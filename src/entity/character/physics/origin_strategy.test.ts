@@ -81,20 +81,20 @@ describe('角色行为原点策略存档', () => {
             aiBlockDuration: 0.7,
             aiBlockCooldown: 2.5,
         }, 0, 0, 0)
-        const e = system.getAll().find(c => c.id === custom.id)!
-        expect(e.originStrategy).toBe('roamer')
-        expect(e.originInterval).toBe(12)
-        expect(e.chaseLeashRadius).toBe(30)
-        expect(e.aiBlockDuration).toBe(0.7)
-        expect(e.aiBlockCooldown).toBe(2.5)
+        const e = system.getAll().find(c => c.state.identity.id === custom.id)!
+        expect(e.state.ai.originStrategy).toBe('roamer')
+        expect(e.state.ai.originInterval).toBe(12)
+        expect(e.state.ai.chaseLeashRadius).toBe(30)
+        expect(e.state.ai.aiBlockDuration).toBe(0.7)
+        expect(e.state.ai.aiBlockCooldown).toBe(2.5)
 
         const legacy = system.add(meleeSaveConfig(), 1, 0, 0)
-        const l = system.getAll().find(c => c.id === legacy.id)!
-        expect(l.originStrategy).toBe('resident')
-        expect(l.originInterval).toBe(20)
-        expect(l.chaseLeashRadius).toBe(20)
-        expect(l.aiBlockDuration).toBe(0.4)
-        expect(l.aiBlockCooldown).toBe(1.2)
+        const l = system.getAll().find(c => c.state.identity.id === legacy.id)!
+        expect(l.state.ai.originStrategy).toBe('resident')
+        expect(l.state.ai.originInterval).toBe(20)
+        expect(l.state.ai.chaseLeashRadius).toBe(20)
+        expect(l.state.ai.aiBlockDuration).toBe(0.4)
+        expect(l.state.ai.aiBlockCooldown).toBe(1.2)
     })
 
     it('setChaseLeashRadius / setOriginInterval / setOriginStrategy / setAIBlock* 更新实体字段', () => {
@@ -104,12 +104,12 @@ describe('角色行为原点策略存档', () => {
         system.setOriginStrategy(id, 'hunter')
         system.setAIBlockDuration(id, 0.9)
         system.setAIBlockCooldown(id, 3)
-        const e = system.getAll().find(c => c.id === id)!
-        expect(e.chaseLeashRadius).toBe(8)
-        expect(e.originInterval).toBe(15)
-        expect(e.originStrategy).toBe('hunter')
-        expect(e.aiBlockDuration).toBe(0.9)
-        expect(e.aiBlockCooldown).toBe(3)
+        const e = system.getAll().find(c => c.state.identity.id === id)!
+        expect(e.state.ai.chaseLeashRadius).toBe(8)
+        expect(e.state.ai.originInterval).toBe(15)
+        expect(e.state.ai.originStrategy).toBe('hunter')
+        expect(e.state.ai.aiBlockDuration).toBe(0.9)
+        expect(e.state.ai.aiBlockCooldown).toBe(3)
     })
 
     it('序列化写出原点策略 / 间隔 / 追击半径 / AI 举盾参数（往返保留）', () => {

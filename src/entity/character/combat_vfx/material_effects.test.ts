@@ -101,7 +101,7 @@ describe('受击闪红颜色恢复', () => {
 
     it('编辑模式改阵营后受击，闪红结束恢复的是新阵营色而非初始阵营色', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         const spawnColors = collectColors(entity)
 
         /* 改阵营 0 → 2：recolor 应改变身体材质颜色 */
@@ -110,7 +110,7 @@ describe('受击闪红颜色恢复', () => {
         expect(recolored).not.toEqual(spawnColors)
 
         /* 受击 → 闪红 → 结束后颜色必须回到「改阵营后」的颜色 */
-        applyDamage(entity.combat, hitEvent(id))
+        applyDamage(entity.state.combat, hitEvent(id))
         expect(collectColors(entity)).toContain(DAMAGE_FLASH_COLOR)
 
         for (let i = 0; i < 30; i++) system.update(1 / 60)
@@ -120,13 +120,13 @@ describe('受击闪红颜色恢复', () => {
 
     it('闪红持续期间内再次受击，结束后仍恢复当前外观颜色', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         system.updateCharacterConfig(id, {}, undefined, 3)
         const recolored = collectColors(entity)
 
-        applyDamage(entity.combat, hitEvent(id))
+        applyDamage(entity.state.combat, hitEvent(id))
         system.update(1 / 60)
-        applyDamage(entity.combat, hitEvent(id))
+        applyDamage(entity.state.combat, hitEvent(id))
 
         for (let i = 0; i < 30; i++) system.update(1 / 60)
         expect(collectColors(entity)).toEqual(recolored)
@@ -169,7 +169,7 @@ describe('翻滚无敌帧材质表现与伤害免疫', () => {
 
     it('中段无敌帧：材质半透明白、伤害完全免疫；窗口结束后恢复外观并恢复结算', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         const baseColors = collectColors(entity)
         const baseOpacities = collectMaterials(entity).map(mat => mat.opacity)
 
@@ -178,11 +178,11 @@ describe('翻滚无敌帧材质表现与伤害免疫', () => {
         expect(entity.stateMachine.currentState).toBe('rolling')
 
         /* 起手（窗口前）可被命中 */
-        expect(entity.combat.invincibleTimer).toBe(0)
+        expect(entity.state.combat.invincibleTimer).toBe(0)
 
         /* 推进到中段窗口（无敌帧 0.15s ~ 0.45s；第 12 帧 stateTime≈0.183s） */
         for (let i = 0; i < 11; i++) step()
-        expect(entity.combat.invincibleTimer).toBeGreaterThan(0)
+        expect(entity.state.combat.invincibleTimer).toBeGreaterThan(0)
         for (const mat of collectMaterials(entity)) {
             expect(mat.color.getHex()).toBe(INVINCIBLE_FLASH_COLOR)
             expect(mat.transparent).toBe(true)
@@ -190,9 +190,9 @@ describe('翻滚无敌帧材质表现与伤害免疫', () => {
         }
 
         /* 无敌期间伤害完全免疫：不扣血、不触发闪红 */
-        const healthBefore = entity.combat.health
-        applyDamage(entity.combat, hitEvent(id))
-        expect(entity.combat.health).toBe(healthBefore)
+        const healthBefore = entity.state.combat.health
+        applyDamage(entity.state.combat, hitEvent(id))
+        expect(entity.state.combat.health).toBe(healthBefore)
         expect(collectColors(entity)).not.toContain(DAMAGE_FLASH_COLOR)
 
         /* 翻滚结束（0.6s）后外观还原、无敌解除 */
@@ -204,13 +204,13 @@ describe('翻滚无敌帧材质表现与伤害免疫', () => {
         expect(collectColors(entity)).toEqual(baseColors)
         collectMaterials(entity).forEach((mat, i) => expect(mat.opacity).toBe(baseOpacities[i]))
 
-        applyDamage(entity.combat, hitEvent(id))
-        expect(entity.combat.health).toBe(healthBefore - 5)
+        applyDamage(entity.state.combat, hitEvent(id))
+        expect(entity.state.combat.health).toBe(healthBefore - 5)
     })
 
     it('统一效果层优先级：无敌闪白期间受击显示闪红，无敌结束回到闪白，全部结束恢复原色', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         const effects = createMaterialEffects(entity)
         const baseColors = collectColors(entity)
 

@@ -12,15 +12,15 @@ export const approachHandler: CombatStateHandler = {
         ctx.combatStrafeTimer = 0
     },
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-        if (!target || target.combat.isDead) { setInput(0, 0, false); return }
+        const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+        if (!target || target.state.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.translation()
         const tp = target.body.translation()
         v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
         const dist = v3Length(_dir)
 
-        const weapon = character.combat.weapon
+        const weapon = character.state.combat.weapon
         if (weapon.type !== 'ranged') { setInput(0, 0, false); return }
 
         if (dist < 0.01) { setInput(0, 0, false); return }
@@ -30,9 +30,9 @@ export const approachHandler: CombatStateHandler = {
 
         /* aggressive 策略：使用攻击距离而非理想距离 */
         const effectiveRange = ctx.combatStrategy === 'aggressive' ? weapon.range : weapon.idealRange
-        const canStart = canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
+        const canStart = canStartAttack(character.state.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
 
-        if (character.combat.attackActive) {
+        if (character.state.combat.attackActive) {
             /* 射击动作期间保持面向目标、原地不动 */
             ctx.combatAimActive = true
             setInput(0, 0, false)
@@ -65,11 +65,11 @@ export const approachHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 if (ctx.combatStrategy !== 'cowardly') return false
                 if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 if (weapon.type !== 'ranged') return false
                 return Math.hypot(tp.x - pos.x, tp.z - pos.z) < weapon.retreatRange
             },
@@ -79,13 +79,13 @@ export const approachHandler: CombatStateHandler = {
             to: 'attack',
             guard: (ctx, character, allCharacters) => {
                 if (ctx.combatStrategy !== 'aggressive') return false
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
-                const cooldownOk = canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
+                const weapon = character.state.combat.weapon
+                const cooldownOk = canStartAttack(character.state.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
                 /* 近战无射程概念，用检测回退常量默认值 */
                 const skillRange = weapon.type === 'melee' ? MELEE_FALLBACK_DETECT_RANGE : weapon.range
                 return v3Length(_dir) < skillRange && cooldownOk
@@ -96,26 +96,26 @@ export const approachHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 /* aggressive 策略跳过 volley */
                 if (ctx.combatStrategy === 'aggressive') return false
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 if (weapon.type !== 'ranged') return false
-                const cooldownOk = canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
+                const cooldownOk = canStartAttack(character.state.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
                 return v3Length(_dir) < weapon.idealRange + 0.5 && cooldownOk
             },
         },
         {
             to: 'chase',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 if (weapon.type !== 'ranged') return false
                 const threshold = ctx.combatStrategy === 'aggressive'
                     ? weapon.range * 2
@@ -126,12 +126,12 @@ export const approachHandler: CombatStateHandler = {
         {
             to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return true
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return true
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const detRange = character.combat.weapon.detectionRange
+                const detRange = character.state.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

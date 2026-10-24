@@ -46,7 +46,7 @@ const segmentFinished = (c: CombatComponent): boolean => {
 
 export const attackingHandler: StateHandler = {
     enter: (entity) => {
-        const c = entity.combat
+        const c = entity.state.combat
         c.attackActive = true
         c.bufferedSegment = undefined
         c.attackedTargets.clear()
@@ -56,7 +56,7 @@ export const attackingHandler: StateHandler = {
         enterAttackSegment(c, segment, entity)
     },
     update: (dt, input, entity) => {
-        const c = entity.combat
+        const c = entity.state.combat
         const segment = c.activeSegment
         if (segment === undefined) return
 
@@ -155,7 +155,7 @@ export const attackingHandler: StateHandler = {
         }
     },
     exit: (entity) => {
-        const c = entity.combat
+        const c = entity.state.combat
         c.attackActive = false
         c.bufferedSegment = undefined
         c.attackCharge = 0
@@ -167,45 +167,45 @@ export const attackingHandler: StateHandler = {
     transitions: [
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'flinching',
-            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0,
         },
         {
             to: 'rolling',
             guard: (input, entity) => {
-                if (!input.roll || entity.combat.rollSkill.cooldownTimer > 0) return false
-                const segment = entity.combat.activeSegment
+                if (!input.roll || entity.state.combat.rollSkill.cooldownTimer > 0) return false
+                const segment = entity.state.combat.activeSegment
                 if (segment === undefined) return false
                 const phases = resolvePhases(segment.phases)
                 /* 阶段完成后还需段总时长（动作 + 恢复）满足（防止 phases 和不等于 1 时提前逃逸） */
-                if (entity.combat.phaseIndex >= phases.length) {
-                    return entity.combat.attackTimer >= segmentTotalDuration(segment)
+                if (entity.state.combat.phaseIndex >= phases.length) {
+                    return entity.state.combat.attackTimer >= segmentTotalDuration(segment)
                 }
-                return phases[entity.combat.phaseIndex].cancellable
+                return phases[entity.state.combat.phaseIndex].cancellable
             },
         },
         {
             to: 'walking',
             guard: (input, entity) => {
-                if (!segmentFinished(entity.combat)) return false
+                if (!segmentFinished(entity.state.combat)) return false
                 return Math.hypot(input.dx, input.dz) > 0.001 && isSupportedOn(entity, SLOPE_WALK_THRESHOLD)
             },
         },
         {
             to: 'idle',
-            guard: (_input, entity) => segmentFinished(entity.combat) && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
+            guard: (_input, entity) => segmentFinished(entity.state.combat) && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'jumping',
             guard: (input, entity) =>
-                segmentFinished(entity.combat) && input.jump && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
+                segmentFinished(entity.state.combat) && input.jump && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'falling',
-            guard: (_input, entity) => segmentFinished(entity.combat) && shouldFall(entity),
+            guard: (_input, entity) => segmentFinished(entity.state.combat) && shouldFall(entity),
         },
     ],
 }

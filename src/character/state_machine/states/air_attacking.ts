@@ -36,13 +36,13 @@ export const isAirborneAttackState = (state: CharacterStateName): boolean =>
 
 /** 当前武器空中攻击模组（非近战武器无模组，回退默认值） */
 const airAttackOf = (entity: CharacterEntity): MeleeAirAttackConfig =>
-    entity.combat.weapon.type === 'melee'
-        ? {...DEFAULT_MELEE_AIR_ATTACK, ...entity.combat.weapon.airAttack}
+    entity.state.combat.weapon.type === 'melee'
+        ? {...DEFAULT_MELEE_AIR_ATTACK, ...entity.state.combat.weapon.airAttack}
         : DEFAULT_MELEE_AIR_ATTACK
 
 /** 跳跃/下落中是否可起手空中攻击（起手候选存在且冷却就绪） */
 export const canStartAirAttack = (entity: CharacterEntity): boolean =>
-    canStartAttack(entity.combat, {dx: 0, dz: 0, holdDuration: 0, attackKey: 'air'})
+    canStartAttack(entity.state.combat, {dx: 0, dz: 0, holdDuration: 0, attackKey: 'air'})
 
 /** 段是否已完整播完（阶段全部结束且累计时间达到段总时长） */
 const segmentFinished = (c: CombatComponent): boolean => {
@@ -76,7 +76,7 @@ const applyAirAttackMotion = (input: CharacterInput, entity: CharacterEntity): v
 
 export const airAttackingHandler: StateHandler = {
     enter: (entity) => {
-        const c = entity.combat
+        const c = entity.state.combat
         c.attackActive = true
         c.bufferedSegment = undefined
         c.attackedTargets.clear()
@@ -86,7 +86,7 @@ export const airAttackingHandler: StateHandler = {
         enterAttackSegment(c, segment, entity)
     },
     update: (dt, input, entity) => {
-        const c = entity.combat
+        const c = entity.state.combat
         const segment = c.activeSegment
         if (segment === undefined) return
 
@@ -114,7 +114,7 @@ export const airAttackingHandler: StateHandler = {
         applyAirAttackMotion(input, entity)
     },
     exit: (entity) => {
-        const c = entity.combat
+        const c = entity.state.combat
         c.attackActive = false
         c.bufferedSegment = undefined
         c.attackCharge = 0
@@ -125,26 +125,26 @@ export const airAttackingHandler: StateHandler = {
     transitions: [
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'flinching',
-            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0,
         },
         {
             to: 'walking',
             guard: (input, entity) =>
-                segmentFinished(entity.combat)
+                segmentFinished(entity.state.combat)
                 && isSupportedOn(entity, SLOPE_WALK_THRESHOLD)
                 && Math.hypot(input.dx, input.dz) > 0.001,
         },
         {
             to: 'idle',
-            guard: (_input, entity) => segmentFinished(entity.combat) && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
+            guard: (_input, entity) => segmentFinished(entity.state.combat) && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'falling',
-            guard: (_input, entity) => segmentFinished(entity.combat) && shouldFall(entity),
+            guard: (_input, entity) => segmentFinished(entity.state.combat) && shouldFall(entity),
         },
     ],
 }

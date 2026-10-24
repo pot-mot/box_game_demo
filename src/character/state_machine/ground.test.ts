@@ -4,33 +4,33 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import {isSupportedOn, shouldFall, projectToSlope, applySlopeAntiGravity} from './ground.ts'
 import {SLOPE_WALK_THRESHOLD} from './constants.ts'
 import {GRAVITY} from '../../physics/constants.ts'
-import {createBodyEnvironment} from '../../physics/environment.ts'
 import type {CharacterEntity} from '../types.ts'
 
 /** 构造最小 CharacterEntity mock */
-const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterEntity => ({
-    id: 1,
-    config: {speed: 6, jumpHeight: 2, scale: 1},
-    mesh: null!, wireframe: undefined, appearanceGroup: null!,
-    body: {
-        linvel: () => ({x: 0, y: 0, z: 0}),
-        setLinvel: () => {},
-        resetForces: () => {},
-        addForce: () => {},
-        mass: () => 1,
-        wakeUp: () => {},
-    } as unknown as CharacterEntity['body'],
-    mainCollider: undefined as unknown as RAPIER.Collider,
-    colliders: [],
-    isOnGround,
-    groundNormal: {x: nx, y: ny, z: nz},
-    groundKeepTimer: 0,
-    airborneTime: 0, groundedTime: 0,
-    rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
-    isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
-    combat: null!, bodyState: {holdMode: 'one_handed'}, lockPoints: [], environment: createBodyEnvironment(), stateMachine: null!,
-    state: createTestCharacterState({}),
-})
+const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterEntity => {
+    const state = createTestCharacterState({
+        id: 1,
+        config: {speed: 6, jumpHeight: 2, scale: 1},
+        bodyState: {holdMode: 'one_handed'},
+    })
+    state.physics.isOnGround = isOnGround
+    state.physics.groundNormal = {x: nx, y: ny, z: nz}
+    return {
+        state,
+        mesh: null!, wireframe: undefined, appearanceGroup: null!,
+        body: {
+            linvel: () => ({x: 0, y: 0, z: 0}),
+            setLinvel: () => {},
+            resetForces: () => {},
+            addForce: () => {},
+            mass: () => 1,
+            wakeUp: () => {},
+        } as unknown as CharacterEntity['body'],
+        mainCollider: undefined as unknown as RAPIER.Collider,
+        colliders: [],
+        stateMachine: null!,
+    }
+}
 
 describe('isSupportedOn', () => {
     it('平坦支撑面（ny=1）为 true', () => {

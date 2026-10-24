@@ -11,8 +11,8 @@ import {FALLBACK_GUARD_BREAK_DURATION} from '../../combat/constants.ts'
  */
 export const guardBrokenHandler: StateHandler = {
     enter: (entity) => {
-        entity.combat.blocking = false
-        entity.combat.blockHeld = false
+        entity.state.combat.blocking = false
+        entity.state.combat.blockHeld = false
         entity.body.setLinvel({x: 0, y: 0, z: 0}, true)
     },
     update: (_dt, _input, entity) => {
@@ -20,12 +20,12 @@ export const guardBrokenHandler: StateHandler = {
         entity.body.setLinvel({x: 0, y: entity.body.linvel().y, z: 0}, true)
     },
     exit: (entity) => {
-        entity.combat.guard = guardMaxOf(entity.combat)
+        entity.state.combat.guard = guardMaxOf(entity.state.combat)
     },
     transitions: [
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'walking',
@@ -45,10 +45,10 @@ export const guardBrokenHandler: StateHandler = {
             guard: (_input, entity, ctx) =>
                 ctx.stateTime >= guardBreakDurationOf(entity)
                 && shouldFall(entity)
-                && entity.airborneTime >= STATE_FLIP_MIN_TIME,
+                && entity.state.physics.airborneTime >= STATE_FLIP_MIN_TIME,
         },
     ],
 }
 
 const guardBreakDurationOf = (entity: CharacterEntity): number =>
-    entity.combat.block?.guardBreakDuration ?? FALLBACK_GUARD_BREAK_DURATION
+    entity.state.combat.block?.guardBreakDuration ?? FALLBACK_GUARD_BREAK_DURATION

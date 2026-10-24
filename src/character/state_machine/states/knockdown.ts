@@ -15,7 +15,7 @@ const easeInOutQuad = (p: number): number =>
  */
 export const knockdownHandler: StateHandler = {
     enter: (entity) => {
-        const c = entity.combat
+        const c = entity.state.combat
         c.attackActive = false
         c.pendingFlinch = false
         c.pendingKnockdown = false
@@ -29,15 +29,15 @@ export const knockdownHandler: StateHandler = {
         const {lastHitDirX, lastHitDirZ} = c
         const len = Math.hypot(lastHitDirX, lastHitDirZ)
         if (len > 1e-3) {
-            entity.knockdownFallDirX = lastHitDirX / len
-            entity.knockdownFallDirZ = lastHitDirZ / len
+            entity.state.timers.knockdownFallDirX = lastHitDirX / len
+            entity.state.timers.knockdownFallDirZ = lastHitDirZ / len
         } else {
-            entity.knockdownFallDirX = -Math.sin(yaw)
-            entity.knockdownFallDirZ = -Math.cos(yaw)
+            entity.state.timers.knockdownFallDirX = -Math.sin(yaw)
+            entity.state.timers.knockdownFallDirZ = -Math.cos(yaw)
         }
-        entity.knockdownFallAngle = 0
+        entity.state.timers.knockdownFallAngle = 0
         /* 起身前翻身：躺姿从当前面朝水平转到倒向（正面朝下）所需角度；180° = GET_UP_TURN_180_DURATION */
-        const targetYaw = Math.atan2(entity.knockdownFallDirX, entity.knockdownFallDirZ)
+        const targetYaw = Math.atan2(entity.state.timers.knockdownFallDirX, entity.state.timers.knockdownFallDirZ)
         let turnDiff = targetYaw - yaw
         turnDiff = ((turnDiff + Math.PI) % (2 * Math.PI)) - Math.PI
         c.getUpTurnDuration = Math.abs(turnDiff) / GET_UP_TURN_SPEED
@@ -48,19 +48,19 @@ export const knockdownHandler: StateHandler = {
         void _dt, _input
         entity.body.setLinvel({x: 0, y: entity.body.linvel().y, z: 0}, true)
         /* 前 KNOCKDOWN_FALL_RATIO 完成倒下，之后保持完全伏地的最后一帧（静止停顿） */
-        const fallDuration = Math.max(entity.combat.knockdownDuration * KNOCKDOWN_FALL_RATIO, 0.0001)
+        const fallDuration = Math.max(entity.state.combat.knockdownDuration * KNOCKDOWN_FALL_RATIO, 0.0001)
         const p = Math.min(Math.max(ctx.stateTime / fallDuration, 0), 1)
-        entity.knockdownFallAngle = Math.PI / 2 * easeInOutQuad(p)
+        entity.state.timers.knockdownFallAngle = Math.PI / 2 * easeInOutQuad(p)
     },
     exit: () => {},
     transitions: [
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'getting_up',
-            guard: (_input, entity, ctx) => ctx.stateTime >= entity.combat.knockdownDuration,
+            guard: (_input, entity, ctx) => ctx.stateTime >= entity.state.combat.knockdownDuration,
         },
     ],
 }

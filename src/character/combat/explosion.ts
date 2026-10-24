@@ -28,15 +28,15 @@ export const applyExplosionDamage = (
     poiseDamage: number = EXPLOSION_DEFAULT_POISE_DAMAGE,
 ): void => {
     for (const target of allCharacters) {
-        if (target.id === sourceEntity.id || target.combat.isDead) continue
-        if (!sourceEntity.combat.attackTendency(sourceEntity.combat.faction, target.combat.faction)) continue
+        if (target.state.identity.id === sourceEntity.state.identity.id || target.state.combat.isDead) continue
+        if (!sourceEntity.state.combat.attackTendency(sourceEntity.state.combat.faction, target.state.combat.faction)) continue
         /* 翻滚无敌帧：完全免疫爆炸 —— 不伤害、不径向击退 */
-        if (isDamageImmune(target.combat)) continue
+        if (isDamageImmune(target.state.combat)) continue
 
         const tPos = target.body.translation()
         v3Set(_dir, tPos.x - centerX, tPos.y - centerY, tPos.z - centerZ)
         /* 命中判定：有受击子块时按「爆炸球 × 任一子块」并记录命中块数组；无则回退身体中心距离 */
-        const blocks = target.hurtBlocks
+        const blocks = target.state.hurtBlocks
         let hitHurtBlocks: readonly string[]
         let hitDist: number
         if (blocks !== undefined && blocks.length > 0) {
@@ -64,9 +64,9 @@ export const applyExplosionDamage = (
         /* 冲击方向 = 爆心 → 目标（水平）：伤害事件携带（死亡倒向依据） */
         const hLen = Math.hypot(_dir.x, _dir.z)
         const hasDir = hLen > 0.0001
-        applyDamage(target.combat, {
-            sourceId: sourceEntity.id,
-            targetId: target.id,
+        applyDamage(target.state.combat, {
+            sourceId: sourceEntity.state.identity.id,
+            targetId: target.state.identity.id,
             damageType,
             baseAmount: dmg,
             finalAmount: dmg,

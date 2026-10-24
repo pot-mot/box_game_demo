@@ -55,7 +55,7 @@ export const setupHakoniwa = (
 
     const playerForm = (): ReturnType<typeof bodyFormOf> | undefined => {
         const player = characterSystem.getPlayerCharacter()
-        return player !== undefined ? bodyFormOf(player.config.bodyFormId) : undefined
+        return player !== undefined ? bodyFormOf(player.state.config.bodyFormId) : undefined
     }
     const allowedSlots = (): readonly EquipSlotDef[] => playerForm()?.equipSlots ?? []
     const slotKeys = (): readonly EquipSlot[] => allowedSlots().map(slot => equipSlotKey(slot.kind, slot.bodyPart))
@@ -140,14 +140,14 @@ export const setupHakoniwa = (
         const mainWeaponId = (primarySlot !== undefined ? state.weapon[primarySlot.bodyPart] : undefined) ?? form.defaultWeaponId
         const offWeaponId = state.weapon.off_hand
         characterSystem.updateCharacterConfig(
-            player.id,
+            player.state.identity.id,
             {},
             {weaponId: mainWeaponId},
             undefined, undefined, undefined, undefined,
             {equipment: state},
             offWeaponId !== undefined ? {weaponId: offWeaponId} : null,
         )
-        characterSystem.setBreathModule(player.id, state.weapon.breath)
+        characterSystem.setBreathModule(player.state.identity.id, state.weapon.breath)
         refreshPreview()
     }
 
@@ -161,7 +161,7 @@ export const setupHakoniwa = (
         if (stack === undefined) return
         const player = characterSystem.getPlayerCharacter()
         const pos = player?.body.translation()
-        const facing = player !== undefined ? characterSystem.getFacing(player.id) : 0
+        const facing = player !== undefined ? characterSystem.getFacing(player.state.identity.id) : 0
         const rad = facing * Math.PI / 180
         const x = (pos?.x ?? 0) + Math.sin(rad) * 1.2
         const z = (pos?.z ?? 0) + Math.cos(rad) * 1.2
@@ -217,7 +217,7 @@ export const setupHakoniwa = (
         player.body.setLinvel({x: 0, y: 0, z: 0}, true)
         player.body.wakeUp()
         /* 传送后重置渲染插值历史，避免相机 / 模型从旧位置滑行 */
-        characterSystem.resetRenderState(player.id)
+        characterSystem.resetRenderState(player.state.identity.id)
     }
 
     const onTeleport = (e: InteractableEntity): void => {
@@ -262,7 +262,7 @@ export const setupHakoniwa = (
         const player = characterSystem.getPlayerCharacter()
         if (player === undefined) return
         const t = player.body.translation()
-        map.update(t.x, t.z, characterSystem.getFacing(player.id) * Math.PI / 180)
+        map.update(t.x, t.z, characterSystem.getFacing(player.state.identity.id) * Math.PI / 180)
     }
 
     /* 存档恢复了背包装备时同步到角色与预览；否则仅刷新预览（不覆盖存档中的武器配置） */

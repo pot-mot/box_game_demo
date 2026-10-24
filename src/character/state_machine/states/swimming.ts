@@ -31,8 +31,8 @@ export const swimmingHandler: StateHandler = {
     },
     exit: () => {},
     transitions: [
-        {to: 'dying', guard: (_input, entity) => entity.combat.health <= 0},
-        {to: 'flinching', guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0},
+        {to: 'dying', guard: (_input, entity) => entity.state.combat.health <= 0},
+        {to: 'flinching', guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0},
         {
             to: 'floating',
             guard: (input, _entity) => Math.hypot(input.dx, input.dz) <= 0.001 && input.swimLift === 0,

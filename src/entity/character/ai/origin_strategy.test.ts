@@ -4,6 +4,7 @@ import {updateOrigin, notifyAIKill, setOriginFromCharacter, setOriginFromPositio
 import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import {HUMANOID_BODY_FORM} from '../body_form/index.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
+import {createTestCharacterState} from '../../../character/state/test_state.ts'
 
 /** 脚底中心偏移（scale=1 → 0.5）：由物理中心反算脚底原点用 */
 const HALF_H = HUMANOID_BODY_FORM.base.centerOffsetY
@@ -11,14 +12,18 @@ const HALF_H = HUMANOID_BODY_FORM.base.centerOffsetY
 /** 最小角色替身：仅提供原点逻辑读取的字段（body.translation / config.scale / originInterval） */
 const makeChar = (x: number, z: number, y = 0): {char: CharacterEntity; pos: {x: number; y: number; z: number}} => {
     const pos = {x, y, z}
-    const char = {
+    const state = createTestCharacterState({
         id: 1,
-        body: {translation: () => pos},
         config: {speed: 0, jumpHeight: 0, scale: 1},
-        navEnabled: true,
-        originStrategy: 'resident',
-        originInterval: 20,
-        chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
+    })
+    state.ai.originStrategy = 'resident'
+    state.ai.originInterval = 20
+    const char = {
+        state,
+        body: {translation: () => pos},
+        mesh: null!, wireframe: undefined, appearanceGroup: null!,
+        mainCollider: undefined!, colliders: [],
+        stateMachine: null!,
     } as unknown as CharacterEntity
     return {char, pos}
 }
@@ -89,7 +94,7 @@ describe('行为原点策略 — 漫游者', () => {
 
     it('战斗期计时持续倒数但原点冻结；脱战后首个和平帧立即更新', () => {
         const {char, pos} = makeChar(0, 0)
-        char.originInterval = 5
+        char.state.ai.originInterval = 5
         const ctx = makeCtx(char, 0, 0, 'roamer', 5)
         ctx.activeFsm = 'combat'
 

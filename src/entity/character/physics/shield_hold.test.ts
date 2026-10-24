@@ -98,7 +98,7 @@ describe('盾攻击键路由', () => {
         for (let i = 0; i < 180; i++) {
             frame()
             const p = system.getPlayerCharacter()
-            if (p?.isOnGround && p.stateMachine.currentState === 'idle') break
+            if (p?.state.physics.isOnGround && p.stateMachine.currentState === 'idle') break
         }
     }
 
@@ -111,8 +111,8 @@ describe('盾攻击键路由', () => {
         system.endPlayerAttackHold('light', 0.05)
         frame()
         expect(player()!.stateMachine.currentState).toBe('attacking')
-        expect(player()!.combat.attackActive).toBe(true)
-        expect(player()!.combat.blocking).toBe(false)
+        expect(player()!.state.combat.attackActive).toBe(true)
+        expect(player()!.state.combat.blocking).toBe(false)
     })
 
     it('主手盾长按轻击键进入格挡，松手仅落盾不出招', () => {
@@ -120,12 +120,12 @@ describe('盾攻击键路由', () => {
         system.beginPlayerAttackHold('light')
         for (let i = 0; i < 30; i++) frame()
         expect(player()!.stateMachine.currentState).toBe('blocking')
-        expect(player()!.combat.blocking).toBe(true)
+        expect(player()!.state.combat.blocking).toBe(true)
 
         system.endPlayerAttackHold('light', 0.5)
         frame()
         expect(player()!.stateMachine.currentState).not.toBe('blocking')
-        expect(player()!.combat.attackActive).toBe(false)
+        expect(player()!.state.combat.attackActive).toBe(false)
     })
 
     it('主手盾短按重击键出招（盾撞）', () => {
@@ -147,13 +147,13 @@ describe('盾攻击键路由', () => {
         /* 松开被忽略的重击键：不应触发攻击，仍保持格挡 */
         system.endPlayerAttackHold('heavy', 0.5)
         frame()
-        expect(player()!.combat.attackActive).toBe(false)
+        expect(player()!.state.combat.attackActive).toBe(false)
         expect(player()!.stateMachine.currentState).toBe('blocking')
 
         /* 松开真正按住的轻击键：仅落盾，不出招 */
         system.endPlayerAttackHold('light', 0.5)
         frame()
-        expect(player()!.combat.attackActive).toBe(false)
+        expect(player()!.state.combat.attackActive).toBe(false)
         expect(player()!.stateMachine.currentState).not.toBe('blocking')
     })
 
@@ -165,13 +165,13 @@ describe('盾攻击键路由', () => {
 
         system.endPlayerAttackHold('heavy', 0.5)
         frame()
-        expect(player()!.combat.attackActive).toBe(false)
+        expect(player()!.state.combat.attackActive).toBe(false)
 
         /* 短按重击键：副手盾无攻击能力 */
         system.beginPlayerAttackHold('heavy')
         system.endPlayerAttackHold('heavy', 0.05)
         for (let i = 0; i < 3; i++) frame()
-        expect(player()!.combat.attackActive).toBe(false)
+        expect(player()!.state.combat.attackActive).toBe(false)
         expect(player()!.stateMachine.currentState).not.toBe('attacking')
     })
 
@@ -194,12 +194,12 @@ describe('盾攻击键路由', () => {
         spawnPlayer('long_sword', 'shield_small')
         const p = player()!
         /* 单持：副手盾提供格挡 */
-        expect(p.combat.block).toBeDefined()
+        expect(p.state.combat.block).toBeDefined()
 
-        expect(system.setHoldMode(p.id, 'two_handed')).toBe(true)
-        expect(humanoidBodyStateOf(p.bodyState).holdMode).toBe('two_handed')
+        expect(system.setHoldMode(p.state.identity.id, 'two_handed')).toBe(true)
+        expect(humanoidBodyStateOf(p.state.bodyState).holdMode).toBe('two_handed')
         /* 副手盾挂背：不再计为可用盾 */
-        expect(p.combat.block).toBeUndefined()
+        expect(p.state.combat.block).toBeUndefined()
 
         /* 重击键不再被盾接管：长按不得进入格挡 */
         system.beginPlayerAttackHold('heavy')
@@ -207,7 +207,7 @@ describe('盾攻击键路由', () => {
         expect(p.stateMachine.currentState).not.toBe('blocking')
 
         /* 切回单持：副手盾回手，格挡恢复 */
-        expect(system.setHoldMode(p.id, 'one_handed')).toBe(true)
-        expect(p.combat.block).toBeDefined()
+        expect(system.setHoldMode(p.state.identity.id, 'one_handed')).toBe(true)
+        expect(p.state.combat.block).toBeDefined()
     })
 })

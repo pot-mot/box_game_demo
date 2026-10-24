@@ -96,9 +96,6 @@ export type EntityLocale = {
     'skeleton.ik_fabrik': string
     'skeleton.ik_depth': string
     'skeleton.ik_hint': string
-    'skeleton.parent': string
-    'skeleton.parent_none': string
-    'skeleton.parent_hint': string
     'skeleton.add_child': string
     'skeleton.new_joint_name': string
     'skeleton.length': string
@@ -290,9 +287,6 @@ export const entityZh: EntityLocale = {
     'skeleton.ik_fabrik': 'FABRIK（位置迭代）',
     'skeleton.ik_depth': '影响父级段数',
     'skeleton.ik_hint': '该节点作为 IK 末端；Gizmo 平移时由父级链求解（默认影响 2 段父级）',
-    'skeleton.parent': '父关节',
-    'skeleton.parent_none': '（无 - 独立根）',
-    'skeleton.parent_hint': '选择新父关节后点击应用；选项已排除自身与后代（防止自环）',
     'skeleton.add_child': '添加子关节',
     'skeleton.new_joint_name': '新关节名',
     'skeleton.length': '长度',
@@ -484,9 +478,6 @@ export const entityEn: EntityLocale = {
     'skeleton.ik_fabrik': 'FABRIK (positional)',
     'skeleton.ik_depth': 'Affected parent segments',
     'skeleton.ik_hint': 'This node is the IK end effector; Gizmo translation solves its parent chain (default 2 segments)',
-    'skeleton.parent': 'Parent Joint',
-    'skeleton.parent_none': '(none - independent root)',
-    'skeleton.parent_hint': 'Pick a new parent and click Apply; self and descendants are excluded to prevent cycles',
     'skeleton.add_child': 'Add Child Joint',
     'skeleton.new_joint_name': 'New joint name',
     'skeleton.length': 'Length',

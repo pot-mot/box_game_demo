@@ -123,16 +123,16 @@ const SWIM_PRONE_PITCH = Math.PI * 0.38
 const _swimPitchQuat = new Quaternion()
 
 /** 读取角色持握模式（人形体形状态；非人形回退单持，仅用于通用分支判断） */
-const holdModeOf = (entity: CharacterEntity): HoldMode => humanoidBodyStateOf(entity.bodyState).holdMode
+const holdModeOf = (entity: CharacterEntity): HoldMode => humanoidBodyStateOf(entity.state.bodyState).holdMode
 
 /** 同步装备外观：每个体形由自身 `appearance/equipment` 构建真实网格 */
 const applyEquipmentVisuals = (model: import('../appearance/types.ts').CreatureModel, entity: CharacterEntity): void => {
     if (model.equipEquipmentState !== undefined) {
-        model.equipEquipmentState(entity.combat.equipment)
+        model.equipEquipmentState(entity.state.combat.equipment)
         return
     }
-    model.equipArmor?.(resolveArmorLoadout(entity.combat.equipment.armor))
-    model.equipLimbs?.(resolveLimbLoadout(entity.combat.equipment.limb))
+    model.equipArmor?.(resolveArmorLoadout(entity.state.combat.equipment.armor))
+    model.equipLimbs?.(resolveLimbLoadout(entity.state.combat.equipment.limb))
 }
 
 /** 根据 AttackConfig 解析武器运行时（武器预设 + 数值覆写） */
@@ -345,14 +345,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 按当前主手 / 副手武器与持握模式同步外观装配（副手在双手共持时挂背，其余模式握在左手；主手为远程时不展示副手） */
     const syncWeaponAppearance = (entity: CharacterEntity): void => {
-        const model = appearanceModels.get(entity.id)
+        const model = appearanceModels.get(entity.state.identity.id)
         if (model === undefined) return
         model.equipWeapon({
-            main: entity.combat.weapon.mesh,
-            ...(entity.combat.weapon.mountJointId !== undefined ? {mainMountJointId: entity.combat.weapon.mountJointId} : {}),
-            ...(entity.combat.weapon.mountRotation !== undefined ? {mainMountRotation: entity.combat.weapon.mountRotation} : {}),
-            ...(entity.combat.weapon.type === 'melee'
-                ? {offhand: entity.combat.offhand?.weapon.mesh, offhandStowed: holdModeOf(entity) === 'two_handed'}
+            main: entity.state.combat.weapon.mesh,
+            ...(entity.state.combat.weapon.mountJointId !== undefined ? {mainMountJointId: entity.state.combat.weapon.mountJointId} : {}),
+            ...(entity.state.combat.weapon.mountRotation !== undefined ? {mainMountRotation: entity.state.combat.weapon.mountRotation} : {}),
+            ...(entity.state.combat.weapon.type === 'melee'
+                ? {offhand: entity.state.combat.offhand?.weapon.mesh, offhandStowed: holdModeOf(entity) === 'two_handed'}
                 : {}),
         })
     }
@@ -375,30 +375,30 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
      * 高速弹在盾缘漏判，再评估在全部盾同步后补一次 `queryPipeline.update()`。
      */
     const syncShieldCollider = (entity: CharacterEntity): void => {
-        const block = entity.combat.block
+        const block = entity.state.combat.block
         if (block === undefined) {
-            destroyShieldCollider(entity.id)
+            destroyShieldCollider(entity.state.identity.id)
             return
         }
-        let state = shieldColliders.get(entity.id)
+        let state = shieldColliders.get(entity.state.identity.id)
         if (state === undefined || state.block !== block) {
-            destroyShieldCollider(entity.id)
+            destroyShieldCollider(entity.state.identity.id)
             const {cover} = block
             const desc = RAPIER.ColliderDesc.cuboid(cover.width / 2, cover.height / 2, cover.depth / 2)
                 .setSensor(true)
                 .setCollisionGroups(categoryCollisionGroups(0, 0, 'shield'))
             state = {collider: createColliderForBody(world, desc, undefined), block}
-            shieldColliders.set(entity.id, state)
-            shieldOwnerByHandle.set(state.collider.handle, entity.id)
+            shieldColliders.set(entity.state.identity.id, state)
+            shieldOwnerByHandle.set(state.collider.handle, entity.state.identity.id)
         }
-        const active = entity.combat.blocking && entity.combat.guard > 0 && !entity.combat.isDead
+        const active = entity.state.combat.blocking && entity.state.combat.guard > 0 && !entity.state.combat.isDead
         state.collider.setEnabled(active)
         if (!active) return
-        const scale = entity.config.scale
+        const scale = entity.state.config.scale
         const p = entity.body.translation()
-        const yaw = facingAngles.get(entity.id) ?? 0
+        const yaw = facingAngles.get(entity.state.identity.id) ?? 0
         /* `cover` 相对角色原点（脚底）：body 中心比原点高 originToCenterY，故减去还原到原点坐标 */
-        const originY = p.y - originToCenterY(entity.config)
+        const originY = p.y - originToCenterY(entity.state.config)
         const offsetZ = block.cover.offsetZ * scale
         const offsetY = block.cover.offsetY * scale
         state.collider.setTranslation({
@@ -456,8 +456,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     /** 翻滚命中可破坏世界目标：无敌帧窗口内按胶囊水平近接判定，按来源类别 roll 结算 */
     const applyRollWorldDamage = (entity: CharacterEntity, targets: readonly WorldDamageTarget[]): void => {
         const pos = entity.body.translation()
-        const radius = formBodyRadius(entity.config) + 0.25
-        const halfHeight = originToCenterY(entity.config)
+        const radius = formBodyRadius(entity.state.config) + 0.25
+        const halfHeight = originToCenterY(entity.state.config)
         for (const wt of targets) {
             if (wt.dead) continue
             if (Math.abs(wt.x - pos.x) > wt.hx + radius) continue
@@ -547,9 +547,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 列表行当前状态文本：角色 FSM 状态；AI 激活时追加 AI 双层 FSM（和平/战斗层:子状态）；死亡显示「已死亡」 */
     const stateLabelOf = (ch: CharacterEntity): string => {
-        if (ch.combat.isDead) return translate('entity.state.dead')
+        if (ch.state.combat.isDead) return translate('entity.state.dead')
         const state = translate(CHARACTER_STATE_KEYS[ch.stateMachine.currentState])
-        const ai = aiMap.get(ch.id)
+        const ai = aiMap.get(ch.state.identity.id)
         if (ai === undefined) return state
         return ai.activeFsm === 'combat'
             ? `${state}|${translate('entity.ai.combat')}:${translate(COMBAT_STATE_KEYS[ai.combatState])}`
@@ -558,34 +558,34 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 单条角色列表行文本（含本地化武器名 / 攻击类别短名；语言切换后由 element_list 按需重算） */
     const characterRowText = (ch: CharacterEntity): string => {
-        const playerPrefix = ch.isPlayer ? translate('entity.player_prefix') : ''
-        const weapon = ch.combat.weapon
+        const playerPrefix = ch.state.identity.isPlayer ? translate('entity.player_prefix') : ''
+        const weapon = ch.state.combat.weapon
         const weaponName = weaponDisplayName(weapon)
-        const def = ch.combat.defense
+        const def = ch.state.combat.defense
         /* 有效移速 = 基础移速 × 装备移速乘数；保留两位小数避免浮点尾巴，整数不显示小数点 */
         const speed = Number(moveSpeedOf(ch).toFixed(2))
-        return `${playerPrefix}#${ch.id}  HP:${ch.combat.health}/${ch.combat.maxHealth}  ${weaponName}(${weapon.damage})  def:${translate('entity.def_phys_short')}${def.physical}/${translate('entity.def_magic_short')}${def.magic}  spd:${speed}  [${stateLabelOf(ch)}]`
+        return `${playerPrefix}#${ch.state.identity.id}  HP:${ch.state.combat.health}/${ch.state.combat.maxHealth}  ${weaponName}(${weapon.damage})  def:${translate('entity.def_phys_short')}${def.physical}/${translate('entity.def_magic_short')}${def.magic}  spd:${speed}  [${stateLabelOf(ch)}]`
     }
 
     const refreshPlayerLabel = (): void => {
         const infoById = new Map(panelInfos.map(pi => [pi.id, pi]))
         for (const ch of characters) {
-            const pi = infoById.get(ch.id)
+            const pi = infoById.get(ch.state.identity.id)
             if (!pi) continue
             pi.rowText = characterRowText(ch)
             pi.rowTextOf = () => characterRowText(ch)
-            pi.badgeLabel = ch.isPlayer ? 'P' : `F${ch.combat.faction}`
-            pi.badgeColor = factionBadgeColor(ch.combat.faction, ch.isPlayer)
+            pi.badgeLabel = ch.state.identity.isPlayer ? 'P' : `F${ch.state.combat.faction}`
+            pi.badgeColor = factionBadgeColor(ch.state.combat.faction, ch.state.identity.isPlayer)
         }
     }
 
     const markPlayer = (id: number): void => {
-        for (const c of characters) c.isPlayer = c.id === id
+        for (const c of characters) c.state.identity.isPlayer = c.state.identity.id === id
         refreshPlayerLabel()
     }
 
     const unmarkPlayer = (): void => {
-        for (const c of characters) c.isPlayer = false
+        for (const c of characters) c.state.identity.isPlayer = false
         refreshPlayerLabel()
     }
 
@@ -747,30 +747,30 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         )
 
         bodyCharMap.set(body.handle, entity)
-        charById.set(entity.id, entity)
+        charById.set(entity.state.identity.id, entity)
         meshBodyHandle.set(entity.mesh, body.handle)
         characters.push(entity)
-        appearanceModels.set(entity.id, model)
+        appearanceModels.set(entity.state.identity.id, model)
         /* 体形专属动画系统（每个体形分包自带 base_clips/pose_fns 与调度实现） */
-        appearanceSystems.set(entity.id, plan.animation.createSystem({onAttackEvent}))
-        weaponTrails.set(entity.id, createWeaponTrail(scene))
+        appearanceSystems.set(entity.state.identity.id, plan.animation.createSystem({onAttackEvent}))
+        weaponTrails.set(entity.state.identity.id, createWeaponTrail(scene))
         const hitBoxes = createAttackHitBoxes(scene)
-        attackHitBoxes.set(entity.id, hitBoxes)
+        attackHitBoxes.set(entity.state.identity.id, hitBoxes)
         /* 生成时即定位调试线框（编辑暂停态 update 不运行，避免线框滞留在原点）；
          * 可见性由选中状态驱动（refreshSelectionVisibility），未选中时全部隐藏；
          * placeDebugBoxes 接收的是物理中心坐标 */
         placeDebugBoxes(entity, x, y + halfH, z, 0)
 
-        materialEffects.set(entity.id, createMaterialEffects(entity))
-        entity.combat.onDamageTaken = (amount: number, event) => {
+        materialEffects.set(entity.state.identity.id, createMaterialEffects(entity))
+        entity.state.combat.onDamageTaken = (amount: number, event) => {
             /* 按 id 查效果（体形切换重建外观后替换 map 条目即可，无需重绑回调） */
-            materialEffects.get(entity.id)?.onDamage(amount)
+            materialEffects.get(entity.state.identity.id)?.onDamage(amount)
             /* 记录冲击方向（死亡倒向依据）：伤害事件携带世界水平单位向量，仅在有效方向时覆盖旧值 */
             if (event.dirX !== undefined && event.dirZ !== undefined && (event.dirX !== 0 || event.dirZ !== 0)) {
-                entity.combat.lastHitDirX = event.dirX
-                entity.combat.lastHitDirZ = event.dirZ
+                entity.state.combat.lastHitDirX = event.dirX
+                entity.state.combat.lastHitDirZ = event.dirZ
             }
-            const c = entity.combat
+            const c = entity.state.combat
             /* 韧性结算：命中按削韧值扣除并重置回充延迟 */
             if (event.poiseDamage > 0) {
                 c.poise = Math.max(0, c.poise - event.poiseDamage)
@@ -792,23 +792,23 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 }
             }
             /* 受击转战斗（仇恨）：被背后/视野外攻击或接敌冷却期内挨打时强制还击 */
-            const aiCtx = aiMap.get(entity.id)
-            if (aiCtx && entity.combat.health > 0) {
+            const aiCtx = aiMap.get(entity.state.identity.id)
+            if (aiCtx && entity.state.combat.health > 0) {
                 notifyAIDamaged(aiCtx, entity, characters, event.sourceId)
             }
         }
 
         /* 击杀钩子（行为原点策略）：存活 → 死亡跳变时触发一次，按击杀者原点策略迁移原点。
          * 边界：非伤害来源 / 自伤 / 击杀者缺失或已死 / 友军误伤 → 全部跳过 */
-        entity.combat.onDeath = (sourceId) => {
-            if (sourceId === undefined || sourceId === entity.id) return
-            const killer = characters.find(c => c.id === sourceId)
-            if (!killer || killer.combat.isDead) return
-            if (!killer.combat.attackTendency(killer.combat.faction, entity.combat.faction)) return
-            const killerCtx = aiMap.get(killer.id)
+        entity.state.combat.onDeath = (sourceId) => {
+            if (sourceId === undefined || sourceId === entity.state.identity.id) return
+            const killer = characters.find(c => c.state.identity.id === sourceId)
+            if (!killer || killer.state.combat.isDead) return
+            if (!killer.state.combat.attackTendency(killer.state.combat.faction, entity.state.combat.faction)) return
+            const killerCtx = aiMap.get(killer.state.identity.id)
             if (!killerCtx) return
             const vp = entity.body.translation()
-            const victimFootY = vp.y - originToCenterY(entity.config)
+            const victimFootY = vp.y - originToCenterY(entity.state.config)
             notifyAIKill(killerCtx, killer, {x: vp.x, y: victimFootY, z: vp.z})
         }
 
@@ -823,19 +823,19 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const spawnAt = (x: number, y: number, z: number): void => {
         const meleePreset: AttackConfig = {weaponId: 'long_sword'}
         const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, undefined, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
-        select(entity.id)
+        select(entity.state.identity.id)
     }
 
     /** 物理步：把真实物理位置写到渲染根（碰撞体同步需要真实位置，不能是插值位置） */
     const syncTrueTransforms = (): void => {
         for (const entity of characters) {
-            if (entity.combat.isDead) continue
+            if (entity.state.combat.isDead) continue
             const pos = entity.body.translation()
             /* 实体原点在脚底：物理中心回退半高得到原点 Y */
-            const originY = pos.y - originToCenterY(entity.config)
+            const originY = pos.y - originToCenterY(entity.state.config)
             entity.mesh.position.set(pos.x, originY, pos.z)
             /* 碰撞箱可视化随身体朝向旋转（物理碰撞体为竖直胶囊，旋转对称不受影响） */
-            entity.mesh.rotation.set(0, facingAngles.get(entity.id) ?? 0, 0)
+            entity.mesh.rotation.set(0, facingAngles.get(entity.state.identity.id) ?? 0, 0)
             entity.appearanceGroup.position.set(pos.x, originY, pos.z)
         }
     }
@@ -843,7 +843,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     /** 物理步末：记录角色可视节点的真实变换，供渲染帧滞后一拍插值 */
     const captureRenderState = (): void => {
         for (const entity of characters) {
-            if (entity.combat.isDead) continue
+            if (entity.state.combat.isDead) continue
             captureObjectRenderPose(entity.mesh)
             captureObjectRenderPose(entity.appearanceGroup)
         }
@@ -852,22 +852,22 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     /** 渲染帧：按 alpha 写插值后的可视变换（无历史时回退真实变换） */
     const syncPositions = (alpha = 1): void => {
         for (const entity of characters) {
-            if (entity.combat.isDead) continue
+            if (entity.state.combat.isDead) continue
             if (!applyRenderPose(entity.mesh, alpha)) {
                 const pos = entity.body.translation()
-                const originY = pos.y - originToCenterY(entity.config)
+                const originY = pos.y - originToCenterY(entity.state.config)
                 entity.mesh.position.set(pos.x, originY, pos.z)
-                entity.mesh.rotation.set(0, facingAngles.get(entity.id) ?? 0, 0)
+                entity.mesh.rotation.set(0, facingAngles.get(entity.state.identity.id) ?? 0, 0)
             }
             if (!applyRenderPose(entity.appearanceGroup, alpha)) {
                 /* 无插值历史（首帧 / 编辑暂停 / 体形重建）：位置跟随 mesh，姿态保留 update 写入的真实值 */
                 entity.appearanceGroup.position.copy(entity.mesh.position)
             }
-            if (entity.isDying) {
+            if (entity.state.timers.isDying) {
                 /* 死亡渐隐以选中态不透明度为基线：未选中角色基线为 0（全程不可见，
                  * 避免覆写选中态透明度导致胶囊在死亡时冒出）；选中角色自胶囊固有透明度渐隐 */
-                const fade = 1 - entity.dyingTimer / DYING_DURATION
-                const base = entity.id === selectedId ? COLLIDER_MESH_OPACITY : 0
+                const fade = 1 - entity.state.timers.dyingTimer / DYING_DURATION
+                const base = entity.state.identity.id === selectedId ? COLLIDER_MESH_OPACITY : 0
                 const mat = entity.mesh.material
                 if (Array.isArray(mat)) {
                     for (const m of mat) { m.transparent = true; m.opacity = base * fade }
@@ -882,13 +882,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const select = (id: number | undefined): void => {
         if (selectedId !== undefined) {
-            const prev = characters.find(c => c.id === selectedId)
+            const prev = characters.find(c => c.state.identity.id === selectedId)
             if (prev) cleanupWireframe(prev)
         }
         selectedId = id
         events.emit('select', id)
         if (id !== undefined) {
-            const entity = characters.find(c => c.id === id)
+            const entity = characters.find(c => c.state.identity.id === id)
             if (entity) {
                 const line = createWireframe(entity.mesh.geometry)
                 entity.mesh.add(line)
@@ -903,17 +903,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     /** 定位单个角色的调试线框（受击箱/检测箱或射程圆环/视线扇形）并按当前选中与 debug 开关设可见性，
      * 供生成/面板瞬移（setTransform）/选中切换复用，保证编辑暂停态（update 不运行）线框也随位置同步 */
     const placeDebugBoxes = (entity: CharacterEntity, x: number, y: number, z: number, yaw: number): void => {
-        const hitBoxes = attackHitBoxes.get(entity.id)
+        const hitBoxes = attackHitBoxes.get(entity.state.identity.id)
         if (!hitBoxes) return
-        const show = attackHitBoxVisible && entity.id === selectedId
-        const th = targetHitBoxHalves(entity.config)
+        const show = attackHitBoxVisible && entity.state.identity.id === selectedId
+        const th = targetHitBoxHalves(entity.state.config)
         hitBoxes.targetBox.position.set(x, y, z)
         hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
         hitBoxes.targetBox.rotation.y = yaw
         hitBoxes.targetBox.visible = show
-        const weapon = entity.combat.weapon
+        const weapon = entity.state.combat.weapon
         if (weapon.type === 'melee') {
-            const db = attackDetectOBB({x, y, z}, weapon.detectBox, entity.config.scale, yaw)
+            const db = attackDetectOBB({x, y, z}, weapon.detectBox, entity.state.config.scale, yaw)
             hitBoxes.detectBox.position.set(db.center.x, db.center.y, db.center.z)
             hitBoxes.detectBox.scale.set(db.half.x * 2, db.half.y * 2, db.half.z * 2)
             hitBoxes.detectBox.rotation.y = yaw
@@ -923,13 +923,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
         if (weapon.type === 'ranged') {
             /* 射程圆环：半径 = weapon.range，贴足部高度平铺 */
-            hitBoxes.rangeRing.position.set(x, y - originToCenterY(entity.config), z)
+            hitBoxes.rangeRing.position.set(x, y - originToCenterY(entity.state.config), z)
             hitBoxes.rangeRing.scale.set(weapon.range, 1, weapon.range)
             hitBoxes.rangeRing.visible = show
         } else {
             hitBoxes.rangeRing.visible = false
         }
-        placeVisionFan(hitBoxes, losChecker, x, y + formEyeHeight(entity.config), z, yaw,
+        placeVisionFan(hitBoxes, losChecker, x, y + formEyeHeight(entity.state.config), z, yaw,
             weapon.detectionRange, entity.mesh as Object3D)
         hitBoxes.visionFan.visible = show
         /* 攻击判定箱（红）需逐帧跟随武器 matrixWorld，暂停态不强行显示，由 update() 维护 */
@@ -944,22 +944,22 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const refreshSelectionVisibility = (): void => {
         for (const entity of characters) {
             const mat = entity.mesh.material
-            const opacity = entity.id === selectedId ? COLLIDER_MESH_OPACITY : 0
+            const opacity = entity.state.identity.id === selectedId ? COLLIDER_MESH_OPACITY : 0
             if (Array.isArray(mat)) {
                 for (const m of mat) m.opacity = opacity
             } else {
                 mat.opacity = opacity
             }
             /* 上/下半身半胶囊可视化：仅编辑（碰撞可见）模式显示 */
-            const model = appearanceModels.get(entity.id)
+            const model = appearanceModels.get(entity.state.identity.id)
             if (model !== undefined) {
                 for (const m of model.colliderMeshes) m.visible = attackHitBoxVisible
             }
-            const hb = attackHitBoxes.get(entity.id)
+            const hb = attackHitBoxes.get(entity.state.identity.id)
             if (!hb) continue
-            if (attackHitBoxVisible && entity.id === selectedId) {
+            if (attackHitBoxVisible && entity.state.identity.id === selectedId) {
                 const p = entity.body.translation()
-                placeDebugBoxes(entity, p.x, p.y, p.z, facingAngles.get(entity.id) ?? 0)
+                placeDebugBoxes(entity, p.x, p.y, p.z, facingAngles.get(entity.state.identity.id) ?? 0)
             } else {
                 hb.targetBox.visible = false
                 hb.weaponBox.visible = false
@@ -972,7 +972,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const remove = (id: number): void => {
-        const idx = characters.findIndex(c => c.id === id)
+        const idx = characters.findIndex(c => c.state.identity.id === id)
         if (idx === -1) return
         const entity = characters[idx]
         const wasSelected = id === selectedId
@@ -981,37 +981,37 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
         cleanupWireframe(entity)
 
-        if (entity.combat.attackActive) {
-            const activeType = activatedAttacks.get(entity.id) ?? entity.combat.weapon.type
-            getSkillExecutor(activeType)?.end(entity.combat, entity, noopExecCtx)
-            activatedAttacks.delete(entity.id)
+        if (entity.state.combat.attackActive) {
+            const activeType = activatedAttacks.get(entity.state.identity.id) ?? entity.state.combat.weapon.type
+            getSkillExecutor(activeType)?.end(entity.state.combat, entity, noopExecCtx)
+            activatedAttacks.delete(entity.state.identity.id)
         }
 
         scene.remove(entity.mesh)
         world.removeRigidBody(entity.body)
         bodyCharMap.delete(entity.body.handle)
-        charById.delete(entity.id)
+        charById.delete(entity.state.identity.id)
         meshBodyHandle.delete(entity.mesh)
         entity.mesh.geometry.dispose()
         const mat = entity.mesh.material
         if (Array.isArray(mat)) mat.forEach(m => m.dispose())
         else mat.dispose()
 
-        const model = appearanceModels.get(entity.id)
+        const model = appearanceModels.get(entity.state.identity.id)
         if (model) {
             scene.remove(model.group)
             model.dispose()
-            appearanceModels.delete(entity.id)
+            appearanceModels.delete(entity.state.identity.id)
         }
-        appearanceSystems.delete(entity.id)
-        weaponTrails.get(entity.id)?.dispose()
-        weaponTrails.delete(entity.id)
-        attackHitBoxes.get(entity.id)?.dispose()
-        attackHitBoxes.delete(entity.id)
-        facingAngles.delete(entity.id)
-        previousFacingAngles.delete(entity.id)
-        smoothedTurnRates.delete(entity.id)
-        destroyShieldCollider(entity.id)
+        appearanceSystems.delete(entity.state.identity.id)
+        weaponTrails.get(entity.state.identity.id)?.dispose()
+        weaponTrails.delete(entity.state.identity.id)
+        attackHitBoxes.get(entity.state.identity.id)?.dispose()
+        attackHitBoxes.delete(entity.state.identity.id)
+        facingAngles.delete(entity.state.identity.id)
+        previousFacingAngles.delete(entity.state.identity.id)
+        smoothedTurnRates.delete(entity.state.identity.id)
+        destroyShieldCollider(entity.state.identity.id)
 
         characters.splice(idx, 1)
         aiMap.delete(id)
@@ -1025,7 +1025,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const getMeshes = (): Mesh[] => characters.map(c => c.mesh)
-    const getEntityList = (): Array<{id: number; mesh: Mesh}> => characters.map(c => ({id: c.id, mesh: c.mesh}))
+    const getEntityList = (): Array<{id: number; mesh: Mesh}> => characters.map(c => ({id: c.state.identity.id, mesh: c.mesh}))
     const getAll = (): readonly CharacterEntity[] => characters
 
     const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean, swimLift?: number): void => {
@@ -1042,11 +1042,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const setPlayerAttack = (attackKey?: AttackKey, holdDuration?: number): AttackResult => {
         const player = getPlayerCharacter()
-        if (!player || player.combat.isDead) return 'dead'
+        if (!player || player.state.combat.isDead) return 'dead'
         /* 空中攻击态按下的攻击键统一映射到空中攻击键（无空中链的武器起手解析失败 → 拒绝） */
         const key: AttackKey = isAirborneAttackState(player.stateMachine.currentState) ? 'air' : (attackKey ?? 'light')
         const hold = holdDuration ?? 0
-        if (player.combat.attackActive) {
+        if (player.state.combat.attackActive) {
             /* 攻击中不再拒绝：写入单帧脉冲，由 attacking 段转换在段末推进（同键续链/异键切链） */
             playerAttackPending = true
             playerAttackKey = key
@@ -1054,7 +1054,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             return 'ok'
         }
         /* 非攻击中：按键起手解析（起手候选守卫 + 冷却），无候选才拒绝 */
-        const canStart = canStartAttack(player.combat, {dx: playerDx, dz: playerDz, holdDuration: hold, attackKey: key})
+        const canStart = canStartAttack(player.state.combat, {dx: playerDx, dz: playerDz, holdDuration: hold, attackKey: key})
         if (!canStart) return 'cooldown'
         playerAttackPending = true
         playerAttackKey = key
@@ -1067,10 +1067,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
      * 副手盾仅重击键控盾（长按=格挡、短按不出招，副手盾无攻击能力）。
      */
     const shieldHoldKeysOf = (player: CharacterEntity): readonly GroundAttackKey[] => {
-        const main = player.combat.weapon
+        const main = player.state.combat.weapon
         if (main !== undefined && main.type === 'melee' && main.block !== undefined) return ['light', 'heavy']
         /* 副手盾仅在单持 / 双持时握在手中；双手共持时挂背，不接管按键 */
-        const off = player.combat.offhand
+        const off = player.state.combat.offhand
         if (off !== undefined && holdModeOf(player) !== 'two_handed'
             && off.weapon.type === 'melee' && off.weapon.block !== undefined) return ['heavy']
         return []
@@ -1083,7 +1083,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
      */
     const beginPlayerAttackHold = (attackKey?: AttackKey): void => {
         const player = getPlayerCharacter()
-        if (!player || player.combat.isDead) return
+        if (!player || player.state.combat.isDead) return
         /* 空中攻击不可蓄力：空中攻击态忽略蓄力保持，松开后按空中攻击语义出招 */
         if (isAirborneAttackState(player.stateMachine.currentState)) return
         const key = attackKey ?? 'light'
@@ -1097,16 +1097,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             return
         }
         /* 后摇窗口内按下攻击键：写连段预输入脉冲（按住计时吞掉松开时的补脉冲，避免重复出招） */
-        if (player.combat.attackActive && inRecoveryWindow(player.combat)) {
+        if (player.state.combat.attackActive && inRecoveryWindow(player.state.combat)) {
             playerAttackHeld = true
             setPlayerAttack(key, 0)
             return
         }
         /* 该攻击键的起手段声明了 chargeFullTime 才进入蓄力；否则忽略（松开时按原有语义出招） */
-        if (!isChargeableKey(player.combat.attacks, key)) return
+        if (!isChargeableKey(player.state.combat.attacks, key)) return
         playerAttackHeld = true
-        if (!player.combat.attackActive) {
-            if (!canStartAttack(player.combat, {dx: playerDx, dz: playerDz, holdDuration: 0, attackKey: key})) {
+        if (!player.state.combat.attackActive) {
+            if (!canStartAttack(player.state.combat, {dx: playerDx, dz: playerDz, holdDuration: 0, attackKey: key})) {
                 playerAttackHeld = false
                 return
             }
@@ -1120,14 +1120,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const endPlayerAttackHold = (attackKey: AttackKey, holdDuration: number): void => {
         if (playerShieldHoldKey === attackKey) {
             const player = getPlayerCharacter()
-            const wasBlocking = player?.combat.blocking === true
+            const wasBlocking = player?.state.combat.blocking === true
             playerShieldHoldKey = undefined
             playerShieldHoldTime = 0
             if (player === undefined) return
-            player.combat.blockHeld = false
+            player.state.combat.blockHeld = false
             /* 已进入格挡 → 松手仅落盾；未进入格挡（短按）→ 主手盾出招，副手盾无攻击 */
             if (!wasBlocking && shieldHoldKeysOf(player).includes(attackKey)
-                && player.combat.weapon.type === 'melee' && player.combat.weapon.block !== undefined) {
+                && player.state.combat.weapon.type === 'melee' && player.state.combat.weapon.block !== undefined) {
                 setPlayerAttack(attackKey, holdDuration)
             }
             return
@@ -1150,20 +1150,20 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const player = getPlayerCharacter()
             playerShieldHoldKey = undefined
             playerShieldHoldTime = 0
-            if (player !== undefined) player.combat.blockHeld = false
+            if (player !== undefined) player.state.combat.blockHeld = false
             return
         }
         if (!playerAttackHeld) return
         playerAttackHeld = false
         const player = getPlayerCharacter()
-        if (!player || !player.combat.attackActive) return
-        const segment = player.combat.activeSegment
+        if (!player || !player.state.combat.attackActive) return
+        const segment = player.state.combat.activeSegment
         if (segment === undefined) return
         /* 直接把段标记为「已播完」：下一次状态机更新即退出 attacking（不发射，不推进缓冲） */
-        player.combat.phaseIndex = resolvePhases(segment.phases).length
-        player.combat.attackTimer = segmentTotalDuration(segment)
-        player.combat.attackHolding = false
-        player.combat.bufferedSegment = undefined
+        player.state.combat.phaseIndex = resolvePhases(segment.phases).length
+        player.state.combat.attackTimer = segmentTotalDuration(segment)
+        player.state.combat.attackHolding = false
+        player.state.combat.bufferedSegment = undefined
     }
 
     const setPlayerInteract = (pending: boolean, targetX: number, targetZ: number): void => {
@@ -1175,7 +1175,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const getPlayerCharacter = (): CharacterEntity | undefined =>
-        characters.find(c => c.isPlayer && !c.combat.isDead)
+        characters.find(c => c.state.identity.isPlayer && !c.state.combat.isDead)
 
     /** 复用向量：玩家渲染插值位置（身体中心，供相机 / HUD 使用；禁止逐帧分配） */
     const _playerRenderPos = {x: 0, y: 0, z: 0}
@@ -1183,7 +1183,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const player = getPlayerCharacter()
         if (player === undefined) return undefined
         _playerRenderPos.x = player.mesh.position.x
-        _playerRenderPos.y = player.mesh.position.y + originToCenterY(player.config)
+        _playerRenderPos.y = player.mesh.position.y + originToCenterY(player.state.config)
         _playerRenderPos.z = player.mesh.position.z
         return _playerRenderPos
     }
@@ -1196,7 +1196,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         resetObjectRenderPose(entity.appearanceGroup)
     }
     const getHostileTo = (faction: number): CharacterEntity[] =>
-        characters.filter(c => c.combat.attackTendency(c.combat.faction, faction) && !c.combat.isDead)
+        characters.filter(c => c.state.combat.attackTendency(c.state.combat.faction, faction) && !c.state.combat.isDead)
 
     const setAIEnabled = (enabled: boolean): void => { aiEnabled = enabled }
 
@@ -1215,8 +1215,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const applySupportCarry = (dt: number): void => {
         if (!(dt > 0)) return
         for (const entity of characters) {
-            if (entity.combat.isDead) continue
-            const handle = entity.groundBodyHandle
+            if (entity.state.combat.isDead) continue
+            const handle = entity.state.physics.groundBodyHandle
             if (handle === null || handle === undefined) continue
             const support = shared.movingSupports.get(handle)
             if (support === undefined) continue
@@ -1251,7 +1251,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 每帧在 area 场写入前清零全部角色的环境场（main.ts 在每个 preSync 循环前调用） */
     const clearEnvironments = (): void => {
-        for (const entity of characters) resetBodyEnvironment(entity.environment)
+        for (const entity of characters) resetBodyEnvironment(entity.state.environment)
     }
 
     /**
@@ -1277,8 +1277,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
      * 无部件时退回关节矩阵 + 预设形状常量。
      */
     const refreshHurtBlocks = (entity: CharacterEntity, model: CreatureModel): void => {
-        const profile = entity.hurtProfile
-        const out = entity.hurtBlocks
+        const profile = entity.state.hurtProfile
+        const out = entity.state.hurtBlocks
         if (profile === undefined || out === undefined) return
         model.group.updateMatrixWorld(true)
         for (let i = 0; i < profile.length && i < out.length; i++) {
@@ -1324,9 +1324,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 用体形碰撞节点相对模型根的变换驱动全部碰撞体；缺省节点时保留静态拼接。 */
     const syncCollidersFromNodes = (entity: CharacterEntity, model: CreatureModel): void => {
-        const layout = bodyFormOf(entity.config.bodyFormId).skeleton.colliderLayout
-        const scale = entity.config.scale
-        const centerY = originToCenterY(entity.config)
+        const layout = bodyFormOf(entity.state.config.bodyFormId).skeleton.colliderLayout
+        const scale = entity.state.config.scale
+        const centerY = originToCenterY(entity.state.config)
         for (let i = 0; i < layout.length && i < entity.colliders.length; i++) {
             const node = model.jointGroups.get(layout[i].nodeId)
             if (node === undefined) continue
@@ -1335,7 +1335,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const applyEnvironment = (entity: CharacterEntity, dt: number): void => {
-        const env = entity.environment
+        const env = entity.state.environment
         const hasAccel = env.accel.x !== 0 || env.accel.y !== 0 || env.accel.z !== 0
         if (!hasAccel && env.flowBlend <= 0) return
         const blend = env.flowBlend > 0 ? Math.min(1, env.flowBlend * dt) : 0
@@ -1350,15 +1350,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const checkGround = (entity: CharacterEntity, dt: number): void => {
         const contacts = buildGroundContacts(entity)
         const next = resolveGroundState(contacts, entity.body.handle, {
-            isOnGround: entity.isOnGround,
-            groundNormal: entity.groundNormal,
-            groundKeepTimer: entity.groundKeepTimer,
-            groundBodyHandle: entity.groundBodyHandle,
+            isOnGround: entity.state.physics.isOnGround,
+            groundNormal: entity.state.physics.groundNormal,
+            groundKeepTimer: entity.state.physics.groundKeepTimer,
+            groundBodyHandle: entity.state.physics.groundBodyHandle,
         }, dt)
-        entity.isOnGround = next.isOnGround
-        entity.groundNormal = next.groundNormal
-        entity.groundKeepTimer = next.groundKeepTimer
-        entity.groundBodyHandle = next.groundBodyHandle
+        entity.state.physics.isOnGround = next.isOnGround
+        entity.state.physics.groundNormal = next.groundNormal
+        entity.state.physics.groundKeepTimer = next.groundKeepTimer
+        entity.state.physics.groundBodyHandle = next.groundBodyHandle
     }
 
     const update = (rawDt: number): void => {
@@ -1374,43 +1374,43 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         for (const entity of characters) meshBodyHandle.set(entity.mesh, entity.body.handle)
 
         for (const entity of characters) {
-            if (entity.combat.isDead) continue
+            if (entity.state.combat.isDead) continue
 
             /* 段冷却逐帧递减（只挡起手，链推进不查冷却） */
-            tickSegmentCooldowns(entity.combat, dt)
-            entity.combat.rollSkill.cooldownTimer = Math.max(0, entity.combat.rollSkill.cooldownTimer - dt)
-            entity.combat.flinchImmunityTimer = Math.max(0, entity.combat.flinchImmunityTimer - dt)
+            tickSegmentCooldowns(entity.state.combat, dt)
+            entity.state.combat.rollSkill.cooldownTimer = Math.max(0, entity.state.combat.rollSkill.cooldownTimer - dt)
+            entity.state.combat.flinchImmunityTimer = Math.max(0, entity.state.combat.flinchImmunityTimer - dt)
             /* 无敌帧计时安全网：rolling 状态在窗口内每帧重算，退出状态已清零；此处递减兜底异常残留 */
-            entity.combat.invincibleTimer = Math.max(0, entity.combat.invincibleTimer - dt)
+            entity.state.combat.invincibleTimer = Math.max(0, entity.state.combat.invincibleTimer - dt)
             /* 倒地 / 起身无敌计时（knockdown / getting_up 状态逐帧写入，退出清零，此处递减兜底） */
-            entity.combat.hitImmunityTimer = Math.max(0, entity.combat.hitImmunityTimer - dt)
+            entity.state.combat.hitImmunityTimer = Math.max(0, entity.state.combat.hitImmunityTimer - dt)
             /* 韧性回充：受击延迟内暂停，延迟结束后按每秒回复量恢复至上限 */
-            if (entity.combat.poiseRegenDelayTimer > 0) {
-                entity.combat.poiseRegenDelayTimer = Math.max(0, entity.combat.poiseRegenDelayTimer - dt)
-            } else if (entity.combat.poise < entity.combat.poiseMax) {
-                entity.combat.poise = Math.min(entity.combat.poiseMax, entity.combat.poise + entity.combat.poiseRegenPerSec * dt)
+            if (entity.state.combat.poiseRegenDelayTimer > 0) {
+                entity.state.combat.poiseRegenDelayTimer = Math.max(0, entity.state.combat.poiseRegenDelayTimer - dt)
+            } else if (entity.state.combat.poise < entity.state.combat.poiseMax) {
+                entity.state.combat.poise = Math.min(entity.state.combat.poiseMax, entity.state.combat.poise + entity.state.combat.poiseRegenPerSec * dt)
             }
             /* 格挡槽回充：未举盾、未破防且未满时按每秒回复量恢复（举盾 / 破防期间暂停） */
             {
-                const block = entity.combat.block
+                const block = entity.state.combat.block
                 if (block !== undefined
-                    && !entity.combat.blocking
+                    && !entity.state.combat.blocking
                     && entity.stateMachine.currentState !== 'guard_broken'
-                    && entity.combat.guard < block.guardMax) {
-                    entity.combat.guard = Math.min(block.guardMax, entity.combat.guard + block.guardRegenPerSec * dt)
+                    && entity.state.combat.guard < block.guardMax) {
+                    entity.state.combat.guard = Math.min(block.guardMax, entity.state.combat.guard + block.guardRegenPerSec * dt)
                 }
             }
-            materialEffects.get(entity.id)?.tick(dt)
+            materialEffects.get(entity.state.identity.id)?.tick(dt)
             checkGround(entity, dt)
 
-            const aiCtx = aiMap.get(entity.id)
+            const aiCtx = aiMap.get(entity.state.identity.id)
             if (aiCtx && aiEnabled) {
                 /* 战斗中把当前攻击目标排除出导航感知：目标相对走位由战斗 FSM 负责，
                  * 否则贴脸前会被当成墙绕行（两个近战 AI 互相绕圈不打） */
                 const combatTarget = aiCtx.activeFsm === 'combat' && aiCtx.combatTargetId !== undefined
                     ? charById.get(aiCtx.combatTargetId)
                     : undefined
-                aiCtx.nav.ignoredMesh = combatTarget !== undefined && !combatTarget.combat.isDead ? combatTarget.mesh : null
+                aiCtx.nav.ignoredMesh = combatTarget !== undefined && !combatTarget.state.combat.isDead ? combatTarget.mesh : null
 
                 updateAI(dt, aiCtx, entity, characters, (dx, dz, attack, attackDX, attackDZ, block) => {
                     /* 若与另一个角色有物理接触，禁止继续向其方向推挤 */
@@ -1448,39 +1448,39 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 'light', 0, false, false, block ?? false)
                     /* 记录意图方向（过滤前）：驱动朝向持续对准目标/路点，被接触阻断/nav 卡住时
                      * 仍能转正朝向，保证攻击检测箱门控与发射方向可用（过滤后方向会清零导致朝向自锁） */
-                    aiTargetDirs.set(entity.id, {dx, dz})
+                    aiTargetDirs.set(entity.state.identity.id, {dx, dz})
                     if (attack) {
                         /* 攻击方向：AI 显式指定（如边逃边射面向敌人）优先，缺省取移动方向 */
                         const adx = attackDX ?? dx
                         const adz = attackDZ ?? dz
                         if (adx !== 0 || adz !== 0) {
-                            entity.combat.attackDirX = adx
-                            entity.combat.attackDirZ = adz
+                            entity.state.combat.attackDirX = adx
+                            entity.state.combat.attackDirZ = adz
                         }
                     }
                 })
-            } else if (entity.isPlayer) {
+            } else if (entity.state.identity.isPlayer) {
                 /* 盾长按计时：按住盾键期间累计时长，供阈值判定举盾 */
                 if (playerShieldHoldKey !== undefined) playerShieldHoldTime += dt
                 /* 交互目标活跃：本帧按下交互键，或正处于 interacting（供转换守卫与转身朝向使用） */
-                entity.interactTargetActive = playerInteractPending || entity.stateMachine.currentState === 'interacting'
+                entity.state.interaction.active = playerInteractPending || entity.stateMachine.currentState === 'interacting'
                 if (playerInteractPending) {
-                    entity.interactTargetX = playerInteractTargetX
-                    entity.interactTargetZ = playerInteractTargetZ
+                    entity.state.interaction.targetX = playerInteractTargetX
+                    entity.state.interaction.targetZ = playerInteractTargetZ
                 }
-                const block = entity.combat.block
+                const block = entity.state.combat.block
                 const playerBlockHeld = playerShieldHoldKey !== undefined
                     && block !== undefined
-                    && entity.combat.guard > 0
-                    && !entity.combat.isDead
+                    && entity.state.combat.guard > 0
+                    && !entity.state.combat.isDead
                     && entity.stateMachine.currentState !== 'guard_broken'
                     && playerShieldHoldTime >= block.holdThreshold
                 entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerAttackHeld, playerInteractPending, playerBlockHeld, playerSwimLift)
                 /* 攻击期间（含待起手帧）瞄准方向持续取相机前方：角色随之转向瞄准方向，
                  * 射击弹道再由武器实际朝向（muzzleDir）决定，避免背身射向目标 */
-                if (playerAttackPending || entity.combat.attackActive) {
-                    entity.combat.attackDirX = playerForwardX
-                    entity.combat.attackDirZ = playerForwardZ
+                if (playerAttackPending || entity.state.combat.attackActive) {
+                    entity.state.combat.attackDirX = playerForwardX
+                    entity.state.combat.attackDirZ = playerForwardZ
                 }
             }
 
@@ -1488,34 +1488,34 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             /* 环境场（area）在状态机之后叠加，避免被状态机水平速度覆写抹掉 */
             applyEnvironment(entity, dt)
             /* 翻滚无敌帧窗口内命中可破坏世界目标（按来源 roll 结算） */
-            if (entity.isPlayer && entity.stateMachine.currentState === 'rolling'
-                && entity.combat.invincibleTimer > 0 && worldDamageTargets !== null) {
+            if (entity.state.identity.isPlayer && entity.stateMachine.currentState === 'rolling'
+                && entity.state.combat.invincibleTimer > 0 && worldDamageTargets !== null) {
                 applyRollWorldDamage(entity, worldDamageTargets())
             }
             /* 翻滚无敌帧视觉：材质统一效果层切换为半透明白（与受击闪红共用快照/还原） */
-            materialEffects.get(entity.id)?.setInvincible(entity.combat.invincibleTimer > 0)
+            materialEffects.get(entity.state.identity.id)?.setInvincible(entity.state.combat.invincibleTimer > 0)
 
-            const model = appearanceModels.get(entity.id)
-            const sys = appearanceSystems.get(entity.id)
+            const model = appearanceModels.get(entity.state.identity.id)
+            const sys = appearanceSystems.get(entity.state.identity.id)
             if (model && sys) {
                 const linvel = entity.body.linvel()
                 const hSpeed = Math.hypot(linvel.x, linvel.z)
                 /* 计算阶段动画上下文（仅 attacking 状态注入当前段信息） */
-                const activeSegment = entity.combat.activeSegment
+                const activeSegment = entity.state.combat.activeSegment
                 const inAttacking = (entity.stateMachine.currentState === 'attacking' || entity.stateMachine.currentState === 'air_attacking') && activeSegment !== undefined
                 const phases = inAttacking ? resolvePhases(activeSegment.phases) : []
-                const phaseDuration = inAttacking && entity.combat.phaseIndex < phases.length
-                    ? phaseDurationOf(phases[entity.combat.phaseIndex], activeSegment.duration, activeSegment.recovery)
+                const phaseDuration = inAttacking && entity.state.combat.phaseIndex < phases.length
+                    ? phaseDurationOf(phases[entity.state.combat.phaseIndex], activeSegment.duration, activeSegment.recovery)
                     : 1
                 const totalDuration = activeSegment !== undefined ? activeSegment.duration + activeSegment.recovery : 1
-                const ctxPhaseName = inAttacking && entity.combat.phaseIndex < phases.length
-                    ? phases[entity.combat.phaseIndex].name
+                const ctxPhaseName = inAttacking && entity.state.combat.phaseIndex < phases.length
+                    ? phases[entity.state.combat.phaseIndex].name
                     : undefined
 
                 /* 持盾手（可能双手各持一盾）：格挡姿态据此决定抬哪只手臂，基础姿态据此校正盾面朝向。
                  * 双手共持时副手盾挂背、不计入（与 `updateShieldBlock` 的盾来源一致）。 */
-                const mainWeapon = entity.combat.weapon
-                const offWeapon = entity.combat.offhand
+                const mainWeapon = entity.state.combat.weapon
+                const offWeapon = entity.state.combat.offhand
                 const shieldHands = {
                     main: mainWeapon.type === 'melee' && mainWeapon.block !== undefined,
                     off: holdModeOf(entity) !== 'two_handed'
@@ -1525,40 +1525,40 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 /* 倒地 / 起身时长可配置：动画层按同一状态时长定位 clip，与根旋转曲线同拍 */
                 const animState = entity.stateMachine.currentState
                 const stateDuration = animState === 'knockdown'
-                    ? entity.combat.knockdownDuration
+                    ? entity.state.combat.knockdownDuration
                     : animState === 'getting_up'
-                        ? entity.combat.getUpDuration
+                        ? entity.state.combat.getUpDuration
                         : animState === 'flinching'
-                            ? entity.combat.flinchDuration
+                            ? entity.state.combat.flinchDuration
                             : animState === 'rolling'
-                                ? entity.combat.rollSkill.config.duration
+                                ? entity.state.combat.rollSkill.config.duration
                                 : animState === 'interacting'
                                     ? INTERACTION_DURATION
                                     : animState === 'guard_broken'
-                                        ? (entity.combat.block?.guardBreakDuration ?? FALLBACK_GUARD_BREAK_DURATION)
+                                        ? (entity.state.combat.block?.guardBreakDuration ?? FALLBACK_GUARD_BREAK_DURATION)
                                         : undefined
                 /* 进入起身首帧时按实际面朝重算翻身时长（180° = 0.25s），保证倒地段朝向漂移后仍按角速度对齐 */
-                const facingYaw = facingAngles.get(entity.id) ?? 0
+                const facingYaw = facingAngles.get(entity.state.identity.id) ?? 0
                 if (animState === 'getting_up' && entity.stateMachine.stateTime === 0) {
-                    const targetYaw = Math.atan2(entity.knockdownFallDirX, entity.knockdownFallDirZ)
+                    const targetYaw = Math.atan2(entity.state.timers.knockdownFallDirX, entity.state.timers.knockdownFallDirZ)
                     let turnDiff = targetYaw - facingYaw
                     turnDiff = ((turnDiff + Math.PI) % (2 * Math.PI)) - Math.PI
-                    entity.combat.getUpTurnDuration = Math.abs(turnDiff) / GET_UP_TURN_SPEED
+                    entity.state.combat.getUpTurnDuration = Math.abs(turnDiff) / GET_UP_TURN_SPEED
                 }
                 /* 起身前翻身阶段不算爬起进度：动画停在伏地首帧，翻身结束后再推进 */
                 const animStateTime = animState === 'getting_up'
-                    ? Math.max(entity.stateMachine.stateTime - Math.max(entity.combat.getUpTurnDuration, 0), 0)
+                    ? Math.max(entity.stateMachine.stateTime - Math.max(entity.state.combat.getUpTurnDuration, 0), 0)
                     : entity.stateMachine.stateTime
-                const isHumanoid = bodyFormOf(entity.config.bodyFormId).id === HUMANOID_BODY_FORM.id
-                const facingYawForAnim = facingAngles.get(entity.id) ?? 0
-                const previousFacing = previousFacingAngles.get(entity.id) ?? facingYawForAnim
+                const isHumanoid = bodyFormOf(entity.state.config.bodyFormId).id === HUMANOID_BODY_FORM.id
+                const facingYawForAnim = facingAngles.get(entity.state.identity.id) ?? 0
+                const previousFacing = previousFacingAngles.get(entity.state.identity.id) ?? facingYawForAnim
                 let turnDelta = facingYawForAnim - previousFacing
                 turnDelta = ((turnDelta + Math.PI) % (Math.PI * 2)) - Math.PI
                 const targetTurnRate = dt > 0 ? Math.max(-8, Math.min(8, turnDelta / dt)) : 0
-                const previousTurnRate = smoothedTurnRates.get(entity.id) ?? 0
+                const previousTurnRate = smoothedTurnRates.get(entity.state.identity.id) ?? 0
                 const turnRate = previousTurnRate + (targetTurnRate - previousTurnRate) * Math.min(1, dt * 12)
-                smoothedTurnRates.set(entity.id, turnRate)
-                previousFacingAngles.set(entity.id, facingYawForAnim)
+                smoothedTurnRates.set(entity.state.identity.id, turnRate)
+                previousFacingAngles.set(entity.state.identity.id, facingYawForAnim)
                 const aimDirection = {
                     x: Math.sin(facingYawForAnim),
                     y: 0,
@@ -1567,20 +1567,20 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 const stateProgress = stateDuration !== undefined && stateDuration > 0
                     ? animStateTime / stateDuration
                     : 0
-                const attackTotalProgress = inAttacking && totalDuration > 0 ? entity.combat.attackTimer / totalDuration : 0
+                const attackTotalProgress = inAttacking && totalDuration > 0 ? entity.state.combat.attackTimer / totalDuration : 0
                 const animParams = entity.state.animation.params
                 animParams.horizontalSpeed = hSpeed
                 animParams.verticalSpeed = linvel.y
                 animParams.turnRate = turnRate
                 animParams.aimDirection = aimDirection
                 animParams.facingYaw = facingYawForAnim
-                animParams.attackCharge = entity.combat.attackCharge
+                animParams.attackCharge = entity.state.combat.attackCharge
                 animParams.attackTotalProgress = attackTotalProgress
                 animParams.stateProgress = stateProgress
                 if (isHumanoid) {
                     animParams.holdMode = holdModeOf(entity)
-                    animParams.handedness = humanoidBodyStateOf(entity.bodyState).handedness
-                    animParams.weaponClassId = entity.combat.weapon.classId
+                    animParams.handedness = humanoidBodyStateOf(entity.state.bodyState).handedness
+                    animParams.weaponClassId = entity.state.combat.weapon.classId
                     animParams.shieldHands = shieldHands
                 }
                 sys.update(dt, model, animState, {
@@ -1594,71 +1594,71 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     ...(isHumanoid
                         ? {humanoid: {
                             holdMode: holdModeOf(entity),
-                            handedness: humanoidBodyStateOf(entity.bodyState).handedness,
-                            weaponClassId: entity.combat.weapon.classId,
+                            handedness: humanoidBodyStateOf(entity.state.bodyState).handedness,
+                            weaponClassId: entity.state.combat.weapon.classId,
                             shieldHands,
                         }}
                         : {}),
                     attackSegment: inAttacking ? activeSegment : undefined,
                     attackPhase: ctxPhaseName,
-                    attackPhaseProgress: phaseDuration > 0 ? entity.combat.phaseTimer / phaseDuration : 0,
+                    attackPhaseProgress: phaseDuration > 0 ? entity.state.combat.phaseTimer / phaseDuration : 0,
                     attackTotalProgress,
-                    attackPhaseIndex: entity.combat.phaseIndex,
-                    attackCharge: entity.combat.attackCharge,
-                    attackHolding: entity.combat.attackHolding,
+                    attackPhaseIndex: entity.state.combat.phaseIndex,
+                    attackCharge: entity.state.combat.attackCharge,
+                    attackHolding: entity.state.combat.attackHolding,
                     weaponHeld: model.weaponMesh !== null,
                 })
 
                 const vx = entity.body.linvel().x
                 const vz = entity.body.linvel().z
-                const currentAngle = facingAngles.get(entity.id) ?? 0
+                const currentAngle = facingAngles.get(entity.state.identity.id) ?? 0
                 const isRolling = entity.stateMachine.currentState === 'rolling'
                 const isKnockdown = entity.stateMachine.currentState === 'knockdown'
                 const isGettingUp = entity.stateMachine.currentState === 'getting_up'
                 /* 起身前置翻身：躺在地上按固定角速度转到倒向（正面朝下），180° = 0.25s。
                  * 末尾多允许一个物理步，确保离散步长下也能转到目标角（步进按剩余角夹紧，不越过）。 */
-                const turnDuration = Math.max(entity.combat.getUpTurnDuration, 0)
+                const turnDuration = Math.max(entity.state.combat.getUpTurnDuration, 0)
                 const turningOver = isGettingUp
                     && entity.stateMachine.stateTime > 0
                     && turnDuration - entity.stateMachine.stateTime > -dt
 
                 let targetAngle: number
                 /** 当前攻击实际武器（吐息重击 = 吐息模组；其余 = 主武器） */
-                const attackWeapon = entity.combat.attackActive ? (entity.combat.activeWeapon ?? entity.combat.weapon) : entity.combat.weapon
+                const attackWeapon = entity.state.combat.attackActive ? (entity.state.combat.activeWeapon ?? entity.state.combat.weapon) : entity.state.combat.weapon
                 /** 远程武器（近战不受瞄准朝向影响，攻击判定箱随武器模型） */
                 const rangedWeapon = attackWeapon.type === 'ranged'
                 /** 当前战斗目标 id（仅 AI 处于 combat 时有效） */
                 const aiCombatTargetId = aiCtx !== undefined && aiCtx.activeFsm === 'combat'
                     ? aiCtx.combatTargetId
                     : undefined
-                const aiCombatTarget = !entity.isPlayer && !entity.isDying && rangedWeapon && aiCombatTargetId !== undefined
+                const aiCombatTarget = !entity.state.identity.isPlayer && !entity.state.timers.isDying && rangedWeapon && aiCombatTargetId !== undefined
                     ? charById.get(aiCombatTargetId)
                     : undefined
-                const aiAimTarget = aiCombatTarget !== undefined && !aiCombatTarget.combat.isDead ? aiCombatTarget : undefined
+                const aiAimTarget = aiCombatTarget !== undefined && !aiCombatTarget.state.combat.isDead ? aiCombatTarget : undefined
                 /** 仅在「站定转身瞄准 / 射击动作」期间把朝向锁到目标；移动阶段（含逃跑/回撤）朝向跟随移动方向 */
                 const aiFacingTarget = aiAimTarget !== undefined
-                    && (entity.combat.attackActive || (aiCtx !== undefined && aiCtx.combatAimActive))
+                    && (entity.state.combat.attackActive || (aiCtx !== undefined && aiCtx.combatAimActive))
                 if (isKnockdown || (isGettingUp && !turningOver)) {
                     /* 倒地段与翻身结束后的爬起段都锁定朝向：避免躺地时被 AI / 输入带着原地打转 */
                     targetAngle = currentAngle
-                } else if (entity.isPlayer) {
+                } else if (entity.state.identity.isPlayer) {
                     const inputLen = Math.hypot(playerDx, playerDz)
                     if (isRolling) {
                         /* 翻滚期间朝向锁定翻滚方向：输入转向不改变朝向，避免边滚边原地打转 */
-                        targetAngle = Math.atan2(entity.combat.rollSkill.dirX, entity.combat.rollSkill.dirZ)
-                    } else if (entity.stateMachine.currentState === 'interacting' && entity.interactTargetActive) {
+                        targetAngle = Math.atan2(entity.state.combat.rollSkill.dirX, entity.state.combat.rollSkill.dirZ)
+                    } else if (entity.stateMachine.currentState === 'interacting' && entity.state.interaction.active) {
                         /* 交互期间朝向锁定交互目标 */
                         const myPos = entity.body.translation()
-                        const tdx = (entity.interactTargetX ?? myPos.x) - myPos.x
-                        const tdz = (entity.interactTargetZ ?? myPos.z) - myPos.z
+                        const tdx = (entity.state.interaction.targetX ?? myPos.x) - myPos.x
+                        const tdz = (entity.state.interaction.targetZ ?? myPos.z) - myPos.z
                         targetAngle = Math.hypot(tdx, tdz) > VELOCITY_DIR_THRESHOLD
                             ? Math.atan2(tdx, tdz)
                             : currentAngle
                     } else if (rangedWeapon && inAttacking) {
                         /* 玩家远程攻击：转向瞄准方向（相机前方），draw/aim 阶段完成转向后武器才对准目标 */
-                        const aimLen = Math.hypot(entity.combat.attackDirX, entity.combat.attackDirZ)
+                        const aimLen = Math.hypot(entity.state.combat.attackDirX, entity.state.combat.attackDirZ)
                         targetAngle = aimLen > VELOCITY_DIR_THRESHOLD
-                            ? Math.atan2(entity.combat.attackDirX, entity.combat.attackDirZ)
+                            ? Math.atan2(entity.state.combat.attackDirX, entity.state.combat.attackDirZ)
                             : currentAngle
                     } else if (inputLen > VELOCITY_DIR_THRESHOLD) {
                         targetAngle = Math.atan2(playerDx, playerDz)
@@ -1675,7 +1675,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         ? Math.atan2(tdx, tdz)
                         : currentAngle
                 } else {
-                    const aiDir = aiTargetDirs.get(entity.id)
+                    const aiDir = aiTargetDirs.get(entity.state.identity.id)
                     if (aiDir !== undefined) {
                         const aiDirLen = Math.hypot(aiDir.dx, aiDir.dz)
                         targetAngle = aiDirLen > VELOCITY_DIR_THRESHOLD
@@ -1690,7 +1690,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                 let newAngle: number
                 if (turningOver) {
-                    const targetYaw = Math.atan2(entity.knockdownFallDirX, entity.knockdownFallDirZ)
+                    const targetYaw = Math.atan2(entity.state.timers.knockdownFallDirX, entity.state.timers.knockdownFallDirZ)
                     let turnDiff = targetYaw - currentAngle
                     turnDiff = ((turnDiff + Math.PI) % (2 * Math.PI)) - Math.PI
                     const step = GET_UP_TURN_SPEED * dt
@@ -1700,14 +1700,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     diff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI
                     newAngle = currentAngle + diff * Math.min(ROTATION_SPEED * dt, 1)
                 }
-                facingAngles.set(entity.id, newAngle)
-                if (entity.isDying) {
+                facingAngles.set(entity.state.identity.id, newAngle)
+                if (entity.state.timers.isDying) {
                     /* 死亡倒下：绕世界轴「上 × 倒向」旋转 dyingFallAngle（方向/角度由 dying state 决定），
                      * 再叠加保持的最后朝向；模型原点在脚底，因此以脚为支点倒向冲击方向 */
-                    _deathFallAxis.set(entity.dyingFallDirZ, 0, -entity.dyingFallDirX)
+                    _deathFallAxis.set(entity.state.timers.dyingFallDirZ, 0, -entity.state.timers.dyingFallDirX)
                     if (_deathFallAxis.lengthSq() > 1e-8) {
                         _deathFallAxis.normalize()
-                        _deathFallQuat.setFromAxisAngle(_deathFallAxis, entity.dyingFallAngle)
+                        _deathFallQuat.setFromAxisAngle(_deathFallAxis, entity.state.timers.dyingFallAngle)
                         _deathYawQuat.setFromAxisAngle(_upAxis, newAngle)
                         model.group.quaternion.copy(_deathFallQuat).multiply(_deathYawQuat)
                     } else {
@@ -1716,10 +1716,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 } else if (isKnockdown || isGettingUp) {
                     /* 倒地 / 起身：绕世界轴「上 × 倒向」旋转 knockdownFallAngle（0 → π/2 倒地，π/2 → 0 起身），
                      * 再叠加保持的最后朝向；方向 / 角度由 knockdown / getting_up state 推进，与死亡倒地同机制 */
-                    _deathFallAxis.set(entity.knockdownFallDirZ, 0, -entity.knockdownFallDirX)
+                    _deathFallAxis.set(entity.state.timers.knockdownFallDirZ, 0, -entity.state.timers.knockdownFallDirX)
                     if (_deathFallAxis.lengthSq() > 1e-8) {
                         _deathFallAxis.normalize()
-                        _deathFallQuat.setFromAxisAngle(_deathFallAxis, entity.knockdownFallAngle)
+                        _deathFallQuat.setFromAxisAngle(_deathFallAxis, entity.state.timers.knockdownFallAngle)
                         _deathYawQuat.setFromAxisAngle(_upAxis, newAngle)
                         model.group.quaternion.copy(_deathFallQuat).multiply(_deathYawQuat)
                     } else {
@@ -1729,14 +1729,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     /* 翻滚前滚翻：clip 只含蜷缩姿态，根自转由状态驻留时间推导（同死亡倒地由 world 合成）；
                      * 根原点在脚底，绕身体中心自转需位置补偿 `center − Q·center`，否则会绕脚底划大圈 */
                     /* 根自转圈数按体形（四足 0 = 低伏冲刺不做前滚翻；缺省 1 = 前滚翻一周） */
-                    const rollTurns = bodyFormOf(entity.config.bodyFormId).rollSpinTurns ?? 1
+                    const rollTurns = bodyFormOf(entity.state.config.bodyFormId).rollSpinTurns ?? 1
                     _rollSpinQuat.setFromAxisAngle(_rollAxis, Math.PI * 2 * rollTurns * rollSpinProgress(
                         entity.stateMachine.stateTime,
-                        entity.combat.rollSkill.config.duration,
+                        entity.state.combat.rollSkill.config.duration,
                     ))
                     _rollYawQuat.setFromAxisAngle(_upAxis, newAngle)
                     model.group.quaternion.copy(_rollYawQuat).multiply(_rollSpinQuat)
-                    _rollPivot.set(0, originToCenterY(entity.config), 0)
+                    _rollPivot.set(0, originToCenterY(entity.state.config), 0)
                     _rollOffset.copy(_rollPivot).applyQuaternion(model.group.quaternion)
                     model.group.position.add(_rollPivot).sub(_rollOffset)
                 } else if (entity.stateMachine.currentState === 'swimming') {
@@ -1744,7 +1744,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     _swimPitchQuat.setFromAxisAngle(_rollAxis, SWIM_PRONE_PITCH)
                     _rollYawQuat.setFromAxisAngle(_upAxis, newAngle)
                     model.group.quaternion.copy(_rollYawQuat).multiply(_swimPitchQuat)
-                    _rollPivot.set(0, originToCenterY(entity.config), 0)
+                    _rollPivot.set(0, originToCenterY(entity.state.config), 0)
                     _rollOffset.copy(_rollPivot).applyQuaternion(model.group.quaternion)
                     model.group.position.add(_rollPivot).sub(_rollOffset)
                 } else {
@@ -1770,27 +1770,27 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                 /* 远程枪口世界朝向：武器本地 +Y = 枪口/弹道方向；在骨骼姿势与身体朝向写入后采样，
                  * 供 ranged_executor 在 release 帧作为弹道初始方向（角色朝向 + 出手动画共同决定） */
-                if (rangedWeapon && !entity.isDying) {
+                if (rangedWeapon && !entity.state.timers.isDying) {
                     const muzzleJointId = attackWeapon.mountJointId
                     const muzzleGroup = (muzzleJointId !== undefined ? model.jointGroups.get(muzzleJointId) : undefined) ?? model.weaponGroup
                     if (muzzleGroup !== null && muzzleGroup !== undefined) {
                         muzzleGroup.updateWorldMatrix(true, false)
                         muzzleGroup.getWorldPosition(_muzzlePos)
-                        entity.combat.muzzleX = _muzzlePos.x
-                        entity.combat.muzzleY = _muzzlePos.y
-                        entity.combat.muzzleZ = _muzzlePos.z
+                        entity.state.combat.muzzleX = _muzzlePos.x
+                        entity.state.combat.muzzleY = _muzzlePos.y
+                        entity.state.combat.muzzleZ = _muzzlePos.z
                         muzzleGroup.getWorldQuaternion(_muzzleQuat)
                         _muzzleVec.set(0, 1, 0).applyQuaternion(_muzzleQuat)
                         const muzzleLen = Math.hypot(_muzzleVec.x, _muzzleVec.z)
                         if (muzzleLen > 0.001) {
-                            entity.combat.muzzleDirX = _muzzleVec.x / muzzleLen
-                            entity.combat.muzzleDirZ = _muzzleVec.z / muzzleLen
+                            entity.state.combat.muzzleDirX = _muzzleVec.x / muzzleLen
+                            entity.state.combat.muzzleDirZ = _muzzleVec.z / muzzleLen
                         }
                     }
                 }
 
                 /* 刀光轨迹：attacking 状态的打击/释放/旋转阶段激活，采样刀尖世界坐标 */
-                const trail = weaponTrails.get(entity.id)
+                const trail = weaponTrails.get(entity.state.identity.id)
                 if (trail) {
                     const tip = model.weaponTip
                     if (tip) {
@@ -1806,14 +1806,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 /* 战斗判定调试线框（edit 模式）：红色攻击判定箱（随武器 matrixWorld）、
                  * 青色受击箱、橙色攻击检测箱（随位置/朝向）、蓝色视线扇形，
                  * 几何均与对应判定函数同源，保证所见即所判 */
-                const hitBoxes = attackHitBoxes.get(entity.id)
+                const hitBoxes = attackHitBoxes.get(entity.state.identity.id)
                 if (hitBoxes) {
                     /* debug 信息仅被选中角色显示（与 refreshSelectionVisibility 的门控一致） */
-                    const showDebug = attackHitBoxVisible && entity.id === selectedId
+                    const showDebug = attackHitBoxVisible && entity.state.identity.id === selectedId
                     const bPos = entity.body.translation()
-                    const yaw = facingAngles.get(entity.id) ?? 0
+                    const yaw = facingAngles.get(entity.state.identity.id) ?? 0
                     /* 受击箱：有受击子块时逐块显示（与判定形状一致）；无则回退单一身体盒 */
-                    const hurtBlocks = entity.hurtBlocks
+                    const hurtBlocks = entity.state.hurtBlocks
                     if (showDebug && hurtBlocks !== undefined && hurtBlocks.length > 0) {
                         hitBoxes.targetBox.visible = false
                         for (let bi = 0; bi < hitBoxes.hurtBoxes.length; bi++) {
@@ -1826,7 +1826,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                             }
                         }
                     } else {
-                        const th = targetHitBoxHalves(entity.config)
+                        const th = targetHitBoxHalves(entity.state.config)
                         hitBoxes.targetBox.position.set(bPos.x, bPos.y, bPos.z)
                         hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
                         /* 受击箱随身体朝向旋转（与判定的 OBB 几何一致） */
@@ -1835,7 +1835,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                         for (const box of hitBoxes.hurtBoxes) box.visible = false
                     }
 
-                    const debugWeapon = entity.combat.weapon
+                    const debugWeapon = entity.state.combat.weapon
                     const meleeWeapon = debugWeapon.type === 'melee' ? debugWeapon : undefined
 
                     /* 攻击判定箱（红）：跟随武器模型位姿，尺寸 = 武器本地命中箱 */
@@ -1860,7 +1860,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                     /* 攻击检测箱（橙）：与角色位置/朝向绑定，尺寸与偏移由武器 detectBox 配置驱动 */
                     if (showDebug && meleeWeapon !== undefined) {
-                        const db = attackDetectOBB(bPos, meleeWeapon.detectBox, entity.config.scale, yaw)
+                        const db = attackDetectOBB(bPos, meleeWeapon.detectBox, entity.state.config.scale, yaw)
                         hitBoxes.detectBox.position.set(db.center.x, db.center.y, db.center.z)
                         hitBoxes.detectBox.scale.set(db.half.x * 2, db.half.y * 2, db.half.z * 2)
                         hitBoxes.detectBox.rotation.y = yaw
@@ -1871,7 +1871,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                     /* 射程圆环（橙）：远程出招门控为圆形距离判定 dist <= weapon.range，贴足部高度平铺 */
                     if (showDebug && debugWeapon.type === 'ranged') {
-                        hitBoxes.rangeRing.position.set(bPos.x, bPos.y - originToCenterY(entity.config), bPos.z)
+                        hitBoxes.rangeRing.position.set(bPos.x, bPos.y - originToCenterY(entity.state.config), bPos.z)
                         hitBoxes.rangeRing.scale.set(debugWeapon.range, 1, debugWeapon.range)
                         hitBoxes.rangeRing.visible = true
                     } else {
@@ -1880,17 +1880,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                     /* 视线扇形（蓝）：每 10° 一条扫描射线（截断到遮挡点），战斗目标存在时画连线 */
                     if (showDebug) {
-                        const eyeY = bPos.y + formEyeHeight(entity.config)
+                        const eyeY = bPos.y + formEyeHeight(entity.state.config)
                         const fanLen = debugWeapon.detectionRange
                         let tx: number | undefined
                         let ty: number | undefined
                         let tz: number | undefined
                         if (aiCtx && aiCtx.activeFsm === 'combat' && aiCtx.combatTargetId !== undefined) {
                             const target = charById.get(aiCtx.combatTargetId)
-                            if (target && !target.combat.isDead) {
+                            if (target && !target.state.combat.isDead) {
                                 const tp = target.body.translation()
                                 tx = tp.x
-                                ty = tp.y + formEyeHeight(target.config)
+                                ty = tp.y + formEyeHeight(target.state.config)
                                 tz = tp.z
                             }
                         }
@@ -1905,33 +1905,33 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             /* 盾遮挡体同步：须在攻击 / 弹丸执行器之前（同帧子弹形状扫描据此命中盾） */
             syncShieldCollider(entity)
 
-            if (entity.combat.attackActive && !entity.combat.isDead) {
-                const activeType = entity.combat.activeWeapon?.type ?? entity.combat.weapon.type
+            if (entity.state.combat.attackActive && !entity.state.combat.isDead) {
+                const activeType = entity.state.combat.activeWeapon?.type ?? entity.state.combat.weapon.type
                 const executor = getSkillExecutor(activeType)
                 if (executor) {
                     const kind = activeType === 'ranged' ? 'ranged' : 'melee'
-                    const previousKind = activatedAttacks.get(entity.id)
+                    const previousKind = activatedAttacks.get(entity.state.identity.id)
                     if (previousKind !== undefined && previousKind !== kind) {
-                        getSkillExecutor(previousKind)?.end(entity.combat, entity, noopExecCtx)
-                        activatedAttacks.delete(entity.id)
+                        getSkillExecutor(previousKind)?.end(entity.state.combat, entity, noopExecCtx)
+                        activatedAttacks.delete(entity.state.identity.id)
                     }
-                    if (!activatedAttacks.has(entity.id)) {
-                        activatedAttacks.set(entity.id, kind)
-                        const dirInfo = aiTargetDirs.get(entity.id)
-                        let dirX = dirInfo ? dirInfo.dx : entity.combat.attackDirX
-                        let dirZ = dirInfo ? dirInfo.dz : entity.combat.attackDirZ
+                    if (!activatedAttacks.has(entity.state.identity.id)) {
+                        activatedAttacks.set(entity.state.identity.id, kind)
+                        const dirInfo = aiTargetDirs.get(entity.state.identity.id)
+                        let dirX = dirInfo ? dirInfo.dx : entity.state.combat.attackDirX
+                        let dirZ = dirInfo ? dirInfo.dz : entity.state.combat.attackDirZ
                         const len = Math.hypot(dirX, dirZ)
                         if (len < 0.001) { dirX = 0; dirZ = 1 }
                         else { dirX /= len; dirZ /= len }
                         const dirVec = { x: dirX, y: 0, z: dirZ }
-                        executor.start(entity.combat, entity, dirVec, noopExecCtx)
+                        executor.start(entity.state.combat, entity, dirVec, noopExecCtx)
                     }
-                    executor.update(dt, entity.combat, entity, noopExecCtx)
+                    executor.update(dt, entity.state.combat, entity, noopExecCtx)
                 }
-            } else if (activatedAttacks.has(entity.id)) {
-                const previousKind = activatedAttacks.get(entity.id)
-                activatedAttacks.delete(entity.id)
-                if (previousKind !== undefined) getSkillExecutor(previousKind)?.end(entity.combat, entity, noopExecCtx)
+            } else if (activatedAttacks.has(entity.state.identity.id)) {
+                const previousKind = activatedAttacks.get(entity.state.identity.id)
+                activatedAttacks.delete(entity.state.identity.id)
+                if (previousKind !== undefined) getSkillExecutor(previousKind)?.end(entity.state.combat, entity, noopExecCtx)
             }
         }
 
@@ -1947,9 +1947,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const ai = bodyCharMap.get(bodyA.handle)
             const aj = bodyCharMap.get(bodyB.handle)
             if (!ai || !aj) continue
-            if (ai.combat.isDead || aj.combat.isDead) continue
+            if (ai.state.combat.isDead || aj.state.combat.isDead) continue
 
-            const key = ai.id < aj.id ? `${ai.id}-${aj.id}` : `${aj.id}-${ai.id}`
+            const key = ai.state.identity.id < aj.state.identity.id ? `${ai.state.identity.id}-${aj.state.identity.id}` : `${aj.state.identity.id}-${ai.state.identity.id}`
             if (separated.has(key)) continue
             separated.add(key)
 
@@ -1958,23 +1958,23 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             const sep = computeSeparation({
                 aiX: aPos.x, aiZ: aPos.z,
                 ajX: bPos.x, ajZ: bPos.z,
-                radiusA: formBodyRadius(ai.config),
-                radiusB: formBodyRadius(aj.config),
+                radiusA: formBodyRadius(ai.state.config),
+                radiusB: formBodyRadius(aj.state.config),
             }, CHARACTER_SEPARATION_SPEED)
             if (!sep) continue
 
             /* 斜坡上水平平移需要沿坡面补偿 Y，否则碰撞体埋进坡面（穿模 + 暴力弹出） */
-            const aDy = separationSlopeDy(ai.isOnGround, ai.groundNormal, sep.aiDx, sep.aiDz)
-            const bDy = separationSlopeDy(aj.isOnGround, aj.groundNormal, sep.ajDx, sep.ajDz)
+            const aDy = separationSlopeDy(ai.state.physics.isOnGround, ai.state.physics.groundNormal, sep.aiDx, sep.aiDz)
+            const bDy = separationSlopeDy(aj.state.physics.isOnGround, aj.state.physics.groundNormal, sep.ajDx, sep.ajDz)
             bodyA.setTranslation({ x: aPos.x + sep.aiDx, y: aPos.y + aDy, z: aPos.z + sep.aiDz }, true)
             bodyB.setTranslation({ x: bPos.x + sep.ajDx, y: bPos.y + bDy, z: bPos.z + sep.ajDz }, true)
 
             const aAfter = bodyA.translation()
-            ai.mesh.position.set(aAfter.x, aAfter.y - originToCenterY(ai.config), aAfter.z)
-            ai.appearanceGroup.position.set(aAfter.x, aAfter.y - originToCenterY(ai.config), aAfter.z)
+            ai.mesh.position.set(aAfter.x, aAfter.y - originToCenterY(ai.state.config), aAfter.z)
+            ai.appearanceGroup.position.set(aAfter.x, aAfter.y - originToCenterY(ai.state.config), aAfter.z)
             const bAfter = bodyB.translation()
-            aj.mesh.position.set(bAfter.x, bAfter.y - originToCenterY(aj.config), bAfter.z)
-            aj.appearanceGroup.position.set(bAfter.x, bAfter.y - originToCenterY(aj.config), bAfter.z)
+            aj.mesh.position.set(bAfter.x, bAfter.y - originToCenterY(aj.state.config), bAfter.z)
+            aj.appearanceGroup.position.set(bAfter.x, bAfter.y - originToCenterY(aj.state.config), bAfter.z)
 
             const aVel = bodyA.linvel()
             const bVel = bodyB.linvel()
@@ -1994,7 +1994,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         rangedExecutor.updateBullets(dt, characters)
 
         for (let i = characters.length - 1; i >= 0; i--) {
-            if (characters[i].combat.isDead) remove(characters[i].id)
+            if (characters[i].state.combat.isDead) remove(characters[i].state.identity.id)
         }
 
         /* 列表行状态实时刷新（状态机/AI 状态每帧可能变化） */
@@ -2005,9 +2005,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let navSensor: NavSensor | null = null
 
     const setNavEnabled = (id: number, enabled: boolean): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.navEnabled = enabled
+        entity.state.ai.navEnabled = enabled
         const aiCtx = aiMap.get(id)
         if (aiCtx) {
             aiCtx.nav.enabled = enabled
@@ -2016,38 +2016,38 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     const activateAI = (): void => {
         for (const entity of characters) {
-            if (!entity.isPlayer && !aiMap.has(entity.id)) {
+            if (!entity.state.identity.isPlayer && !aiMap.has(entity.state.identity.id)) {
                 const pos = entity.body.translation()
                 /* 原点/出生锚点统一取脚底 Y（与 origin.ts 的 setOriginFromCharacter 同源），避免策略迁移后 Y 语义不一致 */
-                const originY = pos.y - originToCenterY(entity.config)
+                const originY = pos.y - originToCenterY(entity.state.config)
                 const ctx = createAIMachine(
                     entity,
                     pos.x, originY, pos.z,
                     losChecker,
-                    DEFAULT_PEACE_CONFIGS[entity.peaceStrategy],
-                    entity.combatStrategy,
+                    DEFAULT_PEACE_CONFIGS[entity.state.ai.peaceStrategy],
+                    entity.state.ai.combatStrategy,
                     /* 攻击检测箱：与角色位置/朝向绑定、尺寸与偏移由武器 detectBox 配置驱动的前侧方立方体；
                      * 远程不适用检测箱，回退圆形距离判定 */
                     (character, target) => {
-                        const weapon = character.combat.weapon
+                        const weapon = character.state.combat.weapon
                         const cPos = character.body.translation()
                         const tPos = target.body.translation()
                         if (weapon.type !== 'melee') {
                             return Math.hypot(tPos.x - cPos.x, tPos.z - cPos.z) <= weapon.range
                         }
                         return testAttackDetect(
-                            cPos, weapon.detectBox, character.config.scale, facingAngles.get(character.id) ?? 0,
-                            tPos, targetHitBoxHalves(target.config), facingAngles.get(target.id) ?? 0,
+                            cPos, weapon.detectBox, character.state.config.scale, facingAngles.get(character.state.identity.id) ?? 0,
+                            tPos, targetHitBoxHalves(target.state.config), facingAngles.get(target.state.identity.id) ?? 0,
                         )
                     },
                     /* 视线扇形门控用的实时朝向（findNearestEnemy 每帧读取） */
-                    () => facingAngles.get(entity.id) ?? 0,
-                    entity.originStrategy,
-                    entity.originInterval,
+                    () => facingAngles.get(entity.state.identity.id) ?? 0,
+                    entity.state.ai.originStrategy,
+                    entity.state.ai.originInterval,
                 )
                 if (boxSpawner) ctx.spawnBox = boxSpawner
                 if (navSensor) ctx.navSensor = navSensor
-                aiMap.set(entity.id, ctx)
+                aiMap.set(entity.state.identity.id, ctx)
             }
         }
     }
@@ -2108,35 +2108,35 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         /* 持握模式：从体形状态读取，武器不支持时 setHoldMode 回退默认模式（不抛错） */
         if (plan.id === HUMANOID_BODY_FORM.id) {
             const {holdMode} = humanoidBodyStateOf(cfg.bodyState)
-            setHoldMode(entity.id, holdMode)
+            setHoldMode(entity.state.identity.id, holdMode)
         }
         /* 防御 / 攻击：旧档缺字段回退零防御零攻击；装备汇总已在 spawnEntity 内完成 */
-        entity.combat.baseDefense = saveConfig.defense ?? plan.base.baseDefense
-        entity.combat.baseAttack = saveConfig.baseAttack ?? plan.base.baseAttack
-        entity.combat.baseMoveSpeedMultiplier = plan.base.baseMoveSpeedMultiplier
-        entity.combat.basePoiseMax = saveConfig.poiseMax ?? plan.base.basePoise
-        setCombatEquipment(entity.combat, entity.combat.baseDefense, entity.combat.equipment, plan.id, entity.combat.baseAttack)
+        entity.state.combat.baseDefense = saveConfig.defense ?? plan.base.baseDefense
+        entity.state.combat.baseAttack = saveConfig.baseAttack ?? plan.base.baseAttack
+        entity.state.combat.baseMoveSpeedMultiplier = plan.base.baseMoveSpeedMultiplier
+        entity.state.combat.basePoiseMax = saveConfig.poiseMax ?? plan.base.basePoise
+        setCombatEquipment(entity.state.combat, entity.state.combat.baseDefense, entity.state.combat.equipment, plan.id, entity.state.combat.baseAttack)
         /* 载入即回满韧性（poiseMax 已含装备汇总） */
-        entity.combat.poise = entity.combat.poiseMax
+        entity.state.combat.poise = entity.state.combat.poiseMax
         /* 额外锁定点：旧档缺字段回退仅默认身体中心点；非法条目由 sanitizeLockPoints 安全剔除 */
-        entity.lockPoints = sanitizeLockPoints(saveConfig.lockPoints)
-        const model = appearanceModels.get(entity.id)
+        entity.state.lockPoints = sanitizeLockPoints(saveConfig.lockPoints)
+        const model = appearanceModels.get(entity.state.identity.id)
         if (model) {
             applyEquipmentVisuals(model, entity)
         }
-        entity.combat.maxHealth = saveConfig.maxHealth
-        entity.combat.health = opts?.health ?? saveConfig.maxHealth
+        entity.state.combat.maxHealth = saveConfig.maxHealth
+        entity.state.combat.health = opts?.health ?? saveConfig.maxHealth
         if (quat) entity.body.setRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w }, true)
         /* spawnEntity 之后 maxHealth/health 才被覆盖，需再次刷新列表行 */
         refreshPlayerLabel()
-        return {id: entity.id}
+        return {id: entity.state.identity.id}
     }
 
     const setTransform = (id: number, pos: {x: number; y: number; z: number}, rotDeg: {x: number; y: number; z: number}): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
         /* pos 为脚底原点：物理刚体（胶囊）中心上移半高 */
-        const halfH = originToCenterY(entity.config)
+        const halfH = originToCenterY(entity.state.config)
         entity.body.setTranslation({ x: pos.x, y: pos.y + halfH, z: pos.z }, true)
         entity.mesh.position.set(pos.x, pos.y, pos.z)
         /* 外观动画体一同瞬移（暂停态 syncPositions 不运行，否则模型滞留旧位置） */
@@ -2173,7 +2173,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const setFacing = (id: number, degrees: number): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
         const normalized = ((degrees % 360) + 360) % 360
         const yaw = normalized * Math.PI / 180
@@ -2191,16 +2191,16 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
      * 切换后按新模式重解析攻击链、清空段冷却 / 当前段，并同步外观（副手在双手共持时挂背、其余模式回手）。
      */
     const setHoldMode = (id: number, holdMode: HoldMode): boolean => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (entity === undefined) return false
-        const supported = availableHoldModes(entity.combat.weapon, entity.combat.offhand?.weapon).includes(holdMode)
-        const mode = supported ? holdMode : defaultHoldMode(entity.combat.weapon)
+        const supported = availableHoldModes(entity.state.combat.weapon, entity.state.combat.offhand?.weapon).includes(holdMode)
+        const mode = supported ? holdMode : defaultHoldMode(entity.state.combat.weapon)
         if (holdModeOf(entity) !== mode) {
-            setCombatWeapon(entity.combat, runtimeForHoldMode(entity.combat.weapon, mode), mode)
-            entity.bodyState = withHumanoidHoldMode(entity.bodyState, mode)
-            entity.combat.activeSegment = undefined
-            entity.combat.bufferedSegment = undefined
-            entity.combat.segmentCooldowns.clear()
+            setCombatWeapon(entity.state.combat, runtimeForHoldMode(entity.state.combat.weapon, mode), mode)
+            entity.state.bodyState = withHumanoidHoldMode(entity.state.bodyState, mode)
+            entity.state.combat.activeSegment = undefined
+            entity.state.combat.bufferedSegment = undefined
+            entity.state.combat.segmentCooldowns.clear()
             syncWeaponAppearance(entity)
         }
         return supported
@@ -2208,52 +2208,52 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 玩家持握模式环切（单持 → 双手共持 → 双持 → 单持；可用列表按武器声明 + 副手同类过滤） */
     const cyclePlayerHoldMode = (): HoldMode | undefined => {
-        const entity = characters.find(c => c.isPlayer)
+        const entity = characters.find(c => c.state.identity.isPlayer)
         if (entity === undefined) return undefined
-        const modes = availableHoldModes(entity.combat.weapon, entity.combat.offhand?.weapon)
+        const modes = availableHoldModes(entity.state.combat.weapon, entity.state.combat.offhand?.weapon)
         if (modes.length === 0) return undefined
         const index = modes.indexOf(holdModeOf(entity))
         const next = modes[(index + 1) % modes.length] ?? modes[0]
-        setHoldMode(entity.id, next)
+        setHoldMode(entity.state.identity.id, next)
         return holdModeOf(entity)
     }
 
     /** 设置额外锁定点：非法条目安全剔除（不抛错），默认身体中心点不受影响 */
     const setLockPoints = (id: number, points: readonly LockPointConfig[]): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (entity === undefined) return
-        entity.lockPoints = sanitizeLockPoints(points)
+        entity.state.lockPoints = sanitizeLockPoints(points)
     }
 
     const updateCharacterConfig = (id: number, charCfg: Partial<CharacterConfig>, newAttackSlot?: AttackConfig, newFaction?: number, newMaxHealth?: number, newTendencyConfig?: TendencyConfig, newHealth?: number, newEquipment?: {baseDefense?: DefenseProfile; baseAttack?: DamageTypeProfile; equipment?: EquipmentState}, newOffhand?: AttackConfig | null): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        if (charCfg.speed !== undefined) entity.config.speed = charCfg.speed
-        if (charCfg.jumpHeight !== undefined) entity.config.jumpHeight = charCfg.jumpHeight
+        if (charCfg.speed !== undefined) entity.state.config.speed = charCfg.speed
+        if (charCfg.jumpHeight !== undefined) entity.state.config.jumpHeight = charCfg.jumpHeight
         if (charCfg.scale !== undefined) {
             /* 脚底原点锚定：先记录旧原点 Y，scale 变更后物理中心按新半高重定位（脚底不动） */
             const bodyPos = entity.body.translation()
-            const originY = bodyPos.y - originToCenterY(entity.config)
-            entity.config.scale = charCfg.scale
+            const originY = bodyPos.y - originToCenterY(entity.state.config)
+            entity.state.config.scale = charCfg.scale
 
-            const model = appearanceModels.get(entity.id)
+            const model = appearanceModels.get(entity.state.identity.id)
             if (model) {
-                model.group.scale.set(entity.config.scale, entity.config.scale, entity.config.scale)
+                model.group.scale.set(entity.state.config.scale, entity.state.config.scale, entity.state.config.scale)
             }
 
             for (const collider of entity.colliders) world.removeCollider(collider, true)
             /* 碰撞体参数与 spawnEntity 一致（随 scale 缩放）：按体形计划 colliderLayout 重建 */
-            const layout = bodyFormOf(entity.config.bodyFormId).skeleton.colliderLayout
-            const rebuilt = layout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, entity.config.scale), entity.body))
+            const layout = bodyFormOf(entity.state.config.bodyFormId).skeleton.colliderLayout
+            const rebuilt = layout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, entity.state.config.scale), entity.body))
             entity.colliders = rebuilt
             entity.mainCollider = rebuilt[0]
             /* 重建后刷新总质量（碰撞体密度 0，质量仍为 1） */
             setBodyMass(entity.body, 1)
             entity.body.wakeUp()
             /* 物理中心随新半高上移，mesh/外观模型原点（脚底）保持不变 */
-            entity.body.setTranslation({ x: bodyPos.x, y: originY + originToCenterY(entity.config), z: bodyPos.z }, true)
+            entity.body.setTranslation({ x: bodyPos.x, y: originY + originToCenterY(entity.state.config), z: bodyPos.z }, true)
 
-            updateCharacterMesh(entity.mesh, entity.config)
+            updateCharacterMesh(entity.mesh, entity.state.config)
             if (entity.wireframe) {
                 entity.mesh.remove(entity.wireframe)
                 entity.wireframe.geometry.dispose()
@@ -2266,11 +2266,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const nextHandedness = charCfg.bodyState?.handedness
         if (nextHandedness !== undefined && isHandedness(nextHandedness)) {
             /* 惯用手切换：主 / 副手槽位与网格镜像迁移（武器网格不重建）；动作镜像由 clip 层随 ctx 生效 */
-            entity.bodyState = {...entity.bodyState, handedness: nextHandedness}
-            appearanceModels.get(entity.id)?.setHandedness?.(nextHandedness)
+            entity.state.bodyState = {...entity.state.bodyState, handedness: nextHandedness}
+            appearanceModels.get(entity.state.identity.id)?.setHandedness?.(nextHandedness)
         }
         if (newAttackSlot || newOffhand !== undefined) {
-            const plan = bodyFormOf(entity.config.bodyFormId)
+            const plan = bodyFormOf(entity.state.config.bodyFormId)
             /* 体形武器白名单过滤：面板 Apply 会在切体形后提交「旧体形的选择」，
              * 须按**新体形**的允许集剔除，否则狼 / 龙会被装上白名单外的武器（绕过 setBodyForm 的回退）。 */
             let changed = false
@@ -2280,9 +2280,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     const slot = mainWeapon.weapon.equipBodyParts.find(part =>
                         plan.equipSlots.some(s => s.kind === 'weapon' && s.bodyPart === part) && part !== 'off_hand',
                     ) ?? mainWeapon.weapon.equipBodyParts[0]
-                    setCombatWeapon(entity.combat, mainWeapon, undefined, slot)
+                    setCombatWeapon(entity.state.combat, mainWeapon, undefined, slot)
                     if (slot !== undefined) {
-                        entity.combat.equipment = withEquipmentAt(entity.combat.equipment, 'weapon', slot, mainWeapon.weapon.id)
+                        entity.state.combat.equipment = withEquipmentAt(entity.state.combat.equipment, 'weapon', slot, mainWeapon.weapon.id)
                     }
                     changed = true
                 }
@@ -2290,9 +2290,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             if (newOffhand !== undefined) {
                 const offWeapon = newOffhand === null ? undefined : weaponRuntimeOf(newOffhand)
                 if (offWeapon === undefined || weaponSelectableFor(plan, offWeapon.weapon)) {
-                    setCombatOffhand(entity.combat, offWeapon)
-                    entity.combat.equipment = withEquipmentAt(
-                        entity.combat.equipment,
+                    setCombatOffhand(entity.state.combat, offWeapon)
+                    entity.state.combat.equipment = withEquipmentAt(
+                        entity.state.combat.equipment,
                         'weapon',
                         'off_hand',
                         offWeapon?.weapon.id,
@@ -2302,68 +2302,68 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             }
             if (changed) {
                 /* 持握模式重置为该武器支持的首个模式（面板随后可再显式 setHoldMode），清空段冷却与当前段 */
-                entity.bodyState = withHumanoidHoldMode(entity.bodyState, defaultHoldMode(entity.combat.weapon))
+                entity.state.bodyState = withHumanoidHoldMode(entity.state.bodyState, defaultHoldMode(entity.state.combat.weapon))
                 /* 新模式可能使副手盾挂背（双手共持）：重解析盾来源 */
-                updateShieldBlock(entity.combat, holdModeOf(entity))
-                entity.combat.activeSegment = undefined
-                entity.combat.bufferedSegment = undefined
-                entity.combat.segmentCooldowns.clear()
+                updateShieldBlock(entity.state.combat, holdModeOf(entity))
+                entity.state.combat.activeSegment = undefined
+                entity.state.combat.bufferedSegment = undefined
+                entity.state.combat.segmentCooldowns.clear()
                 syncWeaponAppearance(entity)
             }
         }
         if (newFaction !== undefined) {
-            entity.combat.faction = newFaction
-            const model = appearanceModels.get(entity.id)
+            entity.state.combat.faction = newFaction
+            const model = appearanceModels.get(entity.state.identity.id)
             if (model) model.recolor(SELECT_PALETTE(newFaction))
         }
         if (newMaxHealth !== undefined) {
-            entity.combat.maxHealth = newMaxHealth
-            if (entity.combat.health > newMaxHealth) entity.combat.health = newMaxHealth
+            entity.state.combat.maxHealth = newMaxHealth
+            if (entity.state.combat.health > newMaxHealth) entity.state.combat.health = newMaxHealth
         }
         if (newHealth !== undefined) {
-            entity.combat.health = Math.max(0, Math.min(newHealth, entity.combat.maxHealth))
+            entity.state.combat.health = Math.max(0, Math.min(newHealth, entity.state.combat.maxHealth))
         }
         /* 韧性属性：基础上界变更须重算「护甲 / 肢体 poise 汇总」，其余参数直接写入战斗组件 */
         if (charCfg.poiseMax !== undefined) {
-            entity.config.poiseMax = charCfg.poiseMax
-            entity.combat.basePoiseMax = charCfg.poiseMax
-            setCombatEquipment(entity.combat, entity.combat.baseDefense, entity.combat.equipment, bodyFormOf(entity.config.bodyFormId).id)
+            entity.state.config.poiseMax = charCfg.poiseMax
+            entity.state.combat.basePoiseMax = charCfg.poiseMax
+            setCombatEquipment(entity.state.combat, entity.state.combat.baseDefense, entity.state.combat.equipment, bodyFormOf(entity.state.config.bodyFormId).id)
         }
         if (charCfg.poiseRegenDelay !== undefined) {
-            entity.config.poiseRegenDelay = charCfg.poiseRegenDelay
-            entity.combat.poiseRegenDelay = charCfg.poiseRegenDelay
+            entity.state.config.poiseRegenDelay = charCfg.poiseRegenDelay
+            entity.state.combat.poiseRegenDelay = charCfg.poiseRegenDelay
         }
         if (charCfg.poiseRegenPerSec !== undefined) {
-            entity.config.poiseRegenPerSec = charCfg.poiseRegenPerSec
-            entity.combat.poiseRegenPerSec = charCfg.poiseRegenPerSec
+            entity.state.config.poiseRegenPerSec = charCfg.poiseRegenPerSec
+            entity.state.combat.poiseRegenPerSec = charCfg.poiseRegenPerSec
         }
         if (charCfg.knockdownDuration !== undefined) {
-            entity.config.knockdownDuration = charCfg.knockdownDuration
-            entity.combat.knockdownDuration = charCfg.knockdownDuration
+            entity.state.config.knockdownDuration = charCfg.knockdownDuration
+            entity.state.combat.knockdownDuration = charCfg.knockdownDuration
         }
         if (charCfg.getUpDuration !== undefined) {
-            entity.config.getUpDuration = charCfg.getUpDuration
-            entity.combat.getUpDuration = charCfg.getUpDuration
+            entity.state.config.getUpDuration = charCfg.getUpDuration
+            entity.state.combat.getUpDuration = charCfg.getUpDuration
         }
         if (newTendencyConfig) {
-            entity.combat.attackTendency = resolveTendency(newTendencyConfig)
-            entity.combat.tendencyConfig = newTendencyConfig
+            entity.state.combat.attackTendency = resolveTendency(newTendencyConfig)
+            entity.state.combat.tendencyConfig = newTendencyConfig
         }
         if (newEquipment) {
             /* 基础防御 / 基础攻击 / 装备变更：重算防御、攻击加成与移速并同步外观（未传项保持原值）。
              * 按**当前体形**装备槽过滤（切体形后提交的旧槽位装备须剔除，避免无槽体形获得装备数值）。 */
-            const plan = bodyFormOf(entity.config.bodyFormId)
+            const plan = bodyFormOf(entity.state.config.bodyFormId)
             const filtered = newEquipment.equipment !== undefined
                 ? filterEquipmentState(plan.equipSlots, newEquipment.equipment)
-                : entity.combat.equipment
+                : entity.state.combat.equipment
             setCombatEquipment(
-                entity.combat,
-                newEquipment.baseDefense ?? entity.combat.baseDefense,
+                entity.state.combat,
+                newEquipment.baseDefense ?? entity.state.combat.baseDefense,
                 filtered,
                 plan.id,
                 newEquipment.baseAttack,
             )
-            const model = appearanceModels.get(entity.id)
+            const model = appearanceModels.get(entity.state.identity.id)
             if (model) {
                 if (newEquipment.equipment !== undefined) {
                     applyEquipmentVisuals(model, entity)
@@ -2375,18 +2375,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 设置 / 卸下吐息模组（仅声明 breath 武器槽的体形；未知 id 视为卸下） */
     const setBreathModule = (id: number, breathModuleId: string | undefined): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (entity === undefined) return
-        const plan = bodyFormOf(entity.config.bodyFormId)
+        const plan = bodyFormOf(entity.state.config.bodyFormId)
         const hasBreathSlot = plan.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'breath')
         const module = hasBreathSlot ? breathModuleOf(breathModuleId) : undefined
         if (module === undefined) {
-            entity.combat.equipment = withEquipmentAt(entity.combat.equipment, 'weapon', 'breath', undefined)
-            setCombatBreath(entity.combat, undefined)
+            entity.state.combat.equipment = withEquipmentAt(entity.state.combat.equipment, 'weapon', 'breath', undefined)
+            setCombatBreath(entity.state.combat, undefined)
             return
         }
-        entity.combat.equipment = withEquipmentAt(entity.combat.equipment, 'weapon', 'breath', module.id)
-        setCombatBreath(entity.combat, {module, attacks: weaponAttacksOf(module)})
+        entity.state.combat.equipment = withEquipmentAt(entity.state.combat.equipment, 'weapon', 'breath', module.id)
+        setCombatBreath(entity.state.combat, {module, attacks: weaponAttacksOf(module)})
     }
 
     /**
@@ -2394,79 +2394,79 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
      * 脚底原点保持不变；未知 id 或切换为同一体形时安全返回 false。
      */
     const setBodyForm = (id: number, planId: string): boolean => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (entity === undefined) return false
         const plan = bodyFormOf(planId)
         /* 未知 id 拒绝（不静默回退）；同一体形无操作 */
         if (plan.id !== planId) return false
-        if (bodyFormOf(entity.config.bodyFormId).id === plan.id) return false
+        if (bodyFormOf(entity.state.config.bodyFormId).id === plan.id) return false
 
         const bodyPos = entity.body.translation()
-        const originY = bodyPos.y - originToCenterY(entity.config)
-        const oldModel = appearanceModels.get(entity.id)
+        const originY = bodyPos.y - originToCenterY(entity.state.config)
+        const oldModel = appearanceModels.get(entity.state.identity.id)
         /* 记录当前朝向：编辑暂停态 update 不运行（不会每帧写回 model.group 朝向），
          * 重建模型后必须复原，否则新体形会复位到 +Z 正前方、丢失当前朝左 / 朝后的朝向 */
         const oldFacingQuat = oldModel?.group.quaternion.clone()
 
         /* 1) 记录体形 id（humanoid 用缺省表示，便于旧档兼容） */
-        if (plan.id === HUMANOID_BODY_FORM.id) delete entity.config.bodyFormId
-        else entity.config.bodyFormId = plan.id
+        if (plan.id === HUMANOID_BODY_FORM.id) delete entity.state.config.bodyFormId
+        else entity.state.config.bodyFormId = plan.id
 
         /* 2) 武器策略：武器只属于一种体形 → 切体形一律落到新体形默认武器（不跨体形沿用）。
          * 装备状态按新体形槽位过滤；天然默认武器不进装备表。 */
         const newFormId = plan.id
-        let equipment = filterEquipmentState(plan.equipSlots, entity.combat.equipment)
+        let equipment = filterEquipmentState(plan.equipSlots, entity.state.combat.equipment)
         const defaultSlot = plan.weapons.find(w => w.id === plan.defaultWeaponId)?.equipBodyParts[0]
         const defaultRuntime = weaponRuntimeOf({weaponId: plan.defaultWeaponId})
-        setCombatWeapon(entity.combat, defaultRuntime, undefined, defaultSlot)
+        setCombatWeapon(entity.state.combat, defaultRuntime, undefined, defaultSlot)
         equipment = withEquipmentAt(equipment, 'weapon', defaultSlot ?? 'main_hand', plan.defaultWeaponId)
-        setCombatOffhand(entity.combat, undefined)
+        setCombatOffhand(entity.state.combat, undefined)
         equipment = withEquipmentAt(equipment, 'weapon', 'off_hand', undefined)
         /* 吐息只属于 wyvern：非 wyvern 体形不应用（装备表已按新槽位过滤） */
         const breathModule = plan.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'breath')
             ? breathModuleOf(equipment.weapon.breath)
             : undefined
-        setCombatBreath(entity.combat, breathModule !== undefined ? {module: breathModule, attacks: weaponAttacksOf(breathModule)} : undefined)
-        entity.bodyState = newFormId === HUMANOID_BODY_FORM.id ? entity.bodyState : {}
+        setCombatBreath(entity.state.combat, breathModule !== undefined ? {module: breathModule, attacks: weaponAttacksOf(breathModule)} : undefined)
+        entity.state.bodyState = newFormId === HUMANOID_BODY_FORM.id ? entity.state.bodyState : {}
         if (newFormId === HUMANOID_BODY_FORM.id) {
-            entity.bodyState = withHumanoidHoldMode(entity.bodyState, defaultHoldMode(defaultRuntime.weapon))
+            entity.state.bodyState = withHumanoidHoldMode(entity.state.bodyState, defaultHoldMode(defaultRuntime.weapon))
         }
         /* 3) 装备过滤 + 汇总（防御 / 加成 / 移速 / 韧性） */
-        entity.combat.equipment = equipment
-        setCombatEquipment(entity.combat, entity.combat.baseDefense, equipment, newFormId, entity.combat.baseAttack)
+        entity.state.combat.equipment = equipment
+        setCombatEquipment(entity.state.combat, entity.state.combat.baseDefense, equipment, newFormId, entity.state.combat.baseAttack)
         const finalState = resolveBodyFormBase(
-            entity.config.poiseMax !== undefined ? {...plan.base, basePoise: entity.config.poiseMax} : plan.base,
-            entity.combat.weapon,
+            entity.state.config.poiseMax !== undefined ? {...plan.base, basePoise: entity.state.config.poiseMax} : plan.base,
+            entity.state.combat.weapon,
             equipment,
             newFormId,
         )
-        entity.combat.defense = finalState.defense
-        entity.combat.attackBonus = finalState.attackBonus
-        entity.combat.moveSpeedMultiplier = finalState.moveSpeedMultiplier
-        entity.combat.poiseMax = finalState.poise
-        if (entity.combat.poise > entity.combat.poiseMax) entity.combat.poise = entity.combat.poiseMax
+        entity.state.combat.defense = finalState.defense
+        entity.state.combat.attackBonus = finalState.attackBonus
+        entity.state.combat.moveSpeedMultiplier = finalState.moveSpeedMultiplier
+        entity.state.combat.poiseMax = finalState.poise
+        if (entity.state.combat.poise > entity.state.combat.poiseMax) entity.state.combat.poise = entity.state.combat.poiseMax
 
         /* 4) 重建外观模型（dispose 旧模型 → 按新 plan 建模型） */
         if (oldModel !== undefined) {
             scene.remove(oldModel.group)
             oldModel.dispose()
         }
-        const model = plan.createModel(entity.config, entity.combat.faction)
-        appearanceModels.set(entity.id, model)
+        const model = plan.createModel(entity.state.config, entity.state.combat.faction)
+        appearanceModels.set(entity.state.identity.id, model)
         entity.appearanceGroup = model.group
         /* 动画系统亦按新体形重建：否则切体形后仍由旧体形的动作数据驱动（关节不匹配 → 冻结） */
-        appearanceSystems.set(entity.id, plan.animation.createSystem({onAttackEvent}))
+        appearanceSystems.set(entity.state.identity.id, plan.animation.createSystem({onAttackEvent}))
 
         /* 5) 生命值档位：体形覆写（缺省沿用武器类型档位） */
         const maxHP = finalState.maxHealth
-        entity.combat.maxHealth = maxHP
-        if (entity.combat.health > maxHP) entity.combat.health = maxHP
+        entity.state.combat.maxHealth = maxHP
+        if (entity.state.combat.health > maxHP) entity.state.combat.health = maxHP
 
         /* 6) 受击子块与碰撞体按新 plan 重建 */
-        entity.hurtProfile = plan.skeleton.hurtProfile
-        entity.hurtBlocks = plan.skeleton.hurtProfile.map(b => zeroWorldHurtBlock(b.id))
+        entity.state.hurtProfile = plan.skeleton.hurtProfile
+        entity.state.hurtBlocks = plan.skeleton.hurtProfile.map(b => zeroWorldHurtBlock(b.id))
         for (const collider of entity.colliders) world.removeCollider(collider, true)
-        const rebuilt = plan.skeleton.colliderLayout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, entity.config.scale), entity.body))
+        const rebuilt = plan.skeleton.colliderLayout.map(spec => createColliderForBody(world, makeColliderDescForSpec(spec, entity.state.config.scale), entity.body))
         entity.colliders = rebuilt
         entity.mainCollider = rebuilt[0]
         setBodyMass(entity.body, 1)
@@ -2478,15 +2478,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         scene.add(model.group)
         applyEquipmentVisuals(model, entity)
         syncWeaponAppearance(entity)
-        model.recolor(SELECT_PALETTE(entity.combat.faction))
-        updateShieldBlock(entity.combat, holdModeOf(entity))
+        model.recolor(SELECT_PALETTE(entity.state.combat.faction))
+        updateShieldBlock(entity.state.combat, holdModeOf(entity))
         /* 材质效果重绑到新外观（旧快照作废） */
-        materialEffects.set(entity.id, createMaterialEffects(entity))
+        materialEffects.set(entity.state.identity.id, createMaterialEffects(entity))
 
         /* 8) 物理中心随新体形中心偏移重定位（脚底不动），调试胶囊 mesh 同步 */
-        entity.body.setTranslation({x: bodyPos.x, y: originY + originToCenterY(entity.config), z: bodyPos.z}, true)
+        entity.body.setTranslation({x: bodyPos.x, y: originY + originToCenterY(entity.state.config), z: bodyPos.z}, true)
         entity.mesh.position.set(bodyPos.x, originY, bodyPos.z)
-        updateCharacterMesh(entity.mesh, entity.config)
+        updateCharacterMesh(entity.mesh, entity.state.config)
         if (entity.wireframe) {
             entity.mesh.remove(entity.wireframe)
             entity.wireframe.geometry.dispose()
@@ -2504,9 +2504,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const setPeaceStrategy = (id: number, strategy: PeaceSubStrategy): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.peaceStrategy = strategy
+        entity.state.ai.peaceStrategy = strategy
         const ctx = aiMap.get(id)
         if (ctx) {
             ctx.peaceConfig = DEFAULT_PEACE_CONFIGS[strategy]
@@ -2527,9 +2527,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const setCombatStrategy = (id: number, strategy: CombatSubStrategy): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.combatStrategy = strategy
+        entity.state.ai.combatStrategy = strategy
         const ctx = aiMap.get(id)
         if (ctx) {
             ctx.combatStrategy = strategy
@@ -2540,14 +2540,14 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 切换行为原点策略并复位原点：roamer → 当前位置；resident / fighter / hunter → 初始锚点 */
     const setOriginStrategy = (id: number, strategy: OriginSubStrategy): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.originStrategy = strategy
+        entity.state.ai.originStrategy = strategy
         const ctx = aiMap.get(id)
         if (!ctx) return
         ctx.originStrategy = strategy
         ctx.originConfig = DEFAULT_ORIGIN_CONFIGS[strategy]
-        ctx.originTimer = entity.originInterval > 0 ? entity.originInterval : ctx.originConfig.interval
+        ctx.originTimer = entity.state.ai.originInterval > 0 ? entity.state.ai.originInterval : ctx.originConfig.interval
         if (strategy === 'roamer') {
             setOriginFromCharacter(ctx, entity)
         } else {
@@ -2558,9 +2558,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const setOriginInterval = (id: number, seconds: number): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.originInterval = seconds
+        entity.state.ai.originInterval = seconds
         const ctx = aiMap.get(id)
         if (!ctx) return
         /* 复制而非原地改共享默认对象，避免污染 DEFAULT_ORIGIN_CONFIGS */
@@ -2569,23 +2569,23 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const setChaseLeashRadius = (id: number, radius: number): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.chaseLeashRadius = radius
+        entity.state.ai.chaseLeashRadius = radius
     }
 
     /** 设置 AI 反应式举盾窗口时长（逐角色属性，shouldReactiveBlock 触发时读取） */
     const setAIBlockDuration = (id: number, seconds: number): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.aiBlockDuration = seconds
+        entity.state.ai.aiBlockDuration = seconds
     }
 
     /** 设置 AI 反应式举盾冷却（逐角色属性，举盾窗口结束时读取） */
     const setAIBlockCooldown = (id: number, seconds: number): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.aiBlockCooldown = seconds
+        entity.state.ai.aiBlockCooldown = seconds
     }
 
     /** 读取角色行为原点（返回副本）：面板据此展示当前原点坐标，AI 未激活时为 undefined */
@@ -2597,9 +2597,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
     /** 设置角色当前韧性：夹取到 0..poiseMax（受击 / 回充仍由战斗系统驱动） */
     const setPoise = (id: number, value: number): void => {
-        const entity = characters.find(c => c.id === id)
+        const entity = characters.find(c => c.state.identity.id === id)
         if (!entity) return
-        entity.combat.poise = Math.max(0, Math.min(value, entity.combat.poiseMax))
+        entity.state.combat.poise = Math.max(0, Math.min(value, entity.state.combat.poiseMax))
     }
 
     const setCollisionVisible = (visible: boolean): void => {

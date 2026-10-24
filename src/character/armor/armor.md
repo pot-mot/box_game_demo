@@ -243,7 +243,7 @@ export const setCombatEquipment = (
 ```ts
 /** 当前有效移速 = 基础移速（config.speed）× 装备移速乘数；状态机全部移动速度统一由此推导 */
 export const moveSpeedOf = (entity: CharacterEntity): number =>
-    entity.config.speed * entity.combat.moveSpeedMultiplier
+    entity.state.config.speed * entity.state.combat.moveSpeedMultiplier
 ```
 
 `walking` / `jumping` / `falling`（含最大速度钳制）/ `rolling` / `attacking` 默认阶段行为的移动速度全部改读 `moveSpeedOf(entity)`。
@@ -469,7 +469,7 @@ const ARMOR_SLOT_JOINTS: Record<string, readonly string[]> = {
 ### 4.3 系统接线（`world.ts`）
 
 - `spawnEntity`：`createCombatComponent` 初始化零防御 / 空护甲 / 空肢体 / 无攻击加成 / 移速 1（新建角色外观自然无护甲与肢体，`equipArmor` / `equipLimbs` 仅在存档载入与面板应用时调用）。
-- `add()`（存档载入）：spawn 后调用 `setCombatEquipment(entity.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {}, saveConfig.limb ?? {})`，再 `model.equipArmor(resolveArmorLoadout(...))` 与 `model.equipLimbs(resolveLimbLoadout(...))`（与 maxHealth 覆盖同层，加载后刷新列表行）。
+- `add()`（存档载入）：spawn 后调用 `setCombatEquipment(entity.state.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {}, saveConfig.limb ?? {})`，再 `model.equipArmor(resolveArmorLoadout(...))` 与 `model.equipLimbs(resolveLimbLoadout(...))`（与 maxHealth 覆盖同层，加载后刷新列表行）。
 - `updateCharacterConfig()`（面板应用）：末位可选参数 `newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout; limb?: LimbLoadout}`，内部 `setCombatEquipment` +（对应项传入时）`model.equipArmor` / `model.equipLimbs`；未传项保持原值（`setCombatEquipment` 的 `limb` 省略 = 保持原肢体）。
 - 换阵营：`newFaction` 分支调用 `model.recolor(SELECT_PALETTE(newFaction))`，已装备肢体会据此重建外观。
 - 列表行 `rowText`：防御展示 `def:物X/魔Y`，移速展示**有效移速**（保留两位小数去尾，如 `spd:6.69`）。

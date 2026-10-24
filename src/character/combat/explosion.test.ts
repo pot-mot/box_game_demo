@@ -4,7 +4,6 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import {applyExplosionDamage} from './explosion.ts'
 import {createCombatComponent} from './types.ts'
 import {createWeaponRuntime} from '../weapon/weapon_runtime.ts'
-import {createBodyEnvironment} from '../../physics/environment.ts'
 
 /** 构造最低限度 CharacterEntity mock（overrides：无敌帧计时 / 冲量回调） */
 const makeMock = (
@@ -28,9 +27,15 @@ const makeMock = (
     combat.isDead = isDead
     combat.invincibleTimer = overrides?.invincibleTimer ?? 0
 
-    return {
+    const characterState = createTestCharacterState({
         id,
         config: {speed: 0, jumpHeight: 0, scale: 1},
+        combat,
+        bodyState: {holdMode: 'one_handed'},
+    })
+    characterState.physics.isOnGround = true
+    return {
+        state: characterState,
         mesh: null!, wireframe: undefined, appearanceGroup: null!,
         body: {
             translation: () => ({x, y, z}),
@@ -41,14 +46,7 @@ const makeMock = (
         } as unknown as Parameters<typeof applyExplosionDamage>[7]['body'],
         mainCollider: undefined as unknown as RAPIER.Collider,
         colliders: [],
-        isOnGround: true, groundNormal: { x: 0, y: 1, z: 0 }, groundKeepTimer: 0, airborneTime: 0, groundedTime: 0,
-        rowText: '', navEnabled: true, isPlayer: false, peaceStrategy: 'patrol', combatStrategy: 'tactical', originStrategy: 'resident', originInterval: 20, chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2, isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
-        combat,
-        bodyState: {holdMode: 'one_handed'},
-        lockPoints: [],
-        environment: createBodyEnvironment(),
         stateMachine: null!,
-        state: createTestCharacterState({}),
     }
 }
 
@@ -57,8 +55,8 @@ describe('applyExplosionDamage', () => {
         const src = makeMock(1, 0, 0, 0, 100, 0, false)
         const target = makeMock(2, 0.1, 0, 0, 50, 1, false)
         applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
-        expect(target.combat.health).toBeLessThan(50)
-        expect(target.combat.health).toBeGreaterThan(35) // 满伤 10，50-10=40 附近
+        expect(target.state.combat.health).toBeLessThan(50)
+        expect(target.state.combat.health).toBeGreaterThan(35) // 满伤 10，50-10=40 附近
     })
 
     it('半径边缘目标承受衰减伤害', () => {
@@ -66,28 +64,28 @@ describe('applyExplosionDamage', () => {
         const target = makeMock(2, 1.8, 0, 0, 50, 1, false)
         applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
         // dist=1.8, falloff=1-1.8/2=0.1, dmg=ceil(10*0.1)=1
-        expect(target.combat.health).toBe(49)
+        expect(target.state.combat.health).toBe(49)
     })
 
     it('范围外目标不受伤害', () => {
         const src = makeMock(1, 0, 0, 0, 100, 0, false)
         const target = makeMock(2, 3, 0, 0, 50, 1, false)
         applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
-        expect(target.combat.health).toBe(50)
+        expect(target.state.combat.health).toBe(50)
     })
 
     it('友军不受伤害', () => {
         const src = makeMock(1, 0, 0, 0, 100, 1, false)
         const target = makeMock(2, 0, 0, 0, 50, 1, false)
         applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
-        expect(target.combat.health).toBe(50)
+        expect(target.state.combat.health).toBe(50)
     })
 
     it('已死亡目标不受伤害', () => {
         const src = makeMock(1, 0, 0, 0, 100, 0, false)
         const target = makeMock(2, 0, 0, 0, 50, 1, true)
         applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
-        expect(target.combat.health).toBe(50)
+        expect(target.state.combat.health).toBe(50)
     })
 
     it('多个目标全部受影响', () => {
@@ -95,8 +93,8 @@ describe('applyExplosionDamage', () => {
         const t1 = makeMock(2, 0.5, 0, 0, 50, 1, false)
         const t2 = makeMock(3, -0.3, 0, 0.2, 50, 2, false)
         applyExplosionDamage(0, 0, 0, 3, 10, 'physical', 5, src, [t1, t2])
-        expect(t1.combat.health).toBeLessThan(50)
-        expect(t2.combat.health).toBeLessThan(50)
+        expect(t1.state.combat.health).toBeLessThan(50)
+        expect(t2.state.combat.health).toBeLessThan(50)
     })
 
     it('翻滚无敌帧目标完全免疫：不伤害、不径向击退', () => {
@@ -107,7 +105,7 @@ describe('applyExplosionDamage', () => {
             onImpulse: () => { impulses++ },
         })
         applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
-        expect(target.combat.health).toBe(50)
+        expect(target.state.combat.health).toBe(50)
         expect(impulses).toBe(0)
     })
 
@@ -116,22 +114,22 @@ describe('applyExplosionDamage', () => {
         // dist=1.99, falloff=1-1.99/2=0.005, dmg=ceil(10*0.005)=1
         const target = makeMock(2, 1.99, 0, 0, 50, 1, false)
         applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
-        expect(target.combat.health).toBe(49) // 50 - 1 = 49
+        expect(target.state.combat.health).toBe(49) // 50 - 1 = 49
     })
 
     it('按 damageType 取对应防御：魔法爆炸被魔法防御固定减免', () => {
         const src = makeMock(1, 0, 0, 0, 100, 0, false)
         const target = makeMock(2, 0.1, 0, 0, 50, 1, false)
-        target.combat.defense = {physical: 0, magic: 3}
+        target.state.combat.defense = {physical: 0, magic: 3}
         applyExplosionDamage(0, 0, 0, 2, 10, 'magic', 5, src, [target])
-        expect(target.combat.health).toBe(50 - 7)
+        expect(target.state.combat.health).toBe(50 - 7)
     })
 
     it('物理爆炸不被目标魔法防御减免（按类别取防御）', () => {
         const src = makeMock(1, 0, 0, 0, 100, 0, false)
         const target = makeMock(2, 0.1, 0, 0, 50, 1, false)
-        target.combat.defense = {physical: 0, magic: 30}
+        target.state.combat.defense = {physical: 0, magic: 30}
         applyExplosionDamage(0, 0, 0, 2, 10, 'physical', 5, src, [target])
-        expect(target.combat.health).toBe(40)
+        expect(target.state.combat.health).toBe(40)
     })
 })

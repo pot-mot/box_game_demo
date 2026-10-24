@@ -99,7 +99,7 @@ const buildBaseClipWithJoints = (
     return handedness === DEFAULT_HANDEDNESS ? clip : mirrorClip(clip)
 }
 
-/** 完整基础状态 clip（编辑器动画库 / 兼容全骨架播放） */
+/** 完整基础状态 clip（测试 / 工具用；生产走 canonical + 持握覆盖组合） */
 export const buildBaseClip = (
     state: keyof typeof BASE_POSE_SAMPLERS,
     weaponHeld: boolean,
@@ -111,24 +111,6 @@ export const buildBaseClip = (
 /** falling 腿张开速度档（legSpread = min(speed,4)×0.04，取整档避免频繁切 clip） */
 export const fallingSpeedTier = (horizontalSpeed: number): number =>
     Math.min(Math.max(Math.round(Math.min(horizontalSpeed, 4)), 0), 4)
-
-/** 基础状态 clip 缓存（按 state + weaponHeld + falling 速度档惰性生成） */
-const clipCache = new Map<string, BoneAnimationClip>()
-
-export const getBaseClip = (
-    state: keyof typeof BASE_POSE_SAMPLERS,
-    weaponHeld: boolean,
-    horizontalSpeed = 0,
-    handedness: Handedness = DEFAULT_HANDEDNESS,
-): BoneAnimationClip => {
-    const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
-    const key = `${handedness}:${state}:${weaponHeld ? 'w' : 'n'}${speedKey}`
-    const cached = clipCache.get(key)
-    if (cached !== undefined) return cached
-    const clip = buildBaseClip(state, weaponHeld, horizontalSpeed, handedness)
-    clipCache.set(key, clip)
-    return clip
-}
 
 /* ── 底盘行走叠加 clip 缓存（格挡 / 蓄力攻击时用行走步态覆盖双腿；仅依赖惯用手） ── */
 const walkLegsClipCache = new Map<Handedness, BoneAnimationClip>()
@@ -142,48 +124,6 @@ export const getWalkLegsClip = (handedness: Handedness = DEFAULT_HANDEDNESS): Bo
     if (cached !== undefined) return cached
     const clip = buildBaseClipWithJoints('walking', WALK_LEG_JOINTS, false, 0, undefined, [], handedness)
     walkLegsClipCache.set(handedness, clip)
-    return clip
-}
-
-/* ── 持握模式感知的完整基础状态 clip（离线预组合：运行时单层播放，零组合开销） ── */
-const holdClipCache = new Map<string, BoneAnimationClip>()
-
-/**
- * 迁移期旧路径：按持握模式离线烘焙整身 clip。
- * 生产运行时已改用 `getCanonicalBaseClip` + `getHoldShieldOverlayClip`；本函数仅保留给编辑器/兼容测试，P5 删除。
- */
-export const getBaseClipForHoldMode = (
-    state: keyof typeof BASE_POSE_SAMPLERS,
-    weaponHeld: boolean,
-    holdMode: HoldMode,
-    horizontalSpeed = 0,
-    shieldArms: readonly ('right' | 'left')[] = [],
-    handedness: Handedness = DEFAULT_HANDEDNESS,
-    weaponClassId?: string,
-): BoneAnimationClip => {
-    const speedKey = state === 'falling' ? `:${fallingSpeedTier(horizontalSpeed)}` : ''
-    const shieldKey = shieldArms.length > 0 ? `:s${shieldArms.map(arm => arm[0]).join('')}` : ''
-    const weaponKey = weaponHeld && holdMode === 'two_handed' && weaponClassId !== undefined
-        ? `:w${weaponClassId}`
-        : ''
-    const key = `${handedness}:${state}:${weaponHeld ? holdMode : 'n'}${speedKey}${shieldKey}${weaponKey}`
-    const cached = holdClipCache.get(key)
-    if (cached !== undefined) return cached
-    const canonical = buildBaseClipWithJoints(
-        state,
-        CHARACTER_JOINT_IDS,
-        weaponHeld,
-        horizontalSpeed,
-        weaponHeld ? holdMode : undefined,
-        shieldArms,
-        DEFAULT_HANDEDNESS,
-    )
-    const support = weaponHeld && holdMode === 'two_handed' && weaponClassId !== undefined
-        ? SUPPORT_HAND_BASE[weaponClassId]?.[state]
-        : undefined
-    const posable = applySupportHandTracks(canonical, support, CHARACTER_JOINT_REST_POSITIONS)
-    const clip = handedness === DEFAULT_HANDEDNESS ? posable : mirrorClip(posable)
-    holdClipCache.set(key, clip)
     return clip
 }
 

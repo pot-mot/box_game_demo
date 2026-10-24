@@ -16,8 +16,8 @@ export const chaseHandler: CombatStateHandler = {
             return
         }
 
-        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-        if (!target || target.combat.isDead) { setInput(0, 0, false); return }
+        const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+        if (!target || target.state.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.translation()
         const tp = target.body.translation()
@@ -26,7 +26,7 @@ export const chaseHandler: CombatStateHandler = {
 
         if (dist < 0.01) { setInput(0, 0, false); return }
 
-        const weapon = character.combat.weapon
+        const weapon = character.state.combat.weapon
 
         /* aggressive 策略：远程也追到近战距离 */
         if (ctx.combatStrategy === 'aggressive') {
@@ -59,24 +59,24 @@ export const chaseHandler: CombatStateHandler = {
             guard: (ctx, character, allCharacters) => {
                 if (ctx.combatStrategy !== 'cowardly') return false
                 if (ctx.combatBurstAttackCount >= ctx.combatConfig.attackBurstCount) return false
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 const dist = Math.hypot(tp.x - pos.x, tp.z - pos.z)
-                const detRange = character.combat.weapon.detectionRange
+                const detRange = character.state.combat.weapon.detectionRange
                 return dist < detRange * 0.5
             },
         },
         {
             to: 'approach',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 if (weapon.type !== 'ranged') return false
 
                 /* aggressive 策略：更短的理想距离 */
@@ -84,23 +84,23 @@ export const chaseHandler: CombatStateHandler = {
                     ? weapon.range * 1.5
                     : weapon.idealRange * 1.3
                 return v3Length(_dir) < threshold
-                    && canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
+                    && canStartAttack(character.state.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
             },
         },
         {
             to: 'attack',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
 
                 /* aggressive 策略：远程也可进入攻击（远程保持距离判定） */
                 if (ctx.combatStrategy === 'aggressive' && weapon.type === 'ranged') {
                     return v3Length(_dir) < weapon.range
-                        && canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
+                        && canStartAttack(character.state.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
                 }
 
                 /* 默认：仅近战可进入攻击（攻击检测箱检查，checker 缺失时回退常量距离判定） */
@@ -108,19 +108,19 @@ export const chaseHandler: CombatStateHandler = {
                 const inRegion = ctx.attackDetectChecker
                     ? ctx.attackDetectChecker(character, target)
                     : v3Length(_dir) < MELEE_FALLBACK_DETECT_RANGE
-                return inRegion && canStartAttack(character.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
+                return inRegion && canStartAttack(character.state.combat, {dx: _dir.x, dz: _dir.z, holdDuration: 0, attackKey: 'light'})
             },
         },
         {
             /* 脱战：目标死亡/消失，或拉开到侦测半径 × 滞回系数之外（与进入阈值形成滞回） */
             to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return true
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return true
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const detRange = character.combat.weapon.detectionRange
+                const detRange = character.state.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

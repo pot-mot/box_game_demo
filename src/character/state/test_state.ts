@@ -5,16 +5,19 @@ import {createCharacterStateMachineData, type CharacterStateMachineData} from '.
 
 /** 测试专用：构造最小 CharacterState；生产代码必须走 `createCharacterState` */
 export interface TestCharacterStateOptions {
+    readonly id?: number
     readonly combat?: CombatComponent
     readonly stateMachine?: CharacterStateMachineData
     readonly config?: CharacterConfig
+    readonly bodyState?: Readonly<Record<string, string>>
+    readonly rowText?: string
     readonly isPlayer?: boolean
 }
 
 export const createTestCharacterState = (options: TestCharacterStateOptions): CharacterState => ({
-    identity: {id: 1, isPlayer: options.isPlayer ?? false, rowText: ''},
+    identity: {id: options.id ?? 1, isPlayer: options.isPlayer ?? false, rowText: options.rowText ?? ''},
     config: options.config ?? {speed: 6, jumpHeight: 2, scale: 1},
-    bodyState: {},
+    bodyState: options.bodyState ?? {},
     combat: options.combat ?? (undefined as unknown as CombatComponent),
     stateMachine: options.stateMachine ?? createCharacterStateMachineData(),
     physics: {

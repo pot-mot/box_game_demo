@@ -177,7 +177,7 @@ describe('弹丸系统', () => {
                 stepWorld(hw)
                 system.update(DT, [owner, target])
             }
-            return target.combat.maxHealth - target.combat.health
+            return target.state.combat.maxHealth - target.state.combat.health
         }
 
         expect(speedOf(1)).toBeCloseTo(bow.projectileSpeed * curve.maxSpeedScale, 3)
@@ -199,9 +199,9 @@ describe('弹丸系统', () => {
         const owner = makeChar(hw, 1, 0, 0.5, 0)
         const target = makeChar(hw, 2, 0, 0.5, 6)
         const block = SHIELD_BLOCK_MEDIUM
-        target.combat.block = block
-        target.combat.blocking = true
-        target.combat.guard = block.guardMax
+        target.state.combat.block = block
+        target.state.combat.blocking = true
+        target.state.combat.guard = block.guardMax
         const cover = block.cover
         const desc = RAPIER.ColliderDesc.cuboid(cover.width / 2, cover.height / 2, cover.depth / 2)
             .setSensor(true)
@@ -212,7 +212,7 @@ describe('弹丸系统', () => {
         const bow = RANGED_WEAPON_PRESETS.longbow
         /* harness 胶囊总高 1.0 → body 中心比脚底高 0.5；`cover` 偏移相对脚底。
          * 位置须在 stepWorld 前写好，查询管线才在下一步生效（与 world.ts 的每帧同步一致）。 */
-        const scale = target.config.scale
+        const scale = target.state.config.scale
         const tp0 = target.body.translation()
         collider.setTranslation({
             x: tp0.x + Math.sin(yaw) * cover.offsetZ * scale,
@@ -233,14 +233,14 @@ describe('弹丸系统', () => {
         /* 目标面朝 -Z（正对 owner）：盾位于身体前方 */
         const {target, bow, block} = fireAtBlockingTarget(Math.PI)
         const blockedDamage = bow.damage * block.blockDamageMultiplier
-        expect(target.combat.guard).toBeCloseTo(block.guardMax - blockedDamage, 4)
-        expect(target.combat.maxHealth - target.combat.health).toBeCloseTo(blockedDamage, 4)
+        expect(target.state.combat.guard).toBeCloseTo(block.guardMax - blockedDamage, 4)
+        expect(target.state.combat.maxHealth - target.state.combat.health).toBeCloseTo(blockedDamage, 4)
     })
 
     it('盾格挡：盾在背后时弹道未触及遮挡体，按正常伤害结算且格挡槽不消耗', () => {
         /* 目标面朝 +Z（背对 owner）：盾在身体后方，弹道在角色中心终止 */
         const {target, bow, block} = fireAtBlockingTarget(0)
-        expect(target.combat.guard).toBe(block.guardMax)
-        expect(target.combat.maxHealth - target.combat.health).toBeCloseTo(bow.damage, 4)
+        expect(target.state.combat.guard).toBe(block.guardMax)
+        expect(target.state.combat.maxHealth - target.state.combat.health).toBeCloseTo(bow.damage, 4)
     })
 })

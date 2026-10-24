@@ -89,22 +89,22 @@ describe('角色接触不被当作地面', () => {
         /* a 脚底 y=0.5 悬空并落在站立的 b 侧面/顶部，唯一接触是 b 的胶囊 */
         const {id: aId} = system.add(meleeSaveConfig(), 0, 0.5, 0)
         const {id: bId} = system.add(meleeSaveConfig(), 0.2, 0, 0)
-        const a = system.getAll().find(e => e.id === aId)!
+        const a = system.getAll().find(e => e.state.identity.id === aId)!
         void bId
 
         for (let i = 0; i < 5; i++) {
             step()
             /* a 尚未落到真实地面 → 不得因接触 b 而判为着地，法线保持默认朝上 */
-            expect(a.isOnGround).toBe(false)
-            expect(a.groundNormal.y).toBeGreaterThan(0.9)
+            expect(a.state.physics.isOnGround).toBe(false)
+            expect(a.state.physics.groundNormal.y).toBeGreaterThan(0.9)
         }
     })
 
     it('翻滚撞向另一角色不越顶、最终落回地面且保持水平分离', () => {
         const {id: aId} = system.add(meleeSaveConfig(), 0, 0, 0)
         const {id: bId} = system.add(meleeSaveConfig(), 0.4, 0, 0)
-        const a = system.getAll().find(e => e.id === aId)!
-        const b = system.getAll().find(e => e.id === bId)!
+        const a = system.getAll().find(e => e.state.identity.id === aId)!
+        const b = system.getAll().find(e => e.state.identity.id === bId)!
 
         /* 给翻滚一个朝 +x（朝 b）的初速度，触发翻滚方向解析；b 直立不动 */
         a.body.setLinvel({x: 6, y: 0, z: 0}, true)

@@ -90,7 +90,7 @@
 7. **惯用手 canonical 右撇子** — 骨架与全部动作数据（含存档姿势）恒定表示右撇子（主手 = 解剖右 = `-X`、副手/支撑手 = 解剖左 = `+X`）；左撇子（`CharacterConfig.handedness = 'left'`）只是**取用时镜像**视图：clip 经 `skeleton/anim/mirror.ts` 的 `mirrorClip` 派生（缓存键含 handedness，逐帧零开销）、武器/护甲/肢体挂点与网格（`scale.x=-1`）随 `mainHandSide`/`offHandSide` 切换、支撑手烘焙侧换到相反侧。**禁止**新增左撇子专有动作数据或按「屏幕左右」写死关节映射。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md)。
 8. **body_form 五子包** — 每个体形拥有 `state/`（静态 `base` + 具体 `CharacterState` 实现 + 装备槽/bodyState/动画状态时长）、`skeleton/`（唯一关节/碰撞/受击节点）、`skeleton_animation/`（动画组合/模组/叶子烘焙）、`appearance/`（mesh/材质/外观/装备外观）、`equipment/`（limb/armor/weapon 模组）。静态体形定义统一叫 `BodyForm.base`（原 `state`）；运行时角色数据只存在于 `CharacterState`。`skeleton` 与 `State` 分别是骨架/碰撞/受击与数值/运行数据的**唯一真源**：碰撞/受击箱只读取骨架数据，禁止读取 appearance 几何；装备只影响 state 与 appearance，不修改 skeleton/动画；动画不能增删骨骼节点；父级可经 `connectJoint` 显式重连（禁止自环 / 后代挂到祖先）。
 9. **武器按体形分包** — 每个武器**只属于一种体形**（`WeaponModelConfig.formId`），数据声明在 `body_form/<form>/equipment/weapons.ts`（只复用 `appearance/weapon_mesh.ts` 的网格生成器）；体形 `BodyForm.weapons` 暴露其武器表，`body_form/index.ts` 装配时经 `catalog.ts` 的 `registerFormWeapons` 注册。**禁止**跨体形直接复用武器条目；切体形一律落到新体形 `defaultWeaponId`。见 [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) 与 [`src/entity/character/body_form/body_form.md`](src/entity/character/body_form/body_form.md)。
-10. **state 单一真源** — `character/state` 声明基础接口，每个 `body_form/<form>/state` 实现具体 state。state 是角色**唯一权威数据存储**：属性、装备、全部计时器、状态机信息、物理量、AI、交互、环境、动画参数与动画当前信息都只存于 state。Rapier / Three 等引擎句柄放在 `CharacterRuntime`，不得进入 state。`CharacterEntity` 同名属性只能是委托到 state 的访问器，禁止另存副本；新代码优先 `entity.state.*`。详见 [`docs/design/character_state.md`](docs/design/character_state.md)。
+10. **state 单一真源** — `character/state` 声明基础接口，每个 `body_form/<form>/state` 实现具体 state。state 是角色**唯一权威数据存储**：属性、装备、全部计时器、状态机信息、物理量、AI、交互、环境、动画参数与动画当前信息都只存于 state。Rapier / Three 等引擎句柄放在 `CharacterRuntime`，不得进入 state。`CharacterEntity` 只保留 state、引擎句柄与状态机逻辑对象，不得再暴露游戏数据访问器；一律 `entity.state.*`。详见 [`docs/design/character_state.md`](docs/design/character_state.md)。
 11. **动画组合 + 进度控制** — 所有体形、所有骨骼动画统一为动画组合树；子组合权重只在引用边，边可带每关节权重；normal 贡献按有效权重归一化加权平均，additive 在归一化后叠加；叶子可为烘焙 clip。组合**不得**持有时间/时长/倍速，只用 progress；绝对时间与倍速只由动作/运行时在根驱动。动作模组必须覆盖其声明要控制的全部 joints 且节点内权重 1；与移动/跳跃共存由父组合按关节分配权重。持握是跨状态常驻组合。详见 [`docs/design/animation_composition.md`](docs/design/animation_composition.md)。
 
 ## 高危红线（跨模块，必须遵守）
@@ -145,7 +145,7 @@ src/
 | 存档 | [`src/save_load/save_load.md`](src/save_load/save_load.md) | 存档结构/版本/兼容 |
 | UI 面板 | [`src/ui/ui.md`](src/ui/ui.md) | 面板样式、图标、迁移 |
 | 角色领域（lock_point/faction/原型/惯用手） | [`src/character/character.md`](src/character/character.md) | 锁定点、阵营、惯用手 |
-| 角色状态（模块） | [`src/character/state/state.md`](src/character/state/state.md) | state 子域、所有权、访问器 |
+| 角色状态（模块） | [`src/character/state/state.md`](src/character/state/state.md) | state 子域、所有权 |
 | 武器 | [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) | 武器类/模型、持握、攻击段、蓄力、空中攻击、动作 |
 | 战斗运行时 | [`src/character/combat/combat.md`](src/character/combat/combat.md) | 伤害类别、防御、无敌帧 |
 | 护甲 / 肢体 | [`src/character/armor/armor.md`](src/character/armor/armor.md) | 护甲槽位、防御/加成 |
@@ -175,7 +175,7 @@ src/
 | 游玩模式 | [`src/modes/play/play.md`](src/modes/play/play.md) | 第三人称、锁定、箱庭子系统 |
 | 编辑模式 | [`src/modes/edit/edit.md`](src/modes/edit/edit.md) | 指针、执行面板、雕刻 |
 | 展示模式 | [`src/modes/showcase/showcase.md`](src/modes/showcase/showcase.md) | 子模块框架与注册 |
-| 骨骼动画编辑 | [`src/modes/bone_edit/bone_edit.md`](src/modes/bone_edit/bone_edit.md) | 轨道/函数双模式、体形切换、脚本 JIT |
+| 骨骼动画编辑 | [`src/modes/bone_edit/bone_edit.md`](src/modes/bone_edit/bone_edit.md) | 轨道编辑、体形切换、导入导出 |
 | 全局 UI 风格 | [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)、[`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md) | 任何面板/HUD |
 | 全局 i18n | [`docs/i18n.md`](docs/i18n.md) | 文案 |
 | 全局动作规范 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 调动作 |

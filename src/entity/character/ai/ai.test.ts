@@ -7,6 +7,7 @@ import {DEFAULT_PEACE_CONFIGS} from '../../../character/ai_strategy/peace.ts'
 import {DEFAULT_ORIGIN_CONFIGS} from '../../../character/ai_strategy/origin.ts'
 import type {CombatSubStrategy} from '../../../character/ai_strategy/types.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
+import {createTestCharacterState} from '../../../character/state/test_state.ts'
 import type {AIContext, AISetInput} from './types.ts'
 import type {LineOfSightChecker} from './line_of_sight.ts'
 import {VISION_FAN_RAY_COUNT} from './constants.ts'
@@ -49,27 +50,22 @@ const makeChar = (
     combat.attackActive = overrides?.attackActive ?? false
     combat.isDead = overrides?.isDead ?? false
 
-    return {
+    const state = createTestCharacterState({
         id,
+        config: {speed: 0, jumpHeight: 0, scale: 1},
+        combat,
+        rowText: '',
+    })
+    state.physics.isOnGround = true
+    state.ai.combatStrategy = combatStrategy
+    return {
+        state,
         body: {translation: () => ({x, y: 0, z})} as unknown as CharacterEntity['body'],
         mainCollider: undefined as unknown as RAPIER.Collider,
-        combat,
-        config: {speed: 0, jumpHeight: 0, scale: 1},
-        mesh: null!, appearanceGroup: null!,
-        isOnGround: true, rowText: '',
-        groundKeepTimer: 0, airborneTime: 0, groundedTime: 0,
-        isPlayer: false,
-        navEnabled: true,
-        peaceStrategy: 'patrol' as const,
-        combatStrategy,
-        originStrategy: 'resident' as const,
-        originInterval: 20,
-        chaseLeashRadius: 20,
-        aiBlockDuration: 0.4,
-        aiBlockCooldown: 1.2,
-        isDying: false, dyingTimer: 0, dyingFallDirX: 0, dyingFallDirZ: 0, dyingFallAngle: 0, knockdownFallDirX: 0, knockdownFallDirZ: 0, knockdownFallAngle: 0,
+        mesh: null!, wireframe: undefined, appearanceGroup: null!,
+        colliders: [],
         stateMachine: null!,
-    } as unknown as CharacterEntity
+    }
 }
 
 const makeCtx = (combatStrategy: CombatSubStrategy = 'tactical', targetId?: number): AIContext => {
@@ -444,9 +440,9 @@ describe('AI 顶层调度器', () => {
         /* 敌人持续 attackActive；若无窗口/冷却，blocking（优先级高于 attacking）会让 AI 永不挥砍 */
         const self = makeChar(1, 0, 0, 0, 'melee', undefined, 'tactical', 'shield_small')
         const enemy = makeChar(2, 0, 1, 1, 'melee')
-        enemy.combat.attackActive = true
-        enemy.combat.attackDirX = 0
-        enemy.combat.attackDirZ = -1
+        enemy.state.combat.attackActive = true
+        enemy.state.combat.attackDirX = 0
+        enemy.state.combat.attackDirZ = -1
         const ctx = createAIMachine(self, 0, 0, 0, null, DEFAULT_PEACE_CONFIGS.patrol, 'tactical')
         let blockFrames = 0
         let attackWindows = 0

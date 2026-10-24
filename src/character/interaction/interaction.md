@@ -69,16 +69,16 @@ export const INTERACTION_MAX_ANGLE_COS = 0.34
 - `CharacterInput` 增加 `interact: boolean`（脉冲）。
 - `CharacterStateMachine.setInput` 增加末位参数 `interact?: boolean`。
 
-### 3.2 角色实体瞬态字段
+### 3.2 角色状态瞬态字段
 
-`src/character/types.ts` 的 `CharacterEntity` 增加：
+`CharacterState.interaction`（`src/character/state/types.ts`）保存：
 
 ```ts
 /** 本帧是否有可交互目标（由 world.ts 按玩家交互脉冲写入；用于交互转换守卫） */
-interactTargetActive: boolean
+active: boolean
 /** 交互目标世界坐标（转身朝向用；无目标时保持上次值即可） */
-interactTargetX: number
-interactTargetZ: number
+targetX: number
+targetZ: number
 ```
 
 ### 3.3 状态文件 `states/interacting.ts`
@@ -131,7 +131,7 @@ guard: (input, entity) => input.interact && entity.interactTargetActive
 interacting: {duration: INTERACTION_DURATION, loop: false}
 ```
 
-`PoseSampler` 的 key 联合类型会自动扩展，`getBaseClipForHoldMode` 随之支持。
+`PoseSampler` 的 key 联合类型会自动扩展，骨骼编辑器 `previewClip` 随之支持。
 
 ### 4.2 外观系统（`src/entity/character/body_form/humanoid/skeleton_animation/system.ts`）
 

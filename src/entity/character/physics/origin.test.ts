@@ -75,9 +75,9 @@ describe('角色原点在脚底（非身体中心）', () => {
 
     it('add 的 y 为脚底：mesh/外观定位原点，物理刚体中心上移半高', () => {
         const {id} = system.add(meleeSaveConfig(), 1, 2, 3)
-        const entity = system.getAll().find(e => e.id === id)
+        const entity = system.getAll().find(e => e.state.identity.id === id)
         expect(entity).toBeDefined()
-        const halfH = HUMANOID_BODY_FORM.base.size.height * entity!.config.scale / 2
+        const halfH = HUMANOID_BODY_FORM.base.size.height * entity!.state.config.scale / 2
         expect(entity!.mesh.position.x).toBeCloseTo(1, 6)
         expect(entity!.mesh.position.y).toBeCloseTo(2, 6)
         expect(entity!.mesh.position.z).toBeCloseTo(3, 6)
@@ -90,7 +90,7 @@ describe('角色原点在脚底（非身体中心）', () => {
         /* 模拟物理移动：身体中心到 (5, 10, -2)（scale 1 → 半高 0.5） */
         system.setTransform(id, {x: 5, y: 9.5, z: -2}, {x: 0, y: 0, z: 0})
         system.syncPositions()
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         expect(entity.mesh.position.y).toBeCloseTo(9.5, 6)
         expect(entity.appearanceGroup.position.y).toBeCloseTo(9.5, 6)
         expect(entity.body.translation().y).toBeCloseTo(10, 6)
@@ -98,7 +98,7 @@ describe('角色原点在脚底（非身体中心）', () => {
 
     it('scale 变更后暂停态脚底锚定：原点不动、物理中心随新半高上移', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         const originBefore = entity.mesh.position.y
         system.updateCharacterConfig(id, {scale: 2})
         expect(entity.mesh.position.y).toBeCloseTo(originBefore, 6)

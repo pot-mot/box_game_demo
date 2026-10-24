@@ -232,8 +232,8 @@ export const interactablesModule: ShowcaseModule = {
         let respawnTimer = 0
         const killPlayer = (): void => {
             const p = characterSystem.getPlayerCharacter()
-            if (p === undefined || p.isDying) return
-            characterSystem.updateCharacterConfig(p.id, {}, undefined, undefined, undefined, undefined, 0)
+            if (p === undefined || p.state.timers.isDying) return
+            characterSystem.updateCharacterConfig(p.state.identity.id, {}, undefined, undefined, undefined, undefined, 0)
             respawnTimer = INTERACTABLE_RESPAWN_DELAY
         }
         const respawnPlayer = (): void => {

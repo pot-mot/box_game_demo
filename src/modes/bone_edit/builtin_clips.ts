@@ -3,7 +3,7 @@ import type {BaseClipState} from '../../character/state_machine/types.ts'
 import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../character/weapon/attack_chain.ts'
 import {weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../character/weapon/catalog.ts'
 import {HUMANOID_BODY_FORM_ID, bodyFormOf} from '../../entity/character/body_form/index.ts'
-import {DEFAULT_FORM_CLIP_VARIANT} from '../../entity/character/body_form/common/skeleton_animation/form_animation.ts'
+import {DEFAULT_FORM_CLIP_VARIANT, type FormClipVariant} from '../../entity/character/body_form/common/skeleton_animation/form_animation.ts'
 import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
@@ -128,23 +128,33 @@ export const BASE_STATE_ORDER: readonly BaseState[] = (Object.keys(BASE_STATE_PR
 /** 姿态公式区分持械/空手的状态（其余状态两种变体姿态相同，只列出一份） */
 const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']
 
-/** 体形 clip 来源：统一取自 `BodyForm.animation`，模式层不再感知具体体形。 */
+/** 预览来源：统一采样 `BodyForm.animation` 的生产进度组合树；模式层不感知体形。 */
 interface ClipProvider {
-    readonly attackClip: (segment: AttackSegment) => BoneAnimationClip
-    readonly baseClip: (state: BaseState, held: boolean) => BoneAnimationClip
+    readonly previewAttack: (segment: AttackSegment, holdMode: HoldMode) => BoneAnimationClip
+    readonly previewBase: (state: BaseState, held: boolean) => BoneAnimationClip
     /** 基础状态是否有「持械 / 空手」两种变体 */
     readonly weaponVariants: boolean
 }
 
+const variantOf = (overrides: Partial<FormClipVariant>): FormClipVariant => ({
+    ...DEFAULT_FORM_CLIP_VARIANT,
+    ...overrides,
+})
+
 const providerOf = (formId: string): ClipProvider => {
     const form = bodyFormOf(formId)
     return {
-        attackClip: segment => form.animation.attackClip(segment, DEFAULT_FORM_CLIP_VARIANT),
-        baseClip: (state, held) => form.animation.baseClip(state, {
-            ...DEFAULT_FORM_CLIP_VARIANT,
-            weaponHeld: held,
+        previewAttack: (segment, holdMode) => form.animation.previewClip({
+            kind: 'attack',
+            segment,
+            variant: variantOf({weaponHeld: true, holdMode}),
         }),
-        weaponVariants: form.animation.weaponVariants === true,
+        previewBase: (state, held) => form.animation.previewClip({
+            kind: 'base',
+            state,
+            variant: variantOf({weaponHeld: held}),
+        }),
+        weaponVariants: formId === HUMANOID_BODY_FORM_ID,
     }
 }
 
@@ -165,7 +175,7 @@ const buildBaseEntries = (provider: ClipProvider): BuiltinClipEntry[] => {
                 `state/${state}${held ? '_held' : ''}`,
                 GROUP_BASE,
                 labelOf(),
-                provider.baseClip(state, held),
+                provider.previewBase(state, held),
                 /* 仅持械/空手变体带标记：空手变体在编辑器里卸下武器，持械变体保留当前武器；
                  * 其余基础状态（跳跃/下落/死亡/翻滚/受击）无持械语义 → 保留当前武器 */
                 hasWeaponVariants ? {weaponHeld: held} : {},
@@ -204,7 +214,7 @@ const buildAttackEntries = (formId: string, provider: ClipProvider): BuiltinClip
                     segment.id,
                     weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,
                     labelOf(),
-                    provider.attackClip(source),
+                    provider.previewAttack(source, holdMode),
                     {weaponId: weapon.id, segmentId: segment.id, holdMode},
                     labelOf,
                 )

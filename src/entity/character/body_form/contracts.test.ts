@@ -143,17 +143,25 @@ describe('体形计划公共契约（全部注册体形）', () => {
                 model.dispose()
             })
 
-            it('动画 provider 同时提供运行时系统与编辑器 base/attack clip', () => {
+            it('动画 provider 同时提供运行时系统与编辑器预览 clip', () => {
                 const system = form.animation.createSystem({})
                 expect(typeof system.update).toBe('function')
 
-                const base = form.animation.baseClip('idle', DEFAULT_FORM_CLIP_VARIANT)
+                const base = form.animation.previewClip({
+                    kind: 'base',
+                    state: 'idle',
+                    variant: DEFAULT_FORM_CLIP_VARIANT,
+                })
                 expect(base.duration, `${form.id}:idle`).toBeGreaterThan(0)
 
                 const weapon = form.weapons[0]!
                 const segment = orderedSegments(weaponAttacksOf(weapon, weapon.holdModes[0]!))[0]
                 expect(segment, form.id).toBeDefined()
-                const attack = form.animation.attackClip(segment!, DEFAULT_FORM_CLIP_VARIANT)
+                const attack = form.animation.previewClip({
+                    kind: 'attack',
+                    segment: segment!,
+                    variant: DEFAULT_FORM_CLIP_VARIANT,
+                })
                 expect(attack.duration, `${form.id}:attack`).toBeGreaterThan(0)
             })
         })

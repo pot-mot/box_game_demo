@@ -51,8 +51,8 @@ export const createRangedExecutor = (
         direction: RapVector3,
         _ctx: ExecutorContext,
     ): void => {
-        firedThisAttack.delete(entity.id)
-        attackDirections.set(entity.id, {dx: direction.x, dz: direction.z})
+        firedThisAttack.delete(entity.state.identity.id)
+        attackDirections.set(entity.state.identity.id, {dx: direction.x, dz: direction.z})
     }
 
     const update = (
@@ -67,17 +67,17 @@ export const createRangedExecutor = (
             : combat.weapon
         if (weapon.type !== 'ranged') return
 
-        if (firedThisAttack.has(entity.id) || combat.attackHolding || activePhaseName(combat) !== 'release') return
-        firedThisAttack.add(entity.id)
+        if (firedThisAttack.has(entity.state.identity.id) || combat.attackHolding || activePhaseName(combat) !== 'release') return
+        firedThisAttack.add(entity.state.identity.id)
 
-        const dir = attackDirections.get(entity.id)
+        const dir = attackDirections.get(entity.state.identity.id)
         const aimReady = Math.hypot(combat.attackDirX, combat.attackDirZ) > 0.001
         const muzzleReady = Math.hypot(combat.muzzleDirX, combat.muzzleDirZ) > 0.001
         /* 玩家：弹道水平方向严格取瞄准方向（相机前方）——玩家以准心瞄准，
          * 不把武器骨骼姿态偏差（各武器可达 ~10°~25°）与上一帧采样延迟带入弹道。
          * 非玩家（AI）：沿用武器实际朝向（`muzzleDir`），保留「背身开火按枪口」的既有行为。
          * 两者都缺数据时回退到段起手记录的瞄准方向。 */
-        const useAim = entity.isPlayer && aimReady
+        const useAim = entity.state.identity.isPlayer && aimReady
         const fallbackDx = dir?.dx ?? combat.attackDirX
         const fallbackDz = dir?.dz ?? combat.attackDirZ
         const ndx = useAim ? combat.attackDirX : (muzzleReady ? combat.muzzleDirX : fallbackDx)
@@ -89,7 +89,7 @@ export const createRangedExecutor = (
         const throwAngle = weapon.throwAngle ?? 0
         const spreadCount = weapon.spreadCount ?? 1
         /* 玩家蓄力：把蓄力值交给弹丸系统按武器 charge 曲线缩放速度/伤害/生命期；AI 不蓄力 */
-        const chargeProp = entity.isPlayer ? {charge: combat.attackCharge} : {}
+        const chargeProp = entity.state.identity.isPlayer ? {charge: combat.attackCharge} : {}
         /* 弹丸冲击力 / 削韧取自当前开火段（缺省沿用远程默认值） */
         const impact = combat.activeSegment?.impact ?? RANGED_DEFAULT_IMPACT
         const poiseDamage = combat.activeSegment?.poiseDamage ?? RANGED_DEFAULT_POISE_DAMAGE
@@ -120,7 +120,7 @@ export const createRangedExecutor = (
         entity: CharacterEntity,
         _ctx: ExecutorContext,
     ): void => {
-        attackDirections.delete(entity.id)
+        attackDirections.delete(entity.state.identity.id)
     }
 
     return {

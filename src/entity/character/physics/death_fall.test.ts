@@ -72,8 +72,8 @@ describe('死亡倒下（世界层按最后受击方向合成根旋转）', () =
     /** 生成角色 → 走伤害回调记录冲击方向（与真实命中路径一致）→ 置零血量致死 → 推进若干帧 */
     const dieWithHitDir = (hitDirX: number, hitDirZ: number, frames = 30) => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(candidate => candidate.id === id)!
-        entity.combat.onDamageTaken?.(1, {
+        const entity = system.getAll().find(candidate => candidate.state.identity.id === id)!
+        entity.state.combat.onDamageTaken?.(1, {
             sourceId: 999,
             targetId: id,
             damageType: 'physical',
@@ -86,9 +86,9 @@ describe('死亡倒下（世界层按最后受击方向合成根旋转）', () =
             dirZ: hitDirZ,
         })
         /* 伤害回调把冲击方向记录到 combat（死亡 state 的输入） */
-        expect(entity.combat.lastHitDirX).toBeCloseTo(hitDirX, 6)
-        expect(entity.combat.lastHitDirZ).toBeCloseTo(hitDirZ, 6)
-        entity.combat.health = 0
+        expect(entity.state.combat.lastHitDirX).toBeCloseTo(hitDirX, 6)
+        expect(entity.state.combat.lastHitDirZ).toBeCloseTo(hitDirZ, 6)
+        entity.state.combat.health = 0
         for (let i = 0; i < frames; i++) system.update(DT)
         return entity
     }
@@ -121,7 +121,7 @@ describe('死亡倒下（世界层按最后受击方向合成根旋转）', () =
     it('死亡动画本身直立：倒下角度全由状态与受击方向决定', () => {
         const entity = dieWithHitDir(0, 1, 1)
         /* 进入死亡首帧即后倒过程中，角度从 0 开始（非 clip 内置前倒） */
-        expect(entity.dyingFallAngle).toBeLessThan(Math.PI / 2)
-        expect(entity.dyingFallDirZ).toBeCloseTo(1, 6)
+        expect(entity.state.timers.dyingFallAngle).toBeLessThan(Math.PI / 2)
+        expect(entity.state.timers.dyingFallDirZ).toBeCloseTo(1, 6)
     })
 })

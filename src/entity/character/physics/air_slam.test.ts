@@ -105,7 +105,7 @@ describe('空中砸地冲量（段内冲击，打击帧施加）', () => {
         for (let i = 0; i < 180; i++) {
             frame()
             const p = system.getPlayerCharacter()
-            if (p?.isOnGround && p.stateMachine.currentState === 'idle') break
+            if (p?.state.physics.isOnGround && p.stateMachine.currentState === 'idle') break
         }
     }
 
@@ -119,7 +119,7 @@ describe('空中砸地冲量（段内冲击，打击帧施加）', () => {
         frame()
         const p = system.getPlayerCharacter()!
         expect(p.stateMachine.currentState).toBe('air_attacking')
-        expect(p.combat.activeSegment?.key).toBe('air')
+        expect(p.state.combat.activeSegment?.key).toBe('air')
         return p
     }
 

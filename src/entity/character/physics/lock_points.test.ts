@@ -74,10 +74,10 @@ describe('角色额外锁定点', () => {
 
     it('add 按存档写入额外锁定点，旧档缺字段回退空数组', () => {
         const withPoints = system.add({...meleeSaveConfig(), lockPoints: [{jointId: 'headNeck', offset: [0, 0.2, 0]}]}, 0, 0, 0)
-        expect(system.getAll().find(e => e.id === withPoints.id)!.lockPoints).toEqual([{jointId: 'headNeck', offset: [0, 0.2, 0]}])
+        expect(system.getAll().find(e => e.state.identity.id === withPoints.id)!.state.lockPoints).toEqual([{jointId: 'headNeck', offset: [0, 0.2, 0]}])
 
         const withoutPoints = system.add(meleeSaveConfig(), 1, 0, 0)
-        expect(system.getAll().find(e => e.id === withoutPoints.id)!.lockPoints).toEqual([])
+        expect(system.getAll().find(e => e.state.identity.id === withoutPoints.id)!.state.lockPoints).toEqual([])
     })
 
     it('序列化保留锁定点（JSON-safe 元组），setLockPoints 过滤非法条目', () => {
@@ -94,6 +94,6 @@ describe('角色额外锁定点', () => {
             {jointId: 'spine', offset: [Number.NaN, 0, 0]},
             {jointId: 'spine', offset: [0, 0.1, 0]},
         ])
-        expect(system.getAll().find(e => e.id === id)!.lockPoints).toEqual([{jointId: 'spine', offset: [0, 0.1, 0]}])
+        expect(system.getAll().find(e => e.state.identity.id === id)!.state.lockPoints).toEqual([{jointId: 'spine', offset: [0, 0.1, 0]}])
     })
 })

@@ -290,7 +290,7 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 
 **重新接敌冷却**（`combatReentryTimer`）：卡死放弃战斗后，冷却（`COMBAT_REENTRY_COOLDOWN`）耗尽前即使检测到敌人也不进入 combat，同时根治"超时 → peace → 下帧立刻回 chase"的空转循环。aggressive 的 `chaseTimeout = 0`（永不放弃追击）依赖此兜底而不会死锁。
 
-**追击活动半径**（角色属性 `CharacterEntity.chaseLeashRadius`，默认常量 `DEFAULT_CHASE_LEASH_RADIUS`）：`chase` 状态下每帧检查距**行为原点**（`ctx.origin`）的水平距离，超出半径即放弃战斗并进入接敌冷却。防止同速目标永远追不上时把角色拖向无限远（平行走到天边的根因之一）。半径支持编辑面板逐角色配置与存档持久化。
+**追击活动半径**（角色属性 `state.ai.chaseLeashRadius`，默认常量 `DEFAULT_CHASE_LEASH_RADIUS`）：`chase` 状态下每帧检查距**行为原点**（`ctx.origin`）的水平距离，超出半径即放弃战斗并进入接敌冷却。防止同速目标永远追不上时把角色拖向无限远（平行走到天边的根因之一）。半径支持编辑面板逐角色配置与存档持久化。
 
 **行为原点策略**（`OriginSubStrategy`，`character/ai_strategy/`：`types.ts` / `origin.ts`；运行时 `ai/origin.ts`）：原点（`ctx.origin`）是巡逻范围、逃跑兜底方向、追击半径判定的中心，由角色属性 `originStrategy` 决定其迁移规则，独立于和平 / 战斗策略：
 
@@ -301,9 +301,9 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 | `hunter`（狩猎者） | 击杀瞬间取**被击杀者**脚底位置 | 每次成功击杀 |
 | `roamer`（漫游者） | 取当前位置 | 脱战后首个和平帧（`originTimer` 到期时；战斗期冻结） |
 
-漫游者的 `originTimer` 在和平与战斗期**都持续倒数**，但原点写入只在 `activeFsm === 'peace'` 时发生：若战斗期间到期，脱战后首个和平帧立即以当前位置更新原点（间隔取自 `CharacterEntity.originInterval`）。击杀钩子经伤害链路的 `onDeath(sourceId)` 触发（`character/combat/damage.ts` 仅在存活 → 死亡跳变时回调一次），由 `world.ts` 校验来源（非伤害来源 / 自伤 / 击杀者已死 / 友军误伤均跳过）。切换原点策略时按规则复位原点（`world.setOriginStrategy`：resident/fighter/hunter → `spawnPoint`，roamer → 当前位置）。编辑面板中「原点策略」下拉与「更新间隔」输入同排展示（间隔仅 roamer 可见），其下方只读展示当前行为原点坐标（经 `CharacterEntitySystem.getOrigin` 读取，随策略迁移实时刷新）。
+漫游者的 `originTimer` 在和平与战斗期**都持续倒数**，但原点写入只在 `activeFsm === 'peace'` 时发生：若战斗期间到期，脱战后首个和平帧立即以当前位置更新原点（间隔取自 `state.ai.originInterval`）。击杀钩子经伤害链路的 `onDeath(sourceId)` 触发（`character/combat/damage.ts` 仅在存活 → 死亡跳变时回调一次），由 `world.ts` 校验来源（非伤害来源 / 自伤 / 击杀者已死 / 友军误伤均跳过）。切换原点策略时按规则复位原点（`world.setOriginStrategy`：resident/fighter/hunter → `spawnPoint`，roamer → 当前位置）。编辑面板中「原点策略」下拉与「更新间隔」输入同排展示（间隔仅 roamer 可见），其下方只读展示当前行为原点坐标（经 `CharacterEntitySystem.getOrigin` 读取，随策略迁移实时刷新）。
 
-**受击转战斗（仇恨）**（`notifyAIDamaged`，由 `world.ts` 的 `onDamageTaken` 回调调用）：被击中时清除接敌冷却并强制进入 combat 锁定攻击者，解决和平态被背后/视野外攻击不还手、冷却期内挨打不反应的问题。友军误伤（`attackTendency` 为 false）不强制开战；攻击者已死亡时不锁定（冷却仍被清除）。伤害回调签名透传 `DamageEvent`（`onDamageTaken(amount, event)`，`character/combat/damage.ts` + `targetable.ts`）。
+**受击转战斗（仇恨）**（`notifyAIDamaged`，由 `world.ts` 的 `onDamageTaken` 回调调用）：被击中时清除接敌冷却并强制进入 combat 锁定攻击者，解决和平态被背后/视野外攻击不还手、冷却期内挨打不反应的问题。友军误伤（`attackTendency` 为 false）不强制开战；攻击者已死亡时不锁定（冷却仍被清除）。伤害回调签名透传 `DamageEvent`（`onDamageTaken(amount, event)`，`character/combat/damage.ts`）。
 
 **脱战距离滞回**（`COMBAT_LOSE_RANGE_FACTOR`）：各战斗状态（chase/approach/attack/kite/volley，以及 **flee**）的"目标超距 → inactive"守卫阈值为 `detectionRange × 2`，与进入战斗用的 `detectionRange` 形成滞回：防止边界抖动、以及受击仇恨目标在侦测半径外（如远程狙击）时 combat 一闪即灭（表现为"被打仍处 peace"）。目标死亡/消失仍立即退出。
 
@@ -448,24 +448,25 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 |------|------|------|
 | `AI_DEFEND_RANGE` | 3.5 | 进入威胁范围（目标在此距离内才考虑格挡） |
 | `AI_DEFEND_FACING_DOT` | 0.3 | 目标攻击方向与「目标 → 自身」朝向的最小点积（判定来袭是否朝向自己） |
-| `DEFAULT_AI_BLOCK_DURATION` / `CharacterEntity.aiBlockDuration` | 0.4 | 单次举盾窗口（秒）：举满即落盾；逐角色可配（面板「举盾窗口」） |
-| `DEFAULT_AI_BLOCK_COOLDOWN` / `CharacterEntity.aiBlockCooldown` | 1.2 | 两次举盾之间的最短间隔（秒）；逐角色可配（面板「举盾冷却」） |
+| `DEFAULT_AI_BLOCK_DURATION` / `state.ai.aiBlockDuration` | 0.4 | 单次举盾窗口（秒）：举满即落盾；逐角色可配（面板「举盾窗口」） |
+| `DEFAULT_AI_BLOCK_COOLDOWN` / `state.ai.aiBlockCooldown` | 1.2 | 两次举盾之间的最短间隔（秒）；逐角色可配（面板「举盾冷却」） |
 
 生效条件（全部满足）：自身装备盾（`combat.block !== undefined`）、`guard > 0`、未死亡、存在 `combatTargetId`、目标未死亡且 `attackActive`、目标距离 ≤ `AI_DEFEND_RANGE`、目标攻击方向与来袭方向点积 ≥ `AI_DEFEND_FACING_DOT`；仅在 `activeFsm === 'combat'` 时注入，其余帧注入 `block = false`。签发按钮不做别的处理（沿用玩家同一 `setInput` 通路）。
 
-**举盾是限时反应而非持续姿态**：威胁成立即按 `character.aiBlockDuration` 开启窗口（窗口内持续举盾，即使威胁中途消失）；窗口结束进入 `character.aiBlockCooldown` 冷却，冷却期内不发起新举盾。`combatBlockTimer` / `combatBlockCooldownTimer` 由 `updateAI` 逐帧递减。**必须限时**：`blocking` 在状态机中优先级高于 `attacking`（`idle`/`walking` 的转换顺序），若无窗口/冷却，持盾 AI 面对连续出手的敌人会永远举盾、从不出手（表现为"持盾不攻击"）。
+**举盾是限时反应而非持续姿态**：威胁成立即按 `character.state.ai.aiBlockDuration` 开启窗口（窗口内持续举盾，即使威胁中途消失）；窗口结束进入 `character.state.ai.aiBlockCooldown` 冷却，冷却期内不发起新举盾。`combatBlockTimer` / `combatBlockCooldownTimer` 由 `updateAI` 逐帧递减。**必须限时**：`blocking` 在状态机中优先级高于 `attacking`（`idle`/`walking` 的转换顺序），若无窗口/冷却，持盾 AI 面对连续出手的敌人会永远举盾、从不出手（表现为"持盾不攻击"）。
 
-> 窗口时长与冷却为**逐角色属性**（与 `chaseLeashRadius` / `originInterval` 同性质）：`CharacterEntity.aiBlockDuration` / `aiBlockCooldown`，编辑面板可改、存档持久化（可选字段，旧档安全回退常量默认）。
+> 窗口时长与冷却为**逐角色属性**（与 `chaseLeashRadius` / `originInterval` 同性质）：`state.ai.aiBlockDuration` / `aiBlockCooldown`，编辑面板可改、存档持久化（可选字段，旧档安全回退常量默认）。
 
 ---
 
 ## 五、关键类型定义
 
-### 5.1 `CharacterEntity` AI 字段
+### 5.1 `CharacterState.ai` / `CharacterState.combat`
 
-**文件**：`src/character/types.ts:40-43`
+**文件**：`src/character/state/types.ts`
 
 ```ts
+// CharacterState.ai
 peaceStrategy: PeaceSubStrategy     // 'patrol' | 'build'
 combatStrategy: CombatSubStrategy   // 'tactical' | 'aggressive' | 'cowardly'
 originStrategy: OriginSubStrategy   // 'resident' | 'fighter' | 'hunter' | 'roamer'
@@ -473,8 +474,10 @@ originInterval: number              // 漫游者原点更新间隔（秒，默�
 chaseLeashRadius: number            // 追击活动半径（m，默认 20）
 aiBlockDuration: number             // 反应式举盾窗口（秒，默认 0.4）
 aiBlockCooldown: number             // 反应式举盾冷却（秒，默认 1.2）
+
+// CharacterState.combat
 combat: CombatComponent             // 阵营、技能、血量等
-stateMachine: CharacterStateMachine // 角色动作 FSM
+// 状态机逻辑对象在 CharacterRuntime.stateMachine，不在 state
 ```
 
 ### 5.2 `CombatComponent`

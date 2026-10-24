@@ -35,7 +35,7 @@ const getUpFallAngle = (p: number): number => {
 
 /** 起身总时长 = 翻身前置动作（按角度）+ 爬起动作 */
 const getUpTotalDuration = (entity: CharacterEntity): number =>
-    Math.max(entity.combat.getUpTurnDuration, 0) + Math.max(entity.combat.getUpDuration, 0)
+    Math.max(entity.state.combat.getUpTurnDuration, 0) + Math.max(entity.state.combat.getUpDuration, 0)
 
 /**
  * 起身状态：倒地时长结束后进入。期间保持完全免疫（`hitImmunityTimer` 覆盖全程）。
@@ -49,27 +49,27 @@ export const gettingUpHandler: StateHandler = {
         /* 仅清水平速度：保留垂直方向，空中被击倒后起身期间仍受重力下落 */
         entity.body.setLinvel({x: 0, y: entity.body.linvel().y, z: 0}, true)
         /* 翻身 + 爬起全程免疫（倒地阶段已挂计时，此处按翻身时长上限兜底延长） */
-        const c = entity.combat
+        const c = entity.state.combat
         c.hitImmunityTimer = Math.max(c.hitImmunityTimer, GET_UP_TURN_180_DURATION + c.getUpDuration)
     },
     update: (_dt, _input, entity, ctx) => {
         void _dt, _input
         entity.body.setLinvel({x: 0, y: entity.body.linvel().y, z: 0}, true)
         /* 翻身阶段保持完全伏地，翻身结束后才按爬起进度回正 */
-        const riseTime = Math.max(ctx.stateTime - Math.max(entity.combat.getUpTurnDuration, 0), 0)
-        const p = clamp01(riseTime / Math.max(entity.combat.getUpDuration, 0.0001))
-        entity.knockdownFallAngle = getUpFallAngle(p)
+        const riseTime = Math.max(ctx.stateTime - Math.max(entity.state.combat.getUpTurnDuration, 0), 0)
+        const p = clamp01(riseTime / Math.max(entity.state.combat.getUpDuration, 0.0001))
+        entity.state.timers.knockdownFallAngle = getUpFallAngle(p)
     },
     exit: (entity) => {
         /* 起身结束：解除完全免疫并回满韧性 */
-        entity.combat.hitImmunityTimer = 0
-        entity.combat.poise = entity.combat.poiseMax
-        entity.knockdownFallAngle = 0
+        entity.state.combat.hitImmunityTimer = 0
+        entity.state.combat.poise = entity.state.combat.poiseMax
+        entity.state.timers.knockdownFallAngle = 0
     },
     transitions: [
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'walking',

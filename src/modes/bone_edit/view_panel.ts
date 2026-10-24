@@ -3,7 +3,7 @@ import {localizeText} from '../../i18n/dom.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
 import {BONE_EDIT_LOCK_ID, BONE_SHOW_BONES_ID, BONE_SHOW_JOINTS_ID, BONE_SHOW_MODEL_ID} from './constants.ts'
 
-/** 骨骼编辑器右侧常驻面板：节点编辑开关 + 三层显示控制 */
+/** 骨骼编辑器左侧常驻面板：节点编辑开关 + 三层显示控制 */
 export interface BoneViewPanel {
     readonly element: HTMLElement
     readonly destroy: () => void
@@ -32,21 +32,19 @@ const createCheckRow = (
     return row
 }
 
-export const setupBoneViewPanel = (
-    world: SkeletonEntitiesContext,
-    timelineContainer: HTMLElement,
-): BoneViewPanel => {
+export const setupBoneViewPanel = (world: SkeletonEntitiesContext): BoneViewPanel => {
     const element = document.createElement('div')
     element.id = 'bone-view-panel'
     element.className = 'dc-panel dc-scroll'
     element.style.cssText = [
         'position:fixed',
-        'top:calc(var(--dc-space-4) + 40px + var(--dc-space-2))',
-        'right:var(--dc-space-4)',
+        'top:140px',
+        'left:var(--dc-space-4)',
+        'right:auto',
         'z-index:150',
-        'width:230px',
-        'padding:var(--dc-space-3) var(--dc-space-4)',
-        'max-height:calc(100vh - 96px)',
+        'width:200px',
+        'padding:8px 10px',
+        'max-height:calc(100vh - 300px)',
     ].join(';')
     document.body.appendChild(element)
 
@@ -102,19 +100,9 @@ export const setupBoneViewPanel = (
     ))
     syncDataset(settings)
 
-    /* 时间轴高度可拖拽：面板底边始终贴在其上方，避免被遮挡 */
-    const syncBottom = (): void => {
-        element.style.bottom = `${timelineContainer.getBoundingClientRect().height + 16}px`
-    }
-    const observer = new ResizeObserver(syncBottom)
-    observer.observe(timelineContainer)
-    syncBottom()
 
     return {
         element,
-        destroy: () => {
-            observer.disconnect()
-            element.remove()
-        },
+        destroy: () => { element.remove() },
     }
 }

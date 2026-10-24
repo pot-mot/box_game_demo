@@ -22,13 +22,13 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 
 - `src/character/state/` 声明 `CharacterState` 基础接口与子域类型。
 - 每个 `body_form/<form>/state/` 实现自己的具体 state（人形持握/惯用手；狼/马步态；飞龙飞行等）。
-- `CharacterRuntime`（或保留 `CharacterEntity` 作为运行时句柄）持有：
+- `CharacterEntity` 只保留 `state` 与运行时句柄：
   - `state`；
   - Rapier body / colliders；
   - Three model / groups / meshes；
+  - 状态机逻辑对象；
   - 其他非数据句柄。
-- `CharacterEntity` 不再保存可变的游戏数据字段；迁移完成后只保留句柄与 `state`。
-- 生产运行时允许 `CharacterEntity` 的同名属性作为**委托访问器**（getter/setter 直接读写 state）；访问器不是存储，禁止在实体或子系统另存副本。新代码优先 `entity.state.*`。
+- 生产代码一律通过 `entity.state.*` 读写游戏数据；`CharacterEntity` 不再暴露 `config` / `combat` / `physics` / `ai` / `timers` / `interaction` 等同名访问器。
 
 ## 3. 子域
 
@@ -66,7 +66,7 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 | `animation.params` | 物理 / 状态机 / 战斗 / AI / 输入 |
 | `animation.current` | 动画系统（只写当前信息，不回写参数） |
 
-**禁止双存储**：同一字段不得同时存在于 `CharacterEntity` 与 `state`。迁移期访问器只能委托到 state，不得复制值。
+**禁止双存储**：同一字段不得同时存在于 `CharacterEntity` 与 `state`；实体不得再以访问器或副本暴露游戏数据。
 
 ## 5. 派生数据
 
@@ -88,8 +88,8 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 
 ## 7. 迁移规则
 
-- **一次性全迁**：所有 `CharacterEntity` 游戏数据字段一次性迁入 `CharacterState`；不保留长期双存储或兼容双写。
-- 引擎句柄迁入 `CharacterRuntime`。
+- **一次性全迁**：所有 `CharacterEntity` 游戏数据字段一次性迁入 `CharacterState`；不保留双存储、访问器或兼容双写。
+- 引擎句柄与状态机逻辑对象留在 `CharacterRuntime`。
 - 迁移前必须完成 golden baseline 与 feature freeze；迁移后立即跑全量测试。
 - 所有系统改为「从 state 读、向自己的子域写」；禁止再从 `entity` 上的散落字段读写。
 

@@ -23,8 +23,6 @@ export interface SkeletonPanelContext {
     isEditingEnabled: () => boolean
     /** 领域编辑后刷新：FK + 写回场景图 + 部件缩放 */
     refresh: () => void
-    /** 重连父关节（视觉 Group 与领域骨架同步重挂；parentId = undefined 表示独立根） */
-    reparentJoint: (jointId: string, parentId: string | undefined) => void
     /** 重开面板（选中变化后由 world 调用） */
     reopen: () => void
 }
@@ -36,7 +34,7 @@ const valueOf = (input: HTMLInputElement): number => {
     return Number.isNaN(val) ? 0 : val
 }
 
-/** 关节属性面板：位置/旋转/IK 根级别/父关节/添加子关节/删除 */
+/** 关节属性面板：位置/旋转/IK/添加子关节（删除与父级重连不支持） */
 const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): (() => void) => {
     const entity = ctx.getFocus()
     const selection = ctx.getSelection()
@@ -165,38 +163,6 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
         ikDepthInput.disabled = ikSolverSelect.value === ''
     })
 
-    /* 父关节：可重连（选项排除自身与后代，避免自环） */
-    container.appendChild(createSection('skeleton.parent'))
-    const excluded = new Set<string>([joint.id])
-    const pending = [...joint.children]
-    while (pending.length > 0) {
-        const child = pending.pop()
-        if (child === undefined || excluded.has(child.id)) continue
-        excluded.add(child.id)
-        pending.push(...child.children)
-    }
-    const parentSelect = document.createElement('select')
-    parentSelect.id = 'skeleton-parent'
-    parentSelect.className = 'dc-select'
-    const rootOption = document.createElement('option')
-    rootOption.value = ''
-    localizeText(rootOption, 'skeleton.parent_none')
-    parentSelect.appendChild(rootOption)
-    for (const candidate of skeleton.joints.values()) {
-        if (excluded.has(candidate.id)) continue
-        const option = document.createElement('option')
-        option.value = candidate.id
-        option.textContent = `${candidate.name}（${candidate.id}）`
-        parentSelect.appendChild(option)
-    }
-    parentSelect.value = joint.parent?.id ?? ''
-    container.appendChild(parentSelect)
-    const parentHint = document.createElement('div')
-    parentHint.className = 'dc-hint'
-    parentHint.style.cssText = 'margin-top:2px'
-    localizeText(parentHint, 'skeleton.parent_hint')
-    container.appendChild(parentHint)
-
     /* 添加子关节 */
     container.appendChild(createSection('skeleton.add_child'))
     const childRow = document.createElement('div')
@@ -215,18 +181,9 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     /* 按钮行 */
     const applyBtn = document.createElement('button')
     applyBtn.className = 'dc-btn dc-btn--primary'
-    applyBtn.style.cssText = 'flex:1;margin-top:8px'
+    applyBtn.style.cssText = 'margin-top:8px'
     localizeText(applyBtn, 'common.apply')
-    const deleteBtn = document.createElement('button')
-    deleteBtn.className = 'dc-btn dc-btn--danger'
-    deleteBtn.style.cssText = 'flex:1;margin-top:8px'
-    localizeText(deleteBtn, 'common.delete')
-    const btnRow = document.createElement('div')
-    btnRow.className = 'dc-row'
-    btnRow.style.cssText = 'gap:8px'
-    btnRow.appendChild(applyBtn)
-    btnRow.appendChild(deleteBtn)
-    container.appendChild(btnRow)
+    container.appendChild(applyBtn)
 
     applyBtn.addEventListener('click', () => {
         joint.position.set(valueOf(posX), valueOf(posY), valueOf(posZ))
@@ -242,8 +199,6 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
         } else {
             joint.ik = undefined
         }
-        const parentId = parentSelect.value === '' ? undefined : parentSelect.value
-        if (parentId !== joint.parent?.id) ctx.reparentJoint(joint.id, parentId)
         ctx.refresh()
         ctx.reopen()
     })
@@ -254,12 +209,6 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
         const child = createSkeletonJoint(name)
         skeleton.addJoint(child)
         connectJoint(joint, child)
-        ctx.refresh()
-        ctx.reopen()
-    })
-
-    deleteBtn.addEventListener('click', () => {
-        skeleton.removeJoint(joint.id)
         ctx.refresh()
         ctx.reopen()
     })
@@ -278,7 +227,7 @@ const renderJointPanel = (ctx: SkeletonPanelContext, container: HTMLElement): ((
     }
 }
 
-/** 骨骼段属性面板：长度（面板输入）/roll/删除 */
+/** 骨骼段属性面板：长度（面板输入）/roll（删除不支持） */
 const renderBonePanel = (ctx: SkeletonPanelContext, container: HTMLElement): (() => void) => {
     const entity = ctx.getFocus()
     const selection = ctx.getSelection()
@@ -300,29 +249,14 @@ const renderBonePanel = (ctx: SkeletonPanelContext, container: HTMLElement): (()
 
     const applyBtn = document.createElement('button')
     applyBtn.className = 'dc-btn dc-btn--primary'
-    applyBtn.style.cssText = 'flex:1;margin-top:8px'
+    applyBtn.style.cssText = 'margin-top:8px'
     localizeText(applyBtn, 'common.apply')
-    const deleteBtn = document.createElement('button')
-    deleteBtn.className = 'dc-btn dc-btn--danger'
-    deleteBtn.style.cssText = 'flex:1;margin-top:8px'
-    localizeText(deleteBtn, 'common.delete')
-    const btnRow = document.createElement('div')
-    btnRow.className = 'dc-row'
-    btnRow.style.cssText = 'gap:8px'
-    btnRow.appendChild(applyBtn)
-    btnRow.appendChild(deleteBtn)
-    container.appendChild(btnRow)
+    container.appendChild(applyBtn)
 
     applyBtn.addEventListener('click', () => {
         const length = valueOf(lengthInput)
         if (length > 0) setBoneLength(skeleton, bone, length)
         setBoneRoll(bone, valueOf(rollInput))
-        ctx.refresh()
-        ctx.reopen()
-    })
-
-    deleteBtn.addEventListener('click', () => {
-        skeleton.removeBone(bone.id)
         ctx.refresh()
         ctx.reopen()
     })
@@ -337,29 +271,36 @@ export const createSkeletonPanel = (ctx: SkeletonPanelContext): PanelContext => 
     let refreshValues: (() => void) | undefined
     /** 面板容器（render 时赋值，update 用于焦点检查） */
     let panelContainer: HTMLElement | undefined
-    /** 时间轴高度变化时同步面板底边（面板始终浮在时间轴上方） */
+    /** 时间轴高度 / 窗口尺寸变化时同步面板最大高度（顶部定位，底部不越过时间轴） */
     let panelResizeObserver: ResizeObserver | undefined
+    let panelWindowResize: (() => void) | undefined
 
     const render = (container: HTMLElement): void => {
         /* 与编辑模式实体面板一致：独立固定浮层，避免被挤在画布下方 */
+        const panelTop = 64
+        const panelGap = 16
         const root = document.createElement('div')
         root.id = 'skeleton-panel'
         root.className = 'dc-panel dc-scroll'
-        root.style.cssText = 'position:fixed;bottom:var(--dc-space-4);right:var(--dc-space-4);z-index:130;padding:16px 20px;min-width:230px;max-width:340px;max-height:70vh;user-select:none'
+        root.style.cssText = `position:fixed;top:${panelTop}px;right:var(--dc-space-4);z-index:130;padding:12px 16px;min-width:230px;max-width:340px;user-select:none`
         container.appendChild(root)
         panelContainer = root
         refreshValues = undefined
 
         panelResizeObserver?.disconnect()
+        if (panelWindowResize !== undefined) window.removeEventListener('resize', panelWindowResize)
+        const syncMaxHeight = (): void => {
+            const timelineHeight = document.getElementById('bone-timeline')?.getBoundingClientRect().height ?? 0
+            root.style.maxHeight = `${Math.max(0, window.innerHeight - panelTop - timelineHeight - panelGap)}px`
+        }
         const timeline = document.getElementById('bone-timeline')
         if (timeline !== null) {
-            const syncBottom = (): void => {
-                root.style.bottom = `${timeline.getBoundingClientRect().height + 16}px`
-            }
-            syncBottom()
-            panelResizeObserver = new ResizeObserver(syncBottom)
+            panelResizeObserver = new ResizeObserver(syncMaxHeight)
             panelResizeObserver.observe(timeline)
         }
+        panelWindowResize = syncMaxHeight
+        window.addEventListener('resize', panelWindowResize)
+        syncMaxHeight()
 
         const entity = ctx.getFocus()
         if (entity === undefined) {
@@ -388,6 +329,8 @@ export const createSkeletonPanel = (ctx: SkeletonPanelContext): PanelContext => 
     const destroy = (): void => {
         panelResizeObserver?.disconnect()
         panelResizeObserver = undefined
+        if (panelWindowResize !== undefined) window.removeEventListener('resize', panelWindowResize)
+        panelWindowResize = undefined
         const entity = ctx.getFocus()
         if (entity !== undefined) {
             clearSelectedVisuals(entity.visuals)

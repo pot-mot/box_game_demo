@@ -1,24 +1,16 @@
 import type {Mesh, Group, LineSegments} from 'three'
 import type RAPIER from '@dimforge/rapier3d-compat'
-import type {BodyEnvironment} from '../physics/environment.ts'
-import type {HurtBlockProfile, WorldHurtBlock} from './hurt_blocks.ts'
 import type {CharacterStateMachine} from './state_machine/types.ts'
-import type { CombatComponent } from './combat/types.ts'
-import type { LockPointConfig} from './lock_point.ts'
-import type {PeaceSubStrategy} from './ai_strategy/types.ts'
-import type {CombatSubStrategy} from './ai_strategy/types.ts'
-import type {OriginSubStrategy} from './ai_strategy/types.ts'
+import type {PeaceSubStrategy, CombatSubStrategy, OriginSubStrategy} from './ai_strategy/types.ts'
 
 export type {PeaceSubStrategy, CombatSubStrategy, OriginSubStrategy}
 
 export type {BodyState, CharacterConfig, CharacterState} from './state/types.ts'
-import type {BodyState, CharacterConfig, CharacterState} from './state/types.ts'
+import type {CharacterState} from './state/types.ts'
 
 export interface CharacterEntity {
-    /** 唯一权威数据存储；下列同名属性在生产运行时是委托到 state 的访问器 */
+    /** 唯一权威数据存储；所有游戏数据读取 `entity.state.*`。 */
     readonly state: CharacterState
-    id: number
-    config: CharacterConfig
     /** 碰撞体胶囊 mesh（edit 模式可见，play 模式隐藏） */
     mesh: Mesh
     /** 选中高亮线框（edit 模式） */
@@ -30,91 +22,13 @@ export interface CharacterEntity {
     mainCollider: RAPIER.Collider
     /** 体形全部碰撞体（按体形计划 colliderLayout 顺序；质量由附加质量统一决定） */
     colliders: RAPIER.Collider[]
-    isOnGround: boolean
-    /** 地面接触法线（从地面指向角色，已归一化）。无地面接触时回退为 (0, 1, 0) */
-    groundNormal: { readonly x: number; readonly y: number; readonly z: number }
-    /** 郊狼时间计时（秒）：最近一次真实接触至今，宽限期内仍判定为着地 */
-    groundKeepTimer: number
-    /**
-     * 本帧真实接触中被判定为「支撑」的刚体 handle（无真实接触 = null/undefined，郊狼宽限不赋值）。
-     * 供移动平台携带乘客：查 `SharedWorld.movingSupports` 叠加支撑速度。
-     */
-    groundBodyHandle?: number | null
-    /** 连续悬空计时（秒）：shouldFall 持续时长，达到阈值才允许进入 falling（防下坡弹跳误触发） */
-    airborneTime: number
-    /** 连续支撑计时（秒）：可恢复支撑持续时长，达到阈值才允许退出 falling */
-    groundedTime: number
-    rowText: string
-
-    isPlayer: boolean
-
-    /** 导航感知开关（默认 true，面板可动态切换） */
-    navEnabled: boolean
-
-    /** 和平策略（仅非玩家角色有效，默认 patrol） */
-    peaceStrategy: PeaceSubStrategy
-    /** 战斗策略（仅非玩家角色有效，默认 tactical） */
-    combatStrategy: CombatSubStrategy
-    /** 行为原点更新策略（仅非玩家角色有效，默认 resident） */
-    originStrategy: OriginSubStrategy
-    /** 漫游者原点更新间隔（秒，仅 originStrategy === 'roamer' 时有意义，默认 20） */
-    originInterval: number
-    /** 追击活动半径（m，距行为原点超出即放弃追击；默认 20） */
-    chaseLeashRadius: number
-    /** AI 反应式举盾单次窗口时长（秒，默认 0.4；仅非玩家 AI 有效）：对连续攻击的敌人举满即落盾 */
-    aiBlockDuration: number
-    /** AI 反应式举盾两次之间的最短冷却（秒，默认 1.2；仅非玩家 AI 有效）：冷却期不发起新举盾 */
-    aiBlockCooldown: number
-
-    /** 死亡动画计时（非持久状态） */
-    isDying: boolean
-    dyingTimer: number
-    /** 死亡倒向（世界水平单位向量，由死亡 state 依据最后受击冲击方向写入；无受击记录时默认向后倒） */
-    dyingFallDirX: number
-    dyingFallDirZ: number
-    /** 死亡倒下角度（rad，0 → π/2，由死亡 state 按缓动推进；世界层据此绕「上 × 倒向」轴合成根旋转） */
-    dyingFallAngle: number
-
-    /** 倒地倒向（世界水平单位向量，由 knockdown state 依据最后受击冲击方向写入；无受击记录时默认向后倒） */
-    knockdownFallDirX: number
-    knockdownFallDirZ: number
-    /** 倒地 / 起身根旋转角度（rad）：knockdown 期间 0 → π/2，getting_up 期间 π/2 → 0 */
-    knockdownFallAngle: number
-
-    combat: CombatComponent
-
-    /** 体形专属状态（人形：holdMode / handedness；其他体形为空） */
-    bodyState: BodyState
-
-    /**
-     * 额外锁定点（持久化）：默认锁定点恒为身体中心、不在数组内；
-     * 数组项为「关节 id + 关节本地偏移」，play 模式锁定镜头时与默认点一起参与选取。
-     */
-    lockPoints: readonly LockPointConfig[]
-
-    /** 本帧是否存在可交互目标（由 world.ts 按玩家交互脉冲写入，供交互转换守卫使用） */
-    interactTargetActive?: boolean
-    /** 交互目标世界坐标（交互时转身朝向用；无目标时保持上次值） */
-    interactTargetX?: number
-    interactTargetZ?: number
-
-    /**
-     * 环境场累加器：由 area 场（float / wind / gravity）逐帧写入，
-     * 由角色物理在状态机之后消费（绕开状态机的水平速度覆写）。每帧开头清零。
-     */
-    environment: BodyEnvironment
-
-    /** 受击子块定义（骨架预设提供，随角色固定；缺省 = 无子块，命中检定回退到身体盒） */
-    hurtProfile?: HurtBlockProfile
-    /** 逐帧世界化的受击子块（与 hurtProfile 等长，就地刷新；命中检定读取） */
-    hurtBlocks?: WorldHurtBlock[]
-
+    /** 状态机逻辑对象（运行时句柄，不是 state 数据） */
     stateMachine: CharacterStateMachine
 }
 
 /** 当前有效移速 = 基础移速（config.speed）× 装备移速乘数；状态机全部移动速度统一由此推导 */
 export const moveSpeedOf = (entity: CharacterEntity): number =>
-    entity.config.speed * entity.combat.moveSpeedMultiplier
+    entity.state.config.speed * entity.state.combat.moveSpeedMultiplier
 
 export type { Faction, AttackTendency, TendencyConfig } from './faction.ts'
 export type { AttackConfig } from './archetypes.ts'

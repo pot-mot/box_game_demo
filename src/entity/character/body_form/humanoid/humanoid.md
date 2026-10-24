@@ -14,12 +14,12 @@
 - **基础定义**：`state/form_base.ts` 提供尺寸 / 中心偏移 / 眼高 / 基础生命 / 动画状态时长；
   最终数值由 `common/base.ts` 统一计算。
 - **具体 state**：`state/runtime.ts` 的 `createHumanoidState` 是生产角色生成入口，负责持握 / 惯用手归一化；唯一数据存储见 `character/state`。
-- **动画契约**：`BodyForm.animation` 暴露 `createSystem` / `baseClip` / `attackClip`。运行时由
-  `progress_system.ts` 求值单一组合树；`baseClip` / `attackClip` 仅服务骨骼编辑器预览。
+- **动画契约**：`BodyForm.animation` 暴露 `createSystem` / `previewClip`。运行时由
+  `progress_system.ts` 求值单一组合树；`previewClip` 仅服务骨骼编辑器动作库，内部采样同一棵组合树。
 - **动作分层**：基础状态由 `pose_fns.ts` → `base_clips.ts` 烘焙为**规范基础 clip**；
   持握 / 盾臂 / 基础支撑手 / falling 腿部由 `progress_graph.ts` 组为单棵进度组合树；
   攻击段由作者数据编译为身体 clip + 独立支撑手层 + 行走腿层；运行时统一由 `progress_system.ts` 求值。
-  编辑器仍使用 `baseClip` / `attackClip` 的整身预览。
+  编辑器使用 `previewClip` 由同一棵组合树烘焙整身预览。
 - **攻击作者数据是稀疏的**：只写需要控制的关节。未声明 = 本段不控制 = 进入攻击时回到骨架静止姿态；
   编译器禁止补恒等轨道。
 - **支撑手离线烘焙**：攻击与基础状态的左肩/左肘轨来自 `clips/generated/`；生成器 `scripts/bake_support_hands.mjs`，
@@ -59,7 +59,6 @@
 | `appearance/armor_mesh.ts` | 护甲 / 种族肢体网格 |
 | `equipment/modules.ts` | 人形装备模组（同槽位共享挂载骨骼配置） |
 | `body_form.ts` | BodyForm 装配 + `createHumanoidModel` |
-| `skeleton_animation/rig.ts` / `script_motions.ts` | 骨骼编辑器函数编排 |
 
 ## 惯用手与槽位
 

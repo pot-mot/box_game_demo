@@ -46,20 +46,20 @@ const fireForward = (
     runtime: WeaponRuntime,
     muzzle?: {x: number; z: number},
 ): void => {
-    shooter.combat.weapon = runtime.weapon
-    shooter.combat.attacks = runtime.attacks
-    shooter.combat.attackTimer = 0
+    shooter.state.combat.weapon = runtime.weapon
+    shooter.state.combat.attacks = runtime.attacks
+    shooter.state.combat.attackTimer = 0
     /* 开火门控 = release 阶段：测试直接把段阶段推进到 release */
     const segment = Object.values(runtime.attacks.segments)[0]
-    shooter.combat.activeSegment = segment
+    shooter.state.combat.activeSegment = segment
     const releaseIndex = resolvePhases(segment.phases).findIndex(phase => phase.name === 'release')
-    shooter.combat.phaseIndex = releaseIndex >= 0 ? releaseIndex : 0
-    executor.start(shooter.combat, shooter, {x: 0, y: 0, z: 1}, noopCtx)
+    shooter.state.combat.phaseIndex = releaseIndex >= 0 ? releaseIndex : 0
+    executor.start(shooter.state.combat, shooter, {x: 0, y: 0, z: 1}, noopCtx)
     if (muzzle) {
-        shooter.combat.muzzleDirX = muzzle.x
-        shooter.combat.muzzleDirZ = muzzle.z
+        shooter.state.combat.muzzleDirX = muzzle.x
+        shooter.state.combat.muzzleDirZ = muzzle.z
     }
-    executor.update(DT, shooter.combat, shooter, noopCtx)
+    executor.update(DT, shooter.state.combat, shooter, noopCtx)
 }
 
 /** 推进若干帧：物理步进 + 子弹结算（与 main.ts 的帧序一致） */
@@ -112,8 +112,8 @@ describe('投掷物可穿过类别', () => {
         fireForward(executor, shooter, makeWeaponRuntime(), {x: 1, z: 0})
         runFrames(hw, executor, [shooter, frontTarget, sideTarget], 30)
 
-        expect(sideTarget.combat.health).toBe(sideTarget.combat.maxHealth - 5)
-        expect(frontTarget.combat.health).toBe(frontTarget.combat.maxHealth)
+        expect(sideTarget.state.combat.health).toBe(sideTarget.state.combat.maxHealth - 5)
+        expect(frontTarget.state.combat.health).toBe(frontTarget.state.combat.maxHealth)
     })
 
     it('默认（仅 area）：命中箱子即消失，箱后目标不受伤害', () => {
@@ -129,7 +129,7 @@ describe('投掷物可穿过类别', () => {
         runFrames(hw, executor, [shooter, target], 30)
 
         expect(executor.getBulletCount()).toBe(0)
-        expect(target.combat.health).toBe(target.combat.maxHealth)
+        expect(target.state.combat.health).toBe(target.state.combat.maxHealth)
     })
 
     it('可穿过列表加入 box：子弹穿过箱子并命中目标', () => {
@@ -143,7 +143,7 @@ describe('投掷物可穿过类别', () => {
         runFrames(hw, executor, [shooter, target], 30)
 
         expect(executor.getBulletCount()).toBe(0)
-        expect(target.combat.health).toBe(target.combat.maxHealth - 5)
+        expect(target.state.combat.health).toBe(target.state.combat.maxHealth - 5)
     })
 
     it('默认列表含 area：标注为 area 的碰撞体不阻挡子弹', () => {
@@ -157,7 +157,7 @@ describe('投掷物可穿过类别', () => {
         fireForward(executor, shooter, makeWeaponRuntime())
         runFrames(hw, executor, [shooter, target], 30)
 
-        expect(target.combat.health).toBe(target.combat.maxHealth - 5)
+        expect(target.state.combat.health).toBe(target.state.combat.maxHealth - 5)
     })
 
     it('世界地面阻挡：无遮挡的平射子弹落地即消失（不会穿过地面）', () => {
@@ -193,15 +193,15 @@ describe('投掷物可穿过类别', () => {
         const ally = makeChar(hw, 2, 0, SHOOTER_Y, 2)
         const enemy = makeChar(hw, 3, 0, SHOOTER_Y, TARGET_Z)
         /* 射手只敌对异阵营：同阵营的 ally 挡下子弹（消失），但不结算伤害 */
-        shooter.combat.attackTendency = (ownerFaction, targetFaction) => ownerFaction !== targetFaction
-        enemy.combat.faction = 1
+        shooter.state.combat.attackTendency = (ownerFaction, targetFaction) => ownerFaction !== targetFaction
+        enemy.state.combat.faction = 1
 
         fireForward(executor, shooter, makeWeaponRuntime())
         runFrames(hw, executor, [shooter, ally, enemy], 30)
 
         expect(executor.getBulletCount()).toBe(0)
-        expect(ally.combat.health).toBe(ally.combat.maxHealth)
-        expect(enemy.combat.health).toBe(enemy.combat.maxHealth)
+        expect(ally.state.combat.health).toBe(ally.state.combat.maxHealth)
+        expect(enemy.state.combat.health).toBe(enemy.state.combat.maxHealth)
     })
 
     it('可穿过列表加入 character：角色完全透明（穿过且不结算伤害）', () => {
@@ -210,17 +210,17 @@ describe('投掷物可穿过类别', () => {
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
         const enemy = makeChar(hw, 2, 0, SHOOTER_Y, 2)
         const enemy2 = makeChar(hw, 3, 0, SHOOTER_Y, TARGET_Z)
-        shooter.combat.attackTendency = (ownerFaction, targetFaction) => ownerFaction !== targetFaction
-        enemy.combat.faction = 1
-        enemy2.combat.faction = 1
+        shooter.state.combat.attackTendency = (ownerFaction, targetFaction) => ownerFaction !== targetFaction
+        enemy.state.combat.faction = 1
+        enemy2.state.combat.faction = 1
 
         fireForward(executor, shooter, makeWeaponRuntime({passThroughCategories: ['area', 'character']}))
         /* 默认配置下子弹会在 z=2 处被挡下；此处穿过两名敌人并继续飞行 */
         runFrames(hw, executor, [shooter, enemy, enemy2], 6)
 
         expect(executor.getBulletCount()).toBe(1)
-        expect(enemy.combat.health).toBe(enemy.combat.maxHealth)
-        expect(enemy2.combat.health).toBe(enemy2.combat.maxHealth)
+        expect(enemy.state.combat.health).toBe(enemy.state.combat.maxHealth)
+        expect(enemy2.state.combat.health).toBe(enemy2.state.combat.maxHealth)
     })
 
     it('翻滚无敌帧：弹丸穿过无敌目标并命中其后目标（不结算伤害/击退）', () => {
@@ -229,14 +229,14 @@ describe('投掷物可穿过类别', () => {
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
         const immune = makeChar(hw, 2, 0, SHOOTER_Y, 2)
         const target = makeChar(hw, 3, 0, SHOOTER_Y, TARGET_Z)
-        immune.combat.invincibleTimer = 1
+        immune.state.combat.invincibleTimer = 1
 
         fireForward(executor, shooter, makeWeaponRuntime())
         /* 无敌目标视为穿过：子弹不消耗、不伤害，继续飞行命中后方目标 */
         runFrames(hw, executor, [shooter, immune, target], 30)
 
-        expect(immune.combat.health).toBe(immune.combat.maxHealth)
-        expect(target.combat.health).toBe(target.combat.maxHealth - 5)
+        expect(immune.state.combat.health).toBe(immune.state.combat.maxHealth)
+        expect(target.state.combat.health).toBe(target.state.combat.maxHealth - 5)
         expect(executor.getBulletCount()).toBe(0)
     })
 
@@ -264,7 +264,7 @@ describe('投掷物可穿过类别', () => {
         runFrames(hw, executor, [shooter, bystander], 10)
 
         expect(executor.getBulletCount()).toBe(0)
-        expect(bystander.combat.health).toBeLessThan(bystander.combat.maxHealth)
+        expect(bystander.state.combat.health).toBeLessThan(bystander.state.combat.maxHealth)
     })
 
     it('魔法弹丸按目标魔法防御固定减伤（攻击类别取自武器 damageType）', () => {
@@ -272,12 +272,12 @@ describe('投掷物可穿过类别', () => {
         const executor = createRangedExecutor(hw.shared, new Scene())
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
         const target = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
-        target.combat.defense = {physical: 0, magic: 3}
+        target.state.combat.defense = {physical: 0, magic: 3}
 
         fireForward(executor, shooter, makeWeaponRuntime({damageType: 'magic'}, 5))
         runFrames(hw, executor, [shooter, target], 30)
 
-        expect(target.combat.health).toBe(target.combat.maxHealth - 2)
+        expect(target.state.combat.health).toBe(target.state.combat.maxHealth - 2)
     })
 
     it('物理弹丸不按目标魔法防御结算（按类别取对应防御）', () => {
@@ -285,12 +285,12 @@ describe('投掷物可穿过类别', () => {
         const executor = createRangedExecutor(hw.shared, new Scene())
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
         const target = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
-        target.combat.defense = {physical: 0, magic: 3}
+        target.state.combat.defense = {physical: 0, magic: 3}
 
         fireForward(executor, shooter, makeWeaponRuntime())
         runFrames(hw, executor, [shooter, target], 30)
 
-        expect(target.combat.health).toBe(target.combat.maxHealth - 5)
+        expect(target.state.combat.health).toBe(target.state.combat.maxHealth - 5)
     })
 
     it('装备攻击加成计入弹丸伤害：仅与武器类别匹配时生效', () => {
@@ -298,13 +298,13 @@ describe('投掷物可穿过类别', () => {
         const executor = createRangedExecutor(hw.shared, new Scene())
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
         const target = makeChar(hw, 2, 0, SHOOTER_Y, TARGET_Z)
-        shooter.combat.attackBonus = {physical: 2, magic: 9}
+        shooter.state.combat.attackBonus = {physical: 2, magic: 9}
 
         fireForward(executor, shooter, makeWeaponRuntime())
         runFrames(hw, executor, [shooter, target], 30)
 
         /* 长弓物理：(5 + 物理加成 2)；魔法加成 9 不参与 */
-        expect(target.combat.health).toBe(target.combat.maxHealth - 7)
+        expect(target.state.combat.health).toBe(target.state.combat.maxHealth - 7)
     })
 
     it('爆炸伤害继承武器攻击类别：魔法爆炸按目标魔法防御减免', () => {
@@ -312,14 +312,14 @@ describe('投掷物可穿过类别', () => {
         const executor = createRangedExecutor(hw.shared, new Scene())
         const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
         const target = makeChar(hw, 2, 0, SHOOTER_Y, 3.0)
-        target.combat.defense = {physical: 0, magic: 5}
+        target.state.combat.defense = {physical: 0, magic: 5}
         /* 箱面 z=1.75，目标 z=3.0：衰减伤害约 2，被 5 点魔防压到最小 1 */
         makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
 
         fireForward(executor, shooter, makeWeaponRuntime({damageType: 'magic', explosionRadius: 2}))
         runFrames(hw, executor, [shooter, target], 10)
 
-        expect(target.combat.health).toBe(target.combat.maxHealth - 1)
+        expect(target.state.combat.health).toBe(target.state.combat.maxHealth - 1)
     })
 
     it('魔法爆炸伤害计入装备攻击加成（与武器类别匹配，物理加成不参与）', () => {
@@ -330,13 +330,13 @@ describe('投掷物可穿过类别', () => {
             const executor = createRangedExecutor(hw.shared, new Scene())
             const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
             const target = makeChar(hw, 2, 0, SHOOTER_Y, 3.0)
-            shooter.combat.attackBonus = {physical: physicalBonus, magic: magicBonus}
+            shooter.state.combat.attackBonus = {physical: physicalBonus, magic: magicBonus}
             makeStaticBox(hw, 0, 0.5, 2, 0.5, 0.5, 0.25)
 
             fireForward(executor, shooter, makeWeaponRuntime({damageType: 'magic', explosionRadius: 3}))
             runFrames(hw, executor, [shooter, target], 10)
 
-            return target.combat.maxHealth - target.combat.health
+            return target.state.combat.maxHealth - target.state.combat.health
         }
 
         const noBonus = explosionDamage(0, 0)
@@ -355,8 +355,8 @@ describe('投掷物可穿过类别', () => {
             const hw = createHarnessWorld()
             const executor = createRangedExecutor(hw.shared, new Scene())
             const shooter = makeChar(hw, 1, 0, SHOOTER_Y, 0)
-            shooter.isPlayer = isPlayer
-            shooter.combat.attackCharge = charge
+            shooter.state.identity.isPlayer = isPlayer
+            shooter.state.combat.attackCharge = charge
             fireForward(executor, shooter, makeWeaponRuntime())
             let body: import('@dimforge/rapier3d-compat').RigidBody | undefined
             hw.shared.world.bodies.forEach((b) => {

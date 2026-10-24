@@ -58,7 +58,7 @@ const setupWithSupport = (support: {x: number; y: number; z: number} | undefined
         setMovingSupport(shared, body.handle, {v: support, w: {x: 0, y: 0, z: 0}})
     }
     const {id} = system.add(config(), 0, 0.5, 0)
-    const entity = system.getAll().find(e => e.id === id)!
+    const entity = system.getAll().find(e => e.state.identity.id === id)!
     const step = (frames: number): void => {
         for (let i = 0; i < frames; i++) {
             /* 生产顺序：每帧步进前先位置携带乘客 */
@@ -93,7 +93,7 @@ describe('移动支撑携带（物理接触 + 速度注册表）', () => {
         const {entity, platformHandle, step} = setupWithSupport({x: 2, y: 0, z: 0})
         const x0 = entity.body.translation().x
         step(30)
-        expect(entity.groundBodyHandle).toBe(platformHandle)
+        expect(entity.state.physics.groundBodyHandle).toBe(platformHandle)
         /* 30 帧 @ 2 m/s ≈ 1m 的位移（位置携带），且非速度残留 */
         expect(entity.body.translation().x - x0).toBeGreaterThan(0.5)
     })
@@ -117,7 +117,7 @@ describe('移动支撑携带（物理接触 + 速度注册表）', () => {
         const sizeY = 0.25
         const travel = 4
         const {id} = system.add(config(), 0, sizeY, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         interactables.activate(liftId)
 
         /* 每帧 2 个物理子步（delta 略大于 1/60，旧实现会在此抖动） */

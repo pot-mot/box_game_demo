@@ -33,11 +33,11 @@ const findNearestEnemy = (
 ): {id: number; dist: number} | undefined => {
     const pos = character.body.translation()
     /* 侦测半径取自装备武器（武器恒存在，无槽位概念） */
-    const detRange = character.combat.weapon.detectionRange
+    const detRange = character.state.combat.weapon.detectionRange
     const los = ctx.losChecker
     const facing = ctx.getFacingAngle?.() ?? 0
     /* 扫描射线起点取体形眼部高度（与 debug 可视化同源） */
-    const eyeY = pos.y + formEyeHeight(character.config)
+    const eyeY = pos.y + formEyeHeight(character.state.config)
 
     /* 扇形重扫节流：非全向模式下每帧递减，帧间复用缓存射线结果 */
     if (!ignoreFacing) ctx.visionFanCooldown = Math.max(0, ctx.visionFanCooldown - 1)
@@ -49,8 +49,8 @@ const findNearestEnemy = (
     let blockersReady = false
 
     for (const other of allCharacters) {
-        if (other.id === character.id || other.combat.isDead) continue
-        if (!character.combat.attackTendency(character.combat.faction, other.combat.faction)) continue
+        if (other.state.identity.id === character.state.identity.id || other.state.combat.isDead) continue
+        if (!character.state.combat.attackTendency(character.state.combat.faction, other.state.combat.faction)) continue
 
         const op = other.body.translation()
         const dx = op.x - pos.x
@@ -68,7 +68,7 @@ const findNearestEnemy = (
         if (los && d > 0.001) {
             if (ignoreFacing) {
                 if (!blockersReady) { los.collectBlockers(); blockersReady = true }
-                const targetY = op.y + formEyeHeight(other.config)
+                const targetY = op.y + formEyeHeight(other.state.config)
                 if (!los.hasLOSPrepared(pos.x, eyeY, pos.z, op.x, targetY, op.z, other.mesh, character.mesh)) continue
             } else {
                 /* 扇形射线遮挡：懒投射（有候选才投），按 RECAST_INTERVAL 节流 + 逐次旋转偏移。
@@ -88,13 +88,13 @@ const findNearestEnemy = (
                 const fanDiff = normalizeAngle(bearing - ctx.visionFanYaw)
                 const idx = Math.round((fanDiff + VISION_FAN_HALF_ANGLE) / VISION_FAN_RAY_STEP)
                 const clamped = Math.max(0, Math.min(VISION_FAN_RAY_COUNT - 1, idx))
-                const bodyRadius = formBodyRadius(other.config)
+                const bodyRadius = formBodyRadius(other.state.config)
                 if (ctx.visionFanDists[clamped] < d - bodyRadius - 0.05) continue
             }
         }
 
         bestDist = d
-        bestId = other.id
+        bestId = other.state.identity.id
     }
 
     return bestId !== undefined ? {id: bestId, dist: bestDist} : undefined
@@ -113,7 +113,7 @@ export const createAIMachine = (
 ): AIContext => {
     const originConfig = DEFAULT_ORIGIN_CONFIGS[originStrategy]
     const ctx: AIContext = {
-        characterId: character.id,
+        characterId: character.state.identity.id,
         spawnPoint: {x: spawnX, y: spawnY, z: spawnZ},
         origin: {x: spawnX, y: spawnY, z: spawnZ},
         originStrategy,
@@ -122,7 +122,7 @@ export const createAIMachine = (
         losChecker,
         attackDetectChecker,
         getFacingAngle,
-        nav: createNavRunContext(character.navEnabled),
+        nav: createNavRunContext(character.state.ai.navEnabled),
         navSensor: null,
         activeFsm: 'peace',
 
@@ -205,10 +205,10 @@ const recoverFromStall = (ctx: AIContext, character: CharacterEntity, allCharact
         ctx.combatState = 'chase'
         ctx.combatStateTime = 0
         /* 朝目标方向随机偏转 ±60°〜120° 形成绕行：侧向移动可脱离接触推挤闸门的正面清零 */
-        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
+        const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
         let dx = 0
         let dz = 0
-        if (target && !target.combat.isDead) {
+        if (target && !target.state.combat.isDead) {
             const pos = character.body.translation()
             const tp = target.body.translation()
             dx = tp.x - pos.x
@@ -261,7 +261,7 @@ const updateStallDetection = (
     attacking: boolean,
 ): void => {
     const pos = character.body.translation()
-    if ((character.environment?.fluidFraction ?? 0) > 0) {
+    if ((character.state.environment?.fluidFraction ?? 0) > 0) {
         /* 浸没于流体：游泳拖拽会显著压低水平速度，豁免卡死判定避免误重掷路点 / 绕行 */
         ctx.stallTimer = 0
         ctx.stallAnchorX = pos.x
@@ -309,12 +309,12 @@ export const notifyAIDamaged = (
     allCharacters: readonly CharacterEntity[],
     sourceId: number,
 ): void => {
-    if (character.combat.isDead) return
+    if (character.state.combat.isDead) return
     ctx.combatReentryTimer = 0
-    const source = allCharacters.find(c => c.id === sourceId)
-    if (!source || source.combat.isDead) return
+    const source = allCharacters.find(c => c.state.identity.id === sourceId)
+    if (!source || source.state.combat.isDead) return
     /* 友军误伤不强制开战 */
-    if (!character.combat.attackTendency(character.combat.faction, source.combat.faction)) return
+    if (!character.state.combat.attackTendency(character.state.combat.faction, source.state.combat.faction)) return
     ctx.activeFsm = 'combat'
     ctx.combatState = 'chase'
     ctx.combatStateTime = 0
@@ -332,7 +332,7 @@ export const updateAI = (
     allCharacters: readonly CharacterEntity[],
     setInput: AISetInput,
 ): void => {
-    if (character.combat.isDead) return
+    if (character.state.combat.isDead) return
 
     /* 行为原点更新（漫游者脱战后迁移原点；其余策略不动作） */
     updateOrigin(dt, ctx, character)
@@ -346,7 +346,7 @@ export const updateAI = (
      * （避免连续举盾永不出手） */
     if (ctx.combatBlockTimer > 0) {
         ctx.combatBlockTimer = Math.max(0, ctx.combatBlockTimer - dt)
-        if (ctx.combatBlockTimer === 0) ctx.combatBlockCooldownTimer = character.aiBlockCooldown
+        if (ctx.combatBlockTimer === 0) ctx.combatBlockCooldownTimer = character.state.ai.aiBlockCooldown
     } else if (ctx.combatBlockCooldownTimer > 0) {
         ctx.combatBlockCooldownTimer = Math.max(0, ctx.combatBlockCooldownTimer - dt)
     }
@@ -421,7 +421,7 @@ export const updateAI = (
         if (ctx.combatState === 'chase') {
             const pos = character.body.translation()
             const leash = Math.hypot(pos.x - ctx.origin.x, pos.z - ctx.origin.z)
-            if (leash > character.chaseLeashRadius) {
+            if (leash > character.state.ai.chaseLeashRadius) {
                 ctx.activeFsm = 'peace'
                 ctx.peaceState = 'patrol'
                 ctx.peaceStateTime = 0
@@ -447,8 +447,8 @@ export const updateAI = (
             ctx.peaceStateTime = 0
             /* 敌人仍存活可见时施加接敌冷却：防止超时→peace→下帧立即回 chase 的
              * 空转循环（同速目标永追不上时会演变为平行走到无限远） */
-            const enemyChar = enemy ? allCharacters.find(c => c.id === enemy.id) : undefined
-            if (enemyChar && !enemyChar.combat.isDead) {
+            const enemyChar = enemy ? allCharacters.find(c => c.state.identity.id === enemy.id) : undefined
+            if (enemyChar && !enemyChar.state.combat.isDead) {
                 ctx.combatReentryTimer = Math.max(ctx.combatReentryTimer, COMBAT_REENTRY_COOLDOWN)
             }
         }
@@ -464,5 +464,5 @@ export const updateAI = (
 
     /* 静止自检：决策层对被截断输入的兜底（接触阻断/nav stuck 清零后由这里触发自救）；
      * 攻击意图或攻击动作进行中视为有效战斗，不计入卡死 */
-    updateStallDetection(dt, ctx, character, allCharacters, intentDX, intentDZ, intentAttack || character.combat.attackActive)
+    updateStallDetection(dt, ctx, character, allCharacters, intentDX, intentDZ, intentAttack || character.state.combat.attackActive)
 }

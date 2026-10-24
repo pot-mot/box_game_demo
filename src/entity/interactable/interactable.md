@@ -134,7 +134,7 @@ export interface InteractableBehavior {
 
 `breakable` 通过扩展战斗执行器接收伤害：
 
-1. `character/combat/targetable.ts` 增加来源类别常量：
+1. `character/combat/world_targets.ts` 声明来源类别常量：
    ```ts
    export const ATTACK_SOURCE_KINDS = ['melee', 'ranged', 'explosion', 'roll'] as const
    export type AttackSourceKind = typeof ATTACK_SOURCE_KINDS[number]
@@ -181,7 +181,7 @@ export interface InteractableBehavior {
 - 不再由交互物领域用 `config.size` 几何 / `PlayerAccess` 去猜「玩家是否站在平台上」——那是尺寸 / 轴 / 朝向敏感的脆弱做法。
 - 移动平台（`gate` / `elevator` / 未来载具）用 `setTranslation` **瞬移**（**禁止** `setNextKinematicTranslation`：多物理子步下运动学体会把整帧位移压进首个子步、顶到乘客 → 上升抖动）。
 - `setupInteractables` 每帧 `update` 按平台**实际位置 / 四元数差分**得到速度注册到 `SharedWorld.movingSupports`（静止写 0；`remove` 删除）。
-- 角色系统 `checkGround` 记录**真实接触**的支撑刚体 handle（`CharacterEntity.groundBodyHandle`，郊狼宽限不赋值）；`applySupportCarry(dt)` 在 `world.step` **之前**按平台位移 / `ω·dt` **平移乘客位姿**（**位置携带，不叠加速度**）。对**所有被支撑角色（含 AI）**生效。
+- 角色系统 `checkGround` 记录**真实接触**的支撑刚体 handle（`state.physics.groundBodyHandle`，郊狼宽限不赋值）；`applySupportCarry(dt)` 在 `world.step` **之前**按平台位移 / `ω·dt` **平移乘客位姿**（**位置携带，不叠加速度**）。对**所有被支撑角色（含 AI）**生效。
 - 关键：位置携带发生在步进前，平台与乘客同级对齐 → 步进时无穿透 → 碰撞解算不产生额外冲量。若改用「速度叠加」，会与运动学推挤叠加导致**上升双倍顶起抖动**。
 - 好处：形状 / 尺寸 / 朝向 / 移动方向无关；上升不抖；下降不出现落 / 地循环；不影响跳跃与下落。
 

@@ -23,11 +23,11 @@ export const interactingHandler: StateHandler = {
     transitions: [
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'flinching',
-            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0,
         },
         {
             to: 'walking',
@@ -47,7 +47,7 @@ export const interactingHandler: StateHandler = {
             guard: (_input, entity, ctx) =>
                 ctx.stateTime >= INTERACTION_DURATION
                 && shouldFall(entity)
-                && entity.airborneTime >= STATE_FLIP_MIN_TIME,
+                && entity.state.physics.airborneTime >= STATE_FLIP_MIN_TIME,
         },
     ],
 }

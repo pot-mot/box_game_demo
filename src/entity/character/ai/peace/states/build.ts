@@ -41,7 +41,7 @@ export const buildHandler: PeaceStateHandler = {
         const dist = 1 + Math.random() * 1.5
         const bx = pos.x + Math.cos(angle) * dist
         const bz = pos.z + Math.sin(angle) * dist
-        const groundY = pos.y - formCenterOffsetY(character.config)
+        const groundY = pos.y - formCenterOffsetY(character.state.config)
 
         v3Set(_pos, bx, groundY + 0.05, bz)
 

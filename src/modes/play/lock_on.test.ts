@@ -8,12 +8,14 @@ const candidate = (actorId: number, pointIndex: number, x: number, z: number): L
 
 /** 测试角色：位置可变，锁定校验逐帧读取 */
 interface TestActor {
-    readonly id: number
-    lockPoints: LockPointConfig[]
-    readonly combat: {
-        isDead: boolean
-        faction: number
-        attackTendency: (self: number, target: number) => boolean
+    readonly state: {
+        readonly identity: {readonly id: number}
+        lockPoints: LockPointConfig[]
+        readonly combat: {
+            isDead: boolean
+            faction: number
+            attackTendency: (self: number, target: number) => boolean
+        }
     }
     readonly body: {translation: () => {x: number; y: number; z: number}}
     readonly pos: {x: number; y: number; z: number}
@@ -25,9 +27,11 @@ const makeActor = (id: number, x: number, z: number, attackTendency: (self: numb
     const appearanceGroup = new Group()
     appearanceGroup.position.set(x, pos.y - 0.5, z)
     return {
-        id,
-        lockPoints,
-        combat: {isDead: false, faction: 0, attackTendency},
+        state: {
+            identity: {id},
+            lockPoints,
+            combat: {isDead: false, faction: 0, attackTendency},
+        },
         body: {translation: () => pos},
         pos,
         appearanceGroup,
@@ -166,7 +170,7 @@ describe('createPlayerLockOn', () => {
 
         lockOn.toggle()
         expect(lockOn.getAimPoint()).toBeDefined()
-        enemy.lockPoints = []
+        enemy.state.lockPoints = []
         expect(lockOn.getAimPoint()).toBeUndefined()
     })
 
@@ -175,7 +179,7 @@ describe('createPlayerLockOn', () => {
         const player = makeActor(1, 0, 0, (_self, target) => target !== 0)
         const allyFaction = makeActor(2, 0, 5)
         const enemyFaction = makeActor(3, 1, 5)
-        enemyFaction.combat.faction = 1
+        enemyFaction.state.combat.faction = 1
         const lockOn = createPlayerLockOn(makeSource(player, [enemyFaction, allyFaction]), makeCamera(0))
 
         lockOn.toggle()
@@ -204,7 +208,7 @@ describe('createPlayerLockOn', () => {
         expect(lockOn.getAimPoint()).toBeUndefined()
 
         lockOn.toggle()
-        enemy.combat.isDead = true
+        enemy.state.combat.isDead = true
         expect(lockOn.getAimPoint()).toBeUndefined()
     })
 

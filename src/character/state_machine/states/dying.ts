@@ -17,32 +17,32 @@ const easeInOutQuad = (p: number): number =>
  */
 export const dyingHandler: StateHandler = {
     enter: (entity) => {
-        entity.combat.attackActive = false
+        entity.state.combat.attackActive = false
         entity.body.setLinvel({x: 0, y: 0, z: 0}, true)
         /* 倒下方向 = 最后受击冲击方向（来源 → 受击者）；无记录时默认向后倒（沿面朝反方向） */
-        const {lastHitDirX, lastHitDirZ} = entity.combat
+        const {lastHitDirX, lastHitDirZ} = entity.state.combat
         const len = Math.hypot(lastHitDirX, lastHitDirZ)
         if (len > 1e-3) {
-            entity.dyingFallDirX = lastHitDirX / len
-            entity.dyingFallDirZ = lastHitDirZ / len
+            entity.state.timers.dyingFallDirX = lastHitDirX / len
+            entity.state.timers.dyingFallDirZ = lastHitDirZ / len
         } else {
             const yaw = entity.appearanceGroup.rotation.y
-            entity.dyingFallDirX = -Math.sin(yaw)
-            entity.dyingFallDirZ = -Math.cos(yaw)
+            entity.state.timers.dyingFallDirX = -Math.sin(yaw)
+            entity.state.timers.dyingFallDirZ = -Math.cos(yaw)
         }
-        entity.dyingFallAngle = 0
+        entity.state.timers.dyingFallAngle = 0
     },
     update: (dt, _input, entity) => {
         entity.body.setLinvel({x: 0, y: 0, z: 0}, true)
-        if (!entity.isDying) {
-            entity.isDying = true
-            entity.dyingTimer = 0
+        if (!entity.state.timers.isDying) {
+            entity.state.timers.isDying = true
+            entity.state.timers.dyingTimer = 0
         }
-        entity.dyingTimer = (entity.dyingTimer ?? 0) + dt
-        const progress = Math.min(Math.max(entity.dyingTimer / DYING_FALL_DURATION, 0), 1)
-        entity.dyingFallAngle = Math.PI / 2 * easeInOutQuad(progress)
-        if (entity.dyingTimer >= DYING_DURATION) {
-            entity.combat.isDead = true
+        entity.state.timers.dyingTimer = (entity.state.timers.dyingTimer ?? 0) + dt
+        const progress = Math.min(Math.max(entity.state.timers.dyingTimer / DYING_FALL_DURATION, 0), 1)
+        entity.state.timers.dyingFallAngle = Math.PI / 2 * easeInOutQuad(progress)
+        if (entity.state.timers.dyingTimer >= DYING_DURATION) {
+            entity.state.combat.isDead = true
         }
     },
     exit: () => {},

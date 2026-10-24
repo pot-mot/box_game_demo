@@ -32,6 +32,8 @@ export interface TrackView {
     readonly element: HTMLElement
     readonly renderList: () => void
     readonly renderCanvas: () => void
+    /** 显隐轨道区；显示时必须恢复 flex，不能清空 display（否则 canvas 行布局塌陷为 0 高） */
+    readonly setVisible: (visible: boolean) => void
     /** 按容器尺寸同步 canvas（renderer 尺寸联动） */
     readonly resize: () => void
 }
@@ -48,11 +50,11 @@ export const setupTrackView = (host: TrackViewHost): TrackView => {
     trackArea.appendChild(trackList)
 
     const canvasWrap = document.createElement('div')
-    canvasWrap.style.cssText = 'flex:1;min-width:0;position:relative'
+    canvasWrap.style.cssText = 'flex:1;min-width:0;min-height:0;position:relative;overflow:hidden'
     trackArea.appendChild(canvasWrap)
 
     const canvas = document.createElement('canvas')
-    canvas.style.cssText = 'width:100%;height:100%;display:block;cursor:crosshair'
+    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;cursor:crosshair'
     canvas.tabIndex = 0
     canvasWrap.appendChild(canvas)
 
@@ -260,6 +262,7 @@ export const setupTrackView = (host: TrackViewHost): TrackView => {
         element: trackArea,
         renderList: renderTrackList,
         renderCanvas: () => canvasModel.render(),
+        setVisible: (visible) => { trackArea.style.display = visible ? 'flex' : 'none' },
         resize,
     }
 }

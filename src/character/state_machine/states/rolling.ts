@@ -10,7 +10,7 @@ import {moveSpeedOf} from '../../types.ts'
  */
 export const rollingHandler: StateHandler = {
     enter: (entity) => {
-        const skill = entity.combat.rollSkill
+        const skill = entity.state.combat.rollSkill
         const linvel = entity.body.linvel()
         const vx = linvel.x
         const vz = linvel.z
@@ -24,13 +24,13 @@ export const rollingHandler: StateHandler = {
             skill.dirZ = Math.cos(angle)
         }
         skill.cooldownTimer = skill.config.cooldown
-        entity.combat.invincibleTimer = 0
+        entity.state.combat.invincibleTimer = 0
         entity.body.wakeUp()
     },
     update: (_dt, _input, entity, ctx) => {
-        const {config, dirX, dirZ} = entity.combat.rollSkill
+        const {config, dirX, dirZ} = entity.state.combat.rollSkill
         /* 无敌帧：窗口内逐帧重算剩余时间（不累积计时；窗口外清零，起手/收招可被命中） */
-        entity.combat.invincibleTimer = ctx.stateTime >= config.iframeStart && ctx.stateTime < config.iframeEnd
+        entity.state.combat.invincibleTimer = ctx.stateTime >= config.iframeStart && ctx.stateTime < config.iframeEnd
             ? config.iframeEnd - ctx.stateTime
             : 0
         const speed = moveSpeedOf(entity) * ROLL_SPEED_MULTIPLIER
@@ -46,35 +46,35 @@ export const rollingHandler: StateHandler = {
         }
     },
     exit: (entity) => {
-        entity.combat.invincibleTimer = 0
+        entity.state.combat.invincibleTimer = 0
     },
     transitions: [
         {
             to: 'walking',
             guard: (input, entity, ctx) =>
-                ctx.stateTime >= entity.combat.rollSkill.config.duration
+                ctx.stateTime >= entity.state.combat.rollSkill.config.duration
                 && Math.hypot(input.dx, input.dz) > 0.001
                 && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'idle',
             guard: (_input, entity, ctx) =>
-                ctx.stateTime >= entity.combat.rollSkill.config.duration
+                ctx.stateTime >= entity.state.combat.rollSkill.config.duration
                 && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'falling',
             guard: (_input, entity, ctx) =>
-                ctx.stateTime >= entity.combat.rollSkill.config.duration
+                ctx.stateTime >= entity.state.combat.rollSkill.config.duration
                 && shouldFall(entity),
         },
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'flinching',
-            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0,
         },
     ],
 }

@@ -56,11 +56,11 @@ export const createCharacterStateMachine = (
     const makeContext = (entity?: CharacterEntity): MachineContext => {
         let attackPhase: string | undefined
         if (entity !== undefined && (data.currentState === 'attacking' || data.currentState === 'air_attacking')) {
-            const segment = entity.combat.activeSegment
+            const segment = entity.state.combat.activeSegment
             if (segment !== undefined) {
                 const phases = resolvePhases(segment.phases)
-                if (entity.combat.phaseIndex < phases.length) {
-                    attackPhase = phases[entity.combat.phaseIndex].name
+                if (entity.state.combat.phaseIndex < phases.length) {
+                    attackPhase = phases[entity.state.combat.phaseIndex].name
                 }
             }
         }
@@ -90,12 +90,12 @@ export const createCharacterStateMachine = (
         const ctx = makeContext(entity)
         updateGroundTimers(entity, dt)
         /* 格挡保持：统一由输入同步到战斗组件，供 blocking 状态守卫与盾判定读取 */
-        entity.combat.blockHeld = input.block
+        entity.state.combat.blockHeld = input.block
 
         /* 全局倒地：任意非死亡 / 非倒地状态在韧性归零或受 knockdown 冲击时强制进入 knockdown（dying 优先级最高） */
         if (
-            entity.combat.pendingKnockdown
-            && entity.combat.health > 0
+            entity.state.combat.pendingKnockdown
+            && entity.state.combat.health > 0
             && data.currentState !== 'dying'
             && data.currentState !== 'knockdown'
             && data.currentState !== 'getting_up'
@@ -111,9 +111,9 @@ export const createCharacterStateMachine = (
 
         /* 全局破防：持盾且格挡槽归零时强制进入 guard_broken（倒地 / 起身与死亡优先级更高，不受此约束） */
         if (
-            entity.combat.block !== undefined
-            && entity.combat.guard <= 0
-            && entity.combat.health > 0
+            entity.state.combat.block !== undefined
+            && entity.state.combat.guard <= 0
+            && entity.state.combat.health > 0
             && data.currentState !== 'dying'
             && data.currentState !== 'knockdown'
             && data.currentState !== 'getting_up'
@@ -138,11 +138,11 @@ export const createCharacterStateMachine = (
                     /* 起手解析：攻击键的起手候选按守卫（蓄力/方向变体）+ 冷却解析（转换 guard 已验证存在候选）；
                      * 空中攻击固定走 `air` 链（与地面轻重链分离） */
                     const key = data.currentState === 'air_attacking' ? 'air' : input.attackKey
-                    entity.combat.activeSegment = key !== undefined
+                    entity.state.combat.activeSegment = key !== undefined
                         ? resolveEntrySegment(
-                            entity.combat.attacks,
+                            entity.state.combat.attacks,
                             key,
-                            attackContextOf(entity.combat, {
+                            attackContextOf(entity.state.combat, {
                                 dx: input.dx,
                                 dz: input.dz,
                                 holdDuration: input.attackHoldDuration,

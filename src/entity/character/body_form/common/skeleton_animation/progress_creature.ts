@@ -4,7 +4,7 @@ import {createCharacterSkeletonBridge} from '../../../appearance/skeleton_bridge
 import {applyJointBlend, snapshotJoints, type JointSnapshot} from '../../../appearance/joint_blend.ts'
 import {STATE_BLEND_DURATION, walkSpeedScale} from '../../../appearance/constants.ts'
 import {isAttackState, type BaseClipState, type CharacterStateName} from '../../../../../character/state_machine/types.ts'
-import type {AttackSegment} from '../../../../../character/weapon/attack_chain.ts'
+import {segmentTotalDuration, type AttackSegment} from '../../../../../character/weapon/attack_chain.ts'
 import type {BoneAnimationClip, BoneEventRecord} from '../../../../../skeleton/anim/types.ts'
 import type {SkeletonDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {skeletonFromDefinition} from '../../../../../skeleton/anim/serialization.ts'
@@ -22,7 +22,8 @@ import {
 } from './progress_composition.ts'
 import {createProgressClipLeaf} from './progress_clip_leaf.ts'
 import {jointEulersToSkeletonPose} from './progress_pose.ts'
-import type {FormAnimation} from './form_animation.ts'
+import type {FormAnimation, FormPreviewRequest} from './form_animation.ts'
+import {bakeProgressPreviewClip} from './preview.ts'
 
 export interface CreatureProgressConfig {
     readonly skeleton: () => SkeletonDefinition
@@ -372,12 +373,66 @@ export const createCreatureProgressSystem = (
     }
 }
 
-/** 用通用进度系统定义体形动画；baseClip/attackClip 仍供骨骼编辑器使用 */
-export const defineCreatureProgressAnimation = (config: CreatureProgressConfig): FormAnimation => {
+/** 骨骼编辑器预览：采样该体形的生产进度组合树（含转向瞄准 / falling 收腿） */
+export const previewCreatureClip = (
+    config: CreatureProgressConfig,
+    request: FormPreviewRequest,
+): BoneAnimationClip => {
+    const isAttack = request.kind === 'attack'
+    const state: CharacterStateName = isAttack ? 'attacking' : request.state
+    const baseClip = isAttack ? undefined : config.baseClip(request.state)
+    const duration = isAttack ? segmentTotalDuration(request.segment) : baseClip!.duration
+    const loop = isAttack ? false : baseClip!.loop
+    const variant = request.variant
+    const baseContext: AnimationContext = {
+        stateTime: 0,
+        stateDuration: duration,
+        horizontalSpeed: variant.horizontalSpeed,
+        attackSegment: isAttack ? request.segment : undefined,
+        attackPhase: undefined,
+        attackPhaseProgress: 0,
+        attackTotalProgress: 0,
+        attackPhaseIndex: 0,
+        attackCharge: 0,
+        attackHolding: false,
+        weaponHeld: variant.weaponHeld,
+    }
+    return bakeProgressPreviewClip({
+        name: `preview:creature:${isAttack ? request.segment.id : state}`,
+        duration,
+        loop,
+        skeleton: config.skeleton(),
+        preserveJointIds: config.preservedJoints,
+        frameAt: progress => {
+            const context: AnimationContext = {
+                ...baseContext,
+                stateTime: progress * duration,
+                attackTotalProgress: progress,
+            }
+            const frame = resolveCreatureFrame(state, context, config, progress * duration)
+            return {
+                pose: evaluateProgressComposition(frame.graph, frame.progress, {
+                    restPose: frame.restPose,
+                    params: frame.params,
+                }),
+                events: frame.events,
+            }
+        },
+    })
+}
+
+/** 用通用进度系统定义体形动画；previewClip 采样同一棵进度组合树供骨骼编辑器使用 */
+/** 兽形体形预览工厂：各体形在 `skeleton_animation/preview.ts` 暴露自己的入口，内部共用此实现。 */
+export const createCreaturePreviewClip = (config: CreatureProgressConfig): FormAnimation['previewClip'] =>
+    request => previewCreatureClip(config, request)
+
+export const defineCreatureProgressAnimation = (
+    config: CreatureProgressConfig,
+    previewClip: FormAnimation['previewClip'] = createCreaturePreviewClip(config),
+): FormAnimation => {
     return {
         skeleton: config.skeleton,
-        baseClip: config.baseClip,
-        attackClip: config.attackClip,
+        previewClip,
         createSystem: options => createCreatureProgressSystem(config, options),
     }
 }

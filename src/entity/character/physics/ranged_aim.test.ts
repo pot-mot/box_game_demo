@@ -151,9 +151,9 @@ describe('远程瞄准与弹道朝向', () => {
         /* 按住 1s：进入 attacking 并冻结在 aim，未发射 */
         for (let i = 0; i < 60; i++) system.update(FIXED_TIME_STEP)
         expect(findBulletBody(shared)).toBeUndefined()
-        const player = system.getAll().find(c => c.id === id)!
-        expect(player.combat.attackHolding).toBe(true)
-        expect(player.combat.attackCharge).toBeGreaterThan(0.8)
+        const player = system.getAll().find(c => c.state.identity.id === id)!
+        expect(player.state.combat.attackHolding).toBe(true)
+        expect(player.state.combat.attackCharge).toBeGreaterThan(0.8)
 
         /* 松开：推进到 release 并发射，满蓄力按 maxSpeedScale */
         system.endPlayerAttackHold('light', 1)
@@ -182,8 +182,8 @@ describe('远程瞄准与弹道朝向', () => {
         for (let i = 0; i < 30; i++) system.update(FIXED_TIME_STEP)
 
         expect(findBulletBody(shared)).toBeUndefined()
-        const player = system.getAll().find(c => c.id === id)!
-        expect(player.combat.attackActive).toBe(false)
+        const player = system.getAll().find(c => c.state.identity.id === id)!
+        expect(player.state.combat.attackActive).toBe(false)
         expect(player.stateMachine.currentState).not.toBe('attacking')
     })
 })

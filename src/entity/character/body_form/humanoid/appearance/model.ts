@@ -270,7 +270,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
     /**
      * 切换惯用手：主 / 副手内容在左右挂点槽间迁移，并重挂到对应武器挂点 +
      * 重设全部非对称网格（武器 / 护甲 / 肢体）的镜像；副手挂背状态保持不变。
-     * 动作镜像由 clip 层（`getBaseClipForHoldMode` 等）按 handedness 处理，此处不动。
+     * 动作镜像由进度组合层按 handedness 处理，此处不动。
      */
     const setHandedness = (handedness: Handedness): void => {
         if (handedness === currentHandedness) return

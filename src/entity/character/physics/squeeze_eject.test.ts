@@ -263,8 +263,8 @@ describe('AI 移动行为与分离不冲突', () => {
                 aiZ: aiPos.z,
                 ajX: tPos.x,
                 ajZ: tPos.z,
-                radiusA: R * ai.config.scale,
-                radiusB: R * target.config.scale,
+                radiusA: R * ai.state.config.scale,
+                radiusB: R * target.state.config.scale,
             },
             CHARACTER_SEPARATION_SPEED,
         )

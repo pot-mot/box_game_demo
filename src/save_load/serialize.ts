@@ -165,52 +165,52 @@ export const collectWorldState = (
         for (const e of character.getAll()) {
             /* position 存脚底原点（实体原点语义）：物理身体中心回退半高 */
             const bodyPos = e.body.translation()
-            const halfH = bodyFormOf(e.config.bodyFormId).base.centerOffsetY * e.config.scale
+            const halfH = bodyFormOf(e.state.config.bodyFormId).base.centerOffsetY * e.state.config.scale
             entities.push({
                 type: 'character',
                 config: {
-                    speed: e.config.speed,
-                    jumpHeight: e.config.jumpHeight,
-                    scale: e.config.scale,
+                    speed: e.state.config.speed,
+                    jumpHeight: e.state.config.jumpHeight,
+                    scale: e.state.config.scale,
                     /* 体形计划（基础模组）：缺省 humanoid */
-                    bodyFormId: e.config.bodyFormId,
+                    bodyFormId: e.state.config.bodyFormId,
                     /* 体形专属状态（人形：holdMode / handedness） */
-                    bodyState: e.bodyState,
-                    peaceStrategy: e.peaceStrategy,
-                    combatStrategy: e.combatStrategy,
-                    tendency: e.combat.tendencyConfig,
-                    faction: e.combat.faction,
-                    maxHealth: e.combat.maxHealth,
+                    bodyState: e.state.bodyState,
+                    peaceStrategy: e.state.ai.peaceStrategy,
+                    combatStrategy: e.state.ai.combatStrategy,
+                    tendency: e.state.combat.tendencyConfig,
+                    faction: e.state.combat.faction,
+                    maxHealth: e.state.combat.maxHealth,
                     /* 基础防御 + 基础攻击 + 装备状态（limb / weapon / armor 分层） */
-                    defense: e.combat.baseDefense,
-                    baseAttack: e.combat.baseAttack,
-                    equipment: equipmentToSave(e.combat.equipment, bodyFormOf(e.config.bodyFormId).id),
+                    defense: e.state.combat.baseDefense,
+                    baseAttack: e.state.combat.baseAttack,
+                    equipment: equipmentToSave(e.state.combat.equipment, bodyFormOf(e.state.config.bodyFormId).id),
                     /* 额外锁定点（拷贝为 JSON-safe 元组；缺省 = 仅默认身体中心点） */
-                    lockPoints: e.lockPoints.map((point): LockPointConfig => ({
+                    lockPoints: e.state.lockPoints.map((point): LockPointConfig => ({
                         jointId: point.jointId,
                         offset: [point.offset[0], point.offset[1], point.offset[2]],
                     })),
                     /* 韧性 / 倒地属性（写实际值；旧代码读到缺字段安全回退默认） */
-                    poiseMax: e.combat.basePoiseMax,
-                    poiseRegenDelay: e.combat.poiseRegenDelay,
-                    poiseRegenPerSec: e.combat.poiseRegenPerSec,
-                    knockdownDuration: e.combat.knockdownDuration,
-                    getUpDuration: e.combat.getUpDuration,
-                    isPlayer: e.isPlayer,
-                    navEnabled: e.navEnabled,
+                    poiseMax: e.state.combat.basePoiseMax,
+                    poiseRegenDelay: e.state.combat.poiseRegenDelay,
+                    poiseRegenPerSec: e.state.combat.poiseRegenPerSec,
+                    knockdownDuration: e.state.combat.knockdownDuration,
+                    getUpDuration: e.state.combat.getUpDuration,
+                    isPlayer: e.state.identity.isPlayer,
+                    navEnabled: e.state.ai.navEnabled,
                     /* 行为原点策略 / 间隔 / 追击半径（写实际值；旧代码读到缺字段安全回退默认） */
-                    originStrategy: e.originStrategy,
-                    originInterval: e.originInterval,
-                    chaseLeashRadius: e.chaseLeashRadius,
+                    originStrategy: e.state.ai.originStrategy,
+                    originInterval: e.state.ai.originInterval,
+                    chaseLeashRadius: e.state.ai.chaseLeashRadius,
                     /* AI 反应式举盾窗口 / 冷却（写实际值；旧代码读到缺字段安全回退默认） */
-                    aiBlockDuration: e.aiBlockDuration,
-                    aiBlockCooldown: e.aiBlockCooldown,
+                    aiBlockDuration: e.state.ai.aiBlockDuration,
+                    aiBlockCooldown: e.state.ai.aiBlockCooldown,
                 },
-                health: e.combat.health,
+                health: e.state.combat.health,
                 position: [bodyPos.x, bodyPos.y - halfH, bodyPos.z],
                 quaternion: quatToTuple(e.body.rotation()),
                 /* 刚体 lockRotations，朝向不在 body 上，单独从 facingAngles 持久化 */
-                facing: character.getFacing(e.id),
+                facing: character.getFacing(e.state.identity.id),
             })
         }
     }

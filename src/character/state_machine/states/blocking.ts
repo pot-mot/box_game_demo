@@ -10,11 +10,11 @@ import {moveSpeedOf} from '../../types.ts'
  */
 export const blockingHandler: StateHandler = {
     enter: (entity) => {
-        entity.combat.blocking = true
+        entity.state.combat.blocking = true
         entity.body.wakeUp()
     },
     update: (_dt, input, entity) => {
-        const mult = entity.combat.block?.moveSpeedMultiplier ?? 1
+        const mult = entity.state.combat.block?.moveSpeedMultiplier ?? 1
         const len = Math.hypot(input.dx, input.dz)
         if (len < 0.001) {
             /* 原地举盾：水平减速（与 idle 一致的阻尼），保留垂直速度 */
@@ -37,46 +37,46 @@ export const blockingHandler: StateHandler = {
         }
     },
     exit: (entity) => {
-        entity.combat.blocking = false
+        entity.state.combat.blocking = false
     },
     transitions: [
         {
             to: 'interacting',
-            guard: (input, entity) => input.interact && entity.interactTargetActive === true,
+            guard: (input, entity) => input.interact && entity.state.interaction.active === true,
         },
         {
             to: 'attacking',
-            guard: (input, entity) => entity.combat.blockHeld === false
+            guard: (input, entity) => entity.state.combat.blockHeld === false
                 && input.attack
-                && canStartAttack(entity.combat, {
+                && canStartAttack(entity.state.combat, {
                     dx: input.dx,
                     dz: input.dz,
                     holdDuration: input.attackHoldDuration,
                     attackKey: input.attackKey,
                 }),
         },
-        { to: 'walking', guard: (input, entity) => entity.combat.blockHeld === false && Math.hypot(input.dx, input.dz) > 0.001 },
-        { to: 'idle', guard: (input, entity) => entity.combat.blockHeld === false && Math.hypot(input.dx, input.dz) < 0.001 },
+        { to: 'walking', guard: (input, entity) => entity.state.combat.blockHeld === false && Math.hypot(input.dx, input.dz) > 0.001 },
+        { to: 'idle', guard: (input, entity) => entity.state.combat.blockHeld === false && Math.hypot(input.dx, input.dz) < 0.001 },
         {
             to: 'jumping',
-            guard: (input, entity) => entity.combat.blockHeld === false
+            guard: (input, entity) => entity.state.combat.blockHeld === false
                 && input.jump && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'rolling',
-            guard: (input, entity) => input.roll && entity.combat.rollSkill.cooldownTimer <= 0,
+            guard: (input, entity) => input.roll && entity.state.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'flinching',
-            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0,
         },
         {
             to: 'falling',
-            guard: (_input, entity) => shouldFall(entity) && entity.airborneTime >= STATE_FLIP_MIN_TIME,
+            guard: (_input, entity) => shouldFall(entity) && entity.state.physics.airborneTime >= STATE_FLIP_MIN_TIME,
         },
     ],
 }

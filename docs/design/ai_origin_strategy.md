@@ -83,7 +83,7 @@ export const DEFAULT_ORIGIN_CONFIGS: Record<OriginSubStrategy, OriginConfig> = {
 
 ### 5.3 角色实体（`src/character/types.ts`）
 
-`CharacterEntity` 新增**必填**字段（与 `peaceStrategy` / `combatStrategy` 同级）：
+`CharacterState.ai` 新增**必填**字段（与 `peaceStrategy` / `combatStrategy` 同级）：
 
 ```ts
 /** 行为原点更新策略（仅非玩家角色有效，默认 resident） */
@@ -94,7 +94,7 @@ originInterval: number
 chaseLeashRadius: number
 ```
 
-> 说明：`originInterval` 直接落在实体上（而非每次查表 `DEFAULT_ORIGIN_CONFIGS`），以便面板改值后即时生效并持久化。
+> 说明：`originInterval` 直接落在 `state.ai`（而非每次查表 `DEFAULT_ORIGIN_CONFIGS`），以便面板改值后即时生效并持久化。
 
 ### 5.4 AI 上下文（`src/entity/character/ai/types.ts`）
 
@@ -132,7 +132,7 @@ chaseLeashRadius?: number
 /** 由角色物理体反算脚底原点 Y（body 中心 - 半高）写入 ctx.origin */
 export const setOriginFromCharacter = (ctx: AIContext, character: CharacterEntity): void => {
     const pos = character.body.translation()
-    const footY = pos.y - (CHARACTER_BASE_SIZE.height * character.config.scale) / 2
+    const footY = pos.y - (CHARACTER_BASE_SIZE.height * character.state.config.scale) / 2
     ctx.origin.x = pos.x; ctx.origin.y = footY; ctx.origin.z = pos.z
 }
 
@@ -151,7 +151,7 @@ export const updateOrigin = (dt: number, ctx: AIContext, character: CharacterEnt
     if (ctx.originTimer > 0) return
     if (ctx.activeFsm !== 'peace') return // 战斗期冻结：只计时、不写原点，等脱战
     setOriginFromCharacter(ctx, character) // 脱战后首个和平帧以当前位置为原点
-    ctx.originTimer = character.originInterval
+    ctx.originTimer = character.state.ai.originInterval
 }
 ```
 
@@ -178,7 +178,7 @@ export const notifyAIKill = (
 
 **目标**：击杀事件只触发一次，并携带来源。
 
-1. 类型签名（`src/character/combat/types.ts`、`src/character/combat/targetable.ts`）：
+1. 类型签名（`src/character/combat/types.ts`）：
     `onDeath: (() => void) | null` → `onDeath: ((sourceId?: number) => void) | null`
     （`() => void` 形状的函数仍可赋值给新签名，兼容现有测试替身。）
 2. `src/character/combat/damage.ts`：只在存活→死亡跳变时触发，并传 `sourceId`：
@@ -192,18 +192,18 @@ export const notifyAIKill = (
 
     这天然消灭了「尸体再次受击重复触发 `onDeath`」的问题，无需额外 `deathNotified` 标志。
 3. `src/character/armor/armor.md` 第 154–176 行同步更新签名与调用示例。
-4. `src/entity/character/physics/world.ts`：在 `spawnEntity` 中为每个角色挂 `entity.combat.onDeath`（紧邻现有 `combat.onDamageTaken` 赋值处）：
+4. `src/entity/character/physics/world.ts`：在 `spawnEntity` 中为每个角色挂 `entity.state.combat.onDeath`（紧邻现有 `combat.onDamageTaken` 赋值处）：
 
     ```ts
-    entity.combat.onDeath = (sourceId) => {
+    entity.state.combat.onDeath = (sourceId) => {
         if (sourceId === undefined || sourceId === entity.id) return   // 非伤害来源 / 自伤
-        const killer = characters.find(c => c.id === sourceId)
-        if (!killer || killer.combat.isDead) return
-        if (!killer.combat.attackTendency(killer.combat.faction, entity.combat.faction)) return // 友军误伤
+        const killer = characters.find(c => c.state.identity.id === sourceId)
+        if (!killer || killer.state.combat.isDead) return
+        if (!killer.state.combat.attackTendency(killer.state.combat.faction, entity.state.combat.faction)) return // 友军误伤
         const killerCtx = aiMap.get(killer.id)
         if (!killerCtx) return
         const vp = entity.body.translation()
-        const victimFootY = vp.y - (CHARACTER_BASE_SIZE.height * entity.config.scale) / 2
+        const victimFootY = vp.y - (CHARACTER_BASE_SIZE.height * entity.state.config.scale) / 2
         notifyAIKill(killerCtx, killer, {x: vp.x, y: victimFootY, z: vp.z})
     }
     ```
@@ -240,14 +240,14 @@ if (leash > character.chaseLeashRadius) { /* 放弃追击 → peace + 接敌冷�
 
 ### 7.1 `world.ts`
 
-- `spawnEntity` 增参 `originStrategy` / `originInterval` / `chaseLeashRadius`，写入实体。
+- `spawnEntity` 增参 `originStrategy` / `originInterval` / `chaseLeashRadius`，写入 `state.ai`。
 - `createAIMachine(...)` 增参 `originStrategy`，初始化 `origin = spawnPoint`、`originTimer = originInterval`（仅 roamer 有意义）。
 - `add`（存档加载）读 `saveConfig.originStrategy ?? 'resident'`、`saveConfig.originInterval ?? DEFAULT_ROAMER_INTERVAL`、`saveConfig.chaseLeashRadius ?? CHASE_LEASH_RADIUS`。
 - `activateAI` 透传策略。
 - 新增 setter 并暴露到返回接口：
     - `setOriginStrategy(id, strategy)`：更新实体字段与 `ctx.originStrategy/originConfig`；**复位原点** —— `resident` / `fighter` / `hunter` → `origin = spawnPoint`；`roamer` → `origin = 当前位置`；并重置 `originTimer`。
-    - `setOriginInterval(id, seconds)`：更新 `entity.originInterval` 与 `ctx.originConfig.interval`，重置 `originTimer`。
-    - `setChaseLeashRadius(id, radius)`：更新 `entity.chaseLeashRadius`。
+    - `setOriginInterval(id, seconds)`：更新 `entity.state.ai.originInterval` 与 `ctx.originConfig.interval`，重置 `originTimer`。
+    - `setChaseLeashRadius(id, radius)`：更新 `entity.state.ai.chaseLeashRadius`。
 
 ### 7.2 面板（`src/entity/character/ui/panel.ts`）
 
@@ -313,7 +313,6 @@ if (leash > character.chaseLeashRadius) { /* 放弃追击 → peace + 接敌冷�
 - `src/entity/character/ai/constants.ts`（`CHASE_LEASH_RADIUS` 语义改为默认值，可更名 `DEFAULT_CHASE_LEASH_RADIUS`）
 - `src/character/combat/damage.ts`
 - `src/character/combat/types.ts`
-- `src/character/combat/targetable.ts`
 - `src/character/armor/armor.md`
 - `src/entity/character/physics/world.ts`
 - `src/entity/character/ui/panel.ts`

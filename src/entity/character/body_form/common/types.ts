@@ -9,7 +9,7 @@ import type {CharacterState, CharacterStateInit} from '../../../../character/sta
 import type {CreatureModel} from '../../appearance/types.ts'
 import type {FormAnimation} from './skeleton_animation/form_animation.ts'
 import type {EquipSlotDef, EquipmentModuleDef, EquipmentState} from '../../../../character/equipment/types.ts'
-import type {BodyFormBase, BodyClipStateMeta} from './base.ts'
+import type {BodyFormBase} from './base.ts'
 import type {MeshBuilder} from '../../appearance/mesh_builder.ts'
 
 /**
@@ -134,6 +134,3 @@ export interface BodyForm {
     /** 每帧体形专属同步（可选；在受击块/碰撞体同步之外调用） */
     readonly onFrame?: (entity: CharacterEntity, model: CreatureModel) => void
 }
-
-/** 动画/状态系统读取体形基线时长（避免跨模块重复字面量） */
-export type BodyAnimationTiming = BodyClipStateMeta

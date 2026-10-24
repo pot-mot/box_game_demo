@@ -93,7 +93,7 @@ const scanForward = (
 export const buildNavSensor = (caster: NavRayCaster): NavSensor => {
     const footOf = (entity: CharacterEntity): {x: number; y: number; z: number} => {
         const pos = entity.body.translation()
-        return {x: pos.x, y: pos.y - formCenterOffsetY(entity.config) + 0.1, z: pos.z}
+        return {x: pos.x, y: pos.y - formCenterOffsetY(entity.state.config) + 0.1, z: pos.z}
     }
 
     /** 前方扇面 + 坑洞探针（不含侧向扫描）：`sense` 与 `isForwardClear` 共用，避免重复射线 */
@@ -103,7 +103,7 @@ export const buildNavSensor = (caster: NavRayCaster): NavSensor => {
         config: NavConfig,
         ignoredMesh?: Object3D | null,
     ): {fan: ForwardScan; groundAhead: boolean; foot: {x: number; y: number; z: number}; jumpHeight: number} => {
-        const jumpHeight = entity.config.jumpHeight
+        const jumpHeight = entity.state.config.jumpHeight
         const foot = footOf(entity)
         caster.setExcludes(entity.mesh as Object3D, ignoredMesh ?? null)
 

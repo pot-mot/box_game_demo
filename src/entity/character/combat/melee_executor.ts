@@ -140,7 +140,7 @@ const hitHurtBlocksOf = (
     target: CharacterEntity,
     getFacingAngle: (id: number) => number,
 ): readonly string[] | undefined => {
-    const blocks = target.hurtBlocks
+    const blocks = target.state.hurtBlocks
     if (blocks !== undefined && blocks.length > 0) {
         let hit: string[] | undefined
         for (const b of blocks) {
@@ -152,7 +152,7 @@ const hitHurtBlocksOf = (
         return hit
     }
     const t = target.body.translation()
-    return obbIntersect(weaponOBB, targetHurtOBB(t, targetHitBoxHalves(target.config), getFacingAngle(target.id)))
+    return obbIntersect(weaponOBB, targetHurtOBB(t, targetHitBoxHalves(target.state.config), getFacingAngle(target.state.identity.id)))
         ? FALLBACK_HURT_BLOCK
         : undefined
 }
@@ -208,7 +208,7 @@ export const createMeleeExecutor = (
         if (weapon.type !== 'melee') return
         /* 命中窗口全部关闭（动画事件轨 hitbox_off 或攻击尚未进入打击阶段）时不检测 */
         if (!defaultWindowActive && ![...slotWindows.values()].some(Boolean)) return
-        const model = getModel(entity.id)
+        const model = getModel(entity.state.identity.id)
         if (!model) return
 
         const attackId = combat.activeSegment?.id ?? weapon.id
@@ -235,10 +235,10 @@ export const createMeleeExecutor = (
             const wz = wPos.z
 
             for (const target of getAllCharacters()) {
-                if (target.id === entity.id) continue
-                if (target.combat.isDead) continue
-                if (combat.attackedTargets.has(target.id)) continue
-                if (!combat.attackTendency(combat.faction, target.combat.faction)) continue
+                if (target.state.identity.id === entity.state.identity.id) continue
+                if (target.state.combat.isDead) continue
+                if (combat.attackedTargets.has(target.state.identity.id)) continue
+                if (!combat.attackTendency(combat.faction, target.state.combat.faction)) continue
 
                 const tTrans = target.body.translation()
                 const tx = tTrans.x
@@ -249,7 +249,7 @@ export const createMeleeExecutor = (
 
                 /* 翻滚无敌帧：不算命中 —— 不写 attackedTargets、不击退、不触发打击反馈（顿帧/震动）；
                  * 无敌结束后只要仍在命中窗口内，同一段仍可命中该目标 */
-                if (isDamageImmune(target.combat)) continue
+                if (isDamageImmune(target.state.combat)) continue
 
                 /* 冲击方向 = 武器握把 → 目标（水平）：伤害事件携带（死亡倒向依据）并与击退共用 */
                 v3Set(_tmpVec, tx - wx, 0, tz - wz)
@@ -259,17 +259,17 @@ export const createMeleeExecutor = (
                 const dirZ = hasDir ? _tmpVec.z / len : 0
 
                 /* 盾格挡：目标举盾且未破防、武器命中箱与盾遮挡体相交 → 减免结算（不进行全额结算） */
-                const block = target.combat.block
-                if (block !== undefined && target.combat.blocking && target.combat.guard > 0
+                const block = target.state.combat.block
+                if (block !== undefined && target.state.combat.blocking && target.state.combat.guard > 0
                     && obbIntersect(
                         weaponOBB,
-                        shieldCoverOBB(tTrans, target.config, getFacingAngle(target.id), block.cover),
+                        shieldCoverOBB(tTrans, target.state.config, getFacingAngle(target.state.identity.id), block.cover),
                     )) {
                     const blockedDamage = damage * block.blockDamageMultiplier
                     const incomingImpact = segment?.impact ?? 'light'
-                    applyDamage(target.combat, {
-                        sourceId: entity.id,
-                        targetId: target.id,
+                    applyDamage(target.state.combat, {
+                        sourceId: entity.state.identity.id,
+                        targetId: target.state.identity.id,
                         damageType: slotWeapon.damageType,
                         baseAmount: blockedDamage,
                         finalAmount: blockedDamage,
@@ -280,8 +280,8 @@ export const createMeleeExecutor = (
                         hitHurtBlocks: hitBlocks,
                         ...(hasDir ? {dirX, dirZ} : {}),
                     })
-                    target.combat.guard = Math.max(0, target.combat.guard - blockedDamage)
-                    combat.attackedTargets.add(target.id)
+                    target.state.combat.guard = Math.max(0, target.state.combat.guard - blockedDamage)
+                    combat.attackedTargets.add(target.state.identity.id)
                     onHit?.(wx, wy, wz)
                     if (hasDir) {
                         const kb = slotWeapon.knockbackForce * block.blockKnockbackMultiplier
@@ -294,9 +294,9 @@ export const createMeleeExecutor = (
                     continue
                 }
 
-                applyDamage(target.combat, {
-                    sourceId: entity.id,
-                    targetId: target.id,
+                applyDamage(target.state.combat, {
+                    sourceId: entity.state.identity.id,
+                    targetId: target.state.identity.id,
                     damageType: slotWeapon.damageType,
                     baseAmount: damage,
                     finalAmount: damage,
@@ -307,7 +307,7 @@ export const createMeleeExecutor = (
                     hitHurtBlocks: hitBlocks,
                     ...(hasDir ? {dirX, dirZ} : {}),
                 })
-                combat.attackedTargets.add(target.id)
+                combat.attackedTargets.add(target.state.identity.id)
                 onHit?.(wx, wy, wz)
 
                 if (hasDir) {

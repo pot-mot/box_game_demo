@@ -5,7 +5,7 @@ import {formCenterOffsetY} from '../body_form/common/geometry.ts'
 /** 由角色物理体反算脚底原点 Y（body 中心 - 体形中心偏移）写入 `ctx.origin` */
 export const setOriginFromCharacter = (ctx: AIContext, character: CharacterEntity): void => {
     const pos = character.body.translation()
-    const footY = pos.y - formCenterOffsetY(character.config)
+    const footY = pos.y - formCenterOffsetY(character.state.config)
     ctx.origin.x = pos.x
     ctx.origin.y = footY
     ctx.origin.z = pos.z
@@ -30,7 +30,7 @@ export const updateOrigin = (dt: number, ctx: AIContext, character: CharacterEnt
     if (ctx.activeFsm !== 'peace') return
     setOriginFromCharacter(ctx, character)
     /* originInterval <= 0 时回退策略默认间隔，避免每帧写入 */
-    ctx.originTimer = character.originInterval > 0 ? character.originInterval : ctx.originConfig.interval
+    ctx.originTimer = character.state.ai.originInterval > 0 ? character.state.ai.originInterval : ctx.originConfig.interval
 }
 
 /**

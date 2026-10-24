@@ -38,9 +38,9 @@ const walkInto = (
         const contacts = queryColliderContacts(hw.shared.world, entity.mainCollider, hw.tracker.pairsInvolving(entity.mainCollider.handle))
             .filter(c => collisionCategoryOf(c.otherCollisionGroups) !== 'character')
         const next = resolveGroundState(contacts, entity.body.handle, gs, DT)
-        entity.isOnGround = next.isOnGround
-        entity.groundNormal = next.groundNormal
-        entity.groundKeepTimer = next.groundKeepTimer
+        entity.state.physics.isOnGround = next.isOnGround
+        entity.state.physics.groundNormal = next.groundNormal
+        entity.state.physics.groundKeepTimer = next.groundKeepTimer
         gs = next
         entity.stateMachine.setInput(dir.dx, dir.dz, false, false, false)
         entity.stateMachine.update(DT, entity)

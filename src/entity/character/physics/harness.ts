@@ -17,7 +17,6 @@ import {CHARACTER_LINEAR_DAMPING, CHARACTER_SEPARATION_SPEED} from './constants.
 import {createCharacterStateMachine} from '../../../character/state_machine/machine.ts'
 import {createCombatComponent} from '../../../character/combat/types.ts'
 import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
-import {createBodyEnvironment} from '../../../physics/environment.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import {CHARACTER_COLLISION_GROUP, CHARACTER_COLLISION_MASK} from '../constants.ts'
 import {HUMANOID_BODY_FORM} from '../body_form/index.ts'
@@ -84,48 +83,25 @@ export const makeChar = (
 
     /* 测试武器：长剑（真实武器运行时，含攻击链） */
     const runtime = createWeaponRuntime('long_sword')
-    return {
+    const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 100)
+    const state = createTestCharacterState({
         id,
         config: {speed, jumpHeight: 2, scale: 1},
+        combat,
+        bodyState: {holdMode: runtime.holdMode},
+    })
+    const stateMachine = createCharacterStateMachine()
+    return {
+        state,
         mesh: null!,
         wireframe: undefined,
         appearanceGroup: null!,
         body,
         mainCollider,
         colliders: [mainCollider],
-        isOnGround: true,
-        groundNormal: {x: 0, y: 1, z: 0},
-        groundKeepTimer: 0,
-        groundBodyHandle: null,
-        airborneTime: 0,
-        groundedTime: 0,
-        rowText: '',
-        navEnabled: true,
-        isPlayer: false,
-        peaceStrategy: 'patrol',
-        combatStrategy: 'tactical',
-        originStrategy: 'resident',
-        originInterval: 20,
-        chaseLeashRadius: 20, aiBlockDuration: 0.4, aiBlockCooldown: 1.2,
-        isDying: false,
-        dyingTimer: 0,
-        dyingFallDirX: 0,
-        dyingFallDirZ: 0,
-        dyingFallAngle: 0,
-        knockdownFallDirX: 0,
-        knockdownFallDirZ: 0,
-        knockdownFallAngle: 0,
-        lockPoints: [],
-        interactTargetActive: false,
-        interactTargetX: 0,
-        interactTargetZ: 0,
-        /* 测试专用最小 combat（真实组件，仅倾向设为无条件敌对；避免手写字段随组件结构漂移） */
-        combat: createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 100),
-        bodyState: {holdMode: runtime.holdMode},
-        environment: createBodyEnvironment(),
-        stateMachine: createCharacterStateMachine(),
-        state: createTestCharacterState({}),
+        stateMachine,
     }
+
 }
 
 /** 构造静态箱子（场景默认碰撞组，摩擦 0.5） */
@@ -274,9 +250,9 @@ export const tick = (
         hw.tracker.pairsInvolving(entity.mainCollider.handle),
     ).filter(c => collisionCategoryOf(c.otherCollisionGroups) !== 'character')
     const next = resolveGroundState(contacts, entity.body.handle, gs, DT)
-    entity.isOnGround = next.isOnGround
-    entity.groundNormal = next.groundNormal
-    entity.groundKeepTimer = next.groundKeepTimer
+    entity.state.physics.isOnGround = next.isOnGround
+    entity.state.physics.groundNormal = next.groundNormal
+    entity.state.physics.groundKeepTimer = next.groundKeepTimer
     entity.stateMachine.setInput(dx, dz, jump, false)
     entity.stateMachine.update(DT, entity)
     return next
@@ -303,9 +279,9 @@ export const tickMulti = (
             hw.tracker.pairsInvolving(entity.mainCollider.handle),
         ).filter(c => collisionCategoryOf(c.otherCollisionGroups) !== 'character')
         const gs = resolveGroundState(contacts, entity.body.handle, states[i].gs, DT)
-        entity.isOnGround = gs.isOnGround
-        entity.groundNormal = gs.groundNormal
-        entity.groundKeepTimer = gs.groundKeepTimer
+        entity.state.physics.isOnGround = gs.isOnGround
+        entity.state.physics.groundNormal = gs.groundNormal
+        entity.state.physics.groundKeepTimer = gs.groundKeepTimer
         states[i].gs = gs
     }
 
@@ -334,9 +310,9 @@ export const tickMulti = (
         const ai = byBody.get(bodyA.handle)
         const aj = byBody.get(bodyB.handle)
         if (!ai || !aj) continue
-        if (ai.combat.isDead || aj.combat.isDead) continue
+        if (ai.state.combat.isDead || aj.state.combat.isDead) continue
 
-        const key = ai.id < aj.id ? `${ai.id}-${aj.id}` : `${aj.id}-${ai.id}`
+        const key = ai.state.identity.id < aj.state.identity.id ? `${ai.state.identity.id}-${aj.state.identity.id}` : `${aj.state.identity.id}-${ai.state.identity.id}`
         if (separated.has(key)) continue
         separated.add(key)
 
@@ -346,14 +322,14 @@ export const tickMulti = (
         const sep = computeSeparation({
             aiX: aPos.x, aiZ: aPos.z,
             ajX: bPos.x, ajZ: bPos.z,
-            radiusA: maxHalf * ai.config.scale,
-            radiusB: maxHalf * aj.config.scale,
+            radiusA: maxHalf * ai.state.config.scale,
+            radiusB: maxHalf * aj.state.config.scale,
         }, CHARACTER_SEPARATION_SPEED)
         if (!sep) continue
 
         /* 斜坡上水平平移需要沿坡面补偿 Y（与 world.ts 一致） */
-        const aDy = separationSlopeDy(ai.isOnGround, ai.groundNormal, sep.aiDx, sep.aiDz)
-        const bDy = separationSlopeDy(aj.isOnGround, aj.groundNormal, sep.ajDx, sep.ajDz)
+        const aDy = separationSlopeDy(ai.state.physics.isOnGround, ai.state.physics.groundNormal, sep.aiDx, sep.aiDz)
+        const bDy = separationSlopeDy(aj.state.physics.isOnGround, aj.state.physics.groundNormal, sep.ajDx, sep.ajDz)
         bodyA.setTranslation({x: aPos.x + sep.aiDx, y: aPos.y + aDy, z: aPos.z + sep.aiDz}, true)
         bodyB.setTranslation({x: bPos.x + sep.ajDx, y: bPos.y + bDy, z: bPos.z + sep.ajDz}, true)
 

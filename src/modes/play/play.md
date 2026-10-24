@@ -39,7 +39,7 @@
 
 - 按下切换：已锁定 → 解除；未锁定 → 搜索并锁定；再次按下同样解除。绑定默认中键、可改绑键盘（鼠标路径走 `mousedown` 的 `matchesMouseButton`，键盘路径走 `wasActionPressed` 边沿）；手动拖拽旋转视角累计超过点击阈值（5px，与攻击 click/drag 判定一致）后解除，避免攻击点击时的指针抖动误解除。
 - 选取规则（`src/modes/play/lock_on.ts` 的 `selectLockOnTarget`）：以玩家为圆心、水平距离 ≤ `LOCK_ON_RADIUS = 10` m，且相对**镜头水平朝向**偏角 ≤ `LOCK_ON_HALF_ANGLE = 60°` 的候选**锁定点**中，取偏角最小者（偏角相同取更近者）。候选 = 玩家可攻击角色（`combat.attackTendency` 判定，与近战命中过滤一致，排除玩家自身与已死亡角色）的全部锁定点。
-- 锁定点（`src/character/lock_point.ts`）：每个角色恒有一个**默认锁定点 = 身体最中心**（`body.translation()`，下标 0），另有可配置的额外锁定点数组 `CharacterEntity.lockPoints`（关节 id + **关节本地**三维偏移；找不到关节的点跳过）。解析时按关节 Group（`Group.name = 关节 id`）刷新 `matrixWorld` 后 `localToWorld`，逐帧跟随动画。
+- 锁定点（`src/character/lock_point.ts`）：每个角色恒有一个**默认锁定点 = 身体最中心**（`body.translation()`，下标 0），另有可配置的额外锁定点数组 `CharacterState.lockPoints`（关节 id + **关节本地**三维偏移；找不到关节的点跳过）。解析时按关节 Group（`Group.name = 关节 id`）刷新 `matrixWorld` 后 `localToWorld`，逐帧跟随动画。
 - 配置入口：编辑模式角色面板「锁定点」区——默认身体中心点不可删除，额外点可增（关节下拉 + X/Y/Z 偏移）可删可改，Apply 经 `CharacterSystem.setLockPoints` 写入；持久化为 `CharacterSaveConfig.lockPoints`（存档 v5，旧档缺失回退空数组、非法条目安全剔除）。
 - 锁定期间：相机环绕角以 `LOCK_ON_TURN_FACTOR = 10/s` 的指数速率平滑转向「玩家 → 目标」方向；视点以 `LOCK_ON_BLEND_FACTOR = 8/s` 在玩家与目标瞄准点之间混合（锁定/解除均平滑过渡，不跳变；解除后沿用最后瞄准点淡出回玩家），目标位于玩家与相机连线上，玩家保持入镜；仍可滚轮缩放、仍可移动/攻击。
 - 锁定标记：白色圆点（`src/modes/play/lock_marker.ts`，直径 `LOCK_MARKER_DIAMETER`，关闭深度测试不被模型遮挡）标记**命中的锁定点**（`PlayerLockOn.getAimPoint()`，与相机瞄准点同一位置），目标失效或锁定点被移除即隐藏。

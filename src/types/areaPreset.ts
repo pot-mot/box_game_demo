@@ -2,7 +2,7 @@
  * 区域预设标识（中立定义）。
  *
  * 放在通用类型层而非 `entity/area`，避免 `inventory/` 等下层模块
- * 反向依赖实体层造成循环依赖；具体「预设 → 材质 + 场配置」映射由 `entity/area/presets.ts` 提供。
+ * 反向依赖实体层造成循环依赖；预设标识由调用方自行组合材质与物理场。
  */
 export const AREA_PRESET_IDS = ['water', 'air', 'force_field'] as const
 export type AreaPresetId = typeof AREA_PRESET_IDS[number]

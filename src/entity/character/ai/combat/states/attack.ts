@@ -10,8 +10,8 @@ const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 export const attackHandler: CombatStateHandler = {
     enter: () => {},
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-        if (!target || target.combat.isDead) { setInput(0, 0, false); return }
+        const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+        if (!target || target.state.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.translation()
         const tp = target.body.translation()
@@ -19,7 +19,7 @@ export const attackHandler: CombatStateHandler = {
         const dist = v3Length(_dir)
 
         /* 武器恒存在（无技能槽模型），攻击动作参数与射程直接从装备武器读取 */
-        const weapon = character.combat.weapon
+        const weapon = character.state.combat.weapon
 
         /* 出招门控：目标在攻击检测箱内才出招（checker 缺失时回退圆形距离判定；近战无射程概念用常量默认值） */
         const fallbackRange = weapon.type === 'ranged' ? weapon.range : MELEE_FALLBACK_DETECT_RANGE
@@ -31,11 +31,11 @@ export const attackHandler: CombatStateHandler = {
         const len = dist > 0.001 ? dist : 1
         const adx = _dir.x / len
         const adz = _dir.z / len
-        const canStart = canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
+        const canStart = canStartAttack(character.state.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
 
         if (weapon.type === 'ranged') {
             /* 远程：站定转身瞄准 → 开火（射击动作期间保持面向目标、原地不动） */
-            if (character.combat.attackActive) {
+            if (character.state.combat.attackActive) {
                 ctx.combatAimActive = true
                 setInput(0, 0, false)
             } else if (canStart) {
@@ -47,7 +47,7 @@ export const attackHandler: CombatStateHandler = {
         }
 
         /* 近战：攻击中持续按住 attack → 缓冲自动续链；未攻击时起手段就绪才起链 */
-        if (character.combat.attackActive || canStart) {
+        if (character.state.combat.attackActive || canStart) {
             setInput(adx, adz, true)
         } else {
             setInput(0, 0, false)
@@ -75,12 +75,12 @@ export const attackHandler: CombatStateHandler = {
         {
             to: 'chase',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 const detRange = weapon.detectionRange
                 /* 出攻击检测箱 → 追击（checker 缺失时回退距离判定；近战用常量默认值） */
                 const fallbackRange = weapon.type === 'ranged' ? weapon.range : MELEE_FALLBACK_DETECT_RANGE
@@ -93,12 +93,12 @@ export const attackHandler: CombatStateHandler = {
         {
             to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return true
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return true
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const detRange = character.combat.weapon.detectionRange
+                const detRange = character.state.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

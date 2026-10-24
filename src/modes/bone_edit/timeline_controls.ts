@@ -1,11 +1,12 @@
 import {
     ANIM_SELECT_ID,
     BONE_FORM_SELECT_ID,
-    BONE_MODE_SCRIPT_ID,
-    BONE_MODE_TRACKS_ID,
+    BONE_TIMELINE_ZOOM_ID,
     HANDEDNESS_SELECT_ID,
     TIMELINE_MAX_HEIGHT,
     TIMELINE_MIN_HEIGHT,
+    TIMELINE_MAX_PX_PER_SEC,
+    TIMELINE_MIN_PX_PER_SEC,
 } from './constants.ts'
 import {HANDEDNESS, HANDEDNESS_LABELS} from '../../character/handedness.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
@@ -16,20 +17,17 @@ import {createIcon} from '../../ui/icons/icon.ts'
 export interface TimelineControls {
     /** 控制条容器（武器控制等需追加控件） */
     readonly bar: HTMLElement
-    readonly modeTracksBtn: HTMLButtonElement
-    readonly modeScriptBtn: HTMLButtonElement
     readonly formSelect: HTMLSelectElement
-    /** 仅轨道模式可见的控制（函数编排模式隐藏） */
-    readonly trackOnly: readonly HTMLElement[]
     readonly playBtn: HTMLButtonElement
     readonly stopBtn: HTMLButtonElement
     readonly loopInput: HTMLInputElement
     readonly animSelect: HTMLSelectElement
     readonly newAnimBtn: HTMLButtonElement
     readonly renameAnimBtn: HTMLButtonElement
-    readonly delAnimBtn: HTMLButtonElement
     readonly durationInput: HTMLInputElement
     readonly speedInput: HTMLInputElement
+    /** 时间轴缩放（px/秒）；回车生效 */
+    readonly zoomInput: HTMLInputElement
     readonly addKeyBtn: HTMLButtonElement
     readonly addEventBtn: HTMLButtonElement
     readonly delKeyBtn: HTMLButtonElement
@@ -45,6 +43,13 @@ export interface TimelineControls {
     readonly handednessLabel: HTMLElement
     /** 当前面板高度（px，拖拽顶边改变） */
     readonly getHeight: () => number
+}
+
+/** 解析时间轴缩放输入；无效返回 undefined，有效则夹取到允许范围 */
+export const normalizeTimelineZoom = (raw: string): number | undefined => {
+    const value = Number(raw)
+    if (!Number.isFinite(value) || value <= 0) return undefined
+    return Math.max(TIMELINE_MIN_PX_PER_SEC, Math.min(TIMELINE_MAX_PX_PER_SEC, value))
 }
 
 /** 创建控制条按钮（内容与标题由调用方本地化） */
@@ -101,14 +106,6 @@ export const createTimelineControls = (
     bar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 8px;flex-shrink:0;flex-wrap:wrap'
     container.appendChild(bar)
 
-    const modeTracksBtn = makeTextButton('bone_edit.mode.tracks')
-    modeTracksBtn.id = BONE_MODE_TRACKS_ID
-    modeTracksBtn.classList.add('is-active')
-    modeTracksBtn.setAttribute('aria-pressed', 'true')
-    const modeScriptBtn = makeTextButton('bone_edit.mode.script')
-    modeScriptBtn.id = BONE_MODE_SCRIPT_ID
-    modeScriptBtn.setAttribute('aria-pressed', 'false')
-
     const formLabel = document.createElement('span')
     localizeText(formLabel, 'bone_edit.form')
     const formSelect = document.createElement('select')
@@ -142,7 +139,6 @@ export const createTimelineControls = (
     localizeTitle(animSelect, 'bone_edit.timeline.anim_list_title')
     animSelect.style.cssText = 'max-width:200px'
     const newAnimBtn = makeTextButton('bone_edit.timeline.new_anim')
-    const delAnimBtn = makeTextButton('bone_edit.timeline.del_anim')
     const renameAnimBtn = makeTextButton('bone_edit.timeline.rename_anim')
 
     const durationInput = document.createElement('input')
@@ -157,6 +153,15 @@ export const createTimelineControls = (
     speedInput.step = '0.1'
     speedInput.min = '0'
     speedInput.style.width = '50px'
+    const zoomInput = document.createElement('input')
+    zoomInput.id = BONE_TIMELINE_ZOOM_ID
+    zoomInput.type = 'number'
+    zoomInput.className = 'dc-input'
+    zoomInput.step = '10'
+    zoomInput.min = String(TIMELINE_MIN_PX_PER_SEC)
+    zoomInput.max = String(TIMELINE_MAX_PX_PER_SEC)
+    zoomInput.style.width = '64px'
+    localizeTitle(zoomInput, 'bone_edit.timeline.zoom_title')
 
     const addKeyBtn = makeTextButton('bone_edit.timeline.add_key', 'bone_edit.timeline.add_key_title')
     const addEventBtn = makeTextButton('bone_edit.timeline.add_event', 'bone_edit.timeline.add_event_title')
@@ -194,13 +199,15 @@ export const createTimelineControls = (
     localizeText(durationLabel, 'bone_edit.timeline.duration')
     const speedLabel = document.createElement('span')
     localizeText(speedLabel, 'bone_edit.timeline.speed')
+    const zoomLabel = document.createElement('span')
+    localizeText(zoomLabel, 'bone_edit.timeline.zoom')
     const handednessLabel = document.createElement('span')
     localizeText(handednessLabel, 'bone_edit.handedness')
 
     for (const el of [
-        modeTracksBtn, modeScriptBtn, formLabel, formSelect,
-        playBtn, stopBtn, loopCheck, animSelect, newAnimBtn, renameAnimBtn, delAnimBtn,
-        durationLabel, durationInput, speedLabel, speedInput,
+        formLabel, formSelect,
+        playBtn, stopBtn, loopCheck, animSelect, newAnimBtn, renameAnimBtn,
+        durationLabel, durationInput, speedLabel, speedInput, zoomLabel, zoomInput,
         addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn, onionBtn, undoBtn, redoBtn,
         exportBtn, importBtn, handednessLabel, handednessSelect,
     ]) {
@@ -209,15 +216,9 @@ export const createTimelineControls = (
 
     return {
         bar,
-        modeTracksBtn, modeScriptBtn, formSelect,
-        trackOnly: [
-            loopCheck, animSelect, newAnimBtn, renameAnimBtn, delAnimBtn,
-            durationLabel, durationInput, addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn,
-            onionBtn, undoBtn, redoBtn, exportBtn, importBtn,
-            handednessLabel, handednessSelect,
-        ],
-        playBtn, stopBtn, loopInput, animSelect, newAnimBtn, renameAnimBtn, delAnimBtn,
-        durationInput, speedInput, addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn,
+        formSelect,
+        playBtn, stopBtn, loopInput, animSelect, newAnimBtn, renameAnimBtn,
+        durationInput, speedInput, zoomInput, addKeyBtn, addEventBtn, delKeyBtn, copyBtn, pasteBtn,
         onionBtn, undoBtn, redoBtn, exportBtn, importBtn, handednessSelect,
         handednessLabel,
         getHeight: () => panelHeight,

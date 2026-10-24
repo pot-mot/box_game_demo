@@ -7,7 +7,6 @@
   - `shape` —— 体积几何判别联合：`{kind:'box',width,height,depth}` / `{kind:'sphere',radius}` / `{kind:'cylinder',radius,height}`（柱轴向 = 局部 +Y）。
   - `material` —— 视觉材质（`AREA_MATERIAL_IDS`：`water` / `air` / `force_field`），与物理无关，可动态切换。
   - `fields` —— 物理场，存在键即启用：`float`（浮力）/ `wind`（风）/ `gravity`（方向重力），可任意组合。
-- **预设**（`presets.ts` 的 `AREA_PRESETS` / `areaPresetConfig`）：`water`（float+水）/ `air`（wind+空气）/ `force_field`（gravity+力场）；预设标识定义在中立模块 [`src/types/areaPreset.ts`](../../types/areaPreset.ts)，避免下层反向依赖实体层。
 - **徽章**：`constants.ts` 的 `badgeOf(fields)` 按 `AREA_FIELD_IDS` 顺序取启用场的字母/底色（无场回退 `A`）。
 
 ## 物理
@@ -46,7 +45,6 @@
 | `constants.ts` | `AREA_FIELD_IDS` / `AREA_MATERIAL_IDS` / `AREA_SHAPE_KINDS` / `badgeOf` / `enabledFields` |
 | `validation.ts` | `AreaConfigSchema`（形状判别联合 + material + 可选场） |
 | `types/index.ts` | `AreaConfig` / `AreaShape` / `Area` / `AreaEntityContext` / `AreaInfo` |
-| `presets.ts` | `AREA_PRESETS` / `areaPresetConfig` |
 | `physics/constants.ts` | 各场默认值 + 角阻尼 + 数值积分点数 |
 | `physics/overlap.ts` | 形状重叠体积采样（`sampleOverlap`） |
 | `physics/world.ts` | `setupAreas(scene, physicsEnv)`：CRUD、`preSync`、`getRefractionMeshes` |
@@ -60,5 +58,5 @@
 - 区域无碰撞体：碰撞类别 `area` 仅服务 AI 导航排除与子弹穿透（既有），新增触发类语义需另配 sensor + `categoryCollisionGroups(..., 'area')`。
 - 帧内零分配：`overlap.ts` 与各场模块使用模块级临时向量 / 四元数复用；区域 `preSync` 逐帧调用，勿在循环内 new 对象。
 - 材质切换 / 几何变化走 `updateAreaGeometry` / `updateAreaMaterial`（重建并 dispose 旧资源；选中线框在几何变化后重建）。
-- 视觉与物理独立：`material` 与 `fields` 无强绑定，面板可自由组合；预设仅提供默认搭配。
+- 视觉与物理独立：`material` 与 `fields` 无强绑定，面板可自由组合。
 - 存档：`area` 为单一类型，旧 `area/water` 在 v14 起作为未知类型逐元素跳过（见 [`save_load.md`](../../save_load/save_load.md)）。

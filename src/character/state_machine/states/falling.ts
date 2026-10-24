@@ -61,25 +61,25 @@ export const fallingHandler: StateHandler = {
             guard: (input, entity) =>
                 isSupportedOn(entity, SLOPE_RECOVER_THRESHOLD)
                 && Math.hypot(input.dx, input.dz) > 0.001
-                && entity.groundedTime >= STATE_FLIP_MIN_TIME,
+                && entity.state.physics.groundedTime >= STATE_FLIP_MIN_TIME,
         },
         {
             to: 'idle',
             guard: (_input, entity) =>
                 isSupportedOn(entity, SLOPE_RECOVER_THRESHOLD)
-                && entity.groundedTime >= STATE_FLIP_MIN_TIME,
+                && entity.state.physics.groundedTime >= STATE_FLIP_MIN_TIME,
         },
         {
             to: 'rolling',
-            guard: (input, entity) => input.roll && entity.combat.rollSkill.cooldownTimer <= 0,
+            guard: (input, entity) => input.roll && entity.state.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',
-            guard: (_input, entity) => entity.combat.health <= 0,
+            guard: (_input, entity) => entity.state.combat.health <= 0,
         },
         {
             to: 'flinching',
-            guard: (_input, entity) => entity.combat.pendingFlinch && entity.combat.health > 0,
+            guard: (_input, entity) => entity.state.combat.pendingFlinch && entity.state.combat.health > 0,
         },
         {
             /* 空中攻击：下落中按攻击键且武器声明了空中链（死亡/受击优先级更高，故置于末尾） */

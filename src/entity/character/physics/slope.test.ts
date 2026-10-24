@@ -126,9 +126,9 @@ describe('斜坡上的角色强制分离', () => {
         for (let i = 0; i < 120; i++) {
             tickMulti(hw, states, [{dx: 0, dz: 0}, {dx: 0, dz: 0}])
         }
-        expect(a.isOnGround).toBe(true)
-        expect(b.isOnGround).toBe(true)
-        expect(a.groundNormal.y).toBeGreaterThan(0.5)
+        expect(a.state.physics.isOnGround).toBe(true)
+        expect(b.state.physics.isOnGround).toBe(true)
+        expect(a.state.physics.groundNormal.y).toBeGreaterThan(0.5)
 
         /* 记录贴坡基线（y − x 应保持恒定） */
         const pa = a.body.translation()

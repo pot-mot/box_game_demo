@@ -12,11 +12,8 @@
 
 - `CharacterState` 是角色唯一权威数据存储。
 - 生产运行时由 `entity/character/runtime.ts` 的 `CharacterRuntime` 持有 state 与引擎句柄。
-- `CharacterEntity` 上的 `config` / `combat` / `physics` / `ai` / `timers` / `interaction` 等同名属性是**委托访问器**，不是第二份存储：
-  - getter 直接返回 state 子域或字段；
-  - setter 直接写 state；
-  - 禁止在 `CharacterEntity` 或任何子系统另存副本。
-- 新代码优先使用 `entity.state.*`；旧代码经访问器迁移，P5 再评估是否移除访问器。
+- `CharacterEntity` 只保留 `state`、引擎句柄与状态机逻辑对象，不再暴露游戏数据访问器。
+- 所有游戏数据读写统一使用 `entity.state.*`；禁止在 `CharacterEntity` 或任何子系统另存副本。
 
 ## 子域
 

@@ -10,15 +10,15 @@ const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 export const kiteHandler: CombatStateHandler = {
     enter: () => {},
     update: (_dt, ctx, character, allCharacters, setInput) => {
-        const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-        if (!target || target.combat.isDead) { setInput(0, 0, false); return }
+        const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+        if (!target || target.state.combat.isDead) { setInput(0, 0, false); return }
 
         const pos = character.body.translation()
         const tp = target.body.translation()
         v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
         const dist = v3Length(_dir)
 
-        const weapon = character.combat.weapon
+        const weapon = character.state.combat.weapon
         if (weapon.type !== 'ranged') { setInput(0, 0, false); return }
 
         if (dist < 0.01) { setInput(0, 0, false); return }
@@ -26,8 +26,8 @@ export const kiteHandler: CombatStateHandler = {
         const adx = _dir.x / len
         const adz = _dir.z / len
 
-        const canStart = canStartAttack(character.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
-        if (character.combat.attackActive) {
+        const canStart = canStartAttack(character.state.combat, {dx: adx, dz: adz, holdDuration: 0, attackKey: 'light'})
+        if (character.state.combat.attackActive) {
             /* 射击动作期间原地站定（朝向由 world 锁到目标） */
             ctx.combatAimActive = true
             setInput(0, 0, false)
@@ -53,9 +53,9 @@ export const kiteHandler: CombatStateHandler = {
                 if (timeout <= 0) return false
                 if (ctx.combatStateTime < timeout) return false
                 /* 需要目标在攻击距离内（近战用攻击检测箱，checker 缺失时回退距离判定） */
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
-                const weapon = character.combat.weapon
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
+                const weapon = character.state.combat.weapon
                 if (weapon.type === 'melee' && ctx.attackDetectChecker) {
                     return ctx.attackDetectChecker(character, target)
                 }
@@ -86,12 +86,12 @@ export const kiteHandler: CombatStateHandler = {
         {
             to: 'volley',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return false
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return false
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const weapon = character.combat.weapon
+                const weapon = character.state.combat.weapon
                 if (weapon.type !== 'ranged') return false
                 return v3Length(_dir) > weapon.retreatRange * 1.5
             },
@@ -99,12 +99,12 @@ export const kiteHandler: CombatStateHandler = {
         {
             to: 'inactive',
             guard: (ctx, character, allCharacters) => {
-                const target = allCharacters.find(c => c.id === ctx.combatTargetId)
-                if (!target || target.combat.isDead) return true
+                const target = allCharacters.find(c => c.state.identity.id === ctx.combatTargetId)
+                if (!target || target.state.combat.isDead) return true
                 const pos = character.body.translation()
                 const tp = target.body.translation()
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
-                const detRange = character.combat.weapon.detectionRange
+                const detRange = character.state.combat.weapon.detectionRange
                 return v3Length(_dir) >= detRange * COMBAT_LOSE_RANGE_FACTOR
             },
         },

@@ -133,11 +133,11 @@ describe('角色 panelInfo 同步', () => {
             defense: {physical: 1, magic: 0},
             equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'}},
         }), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         /* chest 未知 id 回退空槽：物理 1+2，魔法 0+2 */
-        expect(entity.combat.defense).toEqual({physical: 3, magic: 2})
+        expect(entity.state.combat.defense).toEqual({physical: 3, magic: 2})
         /* 原始装备表保留（未知 id 不写回） */
-        expect(entity.combat.equipment.armor).toEqual({head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'})
+        expect(entity.state.combat.equipment.armor).toEqual({head: 'iron_helmet', chest: 'no_such_armor', legs: 'mage_leggings'})
     })
 
     it('add() 装备攻击加成与移速乘数：按类别区分、多件相乘并反映到列表行', () => {
@@ -145,9 +145,9 @@ describe('角色 panelInfo 同步', () => {
             /* 法师兜帽（魔攻+1）、战臂甲（物攻+2、移速×0.97）、疾行靴（移速×1.15） */
             equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'mage_hood', arms: 'battle_bracers', legs: 'swift_boots'}},
         }), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
-        expect(entity.combat.attackBonus).toEqual({physical: 2, magic: 1})
-        expect(entity.combat.moveSpeedMultiplier).toBeCloseTo(0.97 * 1.15, 6)
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
+        expect(entity.state.combat.attackBonus).toEqual({physical: 2, magic: 1})
+        expect(entity.state.combat.moveSpeedMultiplier).toBeCloseTo(0.97 * 1.15, 6)
     })
 
     it('add() 带基础攻击加成：有效攻击加成 = 基础攻击 + 装备加成', () => {
@@ -155,22 +155,22 @@ describe('角色 panelInfo 同步', () => {
             baseAttack: {physical: 2, magic: 3},
             equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {arms: 'battle_bracers'}},
         }), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
-        expect(entity.combat.baseAttack).toEqual({physical: 2, magic: 3})
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
+        expect(entity.state.combat.baseAttack).toEqual({physical: 2, magic: 3})
         /* 战臂甲物攻 +2 → 有效物攻 2 + 2 = 4；魔法无装备加成 → 3 */
-        expect(entity.combat.attackBonus).toEqual({physical: 4, magic: 3})
+        expect(entity.state.combat.attackBonus).toEqual({physical: 4, magic: 3})
     })
 
     it('updateCharacterConfig 修改基础攻击：写入战斗组件并与装备加成汇总', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
             baseAttack: {physical: 1, magic: 4},
             equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'mage_hood'}},
         })
-        expect(entity.combat.baseAttack).toEqual({physical: 1, magic: 4})
+        expect(entity.state.combat.baseAttack).toEqual({physical: 1, magic: 4})
         /* 法师兜帽魔攻 +1 → 有效魔法攻击 4 + 1 = 5 */
-        expect(entity.combat.attackBonus).toEqual({physical: 1, magic: 5})
+        expect(entity.state.combat.attackBonus).toEqual({physical: 1, magic: 5})
     })
 
     it('updateCharacterConfig 装备护甲后立即重算有效防御并同步 panelInfo', () => {
@@ -179,8 +179,8 @@ describe('角色 panelInfo 同步', () => {
             baseDefense: {physical: 0, magic: 1},
             equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {chest: 'iron_plate'}},
         })
-        const entity = system.getAll().find(e => e.id === id)!
-        expect(entity.combat.defense).toEqual({physical: 3, magic: 1})
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
+        expect(entity.state.combat.defense).toEqual({physical: 3, magic: 1})
     })
 
     it('updateCharacterConfig 换装重甲与加速鞋：防御 / 攻击 / 移速一并重算', () => {
@@ -189,16 +189,16 @@ describe('角色 panelInfo 同步', () => {
             baseDefense: {physical: 0, magic: 1},
             equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {chest: 'iron_plate', arms: 'iron_bracers', legs: 'wind_boots'}},
         })
-        const entity = system.getAll().find(e => e.id === id)!
-        expect(entity.combat.defense).toEqual({physical: 5, magic: 2})
-        expect(entity.combat.attackBonus).toEqual({physical: 1, magic: 0})
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
+        expect(entity.state.combat.defense).toEqual({physical: 5, magic: 2})
+        expect(entity.state.combat.attackBonus).toEqual({physical: 1, magic: 0})
         /* 铁胸甲 ×0.9 × 疾风靴 ×1.25 = 1.125 → 有效移速 6.75 */
-        expect(entity.combat.moveSpeedMultiplier).toBeCloseTo(1.125, 6)
+        expect(entity.state.combat.moveSpeedMultiplier).toBeCloseTo(1.125, 6)
     })
 
     it('updateCharacterConfig 修改韧性属性：写入战斗组件，且基础上界变更后按装备重算上界', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
 
         system.updateCharacterConfig(id, {
             poiseMax: 30,
@@ -207,29 +207,29 @@ describe('角色 panelInfo 同步', () => {
             knockdownDuration: 1,
             getUpDuration: 0.9,
         })
-        expect(entity.config.poiseMax).toBe(30)
-        expect(entity.combat.basePoiseMax).toBe(30)
+        expect(entity.state.config.poiseMax).toBe(30)
+        expect(entity.state.combat.basePoiseMax).toBe(30)
         /* 未装备护甲：上界等于基础上界 */
-        expect(entity.combat.poiseMax).toBe(30)
-        expect(entity.combat.poiseRegenDelay).toBe(2)
-        expect(entity.combat.poiseRegenPerSec).toBe(12)
-        expect(entity.combat.knockdownDuration).toBe(1)
-        expect(entity.combat.getUpDuration).toBe(0.9)
+        expect(entity.state.combat.poiseMax).toBe(30)
+        expect(entity.state.combat.poiseRegenDelay).toBe(2)
+        expect(entity.state.combat.poiseRegenPerSec).toBe(12)
+        expect(entity.state.combat.knockdownDuration).toBe(1)
+        expect(entity.state.combat.getUpDuration).toBe(0.9)
 
         /* 装备铁盔（poise 2）+ 铁胸甲（poise 4）：上界重算为 30 + 6 */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
             equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {head: 'iron_helmet', chest: 'iron_plate'}},
         })
-        expect(entity.combat.poiseMax).toBe(36)
+        expect(entity.state.combat.poiseMax).toBe(36)
 
         /* 仅改基础上界：重算时保留护甲汇总 → 40 + 6 */
         system.updateCharacterConfig(id, {poiseMax: 40})
-        expect(entity.combat.poiseMax).toBe(46)
+        expect(entity.state.combat.poiseMax).toBe(46)
     })
 
     it('护甲外观随装备同步装配与移除（换装不残留部件）', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         const before = countMeshes(entity)
 
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
@@ -243,7 +243,7 @@ describe('角色 panelInfo 同步', () => {
 
     it('护甲 hideBodyParts 顶替身体部件：装备后隐藏、卸下后还原', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
 
         /* 疾行靴顶替小腿；铁盔 / 铁胸甲为叠加件，头部与躯干保持可见 */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
@@ -264,7 +264,7 @@ describe('角色 panelInfo 同步', () => {
 
     it('肢体组件：装备后顶替人类部位并计入数值，卸下后还原', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         const before = countMeshes(entity)
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
         expect(findJointPart(entity, 'spine')!.visible).toBe(true)
@@ -276,20 +276,20 @@ describe('角色 panelInfo 同步', () => {
         expect(countMeshes(entity)).toBeGreaterThan(before)
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(false)
         expect(findJointPart(entity, 'spine')!.visible).toBe(false)
-        expect(entity.combat.defense).toEqual({physical: 3, magic: 1})
-        expect(entity.combat.equipment.limb).toEqual({head: 'orc_head', body: 'skeleton_body'})
+        expect(entity.state.combat.defense).toEqual({physical: 3, magic: 1})
+        expect(entity.state.combat.equipment.limb).toEqual({head: 'orc_head', body: 'skeleton_body'})
 
         /* 卸下肢体 → 数值回落、人类部位还原、外观部件不残留 */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {equipment: {limb: {}, weapon: {main_hand: 'long_sword'}, armor: {}}})
         expect(countMeshes(entity)).toBe(before)
         expect(findJointPart(entity, 'headNeck')!.visible).toBe(true)
         expect(findJointPart(entity, 'spine')!.visible).toBe(true)
-        expect(entity.combat.defense).toEqual({physical: 0, magic: 0})
+        expect(entity.state.combat.defense).toEqual({physical: 0, magic: 0})
     })
 
     it('护甲与肢体并存：两者顶替部位互不干扰，卸下护甲不还原肢体顶替的部位', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
 
         /* 疾行靴顶替小腿（护甲） + 兽人头颅顶替头部（肢体） */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, {
@@ -330,7 +330,7 @@ describe('角色 panelInfo 同步', () => {
         system.markPlayer(id)
         system.setPlayerMove(1, 0, false, 1, 0)
         system.update(1 / 60)
-        const entity = system.getAll().find(e => e.id === id)!
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
         /* 有移动输入后状态机离开 idle */
         expect(entity.stateMachine.currentState).not.toBe('idle')
         system.setPlayerMove(0, 0, false, 1, 0)
@@ -338,7 +338,7 @@ describe('角色 panelInfo 同步', () => {
 
     it('角色刚体质量恒为 1（击退力度回归保护），修改 scale 不影响质量', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
-        const entity = system.getAll().find(e => e.id === id)
+        const entity = system.getAll().find(e => e.state.identity.id === id)
         expect(entity).toBeDefined()
         expect(entity!.body.mass()).toBeCloseTo(1, 6)
         /* 重建碰撞体（scale 变化）后质量仍为 1 */

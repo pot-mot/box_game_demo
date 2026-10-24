@@ -284,8 +284,8 @@ const readSelectedAttack = (sel: CharacterEntity): {
     readonly charge?: ChargeTuning
     readonly ranged?: {readonly range: number; readonly bulletSpeed: number; readonly bulletKnockback: number; readonly bulletLifetime: number}
 } => {
-    const weapon = sel.combat.weapon
-    const cooldown = entryCooldownOfAttacks(sel.combat.attacks)
+    const weapon = sel.state.combat.weapon
+    const cooldown = entryCooldownOfAttacks(sel.state.combat.attacks)
     const charge = chargeTuningOfWeapon(weapon)
     if (weapon.type === 'ranged') {
         return {
@@ -1022,14 +1022,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const getSelected = (): CharacterEntity | undefined => {
         const id = ctx.getSelectedId()
         if (id === undefined) return undefined
-        return ctx.getAll().find(c => c.id === id)
+        return ctx.getAll().find(c => c.state.identity.id === id)
     }
 
     /** 武器标签文本（当前选中武器 + 伤害类型；随语言切换重译） */
     const renderWeaponTag = (): string => {
         const sel = getSelected()
         if (sel === undefined) return ''
-        const weapon = sel.combat.weapon
+        const weapon = sel.state.combat.weapon
         const damageTypeLabel = `  ·  ${translate(DAMAGE_TYPE_LABELS[weapon.damageType])}`
         const name = weaponDisplayName(weapon)
         return weapon.type === 'ranged'
@@ -1041,8 +1041,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const renderAttackSegmentTag = (): string => {
         const sel = getSelected()
         if (sel === undefined) return ''
-        const name = weaponDisplayName(sel.combat.weapon)
-        const activeSegment = sel.combat.activeSegment
+        const name = weaponDisplayName(sel.state.combat.weapon)
+        const activeSegment = sel.state.combat.activeSegment
         return activeSegment === undefined
             ? `${name} · ${translate('character.idle')}`
             : `${name} · ${segmentDisplayName(activeSegment)}`
@@ -1176,7 +1176,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     /** 刷新当前行为原点坐标展示（玩家或 AI 未激活时留空） */
     const refreshOriginValue = (sel: CharacterEntity | undefined): void => {
-        const origin = sel ? ctx.getOrigin?.(sel.id) : undefined
+        const origin = sel ? ctx.getOrigin?.(sel.state.identity.id) : undefined
         originCoordsTag.textContent = origin
             ? `${translate('character.origin.current')}: (${origin.x.toFixed(2)}, ${origin.y.toFixed(2)}, ${origin.z.toFixed(2)})`
             : ''
@@ -1196,9 +1196,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         setIfUnfocused(posX, sel.mesh.position.x.toFixed(2))
         setIfUnfocused(posY, sel.mesh.position.y.toFixed(2))
         setIfUnfocused(posZ, sel.mesh.position.z.toFixed(2))
-        setIfUnfocused(facingDeg, String(Math.round(ctx.getFacing?.(sel.id) ?? 0)))
-        setIfUnfocused(curHP, formatNumber(sel.combat.health))
-        setIfUnfocused(poiseInput, formatNumber(sel.combat.poise))
+        setIfUnfocused(facingDeg, String(Math.round(ctx.getFacing?.(sel.state.identity.id) ?? 0)))
+        setIfUnfocused(curHP, formatNumber(sel.state.combat.health))
+        setIfUnfocused(poiseInput, formatNumber(sel.state.combat.poise))
         refreshOriginValue(sel)
     }
 
@@ -1209,23 +1209,23 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         /* 重新回显即清除「待应用」标记：面板显示值与运行时状态重新对齐 */
         dirtyDynamic.clear()
 
-        speed.value = String(sel.config.speed)
-        jumpH.value = String(sel.config.jumpHeight)
-        scale.value = String(sel.config.scale)
-        handednessSelect.value = humanoidBodyStateOf(sel.bodyState).handedness
-        bodyFormSelect.value = bodyFormOf(sel.config.bodyFormId).id
-        applyEquipVisibility(sel.config.bodyFormId)
+        speed.value = String(sel.state.config.speed)
+        jumpH.value = String(sel.state.config.jumpHeight)
+        scale.value = String(sel.state.config.scale)
+        handednessSelect.value = humanoidBodyStateOf(sel.state.bodyState).handedness
+        bodyFormSelect.value = bodyFormOf(sel.state.config.bodyFormId).id
+        applyEquipVisibility(sel.state.config.bodyFormId)
 
-        maxHP.value = String(sel.combat.maxHealth)
-        curHP.value = String(sel.combat.health)
-        faction.value = String(sel.combat.faction)
-        tendSelect.value = sel.combat.tendencyConfig.tendencyId
-        targetFactionsInput.value = sel.combat.tendencyConfig.targetFactions?.join(',') ?? ''
+        maxHP.value = String(sel.state.combat.maxHealth)
+        curHP.value = String(sel.state.combat.health)
+        faction.value = String(sel.state.combat.faction)
+        tendSelect.value = sel.state.combat.tendencyConfig.tendencyId
+        targetFactionsInput.value = sel.state.combat.tendencyConfig.targetFactions?.join(',') ?? ''
         showTargetFactions()
 
         /* 攻击区：装备武器 + 数值覆写（类型由武器决定，动作时长由武器模组决定，均不在面板暴露）。
          * 按当前体形重建武器选项（天然类别仅其所属体形可选）。 */
-        const form = bodyFormOf(sel.config.bodyFormId)
+        const form = bodyFormOf(sel.state.config.bodyFormId)
         fillWeaponSelect(weaponSelect, false, form)
         fillWeaponSelect(offhandSelect, true, form)
         const attack = readSelectedAttack(sel)
@@ -1246,57 +1246,57 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         attackSegmentTag.textContent = renderAttackSegmentTag()
 
         /* 副手武器与持握模式回显（未知 / 已移除的副手武器视为无） */
-        const offhandWeapon = sel.combat.offhand?.weapon
+        const offhandWeapon = sel.state.combat.offhand?.weapon
         offhandSelect.value = offhandWeapon !== undefined && findWeaponPreset(offhandWeapon.id) !== undefined
             ? offhandWeapon.id
             : ''
         updateOffhandAvailability()
         rebuildHoldModeOptions()
-        holdModeSelect.value = humanoidBodyStateOf(sel.bodyState).holdMode
+        holdModeSelect.value = humanoidBodyStateOf(sel.state.bodyState).holdMode
 
         /* 护甲 / 肢体与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
         for (const [slot, select] of armorSelects) {
-            const piece = findArmorPreset(sel.combat.equipment.armor[slot])
+            const piece = findArmorPreset(sel.state.combat.equipment.armor[slot])
             select.value = piece !== undefined && piece.slot === slot ? piece.id : ''
         }
         for (const [slot, select] of limbSelects) {
-            const piece = findLimbPreset(sel.combat.equipment.limb[slot])
+            const piece = findLimbPreset(sel.state.combat.equipment.limb[slot])
             select.value = piece !== undefined && piece.slot === slot ? piece.id : ''
         }
-        baseDefPhys.value = formatNumber(sel.combat.baseDefense.physical)
-        baseDefMagic.value = formatNumber(sel.combat.baseDefense.magic)
-        baseAtkPhys.value = formatNumber(sel.combat.baseAttack.physical)
-        baseAtkMagic.value = formatNumber(sel.combat.baseAttack.magic)
-        poiseMaxInput.value = formatNumber(sel.combat.basePoiseMax)
-        poiseInput.value = formatNumber(sel.combat.poise)
-        poiseRegenDelayInput.value = formatNumber(sel.combat.poiseRegenDelay)
-        poiseRegenRateInput.value = formatNumber(sel.combat.poiseRegenPerSec)
-        knockdownDurationInput.value = formatNumber(sel.combat.knockdownDuration)
-        getUpDurationInput.value = formatNumber(sel.combat.getUpDuration)
+        baseDefPhys.value = formatNumber(sel.state.combat.baseDefense.physical)
+        baseDefMagic.value = formatNumber(sel.state.combat.baseDefense.magic)
+        baseAtkPhys.value = formatNumber(sel.state.combat.baseAttack.physical)
+        baseAtkMagic.value = formatNumber(sel.state.combat.baseAttack.magic)
+        poiseMaxInput.value = formatNumber(sel.state.combat.basePoiseMax)
+        poiseInput.value = formatNumber(sel.state.combat.poise)
+        poiseRegenDelayInput.value = formatNumber(sel.state.combat.poiseRegenDelay)
+        poiseRegenRateInput.value = formatNumber(sel.state.combat.poiseRegenPerSec)
+        knockdownDurationInput.value = formatNumber(sel.state.combat.knockdownDuration)
+        getUpDurationInput.value = formatNumber(sel.state.combat.getUpDuration)
         refreshStatFormulas()
 
         /* 额外锁定点回显（默认身体中心点固定，不在此列表） */
-        cachedLockPoints = sel.lockPoints.map((point): LockPointEditRow => ({
+        cachedLockPoints = sel.state.lockPoints.map((point): LockPointEditRow => ({
             jointId: point.jointId,
             offset: [formatNumber(point.offset[0]), formatNumber(point.offset[1]), formatNumber(point.offset[2])],
         }))
         refreshLockPointList()
 
-        playerCheck.checked = sel.isPlayer
-        peaceSelect.value = sel.peaceStrategy
-        combatSelect.value = sel.combatStrategy
-        navCheck.checked = sel.navEnabled
-        originSelect.value = sel.originStrategy
-        originIntervalInput.value = formatNumber(sel.originInterval)
-        chaseRadiusInput.value = formatNumber(sel.chaseLeashRadius)
-        aiBlockDurationInput.value = formatNumber(sel.aiBlockDuration)
-        aiBlockCooldownInput.value = formatNumber(sel.aiBlockCooldown)
-        aiSection.style.display = sel.isPlayer ? 'none' : ''
-        peaceRow.style.display = sel.isPlayer ? 'none' : ''
-        combatRow.style.display = sel.isPlayer ? 'none' : ''
-        navRow.style.display = sel.isPlayer ? 'none' : ''
-        applyBuildVisibility(sel.peaceStrategy, sel.isPlayer)
-        applyOriginVisibility(sel.originStrategy, sel.isPlayer)
+        playerCheck.checked = sel.state.identity.isPlayer
+        peaceSelect.value = sel.state.ai.peaceStrategy
+        combatSelect.value = sel.state.ai.combatStrategy
+        navCheck.checked = sel.state.ai.navEnabled
+        originSelect.value = sel.state.ai.originStrategy
+        originIntervalInput.value = formatNumber(sel.state.ai.originInterval)
+        chaseRadiusInput.value = formatNumber(sel.state.ai.chaseLeashRadius)
+        aiBlockDurationInput.value = formatNumber(sel.state.ai.aiBlockDuration)
+        aiBlockCooldownInput.value = formatNumber(sel.state.ai.aiBlockCooldown)
+        aiSection.style.display = sel.state.identity.isPlayer ? 'none' : ''
+        peaceRow.style.display = sel.state.identity.isPlayer ? 'none' : ''
+        combatRow.style.display = sel.state.identity.isPlayer ? 'none' : ''
+        navRow.style.display = sel.state.identity.isPlayer ? 'none' : ''
+        applyBuildVisibility(sel.state.ai.peaceStrategy, sel.state.identity.isPlayer)
+        applyOriginVisibility(sel.state.ai.originStrategy, sel.state.identity.isPlayer)
         refreshOriginValue(sel)
         showRanged()
         showCharge()
@@ -1315,15 +1315,15 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             const onApply = () => {
                 const cur = getSelected()
                 if (!cur) return
-                ctx.setTransform(cur.id,
+                ctx.setTransform(cur.state.identity.id,
                     {x: parseFloat(posX.value), y: parseFloat(posY.value), z: parseFloat(posZ.value)},
                     {x: 0, y: 0, z: 0},
                 )
                 /* 朝向（0-360°，0 = 世界 +Z 前方）：归一化后写入 facingAngles */
                 const fd = parseFloat(facingDeg.value)
-                if (!isNaN(fd)) ctx.setFacing?.(cur.id, fd)
-                if (playerCheck.checked) ctx.markPlayer(cur.id)
-                else if (cur.isPlayer) ctx.unmarkPlayer()
+                if (!isNaN(fd)) ctx.setFacing?.(cur.state.identity.id, fd)
+                if (playerCheck.checked) ctx.markPlayer(cur.state.identity.id)
+                else if (cur.state.identity.isPlayer) ctx.unmarkPlayer()
                 const isPlayer = playerCheck.checked
                 aiSection.style.display = isPlayer ? 'none' : ''
                 peaceRow.style.display = isPlayer ? 'none' : ''
@@ -1331,28 +1331,28 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 navRow.style.display = isPlayer ? 'none' : ''
                 applyBuildVisibility(peaceSelect.value, isPlayer)
                 applyOriginVisibility(originSelect.value, isPlayer)
-                ctx.setNavEnabled?.(cur.id, navCheck.checked)
+                ctx.setNavEnabled?.(cur.state.identity.id, navCheck.checked)
                 const peaceStrat = peaceSelect.value
                 if (isPeaceSubStrategy(peaceStrat)) {
-                    ctx.setPeaceStrategy?.(cur.id, peaceStrat)
+                    ctx.setPeaceStrategy?.(cur.state.identity.id, peaceStrat)
                 }
                 const combatStrat = combatSelect.value
                 if (isCombatSubStrategy(combatStrat)) {
-                    ctx.setCombatStrategy?.(cur.id, combatStrat)
+                    ctx.setCombatStrategy?.(cur.state.identity.id, combatStrat)
                 }
                 /* 行为原点策略：切换时按策略复位原点（见 world.setOriginStrategy） */
                 const originStrat = originSelect.value
                 if (isOriginSubStrategy(originStrat)) {
-                    ctx.setOriginStrategy?.(cur.id, originStrat)
+                    ctx.setOriginStrategy?.(cur.state.identity.id, originStrat)
                 }
                 const originInterval = parseFloat(originIntervalInput.value)
-                if (!isNaN(originInterval) && originInterval > 0) ctx.setOriginInterval?.(cur.id, originInterval)
+                if (!isNaN(originInterval) && originInterval > 0) ctx.setOriginInterval?.(cur.state.identity.id, originInterval)
                 const chaseRadius = parseFloat(chaseRadiusInput.value)
-                if (!isNaN(chaseRadius) && chaseRadius > 0) ctx.setChaseLeashRadius?.(cur.id, chaseRadius)
+                if (!isNaN(chaseRadius) && chaseRadius > 0) ctx.setChaseLeashRadius?.(cur.state.identity.id, chaseRadius)
                 const aiBlockDuration = parseFloat(aiBlockDurationInput.value)
-                if (!isNaN(aiBlockDuration) && aiBlockDuration > 0) ctx.setAIBlockDuration?.(cur.id, aiBlockDuration)
+                if (!isNaN(aiBlockDuration) && aiBlockDuration > 0) ctx.setAIBlockDuration?.(cur.state.identity.id, aiBlockDuration)
                 const aiBlockCooldown = parseFloat(aiBlockCooldownInput.value)
-                if (!isNaN(aiBlockCooldown) && aiBlockCooldown > 0) ctx.setAIBlockCooldown?.(cur.id, aiBlockCooldown)
+                if (!isNaN(aiBlockCooldown) && aiBlockCooldown > 0) ctx.setAIBlockCooldown?.(cur.state.identity.id, aiBlockCooldown)
                 /* 持久化建造配置：仅保留预设合法的条目（非法预设跳过，避免写入脏数据） */
                 if (peaceStrat === 'build') {
                     const boxTypes: BoxSpawnEntry[] = []
@@ -1371,7 +1371,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                             friction: parseFloat(bt.friction) || 0.3,
                         })
                     }
-                    ctx.setPeaceConfig?.(cur.id, {
+                    ctx.setPeaceConfig?.(cur.state.identity.id, {
                         buildInterval: parseFloat(buildIntervalInput.value) || 3,
                         boxTypes,
                     })
@@ -1425,15 +1425,15 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 const getUpValue = parseOpt(getUpDurationInput.value)
                 if (getUpValue !== undefined) poiseCfg.getUpDuration = getUpValue
                 /* 体形切换：先按所选基础模组运行时重构（骨架 / 外观 / 碰撞 / 装备槽），再应用其余配置 */
-                ctx.setBodyForm?.(cur.id, bodyFormSelect.value)
+                ctx.setBodyForm?.(cur.state.identity.id, bodyFormSelect.value)
                 /* 立即按新体形刷新装备区域可见性（不等下次回显） */
                 applyEquipVisibility(bodyFormSelect.value)
                 const handednessValue = handednessSelect.value
-                ctx.updateCharacterConfig?.(cur.id, {
+                ctx.updateCharacterConfig?.(cur.state.identity.id, {
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
                     scale: parseFloat(scale.value),
-                    ...(isHandedness(handednessValue) ? {bodyState: {...cur.bodyState, handedness: handednessValue}} : {}),
+                    ...(isHandedness(handednessValue) ? {bodyState: {...cur.state.bodyState, handedness: handednessValue}} : {}),
                     ...poiseCfg,
                 }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
                     baseDefense: readBaseDefense(),
@@ -1441,7 +1441,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     equipment: {
                         limb: limbLoadout,
                         weapon: {
-                            ...Object.fromEntries(Object.entries(cur.combat.equipment.weapon).filter(([key]) => key !== 'main_hand' && key !== 'off_hand')),
+                            ...Object.fromEntries(Object.entries(cur.state.combat.equipment.weapon).filter(([key]) => key !== 'main_hand' && key !== 'off_hand')),
                             main_hand: newAttack.weaponId,
                             ...(newOffhand !== null ? {off_hand: newOffhand.weaponId} : {}),
                         },
@@ -1450,12 +1450,12 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 }, newOffhand)
                 /* 当前韧性：0..最大韧性（换装导致上界变化时由 setPoise 夹取） */
                 const poiseValue = parseFloat(poiseInput.value)
-                if (!isNaN(poiseValue)) ctx.setPoise?.(cur.id, poiseValue)
+                if (!isNaN(poiseValue)) ctx.setPoise?.(cur.state.identity.id, poiseValue)
                 /* 持握模式：换装重置为默认后再按面板选择显式设置（不可用时 setHoldMode 回退默认模式） */
                 const holdValue = holdModeSelect.value
-                if (isHoldMode(holdValue)) ctx.setHoldMode?.(cur.id, holdValue)
+                if (isHoldMode(holdValue)) ctx.setHoldMode?.(cur.state.identity.id, holdValue)
                 /* 额外锁定点：默认身体中心点由运行时提供；非法偏移输入解析为 0（运行时仍会剔除） */
-                ctx.setLockPoints?.(cur.id, cachedLockPoints.map((point): LockPointConfig => ({
+                ctx.setLockPoints?.(cur.state.identity.id, cachedLockPoints.map((point): LockPointConfig => ({
                     jointId: point.jointId,
                     offset: [
                         parseFloat(point.offset[0]) || 0,
@@ -1465,12 +1465,12 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 })))
                 const updated = getSelected()
                 if (updated) {
-                    maxHP.value = String(updated.combat.maxHealth)
-                    curHP.value = String(updated.combat.health)
-                    baseAtkPhys.value = formatNumber(updated.combat.baseAttack.physical)
-                    baseAtkMagic.value = formatNumber(updated.combat.baseAttack.magic)
-                    poiseMaxInput.value = formatNumber(updated.combat.basePoiseMax)
-                    poiseInput.value = formatNumber(updated.combat.poise)
+                    maxHP.value = String(updated.state.combat.maxHealth)
+                    curHP.value = String(updated.state.combat.health)
+                    baseAtkPhys.value = formatNumber(updated.state.combat.baseAttack.physical)
+                    baseAtkMagic.value = formatNumber(updated.state.combat.baseAttack.magic)
+                    poiseMaxInput.value = formatNumber(updated.state.combat.basePoiseMax)
+                    poiseInput.value = formatNumber(updated.state.combat.poise)
                     refreshStatFormulas()
                 }
                 /* 应用后清除「待应用」标记，动态字段恢复逐帧实时刷新 */
@@ -1479,7 +1479,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
             const onDelete = () => {
                 const cur = getSelected()
-                if (cur) ctx.remove(cur.id)
+                if (cur) ctx.remove(cur.state.identity.id)
             }
             applyBtn.onclick = onApply
             deleteBtn.onclick = onDelete

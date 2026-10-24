@@ -95,7 +95,7 @@ describe('攻击键保持 / 连段预输入路由', () => {
         for (let i = 0; i < 180; i++) {
             frame()
             const p = system.getPlayerCharacter()
-            if (p?.isOnGround && p.stateMachine.currentState === 'idle') break
+            if (p?.state.physics.isOnGround && p.stateMachine.currentState === 'idle') break
         }
     }
 
@@ -107,21 +107,21 @@ describe('攻击键保持 / 连段预输入路由', () => {
         system.beginPlayerAttackHold('heavy')
         for (let i = 0; i < 20; i++) frame()
         const p = player()
-        expect(p.combat.attackHolding).toBe(true)
-        const charge = p.combat.attackCharge
+        expect(p.state.combat.attackHolding).toBe(true)
+        const charge = p.state.combat.attackCharge
         expect(charge).toBeGreaterThan(0.2)
 
         /* 松开：结束蓄力（置位 chargeCommitted），从已蓄力进度继续出招 */
         system.endPlayerAttackHold('heavy', 0.4)
         frame()
-        expect(p.combat.chargeCommitted).toBe(true)
-        expect(p.combat.attackHolding).toBe(false)
+        expect(p.state.combat.chargeCommitted).toBe(true)
+        expect(p.state.combat.attackHolding).toBe(false)
 
         /* 动作阶段（抬手 / 挥斩）再按住：不冻结、蓄力值不变（不会一段段增长） */
         system.beginPlayerAttackHold('heavy')
         for (let i = 0; i < 10; i++) frame()
-        expect(p.combat.attackHolding).toBe(false)
-        expect(p.combat.attackCharge).toBeCloseTo(charge, 6)
+        expect(p.state.combat.attackHolding).toBe(false)
+        expect(p.state.combat.attackCharge).toBeCloseTo(charge, 6)
     })
 
     it('预输入只在后摇窗口接受：抬手阶段按键被忽略（不连段，收招回 idle）', () => {
@@ -129,13 +129,13 @@ describe('攻击键保持 / 连段预输入路由', () => {
         system.setPlayerAttack('light')
         frame()
         const p = player()
-        expect(p.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
+        expect(p.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
 
         /* 抬手阶段按下轻击键：不写缓冲 */
         system.beginPlayerAttackHold('light')
         system.endPlayerAttackHold('light', 0.05)
         frame()
-        expect(p.combat.bufferedSegment).toBeUndefined()
+        expect(p.state.combat.bufferedSegment).toBeUndefined()
 
         /* 无缓冲：轻 1 完整播完（1.1s）后收招回 idle */
         for (let i = 0; i < 90 && p.stateMachine.currentState === 'attacking'; i++) frame()
@@ -147,19 +147,19 @@ describe('攻击键保持 / 连段预输入路由', () => {
         system.setPlayerAttack('light')
         frame()
         const p = player()
-        expect(p.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
+        expect(p.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_1')
 
         /* 推进到后摇（动作 0.6s ≈ 36 帧） */
-        for (let i = 0; i < 45 && p.combat.phaseIndex < 2; i++) frame()
-        expect(p.combat.phaseIndex).toBe(2)
+        for (let i = 0; i < 45 && p.state.combat.phaseIndex < 2; i++) frame()
+        expect(p.state.combat.phaseIndex).toBe(2)
 
         system.beginPlayerAttackHold('light')
         system.endPlayerAttackHold('light', 0.05)
         frame()
-        expect(p.combat.bufferedSegment?.id).toBe('long_sword_one_handed_light_2')
+        expect(p.state.combat.bufferedSegment?.id).toBe('long_sword_one_handed_light_2')
 
-        for (let i = 0; i < 60 && p.combat.activeSegment?.id !== 'long_sword_one_handed_light_2'; i++) frame()
-        expect(p.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
+        for (let i = 0; i < 60 && p.state.combat.activeSegment?.id !== 'long_sword_one_handed_light_2'; i++) frame()
+        expect(p.state.combat.activeSegment?.id).toBe('long_sword_one_handed_light_2')
     })
 
     it('蓄力重击释放后在后摇按下重击键：连到重击 2（不续蓄、不再瞬间完成）', () => {
@@ -167,21 +167,21 @@ describe('攻击键保持 / 连段预输入路由', () => {
         system.beginPlayerAttackHold('heavy')
         for (let i = 0; i < 20; i++) frame()
         const p = player()
-        expect(p.combat.attackHolding).toBe(true)
+        expect(p.state.combat.attackHolding).toBe(true)
         system.endPlayerAttackHold('heavy', 0.4)
 
         /* 从已蓄力进度推进到后摇 */
-        for (let i = 0; i < 70 && p.combat.phaseIndex < 2; i++) frame()
-        expect(p.combat.phaseIndex).toBe(2)
+        for (let i = 0; i < 70 && p.state.combat.phaseIndex < 2; i++) frame()
+        expect(p.state.combat.phaseIndex).toBe(2)
 
         system.beginPlayerAttackHold('heavy')
         system.endPlayerAttackHold('heavy', 0.05)
         frame()
-        expect(p.combat.bufferedSegment?.id).toBe('long_sword_one_handed_heavy_2')
+        expect(p.state.combat.bufferedSegment?.id).toBe('long_sword_one_handed_heavy_2')
 
-        for (let i = 0; i < 90 && p.combat.activeSegment?.id !== 'long_sword_one_handed_heavy_2'; i++) frame()
-        expect(p.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_2')
+        for (let i = 0; i < 90 && p.state.combat.activeSegment?.id !== 'long_sword_one_handed_heavy_2'; i++) frame()
+        expect(p.state.combat.activeSegment?.id).toBe('long_sword_one_handed_heavy_2')
         /* 新段入场：结束蓄力标记清零 */
-        expect(p.combat.chargeCommitted).toBe(false)
+        expect(p.state.combat.chargeCommitted).toBe(false)
     })
 })
