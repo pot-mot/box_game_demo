@@ -10,7 +10,7 @@
   - `BodyForm.skeleton`（`skeleton/`）：关节层级、骨骼段、**碰撞布局**、**受击子块**的唯一来源。
     碰撞箱 / 受击箱只读取骨架节点与骨架数据，**禁止**读取 appearance 部件几何。
   - `BodyForm.assemble` / `createModel`（`appearance/`）：网格、材质、装备外观；只消费骨架派生数据。
-  - `BodyForm.createAnimation`（`skeleton_animation/`）：动画模组、组合与 clip 播放；不能增删骨骼节点。
+  - `BodyForm.animation`（`skeleton_animation/`）：动画 provider（运行时系统 + 编辑器 base/attack clip）；不能增删骨骼节点。
   - `BodyForm.equipSlots` + `equipmentModules`（`state/` + `equipment/`）：槽位与装备模组。
     同一模组共享槽位的 `mountJointIds`（骨骼挂载配置），单件只声明数值与外观。
 - 注册表 `BODY_FORMS`（`index.ts`）；`bodyFormOf(id)` 对未知 / 缺省 id **安全回退人形**（存档容错）。
@@ -26,8 +26,8 @@
 
 - 体形专有的骨架 / 外观 / `form_state.ts` / `equip_slots.ts` / `equipment/` / `base_clips.ts` / `pose_fns.ts` / 动画系统
   一律落在 `body_form/<form>/`，**各自独立实现**；
-- **禁止**用 `jointRefs` / `clipProvider` 之类的参数化把不同体形塞进人形动画代码；
-- 世界主循环只消费 `BodyForm.createAnimation(...)` 返回的 `AppearanceSystem`（`update`）与 `createModel`，
+- 允许各体形提供自己的 `FormAnimationProvider`（基础 / 攻击 clip、静止姿态、可选叠加层），但**禁止**用「体形 id 分支」把不同体形塞进人形动画代码；
+- 世界主循环只消费 `BodyForm.animation.createSystem(...)` 返回的 `AppearanceSystem`（`update`）与 `createModel`，
   不 import 任何 `body_form/<form>/` 内部实现。
 
 > 顶层 `appearance/` 仅保留跨体形共用工具（`mesh_builder` / `weapon_mesh` / `weapon_trail` / `skeleton_bridge` / 共享类型与常量）。
@@ -36,7 +36,7 @@
 
 - **humanoid**（`body_form/humanoid/`）：自包含状态 / 骨架 / 受击块 / 模型 / 装配 / 姿态 / 动画系统 /
   基础与攻击 clip / 支撑手烘焙 / 护甲与肢体网格 / 武器与装备模组。
-  `createModel` 经 `createHumanoidModel`，`createAnimation = createAppearanceSystem`，`defaultWeaponId = 'unarmed'`。
+  `createModel` 经 `createHumanoidModel`，`animation = HUMANOID_ANIMATION`，`defaultWeaponId = 'unarmed'`。
   人形护甲 / 肢体预设数据位于 `humanoid/equipment/armor.ts` / `limb.ts`，由 `body_form/index.ts` 在装配时经 `character/armor/catalog.ts` 注册；`equipment/modules.ts` 负责按槽位批量生成装备模组。
 - **wolf**（`body_form/wolf/`）：四足；自包含骨架（`joints` + `bones` 层级段）/ 状态 / 外观 / `pose_fns.ts` / `clips.ts`；
   口含短剑 / 长剑横向咬持；撕咬轻 1–2、口含剑轻 1–3，重击均为单段蓄力。
@@ -45,27 +45,28 @@
 - **wyvern**（`body_form/wyvern/`）：双足飞龙（双足 + 双翼，共 4 肢）；骨架含关节 + 骨骼段（翼主链 / 尾 / 后足 / 颈头）；
   固定天然 `wyvern_claw`（五段爪击）；重击来自独立 `breath` 装备槽（火球 / 雷电 / 激光）。
 
-## 通用生物运行时（`body_form/common/creature_runtime/`）
+## 通用动画运行时（`body_form/common/`）
 
-狼 / 马 / wyvern 共用的**非人形**通用工具（非参数化人形代码）：
+四体形共用的**通用动画工具**（不是参数化人形代码）：
 
-- `model.ts`：`createCreatureModel` / `createCreatureAppearance`（低多面体部件；材质取自统一材质库；
+- `creature_runtime/model.ts`：`createCreatureModel` / `createCreatureAppearance`（低多面体部件；材质取自统一材质库；
   经 `mesh_builder` 挂到骨架关节组；支持武器位 + 碰撞可视化 + `alignYTo` 沿骨骼段定向）；
   装备外观由 `spec.equipmentAppearance` 注入（各体形 `appearance/equipment.ts` 构建真实网格），
   模型只负责生命周期与换装，不再生成统一占位色块。
-- `animation.ts`：`createCreatureAnimationSystem(provider)`（状态 / 段 → clip 播放；状态 / 段切换姿态混合；
-  行走 / 游泳按 `walkSpeedScale(horizontalSpeed)` 同步步频；播放后调用 `model.updateDeform()`；
-  动画只采样预烘焙 clip 并写入骨架，**不执行运行时 IK**）。
-- `state.ts`：`BodyFormStateDefinition` / `resolveBodyFormState`（基础属性 + 装备 → 最终数值）。
-- `equipment.ts`：生物装备外观公共装配器（体形提供尺寸 / 材质风格）。
-- `pose.ts`：`bakePoseClip`（逐帧欧拉角 / 带位置姿态 → clip）。
+- `skeleton_animation/form_animation.ts`：`createFormAnimationSystem(provider)` / `defineFormAnimation(provider)`
+  （状态 / 段 → clip 播放；状态 / 段切换姿态混合；行走 / 游泳按 `walkSpeedScale(horizontalSpeed)` 同步步频；
+  稀疏作者 clip 播放前回填静止姿态；播放后调用 `model.updateDeform()`；**不执行运行时 IK**）。
+- `skeleton_animation/authored_attack.ts`：跨体形作者攻击数据格式与编译器（`AuthoredAttackClip`）。
+- `creature_runtime/state.ts`：`BodyFormStateDefinition` / `resolveBodyFormState`（基础属性 + 装备 → 最终数值）。
+- `creature_runtime/equipment.ts`：生物装备外观公共装配器（体形提供尺寸 / 材质风格）。
+- `creature_runtime/pose.ts`：`bakePoseClip`（逐帧欧拉角 / 带位置姿态 → clip）。
 - `skeleton_animation/`：`composition.ts`（动画组合 / 单关节权重 / 模组烘焙）、`factory.ts`（姿态动画工厂）。
 
-各体形分包只提供自己的骨架、状态、部件、`pose_fns`、`clips`、装备模块与外观风格。
+各体形分包只提供自己的骨架、状态、部件、`pose_fns`、`clips`、`attack_clips`、装备模块与外观风格。
 
 ## BodyForm 字段（`common/types.ts`）
 
-`id` / `nameKey` / `state` / `skeleton` / `assemble` / `palette?` / `createModel` / `createAnimation` /
+`id` / `nameKey` / `state` / `skeleton` / `assemble` / `palette?` / `createModel` / `animation` /
 `equipSlots` / `equipmentModules` / `armorPieces?` / `limbPieces?` / `weapons` / `defaultWeaponId` /
 `editor` / `breathModules?` / `rollSpinTurns?` / `onFrame?`。
 

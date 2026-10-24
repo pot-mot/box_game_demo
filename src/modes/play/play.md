@@ -70,4 +70,3 @@
 ## 验证
 
 - 单元测试：`src/modes/play/lock_on.test.ts`（角度归一化、偏角优先选取、半径/角度门控、默认身体中心点、额外锁定点优选与跟随、未知关节跳过、目标失效/脱锁/移除自动解除、非敌对与无玩家情形）；`src/character/lock_point.test.ts`（锁定点配置清洗）；`src/entity/character/physics/lock_points.test.ts`（存档写入/序列化/`setLockPoints` 过滤）；`src/save_load/validation.test.ts`（v5 可选字段回退）；`src/modes/play/lock_marker.test.ts`（白点显示/隐藏与位置跟随）；`src/modes/control/player_control.test.ts`（拖拽阈值前不解除锁定、键盘绑定边沿触发、移动合成与翻滚边沿）；`src/input/registry.test.ts` 锁定默认中键绑定。
-- e2e：`e2e/operations_panel.spec.ts`（游玩模式鼠标分组列出「旋转视角 / 锁定目标」，中键改绑冲突确认）；`e2e/character_equipment.spec.ts`（面板添加额外锁定点并 Apply 回显）。

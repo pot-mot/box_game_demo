@@ -123,7 +123,7 @@ guard: (input, entity) => input.interact && entity.interactTargetActive
 
 ## 4. 骨骼动画
 
-### 4.1 程序化姿态（`src/entity/character/appearance/pose_fns.ts`）
+### 4.1 程序化姿态（`src/entity/character/body_form/humanoid/skeleton_animation/pose_fns.ts`）
 
 新增 `interactingPose(t, ctx)`：一个「伸手（0→0.45s）— 发力/下压（0.45→0.9s）」的非循环姿态。默认右臂前伸、躯干微前倾、膝盖微屈；持械时保持器械朝前臂外侧（不强制）。实现时复用文件内已有的关节常量与 `ZERO`，并在 `BASE_POSE_SAMPLERS` 与 `BASE_CLIP_META` 登记：
 
@@ -131,11 +131,11 @@ guard: (input, entity) => input.interact && entity.interactTargetActive
 interacting: {duration: INTERACTION_DURATION, loop: false}
 ```
 
-`PoseSampler` 的 key 联合类型会自动扩展，`getBaseClipForHoldMode` / `getBaseLayers` 随之支持。
+`PoseSampler` 的 key 联合类型会自动扩展，`getBaseClipForHoldMode` 随之支持。
 
-### 4.2 外观系统（`src/entity/character/appearance/system.ts`）
+### 4.2 外观系统（`src/entity/character/body_form/humanoid/skeleton_animation/system.ts`）
 
-- `BASE_CLIP_STATES` 与 `ClipState` 增加 `'interacting'`。
+- `BASE_CLIP_STATES` 与 `BaseClipState` 增加 `'interacting'`。
 - 无需特殊分支，走基础 clip 单层播放。
 
 > `adjustArmsForHoldMode` 仅对 idle/walking 生效，交互动画不受持握模式影响（有意：交互动作为通用伸手）。

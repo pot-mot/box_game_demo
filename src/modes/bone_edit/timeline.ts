@@ -40,7 +40,7 @@ export interface TimelineHost {
     readonly onFormChange: (formId: string) => void
 }
 
-/** 时间轴面板对外接口（index/pointer/e2e 使用） */
+/** 时间轴面板对外接口（index/pointer/测试使用） */
 export interface TimelinePanel {
     readonly container: HTMLElement
     readonly updater: (dt: number) => void

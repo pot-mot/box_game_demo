@@ -27,7 +27,7 @@ const MATERIAL_LABELS: Record<SurfaceMaterialId, StringLocaleKey> = {
     cloth: 'material.cloth',
 }
 
-/** 实体列表行文本（含坐标，供编辑模式列表 / e2e 读取世界位置） */
+/** 实体列表行文本（含坐标，供编辑模式列表 / 自动化测试读取世界位置） */
 export const formatRowText = (box: Box): string => {
     let text = `#${box.id}  (${box.mesh.position.x.toFixed(1)}, ${box.mesh.position.y.toFixed(1)}, ${box.mesh.position.z.toFixed(1)})  ${box.config.width}×${box.config.height}×${box.config.depth}  m:${box.config.mass}`
     const dest = box.runtime.destructible

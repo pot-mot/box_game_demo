@@ -52,7 +52,7 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
         {speed: ACTOR_SPEED, jumpHeight: ACTOR_JUMP_HEIGHT, scale: ACTOR_SCALE},
         0,
     )
-    const system: AppearanceSystem = form.createAnimation({})
+    const system: AppearanceSystem = form.animation.createSystem({})
 
     const anchor = new Group()
     anchor.position.set(x, 0, z)

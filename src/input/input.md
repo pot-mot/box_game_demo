@@ -7,6 +7,6 @@
 
 ## 陷阱
 
-- 改默认键位 / 鼠标绑定必须同步 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 与 `e2e/operations_panel.spec.ts`。
+- 改默认键位 / 鼠标绑定必须同步 `input/registry.test.ts` 的 `EXPECTED_DEFAULTS`。
 - `localStorage` 与导入文件中已有动作的绑定不会被新默认值覆盖（需「重置默认」或导入配置）；缺失的动作（如版本新增）由 `loadFromStorageInternal` / 导入校验以默认值补齐。
 - 旧数据校验必须安全回退默认值，不得抛错崩溃。

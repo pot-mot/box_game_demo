@@ -14,7 +14,7 @@ import {
 } from './harness.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {GroundState} from './ground_state.ts'
-import {createAppearanceSystem} from '../body_form/humanoid/skeleton_animation/system.ts'
+import {HUMANOID_ANIMATION} from '../body_form/humanoid/skeleton_animation/system.ts'
 import type {CharacterModel} from '../body_form/humanoid/appearance/types.ts'
 import type {TrackedBoxPart} from '../../../render/box_parts.ts'
 
@@ -214,7 +214,7 @@ describe('郊狼过程动画与摄像机平滑', () => {
             const x = 820
             const y = Math.tan(deg * Math.PI / 180) * x + 0.51
             const entity = makeChar(hw, 1, x, y, -50)
-            const sys = createAppearanceSystem()
+            const sys = HUMANOID_ANIMATION.createSystem()
             const model = makeModelMock()
 
             let gs: GroundState = initGS()

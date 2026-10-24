@@ -49,7 +49,6 @@
 - 进度条 `#bone-script-progress` 输出 `data-time` / `data-duration`。
 - 体形下拉 `#bone-form-select`；模式按钮 `#bone-mode-tracks` / `#bone-mode-script`；脚本操作 `#bone-script-rebake` / `#bone-script-to-tracks`。
 - 单测：`body_form/common/authoring/authoring.test.ts`（合成/烘焙/四体形/缓存）、`form_store.test.ts`（体形库隔离）。
-- e2e：`e2e/bone_edit.spec.ts` 覆盖双模式、体形切换、非人形控件隐藏与脚本转轨道。
 
 ## 5. 非目标
 

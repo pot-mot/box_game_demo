@@ -187,4 +187,4 @@
 
 ## 13. 迁移
 
-存量 UI 按模块迁移，流程与验收见 [`css_style_guide.md`](css_style_guide.md) 第 8 节。迁移必须**保留既有 id / class / `data-*` / 文案**（e2e 与单测依赖），仅追加 `dc-*` 类名。
+存量 UI 按模块迁移，流程与验收见 [`css_style_guide.md`](css_style_guide.md) 第 8 节。迁移必须**保留既有 id / class / `data-*` / 文案**（单测依赖），仅追加 `dc-*` 类名。

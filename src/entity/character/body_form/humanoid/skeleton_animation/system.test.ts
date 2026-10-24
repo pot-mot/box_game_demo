@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {Vector3} from 'three'
 import type {AnimationContext} from '../../../appearance/types.ts'
-import {createAppearanceSystem} from './system.ts'
+import {HUMANOID_ANIMATION} from './system.ts'
 import {createHumanoidModel} from '../body_form.ts'
 import {weaponAttacksOf, weaponPresetOrDefault} from '../../../../../character/weapon/catalog.ts'
 import {orderedSegments} from '../../../../../character/weapon/attack_chain.ts'
@@ -40,7 +40,7 @@ const makeCtx = (overrides: CtxOverrides = {}): AnimationContext => {
 describe('外观系统基础动画播放（play() 修复回归）', () => {
     it('进入 idle 后多帧推进：头部呼吸摆动（证明 clip 播放器在播放，未修复时静止首帧）', () => {
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
-        const sys = createAppearanceSystem()
+        const sys = HUMANOID_ANIMATION.createSystem()
         /* 模型根位置由外部物理管理（模拟 syncPositions 写入） */
         model.group.position.set(3, 1, -2)
         /* 驱动若干帧（stateTime 随帧累加） */
@@ -64,7 +64,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
 
     it('进入 walking 后多帧推进：腿部摆腿（步频随速度变速 setSpeed）', () => {
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
-        const sys = createAppearanceSystem()
+        const sys = HUMANOID_ANIMATION.createSystem()
         for (let i = 0; i < 30; i++) {
             sys.update(1 / 60, model, 'walking', makeCtx({stateTime: i / 60, horizontalSpeed: WALK_SPEED}))
         }
@@ -79,7 +79,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
             .find(s => s.id === 'shield_small_one_handed_light_1')!
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         model.equipWeapon({main: preset.mesh})
-        const sys = createAppearanceSystem()
+        const sys = HUMANOID_ANIMATION.createSystem()
         for (let i = 0; i < 30; i++) {
             sys.update(1 / 60, model, 'walking', makeCtx({stateTime: i / 60, horizontalSpeed: WALK_SPEED}))
         }
@@ -104,7 +104,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
         for (const state of ['idle', 'walking', 'jumping'] as const) {
             const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
             model.equipWeapon({main: preset.mesh})
-            const sys = createAppearanceSystem()
+            const sys = HUMANOID_ANIMATION.createSystem()
             for (let i = 0; i < 20; i++) {
                 sys.update(1 / 60, model, state, makeCtx({
                     stateTime: i / 60,
@@ -124,7 +124,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
 
     it('格挡时叠加下半身行走步态（水平移动 → 双腿摆动；静止 → 静态格挡腿姿）', () => {
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
-        const sys = createAppearanceSystem()
+        const sys = HUMANOID_ANIMATION.createSystem()
         /* 静止格挡：双腿保持静态格挡姿态（rightLegHip.rx = 0.06） */
         for (let i = 0; i < 10; i++) sys.update(1 / 60, model, 'blocking', makeCtx({stateTime: i / 60, horizontalSpeed: 0}))
         const staticHip = model.rightLegHip.rotation.x
@@ -144,7 +144,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
             .find(s => s.id === 'long_sword_one_handed_heavy_1')!
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         model.equipWeapon({main: preset.mesh})
-        const sys = createAppearanceSystem()
+        const sys = HUMANOID_ANIMATION.createSystem()
         let varied = false
         for (let i = 0; i < 30; i++) {
             sys.update(1 / 60, model, 'attacking', makeCtx({
@@ -183,7 +183,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
             const run = (overrides: Partial<AnimationContext>) => {
                 const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
                 model.equipWeapon({main: preset.mesh})
-                const sys = createAppearanceSystem()
+                const sys = HUMANOID_ANIMATION.createSystem()
                 /* 12 帧 > STATE_BLEND_DURATION，过渡混合已完成 */
                 for (let i = 0; i < frames; i++) {
                     sys.update(1 / 60, model, 'attacking', makeCtx({
@@ -217,7 +217,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
 
     it('切换惯用手后重建 clip（同动画键下镜像到左手持械姿势）', () => {
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
-        const sys = createAppearanceSystem()
+        const sys = HUMANOID_ANIMATION.createSystem()
         const idle = (handedness: 'right' | 'left', i: number): AnimationContext =>
             makeCtx({stateTime: i / 60, handedness, weaponHeld: true, holdMode: 'one_handed'})
         /* 右撇子：主手（解剖右）持械抬肩（WEAPON_READY_SHOULDER ≈ -0.45），副手垂摆 */
@@ -235,8 +235,8 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
         const makeModel = (): ReturnType<typeof createHumanoidModel> => createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
         const slow = makeModel()
         const fast = makeModel()
-        const slowSys = createAppearanceSystem()
-        const fastSys = createAppearanceSystem()
+        const slowSys = HUMANOID_ANIMATION.createSystem()
+        const fastSys = HUMANOID_ANIMATION.createSystem()
         /* 同一状态时间：getUpDuration = 1.2 的角色仍在推起段；0.6 的角色已站直 */
         for (let i = 0; i <= 36; i++) {
             const stateTime = i / 60
@@ -251,7 +251,7 @@ describe('外观系统基础动画播放（play() 修复回归）', () => {
 
     it('falling 腿张开随水平速度（速度 0 vs 高速档，动画键切换生成不同 clip）', () => {
         const model = createHumanoidModel({speed: 6, jumpHeight: 2, scale: 1}, 0)
-        const sys = createAppearanceSystem()
+        const sys = HUMANOID_ANIMATION.createSystem()
         /* 低速（tier 0）：legSpread = 0，髋 -0.15 */
         for (let i = 0; i < 10; i++) {
             sys.update(1 / 60, model, 'falling', makeCtx({stateTime: i / 60, horizontalSpeed: 0}))

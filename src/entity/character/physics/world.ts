@@ -767,7 +767,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         characters.push(entity)
         appearanceModels.set(entity.id, model)
         /* 体形专属动画系统（每个体形分包自带 base_clips/pose_fns 与调度实现） */
-        appearanceSystems.set(entity.id, plan.createAnimation({onAttackEvent}))
+        appearanceSystems.set(entity.id, plan.animation.createSystem({onAttackEvent}))
         weaponTrails.set(entity.id, createWeaponTrail(scene))
         const hitBoxes = createAttackHitBoxes(scene)
         attackHitBoxes.set(entity.id, hitBoxes)
@@ -2430,7 +2430,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         appearanceModels.set(entity.id, model)
         entity.appearanceGroup = model.group
         /* 动画系统亦按新体形重建：否则切体形后仍由旧体形的动作数据驱动（关节不匹配 → 冻结） */
-        appearanceSystems.set(entity.id, plan.createAnimation({onAttackEvent}))
+        appearanceSystems.set(entity.id, plan.animation.createSystem({onAttackEvent}))
 
         /* 5) 生命值档位：体形覆写（缺省沿用武器类型档位） */
         const maxHP = finalState.maxHealth

@@ -229,7 +229,6 @@ syncPositions(alpha)   // 每渲染帧
     - `pnpm type-check`
     - 定向 vitest
     - `pnpm test`
-    - `pnpm test:e2e`
     - `pnpm build`
 
 ## 8. 风险与限制
@@ -265,4 +264,4 @@ syncPositions(alpha)   // 每渲染帧
 - 相机跟随无二次平滑导致的额外晃动或滞后感。
 - 掉帧时游戏整体慢放而非跳帧/瞬移；单帧物理步数不超过上限。
 - 编辑模式单步 / 暂停 / Execute 行为不变。
-- `pnpm test`、`pnpm test:e2e`、`pnpm build` 全绿。
+- `pnpm test`、`pnpm build` 全绿。

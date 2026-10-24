@@ -29,7 +29,7 @@ const shapeSummaryOf = (shape: AreaShape): string => {
     return `r${shape.radius}×h${shape.height}`
 }
 
-/** 实体列表行文本（含坐标，供编辑模式列表 / e2e 读取世界位置） */
+/** 实体列表行文本（含坐标，供编辑模式列表 / 自动化测试读取世界位置） */
 export const formatRowText = (area: Area): string => {
     const p = area.mesh.position
     const fields = enabledFields(area.config.fields)

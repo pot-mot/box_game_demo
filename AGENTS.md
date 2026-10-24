@@ -5,7 +5,7 @@
 
 基于 Three.js + rapier3d-compat 的游戏项目：物理交互沙盒 + 角色动作战斗 + 编辑 / 游玩 / 展示 / 骨骼动画四套模式。
 
-> **改动任一模块前，先读该模块根目录下的**同名文档**（如 `src/physics/physics.md`；子文档在其子目录，如 `src/entity/character/body_form/humanoid/skeleton_animation/bone_animation/`）。见文末[模块文档索引](#模块文档索引)。按需惰性加载，不要预读全部。** 本文件只保留全局、跨模块、必须每次在场的规则。
+> **改动任一模块前，先读该模块根目录下的**同名文档**（如 `src/physics/physics.md`；子文档在其子目录，如 `src/entity/character/body_form/humanoid/skeleton_animation/attack_clips/docs/`）。见文末[模块文档索引](#模块文档索引)。按需惰性加载，不要预读全部。** 本文件只保留全局、跨模块、必须每次在场的规则。
 
 ## 命令
 
@@ -14,29 +14,27 @@
 - `pnpm preview` — 预览构建产物
 - `pnpm type-check` — `tsc --noEmit` 仅类型检查
 - `pnpm test` — `vitest run` 全量单元测试
-- `pnpm test:e2e` — `playwright test` 全量端到端测试
 - `pnpm vitest run <测试文件>` — 只跑指定单元测试（开发期首选）
-- `pnpm test:e2e <spec 文件名>` — 只跑指定端到端用例（开发期首选，参数会透传给带 `--config` 的 playwright）
 - `pnpm bake:support-hands` — 重新生成人形双手共持支撑手离线烘焙数据（修改 `pose_fns` / 武器网格 / 基础状态时长后必须运行）
+- `pnpm format:attack-clips` — 压缩人形攻击作者数据的 `times` / 每关节 `joints` / `positions` 数组为单行
 
 ## 测试与验证
 
 **非必要不重复运行全量测试。** 验证遵循「最小充分」原则：
 
-1. **开发迭代期** — 只跑 `pnpm type-check` 加与本次改动直接相关的用例（`pnpm vitest run src/xxx/yyy.test.ts`、`pnpm test:e2e <spec 文件名>`），不跑全量。
-2. **任务收尾时** — 再跑一次全量 `pnpm test`；改动涉及 UI / 交互 / 模式切换时追加 `pnpm test:e2e`；改动涉及构建配置、依赖或入口链路时追加 `pnpm build`。
+1. **开发迭代期** — 只跑 `pnpm type-check` 加与本次改动直接相关的用例（`pnpm vitest run src/xxx/yyy.test.ts`），不跑全量。
+2. **任务收尾时** — 再跑一次全量 `pnpm test`；改动涉及构建配置、依赖或入口链路时追加 `pnpm build`。
 3. **禁止重复验证** — 同一份改动已经全量通过后，不得为「再确认一次」重跑同一套全量测试；后续改动只做受影响的增量验证。
 4. **必须全量的情形** — 改动落在共享底层（`physics/`、`render/`、`input/`、`save_load/`、`main.ts` 的单 RAF 链路）、跨分包重构、或删除/重命名被广泛引用的导出。
-5. **e2e 说明** — `e2e/playwright.config.ts` 会自动拉起 `pnpm dev`（端口 5173）并复用已有服务器，无需手工启动。
 
 ## 工程标准
 
 1. **无占位实现** — 不提交 TODO、空实现或调试用 `console.log`；未完成的能力要么不合并，要么在对应模块文档中记录设计方案。
-2. **改动完整** — 功能改动必须同时补齐类型、测试（按改动性质选单测或 e2e）、相关模块的同名文档，以及根 AGENTS.md 中受影响的结构/约定描述。
+2. **改动完整** — 功能改动必须同时补齐类型、单元测试、相关模块的同名文档，以及根 AGENTS.md 中受影响的结构/约定描述。
 3. **兼容性** — 存档格式（`save_load/`）与本地存储（如键位绑定 `localStorage`）变更必须考虑旧数据：校验层需安全回退到默认值，不得抛错崩溃。**无法解析的单个实体元素按元素粒度跳过**（`parseSaveData` 返回 `skipped: {index, type, reason}[]`，仅结构性失败才抛错），并经 `ui/components/message_dialog.ts` 的 `showSkippedEntitiesNotice` 弹出对话框列出全部被跳过的 `index + type`；禁止因单元素非法而整档失败。见 [`src/save_load/save_load.md`](src/save_load/save_load.md)。
 4. **性能** — 帧内逻辑避免无谓分配（复用向量与临时对象），更新路径中禁止创建 DOM；纹理、材质、几何体按需单例复用。
 5. **玩家可读性** — 面向玩家的 UI 文案、代码注释与文档一律中文；标识符沿用既有英文命名习惯。**UI 文案禁止硬编码**：一律经 `src/i18n/` 的 `translate` / `localizeText` / `localizeTitle` / `localizePlaceholder` 取用（详见 [`docs/i18n.md`](docs/i18n.md)）；数据名称经 `weaponDisplayName` / `armorPieceDisplayName` / `itemDisplayName` 等映射，序列化字段（如骨架关节名）不改数据、仅显示层翻译。
-6. **UI 风格统一** — 全部模式 / 面板 / HUD 遵循 [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)；样式只走 `src/assets/theme.css` 的 `--dc-*` 令牌与 `.dc-*` 组件类（**禁止硬编码颜色/字体/圆角/间距**），功能滚动容器统一 `scrollbar-gutter:stable`（`.dc-scroll`），装饰用 SVG 图标（`src/ui/icons/`，**禁止 Unicode/emoji 图标**）；编码规则见 [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md)。迁移存量 UI 必须保留既有 `id` / 语义类名 / `data-*` / i18n 文案（e2e 与单测依赖）。详见 [`src/ui/ui.md`](src/ui/ui.md)。
+6. **UI 风格统一** — 全部模式 / 面板 / HUD 遵循 [`docs/ui/ui_style_guide.md`](docs/ui/ui_style_guide.md)；样式只走 `src/assets/theme.css` 的 `--dc-*` 令牌与 `.dc-*` 组件类（**禁止硬编码颜色/字体/圆角/间距**），功能滚动容器统一 `scrollbar-gutter:stable`（`.dc-scroll`），装饰用 SVG 图标（`src/ui/icons/`，**禁止 Unicode/emoji 图标**）；编码规则见 [`docs/ui/css_style_guide.md`](docs/ui/css_style_guide.md)。迁移存量 UI 必须保留既有 `id` / 语义类名 / `data-*` / i18n 文案（单测依赖）。详见 [`src/ui/ui.md`](src/ui/ui.md)。
 
 ## 规范
 
@@ -132,7 +130,7 @@ src/
 
 ## 模块文档索引
 
-每个模块只有一份以模块命名的文档，位于模块根目录（子主题文档在其子目录，如武器动作 `src/entity/character/body_form/humanoid/skeleton_animation/bone_animation/`）。**跨模块不变量只写在本文件（下「架构规则」「高危红线」）；模块文档只写该模块特有内容，不重复全局规则。**
+每个模块只有一份以模块命名的文档，位于模块根目录（子主题文档在其子目录，如武器动作 `src/entity/character/body_form/humanoid/skeleton_animation/attack_clips/docs/`）。**跨模块不变量只写在本文件（下「架构规则」「高危红线」）；模块文档只写该模块特有内容，不重复全局规则。**
 
 | 模块 / 主题 | 文档 | 何时读 |
 |---|---|---|

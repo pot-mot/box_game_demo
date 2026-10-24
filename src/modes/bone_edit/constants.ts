@@ -63,7 +63,7 @@ export const VIEW_MIN_VISIBLE_RATIO = 0.2
 
 // ── 动画列表（下拉：编辑动画 + 内置动作）──
 
-/** 动画下拉 DOM id（e2e 断言面） */
+/** 动画下拉 DOM id（测试断言面） */
 export const ANIM_SELECT_ID = 'bone-anim-select'
 
 /** 动画下拉 option 值前缀：编辑动画（后接 clip 名） */
@@ -74,12 +74,12 @@ export const ANIM_OPTION_BUILTIN_PREFIX = 'builtin:'
 
 // ── 武器控制（编辑器武器装载）──
 
-/** 武器下拉 DOM id（e2e 断言面） */
+/** 武器下拉 DOM id（测试断言面） */
 export const WEAPON_SELECT_ID = 'bone-weapon-select'
 
 // ── 惯用手预览（聚焦骨架整体镜像）──
 
-/** 惯用手预览下拉 DOM id（e2e 断言面） */
+/** 惯用手预览下拉 DOM id（测试断言面） */
 export const HANDEDNESS_SELECT_ID = 'bone-handedness-select'
 
 /** 武器下拉：自动（跟随当前动画所属武器） */
@@ -90,11 +90,11 @@ export const ANIM_OPTION_WEAPON_NONE = 'none'
 
 // ── 骨骼页编辑模式 / 体形切换 ──
 
-/** 轨道编辑 / 函数编排模式按钮 DOM id（e2e 断言面） */
+/** 轨道编辑 / 函数编排模式按钮 DOM id（测试断言面） */
 export const BONE_MODE_TRACKS_ID = 'bone-mode-tracks'
 export const BONE_MODE_SCRIPT_ID = 'bone-mode-script'
 
-/** 骨骼体形下拉 DOM id（e2e 断言面） */
+/** 骨骼体形下拉 DOM id（测试断言面） */
 export const BONE_FORM_SELECT_ID = 'bone-form-select'
 
 /* ── 右侧视图/编辑常驻面板 ── */
@@ -104,7 +104,7 @@ export const BONE_SHOW_JOINTS_ID = 'bone-show-joints'
 export const BONE_SHOW_BONES_ID = 'bone-show-bones'
 export const BONE_SHOW_MODEL_ID = 'bone-show-model'
 
-/** 函数编排面板 DOM id（e2e 断言面） */
+/** 函数编排面板 DOM id（测试断言面） */
 export const BONE_SCRIPT_LIST_ID = 'bone-script-list'
 export const BONE_SCRIPT_REBAKE_ID = 'bone-script-rebake'
 export const BONE_SCRIPT_TO_TRACKS_ID = 'bone-script-to-tracks'

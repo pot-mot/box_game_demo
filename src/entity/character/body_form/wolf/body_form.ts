@@ -1,10 +1,9 @@
 import type {Group} from 'three'
 import type {BodyAppearance, BodyForm} from '../../body_form/common/types.ts'
-import {createCreatureAnimationSystem} from '../common/creature_runtime/animation.ts'
 import {createCreatureAppearance, createCreatureModel} from '../common/creature_runtime/model.ts'
 import {WOLF_PARTS} from './appearance/appearance.ts'
 import {createWolfEquipmentAppearance} from './appearance/equipment.ts'
-import {wolfAttackClip, wolfBaseClip} from './skeleton_animation/clips.ts'
+import {WOLF_ANIMATION} from './skeleton_animation/system.ts'
 import {WOLF_HURT_BLOCKS} from './skeleton/hurt.ts'
 import {buildWolfSkeleton, WOLF_COLLIDER_LAYOUT} from './skeleton/skeleton.ts'
 import {WOLF_WEAPONS} from './equipment/weapons.ts'
@@ -40,11 +39,7 @@ export const WOLF_BODY_FORM: BodyForm = {
         equipmentAppearance: createWolfEquipmentAppearance,
         scale: config.scale,
     }),
-    createAnimation: createCreatureAnimationSystem({
-        clipForState: state => wolfBaseClip(state),
-        clipForSegment: segment => wolfAttackClip(segment),
-        skeleton: buildWolfSkeleton,
-    }),
+    animation: WOLF_ANIMATION,
     equipSlots: WOLF_EQUIP_SLOTS,
     equipmentModules: WOLF_EQUIPMENT_MODULES,
     armorPieces: WOLF_ARMOR_PIECES,

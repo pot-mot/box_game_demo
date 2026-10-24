@@ -1,8 +1,7 @@
 import type {Group} from 'three'
 import type {BodyAppearance, BodyForm} from '../../body_form/common/types.ts'
-import {createCreatureAnimationSystem} from '../common/creature_runtime/animation.ts'
 import {createCreatureAppearance, createCreatureModel} from '../common/creature_runtime/model.ts'
-import {wyvernAttackClip, wyvernBaseClip} from './skeleton_animation/clips.ts'
+import {WYVERN_ANIMATION} from './skeleton_animation/system.ts'
 import {WYVERN_PARTS} from './appearance/parts.ts'
 import {createWyvernEquipmentAppearance} from './appearance/equipment.ts'
 import {buildWyvernSkeleton, WYVERN_COLLIDER_LAYOUT} from './skeleton/skeleton.ts'
@@ -41,11 +40,7 @@ export const WYVERN_BODY_FORM: BodyForm = {
         equipmentAppearance: createWyvernEquipmentAppearance,
         scale: config.scale,
     }),
-    createAnimation: createCreatureAnimationSystem({
-        clipForState: state => wyvernBaseClip(state),
-        clipForSegment: segment => wyvernAttackClip(segment),
-        skeleton: buildWyvernSkeleton,
-    }),
+    animation: WYVERN_ANIMATION,
     equipSlots: WYVERN_EQUIP_SLOTS,
     equipmentModules: WYVERN_EQUIPMENT_MODULES,
     armorPieces: WYVERN_ARMOR_PIECES,

@@ -13,10 +13,10 @@ globalThis.document = {
 
 await import('../src/entity/character/body_form/index.ts')
 const {BASE_POSE_SAMPLERS} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/pose_fns.ts')
-const {buildBaseClip} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/clips/base_clips.ts')
+const {buildBaseClip, CHARACTER_JOINT_IDS} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/clips/base_clips.ts')
+const {buildCharacterSkeletonDefinition} = await import('../src/entity/character/body_form/humanoid/skeleton/skeleton.ts')
 const {ATTACK_CLIPS} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/attack_clips/index.ts')
-const {compileAttackClip} = await import('../src/entity/character/body_form/humanoid/skeleton_animation/clips/attack_clip_build.ts')
-const {clipFromJSON} = await import('../src/skeleton/anim/serialization.ts')
+const {compileAuthoredAttackClip} = await import('../src/entity/character/body_form/common/skeleton_animation/authored_attack.ts')
 const {
     TWO_HANDED_WEAPONS,
     bakeSupportHandToGrip,
@@ -28,6 +28,7 @@ const {
 } = await import('../src/entity/character/body_form/humanoid/skeleton_animation/clips/support_hand_bake.ts')
 
 const outDir = path.resolve('src/entity/character/body_form/humanoid/skeleton_animation/clips/generated')
+const attackSkeleton = buildCharacterSkeletonDefinition()
 
 const base = {}
 for (const weapon of TWO_HANDED_WEAPONS) {
@@ -50,7 +51,7 @@ for (const clipId of Object.keys(ATTACK_CLIPS)) {
     if (weapon === undefined) continue
     const gripLocal = supportGripLocalOf(weapon)
     if (gripLocal === undefined) continue
-    const body = clipFromJSON(compileAttackClip(clipId, ATTACK_CLIPS[clipId]))
+    const body = compileAuthoredAttackClip(clipId, ATTACK_CLIPS[clipId], attackSkeleton, CHARACTER_JOINT_IDS)
     const tracks = extractSupportTracks(bakeSupportHandToGrip(body, gripLocal, true))
     if (tracks !== undefined) attacks[clipId] = tracks
 }

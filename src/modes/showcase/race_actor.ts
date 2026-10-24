@@ -1,7 +1,7 @@
 import {Group, Mesh, Sprite} from 'three'
 import type {Material, Scene} from 'three'
 import {createHumanoidModel} from '../../entity/character/body_form/humanoid/body_form.ts'
-import {createAppearanceSystem} from '../../entity/character/body_form/humanoid/skeleton_animation/system.ts'
+import {HUMANOID_ANIMATION} from '../../entity/character/body_form/humanoid/skeleton_animation/system.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/types.ts'
 import type {AnimationContext} from '../../entity/character/appearance/types.ts'
 import type {CharacterModel} from '../../entity/character/body_form/humanoid/appearance/types.ts'
@@ -47,7 +47,7 @@ interface MaterialSnapshot {
  *
  * 时间线：站立 2s ↔ 行走 2s 交替循环（`RACE_SHOWCASE_HOLD_SECONDS`），
  * 行走时注入 `horizontalSpeed = ACTOR_SPEED` 使步频正常、位置原地不动（纯动画展示）。
- * 动画注入镜像生产 `world.ts`：构造同名同语义 `AnimationContext` 交给 `createAppearanceSystem()`，
+ * 动画注入镜像生产 `world.ts`：构造同名同语义 `AnimationContext` 交给 `HUMANOID_ANIMATION.createSystem()`，
  * 状态在 `idle` / `walking` 间切换触发快照混合，衔接平滑。
  *
  * 外观：`createCharacterModel` + `equipLimbs` / `equipArmor`；空肢体 = 默认人类肢体，
@@ -72,7 +72,7 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
     /* 调试箱（物理碰撞箱 / 受击箱 / 攻击箱）：默认全隐，由面板开关控制 */
     const debug = createActorDebug(scene, model, HUMANOID_HURT_BLOCKS)
 
-    const system: AppearanceSystem = createAppearanceSystem()
+    const system: AppearanceSystem = HUMANOID_ANIMATION.createSystem()
 
     /* —— 站立 / 行走交替时间线 —— */
     let currentState: 'idle' | 'walking' = 'idle'

@@ -9,7 +9,7 @@
 - **武器类 / 模型分层**：玩法数据在 `character/weapon/`，模型与网格数据在 `body_form/<form>/equipment/weapons.ts`。每个武器只属于一种体形（`WeaponModelConfig.formId`），切体形一律落到新体形 `defaultWeaponId`。
 - **段 id**：`{classId}_{holdMode}_{模板键}`；远程单模式沿用 `{classId}_{动作}`。
 - **持握模式**：`HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`，武器以 `holdModes` 声明支持能力，每模式独立连段。
-- **攻击动画真相源**：作者数据在 `entity/character/body_form/humanoid/skeleton_animation/attack_clips/`（按武器拆分），经 `compileAttackClip` 编译为 `ClipJSON`；支撑手双轨来自离线生成数据。作者数据是唯一真源。
+- **攻击动画真相源**：各体形作者数据在 `entity/character/body_form/<form>/skeleton_animation/attack_clips/`（按武器拆分），经 `common/skeleton_animation/authored_attack.ts` 的 `compileAuthoredAttackClip` 编译为运行时 clip；未提供作者数据的段可回退公式动画。人形支撑手双轨来自离线生成数据。
 - **支撑手离线烘焙**：攻击段与基础状态均预烘焙支撑手（左肩/左肘），生产运行时零 IK；修改 `pose_fns` / 武器网格 / 基础状态时长后必须运行 `pnpm bake:support-hands`。
 - **惯用手**：canonical 数据恒为右撇子；左撇子由 `mirrorClip` 派生，不写专有数据。
 - **命中窗口**：攻击 clip 事件轨 `hitbox_on` / `hitbox_off`，双持带 `params.slotKey`（如 `weapon:main_hand` / `weapon:off_hand`）分槽。
@@ -26,7 +26,7 @@
         ├─ damageMultiplier / impact / poiseDamage
         └─ next: AttackTransition[]   连段唯一来源
 
-动画数据（entity/character/body_form/humanoid/skeleton_animation/attack_clips/）
+动画数据（entity/character/body_form/<form>/skeleton_animation/attack_clips/）
 └─ 段 id → AuthoredAttackClip（times + 每关节欧拉角列 + 事件）
    + body_form/humanoid/skeleton_animation/clips/generated/support_hand_attacks.ts（支撑手双轨）
 
@@ -82,7 +82,7 @@ export const ATTACK_PHASES = ['windup', 'strike', 'recovery', 'spin', 'draw', 'a
 
 ### 4.1 作者数据
 
-`attack_clips/types.ts`：
+`common/skeleton_animation/authored_attack.ts`：
 
 ```ts
 interface AuthoredAttackClip {
@@ -111,7 +111,7 @@ interface AuthoredAttackClip {
 `body_form/humanoid/skeleton_animation/clips/attack_clips.ts`：
 
 1. `ATTACK_CLIPS[clipId]` 作者数据；
-2. `compileAttackClip` 编译；
+2. `compileAuthoredAttackClip` 编译；
 3. `applySupportHandTracks` 合并支撑手；
 4. 左撇子 `mirrorClip`；
 5. 按段 id + handedness 缓存。
@@ -128,7 +128,7 @@ interface AuthoredAttackClip {
 | 想改什么 | 改哪里 |
 |---|---|
 | 基础状态姿态 | `body_form/humanoid/skeleton_animation/pose_fns.ts`；跑 `pnpm bake:support-hands` |
-| 攻击段骨骼动作 | `entity/character/body_form/humanoid/skeleton_animation/attack_clips/<weapon>.ts` |
+| 攻击段骨骼动作 | `entity/character/body_form/<form>/skeleton_animation/attack_clips/<weapon>.ts` |
 | 段时长 / 恢复 / 阶段 / 伤害 / next | `melee_attacks.ts` / `ranged_attacks.ts` |
 | 命中窗口 | 作者数据 `events`（或生成器脚本中的窗口推导） |
 | 持握模式 | `body_form/<form>/equipment/weapons.ts` 的 `holdModes` + `attacks` |
@@ -144,14 +144,15 @@ interface AuthoredAttackClip {
 | `attack_chain.ts` | 段 / 链 / 守卫 / 起手与转换解析 / `orderedSegments` |
 | `melee_attacks.ts` | 近战段模板与链编排、段时长常量、重击蓄力默认 |
 | `ranged_attacks.ts` | 远程段规格与蓄力字段注入 |
-| `attack_clips/` | 按武器拆分的作者数据（地面 / 空中 / 盾 / 远程） |
+| `body_form/<form>/skeleton_animation/attack_clips/` | 按体形 / 武器拆分的作者数据（地面 / 空中 / 盾 / 远程） |
 | `catalog.ts` | 武器目录注册与查询（体形装配时填充） |
 | `weapon_runtime.ts` | 数值覆写 → 运行时武器配置 |
 | `melee_weapon.ts` / `ranged_weapon.ts` | 武器类 / 模型类型与构建器 |
 | `body_form/humanoid/skeleton_animation/clips/attack_clips.ts` | 作者数据编译 → 支撑手合并 → 镜像 → 缓存 |
-| `body_form/humanoid/skeleton_animation/clips/attack_clip_build.ts` | 作者格式 → `ClipJSON` |
+| `body_form/common/skeleton_animation/authored_attack.ts` | 作者格式 → 运行时 clip（跨体形） |
 | `body_form/humanoid/skeleton_animation/clips/support_hand_merge.ts` | 支撑手双轨合并 |
 | `body_form/humanoid/skeleton_animation/clips/generated/` | 支撑手离线生成数据（禁止手改） |
+| `body_form/humanoid/skeleton_animation/attack_clips/docs/` | 人形动作设计文档 |
 | `character/combat/attack_phases.ts` | 阶段名 / 时序 / 蓄力锚点 |
 | `character/state_machine/states/attacking/` | 段子状态调度与缓冲 |
 

@@ -193,7 +193,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     /* 调试箱（物理碰撞箱 / 受击箱 / 攻击箱）：默认全隐 */
     const debug = createActorDebug(scene, model, hurtProfile)
 
-    const system: AppearanceSystem = bodyFormOf(init.bodyFormId).createAnimation({})
+    const system: AppearanceSystem = bodyFormOf(init.bodyFormId).animation.createSystem({})
     /* 远程角色同样创建刀光 —— 对齐生产 world.ts：远程 release 阶段的拖尾同样存在，
      * 激活门控已在 applyAnimation 中按 strike/release/spin 阶段判断 */
     const trail: WeaponTrail = createWeaponTrail(scene)

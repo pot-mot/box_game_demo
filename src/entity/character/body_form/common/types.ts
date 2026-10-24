@@ -6,7 +6,7 @@ import type {TrackedBoxPart} from '../../../../render/box_parts.ts'
 import type {HurtBlockProfile} from '../../../../character/hurt_blocks.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../../character/types.ts'
 import type {CreatureModel} from '../../appearance/types.ts'
-import type {AppearanceSystem, AppearanceSystemOptions} from '../../appearance/types.ts'
+import type {FormAnimation} from './skeleton_animation/form_animation.ts'
 import type {EquipSlotDef, EquipmentModuleDef, EquipmentState} from '../../../../character/equipment/types.ts'
 import type {BodyFormStateDefinition, BodyClipStateMeta} from './state.ts'
 import type {MeshBuilder} from '../../appearance/mesh_builder.ts'
@@ -96,10 +96,10 @@ export interface BodyForm {
     readonly createModel: (config: CharacterConfig, faction: number) => CreatureModel
 
     /**
-     * 体形专属动画系统工厂 —— 每个体形分包自带其动画模组与 clip 调度实现。
-     * 世界主循环只消费本接口。
+     * 体形动画定义 —— 运行时系统与骨骼编辑器内置动作共用同一份 clip provider。
+     * 世界主循环只消费 `animation.createSystem`。
      */
-    readonly createAnimation: (options: AppearanceSystemOptions) => AppearanceSystem
+    readonly animation: FormAnimation
 
     /** 装备槽集合（limb / weapon / armor；槽位键 = kind:bodyPart） */
     readonly equipSlots: readonly EquipSlotDef[]

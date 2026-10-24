@@ -351,7 +351,7 @@ if (leash > character.chaseLeashRadius) { /* 放弃追击 → peace + 接敌冷�
 ## 11. 验证
 
 - 迭代期：`pnpm type-check` + 受影响的单测（`pnpm vitest run src/entity/character/ai/origin.test.ts` 等）。
-- 收尾：`pnpm test`；改动触及共享底层（`damage.ts`、`world.ts` 单 RAF 链路、`save_load`）→ 追加 `pnpm build`；涉及模式切换 / 面板 / i18n → 追加 `pnpm test:e2e`。
+- 收尾：`pnpm test`；改动触及共享底层（`damage.ts`、`world.ts` 单 RAF 链路、`save_load`）→ 追加 `pnpm build`。
 
 ## 12. 实施顺序
 

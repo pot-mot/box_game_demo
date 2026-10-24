@@ -7,7 +7,7 @@ import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 /**
  * 攻击链领域模型（武器模组拥有）：
  * - 攻击段（AttackSegment）= 武器的一次可播放动作的**玩法数据**（时长/阶段时序/伤害倍率/冷却/连段）；
- *   动画是段 id 对应的显式骨骼关键帧数据（人形作者数据在 `body_form/humanoid/skeleton_animation/attack_clips/`，其他体形由体形 clip provider 提供）；
+ *   动画是段 id 对应的显式骨骼关键帧数据（各体形作者数据在 `body_form/<form>/skeleton_animation/attack_clips/`，缺失时由体形 clip provider 回退公式动画）；
  * - 攻击链（WeaponAttackChain）= 一个攻击键的起手候选 + 主干段播放顺序；
  * - 连段推进 = **段自身声明的 next 转换函数**（按声明顺序求值，第一个守卫通过者胜出），
  *   状态机只负责调度与消费，不再用「槽位下标 / comboChain 字符串索引」表达连段。

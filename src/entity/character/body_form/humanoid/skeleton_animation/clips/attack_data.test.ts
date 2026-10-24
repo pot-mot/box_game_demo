@@ -4,7 +4,9 @@ import {orderedSegments, type AttackSegment} from '../../../../../../character/w
 import {weaponAttacksOf, weaponsOfForm} from '../../../../../../character/weapon/catalog.ts'
 import {HUMANOID_BODY_FORM_ID} from '../../../index.ts'
 import {getAttackClipById} from './attack_clips.ts'
-import {compileAttackClip} from './attack_clip_build.ts'
+import {CHARACTER_JOINT_IDS} from './base_clips.ts'
+import {compileAuthoredAttackClip} from '../../../common/skeleton_animation/authored_attack.ts'
+import {buildCharacterSkeletonDefinition} from '../../skeleton/skeleton.ts'
 import {SUPPORT_HAND_ATTACKS} from './generated/support_hand_attacks.ts'
 import {isTwoHandedAttackClip, weaponOfClip} from './support_hand_bake.ts'
 
@@ -55,11 +57,11 @@ describe('攻击段作者数据', () => {
     })
 
     it('拒绝当前骨架不存在的作者关节', () => {
-        expect(() => compileAttackClip('bad', {
+        expect(() => compileAuthoredAttackClip('bad', {
             duration: 1,
             times: [0, 1],
             joints: {notAJoint: [[0, 0, 0], [0, 0, 0]]},
-        }, ['headNeck'])).toThrow(/不存在的关节/)
+        }, buildCharacterSkeletonDefinition(), CHARACTER_JOINT_IDS)).toThrow(/不存在的关节/)
     })
 
     it('双手段有支撑手数据，非双手段没有', () => {

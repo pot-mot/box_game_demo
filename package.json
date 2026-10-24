@@ -9,12 +9,11 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "bake:support-hands": "node --experimental-strip-types scripts/bake_support_hands.mjs",
+    "format:attack-clips": "node scripts/format_attack_clips.mjs",
     "check:architecture": "node scripts/check_architecture.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
     "@types/three": "^0.185.1",
     "happy-dom": "^20.11.1",
     "typescript": "~6.0.2",

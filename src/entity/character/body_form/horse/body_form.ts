@@ -1,8 +1,7 @@
 import type {Group} from 'three'
 import type {BodyAppearance, BodyForm} from '../../body_form/common/types.ts'
-import {createCreatureAnimationSystem} from '../common/creature_runtime/animation.ts'
 import {createCreatureAppearance, createCreatureModel} from '../common/creature_runtime/model.ts'
-import {horseAttackClip, horseBaseClip} from './skeleton_animation/clips.ts'
+import {HORSE_ANIMATION} from './skeleton_animation/system.ts'
 import {HORSE_PARTS} from './appearance/parts.ts'
 import {createHorseEquipmentAppearance} from './appearance/equipment.ts'
 import {buildHorseSkeleton, HORSE_COLLIDER_LAYOUT} from './skeleton/skeleton.ts'
@@ -40,11 +39,7 @@ export const HORSE_BODY_FORM: BodyForm = {
         equipmentAppearance: createHorseEquipmentAppearance,
         scale: config.scale,
     }),
-    createAnimation: createCreatureAnimationSystem({
-        clipForState: state => horseBaseClip(state),
-        clipForSegment: segment => horseAttackClip(segment),
-        skeleton: buildHorseSkeleton,
-    }),
+    animation: HORSE_ANIMATION,
     equipSlots: HORSE_EQUIP_SLOTS,
     equipmentModules: HORSE_EQUIPMENT_MODULES,
     armorPieces: HORSE_ARMOR_PIECES,

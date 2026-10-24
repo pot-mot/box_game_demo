@@ -73,7 +73,7 @@ src/
 
 ## 7. 迁移规则（硬约束）
 
-存量 UI 迁移时，**e2e / 单测依赖既有 DOM 契约**，必须保留：
+存量 UI 迁移时，**单测依赖既有 DOM 契约**，必须保留：
 
 - 所有 `id`（`#execute-panel`、`#character-panel`、`#settings-btn`、`#bone-timeline` …）；
 - 所有语义类名（`.bp-*`、`.sch-*`、`.lock-point-*`、`[data-id]` …）与 `data-*` 属性；
@@ -88,8 +88,8 @@ src/
 3. 硬编码颜色/字体/圆角 → 令牌。
 4. 滚动容器加 `.dc-scroll`（或等价 `scrollbar-gutter:stable`）。
 5. 图标：Unicode / 文本符号 → `createIcon()`。
-6. 增量验证：`pnpm type-check` + 该模块相关单测 / e2e。
-7. 收尾：`pnpm test`；涉及交互 / 模式切换追加 `pnpm test:e2e`。
+6. 增量验证：`pnpm type-check` + 该模块相关单测。
+7. 收尾：`pnpm test`。
 
 ## 8. 滚动条
 
@@ -122,6 +122,5 @@ src/
 
 - 类型：`pnpm type-check`。
 - 单测：`pnpm vitest run <相关文件>`。
-- 端到端：`pnpm test:e2e <spec>`（涉及交互 / 模式切换）。
-- 收尾全量：`pnpm test`，必要时 `pnpm test:e2e`、`pnpm build`。
+- 收尾全量：`pnpm test`；涉及构建配置或入口链路时追加 `pnpm build`。
 - 遵循 AGENTS.md「最小充分、非必要不重复全量」原则。

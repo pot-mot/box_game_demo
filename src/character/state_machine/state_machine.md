@@ -19,7 +19,7 @@
 
 ## 文档
 
-- [bone_animation/待机.md](./bone_animation/待机.md)、[bone_animation/受击硬直.md](./bone_animation/受击硬直.md)
+- [待机.md](../../entity/character/body_form/humanoid/skeleton_animation/attack_clips/docs/待机.md)、[受击硬直.md](../../entity/character/body_form/humanoid/skeleton_animation/attack_clips/docs/受击硬直.md)
 
 ## 水（游泳 / 漂浮）
 

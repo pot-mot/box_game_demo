@@ -1,9 +1,9 @@
 import type {BoneAnimationClip} from '../../../../../../skeleton/anim/types.ts'
-import {clipFromJSON} from '../../../../../../skeleton/anim/serialization.ts'
 import {mirrorClip} from '../../../../../../skeleton/anim/mirror.ts'
 import {DEFAULT_HANDEDNESS, type Handedness} from '../../../../../../character/handedness.ts'
+import {compileAuthoredAttackClip} from '../../../common/skeleton_animation/authored_attack.ts'
+import {buildCharacterSkeletonDefinition} from '../../skeleton/skeleton.ts'
 import {ATTACK_CLIPS} from '../attack_clips/index.ts'
-import {compileAttackClip} from './attack_clip_build.ts'
 import {applySupportHandTracks} from './support_hand_merge.ts'
 import {SUPPORT_HAND_ATTACKS} from './generated/support_hand_attacks.ts'
 import {CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
@@ -14,6 +14,7 @@ import {CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.
  * 解析结果惰性缓存（按段 id + 惯用手复用同一 clip 实例）。
  */
 
+const HUMANOID_ATTACK_SKELETON = buildCharacterSkeletonDefinition()
 const cache = new Map<string, BoneAnimationClip>()
 
 const resolveClip = (clipId: string, handedness: Handedness): BoneAnimationClip => {
@@ -25,7 +26,7 @@ const resolveClip = (clipId: string, handedness: Handedness): BoneAnimationClip 
         throw new Error(`攻击动画数据缺失：${clipId}（段 id 必须在 attack_clips/ 中有对应作者数据）`)
     }
     const base = applySupportHandTracks(
-        clipFromJSON(compileAttackClip(clipId, authored, CHARACTER_JOINT_IDS)),
+        compileAuthoredAttackClip(clipId, authored, HUMANOID_ATTACK_SKELETON, CHARACTER_JOINT_IDS),
         SUPPORT_HAND_ATTACKS[clipId],
         CHARACTER_JOINT_REST_POSITIONS,
     )

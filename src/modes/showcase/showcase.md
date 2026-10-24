@@ -6,7 +6,7 @@
 
 - 二级菜单 + 子模块注册表（`ShowcaseModule` / `SHOWCASE_MODULES` / `SHOWCASE_MODULE_IDS`）；共享主页渲染器与单 RAF 循环，可返回启动屏。
 - 相机类子模块用纯摄像机 `createCameraControl`，含玩家子模块用玩家主控 `createPlayerControl`（见 `src/modes/control/control.md`）。
-- 新增子模块：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 加文案 → 补测试（`modules.test.ts` 自动校验注册一致性）/ e2e。
+- 新增子模块：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 加文案 → 补测试（`modules.test.ts` 自动校验注册一致性）。
 
 ## 陷阱
 
@@ -50,7 +50,7 @@ src/modes/showcase/
 - **控制器**：持有 `SHOWCASE_MODULES` 注册表，`selectModule` 释放当前模块、装配新模块并隐藏菜单；`backToMenu` 释放模块、显示菜单；`exit` 释放模块 + 菜单 + 返回按钮后回调宿主。无激活模块时 updater 为空操作（菜单覆盖画布）。
 - **`actor_stage.ts`**：把「独立场景 + 自由飞行相机 + 多 Tab 展示角色 + 聚焦环 + 点击拾取 + 空格暂停/Esc 取消聚焦 + 调试箱开关 + 信息面板」这套通用编排集中一处，供 `actions` / `appearance` 复用。子模块按 `tabs`（`ActorStageTab[]`，单 Tab 不显示 Tab 栏）提供各自 `populate(scene, register)`；切换 Tab 时隐藏旧 Tab 角色、重建面板行、复位聚焦。面板含 **3 个调试箱开关**（物理碰撞箱 / 受击箱 / 攻击箱，默认全关，由 `actor_debug.ts` 逐角色实现）。
 - **相机（两套方案）**：相机类子模块使用共享**纯摄像机** `modes/control/camera_control.ts`——`W/A/S/D` 前后左右、`Z/X` 升 / 降（`MOVE_STEP`，随相机偏航角），按住 `boost` 动作（默认 Shift）加速飞行；「旋转视角」绑定（默认鼠标左键）拖拽转视角、「平移视角」绑定（默认右键）拖拽平移、滚轮缩放；「聚焦」绑定（默认左键点击）命中角色 / 物件进入**聚焦**（相机平滑飞向目标并环绕，期间暂停自由移动），`Esc` 或点击空白恢复自由飞行。旋转 / 平移 / 聚焦均为可重绑的指针动作（操作设置面板「鼠标」分组）。**含玩家的子模块**（交互物 / 背包）使用共享**玩家主控** `modes/control/player_control.ts`：相机第三人称跟随玩家、鼠标拖拽环绕、滚轮缩放，`Shift` = 翻滚，**不提供右键平移**。
-- **新增子模块**：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 补 `showcase.module.<id>.title/desc` 与模块内文案 → 补单测（`modules.test.ts` 自动覆盖注册表一致性）/ e2e。
+- **新增子模块**：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 补 `showcase.module.<id>.title/desc` 与模块内文案 → 补单测（`modules.test.ts` 自动覆盖注册表一致性）。
 
 ## 子模块
 
@@ -133,4 +133,3 @@ src/modes/showcase/
   - `src/entity/interactable/behaviors.test.ts` — 升降梯 `F` 停止 / 继续 / 端点反向、暂停不推进、信号清除暂停、提示随状态。
   - `src/modes/showcase/modules.test.ts` — 注册表与 `SHOWCASE_MODULE_IDS` 一一对应、标题/说明可本地化、id 唯一。
   - `src/modes/showcase/menu.test.ts` — 每个子模块渲染一张卡片、点击触发 `onSelect`、show/hide/dispose。
-- e2e：`e2e/showcase.spec.ts` — 二级菜单 7 张卡片、攻击模组展示（人形 Tab 31 行 + 切龙 Tab 2 行）、外观模块 12 行、AI 模块 10 单位、地形模块 12 配方、交互物模块 8 行（含激活回写状态）、图鉴 56 格、背包模块（背包 / 装备面板 + 玩家 HUD）、聚焦段计时行顺序、返回展示菜单、经设置菜单返回主页面。

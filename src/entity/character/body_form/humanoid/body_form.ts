@@ -4,7 +4,7 @@ import {buildCharacterSkeletonDefinition, HUMANOID_COLLIDER_LAYOUT, HUMANOID_JOI
 import {HUMANOID_HURT_BLOCKS} from './skeleton/hurt.ts'
 import {assembleCharacterAppearance} from './appearance/assemble.ts'
 import {createCharacterModel} from './appearance/model.ts'
-import {createAppearanceSystem} from './skeleton_animation/system.ts'
+import {HUMANOID_ANIMATION} from './skeleton_animation/system.ts'
 import type {BodyAppearance, BodyForm} from '../common/types.ts'
 import type {CharacterConfig} from '../../../../character/types.ts'
 import type {CharacterModel} from './appearance/types.ts'
@@ -35,8 +35,7 @@ export const HUMANOID_BODY_FORM: BodyForm = {
     assemble: (groups: ReadonlyMap<string, Group>, palette: BoxPartPalette): BodyAppearance =>
         assembleCharacterAppearance(groups, palette),
     createModel: (config, faction) => createCharacterModel(config, faction, HUMANOID_BODY_FORM),
-    /* 人形动画系统（体形专属分包；狼 / 马 / 双足飞龙 wyvern 各自提供自己的实现） */
-    createAnimation: createAppearanceSystem,
+    animation: HUMANOID_ANIMATION,
     equipSlots: HUMANOID_EQUIP_SLOTS,
     equipmentModules: HUMANOID_EQUIPMENT_MODULES,
     armorPieces: HUMANOID_ARMOR_PIECES,

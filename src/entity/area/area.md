@@ -61,4 +61,4 @@
 - 帧内零分配：`overlap.ts` 与各场模块使用模块级临时向量 / 四元数复用；区域 `preSync` 逐帧调用，勿在循环内 new 对象。
 - 材质切换 / 几何变化走 `updateAreaGeometry` / `updateAreaMaterial`（重建并 dispose 旧资源；选中线框在几何变化后重建）。
 - 视觉与物理独立：`material` 与 `fields` 无强绑定，面板可自由组合；预设仅提供默认搭配。
-- 存档：`area` 为单一类型，旧 `area/water` 在 v14 起作为未知类型逐元素跳过（见 [`save_load.md`](../save_load/save_load.md)）。
+- 存档：`area` 为单一类型，旧 `area/water` 在 v14 起作为未知类型逐元素跳过（见 [`save_load.md`](../../save_load/save_load.md)）。

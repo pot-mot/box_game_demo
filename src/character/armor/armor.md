@@ -549,8 +549,7 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 | `src/entity/character/appearance/mesh_builder.test.ts` | 构建器几何工厂 / 组装 / 释放单测 |
 | `src/entity/character/appearance/armor_mesh.ts` | 程序化护甲部件构建器（每形状独立 gen + 关节白名单） |
 | `src/entity/character/appearance/armor_mesh.test.ts` | 构建 / 清理 / 关节白名单 / 外扩尺寸单测 |
-| `e2e/character_equipment.spec.ts` | 面板护甲交互端到端用例 |
-| `src/character/armor/src/character/armor/armor.md` | 本文档 |
+| `src/character/armor/armor.md` | 本文档 |
 
 **修改（核心）**
 
@@ -594,12 +593,12 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 2. `armor_mesh.ts` + `CharacterModel.equipArmor`。
 3. `world.ts` 接线 + `panel.ts` 护甲区 + 行文本。
 4. 存档三件套 + 版本 4。
-5. 验证：`pnpm vitest run src/character/armor src/entity/character/appearance src/save_load` + `pnpm test:e2e character_equipment.spec.ts`。
+5. 验证：`pnpm vitest run src/character/armor src/entity/character/appearance src/save_load`。
 
 **M4 收尾**
 
 1. 文档：`src/character/weapon/weapon.md` 补攻击类别与防御结算；AGENTS.md 更新结构、陷阱与文档表。
-2. 全量验证：`pnpm test`；UI/交互改动追加 `pnpm test:e2e`；涉及存档与入口链路追加 `pnpm build`。
+2. 全量验证：`pnpm test`；涉及存档与入口链路追加 `pnpm build`。
 
 **M5 装备数值扩展（臂甲 / 攻击加成 / 移速）**
 
@@ -608,7 +607,7 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 3. 外观：前臂关节基座 + `bracer` / `boots` 形状（`joints` 白名单、`accent.z` 脚尖）。
 4. 运行时：`CombatComponent.attackBonus` / `moveSpeedMultiplier`；`moveSpeedOf` 接入五个状态；近战/远程伤害计入攻击加成。
 5. 接线：角色面板重构为「装备 / 属性」两模块（武器 + 护甲统一为装备模块，生命 + 基础防御 + 数值预览为属性模块）；护甲下拉描述列出防御 / 攻击加成 / 移速影响；行文本有效移速；存档 `armor.arms`。
-6. 验证：增量单测 + 全量 `pnpm test` + `pnpm test:e2e character_equipment.spec.ts` + `pnpm build`。
+6. 验证：增量单测 + 全量 `pnpm test` + `pnpm build`。
 
 ---
 
@@ -630,7 +629,6 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 | 单测 | `state_machine/machine.test.ts` | 装备移速乘数生效：walking 速度 = 基础 × 乘数 |
 | 单测 | `save_load/validation.test.ts` | 旧档缺 `armor`/`defense`/`baseAttack` 回退默认；非法值回退；armor 含四槽位 roundtrip |
 | 单测 | `physics/panel_info.test.ts` | `add()` 带护甲时防御 / 攻击加成 / 移速乘数正确；带基础攻击时有效攻击加成 = 基础 + 装备；未知护甲 id 不抛错；行文本 def 与有效移速格式；换装不残留外观部件；`hideBodyParts` 装备隐藏 / 卸下还原（靴只隐藏小腿、大腿保持可见）；肢体装备顶替人类部位并计入数值、卸下还原；护甲与肢体顶替互不干扰 |
-| e2e | `e2e/character_equipment.spec.ts` | 编辑模式生成角色 → 面板选择护甲 / 基础防御 / 肢体 → 状态 / 属性公式行（当前 / 基础 / 加成 / 系数 / 最终值）与列表行同步更新；当前韧性夹取到基础上界 + 装备加成 |
 
 ---
 

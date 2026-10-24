@@ -6,6 +6,9 @@ import {validateEquipmentModules} from './common/equipment.ts'
 import {resolveBodyFormState} from './common/state.ts'
 import {addDamageProfiles} from '../../../character/combat/defense.ts'
 import {EMPTY_EQUIPMENT_STATE} from '../../../character/equipment/types.ts'
+import {weaponAttacksOf} from '../../../character/weapon/catalog.ts'
+import {orderedSegments} from '../../../character/weapon/attack_chain.ts'
+import {DEFAULT_FORM_CLIP_VARIANT} from './common/skeleton_animation/form_animation.ts'
 
 /** 场景图节点数（用于验证装备外观挂载 / 卸载） */
 const objectCount = (group: Group): number => {
@@ -140,9 +143,18 @@ describe('体形计划公共契约（全部注册体形）', () => {
                 model.dispose()
             })
 
-            it('动画系统工厂返回带 update 的系统', () => {
-                const system = form.createAnimation({})
+            it('动画 provider 同时提供运行时系统与编辑器 base/attack clip', () => {
+                const system = form.animation.createSystem({})
                 expect(typeof system.update).toBe('function')
+
+                const base = form.animation.baseClip('idle', DEFAULT_FORM_CLIP_VARIANT)
+                expect(base.duration, `${form.id}:idle`).toBeGreaterThan(0)
+
+                const weapon = form.weapons[0]!
+                const segment = orderedSegments(weaponAttacksOf(weapon, weapon.holdModes[0]!))[0]
+                expect(segment, form.id).toBeDefined()
+                const attack = form.animation.attackClip(segment!, DEFAULT_FORM_CLIP_VARIANT)
+                expect(attack.duration, `${form.id}:attack`).toBeGreaterThan(0)
             })
         })
     }

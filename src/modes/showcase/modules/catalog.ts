@@ -3,7 +3,7 @@ import type {Material} from 'three'
 import type {ShowcaseModule} from '../module.ts'
 import {setupShowcaseScene} from '../scene.ts'
 import {createHumanoidModel} from '../../../entity/character/body_form/humanoid/body_form.ts'
-import {createAppearanceSystem} from '../../../entity/character/body_form/humanoid/skeleton_animation/system.ts'
+import {HUMANOID_ANIMATION} from '../../../entity/character/body_form/humanoid/skeleton_animation/system.ts'
 import type {AnimationContext} from '../../../entity/character/appearance/types.ts'
 import {weaponPresetOrDefault} from '../../../character/weapon/catalog.ts'
 import {DEFAULT_HANDEDNESS} from '../../../character/handedness.ts'
@@ -115,7 +115,7 @@ export const catalogModule: ShowcaseModule = {
         sceneCtx.scene.add(model.group)
         /* 图鉴预览不展示物理碰撞箱（半胶囊可视化） */
         for (const m of model.colliderMeshes) m.visible = false
-        const system = createAppearanceSystem()
+        const system = HUMANOID_ANIMATION.createSystem()
 
         const cubeGroup = new Group()
         cubeGroup.position.y = CATALOG_CUBE_Y
