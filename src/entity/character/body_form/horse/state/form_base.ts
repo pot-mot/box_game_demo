@@ -13,5 +13,5 @@ export const HORSE_BASE: BodyFormBase = {
     baseAttack: ZERO_PROFILE,
     baseMoveSpeedMultiplier: 1,
     basePoise: DEFAULT_POISE_MAX,
-    animation: creatureStateMeta({idle: 2.0, walking: 0.8, jumping: 0.4, falling: 0.45, swimming: 1.0, floating: 1.8}),
+    animation: creatureStateMeta({idle: 2.0, walking: 0.8, sprinting: 0.55, jumping: 0.4, falling: 0.45, swimming: 1.0, floating: 1.8, flying: 1.2}),
 }

@@ -16,6 +16,12 @@ export type EditLocale = {
     'edit.title.input': string
     'edit.title.run': string
     'edit.title.reset': string
+    'edit.debug.title': string
+    'edit.debug.collision': string
+    'edit.debug.attack': string
+    'edit.debug.hurt': string
+    'edit.debug.detect': string
+    'edit.debug.vision': string
 }
 
 export const editZh: EditLocale = {
@@ -32,6 +38,12 @@ export const editZh: EditLocale = {
     'edit.title.input': '输入步数后点击右侧按钮执行',
     'edit.title.run': '按输入步数逐帧执行',
     'edit.title.reset': '停止步进并还原到初始状态（最近一次执行开始前）',
+    'edit.debug.title': '显示控制',
+    'edit.debug.collision': '碰撞箱',
+    'edit.debug.attack': '攻击箱',
+    'edit.debug.hurt': '受击箱',
+    'edit.debug.detect': '攻击检测区',
+    'edit.debug.vision': '视线扇形',
 }
 
 export const editEn: EditLocale = {
@@ -48,4 +60,10 @@ export const editEn: EditLocale = {
     'edit.title.input': 'Enter step count then click the button on the right',
     'edit.title.run': 'Run the entered number of steps frame by frame',
     'edit.title.reset': 'Stop and restore to the initial state (before the last Execute)',
+    'edit.debug.title': 'Display',
+    'edit.debug.collision': 'Collision',
+    'edit.debug.attack': 'Attack',
+    'edit.debug.hurt': 'Hurt',
+    'edit.debug.detect': 'Attack Detect',
+    'edit.debug.vision': 'Vision Fan',
 }

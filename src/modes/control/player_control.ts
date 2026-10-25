@@ -17,6 +17,8 @@ import {
     PLAYER_CAMERA_WHEEL_SENSITIVITY,
     PLAYER_CAMERA_ZOOM_SMOOTH_FACTOR,
     PLAYER_CLICK_DRAG_THRESHOLD,
+    PLAYER_FLY_DOUBLE_TAP_WINDOW,
+    PLAYER_ROLL_SPRINT_HOLD_THRESHOLD,
 } from './constants.ts'
 import type {FocusController} from './camera_control.ts'
 
@@ -46,8 +48,11 @@ export interface CameraLockTarget {
 export interface PlayerControlOptions {
     /** 相机跟随目标（玩家身体中心等）；返回 undefined 时退化为自由飞行 */
     readonly getTarget: () => Vector3 | undefined
-    /** 移动输出：dx/dz 为相机水平基准方向上的合成输入，roll 为本次翻滚边沿，swimLift 为游泳竖直意图（-1..1） */
-    readonly move: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll: boolean, swimLift: number) => void
+    /**
+     * 移动输出：dx/dz 为相机水平基准方向上的合成输入，roll 为本次翻滚边沿，swimLift 为游泳竖直意图（-1..1），
+     * sprint 为长按翻滚键的跑步保持，fly 为双击跳跃键切换飞行的边沿，flyLift 为飞行升降意图（-1..1）。
+     */
+    readonly move: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll: boolean, swimLift: number, sprint: boolean, fly: boolean, flyLift: number) => void
     /** 持握模式切换（默认 Ctrl）回调；缺省不处理 */
     readonly cycleAttackModule?: () => void
     /** 攻击回调（含蓄力）；缺省 = 无战斗 */
@@ -122,6 +127,12 @@ export const createPlayerControl = (
     let focusDistance = CAMERA_ORBIT_FOCUS_DISTANCE
     /** 进入聚焦前的观察距离（取消聚焦后回归） */
     let savedDistance = distance
+    /** 上一次跳跃键按下的时刻（performance.now()，用于双击切换飞行） */
+    let lastJumpTapAt: number | undefined
+    /** 翻滚键按下的时刻（undefined = 未按住）；达到阈值后本次按住转为跑步 */
+    let rollHeldSince: number | undefined
+    /** 本次按住翻滚键是否已转为跑步（转跑步后松开不再触发翻滚） */
+    let sprintLatched = false
     /** 取消聚焦后是否正在回归快照距离 */
     let returning = false
     let returnDistance = distance
@@ -182,6 +193,9 @@ export const createPlayerControl = (
         e.preventDefault()
     }, {signal})
     window.addEventListener('blur', () => {
+        lastJumpTapAt = undefined
+        rollHeldSince = undefined
+        sprintLatched = false
         orbitButton = undefined
         leftDownAt = undefined
         rightDownAt = undefined
@@ -260,7 +274,52 @@ export const createPlayerControl = (
         if (input.isActionActive('move_right')) { dx += rightX; dz += rightZ }
         /* 镜头前向的垂直分量 = -sin(pitch)：抬头（pitch<0）为正 → 前游上浮、低头前游下潜 */
         const swimLift = fwdInput * (-Math.sin(pitch))
-        move(dx, dz, input.wasActionPressed('jump'), fwdX, fwdZ, input.wasActionPressed('roll'), swimLift)
+        /* 飞行升降：Z 上升 / X 下降（与纯摄像机自由飞行的按键一致） */
+        const flyLift = (input.isActionActive('move_up') ? 1 : 0) - (input.isActionActive('move_down') ? 1 : 0)
+        const now = performance.now()
+        /* 双击跳跃键切换飞行：两次按下间隔在窗口内即触发一次切换边沿 */
+        let fly = false
+        if (input.wasActionPressed('jump')) {
+            if (lastJumpTapAt !== undefined && (now - lastJumpTapAt) / 1000 <= PLAYER_FLY_DOUBLE_TAP_WINDOW) {
+                fly = true
+                lastJumpTapAt = undefined
+            } else {
+                lastJumpTapAt = now
+            }
+        }
+        /* 翻滚键：短按松开 = 翻滚；按住超过阈值 = 跑步，且本次按住不再翻滚 */
+        const rollHeld = input.isActionActive('roll')
+        let roll = false
+        let sprint = false
+        if (rollHeld) {
+            if (rollHeldSince === undefined) {
+                rollHeldSince = now
+                sprintLatched = false
+            }
+            if (!sprintLatched && (now - rollHeldSince) / 1000 >= PLAYER_ROLL_SPRINT_HOLD_THRESHOLD) {
+                sprintLatched = true
+            }
+            sprint = sprintLatched
+        } else if (rollHeldSince !== undefined) {
+            roll = !sprintLatched
+            rollHeldSince = undefined
+            sprintLatched = false
+        } else if (input.wasActionPressed('roll')) {
+            /* 极短点击可能在同一渲染帧内完成按下 / 松开，按翻滚边沿兜底 */
+            roll = true
+        }
+        move(
+            dx,
+            dz,
+            input.wasActionPressed('jump'),
+            fwdX,
+            fwdZ,
+            roll,
+            swimLift,
+            sprint,
+            fly,
+            flyLift,
+        )
 
         /* 持握模式切换（默认 Ctrl）：isActionActive 走最长组合遮蔽，
          * Ctrl+S / Ctrl+O 按下时该动作被更长组合覆盖，不会误触发切换 */

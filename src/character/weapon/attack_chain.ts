@@ -21,7 +21,7 @@ export const ATTACK_KEYS = ['light', 'heavy', 'air'] as const
 export type AttackKey = typeof ATTACK_KEYS[number]
 
 /** 地面攻击键（不含空中键）：起手/链路参数只需覆盖这两键时使用 */
-export const GROUND_ATTACK_KEYS = ['light', 'heavy'] as const
+export const GROUND_ATTACK_KEYS = ['light', 'heavy'] as const satisfies readonly AttackKey[]
 export type GroundAttackKey = typeof GROUND_ATTACK_KEYS[number]
 
 /** 攻击键本地化名键（HUD/面板/展示标签用） */

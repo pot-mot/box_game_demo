@@ -13,5 +13,5 @@ export const WYVERN_BASE: BodyFormBase = {
     baseAttack: ZERO_PROFILE,
     baseMoveSpeedMultiplier: 1,
     basePoise: DEFAULT_POISE_MAX,
-    animation: creatureStateMeta({idle: 2.0, walking: 0.85, jumping: 0.4, falling: 0.5, swimming: 1.0, floating: 1.0}),
+    animation: creatureStateMeta({idle: 2.0, walking: 0.85, sprinting: 0.6, jumping: 0.4, falling: 0.5, swimming: 1.0, floating: 1.0, flying: 0.9}),
 }

@@ -10,6 +10,7 @@ import type { WeaponAttackBoxSpec } from './mesh_config.ts'
 import type { EquipmentColliderSpec, EquipmentHurtBoxSpec, EquipmentMountSpec } from '../equipment/types.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
 import type { ShieldBlockConfig } from './constants.ts'
+import type { StaminaModifierSet } from '../stamina/types.ts'
 
 /**
  * 攻击检测箱（AI 出招触发判定专用，与红色伤害判定箱解耦）：
@@ -58,6 +59,8 @@ export interface MeleeWeaponClassConfig {
     readonly detectBoxes: readonly MeleeDetectBoxSpec[]
     /** 动作时间倍率（缺省 1；盾牌等重型武器可整体放慢，2:1:2.5 阶段比例不变） */
     readonly timeScale?: number
+    /** 装备时对角色体力消耗 / 恢复的修正（缺省 = 无修正） */
+    readonly stamina?: StaminaModifierSet
     /** 可支持的攻击模组（数组；首个为默认模组，换武器时角色模组重置为首个） */
     readonly attackModules: readonly AttackModuleDef[]
     /** 攻击模组 → 攻击链 map（键 = `attackModules` 中受支持的模组；动画为段引用的 pose 组合） */

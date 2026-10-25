@@ -59,8 +59,8 @@ export const setupPlayMode = (
             cameraTarget.set(p.x, p.y, p.z)
             return cameraTarget
         },
-        move: (dx, dz, jump, forwardX, forwardZ, roll, swimLift) =>
-            characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll, swimLift),
+        move: (dx, dz, jump, forwardX, forwardZ, roll, swimLift, sprint, fly, flyLift) =>
+            characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll, swimLift, sprint, fly, flyLift),
         cycleAttackModule: () => characterSystem.cyclePlayerAttackModule(),
         combat: {
             onLightAttackStart: () => characterSystem.beginPlayerAttackHold('light'),
@@ -142,6 +142,8 @@ export const setupPlayMode = (
                 maxHealth: player.state.combat.maxHealth,
                 poise: player.state.combat.poise,
                 poiseMax: player.state.combat.poiseMax,
+                stamina: player.state.stamina.current,
+                staminaMax: player.state.stamina.max,
                 guard: player.state.combat.guard,
                 guardMax: guardMaxOf(player.state.combat),
                 charge: player.state.combat.attackCharge,

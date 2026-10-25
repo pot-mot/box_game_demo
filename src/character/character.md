@@ -16,6 +16,11 @@
 - `CharacterConfig` 新增 5 个**可选**韧性字段（供面板 / 存档覆写，缺省走 `combat/constants.ts` 默认值）：`poiseMax`（上界基础值，叠加护甲/肢体 `poise`）、`poiseRegenDelay`、`poiseRegenPerSec`、`knockdownDuration`、`getUpDuration`；经 `spawnEntity` 汇总进 `CombatComponent`（`basePoiseMax` 等），受击结算与状态机语义见 [`combat/combat.md`](combat/combat.md) 与 [`state_machine.md`](state_machine/state_machine.md)。
 - 倒地数据在 `state.timers`：`knockdownFallDirX/Z`（倒向水平单位向量，进入 `knockdown` 时按 `combat.lastHitDirX/Z` 写入，无记录则向后倒）与 `knockdownFallAngle`（缓动角度，`world.ts` 据此合成根旋转，与死亡倒地同模式）。
 
+## 体力与飞行
+
+- 体力基础配置在 `CharacterConfig.stamina`（可选，缺省回退 `stamina/constants.ts`），运行时权威值在 `state.stamina`。基础值与装备 / 武器乘区、扣除与恢复规则见 [`stamina/stamina.md`](stamina/stamina.md)。
+- `CharacterConfig.flightEnabled`（默认 `false`）控制该角色能否通过双击跳跃键进入飞行；任何体形都允许开启，新建角色默认不允许。面板「配置」区基础模组之后可勾选，存档持久化。
+
 ## 行为原点策略 / 追击半径
 
 - 原点策略领域定义在 `ai_strategy/`：`types.ts` 的 `ORIGIN_SUB_STRATEGIES = ['resident', 'fighter', 'hunter', 'roamer']` / `OriginSubStrategy` / `OriginConfig` / `isOriginSubStrategy`；默认配置在 `origin.ts` 的 `DEFAULT_ORIGIN_CONFIGS`（`roamer.interval = DEFAULT_ROAMER_INTERVAL = 20`，其余 0）。

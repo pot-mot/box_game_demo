@@ -15,7 +15,7 @@ import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.t
 import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {equipBodyPartLabelKey} from '../../../character/equipment/types.ts'
-import {armorPiecesOfSlot, armorPieceDisplayName, attackTermsOf, defenseTermsOf, findArmorPreset, findLimbPreset, limbPiecesOfSlot, moveSpeedTermsOf, poiseTermsOf, resolveArmorLoadout, resolveLimbLoadout, type StatTerm} from '../../../character/armor/catalog.ts'
+import {armorPiecesOfSlot, armorPieceDisplayName, attackTermsOf, defenseTermsOf, findArmorPreset, findLimbPreset, limbPiecesOfSlot, moveSpeedTermsOf, poiseTermsOf, resolveArmorLoadout, resolveLimbLoadout, staminaDrainTermsOf, staminaEntryTermsOf, staminaRegenTermsOf, type StatTerm} from '../../../character/armor/catalog.ts'
 import type {ArmorLoadout, ArmorPieceConfig, LimbLoadout, LimbPieceConfig} from '../../../character/armor/types.ts'
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
 import type {DamageType, DamageTypeProfile} from '../../../character/combat/damage_type.ts'
@@ -23,6 +23,15 @@ import {DAMAGE_TYPE_LABELS} from '../../../character/combat/damage_type.ts'
 import {isPeaceSubStrategy, isCombatSubStrategy, isOriginSubStrategy, PEACE_SUB_STRATEGIES, ORIGIN_SUB_STRATEGIES, type BoxSpawnEntry, type OriginSubStrategy} from '../../../character/ai_strategy/types.ts'
 import {BOX_PRESET_IDS, isBoxPresetId, type BoxPresetId} from '../../../types/boxPreset.ts'
 import type {LockPointConfig} from '../../../character/lock_point.ts'
+import {resolveStaminaConfig} from '../../../character/stamina/runtime.ts'
+import {
+    DEFAULT_STAMINA_DRAIN_PER_SEC,
+    DEFAULT_STAMINA_ENTRY_COST,
+    DEFAULT_STAMINA_MAX,
+    DEFAULT_STAMINA_REGEN_DELAY,
+    DEFAULT_STAMINA_REGEN_PER_SEC,
+} from '../../../character/stamina/constants.ts'
+import type {StaminaConfig, StaminaDrainState, StaminaEntryAction} from '../../../character/stamina/types.ts'
 import {CHARACTER_JOINT_IDS} from '../body_form/humanoid/skeleton_animation/clips/base_clips.ts'
 import {buildCharacterSkeletonDefinition, humanoidJointDisplayName} from '../body_form/humanoid/skeleton/skeleton.ts'
 import {BODY_FORM_IDS, BODY_FORMS, bodyFormOf, type BodyForm} from '../body_form/index.ts'
@@ -161,7 +170,6 @@ interface AttackFields {
     readonly bulletSpeed: HTMLInputElement
     readonly bulletKB: HTMLInputElement
     readonly bulletLife: HTMLInputElement
-    readonly weaponTag: HTMLElement
 }
 
 /** 数字转输入框文本（避免 3.0000000000000004 之类的浮点尾巴） */
@@ -253,7 +261,7 @@ const chargeTuningOfWeapon = (weapon: WeaponConfig): ChargeTuning | undefined =>
     weapon.type === 'melee' ? weapon.heavyCharge : weapon.charge
 
 /** 换武器时按武器预设预填数值覆写字段（冷却取起手段预设冷却；远程弹道仅在远程武器时展示） */
-const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
+const autoFillFromWeapon = (weaponId: string, fields: AttackFields, tag?: HTMLElement): void => {
     const weapon = findWeaponLike(weaponId)
     if (weapon === undefined) return
     fields.atkDmg.value = formatNumber(weapon.damage)
@@ -263,14 +271,16 @@ const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
     fields.atkChargeTime.value = formatNumber(charge?.maxChargeTime ?? 1)
     const damageTypeLabel = `  ·  ${translate(DAMAGE_TYPE_LABELS[weapon.damageType])}`
     const weaponName = weaponDisplayName(weapon)
+    if (tag !== undefined) {
+        tag.textContent = weapon.type === 'ranged'
+            ? [weaponName, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
+            : weaponName + damageTypeLabel
+    }
     if (weapon.type === 'ranged') {
-        fields.weaponTag.textContent = [weaponName, ...rangedModeTags(weapon)].join('  ') + damageTypeLabel
         fields.atkRange.value = formatNumber(weapon.range)
         fields.bulletSpeed.value = formatNumber(weapon.projectileSpeed)
         fields.bulletKB.value = formatNumber(weapon.knockbackForce)
         fields.bulletLife.value = formatNumber(weapon.projectileLifetime)
-    } else {
-        fields.weaponTag.textContent = weaponName + damageTypeLabel
     }
 }
 
@@ -280,16 +290,15 @@ const selectedWeaponOf = (select: HTMLSelectElement): WeaponConfig | undefined =
     return weaponId.length > 0 ? findWeaponLike(weaponId) : undefined
 }
 
-/** 读取角色当前攻击配置：武器 + 数值覆写 + 起手段当前冷却（用于面板回显） */
-const readSelectedAttack = (sel: CharacterEntity): {
+/** 读取某手当前武器运行时数值（含数值覆写；用于面板回显） */
+const readRuntimeAttack = (weapon: WeaponConfig, attacks: WeaponAttacks): {
     readonly weaponId: string
     readonly damage: number
     readonly cooldown: number
     readonly charge?: ChargeTuning
     readonly ranged?: {readonly range: number; readonly bulletSpeed: number; readonly bulletKnockback: number; readonly bulletLifetime: number}
 } => {
-    const weapon = sel.state.combat.weapon
-    const cooldown = entryCooldownOfAttacks(sel.state.combat.attacks)
+    const cooldown = entryCooldownOfAttacks(attacks)
     const charge = chargeTuningOfWeapon(weapon)
     if (weapon.type === 'ranged') {
         return {
@@ -353,6 +362,22 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     }
     bodyFormLabel.appendChild(bodyFormSelect)
     el.appendChild(bodyFormLabel)
+
+    /* 飞行开关：仅影响能否通过双击跳跃键进入飞行，不限制体形 */
+    const flightRow = document.createElement('div')
+    flightRow.className = 'dc-row'
+    const flightCheck = document.createElement('input')
+    flightCheck.type = 'checkbox'
+    flightCheck.className = 'dc-check'
+    flightCheck.id = 'chk-flight-enabled'
+    const flightLabel = document.createElement('label')
+    flightLabel.className = 'dc-label'
+    flightLabel.htmlFor = 'chk-flight-enabled'
+    localizeText(flightLabel, 'character.flight_enabled')
+    flightLabel.style.cssText = 'cursor:pointer'
+    flightRow.appendChild(flightCheck)
+    flightRow.appendChild(flightLabel)
+    el.appendChild(flightRow)
 
     el.appendChild(createSection('panel.faction'))
     const faction = createLabeledNumberInput(el, 'character.faction', {min: '0', step: '1', value: '0'})
@@ -435,6 +460,23 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     weaponTag.style.cssText = 'margin-top:2px;margin-bottom:4px'
     el.appendChild(weaponTag)
 
+    /* 主手武器属性：伤害、冷却、蓄力与远程弹道；动作时长仍由武器模组决定。 */
+    const createAttackFields = (): AttackFields => ({
+        atkRange: createLabeledNumberInput(el, 'character.range', {min: '0.1', step: '0.1', value: '10'}),
+        atkDmg: createLabeledNumberInput(el, 'character.damage', {min: '0.1', step: '0.1', value: '3'}),
+        atkCD: createLabeledNumberInput(el, 'character.cooldown', {min: '0.1', step: '0.1', value: '0.5'}),
+        atkChargeMult: createLabeledNumberInput(el, 'character.charge_power', {min: '100', step: '10', value: '200'}),
+        atkChargeTime: createLabeledNumberInput(el, 'character.charge_time', {min: '0.1', step: '0.1', value: '1'}),
+        bulletSpeed: createLabeledNumberInput(el, 'character.bullet_speed', {min: '1', step: '1', value: '20'}),
+        bulletKB: createLabeledNumberInput(el, 'character.bullet_knockback', {min: '0', step: '0.5', value: '3'}),
+        bulletLife: createLabeledNumberInput(el, 'character.bullet_life', {min: '0.5', step: '0.5', value: '3'}),
+    })
+    const mainAttackTitle = document.createElement('div')
+    mainAttackTitle.className = 'dc-hint'
+    localizeText(mainAttackTitle, 'character.attack_primary')
+    el.appendChild(mainAttackTitle)
+    const mainAttackFields = createAttackFields()
+
     /* 副手武器（仅声明 off_hand 槽位的体形） */
     const offhandRow = document.createElement('div')
     offhandRow.className = 'dc-row'
@@ -447,10 +489,20 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     offhandSelect.id = 'offhand-weapon-select'
     offhandSelect.className = 'dc-select'
     offhandSelect.style.cssText = 'max-width:180px'
-    fillWeaponSelect(offhandSelect, true, bodyFormOf(undefined))
+    fillWeaponSelect(offhandSelect, false, bodyFormOf(undefined))
     offhandLabel.appendChild(offhandSelect)
     offhandRow.appendChild(offhandLabel)
     el.appendChild(offhandRow)
+
+    const offhandAttackTitle = document.createElement('div')
+    offhandAttackTitle.className = 'dc-hint'
+    localizeText(offhandAttackTitle, 'character.attack_offhand')
+    el.appendChild(offhandAttackTitle)
+    const offhandAttackFields = createAttackFields()
+    const offhandAttackHint = document.createElement('div')
+    offhandAttackHint.className = 'dc-hint'
+    localizeText(offhandAttackHint, 'character.attack_offhand_hint')
+    el.appendChild(offhandAttackHint)
 
     /* 额外武器槽（狼头/爪、马蹄、龙翼爪/吐息）：按体形动态生成 */
     const extraWeaponRows = document.createElement('div')
@@ -475,20 +527,6 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     attackModuleHint.style.cssText = 'margin-bottom:4px;display:none'
     localizeText(attackModuleHint, 'character.attack_module_hint')
     el.appendChild(attackModuleHint)
-
-    const atkRange = createLabeledNumberInput(el, 'character.range', {min: '0.1', step: '0.1', value: '10'})
-    const atkDmg = createLabeledNumberInput(el, 'character.damage', {min: '0.1', step: '0.1', value: '3'})
-    const atkCD = createLabeledNumberInput(el, 'character.cooldown', {min: '0.1', step: '0.1', value: '0.5'})
-    /* 蓄力调参：最大蓄力倍率（%，100 = 无加成）+ 最长蓄力时间（秒）；对可蓄力武器生效 */
-    const atkChargeMult = createLabeledNumberInput(el, 'character.charge_power', {min: '100', step: '10', value: '200'})
-    const atkChargeTime = createLabeledNumberInput(el, 'character.charge_time', {min: '0.1', step: '0.1', value: '1'})
-    el.appendChild(document.createElement('br'))
-    const bulletSpeed = createLabeledNumberInput(el, 'character.bullet_speed', {min: '1', step: '1', value: '20'})
-    const bulletKB = createLabeledNumberInput(el, 'character.bullet_knockback', {min: '0', step: '0.5', value: '3'})
-    const bulletLife = createLabeledNumberInput(el, 'character.bullet_life', {min: '0.5', step: '0.5', value: '3'})
-
-    /* 攻击区字段集合（预填与回显共用） */
-    const attackFields: AttackFields = {atkRange, atkDmg, atkCD, atkChargeMult, atkChargeTime, bulletSpeed, bulletKB, bulletLife, weaponTag}
 
     /* 装备下拉：从当前体形槽位表动态生成，首项「无」= 空槽 */
     const armorSelects = new Map<string, HTMLSelectElement>()
@@ -603,6 +641,17 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         return [{name: weaponDisplayName(weapon), value: weapon.damage}]
     }
 
+    /** 收集当前主手 / 副手武器对某项体力数值的乘区来源（仅列出非 1 项） */
+    const weaponStaminaTerms = (valueOf: (weapon: WeaponConfig) => number | undefined): StatTerm[] => {
+        const terms: StatTerm[] = []
+        for (const weapon of [selectedWeaponOf(weaponSelect), selectedWeaponOf(offhandSelect)]) {
+            if (weapon === undefined) continue
+            const value = valueOf(weapon)
+            if (value !== undefined && value !== 1) terms.push({name: weaponDisplayName(weapon), value})
+        }
+        return terms
+    }
+
     /** 属性 / 状态行公式登记表 */
     const statFormulas: StatFormula[] = []
     /* 每个数值组独立成块级行：行内 `label` 连排会撑宽面板遮住左侧实体列表；允许换行以适配窄面板 */
@@ -669,13 +718,6 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const maxHP = createLabeledNumberInput(hpRow, 'character.base_hp', {min: '1', step: '1', value: '15'})
     registerFormula(hpRow, maxHP, () => [], () => [], hpHead, closeFormulaRow(hpRow))
 
-    /* 韧性：当前值 / 最大值 | (基础值 + 装备韧性加值) × 乘区 */
-    const poiseRow = formulaRow()
-    const poiseInput = createLabeledNumberInput(poiseRow, 'character.cur_poise', {min: '0', step: '1', value: '20'})
-    const poiseHead = openStateRow(poiseRow)
-    const poiseMaxInput = createLabeledNumberInput(poiseRow, 'character.base_poise', {min: '1', step: '1', value: '20'})
-    registerFormula(poiseRow, poiseMaxInput, () => poiseTermsOf(resolvedArmor(), resolvedLimb()), () => [], poiseHead, closeFormulaRow(poiseRow))
-
     /* 攻击：结果 | (基础值 + 主手武器伤害 + 装备攻击加成) × 乘区（逐类别一行） */
     const atkPhysRow = formulaRow()
     const atkPhysHead = openAttributeRow(atkPhysRow)
@@ -717,6 +759,14 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         for (const entry of statFormulas) renderStatFormula(entry)
     }
 
+    el.appendChild(createSection('character.section.poise'))
+    /* 韧性：当前值 / 最大值 | (基础值 + 装备韧性加值) × 乘区 */
+    const poiseRow = formulaRow()
+    const poiseInput = createLabeledNumberInput(poiseRow, 'character.cur_poise', {min: '0', step: '1', value: '20'})
+    const poiseHead = openStateRow(poiseRow)
+    const poiseMaxInput = createLabeledNumberInput(poiseRow, 'character.base_poise', {min: '1', step: '1', value: '20'})
+    registerFormula(poiseRow, poiseMaxInput, () => poiseTermsOf(resolvedArmor(), resolvedLimb()), () => [], poiseHead, closeFormulaRow(poiseRow))
+
     /* 韧性 / 倒地属性：受击后延迟回充参数 + 倒地/起身时长（逐项独立成块级行，避免行内连排撑宽面板） */
     const blockRow = (): HTMLDivElement => {
         const row = document.createElement('div')
@@ -727,6 +777,74 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const poiseRegenRateInput = createLabeledNumberInput(blockRow(), 'character.poise_regen_rate', {min: '0', step: '1', value: '8'})
     const knockdownDurationInput = createLabeledNumberInput(blockRow(), 'character.knockdown_duration', {min: '0', step: '0.1', value: '1.4'})
     const getUpDurationInput = createLabeledNumberInput(blockRow(), 'character.get_up_duration', {min: '0', step: '0.1', value: '1.2'})
+
+    /* 体力：上限 / 当前值 + 各动作消耗与恢复速度。展示形态与其他属性一致：
+       结果 | (基础值 + 加值) × 逐项乘区；消耗 / 恢复的乘区来自武器与护甲 / 肢体。 */
+    el.appendChild(createSection('character.section.stamina'))
+
+    const staminaRow = formulaRow()
+    const curStamina = createLabeledNumberInput(staminaRow, 'character.cur_stamina', {min: '0', step: '1', value: '20'})
+    const staminaHead = openStateRow(staminaRow)
+    const staminaMaxInput = createLabeledNumberInput(staminaRow, 'character.stamina_max', {min: '1', step: '1', value: '20'})
+    registerFormula(staminaRow, staminaMaxInput, () => [], () => [], staminaHead, closeFormulaRow(staminaRow))
+
+    const staminaRegenRateRow = formulaRow()
+    const staminaRegenRateHead = openAttributeRow(staminaRegenRateRow)
+    const staminaRegenRateInput = createLabeledNumberInput(staminaRegenRateRow, 'character.stamina_regen_rate', {min: '0', step: '0.1', value: '2'})
+    registerFormula(
+        staminaRegenRateRow,
+        staminaRegenRateInput,
+        () => [],
+        () => [...weaponStaminaTerms(weapon => weapon.stamina?.regen), ...staminaRegenTermsOf(resolvedArmor(), resolvedLimb())],
+        staminaRegenRateHead,
+        closeFormulaRow(staminaRegenRateRow),
+    )
+
+    const staminaRegenDelayRow = document.createElement('div')
+    el.appendChild(staminaRegenDelayRow)
+    const staminaRegenDelayInput = createLabeledNumberInput(staminaRegenDelayRow, 'character.stamina_regen_delay', {min: '0', step: '0.1', value: '0.5'})
+
+    const staminaDrainKeys: readonly {key: StaminaDrainState; labelKey: StringLocaleKey}[] = [
+        {key: 'sprinting', labelKey: 'character.stamina_drain_sprinting'},
+        {key: 'flying', labelKey: 'character.stamina_drain_flying'},
+        {key: 'blocking', labelKey: 'character.stamina_drain_blocking'},
+    ]
+    const staminaDrainInputs = new Map<StaminaDrainState, HTMLInputElement>()
+    for (const entry of staminaDrainKeys) {
+        const row = formulaRow()
+        const head = openAttributeRow(row)
+        const input = createLabeledNumberInput(row, entry.labelKey, {min: '0', step: '0.05', value: '0.2'})
+        registerFormula(
+            row,
+            input,
+            () => [],
+            () => [...weaponStaminaTerms(weapon => weapon.stamina?.drain?.[entry.key]), ...staminaDrainTermsOf(entry.key, resolvedArmor(), resolvedLimb())],
+            head,
+            closeFormulaRow(row),
+        )
+        staminaDrainInputs.set(entry.key, input)
+    }
+
+    const staminaEntryKeys: readonly {key: StaminaEntryAction; labelKey: StringLocaleKey}[] = [
+        {key: 'attack', labelKey: 'character.stamina_entry_attack'},
+        {key: 'roll', labelKey: 'character.stamina_entry_roll'},
+        {key: 'jump', labelKey: 'character.stamina_entry_jump'},
+    ]
+    const staminaEntryInputs = new Map<StaminaEntryAction, HTMLInputElement>()
+    for (const entry of staminaEntryKeys) {
+        const row = formulaRow()
+        const head = openAttributeRow(row)
+        const input = createLabeledNumberInput(row, entry.labelKey, {min: '0', step: '0.1', value: '0.5'})
+        registerFormula(
+            row,
+            input,
+            () => [],
+            () => [...weaponStaminaTerms(weapon => weapon.stamina?.entry?.[entry.key]), ...staminaEntryTermsOf(entry.key, resolvedArmor(), resolvedLimb())],
+            head,
+            closeFormulaRow(row),
+        )
+        staminaEntryInputs.set(entry.key, input)
+    }
 
     /* 装备 / 武器下拉与基础值输入变更即时重算公式（武器决定攻击行的加值项） */
     for (const select of armorSelects.values()) select.onchange = refreshStatFormulas
@@ -750,7 +868,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     /* 动态字段（坐标 / 朝向 / 当前生命 / 当前韧性）：逐帧实时同步运行时状态；
        用户一旦编辑即标记为「待应用」，在 Apply 或重新渲染前跳过刷新，避免覆盖尚未提交的输入 */
     const dirtyDynamic = new Set<HTMLInputElement>()
-    for (const input of [posX, posY, posZ, facingDeg, curHP, poiseInput]) {
+    for (const input of [posX, posY, posZ, facingDeg, curHP, poiseInput, curStamina]) {
         input.addEventListener('input', () => dirtyDynamic.add(input))
     }
 
@@ -998,34 +1116,72 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         applyOriginVisibility(originSelect.value, playerCheck.checked)
     }
 
-    /** 远程弹道数值仅在所选武器为远程时显示（近战打击距离由武器几何驱动） */
-    const showRanged = (): void => {
-        const weapon = selectedWeaponOf(weaponSelect)
+    /** 按武器类型显示远程弹道 / 蓄力字段（主手与副手各自独立） */
+    const showAttackFields = (fields: AttackFields, weapon: WeaponConfig | undefined): void => {
         const isRanged = weapon !== undefined && weapon.type === 'ranged'
-        atkRange.parentElement!.style.display = isRanged ? '' : 'none';
-        [bulletSpeed, bulletKB, bulletLife].forEach(input => {
+        fields.atkRange.parentElement!.style.display = isRanged ? '' : 'none';
+        [fields.bulletSpeed, fields.bulletKB, fields.bulletLife].forEach(input => {
             input.parentElement!.style.display = isRanged ? '' : 'none'
         })
-    }
-
-    /** 蓄力数值仅在所选武器可蓄力时显示（近战重击 / 弓与投掷类；不可蓄力武器不写 charge） */
-    const showCharge = (): void => {
-        const weapon = selectedWeaponOf(weaponSelect)
         const chargeable = weapon !== undefined && chargeTuningOfWeapon(weapon) !== undefined
-        ;[atkChargeMult, atkChargeTime].forEach(input => {
+        ;[fields.atkChargeMult, fields.atkChargeTime].forEach(input => {
             input.parentElement!.style.display = chargeable ? '' : 'none'
         })
     }
 
+    /** 副手攻击数值区显隐：体形无 off_hand 槽时整组隐藏 */
+    const applyOffhandFieldVisibility = (hasOffhand: boolean): void => {
+        offhandAttackTitle.style.display = hasOffhand ? '' : 'none'
+        offhandAttackHint.style.display = hasOffhand ? '' : 'none'
+        if (hasOffhand) {
+            showAttackFields(offhandAttackFields, selectedWeaponOf(offhandSelect))
+            return
+        }
+        for (const input of [offhandAttackFields.atkDmg, offhandAttackFields.atkCD, offhandAttackFields.atkChargeMult,
+            offhandAttackFields.atkChargeTime, offhandAttackFields.atkRange, offhandAttackFields.bulletSpeed,
+            offhandAttackFields.bulletKB, offhandAttackFields.bulletLife]) {
+            input.parentElement!.style.display = 'none'
+        }
+    }
+
+    /** 由当前手所选武器 + 数值输入构造攻击配置（动作时长 / 动画仍由武器模组决定） */
+    const attackConfigOf = (weapon: WeaponConfig | undefined, fields: AttackFields, fallbackId: string): AttackConfig => {
+        const damage = parseFloat(fields.atkDmg.value)
+        const cooldown = parseFloat(fields.atkCD.value)
+        const chargeMult = parseFloat(fields.atkChargeMult.value)
+        const chargeTime = parseFloat(fields.atkChargeTime.value)
+        const chargeable = weapon !== undefined && chargeTuningOfWeapon(weapon) !== undefined
+        return {
+            weaponId: weapon?.id ?? fallbackId,
+            ...(isNaN(damage) ? {} : {damage}),
+            ...(isNaN(cooldown) ? {} : {cooldown}),
+            ...(chargeable && !(isNaN(chargeMult) && isNaN(chargeTime)) ? {charge: {
+                ...(isNaN(chargeMult) ? {} : {maxChargeMultiplier: chargeMult}),
+                ...(isNaN(chargeTime) ? {} : {maxChargeTime: chargeTime}),
+            }} : {}),
+            ...(weapon !== undefined && weapon.type === 'ranged'
+                ? {ranged: {
+                    range: parseFloat(fields.atkRange.value),
+                    bulletSpeed: parseFloat(fields.bulletSpeed.value),
+                    bulletKnockback: parseFloat(fields.bulletKB.value),
+                    bulletLifetime: parseFloat(fields.bulletLife.value),
+                }}
+                : {}),
+        }
+    }
+
     weaponSelect.onchange = () => {
-        if (weaponSelect.value.length > 0) autoFillFromWeapon(weaponSelect.value, attackFields)
-        showRanged()
-        showCharge()
+        if (weaponSelect.value.length > 0) autoFillFromWeapon(weaponSelect.value, mainAttackFields, weaponTag)
+        showAttackFields(mainAttackFields, selectedWeaponOf(weaponSelect))
         updateOffhandAvailability()
         rebuildAttackModuleOptions()
     }
 
-    offhandSelect.onchange = () => rebuildAttackModuleOptions()
+    offhandSelect.onchange = () => {
+        if (offhandSelect.value.length > 0) autoFillFromWeapon(offhandSelect.value, offhandAttackFields)
+        showAttackFields(offhandAttackFields, selectedWeaponOf(offhandSelect))
+        rebuildAttackModuleOptions()
+    }
 
     const getSelected = (): CharacterEntity | undefined => {
         const id = ctx.getSelectedId()
@@ -1246,6 +1402,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         setIfUnfocused(facingDeg, String(Math.round(ctx.getFacing?.(sel.state.identity.id) ?? 0)))
         setIfUnfocused(curHP, formatNumber(sel.state.combat.health))
         setIfUnfocused(poiseInput, formatNumber(sel.state.combat.poise))
+        setIfUnfocused(curStamina, formatNumber(sel.state.stamina.current))
         refreshOriginValue(sel)
     }
 
@@ -1277,34 +1434,56 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         const form = bodyFormOf(sel.state.config.bodyFormId)
         const primarySlot = primarySlotOf(form)
         fillWeaponSelect(weaponSelect, false, form, primarySlot)
-        fillWeaponSelect(offhandSelect, true, form, 'off_hand')
+        fillWeaponSelect(offhandSelect, false, form, 'off_hand')
         const hasOffhand = form.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'off_hand')
         offhandRow.style.display = hasOffhand ? '' : 'none'
         rebuildExtraWeaponSlots(form, sel)
-        const attack = readSelectedAttack(sel)
         const primaryWeaponId = primarySlot !== undefined ? sel.state.combat.equipment.weapon[primarySlot] : undefined
         weaponSelect.value = primaryWeaponId ?? ''
-        const selectedPrimary = selectedWeaponOf(weaponSelect)
-        atkDmg.value = formatNumber(selectedPrimary?.damage ?? attack.damage)
-        atkCD.value = formatNumber(attack.cooldown)
-        if (attack.charge !== undefined) {
-            atkChargeMult.value = formatNumber(attack.charge.maxChargeMultiplier)
-            atkChargeTime.value = formatNumber(attack.charge.maxChargeTime)
+        const mainAttack = readRuntimeAttack(sel.state.combat.weapon, sel.state.combat.attacks)
+        mainAttackFields.atkDmg.value = formatNumber(mainAttack.damage)
+        mainAttackFields.atkCD.value = formatNumber(mainAttack.cooldown)
+        if (mainAttack.charge !== undefined) {
+            mainAttackFields.atkChargeMult.value = formatNumber(mainAttack.charge.maxChargeMultiplier)
+            mainAttackFields.atkChargeTime.value = formatNumber(mainAttack.charge.maxChargeTime)
         }
-        if (attack.ranged !== undefined) {
-            atkRange.value = formatNumber(attack.ranged.range)
-            bulletSpeed.value = formatNumber(attack.ranged.bulletSpeed)
-            bulletKB.value = formatNumber(attack.ranged.bulletKnockback)
-            bulletLife.value = formatNumber(attack.ranged.bulletLifetime)
+        if (mainAttack.ranged !== undefined) {
+            mainAttackFields.atkRange.value = formatNumber(mainAttack.ranged.range)
+            mainAttackFields.bulletSpeed.value = formatNumber(mainAttack.ranged.bulletSpeed)
+            mainAttackFields.bulletKB.value = formatNumber(mainAttack.ranged.bulletKnockback)
+            mainAttackFields.bulletLife.value = formatNumber(mainAttack.ranged.bulletLifetime)
+        }
+        const offhandRuntime = sel.state.combat.offhand
+        if (offhandRuntime === undefined) {
+            const selectedOffhand = selectedWeaponOf(offhandSelect)
+            if (selectedOffhand !== undefined) autoFillFromWeapon(selectedOffhand.id, offhandAttackFields)
+        } else {
+            const offhandAttack = readRuntimeAttack(offhandRuntime.weapon, offhandRuntime.attacks)
+            offhandAttackFields.atkDmg.value = formatNumber(offhandAttack.damage)
+            offhandAttackFields.atkCD.value = formatNumber(offhandAttack.cooldown)
+            if (offhandAttack.charge !== undefined) {
+                offhandAttackFields.atkChargeMult.value = formatNumber(offhandAttack.charge.maxChargeMultiplier)
+                offhandAttackFields.atkChargeTime.value = formatNumber(offhandAttack.charge.maxChargeTime)
+            }
+            if (offhandAttack.ranged !== undefined) {
+                offhandAttackFields.atkRange.value = formatNumber(offhandAttack.ranged.range)
+                offhandAttackFields.bulletSpeed.value = formatNumber(offhandAttack.ranged.bulletSpeed)
+                offhandAttackFields.bulletKB.value = formatNumber(offhandAttack.ranged.bulletKnockback)
+                offhandAttackFields.bulletLife.value = formatNumber(offhandAttack.ranged.bulletLifetime)
+            }
         }
         weaponTag.textContent = renderWeaponTag()
         attackSegmentTag.textContent = renderAttackSegmentTag()
 
         /* 副手武器与持握模式回显（未知 / 已移除的副手武器视为无） */
         const offhandWeapon = sel.state.combat.offhand?.weapon
-        offhandSelect.value = offhandWeapon !== undefined && findWeaponLike(offhandWeapon.id) !== undefined
+        const offhandDefault = form.defaultWeaponLoadout.off_hand
+        const offhandValid = offhandWeapon !== undefined && findWeaponLike(offhandWeapon.id) !== undefined
+        offhandSelect.value = offhandValid
             ? offhandWeapon.id
-            : ''
+            : offhandDefault !== undefined && findWeaponLike(offhandDefault) !== undefined
+                ? offhandDefault
+                : offhandSelect.options[0]?.value ?? ''
         updateOffhandAvailability()
         rebuildAttackModuleOptions()
 
@@ -1327,6 +1506,20 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         poiseRegenRateInput.value = formatNumber(sel.state.combat.poiseRegenPerSec)
         knockdownDurationInput.value = formatNumber(sel.state.combat.knockdownDuration)
         getUpDurationInput.value = formatNumber(sel.state.combat.getUpDuration)
+
+        /* 体力：面板显示基础配置（当前值逐帧刷新） */
+        const staminaCfg = resolveStaminaConfig(sel.state.config)
+        staminaMaxInput.value = formatNumber(staminaCfg.max)
+        curStamina.value = formatNumber(sel.state.stamina.current)
+        staminaRegenDelayInput.value = formatNumber(staminaCfg.regenDelay)
+        staminaRegenRateInput.value = formatNumber(staminaCfg.regenPerSec)
+        staminaDrainInputs.get('sprinting')!.value = formatNumber(staminaCfg.drainPerSec.sprinting)
+        staminaDrainInputs.get('flying')!.value = formatNumber(staminaCfg.drainPerSec.flying)
+        staminaDrainInputs.get('blocking')!.value = formatNumber(staminaCfg.drainPerSec.blocking)
+        staminaEntryInputs.get('attack')!.value = formatNumber(staminaCfg.entryCost.attack)
+        staminaEntryInputs.get('roll')!.value = formatNumber(staminaCfg.entryCost.roll)
+        staminaEntryInputs.get('jump')!.value = formatNumber(staminaCfg.entryCost.jump)
+        flightCheck.checked = sel.state.config.flightEnabled === true
         refreshStatFormulas()
 
         /* 额外锁定点回显（默认身体中心点固定，不在此列表） */
@@ -1352,8 +1545,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         applyBuildVisibility(sel.state.ai.peaceStrategy, sel.state.identity.isPlayer)
         applyOriginVisibility(sel.state.ai.originStrategy, sel.state.identity.isPlayer)
         refreshOriginValue(sel)
-        showRanged()
-        showCharge()
+        showAttackFields(mainAttackFields, selectedWeaponOf(weaponSelect))
+        applyOffhandFieldVisibility(hasOffhand)
     }
 
     return {
@@ -1430,35 +1623,16 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                         boxTypes,
                     })
                 }
-                /* 攻击配置：装备武器 + 数值覆写（动作时长/动画由武器模组的攻击链决定，不在此提交） */
+                /* 攻击配置：主手 / 副手各自独立的数值覆写（动作时长/动画由武器模组决定，不在此提交） */
+                const targetForm = bodyFormOf(bodyFormSelect.value)
                 const selectedWeapon = selectedWeaponOf(weaponSelect)
-                const attackDamage = parseFloat(atkDmg.value)
-                const attackCooldown = parseFloat(atkCD.value)
-                const chargeMult = parseFloat(atkChargeMult.value)
-                const chargeTime = parseFloat(atkChargeTime.value)
-                /* 蓄力调参仅对可蓄力武器写入（不可蓄力武器忽略该字段，避免写无意义存档） */
-                const chargeable = selectedWeapon !== undefined && chargeTuningOfWeapon(selectedWeapon) !== undefined
-                const newAttack: AttackConfig = {
-                    weaponId: selectedWeapon?.id ?? weaponSelect.value,
-                    ...(isNaN(attackDamage) ? {} : {damage: attackDamage}),
-                    ...(isNaN(attackCooldown) ? {} : {cooldown: attackCooldown}),
-                    ...(chargeable && !(isNaN(chargeMult) && isNaN(chargeTime)) ? {charge: {
-                        ...(isNaN(chargeMult) ? {} : {maxChargeMultiplier: chargeMult}),
-                        ...(isNaN(chargeTime) ? {} : {maxChargeTime: chargeTime}),
-                    }} : {}),
-                    /* 远程弹道数值仅远程武器写入 */
-                    ...(selectedWeapon !== undefined && selectedWeapon.type === 'ranged'
-                        ? {ranged: {
-                            range: parseFloat(atkRange.value),
-                            bulletSpeed: parseFloat(bulletSpeed.value),
-                            bulletKnockback: parseFloat(bulletKB.value),
-                            bulletLifetime: parseFloat(bulletLife.value),
-                        }}
-                        : {}),
-                }
-                /* 副手武器：空选择 = 卸下（null）；否则按所选武器（数值取预设，可后续扩展覆写） */
+                const newAttack = attackConfigOf(selectedWeapon, mainAttackFields, weaponSelect.value)
                 const selectedOffhand = selectedOffhandWeapon()
-                const newOffhand: AttackConfig | null = selectedOffhand === undefined ? null : {weaponId: selectedOffhand.id}
+                const hasOffhandSlot = targetForm.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'off_hand')
+                const offhandFallbackId = targetForm.defaultWeaponLoadout.off_hand
+                const newOffhand: AttackConfig | null = !hasOffhandSlot
+                    ? null
+                    : attackConfigOf(selectedOffhand, offhandAttackFields, selectedOffhand?.id ?? offhandFallbackId ?? offhandSelect.value)
                 /* 护甲 / 肢体装备在本次 Apply 中读取一次，供防御重算与韧性上界换算共用 */
                 const armorLoadout = readArmorLoadout()
                 const limbLoadout = readLimbLoadout()
@@ -1478,10 +1652,27 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (knockdownValue !== undefined) poiseCfg.knockdownDuration = knockdownValue
                 const getUpValue = parseOpt(getUpDurationInput.value)
                 if (getUpValue !== undefined) poiseCfg.getUpDuration = getUpValue
+                /* 体力基础配置：输入非法时按默认值回填，保证写入完整可校验配置 */
+                const staminaConfig: StaminaConfig = {
+                    max: parseOpt(staminaMaxInput.value) ?? DEFAULT_STAMINA_MAX,
+                    regenDelay: parseOpt(staminaRegenDelayInput.value) ?? DEFAULT_STAMINA_REGEN_DELAY,
+                    regenPerSec: parseOpt(staminaRegenRateInput.value) ?? DEFAULT_STAMINA_REGEN_PER_SEC,
+                    entryCost: {
+                        attack: parseOpt(staminaEntryInputs.get('attack')!.value) ?? DEFAULT_STAMINA_ENTRY_COST,
+                        roll: parseOpt(staminaEntryInputs.get('roll')!.value) ?? DEFAULT_STAMINA_ENTRY_COST,
+                        jump: parseOpt(staminaEntryInputs.get('jump')!.value) ?? DEFAULT_STAMINA_ENTRY_COST,
+                    },
+                    drainPerSec: {
+                        sprinting: parseOpt(staminaDrainInputs.get('sprinting')!.value) ?? DEFAULT_STAMINA_DRAIN_PER_SEC,
+                        flying: parseOpt(staminaDrainInputs.get('flying')!.value) ?? DEFAULT_STAMINA_DRAIN_PER_SEC,
+                        blocking: parseOpt(staminaDrainInputs.get('blocking')!.value) ?? DEFAULT_STAMINA_DRAIN_PER_SEC,
+                    },
+                }
                 /* 体形切换：先按所选基础模组运行时重构（骨架 / 外观 / 碰撞 / 装备槽），再应用其余配置 */
                 ctx.setBodyForm?.(cur.state.identity.id, bodyFormSelect.value)
                 /* 立即按新体形刷新装备区域可见性（不等下次回显） */
                 applyEquipVisibility(bodyFormSelect.value)
+                applyOffhandFieldVisibility(bodyFormOf(bodyFormSelect.value).equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'off_hand'))
                 const handednessValue = handednessSelect.value
                 const applyForm = bodyFormOf(bodyFormSelect.value)
                 const primarySlot = primarySlotOf(applyForm) ?? 'main_hand'
@@ -1490,6 +1681,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     [primarySlot]: newAttack.weaponId,
                 }
                 if (newOffhand !== null) weaponLoadout.off_hand = newOffhand.weaponId
+                else delete weaponLoadout.off_hand
                 for (const [slot, select] of extraWeaponSlotSelects) {
                     if (select.value.length > 0) weaponLoadout[slot] = select.value
                 }
@@ -1499,6 +1691,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     scale: parseFloat(scale.value),
                     ...(isHandedness(handednessValue) ? {bodyState: {...cur.state.bodyState, handedness: handednessValue}} : {}),
                     ...poiseCfg,
+                    flightEnabled: flightCheck.checked,
+                    stamina: staminaConfig,
                 }, newAttack, parseFloat(faction.value), parseFloat(maxHP.value), buildTendencyConfig(), parseFloat(curHP.value), {
                     baseDefense: readBaseDefense(),
                     baseAttack: readBaseAttack(),
@@ -1511,6 +1705,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 /* 当前韧性：0..最大韧性（换装导致上界变化时由 setPoise 夹取） */
                 const poiseValue = parseFloat(poiseInput.value)
                 if (!isNaN(poiseValue)) ctx.setPoise?.(cur.state.identity.id, poiseValue)
+                const staminaValue = parseFloat(curStamina.value)
+                if (!isNaN(staminaValue)) ctx.setStamina?.(cur.state.identity.id, staminaValue)
                 /* 攻击模组：换装后按面板选择显式设置（不可用时回退第一个可用模组） */
                 const moduleValue = attackModuleSelect.value
                 if (moduleValue.length > 0) ctx.setAttackModule?.(cur.state.identity.id, moduleValue)
@@ -1531,6 +1727,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     baseAtkMagic.value = formatNumber(updated.state.combat.baseAttack.magic)
                     poiseMaxInput.value = formatNumber(updated.state.combat.basePoiseMax)
                     poiseInput.value = formatNumber(updated.state.combat.poise)
+                    staminaMaxInput.value = formatNumber(updated.state.stamina.max)
+                    curStamina.value = formatNumber(updated.state.stamina.current)
                     refreshStatFormulas()
                 }
                 /* 应用后清除「待应用」标记，动态字段恢复逐帧实时刷新 */

@@ -140,6 +140,8 @@ export type CharacterLocale = {
     'character.title': string
     'character.section.equip': string
     'character.section.attributes': string
+    'character.section.poise': string
+    'character.section.stamina': string
     'character.section.lock_points': string
     'character.section.player': string
     'character.section.ai': string
@@ -159,6 +161,9 @@ export type CharacterLocale = {
     'character.attack_module': string
     'character.attack_module_tip': string
     'character.attack_module_hint': string
+    'character.attack_primary': string
+    'character.attack_offhand': string
+    'character.attack_offhand_hint': string
     'character.range': string
     'character.damage': string
     'character.cooldown': string
@@ -173,6 +178,17 @@ export type CharacterLocale = {
     'character.cur_poise': string
     'character.poise_regen_delay': string
     'character.poise_regen_rate': string
+    'character.flight_enabled': string
+    'character.stamina_max': string
+    'character.cur_stamina': string
+    'character.stamina_regen_delay': string
+    'character.stamina_regen_rate': string
+    'character.stamina_drain_sprinting': string
+    'character.stamina_drain_flying': string
+    'character.stamina_drain_blocking': string
+    'character.stamina_entry_attack': string
+    'character.stamina_entry_roll': string
+    'character.stamina_entry_jump': string
     'character.knockdown_duration': string
     'character.get_up_duration': string
     'character.base_atk_phys': string
@@ -388,6 +404,8 @@ export const characterZh: CharacterLocale = {
     'character.title': '角色控制',
     'character.section.equip': '装备',
     'character.section.attributes': '属性',
+    'character.section.poise': '韧性',
+    'character.section.stamina': '体力',
     'character.section.lock_points': '锁定点',
     'character.section.player': '玩家',
     'character.section.ai': 'AI 策略',
@@ -407,6 +425,9 @@ export const characterZh: CharacterLocale = {
     'character.attack_module': '攻击模组',
     'character.attack_module_tip': '攻击模组：由角色全部武器槽的装备情况决定可用列表',
     'character.attack_module_hint': '当前可用模组由武器槽装备提供；Ctrl 可环切',
+    'character.attack_primary': '主手攻击',
+    'character.attack_offhand': '副手攻击',
+    'character.attack_offhand_hint': '副手武器属性独立配置；角色战斗中的冷却、蓄力与远程弹道仍参照主手武器',
     'character.range': '射程',
     'character.damage': '伤害',
     'character.cooldown': '冷却',
@@ -421,6 +442,17 @@ export const characterZh: CharacterLocale = {
     'character.cur_poise': '当前韧性',
     'character.poise_regen_delay': '韧性延迟',
     'character.poise_regen_rate': '韧性回复',
+    'character.flight_enabled': '允许飞行',
+    'character.stamina_max': '基础体力上限',
+    'character.cur_stamina': '当前体力',
+    'character.stamina_regen_delay': '体力恢复延迟',
+    'character.stamina_regen_rate': '体力恢复速度',
+    'character.stamina_drain_sprinting': '跑步消耗',
+    'character.stamina_drain_flying': '飞行消耗',
+    'character.stamina_drain_blocking': '格挡消耗',
+    'character.stamina_entry_attack': '攻击消耗',
+    'character.stamina_entry_roll': '翻滚消耗',
+    'character.stamina_entry_jump': '跳跃消耗',
     'character.knockdown_duration': '倒地时长',
     'character.get_up_duration': '起身时长',
     'character.base_atk_phys': '基础物攻',
@@ -633,6 +665,8 @@ export const characterEn: CharacterLocale = {
     'character.title': 'Character Control',
     'character.section.equip': 'Equipment',
     'character.section.attributes': 'Attributes',
+    'character.section.poise': 'Poise',
+    'character.section.stamina': 'Stamina',
     'character.section.lock_points': 'Lock Points',
     'character.section.player': 'Player',
     'character.section.ai': 'AI Strategy',
@@ -652,6 +686,9 @@ export const characterEn: CharacterLocale = {
     'character.attack_module': 'Attack Module',
     'character.attack_module_tip': 'Attack modules are determined by all equipped weapon slots',
     'character.attack_module_hint': 'Available modules come from equipped weapon slots; Ctrl cycles them',
+    'character.attack_primary': 'Main-hand Attack',
+    'character.attack_offhand': 'Off-hand Attack',
+    'character.attack_offhand_hint': 'Off-hand weapon stats are configured independently; combat cooldown, charge and ballistics still follow the main-hand weapon',
     'character.range': 'Range',
     'character.damage': 'Damage',
     'character.cooldown': 'Cooldown',
@@ -666,6 +703,17 @@ export const characterEn: CharacterLocale = {
     'character.cur_poise': 'CurPoise',
     'character.poise_regen_delay': 'PoiseDelay',
     'character.poise_regen_rate': 'PoiseRegen',
+    'character.flight_enabled': 'Flight',
+    'character.stamina_max': 'Base Stamina',
+    'character.cur_stamina': 'Cur Stamina',
+    'character.stamina_regen_delay': 'Stam Delay',
+    'character.stamina_regen_rate': 'Stam Regen',
+    'character.stamina_drain_sprinting': 'Sprint Cost',
+    'character.stamina_drain_flying': 'Fly Cost',
+    'character.stamina_drain_blocking': 'Block Cost',
+    'character.stamina_entry_attack': 'Atk Cost',
+    'character.stamina_entry_roll': 'Roll Cost',
+    'character.stamina_entry_jump': 'Jump Cost',
     'character.knockdown_duration': 'Knockdown(s)',
     'character.get_up_duration': 'GetUp(s)',
     'character.base_atk_phys': 'Base Phys Atk',

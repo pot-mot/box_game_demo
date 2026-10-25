@@ -27,9 +27,10 @@
 | 操作 | 玩家主控 | 纯摄像机 |
 |------|----------|----------|
 | 移动 | WASD（相对相机水平） | WASD + Z/X 自由飞行 |
-| `roll`（默认 Shift） | 边沿触发**翻滚** | — |
+| `roll`（默认 Shift） | 短按松开**翻滚**；按住超过阈值直接进入**跑步**（本次不翻滚） | — |
 | `boost`（默认 Shift） | — | 按住**加速**自由飞行 |
-| 跳跃 | 空格 | — |
+| 跳跃 | 空格；窗口内双击切换**飞行** | — |
+| 飞行升降 | `Z` / `X`（仅飞行状态消费） | — |
 | 左键拖拽 | 旋转视角 | 旋转视角 |
 | 右键拖拽 | 无平移（play 右键 = 重击） | `mouse_pan` 平移 |
 | 滚轮 | 缩放 | 缩放（可 `setZoomEnabled(false)` 让位） |
@@ -37,7 +38,9 @@
 
 ## 输入动作
 
-- `roll`：玩家主控翻滚（`CHARACTER_INPUT` 的 `roll` 由 `createPlayerControl().move()` 边沿读取）。
+- `roll`：玩家主控翻滚 + 跑步保持，由 `createPlayerControl().move()` 读取；按住超过 `PLAYER_ROLL_SPRINT_HOLD_THRESHOLD`（0.3s）直接跑步，短按松开才触发翻滚。
+- `jump`：玩家主控跳跃；同一按键在 `PLAYER_FLY_DOUBLE_TAP_WINDOW` 内再次按下产生飞行切换边沿（角色 `flightEnabled` 为真时生效）。
+- `move_up` / `move_down`：`Z` / `X`，玩家主控在飞行状态作为升降意图；纯摄像机方案仍用于自由飞行升降。
 - `boost`：纯摄像机自由飞行加速（`applyKeyboardFreeFlight` / `applyFreeFlightMovement` 每帧读取）。
 - 二者默认均绑定 `Shift`，但分属不同方案，运行时不会同时消费。
 - `mouse_pan`：所有纯摄像机模式（含 edit / bone_edit）共用，默认右键。

@@ -77,7 +77,7 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
     const applyAnimation = (dt: number): void => {
         const ctx: AnimationContext = {
             stateTime,
-            horizontalSpeed: currentState === 'walking' || currentState === 'swimming' ? ACTOR_SPEED : 0,
+            horizontalSpeed: currentState === 'walking' || currentState === 'sprinting' || currentState === 'swimming' ? ACTOR_SPEED : 0,
             verticalSpeed: currentState === 'falling' ? -8 : 0,
             attackSegment: undefined,
             attackPhase: undefined,

@@ -1,5 +1,5 @@
 /**
- * 玩家 HUD — 左上角常驻显示生命、韧性、格挡与蓄力
+ * 玩家 HUD — 左上角常驻显示生命、韧性、体力、格挡与蓄力
  */
 import {translate} from '../../i18n/index.ts'
 import {localizeText} from '../../i18n/dom.ts'
@@ -11,6 +11,10 @@ export interface PlayerHUDData {
     poise: number
     /** 韧性上界 */
     poiseMax: number
+    /** 当前体力值 */
+    stamina: number
+    /** 体力上限 */
+    staminaMax: number
     /** 当前格挡槽值（仅持盾时有效） */
     guard: number
     /** 格挡槽上限（0 = 未持盾，隐藏格挡条） */
@@ -81,6 +85,22 @@ export const createPlayerHUD = (): PlayerHUD => {
     poiseOuter.appendChild(poiseInner)
     el.appendChild(poiseOuter)
 
+    /* 体力条：跑步 / 飞行 / 格挡持续消耗，攻击 / 翻滚 / 跳跃一次性消耗 */
+    const staminaLabel = document.createElement('div')
+    staminaLabel.className = 'dc-hint'
+    staminaLabel.style.cssText = 'margin-bottom:2px'
+    localizeText(staminaLabel, 'play.hud.stamina')
+    el.appendChild(staminaLabel)
+
+    const staminaOuter = document.createElement('div')
+    staminaOuter.className = 'dc-bar'
+    staminaOuter.style.cssText = 'height:6px;margin-bottom:6px'
+    const staminaInner = document.createElement('div')
+    staminaInner.className = 'dc-bar__fill'
+    staminaInner.style.cssText = `height:100%;width:100%;background:${FILL_WARNING};transition:background .15s`
+    staminaOuter.appendChild(staminaInner)
+    el.appendChild(staminaOuter)
+
     /* 格挡槽条（仅持盾时显示）：格挡消耗、归零触发破防（guard_broken） */
     const guardRow = document.createElement('div')
     guardRow.style.cssText = 'display:none;margin-bottom:6px'
@@ -130,6 +150,10 @@ export const createPlayerHUD = (): PlayerHUD => {
         const poisePct = data.poiseMax > 0 ? Math.max(0, Math.min(1, data.poise / data.poiseMax)) : 0
         poiseInner.style.width = `${poisePct * 100}%`
         poiseInner.style.background = poisePct > 0.25 ? FILL_INFO : FILL_DANGER
+
+        const staminaPct = data.staminaMax > 0 ? Math.max(0, Math.min(1, data.stamina / data.staminaMax)) : 0
+        staminaInner.style.width = `${staminaPct * 100}%`
+        staminaInner.style.background = staminaPct > 0.25 ? FILL_WARNING : FILL_DANGER
 
         guardRow.style.display = data.guardMax > 0 ? '' : 'none'
         if (data.guardMax > 0) {

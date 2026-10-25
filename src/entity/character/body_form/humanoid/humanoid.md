@@ -26,6 +26,8 @@
   命令 `pnpm bake:support-hands`。基础与攻击支撑手都作为独立组合层参与求值。
   生产运行动画只采样预烘焙 clip，**无运行时 IK**（节点 IK 仅服务骨骼编辑器 Gizmo）。
 - **falling 参数化**：腿部不再按速度档烘焙，由 `horizontalSpeed` / `verticalSpeed` 在进度组合中实时求值。
+- **跑步 / 飞行**：`sprinting` 为更大步幅与摆臂的循环步态；`flying` 为双臂侧后掠、双腿下垂的悬停轮廓。两者均纳入 `HUMANOID_CLIP_STATE_META` 与 `BASE_POSE_SAMPLERS`，并随展示模式动作下拉提供。
+- **默认武器**：`defaultWeaponLoadout = {main_hand: 'unarmed', off_hand: 'unarmed'}`，新建人形双手均填充空手；武器下拉中空手固定排在近战首位，副手下拉不允许空槽。
 - **惯用手 / 攻击模组**：`handedness` 属于人形 `bodyState`；通用 `attackModule` 由全部武器槽解析（人形持械模组带 `holdMode` 语义），不放在通用 `CharacterConfig` 顶层；
   骨架与数据恒为 canonical 右撇子，左撇子由 `mirrorClip` + 挂点/网格镜像派生。
 - **装备槽**：`state/equip_slots.ts` 声明 limb / weapon / armor 槽；`equipment/modules.ts` 按槽位生成装备模组；

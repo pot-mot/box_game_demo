@@ -175,7 +175,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     let showcaseExited = false
 
     if (mode === 'edit') {
-        editMode = setupEditMode(camera, renderer, scene, systems, allTerrainSources, terrainSource, building, excludeFromBackground)
+        editMode = setupEditMode(camera, renderer, scene, systems, allTerrainSources, terrainSource, building, excludeFromBackground, characterSystem)
     } else if (mode === 'play') {
         playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem, boxSpawner)
     } else if (mode === 'showcase') {
@@ -286,7 +286,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     /* 进入编辑模式时保存初始快照，保证始终至少有一个快照 */
     if (mode === 'edit') saveSnapshot()
 
-    characterSystem.setCollisionVisible(mode === 'edit')
+    /* 调试可视化默认全部关闭（编辑模式下由实体列表上方的显示控制面板开启） */
+    characterSystem.setCollisionVisible(false)
 
     // --- 恢复相机 ---
     if (loadResult) {

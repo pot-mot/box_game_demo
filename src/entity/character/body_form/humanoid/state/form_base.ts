@@ -21,8 +21,10 @@ const baseHealthOf = (weapon: WeaponConfig): number => weapon.type === 'melee' ?
 export const HUMANOID_CLIP_STATE_META: Readonly<Record<BaseClipState, {duration: number; loop: boolean}>> = {
     idle: {duration: (Math.PI * 2) / 1.8, loop: true},
     walking: {duration: (Math.PI * 2) / WALK_CYCLE_FREQ, loop: true},
+    sprinting: {duration: (Math.PI * 2) / (WALK_CYCLE_FREQ * 1.4), loop: true},
     jumping: {duration: JUMP_EXTEND_END, loop: false},
     falling: {duration: 1, loop: true},
+    flying: {duration: (Math.PI * 2) / 1.4, loop: true},
     swimming: {duration: (Math.PI * 2) / 4, loop: true},
     floating: {duration: (Math.PI * 2) / 1.6, loop: true},
     dying: {duration: FALL_END, loop: false},

@@ -60,3 +60,9 @@ export const LOCK_ON_BLEND_FACTOR = 8
 
 /** 判定为「点击」的最大拖拽位移（px，超过视为拖拽旋转视角，不触发攻击 / 不解除锁定） */
 export const PLAYER_CLICK_DRAG_THRESHOLD = 5
+
+/** 双击跳跃键切换飞行的最大间隔（秒） */
+export const PLAYER_FLY_DOUBLE_TAP_WINDOW = 0.3
+
+/** 短按翻滚 / 长按跑步的按住阈值（秒）：达到后本次按住不再触发翻滚 */
+export const PLAYER_ROLL_SPRINT_HOLD_THRESHOLD = 0.3

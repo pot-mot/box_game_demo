@@ -9,6 +9,7 @@ import {fireSegmentImpulses} from '../../combat/attack_impulses.ts'
 import {SLOPE_WALK_THRESHOLD} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
 import {moveSpeedOf} from '../../types.ts'
+import {canAffordStaminaEntry, spendStaminaEntry} from '../../stamina/runtime.ts'
 import {advanceSegmentPhases, enterAttackSegment, resolveSegmentNextState, type SegmentInput} from './attacking/segment.ts'
 
 /**
@@ -83,6 +84,7 @@ export const airAttackingHandler: StateHandler = {
         c.pendingFlinch = false
         const segment = c.activeSegment
         if (segment === undefined) return
+        spendStaminaEntry(entity.state.stamina, 'attack')
         enterAttackSegment(c, segment, entity)
     },
     update: (dt, input, entity) => {
@@ -108,7 +110,12 @@ export const airAttackingHandler: StateHandler = {
         }
 
         if (phasesDone && c.bufferedSegment !== undefined) {
-            enterAttackSegment(c, c.bufferedSegment, entity)
+            if (canAffordStaminaEntry(entity.state.stamina, 'attack')) {
+                spendStaminaEntry(entity.state.stamina, 'attack')
+                enterAttackSegment(c, c.bufferedSegment, entity)
+            } else {
+                c.bufferedSegment = undefined
+            }
         }
 
         applyAirAttackMotion(input, entity)

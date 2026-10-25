@@ -3,6 +3,7 @@ import {GROUND_DAMPING, SLOPE_WALK_THRESHOLD, STATE_FLIP_MIN_TIME} from '../cons
 import {shouldFall, isSupportedOn, projectToSlope, projectToSlopeAtSpeed, applySlopeAntiGravity, applySlopeSink} from '../ground.ts'
 import {canStartAttack} from '../../combat/attack_runtime.ts'
 import {moveSpeedOf} from '../../types.ts'
+import {canAffordStaminaEntry, isStaminaExhausted} from '../../stamina/runtime.ts'
 
 /**
  * 格挡状态：持盾且长按攻击键（`combat.blockHeld`）时进入；松开按键或格挡槽归零（见 `machine.ts` 全局破防检查）退出。
@@ -48,6 +49,7 @@ export const blockingHandler: StateHandler = {
             to: 'attacking',
             guard: (input, entity) => entity.state.combat.blockHeld === false
                 && input.attack
+                && canAffordStaminaEntry(entity.state.stamina, 'attack')
                 && canStartAttack(entity.state.combat, {
                     dx: input.dx,
                     dz: input.dz,
@@ -55,16 +57,20 @@ export const blockingHandler: StateHandler = {
                     attackKey: input.attackKey,
                 }),
         },
-        { to: 'walking', guard: (input, entity) => entity.state.combat.blockHeld === false && Math.hypot(input.dx, input.dz) > 0.001 },
-        { to: 'idle', guard: (input, entity) => entity.state.combat.blockHeld === false && Math.hypot(input.dx, input.dz) < 0.001 },
+        { to: 'walking', guard: (input, entity) => (entity.state.combat.blockHeld === false || isStaminaExhausted(entity.state.stamina)) && Math.hypot(input.dx, input.dz) > 0.001 },
+        { to: 'idle', guard: (input, entity) => (entity.state.combat.blockHeld === false || isStaminaExhausted(entity.state.stamina)) && Math.hypot(input.dx, input.dz) < 0.001 },
         {
             to: 'jumping',
             guard: (input, entity) => entity.state.combat.blockHeld === false
-                && input.jump && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
+                && input.jump
+                && canAffordStaminaEntry(entity.state.stamina, 'jump')
+                && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'rolling',
-            guard: (input, entity) => input.roll && entity.state.combat.rollSkill.cooldownTimer <= 0,
+            guard: (input, entity) => input.roll
+                && canAffordStaminaEntry(entity.state.stamina, 'roll')
+                && entity.state.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',

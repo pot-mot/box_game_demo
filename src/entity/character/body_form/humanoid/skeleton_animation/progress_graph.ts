@@ -95,7 +95,7 @@ const chargeSeekScale = (segment: AttackSegment): number => {
 const baseProgress = (state: Exclude<CharacterStateName, 'attacking' | 'air_attacking'>, ctx: AnimationContext): number => {
     const meta = BASE_CLIP_META[state]
     const duration = ctx.stateDuration ?? meta.duration
-    const speedScale = state === 'walking' || state === 'swimming' ? walkSpeedScale(ctx.horizontalSpeed) : 1
+    const speedScale = state === 'walking' || state === 'sprinting' || state === 'swimming' ? walkSpeedScale(ctx.horizontalSpeed) : 1
     const raw = duration > 0 ? (ctx.stateTime * speedScale) / duration : 0
     return meta.loop ? raw - Math.floor(raw) : clamp01(raw)
 }

@@ -60,7 +60,7 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         const library = getBuiltinClips()
         const baseEntries = entriesOf('基础状态')
         const expectedBaseIds = new Set(BASE_STATE_ORDER.flatMap(state =>
-            (state === 'idle' || state === 'walking')
+            (state === 'idle' || state === 'walking' || state === 'sprinting' || state === 'flying')
                 ? [`state/${state}`, `state/${state}_held`]
                 : [`state/${state}`],
         ))

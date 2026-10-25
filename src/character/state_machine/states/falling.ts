@@ -13,6 +13,8 @@ import {fluidFractionOf} from '../fluid.ts'
 import {v3Length} from '../../../physics/rapier_utils.ts'
 import {moveSpeedOf} from '../../types.ts'
 import {canStartAirAttack} from './air_attacking.ts'
+import {canAffordStaminaEntry} from '../../stamina/runtime.ts'
+import {canEnterFlight} from './flying.ts'
 
 export const fallingHandler: StateHandler = {
     enter: () => {},
@@ -57,6 +59,10 @@ export const fallingHandler: StateHandler = {
             guard: (_input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID,
         },
         {
+            to: 'flying',
+            guard: (input, entity) => input.fly && canEnterFlight(entity),
+        },
+        {
             to: 'walking',
             guard: (input, entity) =>
                 isSupportedOn(entity, SLOPE_RECOVER_THRESHOLD)
@@ -71,7 +77,9 @@ export const fallingHandler: StateHandler = {
         },
         {
             to: 'rolling',
-            guard: (input, entity) => input.roll && entity.state.combat.rollSkill.cooldownTimer <= 0,
+            guard: (input, entity) => input.roll
+                && canAffordStaminaEntry(entity.state.stamina, 'roll')
+                && entity.state.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',
@@ -84,7 +92,9 @@ export const fallingHandler: StateHandler = {
         {
             /* 空中攻击：下落中按攻击键且武器声明了空中链（死亡/受击优先级更高，故置于末尾） */
             to: 'air_attacking',
-            guard: (input, entity) => input.attack && canStartAirAttack(entity),
+            guard: (input, entity) => input.attack
+                && canAffordStaminaEntry(entity.state.stamina, 'attack')
+                && canStartAirAttack(entity),
         },
     ],
 }

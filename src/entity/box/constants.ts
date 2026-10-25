@@ -1,11 +1,12 @@
 import {DEFAULT_SURFACE_MATERIAL} from '../../render/materials/ids.ts'
 import type {SurfaceMaterialId} from '../../render/materials/ids.ts'
+import type {BoxPresetId} from '../../types/boxPreset.ts'
 
 /**
  * 箱子可选特性标识：配置对象 `BoxConfig` 中存在对应的键即视为启用该特性
  * （`elastic` / `magnet` / `destructible` / `burning`）。
  */
-const BOX_TRAIT_IDS = ['destructible', 'burning', 'magnet', 'elastic'] as const
+const BOX_TRAIT_IDS = ['destructible', 'burning', 'magnet', 'elastic'] as const satisfies readonly BoxPresetId[]
 type BoxTraitId = typeof BOX_TRAIT_IDS[number]
 
 /** 默认表面材质（复用共享表面材质库） */

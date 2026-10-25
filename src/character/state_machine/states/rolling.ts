@@ -2,6 +2,7 @@ import type {StateHandler} from '../types.ts'
 import {ROLL_SPEED_MULTIPLIER, SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlopeAtSpeed, applySlopeSink} from '../ground.ts'
 import {moveSpeedOf} from '../../types.ts'
+import {spendStaminaEntry} from '../../stamina/runtime.ts'
 
 /**
  * 翻滚状态：向锁定方向位移一段距离，**中段无敌帧**（`rollSkill.config.iframeStart/End`）内
@@ -10,6 +11,7 @@ import {moveSpeedOf} from '../../types.ts'
  */
 export const rollingHandler: StateHandler = {
     enter: (entity) => {
+        spendStaminaEntry(entity.state.stamina, 'roll')
         const skill = entity.state.combat.rollSkill
         const linvel = entity.body.linvel()
         const vx = linvel.x

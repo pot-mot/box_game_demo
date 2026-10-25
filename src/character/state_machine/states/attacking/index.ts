@@ -7,6 +7,7 @@ import {fireSegmentImpulses} from '../../../combat/attack_impulses.ts'
 import {SLOPE_WALK_THRESHOLD, SLOPE_TRANSIENT_MIN_NY} from '../../constants.ts'
 import {shouldFall, isSupportedOn, projectToSlope, projectToSlopeAtSpeed, applySlopeAntiGravity, applySlopeSink} from '../../ground.ts'
 import {moveSpeedOf} from '../../../types.ts'
+import {canAffordStaminaEntry, spendStaminaEntry} from '../../../stamina/runtime.ts'
 import {advanceSegmentPhases, enterAttackSegment, resolveSegmentNextState, type SegmentInput} from './segment.ts'
 
 /**
@@ -53,6 +54,7 @@ export const attackingHandler: StateHandler = {
         c.pendingFlinch = false
         const segment = c.activeSegment
         if (segment === undefined) return
+        spendStaminaEntry(entity.state.stamina, 'attack')
         enterAttackSegment(c, segment, entity)
     },
     update: (dt, input, entity) => {
@@ -100,8 +102,13 @@ export const attackingHandler: StateHandler = {
 
         /* 段末推进：最终阶段（recovery）完整播完后才消费缓冲（段触发时已挂冷却，链推进不查冷却） */
         if (phasesDone && c.bufferedSegment !== undefined) {
-            enterAttackSegment(c, c.bufferedSegment, entity)
-            return
+            if (!canAffordStaminaEntry(entity.state.stamina, 'attack')) {
+                c.bufferedSegment = undefined
+            } else {
+                spendStaminaEntry(entity.state.stamina, 'attack')
+                enterAttackSegment(c, c.bufferedSegment, entity)
+                return
+            }
         }
 
         /* 委托到阶段子状态 handler 或默认行为 */
@@ -177,6 +184,7 @@ export const attackingHandler: StateHandler = {
             to: 'rolling',
             guard: (input, entity) => {
                 if (!input.roll || entity.state.combat.rollSkill.cooldownTimer > 0) return false
+                if (!canAffordStaminaEntry(entity.state.stamina, 'roll')) return false
                 const segment = entity.state.combat.activeSegment
                 if (segment === undefined) return false
                 const phases = resolvePhases(segment.phases)
@@ -201,7 +209,10 @@ export const attackingHandler: StateHandler = {
         {
             to: 'jumping',
             guard: (input, entity) =>
-                segmentFinished(entity.state.combat) && input.jump && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
+                segmentFinished(entity.state.combat)
+                && input.jump
+                && canAffordStaminaEntry(entity.state.stamina, 'jump')
+                && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'falling',

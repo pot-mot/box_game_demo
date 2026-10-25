@@ -217,6 +217,27 @@ const LockPointSchema = z.object({
 })
 const LockPointsSchema = z.array(LockPointSchema).optional().catch(undefined)
 
+/** 体力基础配置（非法 / 缺字段安全回退 undefined，运行时用默认值） */
+const StaminaEntryCostSchema = z.object({
+    attack: z.number().min(0).optional().catch(undefined),
+    roll: z.number().min(0).optional().catch(undefined),
+    jump: z.number().min(0).optional().catch(undefined),
+}).optional().catch(undefined)
+
+const StaminaDrainSchema = z.object({
+    sprinting: z.number().min(0).optional().catch(undefined),
+    flying: z.number().min(0).optional().catch(undefined),
+    blocking: z.number().min(0).optional().catch(undefined),
+}).optional().catch(undefined)
+
+const StaminaConfigSchema = z.object({
+    max: z.number().positive().optional().catch(undefined),
+    regenDelay: z.number().min(0).optional().catch(undefined),
+    regenPerSec: z.number().min(0).optional().catch(undefined),
+    entryCost: StaminaEntryCostSchema,
+    drainPerSec: StaminaDrainSchema,
+}).optional().catch(undefined)
+
 /** character 存档共享默认值（供内联 schema .default() 和外层 CHARACTER_SAVE_CONFIG_DEFAULTS 共用） */
 const CHARACTER_SAVE_TENDENCY_DEFAULT = {tendencyId: 'hostileExceptSelf' as const}
 
@@ -253,6 +274,9 @@ const CharacterConfigInner = z.object({
     aiBlockDuration: z.number().positive().optional().catch(undefined),
     /* 冷却必须为正：0 会让举盾窗口在同一帧内无限续期，退化为持续举盾（即本属性要解决的「持盾不攻击」） */
     aiBlockCooldown: z.number().positive().optional().catch(undefined),
+    /* 飞行开关 / 体力配置：非法值安全回退 undefined（运行时用默认），不抛错 */
+    flightEnabled: z.boolean().optional().catch(undefined),
+    stamina: StaminaConfigSchema,
 })
 
 /** character config 默认值（供外层 .default() 使用） */

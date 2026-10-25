@@ -5,6 +5,7 @@
 export type PlayLocale = {
     'play.hud.hp': string
     'play.hud.poise': string
+    'play.hud.stamina': string
     'play.hud.guard': string
     'play.hud.charge': string
     'play.hud.timers': string
@@ -46,6 +47,7 @@ export const playZh: PlayLocale = {
     'play.debug.camera': (yaw, pitch) => `相机: 偏航 ${yaw}°  俯仰 ${pitch}°`,
     'play.hud.hp': '玩家生命',
     'play.hud.poise': '韧性',
+    'play.hud.stamina': '体力',
     'play.hud.guard': '格挡',
     'play.hud.charge': '蓄力',
     'play.hud.timers': '计时器',
@@ -83,6 +85,7 @@ export const playEn: PlayLocale = {
     'play.debug.camera': (yaw, pitch) => `CAM: yaw ${yaw}°  pitch ${pitch}°`,
     'play.hud.hp': 'PLAYER HP',
     'play.hud.poise': 'POISE',
+    'play.hud.stamina': 'STAMINA',
     'play.hud.guard': 'GUARD',
     'play.hud.charge': 'CHARGE',
     'play.hud.timers': 'TIMERS',

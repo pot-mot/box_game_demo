@@ -1,5 +1,6 @@
 import type {DeepReadonly} from '../types/readonly.ts'
 import type {StringLocaleKey} from '../i18n/index.ts'
+import type {GameMode} from '../modes/constants.ts'
 
 /** 所有可重绑的输入动作 */
 export const INPUT_ACTIONS = [
@@ -99,7 +100,7 @@ export interface FixedMouseOperation {
 }
 
 /** 固定鼠标操作表覆盖的模式（与 modes 的 GAME_MODE_VALUES 保持一致，新增模式时此处会编译报错） */
-export const MOUSE_OPERATION_MODES = ['edit', 'play', 'showcase', 'bone_edit'] as const
+export const MOUSE_OPERATION_MODES = ['edit', 'play', 'showcase', 'bone_edit'] as const satisfies readonly GameMode[]
 export type MouseOperationsMode = typeof MOUSE_OPERATION_MODES[number]
 
 /**

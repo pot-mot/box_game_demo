@@ -11,6 +11,7 @@ import type {DefenseProfile} from '../character/combat/defense.ts'
 import type {DamageTypeProfile} from '../character/combat/damage_type.ts'
 import type {EquipmentState} from '../character/equipment/types.ts'
 import type {LockPointConfig} from '../character/lock_point.ts'
+import type {StaminaConfig} from '../character/stamina/types.ts'
 
 /** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」；
  *  v4 起 character 增加基础防御 defense 与护甲装备 armor；
@@ -33,8 +34,9 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  *  删除顶层 attack / offhand / holdMode / handedness / armor / limb / breathModuleId。
  * v19 起 `bodyState` 使用 `attackModule`（跨体形攻击模组）；天然武器写入角色装备槽；
  *  缺失 / 非法武器槽加载时回填体形天然默认；不做旧 `holdMode` 语义迁移。
+ * v20 起 character 增加飞行开关 flightEnabled 与体力基础配置 stamina（均可选，旧档安全回退默认）。
  */
-export const SAVE_FORMAT_VERSION = 19
+export const SAVE_FORMAT_VERSION = 20
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -181,6 +183,10 @@ export interface CharacterSaveConfig {
     aiBlockDuration?: number
     /** AI 反应式举盾冷却（秒）：缺省 = 1.2；旧存档无此字段时安全回退 */
     aiBlockCooldown?: number
+    /** 是否允许飞行：缺省 false；旧存档无此字段时安全回退 */
+    flightEnabled?: boolean
+    /** 体力基础配置（上限 / 消耗 / 恢复；旧存档缺失回退默认） */
+    stamina?: StaminaConfig
 }
 
 export interface SavableCharacter {

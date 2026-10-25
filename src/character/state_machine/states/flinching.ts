@@ -2,6 +2,7 @@ import type {StateHandler} from '../types.ts'
 import {SLOPE_WALK_THRESHOLD} from '../constants.ts'
 import {shouldFall, isSupportedOn} from '../ground.ts'
 import {FLINCH_IMMUNITY_DURATION} from '../../combat/attack_phases.ts'
+import {canAffordStaminaEntry} from '../../stamina/runtime.ts'
 
 export const flinchingHandler: StateHandler = {
     enter: (entity) => {
@@ -44,6 +45,7 @@ export const flinchingHandler: StateHandler = {
             guard: (input, entity, ctx) =>
                 ctx.stateTime >= entity.state.combat.flinchDuration
                 && input.jump
+                && canAffordStaminaEntry(entity.state.stamina, 'jump')
                 && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {

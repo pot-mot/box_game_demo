@@ -2,6 +2,7 @@ import {createBodyEnvironment} from '../../physics/environment.ts'
 import type {CombatComponent} from '../combat/types.ts'
 import type {CharacterConfig, CharacterState} from './types.ts'
 import {createCharacterStateMachineData, type CharacterStateMachineData} from './types.ts'
+import {createStaminaState} from '../stamina/runtime.ts'
 
 /** 测试专用：构造最小 CharacterState；生产代码必须走 `createCharacterState` */
 export interface TestCharacterStateOptions {
@@ -19,6 +20,7 @@ export const createTestCharacterState = (options: TestCharacterStateOptions): Ch
     config: options.config ?? {speed: 6, jumpHeight: 2, scale: 1},
     bodyState: options.bodyState ?? {},
     combat: options.combat ?? (undefined as unknown as CombatComponent),
+    stamina: createStaminaState(options.config ?? {speed: 6, jumpHeight: 2, scale: 1}, options.combat, 'humanoid'),
     stateMachine: options.stateMachine ?? createCharacterStateMachineData(),
     physics: {
         isOnGround: true,

@@ -9,18 +9,22 @@ import {BLOCKING_POSE_PERIOD, GUARD_BROKEN_POSE_DURATION} from '../../../appeara
 export interface CreatureVisualTiming {
     readonly idle: number
     readonly walking: number
+    readonly sprinting: number
     readonly jumping: number
     readonly falling: number
     readonly swimming: number
     readonly floating: number
+    readonly flying: number
 }
 
 /** 生物基础状态时长：视觉状态由体形声明，玩法状态统一取玩法常量 */
 export const creatureStateMeta = (visual: CreatureVisualTiming): Readonly<Record<BaseClipState, {duration: number; loop: boolean}>> => ({
     idle: {duration: visual.idle, loop: true},
     walking: {duration: visual.walking, loop: true},
+    sprinting: {duration: visual.sprinting, loop: true},
     jumping: {duration: visual.jumping, loop: false},
     falling: {duration: visual.falling, loop: true},
+    flying: {duration: visual.flying, loop: true},
     swimming: {duration: visual.swimming, loop: true},
     floating: {duration: visual.floating, loop: true},
     dying: {duration: DYING_DURATION, loop: false},

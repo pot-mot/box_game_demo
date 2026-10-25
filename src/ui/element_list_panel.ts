@@ -69,7 +69,12 @@ const createGroupContainer = (group: EntityGroup): HTMLElement => {
     return c
 }
 
-export const setupElementListPanel = (sources: EntityInfoSource[]): () => void => {
+export interface ElementListPanelOptions {
+    /** 面板顶部位置（px；编辑模式为显示控制小面板让出空间） */
+    readonly top?: number
+}
+
+export const setupElementListPanel = (sources: EntityInfoSource[], options: ElementListPanelOptions = {}): () => void => {
     const sourcesByType = new Map(sources.map(s => [s.type, s]))
 
     for (const source of sources) {
@@ -81,7 +86,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[]): () => void =
     const el = document.createElement('div')
     el.id = 'element-list-panel'
     el.className = 'dc-panel dc-scroll'
-    el.style.cssText = 'position:fixed;top:120px;left:16px;padding:8px 12px;min-width:300px;max-height:60vh;user-select:none;'
+    el.style.cssText = `position:fixed;top:${options.top ?? 120}px;left:16px;padding:8px 12px;min-width:300px;max-height:60vh;user-select:none;`
     document.body.appendChild(el)
 
     const header = document.createElement('div')

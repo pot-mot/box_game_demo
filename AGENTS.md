@@ -65,6 +65,12 @@
    type EnumType = typeof EnumType_CONTANTS[number]
    ```
    保证运行时也能取到枚举值，以便于类型检查。
+   **子集必须 `satisfies` 父联合** — 当常量数组是某个既有联合类型的子集 / 特化（如状态子集、预设键子集、某类文案键）时，必须在**常量表达式**上追加 `satisfies readonly 父类型[]`，让父子漂移在编译期暴露；`satisfies` 只能修饰值表达式，禁止写在类型别名上。类型专用父类型用 `import type` 引入（必要时内联 `type`）：
+   ```ts
+   import type {ParentUnion} from './parent.ts'
+   const SPECIAL_VALUES = ['A', 'B'] as const satisfies readonly ParentUnion[]
+   type SpecialValue = typeof SPECIAL_VALUES[number]
+   ```
 
 ### 代码风格
 
@@ -143,6 +149,7 @@ src/
 |---|---|---|
 | 物理（shared） | [`src/physics/physics.md`](src/physics/physics.md) | 碰撞体、力、接触、步进 |
 | 渲染 | [`src/render/render.md`](src/render/render.md) | 材质/纹理单例、角色统一材质库、拾取、颜色常量 |
+| 角色渲染调试 | [`src/entity/character/render/render.md`](src/entity/character/render/render.md) | 碰撞/攻击/受击/检测/视线调试可视化、模式复用 |
 | 输入 | [`src/input/input.md`](src/input/input.md) | 键位/鼠标绑定、新增输入动作 |
 | 存档 | [`src/save_load/save_load.md`](src/save_load/save_load.md) | 存档结构/版本/兼容 |
 | UI 面板 | [`src/ui/ui.md`](src/ui/ui.md) | 面板样式、图标、迁移 |
@@ -150,6 +157,7 @@ src/
 | 角色状态（模块） | [`src/character/state/state.md`](src/character/state/state.md) | state 子域、所有权 |
 | 武器 | [`src/character/weapon/weapon.md`](src/character/weapon/weapon.md) | 武器类/模型、攻击模组、攻击段、蓄力、空中攻击、动作 |
 | 战斗运行时 | [`src/character/combat/combat.md`](src/character/combat/combat.md) | 伤害类别、防御、无敌帧 |
+| 体力 | [`src/character/stamina/stamina.md`](src/character/stamina/stamina.md) | 体力配置、消耗 / 恢复、装备修正、跑步 / 飞行资源 |
 | 护甲 / 肢体 | [`src/character/armor/armor.md`](src/character/armor/armor.md) | 护甲槽位、防御/加成 |
 | 装备模型 | [`src/character/equipment/types.ts`](src/character/equipment/types.ts) | `EquipSlotDef` / `EquipmentDef` / `EquipmentState` / `kind:bodyPart` 槽位键 |
 | 交互领域 | [`src/character/interaction/interaction.md`](src/character/interaction/interaction.md) | 交互类型层、时长 |

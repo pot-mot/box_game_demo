@@ -1,9 +1,9 @@
 /** 状态机状态名（仅名称，不包含任何运行时数据；数据统一存于 `CharacterState`） */
-export const CHARACTER_STATES = ['idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'attacking', 'air_attacking', 'dying', 'rolling', 'flinching', 'interacting', 'knockdown', 'getting_up', 'blocking', 'guard_broken'] as const
+export const CHARACTER_STATES = ['idle', 'walking', 'sprinting', 'jumping', 'falling', 'flying', 'swimming', 'floating', 'attacking', 'air_attacking', 'dying', 'rolling', 'flinching', 'interacting', 'knockdown', 'getting_up', 'blocking', 'guard_broken'] as const
 export type CharacterStateName = typeof CHARACTER_STATES[number]
 
 /** 攻击态（由攻击 clip / 段驱动，不属于基础状态采样器） */
-export const ATTACK_STATES = ['attacking', 'air_attacking'] as const
+export const ATTACK_STATES = ['attacking', 'air_attacking'] as const satisfies readonly CharacterStateName[]
 export type AttackState = typeof ATTACK_STATES[number]
 
 const ATTACK_STATE_SET: ReadonlySet<CharacterStateName> = new Set(ATTACK_STATES)

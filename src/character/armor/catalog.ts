@@ -2,6 +2,7 @@ import {addDamageProfiles, ZERO_PROFILE} from '../combat/defense.ts'
 import type {DamageType, DamageTypeProfile} from '../combat/damage_type.ts'
 import type {DefenseProfile} from '../combat/defense.ts'
 import type {EquipmentState} from '../equipment/types.ts'
+import type {StaminaDrainState, StaminaEntryAction} from '../stamina/types.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import type {
     ArmorLoadout,
@@ -180,6 +181,47 @@ export const moveSpeedTermsOf = (
     equippedPieces(resolved, resolvedLimbs)
         .map(piece => ({name: armorPieceDisplayName(piece), value: piece.moveSpeedMultiplier}))
         .filter(term => term.value !== 1)
+
+/** 逐项持续体力消耗乘数来源（仅列出非 1 项，名称已本地化） */
+export const staminaDrainTermsOf = (
+    state: StaminaDrainState,
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): StatTerm[] =>
+    equippedPieces(resolved, resolvedLimbs)
+        .flatMap(piece => {
+            const value = piece.stamina?.drain?.[state]
+            return value !== undefined && value !== 1
+                ? [{name: armorPieceDisplayName(piece), value}]
+                : []
+        })
+
+/** 逐项动作体力消耗乘数来源（仅列出非 1 项，名称已本地化） */
+export const staminaEntryTermsOf = (
+    action: StaminaEntryAction,
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): StatTerm[] =>
+    equippedPieces(resolved, resolvedLimbs)
+        .flatMap(piece => {
+            const value = piece.stamina?.entry?.[action]
+            return value !== undefined && value !== 1
+                ? [{name: armorPieceDisplayName(piece), value}]
+                : []
+        })
+
+/** 逐项体力恢复乘数来源（仅列出非 1 项，名称已本地化） */
+export const staminaRegenTermsOf = (
+    resolved: ResolvedArmorLoadout,
+    resolvedLimbs?: ResolvedLimbLoadout,
+): StatTerm[] =>
+    equippedPieces(resolved, resolvedLimbs)
+        .flatMap(piece => {
+            const value = piece.stamina?.regen
+            return value !== undefined && value !== 1
+                ? [{name: armorPieceDisplayName(piece), value}]
+                : []
+        })
 
 /* ── 通用装备状态解析（跨体形；按 kind:bodyPart 校验） ── */
 

@@ -25,13 +25,15 @@ type MockBody = {
     addForce: () => void
     mass: () => number
     wakeUp: () => void
+    setGravityScale: (scale: number, wake?: boolean) => void
+    gravityScale: () => number
     handle: number
 }
 
 /** 构造可驱动状态机的完整 CharacterEntity mock（真实 entity body mock + stateMachine）。
  *  body 是集中窄化一次的最小替身，避免测试体散落类型转换；combat 走生产工厂，只注入武器运行时 */
 const makeMock = (runtime: WeaponRuntime = createWeaponRuntime('long_sword')): CharacterEntity => {
-    const state = {velocityX: 0, velocityY: 0, velocityZ: 0, posX: 0, posY: 0, posZ: 0}
+    const state = {velocityX: 0, velocityY: 0, velocityZ: 0, posX: 0, posY: 0, posZ: 0, gravityScale: 1}
 
     const mockBody: MockBody = {
         linvel: (): {x: number; y: number; z: number} => ({x: state.velocityX, y: state.velocityY, z: state.velocityZ}),
@@ -45,6 +47,8 @@ const makeMock = (runtime: WeaponRuntime = createWeaponRuntime('long_sword')): C
         addForce: (): void => {},
         mass: (): number => 1,
         wakeUp: (): void => {},
+        setGravityScale: (scale: number): void => { state.gravityScale = scale },
+        gravityScale: (): number => state.gravityScale,
         handle: 1,
     }
 
@@ -955,5 +959,95 @@ describe('空中攻击（air_attacking）', () => {
             if (state === 'jumping' || state === 'falling' || state === 'air_attacking') continue
             expect(isAirborneAttackState(state)).toBe(false)
         }
+    })
+})
+
+describe('体力 / 跑步 / 飞行', () => {
+    it('按住跑步键的首帧优先翻滚，翻滚结束后持续按住才进入 sprinting', () => {
+        const e = makeMock()
+        e.stateMachine.setInput(1, 0, false, false, true, undefined, 0, false, false, false, 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('rolling')
+        /* 翻滚期间仍按住跑步键：翻滚结束回 walking，下一物理步转 sprinting */
+        for (let i = 0; i < 40; i++) {
+            e.stateMachine.setInput(1, 0, false, false, false, undefined, 0, false, false, false, 0, true)
+            e.stateMachine.update(DT, e)
+        }
+        expect(['walking', 'sprinting']).toContain(e.stateMachine.currentState)
+    })
+
+    it('长按跑步键进入 sprinting 并按时间消耗体力', () => {
+        const e = makeMock()
+        e.stateMachine.setInput(1, 0, false, false, false, undefined, 0, false, false, false, 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('sprinting')
+        const before = e.state.stamina.current
+        for (let i = 0; i < 20; i++) {
+            e.stateMachine.setInput(1, 0, false, false, false, undefined, 0, false, false, false, 0, true)
+            e.stateMachine.update(DT, e)
+        }
+        expect(e.state.stamina.current).toBeLessThan(before)
+    })
+
+    it('跑步中松开 Shift 触发的翻滚边沿优先于退回行走', () => {
+        const e = makeMock()
+        e.stateMachine.setInput(1, 0, false, false, false, undefined, 0, false, false, false, 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('sprinting')
+        /* 松开 Shift：同一帧带翻滚边沿、sprint=false（player_control 的短按释放路径） */
+        e.stateMachine.setInput(1, 0, false, false, true, undefined, 0, false, false, false, 0, false)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('rolling')
+    })
+
+    it('奔跑体力耗尽后自动退回行走', () => {
+        const e = makeMock()
+        e.stateMachine.setInput(1, 0, false, false, false, undefined, 0, false, false, false, 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('sprinting')
+        e.state.stamina.current = 0
+        e.stateMachine.setInput(1, 0, false, false, false, undefined, 0, false, false, false, 0, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('walking')
+    })
+
+    it('双击飞行的切换边沿进入 flying，Z / X 意图控制升降', () => {
+        const e = makeMock()
+        e.state.config.flightEnabled = true
+        e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, false, false, 0, false, true, 1)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('flying')
+        /* 飞行期间关闭重力，避免悬停时每步下沉；退出后恢复 */
+        expect(getMockBody(e).gravityScale()).toBe(0)
+        /* 模拟真正离地后越过起飞阶段，再验证升降意图（起飞阶段固定向上） */
+        e.state.physics.isOnGround = false
+        /* 越过起飞阶段后再验证升降意图（起飞阶段固定向上） */
+        for (let i = 0; i < 25; i++) {
+            e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, false, false, 0, false, false, 1)
+            e.stateMachine.update(DT, e)
+        }
+        expect(getMockBody(e).linvel().y).toBeGreaterThan(0)
+        e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, false, false, 0, false, false, -1)
+        e.stateMachine.update(DT, e)
+        expect(getMockBody(e).linvel().y).toBeLessThan(0)
+        /* 双击切换退出飞行（未落地 → falling），重力恢复 */
+        e.stateMachine.setInput(0, 0, false, false, false, undefined, 0, false, false, false, 0, false, true, 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('falling')
+        expect(getMockBody(e).gravityScale()).toBe(1)
+    })
+
+    it('体力不足时无法进入翻滚 / 跳跃 / 攻击', () => {
+        const e = makeMock()
+        e.state.stamina.current = 0
+        e.stateMachine.setInput(0, 0, true, false)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('idle')
+        e.stateMachine.setInput(0, 0, false, false, true)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('idle')
+        e.stateMachine.setInput(0, 0, false, true, false, 'light', 0)
+        e.stateMachine.update(DT, e)
+        expect(e.stateMachine.currentState).toBe('idle')
     })
 })

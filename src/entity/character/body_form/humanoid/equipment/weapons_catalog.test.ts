@@ -16,6 +16,11 @@ describe('人形近战武器（体形拥有 + 注册表查询）', () => {
         }
     })
 
+    it('空手排在近战武器第一项', () => {
+        const melee = weaponsOfForm(HUMANOID_BODY_FORM_ID).filter(weapon => weapon.type === 'melee')
+        expect(melee[0]?.id).toBe('unarmed')
+    })
+
     it('普通近战类声明三持握模式且默认单持；盾类（有 block）与天然空手仅单持', () => {
         for (const weapon of weaponsOfForm(HUMANOID_BODY_FORM_ID)) {
             if (weapon.type !== 'melee') continue

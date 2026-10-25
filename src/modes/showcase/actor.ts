@@ -12,7 +12,7 @@ import {resolvePhases, phaseDurationOf, isWindupStrike} from '../../character/co
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
 import {attackModuleDefOf, defaultAttackModule, weaponAttacksOf} from '../../character/weapon/catalog.ts'
 import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
-import {translate} from '../../i18n/index.ts'
+import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 import type {WeaponConfig} from '../../character/weapon/catalog.ts'
 import type {RangedWeaponConfig} from '../../character/weapon/ranged_weapon.ts'
 import {createShowcaseProjectiles} from './projectile.ts'
@@ -39,7 +39,7 @@ export const LINK_LABELS = [
     'showcase.link.advance',
     'showcase.link.restart',
     'showcase.link.none',
-] as const
+] as const satisfies readonly StringLocaleKey[]
 export type LinkLabel = typeof LINK_LABELS[number]
 
 /** 具名衔接方式键（可读性优于下标） */

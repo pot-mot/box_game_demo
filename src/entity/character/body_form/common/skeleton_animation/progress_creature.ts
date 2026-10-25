@@ -35,7 +35,7 @@ export interface CreatureProgressConfig {
     readonly fallingJoints?: readonly string[]
     /** 由装备控制的挂点（如 mouthMount）：动画不得覆盖其装备旋转；碰撞节点不在此列 */
     readonly preservedJoints?: readonly string[]
-    /** 受速度驱动的步态状态；缺省 walking / swimming */
+    /** 受速度驱动的步态状态；缺省 walking / sprinting / swimming */
     readonly walkStates?: readonly BaseClipState[]
 }
 
@@ -114,7 +114,7 @@ const buildParams = (ctx: AnimationContext, stateProgress: number): ProgressAnim
 }
 
 const walkStatesOf = (config: CreatureProgressConfig): readonly BaseClipState[] =>
-    config.walkStates ?? ['walking', 'swimming']
+    config.walkStates ?? ['walking', 'sprinting', 'swimming']
 
 const baseProgress = (
     state: BaseClipState,

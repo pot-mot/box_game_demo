@@ -39,8 +39,10 @@ export type EntityLocale = {
     'entity.def_magic_short': string
     'entity.state.idle': string
     'entity.state.walking': string
+    'entity.state.sprinting': string
     'entity.state.jumping': string
     'entity.state.falling': string
+    'entity.state.flying': string
     'entity.state.swimming': string
     'entity.state.floating': string
     'entity.state.attacking': string
@@ -230,8 +232,10 @@ export const entityZh: EntityLocale = {
     'entity.def_magic_short': '魔',
     'entity.state.idle': '待机',
     'entity.state.walking': '行走',
+    'entity.state.sprinting': '跑步',
     'entity.state.jumping': '跳跃',
     'entity.state.falling': '下落',
+    'entity.state.flying': '飞行',
     'entity.state.swimming': '游泳',
     'entity.state.floating': '漂浮',
     'entity.state.attacking': '攻击',
@@ -421,8 +425,10 @@ export const entityEn: EntityLocale = {
     'entity.def_magic_short': 'Magic',
     'entity.state.idle': 'Idle',
     'entity.state.walking': 'Walk',
+    'entity.state.sprinting': 'Sprint',
     'entity.state.jumping': 'Jump',
     'entity.state.falling': 'Fall',
+    'entity.state.flying': 'Fly',
     'entity.state.swimming': 'Swim',
     'entity.state.floating': 'Float',
     'entity.state.attacking': 'Attack',

@@ -4,6 +4,7 @@ import type {ArmorMeshConfig, LimbMeshConfig} from './mesh_config.ts'
 import type {WeaponMeshConfig} from '../weapon/mesh_config.ts'
 import type {CollisionCategory} from '../../physics/collision_category.ts'
 import type {HurtShape} from '../hurt_blocks.ts'
+import type {StaminaModifierSet} from '../stamina/types.ts'
 
 /**
  * 装备领域契约：装备影响角色数值（state）、外观（appearance），并可通过声明式数组
@@ -107,6 +108,8 @@ export interface EquipmentStats {
     readonly moveSpeedMultiplier: number
     /** 韧性加成（缺省 0） */
     readonly poise?: number
+    /** 体力消耗 / 恢复修正（缺省 = 无修正；多件装备逐项相乘） */
+    readonly stamina?: StaminaModifierSet
 }
 
 /** 装备外观配方联合（具体构建器由拥有该体形的 appearance 分包实现） */

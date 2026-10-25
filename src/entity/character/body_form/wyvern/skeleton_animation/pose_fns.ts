@@ -172,6 +172,29 @@ const walking: PoseFunction = (t) => {
     }
 }
 
+/** 跑步：更快的双足步态、身体前倾、翅膀后掠 */
+const sprinting: PoseFunction = (t) => {
+    const phase = (t % 0.6) / 0.6
+    const bob = Math.sin(phase * TAU * 2) * 0.032
+    const roll = Math.sin(phase * TAU) * 0.03
+    const left = footSwing(phase, 0.78)
+    const right = footSwing(phaseOffset(phase, 0.5), 0.78)
+    return {
+        body: poseAt(
+            [0.1 + Math.sin(phase * TAU * 2 + 0.35) * 0.018, Math.sin(phase * TAU) * 0.024, roll],
+            [Math.sin(phase * TAU) * 0.009, BODY_Y + bob, 0],
+        ),
+        withers: [0.07 - bob * 0.5, Math.sin(phase * TAU) * 0.04, -roll * 0.35],
+        neck: [0.34 - bob * 0.6, Math.sin(phase * TAU + 0.2) * 0.05, -roll * 0.35],
+        head: [-0.26 + bob * 0.35, -Math.sin(phase * TAU + 0.2) * 0.06, -roll * 0.55],
+        ...tailPose(t, 3.6, 0.14, -Math.sin(phase * TAU) * 0.08),
+        ...foldedWings(Math.sin(phase * TAU) * 0.04),
+        ...walkLeg('l', left),
+        ...walkLeg('r', right),
+    }
+}
+
+/** 飞行：大幅振翅、双腿收起（悬停 / 升降共用同一轮廓） */
 const flying: PoseFunction = (t) => {
     const flap = Math.sin(t * 7)
     return {
@@ -246,7 +269,7 @@ const gettingUp: PoseFunction = (t) => {
 }
 
 const POSES: Partial<Record<CharacterStateName, PoseFunction>> = {
-    walking, jumping, falling, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
+    walking, sprinting, jumping, falling, flying, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
 }
 
 export const wyvernPose = (state: CharacterStateName): PoseFunction => POSES[state] ?? idle

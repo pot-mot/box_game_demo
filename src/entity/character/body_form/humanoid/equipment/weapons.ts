@@ -114,6 +114,7 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 8,
         knockbackForce: 8, knockbackY: 3,
+        stamina: {entry: {attack: 1.2}, drain: {sprinting: 1.1}},
         detectionRange: 10,
         /* 前缘 = (0.5 + reach 0.6025) × 0.8 = 0.882 */
         detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 1.032 }, { x: 0, y: 0, z: 0.391 }),
@@ -148,6 +149,7 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 6,
         knockbackForce: 7, knockbackY: 2,
+        stamina: {entry: {attack: 1.1}, drain: {sprinting: 1.05}},
         detectionRange: 7,
         /* 前缘 = (0.5 + reach 0.4193) × 0.8 = 0.73544 */
         detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.88544 }, { x: 0, y: 0, z: 0.31772 }),
@@ -162,6 +164,7 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 10,
         knockbackForce: 10, knockbackY: 4,
+        stamina: {entry: {attack: 1.35}, drain: {sprinting: 1.2}},
         detectionRange: 8,
         /* 前缘 = (0.5 + reach 0.4875) × 0.8 = 0.79（战锤握把偏低，reach 已计入 gripY） */
         detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.94 }, { x: 0, y: 0, z: 0.345 }),
@@ -188,6 +191,7 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         detectionRange: 3,
         detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.7 }, { x: 0, y: 0, z: 0.225 }),
         block: SHIELD_BLOCK_SMALL,
+        stamina: {drain: {blocking: 0.8}},
     }, {
         one_handed: {},
     }),
@@ -202,6 +206,7 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         detectionRange: 4,
         detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.8 }, { x: 0, y: 0, z: 0.275 }),
         block: SHIELD_BLOCK_MEDIUM,
+        stamina: {drain: {blocking: 0.9}},
     }, {
         one_handed: {},
     }),
@@ -216,6 +221,7 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
         detectionRange: 5,
         detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.94 }, { x: 0, y: 0, z: 0.345 }),
         block: SHIELD_BLOCK_LARGE,
+        stamina: {drain: {blocking: 1.15}},
     }, {
         one_handed: {},
     }),
@@ -299,6 +305,7 @@ const MELEE_MODELS: Record<string, WeaponModelConfig> = {
 const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     longbow: rangedClass({
         id: 'longbow', type: 'ranged',
+        stamina: {entry: {attack: 1.15}},
         damageType: 'physical',
         attackModules: holdModules(['two_handed']),
         damage: 2, range: 10,
@@ -443,9 +450,13 @@ const RANGED_MODELS: Record<string, WeaponModelConfig> = {
     },
 }
 
-/** 人形全部武器（近战在前、远程在后；面板下拉 / 存档校验用） */
+/** 人形全部武器（近战在前、远程在后；空手固定排近战首位；面板下拉 / 存档校验用） */
+const ORDERED_MELEE_MODELS: readonly WeaponModelConfig[] = [
+    ...Object.values(MELEE_MODELS).filter(model => model.id === 'unarmed'),
+    ...Object.values(MELEE_MODELS).filter(model => model.id !== 'unarmed'),
+]
 export const HUMANOID_WEAPONS: readonly WeaponConfig[] = [
-    ...Object.values(MELEE_MODELS).map(model => resolveMeleeWeapon(MELEE_CLASSES[model.classId]!, {
+    ...ORDERED_MELEE_MODELS.map(model => resolveMeleeWeapon(MELEE_CLASSES[model.classId]!, {
         ...model,
         attackBoxes: model.attackBoxes ?? attackBoxesOf(model.mesh),
         colliders: [],

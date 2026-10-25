@@ -4,9 +4,12 @@ import {shouldFall, isSupportedOn} from '../ground.ts'
 import {fluidFractionOf} from '../fluid.ts'
 import {moveSpeedOf} from '../../types.ts'
 import {canStartAirAttack} from './air_attacking.ts'
+import {canAffordStaminaEntry, spendStaminaEntry} from '../../stamina/runtime.ts'
+import {canEnterFlight} from './flying.ts'
 
 export const jumpingHandler: StateHandler = {
     enter: (entity) => {
+        spendStaminaEntry(entity.state.stamina, 'jump')
         const linvel = entity.body.linvel()
         entity.body.setLinvel({x: linvel.x, y: Math.sqrt(2 * 9.82 * entity.state.config.jumpHeight), z: linvel.z}, true)
     },
@@ -34,6 +37,10 @@ export const jumpingHandler: StateHandler = {
         {
             to: 'floating',
             guard: (_input, entity) => fluidFractionOf(entity) >= SWIM_ENTER_FLUID,
+        },
+        {
+            to: 'flying',
+            guard: (input, entity) => input.fly && canEnterFlight(entity),
         },
         {
             to: 'falling',
@@ -72,7 +79,9 @@ export const jumpingHandler: StateHandler = {
         },
         {
             to: 'rolling',
-            guard: (input, entity) => input.roll && entity.state.combat.rollSkill.cooldownTimer <= 0,
+            guard: (input, entity) => input.roll
+                && canAffordStaminaEntry(entity.state.stamina, 'roll')
+                && entity.state.combat.rollSkill.cooldownTimer <= 0,
         },
         {
             to: 'dying',
@@ -85,7 +94,9 @@ export const jumpingHandler: StateHandler = {
         {
             /* 空中攻击：跳跃中按攻击键且武器声明了空中链（死亡/受击优先级更高，故置于末尾） */
             to: 'air_attacking',
-            guard: (input, entity) => input.attack && canStartAirAttack(entity),
+            guard: (input, entity) => input.attack
+                && canAffordStaminaEntry(entity.state.stamina, 'attack')
+                && canStartAirAttack(entity),
         },
     ],
 }

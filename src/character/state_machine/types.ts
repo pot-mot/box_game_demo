@@ -37,6 +37,12 @@ export interface CharacterInput {
     block: boolean
     /** 游泳竖直意图（-1..1 = 镜头前向垂直分量 × 前后输入；0 = 无。仅游泳状态消费） */
     swimLift: number
+    /** 跑步保持（逐帧写入：长按翻滚键且未在翻滚 / 格挡等状态时消费） */
+    sprint: boolean
+    /** 飞行切换（本帧双击跳跃键的边沿；进入 / 退出飞行） */
+    fly: boolean
+    /** 飞行升降意图（-1..1：Z 上升 / X 下降；0 = 悬停） */
+    flyLift: number
 }
 
 export interface MachineContext {
@@ -64,7 +70,7 @@ export interface CharacterStateMachine {
     readonly stateTime: number
     onStateChange: ((from: CharacterStateName, to: CharacterStateName) => void) | null
 
-    setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean, swimLift?: number): void
+    setInput(dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: AttackKey, attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean, swimLift?: number, sprint?: boolean, fly?: boolean, flyLift?: number): void
     update(dt: number, entity: CharacterEntity): void
-    reset(): void
+    reset(entity?: CharacterEntity): void
 }

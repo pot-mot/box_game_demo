@@ -14,6 +14,8 @@ export const INVINCIBLE_FLASH_OPACITY = 0.45
 
 /** 攻击判定箱（武器命中箱）调试线框颜色（红色） */
 export const ATTACK_HIT_BOX_COLOR = 0xff4422
+/** 攻击判定箱未处于命中窗口时的不透明度（激活时恢复 100%） */
+export const ATTACK_HIT_BOX_INACTIVE_OPACITY = 0.5
 /** 受击箱调试线框颜色 */
 export const TARGET_HIT_BOX_COLOR = 0x22ddff
 /** 攻击检测箱调试线框颜色（橙色，区别于红色伤害判定箱） */

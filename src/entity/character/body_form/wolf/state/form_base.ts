@@ -13,5 +13,5 @@ export const WOLF_BASE: BodyFormBase = {
     baseAttack: ZERO_PROFILE,
     baseMoveSpeedMultiplier: 1,
     basePoise: DEFAULT_POISE_MAX,
-    animation: creatureStateMeta({idle: 1.8, walking: 0.7, jumping: 0.35, falling: 0.45, swimming: 0.9, floating: 1.6}),
+    animation: creatureStateMeta({idle: 1.8, walking: 0.7, sprinting: 0.5, jumping: 0.35, falling: 0.45, swimming: 0.9, floating: 1.6, flying: 1.1}),
 }

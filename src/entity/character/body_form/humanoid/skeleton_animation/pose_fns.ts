@@ -153,6 +153,66 @@ const walkingPose = (t: number, ctx: PoseContext): PoseState => {
     }
 }
 
+/** 跑步：更大步幅与摆臂、躯干前倾；武器仍保持戒备握持 */
+const sprintingPose = (t: number, ctx: PoseContext): PoseState => {
+    const legSwing = Math.sin(t) * 0.78
+    const kneeBend = Math.max(0, -Math.cos(t)) * 0.62
+    const swingAbs = Math.abs(Math.sin(t))
+    const armSwing = -Math.sin(t) * 0.62
+    const bow = ctx.weaponHeld && ctx.weaponClassId === 'longbow'
+    const armBend = Math.max(0, Math.cos(t)) * 0.35 + 0.15
+    const runShoulder = ctx.weaponHeld ? WEAPON_READY_SHOULDER - Math.sin(t) * WEAPON_WALK_ARM_SWING * 1.5 : armSwing
+    const runElbow = ctx.weaponHeld ? WEAPON_READY_ELBOW : -armBend
+    return {
+        rightArmShoulder: bow ? {...BOW_IDLE_SHOULDER} : {rx: runShoulder, ry: 0, rz: 0},
+        rightArmElbow: {rx: bow ? BOW_IDLE_ELBOW_RX : runElbow, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: bow ? {...BOW_IDLE_MOUNT} : weaponMountPose(ctx),
+        leftArmShoulder: {rx: -armSwing, ry: 0, rz: 0},
+        leftArmElbow: {rx: -armBend, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
+        rightLegHip: {rx: legSwing, ry: 0, rz: 0},
+        rightLegKnee: {rx: swingAbs < 0.35 ? kneeBend : kneeBend * (1 - (swingAbs - 0.35) / 0.65), ry: 0, rz: 0},
+        leftLegHip: {rx: -legSwing, ry: 0, rz: 0},
+        leftLegKnee: {rx: swingAbs > 0.65 ? kneeBend * ((1 - swingAbs) / 0.35) : kneeBend, ry: 0, rz: 0},
+        headNeck: {rx: -0.12 + Math.abs(Math.sin(t * 2)) * 0.03, ry: 0, rz: 0},
+        spine: {rotation: {rx: 0.16, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
+
+/**
+ * 飞行：双臂向两侧后掠，双腿自然下垂后摆，躯干轻微前倾；轻微起伏模拟悬停。
+ * Z / X 升降只改变物理速度，姿态保持稳定的悬停轮廓（避免升降时肢体抖动）。
+ */
+const flyingPose = (t: number, ctx: PoseContext): PoseState => {
+    const bob = Math.sin(t * 1.4) * 0.06
+    const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
+    const armZ = 0.72 + Math.sin(t * 1.4 + 0.6) * 0.05
+    return {
+        rightArmShoulder: {rx: -0.35 + bob * 0.4, ry: 0, rz: -armZ},
+        rightArmElbow: {rx: -0.25, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: grip,
+        leftArmShoulder: {rx: -0.35 - bob * 0.4, ry: 0, rz: armZ},
+        leftArmElbow: {rx: -0.25, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: grip,
+        rightLegHip: {rx: -0.18 + bob * 0.2, ry: 0, rz: 0},
+        rightLegKnee: {rx: 0.18, ry: 0, rz: 0},
+        leftLegHip: {rx: -0.12 - bob * 0.2, ry: 0, rz: 0},
+        leftLegKnee: {rx: 0.24, ry: 0, rz: 0},
+        headNeck: {rx: 0.08, ry: 0, rz: 0},
+        spine: {rotation: {rx: 0.12, ry: 0, rz: 0}, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
+
 const CROUCH_END = 0.1
 
 const jumpingPose = (t: number, ctx: PoseContext): PoseState => {
@@ -631,8 +691,10 @@ const guardBrokenPose = (t: number, ctx: PoseContext): PoseState => {
 export const BASE_POSE_SAMPLERS: Record<BaseClipState, PoseSampler> = {
     idle: (t, ctx) => idlePose(t, ctx),
     walking: (t, ctx) => walkingPose(t * WALK_CYCLE_FREQ, ctx),
+    sprinting: (t, ctx) => sprintingPose(t * WALK_CYCLE_FREQ * 1.4, ctx),
     jumping: (t, ctx) => jumpingPose(t, ctx),
     falling: (t, ctx) => fallingPose(t, ctx),
+    flying: (t, ctx) => flyingPose(t, ctx),
     swimming: (t, ctx) => swimmingPose(t, ctx),
     floating: (t, ctx) => floatingPose(t, ctx),
     dying: (t, ctx) => dyingPose(t, ctx),
@@ -647,12 +709,12 @@ export const BASE_POSE_SAMPLERS: Record<BaseClipState, PoseSampler> = {
 
 /** 持握必须保持的基础状态（死亡 / 倒地 / 起身 / 格挡除外：前者松手，后者由盾臂姿态接管） */
 const HOLD_PERSISTENT_STATES: ReadonlySet<BaseClipState> = new Set<BaseClipState>([
-    'idle', 'walking', 'jumping', 'falling', 'swimming', 'floating', 'rolling', 'flinching', 'interacting', 'guard_broken',
+    'idle', 'walking', 'sprinting', 'jumping', 'falling', 'flying', 'swimming', 'floating', 'rolling', 'flinching', 'interacting', 'guard_broken',
 ])
 
 /** 双持副手持握戒备位：仅常态生效；falling / rolling / flinching 保留各自姿态 */
 const DUAL_WIELD_READY_STATES: ReadonlySet<BaseClipState> = new Set<BaseClipState>([
-    'idle', 'walking', 'jumping', 'swimming', 'floating', 'interacting', 'guard_broken',
+    'idle', 'walking', 'sprinting', 'jumping', 'flying', 'swimming', 'floating', 'interacting', 'guard_broken',
 ])
 
 /**

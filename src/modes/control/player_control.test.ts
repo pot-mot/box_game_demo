@@ -26,7 +26,7 @@ const bindLockTargetToKeyQ = (): void => {
 const press = (code: string): void => { window.dispatchEvent(new KeyboardEvent('keydown', {code})) }
 const release = (code: string): void => { window.dispatchEvent(new KeyboardEvent('keyup', {code})) }
 
-type MoveFn = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll: boolean) => void
+type MoveFn = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll: boolean, swimLift: number, sprint: boolean, fly: boolean, flyLift: number) => void
 
 const baseOptions = (move: MoveFn) => ({
     getTarget: () => new Vector3(0, 0.5, 0),
@@ -85,15 +85,39 @@ describe('玩家主控：相机与移动', () => {
         expect(first[4]).toBeCloseTo(1)
         expect(first[5]).toBe(false)
 
-        /* Shift（roll 动作）为边沿翻滚 */
+        /* Shift（roll 动作）短按：松开时才触发翻滚 */
         press('ShiftLeft')
         control.move()
+        expect(move.mock.calls.at(-1)?.[5]).toBe(false)
+        expect(move.mock.calls.at(-1)?.[7]).toBe(false)
+        release('ShiftLeft')
+        control.move()
         expect(move.mock.calls.at(-1)?.[5]).toBe(true)
-        /* 下一帧：边沿在 getUpdater 后清除 */
-        getInputRegistry().getUpdater()()
+        expect(move.mock.calls.at(-1)?.[7]).toBe(false)
+    })
+
+    it('长按翻滚键只进入跑步，不会触发翻滚；松开停止跑步', () => {
+        let now = 0
+        const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now)
+        const move = vi.fn<MoveFn>()
+        const control = createPlayerControl(new PerspectiveCamera(), document.createElement('div'), baseOptions(move))
+
+        press('KeyW')
+        press('ShiftLeft')
         control.move()
         expect(move.mock.calls.at(-1)?.[5]).toBe(false)
+        expect(move.mock.calls.at(-1)?.[7]).toBe(false)
+
+        now = 350
+        control.move()
+        expect(move.mock.calls.at(-1)?.[5]).toBe(false)
+        expect(move.mock.calls.at(-1)?.[7]).toBe(true)
+
         release('ShiftLeft')
+        control.move()
+        expect(move.mock.calls.at(-1)?.[5]).toBe(false)
+        expect(move.mock.calls.at(-1)?.[7]).toBe(false)
+        nowSpy.mockRestore()
     })
 
     it('聚焦接口：focusTo / isFocused 切换，Esc 取消聚焦并回归原观察距离', () => {

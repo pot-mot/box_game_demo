@@ -35,7 +35,7 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 `CharacterState` 至少包含以下子域：
 
 - `identity`：id、isPlayer、config、bodyFormId
-- `attributes`：生命、韧性、格挡槽、最终数值（当前聚合在 `combat` 子域，后续可细分，但不得另存）
+- `attributes`：生命、韧性、格挡槽、体力、最终数值（战斗数值当前聚合在 `combat`；体力单独在 `stamina` 子域）
 - `equipment`：全部武器槽装备、护甲/肢体、`bodyState`（当前武器运行时在 `combat`、装备状态在 `config` / `combat`，后续可细分）
 - `timers`：全部计时器（受击、无敌、冷却、状态计时等）
 - `stateMachine`：当前/上一状态名、阶段、攻击段/阶段/计时/蓄力/保持
@@ -56,6 +56,7 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 |---|---|
 | `identity` | 生成/切换体形 |
 | `attributes` / `equipment` | 装备/属性系统 |
+| `stamina` | 状态机（扣除/恢复）、装备变更（重算修正）、面板（当前值） |
 | `timers` | 拥有该计时器的系统（combat / state_machine / ai） |
 | `stateMachine` | 状态机 |
 | `physics` | 物理步 |

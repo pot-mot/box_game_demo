@@ -64,6 +64,32 @@ describe('持握模式运行时（setHoldMode / cyclePlayerHoldMode / 副手挂�
         system = setupCharacterEntities(new Scene(), createSharedWorld())
     })
 
+    it('默认生成角色双手均填充空手武器（副手不留空）', () => {
+        const {id} = system.add(characterConfig({equipment: {limb: {}, weapon: {}, armor: {}}}), 0, 0, 0)
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
+        expect(entity.state.combat.weapon.id).toBe('unarmed')
+        expect(entity.state.combat.offhand?.weapon.id).toBe('unarmed')
+    })
+
+    it('主手 / 副手攻击数值覆写独立保留', () => {
+        const {id} = system.add(characterConfig(), 0, 0, 0)
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
+        system.updateCharacterConfig(
+            id,
+            {},
+            {weaponId: 'long_sword', damage: 11, cooldown: 0.7},
+            undefined, undefined, undefined, undefined,
+            {equipment: {limb: {}, weapon: {main_hand: 'long_sword', off_hand: 'short_sword'}, armor: {}}},
+            {weaponId: 'short_sword', damage: 7, cooldown: 0.9},
+        )
+        expect(entity.state.combat.weapon.damage).toBe(11)
+        expect(entity.state.combat.offhand?.weapon.damage).toBe(7)
+        const mainEntry = entity.state.combat.weapons.get('main_hand')!.attacks.chains.light.entries[0]!.segmentId
+        const offEntry = entity.state.combat.weapons.get('off_hand')!.attacks.chains.light.entries[0]!.segmentId
+        expect(entity.state.combat.weapons.get('main_hand')!.attacks.segments[mainEntry]!.cooldown).toBe(0.7)
+        expect(entity.state.combat.weapons.get('off_hand')!.attacks.segments[offEntry]!.cooldown).toBe(0.9)
+    })
+
     it('默认单持；副手为同类近战时双持可用，否则 setHoldMode 回退默认并返回 false', () => {
         const {id} = system.add(characterConfig(), 0, 0, 0)
         const entity = system.getAll().find(e => e.state.identity.id === id)!

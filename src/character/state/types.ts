@@ -6,6 +6,7 @@ import type {CharacterStateName} from '../state_machine/state_names.ts'
 import type {CombatSubStrategy, OriginSubStrategy, PeaceSubStrategy} from '../ai_strategy/types.ts'
 import type {Handedness} from '../handedness.ts'
 import type {HoldMode} from '../weapon/hold_mode.ts'
+import type {CharacterStaminaState, StaminaConfig} from '../stamina/types.ts'
 
 /**
  * 体形专属状态（不透明键值）：通用层只负责持久化与传递，
@@ -32,6 +33,10 @@ export interface CharacterConfig {
     knockdownDuration?: number
     /** 起身状态持续时间（秒，缺省 = 常量 `DEFAULT_GET_UP_DURATION`） */
     getUpDuration?: number
+    /** 是否允许飞行（缺省 false；新建角色默认不允许，可在角色面板开启） */
+    flightEnabled?: boolean
+    /** 体力基础配置（缺省 = 常量默认值；有效消耗 / 恢复再乘装备修正） */
+    stamina?: StaminaConfig
 }
 
 /** 状态机数据：只存数据，不存状态机逻辑对象 */
@@ -154,6 +159,8 @@ export interface CharacterState {
     config: CharacterConfig
     bodyState: BodyState
     combat: CombatComponent
+    /** 体力运行时（当前值 / 有效消耗 / 恢复 / 计时；唯一权威存储） */
+    stamina: CharacterStaminaState
     stateMachine: CharacterStateMachineData
     physics: CharacterPhysicsState
     ai: CharacterAiState

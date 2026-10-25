@@ -86,7 +86,7 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
     const applyAnimation = (dt: number): void => {
         const ctx: AnimationContext = {
             stateTime,
-            horizontalSpeed: currentState === 'walking' || currentState === 'swimming' ? ACTOR_SPEED : 0,
+            horizontalSpeed: currentState === 'walking' || currentState === 'sprinting' || currentState === 'swimming' ? ACTOR_SPEED : 0,
             verticalSpeed: currentState === 'falling' ? -8 : 0,
             /* 空手：持握模式对基础姿态无影响（无武器），取单持 */
             humanoid: {holdMode: 'one_handed', handedness: DEFAULT_HANDEDNESS, shieldHands: {main: false, off: false}},

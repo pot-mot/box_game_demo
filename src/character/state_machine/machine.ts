@@ -12,6 +12,8 @@ import type {
 import {createCharacterStateMachineData, type CharacterStateMachineData} from '../state/types.ts'
 import {idleHandler} from './states/idle.ts'
 import {walkingHandler} from './states/walking.ts'
+import {sprintingHandler} from './states/sprinting.ts'
+import {flyingHandler} from './states/flying.ts'
 import {jumpingHandler} from './states/jumping.ts'
 import {fallingHandler} from './states/falling.ts'
 import {swimmingHandler} from './states/swimming.ts'
@@ -27,12 +29,15 @@ import {gettingUpHandler} from './states/getting_up.ts'
 import {blockingHandler} from './states/blocking.ts'
 import {guardBrokenHandler} from './states/guard_broken.ts'
 import {updateGroundTimers} from './ground.ts'
+import {updateStamina} from '../stamina/runtime.ts'
 
 const STATE_HANDLERS: Record<CharacterStateName, StateHandler> = {
     idle: idleHandler,
     walking: walkingHandler,
+    sprinting: sprintingHandler,
     jumping: jumpingHandler,
     falling: fallingHandler,
+    flying: flyingHandler,
     swimming: swimmingHandler,
     floating: floatingHandler,
     attacking: attackingHandler,
@@ -51,7 +56,7 @@ export const createCharacterStateMachine = (
     data: CharacterStateMachineData = createCharacterStateMachineData(),
 ): CharacterStateMachine => {
     let onStateChange: ((from: CharacterStateName, to: CharacterStateName) => void) | null = null
-    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false, interact: false, block: false, swimLift: 0}
+    const input: CharacterInput = {dx: 0, dz: 0, jump: false, attack: false, attackKey: undefined, roll: false, attackHoldDuration: 0, attackHeld: false, interact: false, block: false, swimLift: 0, sprint: false, fly: false, flyLift: 0}
 
     const makeContext = (entity?: CharacterEntity): MachineContext => {
         let attackPhase: string | undefined
@@ -71,7 +76,7 @@ export const createCharacterStateMachine = (
         }
     }
 
-    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean, swimLift?: number): void => {
+    const setInput = (dx: number, dz: number, jump: boolean, attack: boolean, roll?: boolean, attackKey?: CharacterInput['attackKey'], attackHoldDuration?: number, attackHeld?: boolean, interact?: boolean, block?: boolean, swimLift?: number, sprint?: boolean, fly?: boolean, flyLift?: number): void => {
         input.dx = dx
         input.dz = dz
         input.jump = jump
@@ -83,6 +88,9 @@ export const createCharacterStateMachine = (
         input.interact = interact ?? false
         input.block = block ?? false
         input.swimLift = swimLift ?? 0
+        input.sprint = sprint ?? false
+        input.fly = fly ?? false
+        input.flyLift = flyLift ?? 0
     }
 
     const update = (dt: number, entity: CharacterEntity): void => {
@@ -91,6 +99,7 @@ export const createCharacterStateMachine = (
         updateGroundTimers(entity, dt)
         /* 格挡保持：统一由输入同步到战斗组件，供 blocking 状态守卫与盾判定读取 */
         entity.state.combat.blockHeld = input.block
+        updateStamina(entity.state.stamina, data.currentState, dt)
 
         /* 全局倒地：任意非死亡 / 非倒地状态在韧性归零或受 knockdown 冲击时强制进入 knockdown（dying 优先级最高） */
         if (
@@ -162,7 +171,9 @@ export const createCharacterStateMachine = (
         STATE_HANDLERS[data.currentState].update(dt, input, entity, makeContext(entity))
     }
 
-    const reset = (): void => {
+    const reset = (entity?: CharacterEntity): void => {
+        /* 复位前先执行当前状态的退出逻辑（如飞行恢复重力），不留引擎侧副作用 */
+        if (entity !== undefined) STATE_HANDLERS[data.currentState].exit(entity, makeContext(entity))
         data.currentState = 'idle'
         data.previousState = null
         data.stateTime = 0
@@ -177,6 +188,9 @@ export const createCharacterStateMachine = (
         input.interact = false
         input.block = false
         input.swimLift = 0
+        input.sprint = false
+        input.fly = false
+        input.flyLift = 0
     }
 
     return {

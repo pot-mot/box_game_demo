@@ -7,6 +7,13 @@
 - 纯摄像机操作（见 `src/modes/control/control.md`）、指针交互、地形雕刻开关。
 - 与主循环的关系：执行面板（Execute / Stop / Step / Run / Reset）语义与快照基线生命周期见文档。
 
+## 显示控制（实体列表上方）
+
+- 实体列表上方常驻「显示控制」小面板（`modes/edit/debug_view_panel.ts`），五类角色调试可视化独立勾选、默认全部关闭：碰撞箱 / 攻击箱 / 受击箱 / 攻击检测区（橙检测箱 + 橙射程圆环）/ 视线扇形（蓝）。
+- 勾选后对**全部角色**常态显示，且选中角色不会绕过开关；未勾选时即使选中也不显示。碰撞箱关闭只隐藏胶囊可视化，保留 `mesh` 供射线拾取与选中线框。
+- 可视化本体由角色渲染层 [`render/debug_view.ts`](../../entity/character/render/debug_view.ts) 的 `CharacterDebugView` 提供（与展示模式共用），编辑模式只负责开关与帧数据；攻击箱默认 50% 不透明，命中 / 释放阶段恢复 100%。
+- 角色系统接口：`CharacterEntitySystem.setDebugVisible(view, visible)` 独立控制；`setCollisionVisible(visible)` 保留为总开关（play / showcase 统一关闭全部调试可视化）。
+
 ## 陷阱
 
 - 建筑笔刷启用时必须关闭指针实体选中 / 生成交互（`pointer.setEnabled(false)`），见 `src/entity/building_generator/building_generator.md`。
@@ -55,6 +62,7 @@
 | 类别 | 默认操作 | 实现 |
 |------|----------|------|
 | 相机（纯摄像机方案） | 左键拖拽转视角（俯仰限 ±90°）、右键拖拽平移、滚轮缩放、WASD 前后 / 左右 + Z 升 / X 降，按住 `boost`（默认 Shift）加速 | `modes/control/camera_control.ts` `createCameraControl` |
+| 显示控制 | 实体列表上方面板勾选碰撞箱 / 攻击箱 / 受击箱 / 攻击检测区 / 视线扇形（默认全关） | `modes/edit/debug_view_panel.ts` |
 | 选中 | 左键点击实体选中，点击空白取消 | `modes/edit/pointer_interaction.ts` |
 | 变换 | 拖拽 gizmo 平移 / 旋转圆弧；角色仅保留 Y 轴旋转 | `modes/edit/transform_gizmo.ts` |
 | 生成 | 「生成物体」绑定（默认 Ctrl+左键）在指针处生成当前生成类型 | `pointer_interaction.ts` + `modes/edit/spawn_mode.ts` |
@@ -70,6 +78,8 @@
 |------|------|
 | `src/modes/edit/index.ts` | 编辑模式装配（相机、gizmo、指针交互、面板），返回 `updater` 与执行面板控制器 |
 | `src/modes/edit/execute_panel.ts` | 执行面板 DOM 与交互状态机（语义约定见文件头注释） |
+| `src/modes/edit/debug_view_panel.ts` | 实体列表上方的显示控制面板（碰撞 / 攻击 / 受击 / 检测） |
+| `src/character/debug_views.ts` | 角色调试可视化分类常量与类型 |
 | `src/modes/edit/execute_panel.test.ts` | 面板交互契约单测：Execute/Stop/Reset 的派发规则与互斥 |
 | `src/main.ts` | `executing` 与快照基线的持有者、`clearWorld()` 清空世界（实体 + 执行期子弹）、步骤排队消费、载入存档刷新基线 |
 | `src/entity/character/physics/world.ts` | `CharacterEntitySystem.clearBullets()`：清除在飞子弹（物理刚体 + 场景 mesh） |

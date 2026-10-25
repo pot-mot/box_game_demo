@@ -4,7 +4,7 @@ import {
     type Scene,
 } from 'three'
 import {
-    ATTACK_HIT_BOX_COLOR, TARGET_HIT_BOX_COLOR,
+    ATTACK_HIT_BOX_COLOR, ATTACK_HIT_BOX_INACTIVE_OPACITY, TARGET_HIT_BOX_COLOR,
     ATTACK_DETECT_BOX_COLOR, VISION_FAN_COLOR,
 } from './constants.ts'
 import {VISION_FAN_RAY_COUNT} from '../ai/constants.ts'
@@ -19,7 +19,6 @@ const ATTACK_DEBUG_CAPACITY = 12
 /* 模块级共享的单位立方体棱线几何与材质（各实例通过 scale/matrix 调整尺寸，
  * 实体删除时只从场景移除，不销毁共享资源） */
 const _unitEdges = new EdgesGeometry(new BoxGeometry(1, 1, 1))
-const _weaponBoxMat = new LineBasicMaterial({color: ATTACK_HIT_BOX_COLOR})
 const _targetBoxMat = new LineBasicMaterial({color: TARGET_HIT_BOX_COLOR})
 const _detectBoxMat = new LineBasicMaterial({color: ATTACK_DETECT_BOX_COLOR})
 const _visionMat = new LineBasicMaterial({color: VISION_FAN_COLOR})
@@ -72,22 +71,30 @@ export interface AttackHitBoxes {
     readonly visionPositions: Float32Array
     /** 标记视线扇形顶点已更新（提交 GPU） */
     markVisionDirty: () => void
-    /** 从场景移除（几何/材质为模块级共享，不销毁） */
+    /** 攻击箱命中窗口状态：激活时 100% 不透明，未激活时半透明（默认 50%） */
+    setAttackActive: (active: boolean) => void
+    /** 从场景移除（几何 / 共享材质不销毁，实例攻击材质释放） */
     dispose: () => void
 }
 
 /** 创建角色的战斗判定调试线框（初始隐藏，可见性由 setCollisionVisible 控制） */
 export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
+    /* 攻击箱材质为实例级：命中窗口激活时切换不透明度，不能与其他角色共享 */
+    const attackMat = new LineBasicMaterial({
+        color: ATTACK_HIT_BOX_COLOR,
+        transparent: true,
+        opacity: ATTACK_HIT_BOX_INACTIVE_OPACITY,
+    })
     const weaponBoxes: LineSegments[] = []
     const offhandWeaponBoxes: LineSegments[] = []
     const detectBoxes: LineSegments[] = []
     for (let i = 0; i < ATTACK_DEBUG_CAPACITY; i++) {
-        const weaponBox = new LineSegments(_unitEdges, _weaponBoxMat)
+        const weaponBox = new LineSegments(_unitEdges, attackMat)
         weaponBox.matrixAutoUpdate = false
         weaponBox.visible = false
         scene.add(weaponBox)
         weaponBoxes.push(weaponBox)
-        const offhandBox = new LineSegments(_unitEdges, _weaponBoxMat)
+        const offhandBox = new LineSegments(_unitEdges, attackMat)
         offhandBox.matrixAutoUpdate = false
         offhandBox.visible = false
         scene.add(offhandBox)
@@ -99,7 +106,7 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
         detectBoxes.push(detectBox)
     }
 
-    const projectileBox = new LineSegments(_unitEdges, _weaponBoxMat)
+    const projectileBox = new LineSegments(_unitEdges, attackMat)
     projectileBox.matrixAutoUpdate = false
     projectileBox.visible = false
     scene.add(projectileBox)
@@ -144,6 +151,9 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
         visionFan,
         visionPositions,
         markVisionDirty: () => { visionAttr.needsUpdate = true },
+        setAttackActive: (active: boolean) => {
+            attackMat.opacity = active ? 1 : ATTACK_HIT_BOX_INACTIVE_OPACITY
+        },
         dispose: () => {
             for (const box of weaponBoxes) scene.remove(box)
             for (const box of offhandWeaponBoxes) scene.remove(box)
@@ -154,6 +164,7 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
             scene.remove(visionFan)
             for (const box of hurtBoxes) scene.remove(box)
             visionGeo.dispose()
+            attackMat.dispose()
         },
     }
 }

@@ -71,8 +71,10 @@ export type BoneEditLocale = {
     /* ── 内置动作：基础状态 ── */
     'bone_edit.state.idle': string
     'bone_edit.state.walking': string
+    'bone_edit.state.sprinting': string
     'bone_edit.state.jumping': string
     'bone_edit.state.falling': string
+    'bone_edit.state.flying': string
     'bone_edit.state.swimming': string
     'bone_edit.state.floating': string
     'bone_edit.state.dying': string
@@ -160,8 +162,10 @@ export const boneEditZh: BoneEditLocale = {
     /* ── 内置动作：基础状态 ── */
     'bone_edit.state.idle': '待机',
     'bone_edit.state.walking': '行走',
+    'bone_edit.state.sprinting': '跑步',
     'bone_edit.state.jumping': '跳跃',
     'bone_edit.state.falling': '下落',
+    'bone_edit.state.flying': '飞行',
     'bone_edit.state.swimming': '游泳',
     'bone_edit.state.floating': '漂浮',
     'bone_edit.state.dying': '死亡',
@@ -249,8 +253,10 @@ export const boneEditEn: BoneEditLocale = {
     /* ── Built-in actions: base states ── */
     'bone_edit.state.idle': 'Idle',
     'bone_edit.state.walking': 'Walk',
+    'bone_edit.state.sprinting': 'Sprint',
     'bone_edit.state.jumping': 'Jump',
     'bone_edit.state.falling': 'Fall',
+    'bone_edit.state.flying': 'Fly',
     'bone_edit.state.swimming': 'Swim',
     'bone_edit.state.floating': 'Float',
     'bone_edit.state.dying': 'Death',

@@ -3,6 +3,7 @@ import type RAPIER from '@dimforge/rapier3d-compat'
 import type {CharacterEntity, CharacterState} from '../../character/types.ts'
 import type {CharacterStateInit} from '../../character/state/types.ts'
 import type {CharacterStateMachine} from '../../character/state_machine/types.ts'
+import {createStaminaState} from '../../character/stamina/runtime.ts'
 
 /** 引擎句柄：只存运行时对象，不进入 CharacterState */
 export interface CharacterRuntimeHandles {
@@ -49,6 +50,7 @@ export const createCharacterState = (init: CharacterStateInit): CharacterState =
     config: init.config,
     bodyState: init.bodyState,
     combat: init.combat,
+    stamina: createStaminaState(init.config, init.combat, init.config.bodyFormId ?? 'humanoid'),
     stateMachine: init.stateMachine,
     physics: {
         isOnGround: true,

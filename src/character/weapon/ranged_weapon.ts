@@ -12,6 +12,7 @@ import type { ProjectileVisualSpec } from './projectile_visual.ts'
 import type { ChargeTuning } from './charge_tuning.ts'
 import type { WeaponAttackBoxSpec } from './mesh_config.ts'
 import type { EquipmentColliderSpec, EquipmentHurtBoxSpec, EquipmentMountSpec } from '../equipment/types.ts'
+import type { StaminaModifierSet } from '../stamina/types.ts'
 
 /** 吐息机制类型（龙专属装备） */
 export const BREATH_KINDS = ['fireball', 'lightning', 'laser'] as const
@@ -71,6 +72,8 @@ export interface RangedWeaponClassConfig {
     readonly mountRotation?: readonly [number, number, number]
     /** 攻击类别（武器固有，不可被存档/面板覆写）：弹丸与爆炸伤害均按此类别结算防御 */
     readonly damageType: DamageType
+    /** 装备时对角色体力消耗 / 恢复的修正（缺省 = 无修正） */
+    readonly stamina?: StaminaModifierSet
     /** 可支持的攻击模组（数组；首个为默认模组，换武器时角色模组重置为首个） */
     readonly attackModules: readonly AttackModuleDef[]
     readonly damage: number

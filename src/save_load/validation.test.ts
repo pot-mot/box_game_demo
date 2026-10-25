@@ -398,6 +398,59 @@ describe('validateSaveData', () => {
         }
     })
 
+    it('character 体力 / 飞行 — 可选字段：合法值保留，非法值逐项回退 undefined（不抛错）', () => {
+        const characterConfig = (extra: Record<string, unknown>) => ({
+            entities: [{
+                type: 'character',
+                config: {
+                    speed: 6, jumpHeight: 2, scale: 1,
+                    tendency: {tendencyId: 'hostileExceptSelf'},
+                    faction: 0, maxHealth: 15, isPlayer: false,
+                    ...extra,
+                },
+                health: 15,
+            }],
+        })
+
+        const valid = validateSaveData(characterConfig({
+            flightEnabled: true,
+            stamina: {
+                max: 30, regenDelay: 1, regenPerSec: 4,
+                entryCost: {attack: 1, roll: 0.5, jump: 0.25},
+                drainPerSec: {sprinting: 0.3, flying: 0.1, blocking: 0.4},
+            },
+        }))
+        const e0 = valid.entities[0]
+        if (e0.type === 'character') {
+            expect(e0.config.flightEnabled).toBe(true)
+            expect(e0.config.stamina?.max).toBe(30)
+            expect(e0.config.stamina?.entryCost?.attack).toBe(1)
+            expect(e0.config.stamina?.drainPerSec?.blocking).toBe(0.4)
+        }
+
+        const invalid = validateSaveData(characterConfig({
+            flightEnabled: 'yes',
+            stamina: {max: 0, regenDelay: -1, regenPerSec: 'x', entryCost: {attack: -1}, drainPerSec: {flying: -2}},
+        }))
+        const e1 = invalid.entities[0]
+        if (e1.type === 'character') {
+            expect(e1.config.flightEnabled).toBeUndefined()
+            expect(e1.config.stamina?.max).toBeUndefined()
+            expect(e1.config.stamina?.regenDelay).toBeUndefined()
+            expect(e1.config.stamina?.regenPerSec).toBeUndefined()
+            expect(e1.config.stamina?.entryCost?.attack).toBeUndefined()
+            expect(e1.config.stamina?.drainPerSec?.flying).toBeUndefined()
+        }
+
+        /* 旧档缺字段：undefined / 未开启飞行（运行时回退默认） */
+        const legacy = validateSaveData(characterConfig({}))
+        const e2 = legacy.entities[0]
+        if (e2.type === 'character') {
+            expect(e2.config.flightEnabled).toBeUndefined()
+            expect(e2.config.stamina).toBeUndefined()
+        }
+    })
+
     it('character 行为原点策略 / 漫游间隔 / 追击半径 — 可选字段：合法值保留，非法值安全回退 undefined（不抛错）', () => {
         const characterConfig = (extra: Record<string, unknown>) => ({
             entities: [{

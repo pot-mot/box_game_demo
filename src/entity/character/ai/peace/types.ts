@@ -3,7 +3,7 @@ import type {AISetInput} from '../types.ts'
 
 export type {PeaceSubStrategy, PeaceConfig}
 
-export const PEACE_STATES = ['patrol', 'build'] as const
+export const PEACE_STATES = ['patrol', 'build'] as const satisfies readonly PeaceSubStrategy[]
 export type PeaceState = typeof PEACE_STATES[number]
 
 export interface PeaceTransition {

@@ -205,6 +205,9 @@ export const collectWorldState = (
                     /* AI 反应式举盾窗口 / 冷却（写实际值；旧代码读到缺字段安全回退默认） */
                     aiBlockDuration: e.state.ai.aiBlockDuration,
                     aiBlockCooldown: e.state.ai.aiBlockCooldown,
+                    /* 飞行开关 / 体力基础配置（写实际值；旧代码读到缺字段安全回退默认） */
+                    flightEnabled: e.state.config.flightEnabled === true,
+                    ...(e.state.config.stamina !== undefined ? {stamina: e.state.config.stamina} : {}),
                 },
                 health: e.state.combat.health,
                 position: [bodyPos.x, bodyPos.y - halfH, bodyPos.z],

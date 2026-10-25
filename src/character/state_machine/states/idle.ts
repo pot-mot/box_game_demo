@@ -3,6 +3,8 @@ import {GROUND_DAMPING, SLOPE_WALK_THRESHOLD, STATE_FLIP_MIN_TIME, SWIM_ENTER_FL
 import {shouldFall, isSupportedOn, projectToSlope, applySlopeAntiGravity} from '../ground.ts'
 import {fluidFractionOf} from '../fluid.ts'
 import {canStartAttack} from '../../combat/attack_runtime.ts'
+import {canAffordStaminaEntry, canEnterSustainedStamina} from '../../stamina/runtime.ts'
+import {canEnterFlight} from './flying.ts'
 
 export const idleHandler: StateHandler = {
     enter: () => {},
@@ -38,13 +40,31 @@ export const idleHandler: StateHandler = {
             guard: (_input, entity) => entity.state.combat.blockHeld
                 && entity.state.combat.block !== undefined
                 && entity.state.combat.guard > 0
-                && entity.state.combat.health > 0,
+                && entity.state.combat.health > 0
+                && canEnterSustainedStamina(entity.state.stamina),
+        },
+        {
+            to: 'rolling',
+            guard: (input, entity) => input.roll
+                && canAffordStaminaEntry(entity.state.stamina, 'roll')
+                && entity.state.combat.rollSkill.cooldownTimer <= 0,
+        },
+        {
+            to: 'flying',
+            guard: (input, entity) => input.fly && canEnterFlight(entity),
+        },
+        {
+            to: 'sprinting',
+            guard: (input, entity) => input.sprint
+                && canEnterSustainedStamina(entity.state.stamina)
+                && Math.hypot(input.dx, input.dz) > 0.001,
         },
         { to: 'walking', guard: (input) => Math.hypot(input.dx, input.dz) > 0.001 },
         {
             to: 'attacking',
             /* 起手解析：攻击键的起手候选按守卫（蓄力/方向组合键）与冷却求值，存在候选才进入 */
             guard: (input, entity) => input.attack
+                && canAffordStaminaEntry(entity.state.stamina, 'attack')
                 && canStartAttack(entity.state.combat, {
                     dx: input.dx,
                     dz: input.dz,
@@ -55,11 +75,9 @@ export const idleHandler: StateHandler = {
         {
             to: 'jumping',
             guard: (input, entity) =>
-                input.jump && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
-        },
-        {
-            to: 'rolling',
-            guard: (input, entity) => input.roll && entity.state.combat.rollSkill.cooldownTimer <= 0,
+                input.jump
+                && canAffordStaminaEntry(entity.state.stamina, 'jump')
+                && isSupportedOn(entity, SLOPE_WALK_THRESHOLD),
         },
         {
             to: 'dying',

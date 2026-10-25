@@ -115,6 +115,39 @@ const walking: PoseFunction = (t) => {
     }
 }
 
+/** 跑步：步幅更大的快速步态、躯干前倾、鬃尾向后拖曳 */
+const sprinting: PoseFunction = (t) => {
+    const phase = (t % 0.55) / 0.55
+    const bob = Math.sin(phase * TAU * 2) * 0.028
+    const roll = Math.sin(phase * TAU) * 0.03
+    return {
+        body: poseAt(
+            [0.04 + Math.sin(phase * TAU * 2 + 0.4) * 0.016, Math.sin(phase * TAU) * 0.02, roll],
+            [Math.sin(phase * TAU) * 0.01, BODY_Y + bob, BODY_Z],
+        ),
+        withers: [0.16 - bob * 0.5, Math.sin(phase * TAU + 0.2) * 0.04, -roll * 0.4],
+        neck: [0.12 + bob * 0.35, Math.sin(phase * TAU + 0.1) * 0.05, -roll * 0.3],
+        head: [-0.28 - Math.sin(phase * TAU * 2 - 0.85) * 0.07, -Math.sin(phase * TAU) * 0.05, -roll * 0.6],
+        ...walkLegs(phase, 0.82),
+        ...tailPose(t, 3.8, 0.14, -Math.sin(phase * TAU) * 0.08),
+        ...earPose(t, 0.1),
+    }
+}
+
+/** 飞行：四肢收拢、身体接近水平，尾巴向后伸展 */
+const flying: PoseFunction = (t) => {
+    const bob = Math.sin(t * 1.7) * 0.02
+    return {
+        body: poseAt([-0.14 + bob * 0.25, 0, 0], [0, BODY_Y + bob, BODY_Z]),
+        withers: [0.3, 0, 0], neck: [0.14, 0, 0], head: [-0.24, 0, 0],
+        ...tailPose(t, 2.6, 0.1, 0.02),
+        flHip: [-0.62, 0, 0], flKnee: [0.72, 0, 0], flFetlock: [0.26, 0, 0], flFoot: [0.1, 0, 0],
+        frHip: [-0.62, 0, 0], frKnee: [0.72, 0, 0], frFetlock: [0.26, 0, 0], frFoot: [0.1, 0, 0],
+        rlHip: [0.5, 0, 0], rlKnee: [0.7, 0, 0], rlHock: [0.28, 0, 0], rlFoot: [0.12, 0, 0],
+        rrHip: [0.5, 0, 0], rrKnee: [0.7, 0, 0], rrHock: [0.28, 0, 0], rrFoot: [0.12, 0, 0],
+    }
+}
+
 const jumping: PoseFunction = (t) => {
     const k = clamp01(t / 0.4)
     return {
@@ -195,7 +228,7 @@ const gettingUp: PoseFunction = (t) => {
 }
 
 const POSES: Partial<Record<CharacterStateName, PoseFunction>> = {
-    walking, jumping, falling, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
+    walking, sprinting, jumping, falling, flying, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
 }
 
 export const horsePose = (state: CharacterStateName): PoseFunction => POSES[state] ?? idle

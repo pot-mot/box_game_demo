@@ -104,8 +104,10 @@ const entryOf = (
 const BASE_STATE_LABELS: Record<BaseState, StringLocaleKey> = {
     idle: 'bone_edit.state.idle',
     walking: 'bone_edit.state.walking',
+    sprinting: 'bone_edit.state.sprinting',
     jumping: 'bone_edit.state.jumping',
     falling: 'bone_edit.state.falling',
+    flying: 'bone_edit.state.flying',
     swimming: 'bone_edit.state.swimming',
     floating: 'bone_edit.state.floating',
     dying: 'bone_edit.state.dying',
@@ -120,9 +122,9 @@ const BASE_STATE_LABELS: Record<BaseState, StringLocaleKey> = {
 
 /** 基础状态展示优先级：Record 保证新增状态漏配时编译失败（待机 → 移动 → 受击/倒地） */
 const BASE_STATE_PRIORITY: Record<BaseState, number> = {
-    idle: 0, walking: 1, jumping: 2, falling: 3, swimming: 4, floating: 5,
-    rolling: 6, flinching: 7, dying: 8, knockdown: 9, getting_up: 10,
-    interacting: 11, blocking: 12, guard_broken: 13,
+    idle: 0, walking: 1, sprinting: 2, jumping: 3, falling: 4, flying: 5, swimming: 6, floating: 7,
+    rolling: 8, flinching: 9, dying: 10, knockdown: 11, getting_up: 12,
+    interacting: 13, blocking: 14, guard_broken: 15,
 }
 
 /** 基础状态展示顺序（导出供测试校验覆盖全部 `BASE_CLIP_STATES`） */
@@ -130,7 +132,7 @@ export const BASE_STATE_ORDER: readonly BaseState[] = (Object.keys(BASE_STATE_PR
     .sort((a, b) => BASE_STATE_PRIORITY[a] - BASE_STATE_PRIORITY[b])
 
 /** 姿态公式区分持械/空手的状态（其余状态两种变体姿态相同，只列出一份） */
-const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking']
+const WEAPON_VARIANT_STATES: readonly BaseState[] = ['idle', 'walking', 'sprinting', 'flying']
 
 /** 预览来源：统一采样 `BodyForm.animation` 的生产进度组合树；模式层不感知体形。 */
 interface ClipProvider {

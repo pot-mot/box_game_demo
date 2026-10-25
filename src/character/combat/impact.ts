@@ -27,7 +27,7 @@ export const downgradeImpact = (impact: ImpactLevel): ImpactLevel =>
     IMPACT_LEVELS[Math.max(0, impactRank(impact) - 1)]
 
 /** 弱硬直（medium）可触发受击的状态集合：非承诺动作状态才被弱冲击打断 */
-export const WEAK_FLINCH_RECEPTIVE_STATES = ['idle', 'walking', 'jumping', 'falling', 'interacting'] as const
+export const WEAK_FLINCH_RECEPTIVE_STATES = ['idle', 'walking', 'sprinting', 'jumping', 'falling', 'flying', 'interacting'] as const
 
 /** 该状态是否接受弱硬直（medium 冲击）——攻击 / 翻滚等承诺动作状态不受弱冲击打断 */
 export const isWeakFlinchReceptive = (state: string): boolean =>

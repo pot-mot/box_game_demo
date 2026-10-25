@@ -108,6 +108,39 @@ const walking: PoseFunction = (t) => {
     }
 }
 
+/** 跑步：更快的对角小跑、身体更低、尾巴拉平 */
+const sprinting: PoseFunction = (t) => {
+    const phase = (t % 0.5) / 0.5
+    const bob = Math.sin(phase * TAU * 2) * 0.035
+    const roll = Math.sin(phase * TAU) * 0.04
+    return {
+        body: poseAt(
+            [0.035 + Math.sin(phase * TAU * 2 + 0.45) * 0.018, Math.sin(phase * TAU) * 0.03, roll],
+            [Math.sin(phase * TAU) * 0.01, BODY_Y - 0.01 + bob, BODY_Z],
+        ),
+        neck: [0.12 - bob * 0.8, Math.sin(phase * TAU + 0.3) * 0.04, -roll * 0.5],
+        head: [-0.08 + bob * 0.4, -Math.sin(phase * TAU + 0.3) * 0.06, -roll * 0.7],
+        ...trotPose(phase, 0.8, 1.25),
+        ...tailPose(t, 3.4, 0.1, -Math.sin(phase * TAU) * 0.05),
+        ...earPose(t, 0.12),
+    }
+}
+
+/** 飞行：四肢收拢、躯干前伸，尾巴作为平衡面 */
+const flying: PoseFunction = (t) => {
+    const bob = Math.sin(t * 1.8) * 0.02
+    return {
+        body: poseAt([-0.16 + bob * 0.3, 0, 0], [0, BODY_Y + bob, BODY_Z]),
+        neck: [0.22, 0, 0],
+        head: [-0.14, 0, 0],
+        ...tailPose(t, 2.6, 0.08, 0.02),
+        flHip: [-0.62, 0, 0], flKnee: [0.72, 0, 0], flFoot: [0.18, 0, 0],
+        frHip: [-0.62, 0, 0], frKnee: [0.72, 0, 0], frFoot: [0.18, 0, 0],
+        rlHip: [0.46, 0, 0], rlKnee: [0.72, 0, 0], rlFoot: [0.22, 0, 0],
+        rrHip: [0.46, 0, 0], rrKnee: [0.72, 0, 0], rrFoot: [0.22, 0, 0],
+    }
+}
+
 const jumping: PoseFunction = (t) => {
     const k = clamp01(t / 0.35)
     return {
@@ -206,7 +239,7 @@ const gettingUp: PoseFunction = (t) => {
 
 /** 状态 → 姿态函数（未列出的状态回退 idle） */
 const POSES: Partial<Record<CharacterStateName, PoseFunction>> = {
-    walking, jumping, falling, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
+    walking, sprinting, jumping, falling, flying, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
 }
 
 export const wolfPose = (state: CharacterStateName): PoseFunction => POSES[state] ?? idle

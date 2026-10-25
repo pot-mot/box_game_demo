@@ -39,3 +39,15 @@ export const SWIM_H_DAMPING = 0.9
 export const SWIM_KICK_IMPULSE = 3.5
 /** 镜头俯仰驱动的上浮/下潜速度（m/s，乘 swimLift 分量） */
 export const SWIM_LIFT_SPEED = 3.5
+
+/* ── 跑步 / 飞行 ── */
+/** 跑步移速倍率（相对角色基础移速） */
+export const SPRINT_SPEED_MULTIPLIER = 1.7
+/** 飞行水平移速倍率 */
+export const FLY_SPEED_MULTIPLIER = 1.2
+/** 飞行升降速度（m/s） */
+export const FLY_VERTICAL_SPEED = 4
+/** 起飞竖直速度（m/s）：双击空格进入飞行后短暂上升，避免贴地即落地 */
+export const FLY_TAKEOFF_SPEED = 2.5
+/** 起飞阶段时长（秒）：该阶段未按下降时保持上升，之后才允许落地退出 */
+export const FLY_TAKEOFF_TIME = 0.3

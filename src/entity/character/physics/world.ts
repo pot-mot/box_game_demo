@@ -1,10 +1,11 @@
-import {Euler, type LineBasicMaterial, type LineSegments, type Mesh, Matrix4, type Object3D, Quaternion, type Scene, Vector3} from 'three'
+import {Euler, type LineBasicMaterial, type Mesh, Matrix4, type Object3D, Quaternion, type Scene, Vector3} from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import type {SharedWorld} from '../../../physics/world.ts'
 import {createColliderForBody, setBodyMass} from '../../../physics/rapier_utils.ts'
 import {applyRenderPose, captureObjectRenderPose, resetObjectRenderPose} from '../../../physics/render_interpolation.ts'
 import {createBodyEnvironment, resetBodyEnvironment} from '../../../physics/environment.ts'
 import {worldizeHurtBlock, zeroWorldHurtBlock, type HurtBlock, type WorldHurtBlock} from '../../../character/hurt_blocks.ts'
+import {refreshStaminaProfile} from '../../../character/stamina/runtime.ts'
 import {bodyFormOf, isKnownBodyFormId, HUMANOID_BODY_FORM, weaponSelectableFor, type ColliderSpec} from '../body_form/index.ts'
 import {type ContactTracker, createContactTracker, queryColliderContacts} from '../../../physics/contact_tracking.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
@@ -53,7 +54,8 @@ import {notifyAIKill, setOriginFromCharacter} from '../ai/origin.ts'
 import {DEFAULT_AI_BLOCK_COOLDOWN, DEFAULT_AI_BLOCK_DURATION, DEFAULT_CHASE_LEASH_RADIUS} from '../ai/constants.ts'
 import {processNav} from '../ai/nav/machine.ts'
 import {createCharacterMesh, updateCharacterMesh} from '../render/index.ts'
-import {COLLIDER_MESH_OPACITY} from '../render/constants.ts'
+import {COLLIDER_MESH_OPACITY, COLLIDER_MESH_OPACITY_UNSELECTED} from '../render/constants.ts'
+import {CHARACTER_DEBUG_VIEWS, type CharacterDebugView as CharacterDebugViewKind} from '../../../character/debug_views.ts'
 import type {AppearanceSystem} from '../appearance/types.ts'
 
 import {createWeaponTrail, type WeaponTrail} from '../appearance/weapon_trail.ts'
@@ -77,8 +79,8 @@ import {GET_UP_TURN_SPEED, ROLL_WORLD_DAMAGE} from '../../../character/combat/co
 import {createRangedExecutor} from '../combat/ranged_executor.ts'
 import {HITSTOP_DURATION, HITSTOP_TIMESCALE} from '../combat/constants.ts'
 import {createMaterialEffects} from '../combat_vfx/material_effects.ts'
-import {type AttackHitBoxes, createAttackHitBoxes, syncWeaponDebugBox, syncHurtDebugBox} from '../combat_vfx/hitbox_debug.ts'
-import {VISION_FAN_HALF_ANGLE, VISION_FAN_RAY_COUNT, VISION_FAN_RAY_STEP} from '../ai/constants.ts'
+import {VISION_FAN_RAY_COUNT} from '../ai/constants.ts'
+import {createCharacterDebugView, type CharacterDebugView, type DebugVisionTarget} from '../render/debug_view.ts'
 import type {EntityInfoSource, EntityPanelInfo} from '../../box/base/types/entity_info.ts'
 import {createEmitter} from '../../box/base/types/event_emitter.ts'
 import {cleanupWireframe, createWireframe} from '../../box/base/render/index.ts'
@@ -238,22 +240,17 @@ const resolveWeaponIdForSlot = (
 const resolveWeaponLoadout = (
     plan: ReturnType<typeof bodyFormOf>,
     equipment: EquipmentState,
-    mainOverrides?: {readonly attack: AttackConfig; readonly slot: string},
+    overrides?: readonly {readonly slot: string; readonly attack: AttackConfig}[],
 ): {readonly runtimes: Map<string, WeaponRuntime>; readonly equipment: EquipmentState} => {
     const runtimes = new Map<string, WeaponRuntime>()
     let next = equipment
     for (const slot of weaponSlotsOfPlan(plan)) {
         const weaponId = resolveWeaponIdForSlot(plan, slot.bodyPart, next)
         if (weaponId === undefined) continue
-        const overrides = mainOverrides !== undefined && mainOverrides.slot === slot.bodyPart
-            ? {
-                damage: mainOverrides.attack.damage,
-                cooldown: mainOverrides.attack.cooldown,
-                charge: mainOverrides.attack.charge,
-                ranged: mainOverrides.attack.ranged,
-            }
-            : {}
-        const runtime = createWeaponRuntime(weaponId, overrides)
+        const override = overrides?.find(entry => entry.slot === slot.bodyPart)
+        const runtime = override !== undefined && override.attack.weaponId === weaponId
+            ? weaponRuntimeOf(override.attack)
+            : createWeaponRuntime(weaponId)
         runtimes.set(slot.bodyPart, runtime)
         next = withEquipmentAt(next, 'weapon', slot.bodyPart, weaponId)
     }
@@ -262,34 +259,20 @@ const resolveWeaponLoadout = (
 
 /* 视线扇形可视化 castFan 命中距离复用缓冲 */
 const _fanVizDists = new Float32Array(VISION_FAN_RAY_COUNT)
+/* 调试同步入参复用（逐角色顺序调用，避免每物理步分配对象） */
+const _debugHurtFallback = {x: 0, y: 0, z: 0, yaw: 0, halfX: 0, halfY: 0, halfZ: 0}
+const _debugAttackOptions = {ranged: false, offhandEnabled: true, projectileRadius: 0}
 
-/** 写入视线扇形调试线段顶点：扇形扫描射线（每 10° 一条，截断到遮挡点）+ 可选目标连线（无目标时退化为点） */
-const placeVisionFan = (
-    hitBoxes: AttackHitBoxes,
+/** 采样视线扇形遮挡距离：有 LOS 时截断到遮挡点，无 checker 时返回 undefined（完整半径） */
+const sampleVisionDistances = (
     los: LineOfSightChecker | null,
     x: number, eyeY: number, z: number,
     yaw: number, len: number,
-    selfMesh?: Object3D,
-    targetX?: number, targetY?: number, targetZ?: number,
-): void => {
-    const vp = hitBoxes.visionPositions
-    /* 与索敌判定同源：castFan 扫描整个扇形，射线截断到最近遮挡点（无 checker 时直达侦测半径） */
-    if (los) los.castFan(x, eyeY, z, yaw, len, _fanVizDists, selfMesh)
-    let p = 0
-    for (let i = 0; i < VISION_FAN_RAY_COUNT; i++) {
-        const a = yaw - VISION_FAN_HALF_ANGLE + i * VISION_FAN_RAY_STEP
-        const r = los ? Math.min(_fanVizDists[i], len) : len
-        vp[p++] = x; vp[p++] = eyeY; vp[p++] = z
-        vp[p++] = x + Math.sin(a) * r; vp[p++] = eyeY; vp[p++] = z + Math.cos(a) * r
-    }
-    /* 末段：当前目标连线（无目标时收缩为不可见点） */
-    vp[p++] = x; vp[p++] = eyeY; vp[p++] = z
-    if (targetX !== undefined && targetY !== undefined && targetZ !== undefined) {
-        vp[p++] = targetX; vp[p++] = targetY; vp[p++] = targetZ
-    } else {
-        vp[p++] = x; vp[p++] = eyeY; vp[p++] = z
-    }
-    hitBoxes.markVisionDirty()
+    selfMesh: Object3D,
+): Float32Array | undefined => {
+    if (los === null) return undefined
+    los.castFan(x, eyeY, z, yaw, len, _fanVizDists, selfMesh)
+    return _fanVizDists
 }
 
 /** 角色实体原点（脚底）到物理刚体中心（碰撞体中心）的 Y 向偏移（由体形计划提供） */
@@ -323,7 +306,7 @@ const factionBadgeColor = (faction: number, isPlayer: boolean): string => {
 export interface CharacterEntitySystem extends EntityInfoSource {
     markPlayer: (id: number) => void
     unmarkPlayer: () => void
-    setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean, swimLift?: number) => void
+    setPlayerMove: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean, swimLift?: number, sprint?: boolean, fly?: boolean, flyLift?: number) => void
     setPlayerAttack: (attackKey?: AttackKey, holdDuration?: number) => import('../../../character/combat/types.ts').AttackResult
     /**
      * 玩家按下攻击键：可蓄力的远程武器进入蓄力（按住期间冻结在蓄力锚点阶段并累积力度）；
@@ -392,10 +375,14 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     getOrigin: (id: number) => {x: number; y: number; z: number} | undefined
     /** 设置角色当前韧性（自动夹取到 0..poiseMax，用于面板调节） */
     setPoise: (id: number, value: number) => void
+    /** 设置角色当前体力（自动夹取到 0..max，用于面板调节） */
+    setStamina: (id: number, value: number) => void
     /** 注册箱子生成回调（供 builder AI 使用） */
     registerBoxSpawner: (fn: SpawnBoxCallback) => void
-    /** 设置碰撞体可视化 mesh 与攻击判定箱调试线框的可见性 */
+    /** 设置碰撞体可视化与全部战斗调试线框的可见性（总开关） */
     setCollisionVisible: (visible: boolean) => void
+    /** 独立设置某一类角色调试可视化（碰撞 / 攻击 / 受击 / 检测） */
+    setDebugVisible: (view: CharacterDebugViewKind, visible: boolean) => void
     /** 获取角色朝向角（度，0-360，0 = 世界 +Z 前方） */
     getFacing: (id: number) => number
     /** 设置角色朝向角（度，自动归一到 0-360，编辑暂停态亦即时生效） */
@@ -441,11 +428,18 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
      * Rapier 的 handle 在碰撞体销毁后可能被复用，每次重建 / 销毁都同步维护。
      */
     const shieldOwnerByHandle = new Map<number, number>()
-    /** 攻击判定箱调试线框（edit 模式随碰撞体可视化一同显示） */
-    const attackHitBoxes = new Map<number, AttackHitBoxes>()
+    /** 角色调试可视化（碰撞 / 攻击 / 受击 / 攻击检测区 / 视线扇形；由各模式开关驱动） */
+    const debugViews = new Map<number, CharacterDebugView>()
     /** 角色 id → 装备扩展碰撞体规格（与 entity.equipmentColliders 一一对应） */
     const equipmentColliderSpecs = new Map<number, readonly RuntimeEquipmentColliderSpec[]>()
-    let attackHitBoxVisible = false
+    /** 模式级调试开关：新建角色时套用当前开关状态 */
+    const debugVisibility: Record<CharacterDebugViewKind, boolean> = {
+        collision: false,
+        attack: false,
+        hurt: false,
+        detect: false,
+        vision: false,
+    }
     let nextId = 1
     let selectedId: number | undefined
     let aiEnabled = false
@@ -528,7 +522,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     let playerDz = 0
     let playerJump = false
     let playerRoll = false
+    let playerFly = false
+    let playerSprint = false
     let playerSwimLift = 0
+    let playerFlyLift = 0
     let playerForwardX = 0
     let playerForwardZ = 1
     /** 玩家交互脉冲与目标坐标（帧末与攻击脉冲一同归零；目标坐标供 interacting 朝向使用） */
@@ -625,8 +622,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const CHARACTER_STATE_KEYS: Record<CharacterStateName, StringLocaleKey> = {
         idle: 'entity.state.idle',
         walking: 'entity.state.walking',
+        sprinting: 'entity.state.sprinting',
         jumping: 'entity.state.jumping',
         falling: 'entity.state.falling',
+        flying: 'entity.state.flying',
         swimming: 'entity.state.swimming',
         floating: 'entity.state.floating',
         attacking: 'entity.state.attacking',
@@ -724,7 +723,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         const plan = bodyFormOf(config.bodyFormId)
         const primarySlot = primaryWeaponSlotOf(plan) ?? 'main_hand'
         /* 全部武器槽：存档 / 天然默认兜底；主槽应用面板数值覆写。 */
-        const loadout = resolveWeaponLoadout(plan, equipment, {attack, slot: primarySlot})
+        const loadout = resolveWeaponLoadout(plan, equipment, [{slot: primarySlot, attack}])
         let resolvedEquipment = loadout.equipment
         const runtimes = new Map(loadout.runtimes)
         if (offhandAttack !== undefined && weaponSlotsOfPlan(plan).some(slot => slot.bodyPart === 'off_hand')) {
@@ -870,12 +869,15 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         /* 体形专属动画系统（每个体形分包自带 base_clips/pose_fns 与调度实现） */
         appearanceSystems.set(entity.state.identity.id, plan.animation.createSystem({onAttackEvent}))
         weaponTrails.set(entity.state.identity.id, createWeaponTrail(scene))
-        const hitBoxes = createAttackHitBoxes(scene)
-        attackHitBoxes.set(entity.state.identity.id, hitBoxes)
+        const debugView = createCharacterDebugView(scene, model)
+        for (const kind of CHARACTER_DEBUG_VIEWS) debugView.setVisible(kind, debugVisibility[kind])
+        debugViews.set(entity.state.identity.id, debugView)
         /* 生成时即定位调试线框（编辑暂停态 update 不运行，避免线框滞留在原点）；
-         * 可见性由选中状态驱动（refreshSelectionVisibility），未选中时全部隐藏；
+         * 可见性由显示控制开关驱动（refreshSelectionVisibility），关闭时不显示；
          * placeDebugBoxes 接收的是物理中心坐标 */
         placeDebugBoxes(entity, x, y + halfH, z, 0)
+        /* 仅同步新角色的胶囊可见性，避免加载 / 批量生成时对全部角色重复刷新 */
+        applyCollisionVisual(entity)
 
         materialEffects.set(entity.state.identity.id, createMaterialEffects(entity))
         entity.state.combat.onDamageTaken = (amount: number, event) => {
@@ -937,7 +939,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const spawnAt = (x: number, y: number, z: number): void => {
-        const meleePreset: AttackConfig = {weaponId: 'long_sword'}
+        /* 默认角色双手均填充空手武器（副手不再留空） */
+        const meleePreset: AttackConfig = {weaponId: 'unarmed'}
         const entity = spawnEntity(DEFAULT_CHARACTER_CONFIG, meleePreset, undefined, {tendencyId: 'hostileExceptSelf'}, 0, x, y, z)
         select(entity.state.identity.id)
     }
@@ -983,7 +986,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 /* 死亡渐隐以选中态不透明度为基线：未选中角色基线为 0（全程不可见，
                  * 避免覆写选中态透明度导致胶囊在死亡时冒出）；选中角色自胶囊固有透明度渐隐 */
                 const fade = 1 - entity.state.timers.dyingTimer / DYING_DURATION
-                const base = entity.state.identity.id === selectedId ? COLLIDER_MESH_OPACITY : 0
+                const selected = entity.state.identity.id === selectedId
+                const collision = debugViews.get(entity.state.identity.id)?.isVisible('collision') === true
+                const base = collision
+                    ? (selected ? COLLIDER_MESH_OPACITY : COLLIDER_MESH_OPACITY_UNSELECTED)
+                    : 0
                 const mat = entity.mesh.material
                 if (Array.isArray(mat)) {
                     for (const m of mat) { m.transparent = true; m.opacity = base * fade }
@@ -1016,123 +1023,107 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
     const getSelectedId = (): number | undefined => selectedId
 
-    /** 同步武器攻击箱调试线框数组（逐项绑定关节，隐藏多余项） */
-    const syncAttackBoxDebug = (
-        model: CreatureModel,
-        boxes: readonly import('../../../character/weapon/mesh_config.ts').WeaponAttackBoxSpec[],
-        targets: readonly LineSegments[],
-        show: boolean,
-    ): void => {
-        for (let i = 0; i < targets.length; i++) {
-            const box = boxes[i]
-            if (!show || box === undefined) { targets[i].visible = false; continue }
-            const joint = model.jointGroups.get(box.jointId)
-            if (joint === undefined) { targets[i].visible = false; continue }
-            joint.updateWorldMatrix(true, false)
-            syncWeaponDebugBox(targets[i], joint.matrixWorld, box.center, box.half, box.rotation)
-            targets[i].visible = true
+    /** 当前攻击箱是否处于命中 / 释放阶段（用状态机阶段近似命中窗口，供攻击箱高亮） */
+    const attackWindowActiveOf = (entity: CharacterEntity): boolean => {
+        const combat = entity.state.combat
+        if (!combat.attackActive) return false
+        const segment = combat.activeSegment
+        if (segment === undefined) return false
+        const phases = resolvePhases(segment.phases)
+        if (combat.phaseIndex >= phases.length) return false
+        const name = phases[combat.phaseIndex].name
+        return name === 'strike' || name === 'release' || name === 'spin'
+    }
+
+    /** 目标点（AI 战斗中）供视线扇形连线；无目标返回 undefined */
+    const visionTargetOf = (entity: CharacterEntity): DebugVisionTarget | undefined => {
+        const aiCtx = aiMap.get(entity.state.identity.id)
+        if (!aiCtx || aiCtx.activeFsm !== 'combat' || aiCtx.combatTargetId === undefined) return undefined
+        const target = charById.get(aiCtx.combatTargetId)
+        if (!target || target.state.combat.isDead) return undefined
+        const tp = target.body.translation()
+        return {x: tp.x, y: tp.y + formEyeHeight(target.state.config), z: tp.z}
+    }
+
+    /** 是否有任一战斗 / 视线调试分类开启（全关时跳过逐角色同步，避免每帧分配） */
+    const hasCombatDebug = (): boolean =>
+        debugVisibility.attack || debugVisibility.hurt || debugVisibility.detect || debugVisibility.vision
+
+    /** 碰撞胶囊可见性与透明度（保留 mesh 可见以承载选中线框；play 等无线框场景可正常剔除） */
+    const applyCollisionVisual = (entity: CharacterEntity): void => {
+        const view = debugViews.get(entity.state.identity.id)
+        const collision = view?.isVisible('collision') === true
+        entity.mesh.visible = collision || entity.wireframe !== undefined
+        const selected = entity.state.identity.id === selectedId
+        const opacity = collision
+            ? (selected ? COLLIDER_MESH_OPACITY : COLLIDER_MESH_OPACITY_UNSELECTED)
+            : 0
+        const mat = entity.mesh.material
+        if (Array.isArray(mat)) {
+            for (const m of mat) m.opacity = opacity
+        } else {
+            mat.opacity = opacity
         }
     }
 
-    /** 同步攻击检测箱调试线框数组（joint + offset + rotation + size） */
-    const syncDetectBoxDebug = (
-        model: CreatureModel,
-        boxes: readonly import('../../../character/weapon/melee_weapon.ts').MeleeDetectBoxSpec[],
-        targets: readonly LineSegments[],
-        show: boolean,
+    /** 按当前武器与开关同步单个角色的全部调试可视化 */
+    const syncCharacterDebug = (
+        entity: CharacterEntity,
+        x: number, y: number, z: number, yaw: number,
+        refreshHurtBlocksNow: boolean,
     ): void => {
-        for (let i = 0; i < targets.length; i++) {
-            const box = boxes[i]
-            if (!show || box === undefined) { targets[i].visible = false; continue }
-            const joint = model.jointGroups.get(box.jointId)
-            if (joint === undefined) { targets[i].visible = false; continue }
-            joint.updateWorldMatrix(true, false)
-            syncWeaponDebugBox(targets[i], joint.matrixWorld, box.offset, {
-                x: box.size.x / 2, y: box.size.y / 2, z: box.size.z / 2,
-            }, box.rotation)
-            targets[i].visible = true
-        }
-    }
-
-    /** 定位单个角色的调试线框（受击箱/检测箱或射程圆环/视线扇形）并按当前选中与 debug 开关设可见性，
-     * 供生成/面板瞬移（setTransform）/选中切换复用，保证编辑暂停态（update 不运行）线框也随位置同步 */
-    const placeDebugBoxes = (entity: CharacterEntity, x: number, y: number, z: number, yaw: number): void => {
-        const hitBoxes = attackHitBoxes.get(entity.state.identity.id)
-        if (!hitBoxes) return
-        const show = attackHitBoxVisible && entity.state.identity.id === selectedId
-        const th = targetHitBoxHalves(entity.state.config)
-        hitBoxes.targetBox.position.set(x, y, z)
-        hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
-        hitBoxes.targetBox.rotation.y = yaw
-        hitBoxes.targetBox.visible = show
-        const weapon = entity.state.combat.weapon
+        if (!hasCombatDebug()) return
+        const view = debugViews.get(entity.state.identity.id)
+        if (view === undefined) return
         const model = appearanceModels.get(entity.state.identity.id)
-        if (weapon.type === 'melee' && model !== undefined) {
-            syncDetectBoxDebug(model, weapon.detectBoxes, hitBoxes.detectBoxes, show)
-        } else {
-            for (const box of hitBoxes.detectBoxes) box.visible = false
+        if (refreshHurtBlocksNow && view.isVisible('hurt') && model !== undefined) {
+            refreshHurtBlocks(entity, model)
         }
-        /* 远程子弹攻击箱预览：编辑暂停态也显示在武器附近 */
-        const projectilePreview = model?.weaponGroup
-        if (show && weapon.type === 'ranged' && model !== undefined && projectilePreview !== null && projectilePreview !== undefined) {
-            projectilePreview.updateWorldMatrix(true, false)
-            const previewBox = model.weaponAttackBoxes[0]
-            const center = previewBox?.center ?? {x: 0, y: 0, z: 0}
-            syncWeaponDebugBox(hitBoxes.projectileBox, projectilePreview.matrixWorld, center, {
-                x: PROJECTILE_RADIUS, y: PROJECTILE_RADIUS, z: PROJECTILE_RADIUS,
-            })
-            hitBoxes.projectileBox.visible = true
-        } else {
-            hitBoxes.projectileBox.visible = false
-        }
-        if (weapon.type === 'ranged') {
-            /* 射程圆环：半径 = weapon.range，贴足部高度平铺 */
-            hitBoxes.rangeRing.position.set(x, y - originToCenterY(entity.state.config), z)
-            hitBoxes.rangeRing.scale.set(weapon.range, 1, weapon.range)
-            hitBoxes.rangeRing.visible = show
-        } else {
-            hitBoxes.rangeRing.visible = false
-        }
-        placeVisionFan(hitBoxes, losChecker, x, y + formEyeHeight(entity.state.config), z, yaw,
-            weapon.detectionRange, entity.mesh as Object3D)
-        hitBoxes.visionFan.visible = show
-        /* 攻击判定箱（红）需逐帧跟随武器 matrixWorld，暂停态不强行显示，由 update() 维护 */
-        if (!show) {
-            for (const box of hitBoxes.weaponBoxes) box.visible = false
-            for (const box of hitBoxes.offhandWeaponBoxes) box.visible = false
-        }
+        const th = targetHitBoxHalves(entity.state.config)
+        _debugHurtFallback.x = x
+        _debugHurtFallback.y = y
+        _debugHurtFallback.z = z
+        _debugHurtFallback.yaw = yaw
+        _debugHurtFallback.halfX = th.x
+        _debugHurtFallback.halfY = th.y
+        _debugHurtFallback.halfZ = th.z
+        view.syncHurt(entity.state.hurtBlocks, _debugHurtFallback)
+        const weapon = entity.state.combat.weapon
+        const offhandEnabled = holdModeOf(entity) !== 'two_handed'
+        view.setAttackActive(attackWindowActiveOf(entity))
+        view.setOffhandAttackEnabled(offhandEnabled)
+        _debugAttackOptions.ranged = weapon.type === 'ranged'
+        _debugAttackOptions.offhandEnabled = offhandEnabled
+        _debugAttackOptions.projectileRadius = PROJECTILE_RADIUS
+        view.syncAttack(_debugAttackOptions)
+        view.syncDetect(
+            weapon.type === 'melee' ? weapon.detectBoxes : undefined,
+            weapon.type === 'ranged' ? weapon.range : undefined,
+            x, y - originToCenterY(entity.state.config), z,
+        )
+        const eyeY = y + formEyeHeight(entity.state.config)
+        const showVision = view.isVisible('vision')
+        view.syncVision(
+            x, eyeY, z, yaw, weapon.detectionRange,
+            showVision
+                ? sampleVisionDistances(losChecker, x, eyeY, z, yaw, weapon.detectionRange, entity.mesh as Object3D)
+                : undefined,
+            showVision ? visionTargetOf(entity) : undefined,
+        )
     }
 
-    /** 刷新选中态可视化：胶囊体/受击箱/检测块/判定箱/检测射线等仅被选中角色显示；
-     * 未选中角色胶囊不透明度降为 0（保留 mesh 本身供射线拾取，不能设 visible=false） */
+    /** 定位单个角色的调试线框（生成 / 瞬移 / 选中切换 / 开关变更时复用） */
+    const placeDebugBoxes = (entity: CharacterEntity, x: number, y: number, z: number, yaw: number): void => {
+        syncCharacterDebug(entity, x, y, z, yaw, true)
+    }
+
+    /** 刷新选中态可视化：碰撞胶囊按开关调整透明度（保留 mesh 可见以承载选中线框）；战斗调试箱按各自开关对全部角色显示 */
     const refreshSelectionVisibility = (): void => {
         for (const entity of characters) {
-            const mat = entity.mesh.material
-            const opacity = entity.state.identity.id === selectedId ? COLLIDER_MESH_OPACITY : 0
-            if (Array.isArray(mat)) {
-                for (const m of mat) m.opacity = opacity
-            } else {
-                mat.opacity = opacity
-            }
-            /* 上/下半身半胶囊可视化：仅编辑（碰撞可见）模式显示 */
-            const model = appearanceModels.get(entity.state.identity.id)
-            if (model !== undefined) {
-                for (const m of model.colliderMeshes) m.visible = attackHitBoxVisible
-            }
-            const hb = attackHitBoxes.get(entity.state.identity.id)
-            if (!hb) continue
-            if (attackHitBoxVisible && entity.state.identity.id === selectedId) {
-                const p = entity.body.translation()
-                placeDebugBoxes(entity, p.x, p.y, p.z, facingAngles.get(entity.state.identity.id) ?? 0)
-            } else {
-                hb.targetBox.visible = false
-                for (const box of hb.weaponBoxes) box.visible = false
-                for (const box of hb.offhandWeaponBoxes) box.visible = false
-                for (const box of hb.detectBoxes) box.visible = false
-                hb.projectileBox.visible = false
-                hb.rangeRing.visible = false
-                hb.visionFan.visible = false
-            }
+            applyCollisionVisual(entity)
+            if (!hasCombatDebug()) continue
+            const p = entity.body.translation()
+            placeDebugBoxes(entity, p.x, p.y, p.z, facingAngles.get(entity.state.identity.id) ?? 0)
         }
     }
 
@@ -1172,8 +1163,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         appearanceSystems.delete(entity.state.identity.id)
         weaponTrails.get(entity.state.identity.id)?.dispose()
         weaponTrails.delete(entity.state.identity.id)
-        attackHitBoxes.get(entity.state.identity.id)?.dispose()
-        attackHitBoxes.delete(entity.state.identity.id)
+        debugViews.get(entity.state.identity.id)?.dispose()
+        debugViews.delete(entity.state.identity.id)
         facingAngles.delete(entity.state.identity.id)
         previousFacingAngles.delete(entity.state.identity.id)
         smoothedTurnRates.delete(entity.state.identity.id)
@@ -1194,14 +1185,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     const getEntityList = (): Array<{id: number; mesh: Mesh}> => characters.map(c => ({id: c.state.identity.id, mesh: c.mesh}))
     const getAll = (): readonly CharacterEntity[] => characters
 
-    const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean, swimLift?: number): void => {
+    const setPlayerMove = (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll?: boolean, swimLift?: number, sprint?: boolean, fly?: boolean, flyLift?: number): void => {
         playerDx = dx
         playerDz = dz
-        /* 跳跃 / 翻滚是渲染帧采样的按下边沿：高刷下会出现「0 物理步」的渲染帧，
+        /* 跳跃 / 翻滚 / 飞行切换是渲染帧采样的按下边沿：高刷下会出现「0 物理步」的渲染帧，
          * 必须锁存到下一个物理步消费，否则边沿会被 input.getUpdater() 清掉而丢输入 */
         playerJump = playerJump || jump
         playerRoll = playerRoll || (roll ?? false)
+        playerFly = playerFly || (fly ?? false)
+        playerSprint = sprint ?? false
         playerSwimLift = swimLift ?? 0
+        playerFlyLift = flyLift ?? 0
         playerForwardX = forwardX
         playerForwardZ = forwardZ
     }
@@ -1696,7 +1690,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     && !entity.state.combat.isDead
                     && entity.stateMachine.currentState !== 'guard_broken'
                     && playerShieldHoldTime >= block.holdThreshold
-                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerAttackHeld, playerInteractPending, playerBlockHeld, playerSwimLift)
+                entity.stateMachine.setInput(playerDx, playerDz, playerJump, playerAttackPending, playerRoll, playerAttackKey, playerAttackHoldDuration, playerAttackHeld, playerInteractPending, playerBlockHeld, playerSwimLift, playerSprint, playerFly, playerFlyLift)
                 /* 攻击期间（含待起手帧）瞄准方向持续取相机前方：角色随之转向瞄准方向，
                  * 射击弹道再由武器实际朝向（muzzleDir）决定，避免背身射向目标 */
                 if (playerAttackPending || entity.state.combat.attackActive) {
@@ -2026,96 +2020,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     }
                 }
 
-                /* 战斗判定调试线框（edit 模式）：红色攻击判定箱（随武器 matrixWorld）、
-                 * 青色受击箱、橙色攻击检测箱（随位置/朝向）、蓝色视线扇形，
-                 * 几何均与对应判定函数同源，保证所见即所判 */
-                const hitBoxes = attackHitBoxes.get(entity.state.identity.id)
-                if (hitBoxes) {
-                    /* debug 信息仅被选中角色显示（与 refreshSelectionVisibility 的门控一致） */
-                    const showDebug = attackHitBoxVisible && entity.state.identity.id === selectedId
-                    const bPos = entity.body.translation()
-                    const yaw = facingAngles.get(entity.state.identity.id) ?? 0
-                    /* 受击箱：有受击子块时逐块显示（与判定形状一致）；无则回退单一身体盒 */
-                    const hurtBlocks = entity.state.hurtBlocks
-                    if (showDebug && hurtBlocks !== undefined && hurtBlocks.length > 0) {
-                        hitBoxes.targetBox.visible = false
-                        for (let bi = 0; bi < hitBoxes.hurtBoxes.length; bi++) {
-                            const box = hitBoxes.hurtBoxes[bi]
-                            if (bi < hurtBlocks.length) {
-                                syncHurtDebugBox(box, hurtBlocks[bi])
-                                box.visible = true
-                            } else {
-                                box.visible = false
-                            }
-                        }
-                    } else {
-                        const th = targetHitBoxHalves(entity.state.config)
-                        hitBoxes.targetBox.position.set(bPos.x, bPos.y, bPos.z)
-                        hitBoxes.targetBox.scale.set(th.x * 2, th.y * 2, th.z * 2)
-                        /* 受击箱随身体朝向旋转（与判定的 OBB 几何一致） */
-                        hitBoxes.targetBox.rotation.y = yaw
-                        hitBoxes.targetBox.visible = showDebug
-                        for (const box of hitBoxes.hurtBoxes) box.visible = false
-                    }
-
-                    const debugWeapon = entity.state.combat.weapon
-                    const meleeWeapon = debugWeapon.type === 'melee' ? debugWeapon : undefined
-
-                    /* 攻击判定箱（红）：逐项绑定关节 */
-                    syncAttackBoxDebug(model, model.weaponAttackBoxes, hitBoxes.weaponBoxes, showDebug && meleeWeapon !== undefined)
-                    syncAttackBoxDebug(model, model.offhandWeaponAttackBoxes ?? [], hitBoxes.offhandWeaponBoxes, showDebug && meleeWeapon !== undefined && holdModeOf(entity) !== 'two_handed')
-
-                    /* 攻击检测箱（橙）：逐项绑定关节 */
-                    if (showDebug && meleeWeapon !== undefined) {
-                        syncDetectBoxDebug(model, meleeWeapon.detectBoxes, hitBoxes.detectBoxes, true)
-                    } else {
-                        for (const box of hitBoxes.detectBoxes) box.visible = false
-                    }
-
-                    /* 远程子弹攻击箱预览（红）：贴在武器附近，表示真实弹丸的命中体积 */
-                    if (showDebug && debugWeapon.type === 'ranged' && model.weaponGroup !== null) {
-                        model.weaponGroup.updateWorldMatrix(true, false)
-                        const previewBox = model.weaponAttackBoxes[0]
-                        const center = previewBox?.center ?? {x: 0, y: 0, z: 0}
-                        syncWeaponDebugBox(hitBoxes.projectileBox, model.weaponGroup.matrixWorld, center, {
-                            x: PROJECTILE_RADIUS, y: PROJECTILE_RADIUS, z: PROJECTILE_RADIUS,
-                        })
-                        hitBoxes.projectileBox.visible = true
-                    } else {
-                        hitBoxes.projectileBox.visible = false
-                    }
-
-                    /* 射程圆环（橙）：远程出招门控为圆形距离判定 dist <= weapon.range，贴足部高度平铺 */
-                    if (showDebug && debugWeapon.type === 'ranged') {
-                        hitBoxes.rangeRing.position.set(bPos.x, bPos.y - originToCenterY(entity.state.config), bPos.z)
-                        hitBoxes.rangeRing.scale.set(debugWeapon.range, 1, debugWeapon.range)
-                        hitBoxes.rangeRing.visible = true
-                    } else {
-                        hitBoxes.rangeRing.visible = false
-                    }
-
-                    /* 视线扇形（蓝）：每 10° 一条扫描射线（截断到遮挡点），战斗目标存在时画连线 */
-                    if (showDebug) {
-                        const eyeY = bPos.y + formEyeHeight(entity.state.config)
-                        const fanLen = debugWeapon.detectionRange
-                        let tx: number | undefined
-                        let ty: number | undefined
-                        let tz: number | undefined
-                        if (aiCtx && aiCtx.activeFsm === 'combat' && aiCtx.combatTargetId !== undefined) {
-                            const target = charById.get(aiCtx.combatTargetId)
-                            if (target && !target.state.combat.isDead) {
-                                const tp = target.body.translation()
-                                tx = tp.x
-                                ty = tp.y + formEyeHeight(target.state.config)
-                                tz = tp.z
-                            }
-                        }
-                        placeVisionFan(hitBoxes, losChecker, bPos.x, eyeY, bPos.z, yaw, fanLen, entity.mesh as Object3D, tx, ty, tz)
-                        hitBoxes.visionFan.visible = true
-                    } else {
-                        hitBoxes.visionFan.visible = false
-                    }
-                }
+                /* 角色调试可视化：各分类开关由角色调试视图内部门控，
+                 * 几何与判定同源（攻击 / 受击 / 检测 / 视线） */
+                const bPos = entity.body.translation()
+                const yaw = facingAngles.get(entity.state.identity.id) ?? 0
+                syncCharacterDebug(entity, bPos.x, bPos.y, bPos.z, yaw, false)
             }
 
             /* 盾遮挡体同步：须在攻击 / 弹丸执行器之前（同帧子弹形状扫描据此命中盾） */
@@ -2205,6 +2114,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         playerAttackHoldDuration = 0
         playerJump = false
         playerRoll = false
+        playerFly = false
         playerInteractPending = false
 
         rangedExecutor.updateBullets(dt, characters)
@@ -2304,6 +2214,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             ...(saveConfig.poiseRegenPerSec !== undefined ? {poiseRegenPerSec: saveConfig.poiseRegenPerSec} : {}),
             ...(saveConfig.knockdownDuration !== undefined ? {knockdownDuration: saveConfig.knockdownDuration} : {}),
             ...(saveConfig.getUpDuration !== undefined ? {getUpDuration: saveConfig.getUpDuration} : {}),
+            ...(saveConfig.flightEnabled !== undefined ? {flightEnabled: saveConfig.flightEnabled} : {}),
+            ...(saveConfig.stamina !== undefined ? {stamina: saveConfig.stamina} : {}),
         }
         /* 装备：只保留当前体形声明的槽位；缺失/非法的武器槽由 spawnEntity 回填天然默认 */
         const equipment = filterEquipmentState(plan.equipSlots, saveConfig.equipment ?? EMPTY_EQUIPMENT_STATE)
@@ -2548,6 +2460,8 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             entity.state.config.getUpDuration = charCfg.getUpDuration
             entity.state.combat.getUpDuration = charCfg.getUpDuration
         }
+        if (charCfg.flightEnabled !== undefined) entity.state.config.flightEnabled = charCfg.flightEnabled
+        if (charCfg.stamina !== undefined) entity.state.config.stamina = charCfg.stamina
         if (newTendencyConfig) {
             entity.state.combat.attackTendency = resolveTendency(newTendencyConfig)
             entity.state.combat.tendencyConfig = newTendencyConfig
@@ -2560,8 +2474,11 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 ? filterEquipmentState(plan.equipSlots, newEquipment.equipment)
                 : entity.state.combat.equipment
             if (newEquipment.equipment !== undefined) {
-                /* 全部武器槽按装备表重建（缺失 / 非法槽位回填天然默认） */
-                const loadout = resolveWeaponLoadout(plan, filtered)
+                /* 全部武器槽按装备表重建（缺失 / 非法槽位回填天然默认），并保留本次提交的逐手数值覆写 */
+                const loadout = resolveWeaponLoadout(plan, filtered, [
+                    ...(newAttackSlot !== undefined ? [{slot: primaryWeaponSlotOf(plan) ?? 'main_hand', attack: newAttackSlot}] : []),
+                    ...(newOffhand !== undefined && newOffhand !== null ? [{slot: 'off_hand', attack: newOffhand}] : []),
+                ])
                 filtered = loadout.equipment
                 entity.state.combat.weapons.clear()
                 for (const [slot, runtime] of loadout.runtimes) entity.state.combat.weapons.set(slot, runtime)
@@ -2588,6 +2505,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                 }
             }
         }
+        refreshStaminaProfile(
+            entity.state.stamina,
+            entity.state.config,
+            entity.state.combat,
+            bodyFormOf(entity.state.config.bodyFormId).id,
+        )
         refreshPlayerLabel()
     }
 
@@ -2600,6 +2523,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (!hasBreathSlot) {
             entity.state.combat.equipment = withEquipmentAt(entity.state.combat.equipment, 'weapon', 'breath', undefined)
             setCombatBreath(entity.state.combat, undefined)
+            refreshStaminaProfile(entity.state.stamina, entity.state.config, entity.state.combat, plan.id)
             return
         }
         /* 缺失 / 未知 id 回填该体形天然默认吐息（不再把吐息槽清空） */
@@ -2607,11 +2531,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         if (module === undefined) {
             entity.state.combat.equipment = withEquipmentAt(entity.state.combat.equipment, 'weapon', 'breath', undefined)
             setCombatBreath(entity.state.combat, undefined)
+            refreshStaminaProfile(entity.state.stamina, entity.state.config, entity.state.combat, plan.id)
             return
         }
         entity.state.combat.equipment = withEquipmentAt(entity.state.combat.equipment, 'weapon', 'breath', module.id)
         setCombatBreath(entity.state.combat, {module, attacks: weaponAttacksOf(module)})
         entity.state.bodyState = withAttackModuleBodyState(entity.state.bodyState, entity.state.combat.attackModule)
+        refreshStaminaProfile(entity.state.stamina, entity.state.config, entity.state.combat, plan.id)
     }
 
     /**
@@ -2671,6 +2597,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.state.combat.moveSpeedMultiplier = finalState.moveSpeedMultiplier
         entity.state.combat.poiseMax = finalState.poise
         if (entity.state.combat.poise > entity.state.combat.poiseMax) entity.state.combat.poise = entity.state.combat.poiseMax
+        refreshStaminaProfile(entity.state.stamina, entity.state.config, entity.state.combat, newFormId)
 
         /* 4) 重建外观模型（dispose 旧模型 → 按新 plan 建模型） */
         if (oldModel !== undefined) {
@@ -2679,6 +2606,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
         const model = plan.createModel(entity.state.config, entity.state.combat.faction)
         appearanceModels.set(entity.state.identity.id, model)
+        debugViews.get(entity.state.identity.id)?.setModel(model)
         entity.appearanceGroup = model.group
         /* 动画系统亦按新体形重建：否则切体形后仍由旧体形的动作数据驱动（关节不匹配 → 冻结） */
         appearanceSystems.set(entity.state.identity.id, plan.animation.createSystem({onAttackEvent}))
@@ -2829,12 +2757,24 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         entity.state.combat.poise = Math.max(0, Math.min(value, entity.state.combat.poiseMax))
     }
 
+    /** 设置角色当前体力：夹取到 0..max（消耗 / 恢复仍由状态机驱动） */
+    const setStamina = (id: number, value: number): void => {
+        const entity = characters.find(c => c.state.identity.id === id)
+        if (!entity) return
+        entity.state.stamina.current = Math.max(0, Math.min(value, entity.state.stamina.max))
+    }
+
     const setCollisionVisible = (visible: boolean): void => {
-        attackHitBoxVisible = visible
-        for (const entity of characters) {
-            entity.mesh.visible = visible
+        for (const kind of CHARACTER_DEBUG_VIEWS) debugVisibility[kind] = visible
+        for (const view of debugViews.values()) {
+            for (const kind of CHARACTER_DEBUG_VIEWS) view.setVisible(kind, visible)
         }
-        /* 按选中状态重刷全部调试线框可见性（关闭时全部隐藏，开启时仅选中角色显示） */
+        refreshSelectionVisibility()
+    }
+
+    const setDebugVisible = (kind: CharacterDebugViewKind, visible: boolean): void => {
+        debugVisibility[kind] = visible
+        for (const view of debugViews.values()) view.setVisible(kind, visible)
         refreshSelectionVisibility()
     }
 
@@ -2895,8 +2835,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setAIBlockCooldown,
         getOrigin,
         setPoise,
+        setStamina,
         registerBoxSpawner,
         setCollisionVisible,
+        setDebugVisible,
         getFacing,
         setFacing,
         setAttackModule,
