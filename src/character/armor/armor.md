@@ -478,7 +478,7 @@ const ARMOR_SLOT_JOINTS: Record<string, readonly string[]> = {
 
 角色面板按「装备 / 属性」两模块组织（与其它分区同风格，复用 `createSection` / `createLabeledNumberInput`）。
 
-**装备模块**：武器与装备统一放置——武器下拉（含数值覆写与攻击类别标签）、**副手武器下拉**（首项「无」；主手为远程时禁用）与**持握模式下拉**（选项 = 武器类 `holdModes` ∩ 双持可用性，`HOLD_MODE_LABELS` 中文名）、**四行两列装备区**。武器下拉与副手下拉按 **近战武器 / 盾牌 / 远程武器** 三组 `optgroup` 组织（盾为近战类、经 `block !== undefined` 归入盾牌组，i18n `character.weapon_group_shield`）；盾类不参与双持。Apply 顺序 = 主手 / 副手配置 → `setHoldMode`（详见 [`src/character/weapon/weapon.md`](../weapon/weapon.md)）。
+**装备模块**：武器与装备统一放置——武器下拉（含数值覆写与攻击类别标签）、**全部武器槽下拉**（人形 main/off、狼 head/claw、马 hooves、龙 wing_claw/breath）与**攻击模组下拉**（选项 = 全部武器槽解析出的可用模组）、**四行两列装备区**。武器下拉与副手下拉按 **近战武器 / 盾牌 / 远程武器** 三组 `optgroup` 组织（盾为近战类、经 `block !== undefined` 归入盾牌组，i18n `character.weapon_group_shield`）；盾类不参与双持。Apply 顺序 = 全部武器槽配置 → `setAttackModule`（详见 [`src/character/weapon/weapon.md`](../weapon/weapon.md)）。
 
 **装备区一行两列（左护甲 / 右肢体）**，按语义顺序 头部 → 手臂 → 身体 → 腿部（`EQUIP_ROWS`，其中「身体」肢体对应胸甲槽的同一区域）：
 
@@ -664,3 +664,9 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 - **AI 目标选择**：AI 可读取目标 `combat.defense` / `moveSpeedMultiplier` 选择有效武器与追击策略（当前 AI 不感知装备，行为不变）。
 - **展示模式护甲**：展示台当前走 `createCharacterModel` 但不装配护甲，可按展示脚本配置装备。
 - **击退与格挡**：护甲未来可声明击退抗性；本期仅固定减伤与攻击/移速修正。
+
+## 装备逐关节挂载与物理扩展（v19）
+
+- 槽位 `mountJointIds` 是允许挂载关节白名单；单件护甲 / 肢体可用 `mounts` 数组为**每个关节独立声明** `mesh`、`offset`、`rotation`、`scale`。未声明时按白名单派生（同模型、零偏移）。
+- 装备可用 `colliders` / `hurtBoxes` 数组扩展角色碰撞箱 / 受击箱；每项绑定 `jointId` + 形状 + 局部偏移 / 旋转。现有装备保持空数组（省略等价空数组）。
+- 碰撞体必须显式声明碰撞类别（缺省 `character`，fail-closed）；换装 / 切体形 / scale 变更时重建，逐帧只同步关节世界变换。

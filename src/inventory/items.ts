@@ -169,7 +169,6 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     weapon('weapon_wolf_claw_blade', '爪刃', ['#', '#'], 'wolf_claw_blade', '狼爪刃', 'item-short-sword', 'claw'),
     weapon('weapon_wolf_short_sword', '口含短剑', ['#', '#', '#'], 'wolf_short_sword', '口含短兵', 'item-short-sword', 'head'),
     weapon('weapon_wolf_long_sword', '口含长剑', ['#', '#', '#', '#'], 'wolf_long_sword', '口含长剑', 'item-long-sword', 'head'),
-    weapon('weapon_horse_head_blade', '衔刃', ['#', '#', '#', '#'], 'horse_head_blade', '马口衔刃', 'item-long-sword', 'head'),
     weapon('weapon_wyvern_wing_blade', '翼刃', ['#', '#', '#'], 'wyvern_wing_blade', '龙翼刃', 'item-long-sword', 'wing_claw'),
     /* ── 龙吐息（独立 breath 装备槽，仅 wyvern 可装备） ── */
     breath('item_breath_fireball', '火球吐息', ['##', '##'], 'breath_fireball', '抛射火球并爆炸', 'item-breath-fireball'),
@@ -298,7 +297,6 @@ const ITEM_NAME_KEYS: Record<string, StringLocaleKey> = {
     weapon_wolf_claw_blade: 'weapon.wolf_claw_blade',
     weapon_wolf_short_sword: 'weapon.wolf_short_sword',
     weapon_wolf_long_sword: 'weapon.wolf_long_sword',
-    weapon_horse_head_blade: 'weapon.horse_head_blade',
     weapon_wyvern_wing_blade: 'weapon.wyvern_wing_blade',
     armor_cloth_cap: 'item.armor_cloth_cap.name',
     armor_iron_helmet: 'item.armor_iron_helmet.name',
@@ -358,7 +356,6 @@ const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
     weapon_wolf_claw_blade: 'item.weapon_generic.desc',
     weapon_wolf_short_sword: 'item.weapon_generic.desc',
     weapon_wolf_long_sword: 'item.weapon_generic.desc',
-    weapon_horse_head_blade: 'item.weapon_generic.desc',
     weapon_wyvern_wing_blade: 'item.weapon_generic.desc',
     armor_cloth_cap: 'item.armor_cloth_cap.desc',
     armor_iron_helmet: 'item.armor_iron_helmet.desc',

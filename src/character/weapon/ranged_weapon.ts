@@ -3,13 +3,15 @@ import type { StringLocaleKey } from '../../i18n/index.ts'
 import type { DamageType } from '../combat/damage_type.ts'
 import type { ImpactLevel } from '../combat/impact.ts'
 import type { CollisionCategory } from '../../physics/collision_category.ts'
-import type { HoldMode } from './hold_mode.ts'
-import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
+import type { AttackModuleDef } from './attack_module.ts'
+import type { AttackModuleAttacks, WeaponAttacks } from './attack_chain.ts'
 import { withAttackSlotKeyMap, withChargeTuningMap } from './attack_chain.ts'
 import { buildRangedAttacks } from './ranged_attacks.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
 import type { ProjectileVisualSpec } from './projectile_visual.ts'
 import type { ChargeTuning } from './charge_tuning.ts'
+import type { WeaponAttackBoxSpec } from './mesh_config.ts'
+import type { EquipmentColliderSpec, EquipmentHurtBoxSpec, EquipmentMountSpec } from '../equipment/types.ts'
 
 /** 吐息机制类型（龙专属装备） */
 export const BREATH_KINDS = ['fireball', 'lightning', 'laser'] as const
@@ -26,6 +28,19 @@ export const DEFAULT_BULLET_PASS_THROUGH_CATEGORIES: readonly CollisionCategory[
  * 定义在武器域，与「可选字段 + 运行时缺省」的契约同源，供武器数据与测试共用。
  */
 export const DEFAULT_PROJECTILE_GRAVITY_SCALE = 0.15
+
+/**
+ * 远程武器默认攻击箱（展示 / 调试用）：网格生成器不提供近战命中箱，
+ * 在武器挂点前方给一个小的朝向盒，便于展示模式「攻击箱」开关观察枪口 / 发射方向。
+ * 远程武器不会进入近战执行器，因此不参与伤害判定。
+ */
+const DEFAULT_RANGED_ATTACK_BOX: WeaponAttackBoxSpec = {
+    jointId: 'weaponMount',
+    center: {x: 0, y: 0, z: 0.25},
+    half: {x: 0.08, y: 0.08, z: 0.25},
+    rotation: {x: 0, y: 0, z: 0},
+    reach: 0.5,
+}
 
 /**
  * 弹丸蓄力曲线（弓与投掷类声明）：在通用蓄力调参 `ChargeTuning`（最大倍率 / 最长时间）
@@ -56,8 +71,8 @@ export interface RangedWeaponClassConfig {
     readonly mountRotation?: readonly [number, number, number]
     /** 攻击类别（武器固有，不可被存档/面板覆写）：弹丸与爆炸伤害均按此类别结算防御 */
     readonly damageType: DamageType
-    /** 可支持的持握模式（数组；首个为默认模式，换武器时角色持握模式重置为首个） */
-    readonly holdModes: readonly HoldMode[]
+    /** 可支持的攻击模组（数组；首个为默认模组，换武器时角色模组重置为首个） */
+    readonly attackModules: readonly AttackModuleDef[]
     readonly damage: number
     /** 最大开火距离 */
     readonly range: number
@@ -110,8 +125,8 @@ export interface RangedWeaponClassConfig {
      */
     readonly passThroughCategories?: readonly CollisionCategory[]
 
-    /** 持握模式 → 攻击链 map（单段开火动作：阶段时序/时长） */
-    readonly attacks: HoldModeAttacks
+    /** 攻击模组 → 攻击链 map（单段开火动作：阶段时序/时长） */
+    readonly attacks: AttackModuleAttacks
 }
 
 /** 解析后的远程武器 = 武器类固有属性 + 所属模型（模型 id / 体形 / 名称 / 网格） */
@@ -126,8 +141,16 @@ export interface RangedWeaponConfig extends RangedWeaponClassConfig {
     readonly nameKey: StringLocaleKey
     /** 该武器可装备的部位 id（体形 `EquipSlotDef.bodyPart`） */
     readonly equipBodyParts: readonly string[]
-    /** 程序化武器模型（主手 / 右手） */
+    /** 程序化武器模型（主手 / 右手；未声明 `mounts` 时作为默认单挂载模型） */
     readonly mesh: WeaponMeshConfig
+    /** 逐骨骼节点挂载配置（可选；生物多肢体武器用） */
+    readonly mounts?: readonly EquipmentMountSpec<WeaponMeshConfig>[]
+    /** 攻击箱数组（远程武器通常为空） */
+    readonly attackBoxes: readonly WeaponAttackBoxSpec[]
+    /** 装备扩展碰撞体（现有武器为空数组） */
+    readonly colliders?: readonly EquipmentColliderSpec[]
+    /** 装备扩展受击箱（现有武器为空数组） */
+    readonly hurtBoxes?: readonly EquipmentHurtBoxSpec[]
 }
 
 /**
@@ -138,8 +161,9 @@ export const rangedClass = (
     base: Omit<RangedWeaponClassConfig, 'attacks'>,
     attackKey: 'light' | 'heavy' = 'light',
 ): RangedWeaponClassConfig => {
-    const attacks: Partial<Record<HoldMode, WeaponAttacks>> = {}
-    attacks[base.holdModes[0]] = buildRangedAttacks(base.id, base.charge, attackKey)
+    const attacks: Partial<Record<string, WeaponAttacks>> = {}
+    const module = base.attackModules[0]
+    if (module !== undefined) attacks[module.id] = buildRangedAttacks(base.id, module.id, base.charge, attackKey)
     return {...base, attacks}
 }
 
@@ -167,5 +191,9 @@ export const resolveRangedWeapon = (weaponClass: RangedWeaponClassConfig, model:
         nameKey: model.nameKey,
         equipBodyParts: model.equipBodyParts,
         mesh: model.mesh,
+        mounts: model.mounts,
+        attackBoxes: model.attackBoxes ?? [DEFAULT_RANGED_ATTACK_BOX],
+        colliders: model.colliders ?? [],
+        hurtBoxes: model.hurtBoxes ?? [],
     }
 }

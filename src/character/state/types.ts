@@ -9,7 +9,7 @@ import type {HoldMode} from '../weapon/hold_mode.ts'
 
 /**
  * 体形专属状态（不透明键值）：通用层只负责持久化与传递，
- * 只有对应体形分包解释其键（如人形的 `holdMode` / `handedness`）。
+ * 只有对应体形分包解释其键（通用 `attackModule` + 人形 `handedness`）。
  */
 export type BodyState = Readonly<Record<string, string>>
 
@@ -20,7 +20,7 @@ export interface CharacterConfig {
     scale: number
     /** 体形计划 id（基础模组，缺省 = humanoid）：决定骨架 / 外观 / 碰撞布局 / 受击子块 / 装备槽 / 武器策略 */
     bodyFormId?: string
-    /** 体形专属状态（人形：holdMode / handedness；其他体形不携带这些键） */
+    /** 体形专属状态（通用：attackModule；人形额外：handedness） */
     bodyState?: BodyState
     /** 韧性上限基础值（缺省 = 常量 `DEFAULT_POISE_MAX`；有效上限再叠加装备加成） */
     poiseMax?: number

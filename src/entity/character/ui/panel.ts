@@ -9,8 +9,7 @@ import {createButtonRow} from '../../../ui/components/button_row.ts'
 import {createEntityPanel} from '../../../ui/components/entity_panel.ts'
 import {createIcon} from '../../../ui/icons/icon.ts'
 import type {WeaponConfig, WeaponType} from '../../../character/weapon/catalog.ts'
-import {availableHoldModes, findWeaponPreset, isDualWieldPair, weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../../character/weapon/catalog.ts'
-import {HOLD_MODE_LABELS, isHoldMode} from '../../../character/weapon/hold_mode.ts'
+import {findWeaponLike, weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../../character/weapon/catalog.ts'
 import {HANDEDNESS, HANDEDNESS_LABELS, isHandedness} from '../../../character/handedness.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
@@ -95,12 +94,17 @@ const describeWeapon = (w: WeaponConfig): string => {
     return `${name} (dmg:${w.damage} rng:${w.range})${tags.length > 0 ? ` [${tags.join(' ')}]` : ''}`
 }
 
+const weaponPresetsForSlot = (form: BodyForm, bodyPart: string): readonly WeaponConfig[] => {
+    const all: readonly WeaponConfig[] = [...weaponsOfForm(form.id), ...(form.breathModules ?? [])]
+    return all.filter(weapon => weapon.equipBodyParts.includes(bodyPart))
+}
+
 /** 武器下拉按近战 / 盾牌 / 远程分组（类型由所选武器决定，因此不再有独立「攻击类型」选择器） */
-const buildWeaponOptions = (form: BodyForm): {melee: readonly WeaponOption[]; shield: readonly WeaponOption[]; ranged: readonly WeaponOption[]} => {
+const buildWeaponOptions = (presets: readonly WeaponConfig[]): {melee: readonly WeaponOption[]; shield: readonly WeaponOption[]; ranged: readonly WeaponOption[]} => {
     const melee: WeaponOption[] = []
     const shield: WeaponOption[] = []
     const ranged: WeaponOption[] = []
-    for (const preset of weaponsOfForm(form.id)) {
+    for (const preset of presets) {
         const option: WeaponOption = {id: preset.id, type: preset.type, preset}
         if (preset.type === 'melee') {
             if (preset.block !== undefined) shield.push(option)
@@ -116,7 +120,7 @@ const buildWeaponOptions = (form: BodyForm): {melee: readonly WeaponOption[]; sh
  * 填充武器下拉：近战 / 盾牌 / 远程分组（withNone = 追加「无」空项，供副手选择）；选项文案随语言切换重译。
  * 选项 = 该体形拥有的武器（`weaponsOfForm(form.id)`；武器只属于一种体形）。会先清空现有选项。
  */
-const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean, form: BodyForm): void => {
+const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean, form: BodyForm, bodyPart?: string): void => {
     select.replaceChildren()
     if (withNone) {
         const none = document.createElement('option')
@@ -124,7 +128,7 @@ const fillWeaponSelect = (select: HTMLSelectElement, withNone: boolean, form: Bo
         localizeText(none, 'common.none')
         select.appendChild(none)
     }
-    const weaponOptions = buildWeaponOptions(form)
+    const weaponOptions = buildWeaponOptions(bodyPart !== undefined ? weaponPresetsForSlot(form, bodyPart) : weaponsOfForm(form.id))
     for (const group of [
         {labelKey: WEAPON_GROUP_LABEL_MELEE, options: weaponOptions.melee},
         {labelKey: WEAPON_GROUP_LABEL_SHIELD, options: weaponOptions.shield},
@@ -250,7 +254,7 @@ const chargeTuningOfWeapon = (weapon: WeaponConfig): ChargeTuning | undefined =>
 
 /** 换武器时按武器预设预填数值覆写字段（冷却取起手段预设冷却；远程弹道仅在远程武器时展示） */
 const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
-    const weapon = findWeaponPreset(weaponId)
+    const weapon = findWeaponLike(weaponId)
     if (weapon === undefined) return
     fields.atkDmg.value = formatNumber(weapon.damage)
     fields.atkCD.value = formatNumber(entryCooldownOf(weapon))
@@ -273,7 +277,7 @@ const autoFillFromWeapon = (weaponId: string, fields: AttackFields): void => {
 /** 当前选中武器（未选中返回 undefined）；类型由所选武器本身决定 */
 const selectedWeaponOf = (select: HTMLSelectElement): WeaponConfig | undefined => {
     const weaponId = select.value
-    return weaponId.length > 0 ? findWeaponPreset(weaponId) : undefined
+    return weaponId.length > 0 ? findWeaponLike(weaponId) : undefined
 }
 
 /** 读取角色当前攻击配置：武器 + 数值覆写 + 起手段当前冷却（用于面板回显） */
@@ -431,7 +435,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     weaponTag.style.cssText = 'margin-top:2px;margin-bottom:4px'
     el.appendChild(weaponTag)
 
-    /* 副手武器（近战主手可用）：单持握左手 / 双手共持挂背 / 与主手同类近战时启用双持 */
+    /* 副手武器（仅声明 off_hand 槽位的体形） */
     const offhandRow = document.createElement('div')
     offhandRow.className = 'dc-row'
     const offhandLabel = document.createElement('label')
@@ -448,25 +452,29 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     offhandRow.appendChild(offhandLabel)
     el.appendChild(offhandRow)
 
-    /* 持握模式（选项 = 主手武器声明的模式 ∩ 双持可用性；默认单持） */
-    const holdRow = document.createElement('div')
-    holdRow.className = 'dc-row'
-    const holdLabel = document.createElement('label')
-    holdLabel.className = 'dc-label'
-    appendLocalizedText(holdLabel, 'character.hold')
-    holdLabel.appendChild(document.createTextNode(' '))
-    localizeTitle(holdLabel, 'character.hold_tip')
-    const holdModeSelect = document.createElement('select')
-    holdModeSelect.id = 'hold-mode-select'
-    holdModeSelect.className = 'dc-select'
-    holdLabel.appendChild(holdModeSelect)
-    holdRow.appendChild(holdLabel)
-    el.appendChild(holdRow)
-    const holdModeHint = document.createElement('div')
-    holdModeHint.className = 'dc-hint dc-text-warning'
-    holdModeHint.style.cssText = 'margin-bottom:4px;display:none'
-    localizeText(holdModeHint, 'character.hold_mode_hint')
-    el.appendChild(holdModeHint)
+    /* 额外武器槽（狼头/爪、马蹄、龙翼爪/吐息）：按体形动态生成 */
+    const extraWeaponRows = document.createElement('div')
+    el.appendChild(extraWeaponRows)
+
+    /* 攻击模组（选项 = 当前全部武器槽解析出的可用模组） */
+    const attackModuleRow = document.createElement('div')
+    attackModuleRow.className = 'dc-row'
+    const attackModuleLabel = document.createElement('label')
+    attackModuleLabel.className = 'dc-label'
+    appendLocalizedText(attackModuleLabel, 'character.attack_module')
+    attackModuleLabel.appendChild(document.createTextNode(' '))
+    localizeTitle(attackModuleLabel, 'character.attack_module_tip')
+    const attackModuleSelect = document.createElement('select')
+    attackModuleSelect.id = 'attack-module-select'
+    attackModuleSelect.className = 'dc-select'
+    attackModuleLabel.appendChild(attackModuleSelect)
+    attackModuleRow.appendChild(attackModuleLabel)
+    el.appendChild(attackModuleRow)
+    const attackModuleHint = document.createElement('div')
+    attackModuleHint.className = 'dc-hint dc-text-warning'
+    attackModuleHint.style.cssText = 'margin-bottom:4px;display:none'
+    localizeText(attackModuleHint, 'character.attack_module_hint')
+    el.appendChild(attackModuleHint)
 
     const atkRange = createLabeledNumberInput(el, 'character.range', {min: '0.1', step: '0.1', value: '10'})
     const atkDmg = createLabeledNumberInput(el, 'character.damage', {min: '0.1', step: '0.1', value: '3'})
@@ -1014,10 +1022,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         showRanged()
         showCharge()
         updateOffhandAvailability()
-        rebuildHoldModeOptions()
+        rebuildAttackModuleOptions()
     }
 
-    offhandSelect.onchange = () => rebuildHoldModeOptions()
+    offhandSelect.onchange = () => rebuildAttackModuleOptions()
 
     const getSelected = (): CharacterEntity | undefined => {
         const id = ctx.getSelectedId()
@@ -1059,22 +1067,61 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         offhandSelect.disabled = main !== undefined && main.type === 'ranged'
     }
 
-    /** 重建持握模式选项：可用模式 = 主手声明 ∩ 双持（副手同类近战）；保留仍可用的当前选择 */
-    const rebuildHoldModeOptions = (): void => {
-        const main = selectedWeaponOf(weaponSelect)
-        const previous = holdModeSelect.value
-        holdModeSelect.innerHTML = ''
-        const modes = main === undefined ? [] : availableHoldModes(main, selectedOffhandWeapon())
-        for (const mode of modes) {
-            const option = document.createElement('option')
-            option.value = mode
-            localizeApply(option, el => { el.textContent = translate(HOLD_MODE_LABELS[mode]) })
-            holdModeSelect.appendChild(option)
+    /** 武器槽下拉（主手槽以外、off_hand 以外的额外槽位） */
+    const extraWeaponSlotSelects = new Map<string, HTMLSelectElement>()
+
+    /** 当前体形的首个武器槽 = 主武器槽 */
+    const primarySlotOf = (form: BodyForm): string | undefined =>
+        form.equipSlots.find(slot => slot.kind === 'weapon')?.bodyPart
+
+    /** 重建额外武器槽下拉（狼头/爪、马蹄、龙翼爪/吐息等） */
+    const rebuildExtraWeaponSlots = (form: BodyForm, sel: CharacterEntity | undefined): void => {
+        extraWeaponRows.replaceChildren()
+        extraWeaponSlotSelects.clear()
+        const primary = primarySlotOf(form)
+        for (const slot of form.equipSlots) {
+            if (slot.kind !== 'weapon' || slot.bodyPart === primary || slot.bodyPart === 'off_hand') continue
+            const row = document.createElement('div')
+            row.className = 'dc-row'
+            const label = document.createElement('label')
+            label.className = 'dc-label'
+            if (slot.nameKey !== undefined) appendLocalizedText(label, slot.nameKey)
+            else label.textContent = equipBodyPartLabelKey(slot.bodyPart) !== undefined
+                ? translate(equipBodyPartLabelKey(slot.bodyPart)!)
+                : slot.bodyPart
+            label.appendChild(document.createTextNode(' '))
+            const select = document.createElement('select')
+            select.id = `weapon-slot-${slot.bodyPart}`
+            select.className = 'dc-select'
+            select.style.cssText = 'max-width:180px'
+            fillWeaponSelect(select, false, form, slot.bodyPart)
+            const current = sel?.state.combat.equipment.weapon[slot.bodyPart]
+                ?? form.defaultWeaponLoadout[slot.bodyPart]
+            if (current !== undefined) select.value = current
+            select.addEventListener('change', refreshStatFormulas)
+            label.appendChild(select)
+            row.appendChild(label)
+            extraWeaponRows.appendChild(row)
+            extraWeaponSlotSelects.set(slot.bodyPart, select)
         }
-        holdModeSelect.value = modes.some(mode => mode === previous) ? previous : (modes[0] ?? '')
-        /* 提示：近战主手但副手不构成双持时，说明双持条件 */
-        const dualAvailable = main !== undefined && main.type === 'melee' && isDualWieldPair(main, selectedOffhandWeapon())
-        holdModeHint.style.display = (main !== undefined && main.type === 'melee' && !dualAvailable) ? '' : 'none'
+    }
+
+    /** 重建攻击模组选项：来自当前角色全部武器槽解析出的可用模组表 */
+    const rebuildAttackModuleOptions = (): void => {
+        const sel = getSelected()
+        const previous = attackModuleSelect.value
+        attackModuleSelect.innerHTML = ''
+        if (sel === undefined) return
+        for (const [moduleId, module] of sel.state.combat.attackModules) {
+            const option = document.createElement('option')
+            option.value = moduleId
+            localizeApply(option, el => { el.textContent = translate(module.def.nameKey) })
+            attackModuleSelect.appendChild(option)
+        }
+        attackModuleSelect.value = sel.state.combat.attackModules.has(previous)
+            ? previous
+            : sel.state.combat.attackModule
+        attackModuleHint.style.display = sel.state.combat.attackModules.size <= 1 ? 'none' : ''
     }
 
     /* 运行时箱型配置缓存（preset 为字符串，提交时经 isBoxPresetId 校验） */
@@ -1212,8 +1259,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         speed.value = String(sel.state.config.speed)
         jumpH.value = String(sel.state.config.jumpHeight)
         scale.value = String(sel.state.config.scale)
+        const selectedForm = bodyFormOf(sel.state.config.bodyFormId)
         handednessSelect.value = humanoidBodyStateOf(sel.state.bodyState).handedness
-        bodyFormSelect.value = bodyFormOf(sel.state.config.bodyFormId).id
+        handednessLabel.style.display = selectedForm.editor.handedness ? '' : 'none'
+        bodyFormSelect.value = selectedForm.id
         applyEquipVisibility(sel.state.config.bodyFormId)
 
         maxHP.value = String(sel.state.combat.maxHealth)
@@ -1226,11 +1275,17 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         /* 攻击区：装备武器 + 数值覆写（类型由武器决定，动作时长由武器模组决定，均不在面板暴露）。
          * 按当前体形重建武器选项（天然类别仅其所属体形可选）。 */
         const form = bodyFormOf(sel.state.config.bodyFormId)
-        fillWeaponSelect(weaponSelect, false, form)
-        fillWeaponSelect(offhandSelect, true, form)
+        const primarySlot = primarySlotOf(form)
+        fillWeaponSelect(weaponSelect, false, form, primarySlot)
+        fillWeaponSelect(offhandSelect, true, form, 'off_hand')
+        const hasOffhand = form.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'off_hand')
+        offhandRow.style.display = hasOffhand ? '' : 'none'
+        rebuildExtraWeaponSlots(form, sel)
         const attack = readSelectedAttack(sel)
-        weaponSelect.value = attack.weaponId
-        atkDmg.value = formatNumber(attack.damage)
+        const primaryWeaponId = primarySlot !== undefined ? sel.state.combat.equipment.weapon[primarySlot] : undefined
+        weaponSelect.value = primaryWeaponId ?? ''
+        const selectedPrimary = selectedWeaponOf(weaponSelect)
+        atkDmg.value = formatNumber(selectedPrimary?.damage ?? attack.damage)
         atkCD.value = formatNumber(attack.cooldown)
         if (attack.charge !== undefined) {
             atkChargeMult.value = formatNumber(attack.charge.maxChargeMultiplier)
@@ -1247,12 +1302,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
         /* 副手武器与持握模式回显（未知 / 已移除的副手武器视为无） */
         const offhandWeapon = sel.state.combat.offhand?.weapon
-        offhandSelect.value = offhandWeapon !== undefined && findWeaponPreset(offhandWeapon.id) !== undefined
+        offhandSelect.value = offhandWeapon !== undefined && findWeaponLike(offhandWeapon.id) !== undefined
             ? offhandWeapon.id
             : ''
         updateOffhandAvailability()
-        rebuildHoldModeOptions()
-        holdModeSelect.value = humanoidBodyStateOf(sel.state.bodyState).holdMode
+        rebuildAttackModuleOptions()
 
         /* 护甲 / 肢体与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
         for (const [slot, select] of armorSelects) {
@@ -1429,6 +1483,16 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 /* 立即按新体形刷新装备区域可见性（不等下次回显） */
                 applyEquipVisibility(bodyFormSelect.value)
                 const handednessValue = handednessSelect.value
+                const applyForm = bodyFormOf(bodyFormSelect.value)
+                const primarySlot = primarySlotOf(applyForm) ?? 'main_hand'
+                const weaponLoadout: Record<string, string> = {
+                    ...Object.fromEntries(Object.entries(cur.state.combat.equipment.weapon).filter(([key]) => key !== primarySlot && key !== 'off_hand')),
+                    [primarySlot]: newAttack.weaponId,
+                }
+                if (newOffhand !== null) weaponLoadout.off_hand = newOffhand.weaponId
+                for (const [slot, select] of extraWeaponSlotSelects) {
+                    if (select.value.length > 0) weaponLoadout[slot] = select.value
+                }
                 ctx.updateCharacterConfig?.(cur.state.identity.id, {
                     speed: parseFloat(speed.value),
                     jumpHeight: parseFloat(jumpH.value),
@@ -1440,20 +1504,16 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                     baseAttack: readBaseAttack(),
                     equipment: {
                         limb: limbLoadout,
-                        weapon: {
-                            ...Object.fromEntries(Object.entries(cur.state.combat.equipment.weapon).filter(([key]) => key !== 'main_hand' && key !== 'off_hand')),
-                            main_hand: newAttack.weaponId,
-                            ...(newOffhand !== null ? {off_hand: newOffhand.weaponId} : {}),
-                        },
+                        weapon: weaponLoadout,
                         armor: armorLoadout,
                     },
                 }, newOffhand)
                 /* 当前韧性：0..最大韧性（换装导致上界变化时由 setPoise 夹取） */
                 const poiseValue = parseFloat(poiseInput.value)
                 if (!isNaN(poiseValue)) ctx.setPoise?.(cur.state.identity.id, poiseValue)
-                /* 持握模式：换装重置为默认后再按面板选择显式设置（不可用时 setHoldMode 回退默认模式） */
-                const holdValue = holdModeSelect.value
-                if (isHoldMode(holdValue)) ctx.setHoldMode?.(cur.state.identity.id, holdValue)
+                /* 攻击模组：换装后按面板选择显式设置（不可用时回退第一个可用模组） */
+                const moduleValue = attackModuleSelect.value
+                if (moduleValue.length > 0) ctx.setAttackModule?.(cur.state.identity.id, moduleValue)
                 /* 额外锁定点：默认身体中心点由运行时提供；非法偏移输入解析为 0（运行时仍会剔除） */
                 ctx.setLockPoints?.(cur.state.identity.id, cachedLockPoints.map((point): LockPointConfig => ({
                     jointId: point.jointId,

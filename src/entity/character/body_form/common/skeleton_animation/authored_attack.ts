@@ -16,6 +16,8 @@ export interface AuthoredAttackEvent {
 export interface AuthoredAttackClip {
     readonly duration: number
     readonly loop?: boolean
+    /** 支撑手来源：缺省 baked（离线烘焙到副握点）；authored = 左臂由本 clip 作者数据直接驱动（如拉弓持弦手） */
+    readonly supportHand?: 'baked' | 'authored'
     readonly times: readonly number[]
     readonly joints: Readonly<Record<string, readonly AuthoredEuler[]>>
     readonly positions?: Readonly<Record<string, readonly (readonly [number, number, number])[]>>

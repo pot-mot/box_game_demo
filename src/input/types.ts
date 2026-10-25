@@ -15,7 +15,7 @@ export const INPUT_ACTIONS = [
     /* 纯摄像机：自由飞行加速（按住） */
     'boost',
     /* 近战持握模式切换（单持 → 双手共持 → 双持循环；副手同类近战才含双持） */
-    'cycle_hold_mode',
+    'cycle_attack_module',
     'cycle_spawn_up',
     'cycle_spawn_down',
     'delete_entity',
@@ -60,7 +60,7 @@ export const ACTION_LABELS: Record<InputAction, StringLocaleKey> = {
     jump: 'input.action.jump',
     roll: 'input.action.roll',
     boost: 'input.action.boost',
-    cycle_hold_mode: 'input.action.cycle_hold_mode',
+    cycle_attack_module: 'input.action.cycle_attack_module',
     cycle_spawn_up: 'input.action.cycle_spawn_up',
     cycle_spawn_down: 'input.action.cycle_spawn_down',
     delete_entity: 'input.action.delete_entity',
@@ -84,7 +84,7 @@ export const ACTION_LABELS: Record<InputAction, StringLocaleKey> = {
 /** 动作分组 */
 export const ACTION_GROUPS: readonly { readonly name: StringLocaleKey; readonly actions: readonly InputAction[] }[] = [
     {name: 'input.group.move', actions: ['move_forward', 'move_backward', 'move_left', 'move_right', 'move_up', 'move_down', 'boost']},
-    {name: 'input.group.character', actions: ['jump', 'roll', 'cycle_hold_mode', 'interact']},
+    {name: 'input.group.character', actions: ['jump', 'roll', 'cycle_attack_module', 'interact']},
     {name: 'input.group.edit_tools', actions: ['cycle_spawn_up', 'cycle_spawn_down']},
     {name: 'input.group.ui', actions: ['delete_entity', 'close_panel', 'open_inventory', 'open_equipment', 'open_map']},
     {name: 'input.group.system', actions: ['save_world', 'load_world', 'toggle_debug_hud']},

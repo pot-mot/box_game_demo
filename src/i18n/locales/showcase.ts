@@ -34,6 +34,7 @@ export type ShowcaseLocale = {
     'showcase.timer.action': string
     'showcase.timer.recovery': string
     'showcase.timer.cooldown': string
+    'showcase.action.title': string
 
     /* ── 角色状态（列表行） ── */
     'showcase.status.idle': string
@@ -41,6 +42,7 @@ export type ShowcaseLocale = {
     'showcase.status.charging': string
     'showcase.status.shooting': string
     'showcase.status.stand_walk': string
+    'showcase.status.action': string
     'showcase.status.hit': (current: number, total: number) => string
 
     /* ── 聚焦详情卡 ── */
@@ -141,7 +143,7 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.module.actions.title': '攻击模组展示',
     'showcase.module.actions.desc': '全武器攻击动作 / 连段 / 蓄力与持握模式时序复现',
     'showcase.module.appearance.title': '装备与外观',
-    'showcase.module.appearance.desc': '种族肢体与全护甲件图鉴（站立 / 行走）',
+    'showcase.module.appearance.desc': '种族肢体与全护甲件图鉴（非攻击动作可切换）',
     'showcase.module.ai_terrain.title': 'AI 与复杂地形',
     'showcase.module.ai_terrain.desc': '双阵营 AI 在起伏地形中的寻路 / 跳跃 / 索敌攻击',
     'showcase.module.terrain.title': '复杂地形与建筑',
@@ -165,6 +167,7 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.timer.action': '动作',
     'showcase.timer.recovery': '恢复',
     'showcase.timer.cooldown': '冷却',
+    'showcase.action.title': '当前动作',
 
     /* ── 角色状态（列表行） ── */
     'showcase.status.idle': '待机',
@@ -172,6 +175,7 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.status.charging': '蓄力',
     'showcase.status.shooting': '射击',
     'showcase.status.stand_walk': '站立/行走',
+    'showcase.status.action': '非攻击动作',
     'showcase.status.hit': (current, total) => `击${current}/${total}`,
 
     /* ── 聚焦详情卡 ── */
@@ -270,7 +274,7 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.module.actions.title': 'Attack Modules',
     'showcase.module.actions.desc': 'All-weapon attack actions / combos / charge and hold-mode timing',
     'showcase.module.appearance.title': 'Equipment & Look',
-    'showcase.module.appearance.desc': 'Race limbs and full armor-piece codex (stand / walk)',
+    'showcase.module.appearance.desc': 'Race limbs and full armor-piece codex (switchable non-attack actions)',
     'showcase.module.ai_terrain.title': 'AI & Terrain',
     'showcase.module.ai_terrain.desc': 'Two factions pathfinding / jumping / engaging over rolling terrain',
     'showcase.module.terrain.title': 'Terrain & Buildings',
@@ -294,6 +298,7 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.timer.action': 'Action',
     'showcase.timer.recovery': 'Recovery',
     'showcase.timer.cooldown': 'Cooldown',
+    'showcase.action.title': 'Current Action',
 
     /* ── Actor status (list rows) ── */
     'showcase.status.idle': 'Idle',
@@ -301,6 +306,7 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.status.charging': 'Charging',
     'showcase.status.shooting': 'Shooting',
     'showcase.status.stand_walk': 'Stand/Walk',
+    'showcase.status.action': 'Non-attack Action',
     'showcase.status.hit': (current, total) => `Hit ${current}/${total}`,
 
     /* ── Focus detail card ── */

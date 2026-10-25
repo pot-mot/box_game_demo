@@ -5,7 +5,6 @@ import {createSharedWorld, type SharedWorld} from '../../../physics/world.ts'
 import {clearAllForces} from '../../../physics/rapier_utils.ts'
 import {FIXED_TIME_STEP} from '../../../physics/constants.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
-import {humanoidBodyStateOf} from '../body_form/humanoid/state/body_state.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 
 /**
@@ -196,8 +195,8 @@ describe('盾攻击键路由', () => {
         /* 单持：副手盾提供格挡 */
         expect(p.state.combat.block).toBeDefined()
 
-        expect(system.setHoldMode(p.state.identity.id, 'two_handed')).toBe(true)
-        expect(humanoidBodyStateOf(p.state.bodyState).holdMode).toBe('two_handed')
+        expect(system.setAttackModule(p.state.identity.id, 'two_handed')).toBe(true)
+        expect(p.state.combat.attackModule).toBe('two_handed')
         /* 副手盾挂背：不再计为可用盾 */
         expect(p.state.combat.block).toBeUndefined()
 
@@ -207,7 +206,7 @@ describe('盾攻击键路由', () => {
         expect(p.stateMachine.currentState).not.toBe('blocking')
 
         /* 切回单持：副手盾回手，格挡恢复 */
-        expect(system.setHoldMode(p.state.identity.id, 'one_handed')).toBe(true)
+        expect(system.setAttackModule(p.state.identity.id, 'one_handed')).toBe(true)
         expect(p.state.combat.block).toBeDefined()
     })
 })

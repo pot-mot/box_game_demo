@@ -207,7 +207,7 @@ const BaseAttackProfileSchema = z.object({
     magic: z.number().min(0).default(0),
 }).optional().catch(undefined)
 
-/* 体形专属状态：不透明键值（人形解释 holdMode / handedness）；非法结构回退空对象 */
+/* 体形专属状态：不透明键值（attackModule + 人形 handedness）；非法结构回退空对象 */
 const BodyStateSchema = z.record(z.string(), z.string()).optional().catch(undefined)
 
 /* 额外锁定点：关节 id + 关节本地偏移；非法结构整体回退 undefined（运行时仅保留默认身体中心点），不抛错 */
@@ -241,7 +241,7 @@ const CharacterConfigInner = z.object({
     getUpDuration: z.number().min(0).optional().catch(undefined),
     /* 体形计划 id：非法值安全回退 undefined（运行时回退 humanoid），未知 id 由 bodyFormOf 安全回退 */
     bodyFormId: z.string().optional().catch(undefined),
-    /* 体形专属状态（人形 holdMode / handedness） */
+    /* 体形专属状态（attackModule + 人形 handedness） */
     bodyState: BodyStateSchema,
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),

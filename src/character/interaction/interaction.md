@@ -16,7 +16,7 @@
 - `src/input/constants.ts` 的 `DEFAULT_BINDINGS` 增加 `interact: [['KeyF']]`（`CODE_LABELS` 已含 `KeyF`）
 - `src/input/registry.test.ts` 的 `EXPECTED_DEFAULTS` 增加同名条目
 
-读取方式：`input.wasActionPressed('interact') && input.isActionActive('interact')`（后者防止被更长组合遮蔽，参照 `cycle_hold_mode`）。
+读取方式：`input.wasActionPressed('interact') && input.isActionActive('interact')`（后者防止被更长组合遮蔽，参照 `cycle_attack_module`）。
 
 ## 2. 交互领域模型（`src/character/interaction/`）
 

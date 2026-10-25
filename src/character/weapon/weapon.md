@@ -6,13 +6,17 @@
 
 ## 约定
 
-- **武器类 / 模型分层**：玩法数据在 `character/weapon/`，模型与网格数据在 `body_form/<form>/equipment/weapons.ts`。每个武器只属于一种体形（`WeaponModelConfig.formId`），切体形一律落到新体形 `defaultWeaponId`。
-- **段 id**：`{classId}_{holdMode}_{模板键}`；远程单模式沿用 `{classId}_{动作}`。
-- **持握模式**：`HoldMode = 'one_handed' | 'two_handed' | 'dual_wield'`，武器以 `holdModes` 声明支持能力，每模式独立连段。
+- **武器类 / 模型分层**：玩法数据在 `character/weapon/`，模型与网格数据在 `body_form/<form>/equipment/weapons.ts`。每个武器只属于一种体形（`WeaponModelConfig.formId`），切体形一律按新体形 `defaultWeaponLoadout` 回填全部武器槽。
+- **段 id**：`{classId}_{moduleId}_{模板键}`；远程单模式沿用 `{classId}_{动作}`。
+- **攻击模组**：`AttackModuleId` 为跨体形选择单位；武器以 `attackModules` 声明支持能力，每模组独立连段。人形模组可带 `holdMode`（`one_handed` / `two_handed` / `dual_wield`）表示握持语义。
+- **可用模组由全部武器槽决定**：`resolveAttackModules` 汇总所有装备槽（含天然默认）；`dual_wield` 额外要求副手同类近战；跨槽模组用 `requiredSlots` / `heavySlot`（如龙吐息）。
 - **攻击动画真相源**：各体形作者数据在 `entity/character/body_form/<form>/skeleton_animation/attack_clips/`（按武器拆分），经 `common/skeleton_animation/authored_attack.ts` 的 `compileAuthoredAttackClip` 编译为运行时 clip；未提供作者数据的段可回退公式动画。人形支撑手双轨来自离线生成数据。
-- **支撑手离线烘焙**：攻击段与基础状态均预烘焙支撑手（左肩/左肘），生产运行时零 IK；修改 `pose_fns` / 武器网格 / 基础状态时长后必须运行 `pnpm bake:support-hands`。
+- **支撑手离线烘焙**：攻击段与基础状态均预烘焙支撑手（左肩/左肘），生产运行时零 IK；修改 `pose_fns` / 武器网格 / 基础状态时长后必须运行 `pnpm bake:support-hands`。作者可在攻击段声明 `supportHand: 'authored'` 改由左臂关键帧直接驱动（长弓拉弦），此时该段不生成支撑手双轨。
 - **惯用手**：canonical 数据恒为右撇子；左撇子由 `mirrorClip` 派生，不写专有数据。
+- **盾牌动作节奏**：大 / 中 / 小盾的盾击与盾撞使用 `timeScale: 2` 整体放慢，仍保持前摇:挥击:后摇 = **2:1:2.5**，避免重型盾牌下砸过快。
+- **远程动作节奏**：所有远程 / 吐息段统一按前摇:释放:后摇 = **2:1:2.5** 编排，整体速度为原速度的 **25%**（时长 ×4）；阶段为 `draw` / `release` / `recovery`。飞斧 / 手雷 / 燃烧瓶额外 `speedMultiplier: 1.5`，即提速到当前 150%。段末腿部关键帧回到待机姿态，后摇阶段完成弓步回收，避免动画结束后瞬跳。
 - **命中窗口**：攻击 clip 事件轨 `hitbox_on` / `hitbox_off`，双持带 `params.slotKey`（如 `weapon:main_hand` / `weapon:off_hand`）分槽。
+- **攻击箱 / 检测箱**：均为数组，每项绑定 `jointId` + 局部坐标 + 旋转；`hitMountJointIds` 仅作关节子集过滤。天然武器攻击箱写在武器数据中。
 
 ## 一、整体架构
 
@@ -116,9 +120,9 @@ interface AuthoredAttackClip {
 4. 左撇子 `mirrorClip`；
 5. 按段 id + handedness 缓存。
 
-## 五、持握、惯用手与盾
+## 五、攻击模组、惯用手与盾
 
-- 三模式语义、副手挂背、双持命中分槽见 [`动作设计规范.md`](../../../docs/bone_animation/动作设计规范.md) §7。
+- 人形三持握语义、副手挂背、双持命中分槽见 [`动作设计规范.md`](../../../docs/bone_animation/动作设计规范.md) §7；生物按武器槽切换嘴 / 爪 / 蹄 / 吐息等模组。
 - 双手共持不再逐帧求解 IK；支撑手在生成期烘焙。
 - 惯用手只切换视图：武器挂点、非对称网格镜像、`mirrorClip`；存档只存语义。
 - 盾牌是近战武器类，`block` 字段声明格挡；判定与盾槽见 [`combat.md`](../combat/combat.md)。
@@ -131,7 +135,7 @@ interface AuthoredAttackClip {
 | 攻击段骨骼动作 | `entity/character/body_form/<form>/skeleton_animation/attack_clips/<weapon>.ts` |
 | 段时长 / 恢复 / 阶段 / 伤害 / next | `melee_attacks.ts` / `ranged_attacks.ts` |
 | 命中窗口 | 作者数据 `events`（或生成器脚本中的窗口推导） |
-| 持握模式 | `body_form/<form>/equipment/weapons.ts` 的 `holdModes` + `attacks` |
+| 攻击模组 | `body_form/<form>/equipment/weapons.ts` 的 `attackModules` + `attacks` |
 | 武器模型握点 / 副握距 | `body_form/<form>/equipment/weapons.ts` 的 `mesh.supportGripOffset` + `weapon_mesh.ts` 握持表 |
 | 惯用手 | `character/handedness.ts` + 存档字段 |
 | 盾牌 / 格挡 | `melee_weapon.ts` 的 `block` + `combat` 判定 |
@@ -173,5 +177,5 @@ interface AuthoredAttackClip {
 - 武器朝向由武器骨骼控制；持械非攻击状态保持 `WEAPON_GRIP_FLEX`。
 - 攻击作者数据修改后重启 `pnpm dev`（解析缓存）；支撑手相关修改后运行 `pnpm bake:support-hands`。
 - 左撇子不写数据，只走镜像。
-- 远程 t=0 即起手瞄准位，`release` 帧朝向必须指向目标；远程武器不生成 `WeaponLocalHitBox`（`weaponHitBox = null`），只有近战 / 天然武器有攻击箱。
+- 远程 t=0 即起手瞄准位，`release` 帧朝向必须指向目标；远程武器不生成近战攻击箱（`attackBoxes = []`），只有近战 / 天然武器有攻击箱。
 - 状态切换有 `STATE_BLEND_DURATION` 快照混合，调参时不要把过渡帧当目标姿态。

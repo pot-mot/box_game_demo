@@ -2,6 +2,15 @@ import type {Group} from 'three'
 import type {NameLabel} from './label.ts'
 import type {ActorStatus} from './actor.ts'
 import type {ShowcaseDebugKind} from './actor_debug.ts'
+import {BASE_CLIP_STATES, type BaseClipState} from '../../character/state_machine/state_names.ts'
+
+/** 外观展示可切换的动作：全部非攻击基础状态（含游泳 / 漂浮 / 死亡 / 倒地等） */
+export const SHOWCASE_ACTIONS: readonly BaseClipState[] = BASE_CLIP_STATES
+export type ShowcaseAction = BaseClipState
+
+/** 运行时校验面板回传值是否属于可切换动作 */
+export const isShowcaseAction = (value: string): value is ShowcaseAction =>
+    SHOWCASE_ACTIONS.some(action => action === value)
 
 /**
  * 展示角色驱动器通用接口：武器攻击展示（`actor.ts`）与种族 / 套装展示（`race_actor.ts`）
@@ -13,15 +22,19 @@ export interface ShowcaseActorHandle {
     /** 面板名称行（武器中文名 / 种族名 / 套装名） */
     readonly weaponName: string
     /** 面板副名列（持握模式 / 种族 / 装备类别；无则空字符串） */
-    readonly holdModeLabel: string
+    readonly attackModuleLabel: string
     /** 阵营数值（面板色点取该阵营调色板主色） */
     readonly factionColor: number
     /** 推进一帧 */
     update: (dt: number) => void
     /** 攻击状态快照（仅武器攻击角色提供；种族 / 套装展示角色为 undefined） */
     readonly status?: () => ActorStatus
+    /** 切换外观展示动作（仅种族 / 套装 / 体形展示角色；缺省不支持） */
+    readonly setAction?: (action: ShowcaseAction) => void
     /** 切换调试箱可见（物理碰撞箱 / 受击箱 / 攻击箱；缺省不支持） */
     readonly setDebugVisible?: (kind: ShowcaseDebugKind, on: boolean) => void
+    /** 清空该角色生成的在飞弹丸（Tab 切换 / 离开展示时调用；缺省不支持） */
+    readonly clearProjectiles?: () => void
     /** 逐帧同步调试箱（在动画写完之后调用；缺省不支持） */
     readonly debugTick?: () => void
     /** 挂载头顶名称标签（label 资源句柄由本驱动器持有，随 dispose 统一回收） */

@@ -1,6 +1,7 @@
 import {describe, it, expect} from 'vitest'
 import {DEFAULT_PROJECTILE_GRAVITY_SCALE, type RangedWeaponConfig} from './ranged_weapon.ts'
-import {allWeaponPresets, findWeaponPreset} from './catalog.ts'
+import {allWeaponPresets, findWeaponPreset, weaponAttacksOf} from './catalog.ts'
+import {RANGED_ANIMATION_SPEED_SCALE} from './ranged_attacks.ts'
 
 /* 全部已注册远程武器（含各体形） */
 const RANGED_WEAPON_PRESETS: Record<string, RangedWeaponConfig> = Object.fromEntries(
@@ -85,6 +86,38 @@ describe('弹丸重力缩放（projectileGravityScale）', () => {
     it('投掷类武器（飞斧 / 手雷 / 燃烧瓶）有可见抛物线仰角', () => {
         for (const id of ['throwing_axe', 'grenade', 'molotov'] as const) {
             expect(RANGED_WEAPON_PRESETS[id].throwAngle ?? 0).toBeGreaterThan(0)
+        }
+    })
+})
+
+describe('远程武器展示攻击箱', () => {
+    it('远程武器带枪口朝向攻击箱（仅展示 / 调试）', () => {
+        const weapon = findWeaponPreset('longbow')
+        expect(weapon?.type).toBe('ranged')
+        if (weapon?.type !== 'ranged') return
+        expect(weapon.attackBoxes.length).toBeGreaterThan(0)
+        expect(weapon.attackBoxes[0]?.jointId).toBe('weaponMount')
+    })
+})
+
+describe('投掷类攻击动作提速', () => {
+    it('飞斧 / 手雷 / 燃烧瓶提速到当前 150%，仍保持 2:1:2.5', () => {
+        const cases = [
+            {id: 'throwing_axe', base: 0.5},
+            {id: 'grenade', base: 0.8},
+            {id: 'molotov', base: 0.8},
+        ] as const
+        for (const {id, base} of cases) {
+            const weapon = findWeaponPreset(id)!
+            const attacks = weaponAttacksOf(weapon)
+            const segment = attacks.segments[attacks.chains.light.steps[0]!]!
+            expect(segment.duration + segment.recovery).toBeCloseTo(base / (RANGED_ANIMATION_SPEED_SCALE * 1.5), 5)
+            const windup = segment.phases.find(phase => phase.name === 'draw')!
+            const strike = segment.phases.find(phase => phase.name === 'release')!
+            const windupDuration = segment.duration * windup.durationRatio
+            const strikeDuration = segment.duration * strike.durationRatio
+            expect(windupDuration / strikeDuration).toBeCloseTo(2, 5)
+            expect(segment.recovery / strikeDuration).toBeCloseTo(2.5, 5)
         }
     })
 })

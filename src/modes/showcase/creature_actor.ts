@@ -4,13 +4,15 @@ import {bodyFormOf} from '../../entity/character/body_form/index.ts'
 import type {AnimationContext, CreatureModel} from '../../entity/character/appearance/types.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/types.ts'
 import {createActorDebug} from './actor_debug.ts'
-import {ACTOR_JUMP_HEIGHT, ACTOR_SCALE, ACTOR_SPEED, DIMMED_OPACITY, RACE_SHOWCASE_HOLD_SECONDS} from './constants.ts'
+import {ACTOR_JUMP_HEIGHT, ACTOR_SCALE, ACTOR_SPEED, DIMMED_OPACITY} from './constants.ts'
 import type {NameLabel} from './label.ts'
-import type {ShowcaseActorHandle} from './actor_handle.ts'
+import type {ShowcaseActorHandle, ShowcaseAction} from './actor_handle.ts'
+import {applyShowcaseRootPosture} from './root_posture.ts'
 
-/** 体形展示角色：在通用展示角色接口上暴露当前姿态（idle / walking）与标签高度 */
+/** 体形展示角色：在通用展示角色接口上暴露当前动作与标签高度 */
 export interface CreatureShowcaseActor extends ShowcaseActorHandle {
-    readonly state: 'idle' | 'walking'
+    readonly state: ShowcaseAction
+    readonly setAction: (action: ShowcaseAction) => void
     /** 头顶标签高度（按模型实际高度计算的锚点上方高度，供创建标签时传入） */
     readonly labelHeight: number
 }
@@ -38,10 +40,10 @@ interface MaterialSnapshot {
 /**
  * 体形（非人形）展示驱动器：狼 / 马 / 双足飞龙等 `BodyForm` 的外观 + 动画展示。
  *
- * 时间线：站立 2s ↔ 行走 2s 交替循环（`RACE_SHOWCASE_HOLD_SECONDS`），
- * 行走时注入 `horizontalSpeed = ACTOR_SPEED` 使步频正常、位置原地不动（纯动画展示）。
- * 动画由体形计划自带的 `createAnimation()` 提供（狼 / 马 / wyvern 各自的 `clips` / `pose_fns`），
- * 上下文注入镜像生产 `world.ts`，状态在 `idle` / `walking` 间切换触发快照混合。
+ * 动作由左侧面板经 `setAction()` 切换（不再定时轮换）：默认待机，可切到全部非攻击基础状态。
+ * 行走 / 游泳注入 `horizontalSpeed = ACTOR_SPEED` 使步频正常、位置原地不动（纯动画展示）；
+ * 游泳额外镜像生产 `world.ts` 的俯卧根姿态。动画由体形计划自带的 `createAnimation()` 提供
+ * （狼 / 马 / wyvern 各自的 `clips` / `pose_fns`），动作切换触发快照混合。
  */
 export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseActor => {
     const {id, scene, x, z, name, subtitle, bodyFormId} = init
@@ -67,14 +69,16 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
     /* 调试箱（物理碰撞箱 / 受击箱 / 攻击箱）：默认全隐 */
     const debug = createActorDebug(scene, model, form.skeleton.hurtProfile)
 
-    /* —— 站立 / 行走交替时间线 —— */
-    let currentState: 'idle' | 'walking' = 'idle'
+    /* —— 当前动作（由左侧面板切换） —— */
+    let currentState: ShowcaseAction = 'idle'
     let stateTime = 0
+    const centerOffsetY = form.base.centerOffsetY * ACTOR_SCALE
 
     const applyAnimation = (dt: number): void => {
         const ctx: AnimationContext = {
             stateTime,
-            horizontalSpeed: currentState === 'walking' ? ACTOR_SPEED : 0,
+            horizontalSpeed: currentState === 'walking' || currentState === 'swimming' ? ACTOR_SPEED : 0,
+            verticalSpeed: currentState === 'falling' ? -8 : 0,
             attackSegment: undefined,
             attackPhase: undefined,
             attackPhaseProgress: 0,
@@ -85,15 +89,19 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
             weaponHeld: false,
         }
         system.update(dt, model, currentState, ctx)
+        applyShowcaseRootPosture(model.group, currentState, centerOffsetY, form.uprightRoot !== false)
     }
 
     const update = (dt: number): void => {
         stateTime += dt
-        if (stateTime >= RACE_SHOWCASE_HOLD_SECONDS) {
-            stateTime -= RACE_SHOWCASE_HOLD_SECONDS
-            currentState = currentState === 'idle' ? 'walking' : 'idle'
-        }
         applyAnimation(dt)
+    }
+
+    const setAction = (action: ShowcaseAction): void => {
+        if (action === currentState) return
+        currentState = action
+        stateTime = 0
+        applyAnimation(0)
     }
 
     /* —— 头顶名称标签 —— */
@@ -137,8 +145,8 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
     }
 
     return {
-        id, anchor, weaponName: name, holdModeLabel: subtitle, factionColor: 0,
-        update, attachLabel, setDimmed, dispose,
+        id, anchor, weaponName: name, attackModuleLabel: subtitle, factionColor: 0,
+        update, setAction, attachLabel, setDimmed, dispose,
         setDebugVisible: (kind, on) => debug.setVisible(kind, on),
         debugTick: () => debug.tick(),
         get state() { return currentState },

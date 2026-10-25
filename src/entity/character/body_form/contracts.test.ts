@@ -107,13 +107,19 @@ describe('体形计划公共契约（全部注册体形）', () => {
                 }
             })
 
-            it('武器表非空且都归属该体形；默认武器为已知 id 且在表内', () => {
+            it('武器表非空且都归属该体形；每个武器槽默认武器为已知 id 且在该体形武器 / 吐息表内', () => {
                 expect(form.weapons.length).toBeGreaterThan(0)
                 for (const weapon of form.weapons) {
                     expect(weapon.formId, weapon.id).toBe(form.id)
                 }
-                expect(isKnownWeaponId(form.defaultWeaponId)).toBe(true)
-                expect(form.weapons.map(w => w.id)).toContain(form.defaultWeaponId)
+                for (const [slot, weaponId] of Object.entries(form.defaultWeaponLoadout)) {
+                    expect(isKnownWeaponId(weaponId), `${form.id}/${slot}`).toBe(true)
+                    expect(
+                        form.weapons.some(weapon => weapon.id === weaponId)
+                        || (form.breathModules ?? []).some(module => module.id === weaponId),
+                        `${form.id}/${slot}`,
+                    ).toBe(true)
+                }
             })
 
             it('模型可构建、可装配默认武器并释放', () => {
@@ -155,7 +161,7 @@ describe('体形计划公共契约（全部注册体形）', () => {
                 expect(base.duration, `${form.id}:idle`).toBeGreaterThan(0)
 
                 const weapon = form.weapons[0]!
-                const segment = orderedSegments(weaponAttacksOf(weapon, weapon.holdModes[0]!))[0]
+                const segment = orderedSegments(weaponAttacksOf(weapon, weapon.attackModules[0]!.id))[0]
                 expect(segment, form.id).toBeDefined()
                 const attack = form.animation.previewClip({
                     kind: 'attack',

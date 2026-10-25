@@ -1,21 +1,21 @@
-import type {WeaponAttacks, AttackSegment, HoldModeAttacks} from './attack_chain.ts'
+import type {WeaponAttacks, AttackSegment, AttackModuleAttacks} from './attack_chain.ts'
 import {ATTACK_KEYS, withChargeTuningMap} from './attack_chain.ts'
 import type {WeaponConfig} from './catalog.ts'
-import {defaultHoldMode, findWeaponPreset, weaponAttacksOf, weaponPresetOrDefault} from './catalog.ts'
-import {HOLD_MODES, type HoldMode} from './hold_mode.ts'
+import {defaultAttackModule, findWeaponLike, weaponAttacksOf, weaponPresetOrDefault} from './catalog.ts'
+import type {AttackModuleId} from './attack_module.ts'
 import type {MeleeWeaponConfig} from './melee_weapon.ts'
 import {DEFAULT_HEAVY_CHARGE} from './melee_attacks.ts'
 import type {RangedWeaponConfig} from './ranged_weapon.ts'
 import type {ChargeTuning} from './charge_tuning.ts'
 
 /**
- * 武器运行时 = 武器预设 + 当前持握模式 + 角色/存档数值覆写（伤害、起手段冷却、远程弹道参数）。
+ * 武器运行时 = 武器预设 + 当前攻击模组 + 角色/存档数值覆写（伤害、起手段冷却、远程弹道参数）。
  * 攻击动作（段/阶段时序/时长/关键帧动画）**不可覆写**：由武器模组决定；
- * `attacks` 为**当前持握模式**解析后的攻击链（换持握模式时重建运行时）。
+ * `attacks` 为**当前攻击模组**解析后的攻击链（换模组时重建运行时）。
  */
 export interface WeaponRuntime {
     readonly weapon: WeaponConfig
-    readonly holdMode: HoldMode
+    readonly attackModule: AttackModuleId
     readonly attacks: WeaponAttacks
 }
 
@@ -48,13 +48,12 @@ const withCooldownOverride = (attacks: WeaponAttacks, cooldown: number | undefin
     return {...attacks, segments}
 }
 
-/** 对持握模式 map 的**每个**模式应用起手段冷却覆写（换持握模式时覆写不丢失） */
-const withCooldownOverrideMap = (attacks: HoldModeAttacks, cooldown: number | undefined): HoldModeAttacks => {
+/** 对攻击模组 map 的**每个**模组应用起手段冷却覆写（换模组时覆写不丢失） */
+const withCooldownOverrideMap = (attacks: AttackModuleAttacks, cooldown: number | undefined): AttackModuleAttacks => {
     if (cooldown === undefined) return attacks
-    const out: Partial<Record<HoldMode, WeaponAttacks>> = {}
-    for (const mode of HOLD_MODES) {
-        const set = attacks[mode]
-        if (set !== undefined) out[mode] = withCooldownOverride(set, cooldown)
+    const out: Partial<Record<AttackModuleId, WeaponAttacks>> = {}
+    for (const [moduleId, set] of Object.entries(attacks)) {
+        if (set !== undefined) out[moduleId] = withCooldownOverride(set, cooldown)
     }
     return out
 }
@@ -97,23 +96,25 @@ const applyRangedOverrides = (preset: RangedWeaponConfig, overrides: WeaponOverr
     }
 }
 
-/** 创建武器运行时：未知武器 id 回退默认武器（存档容错），解析指定/默认持握模式的攻击链，再应用数值覆写 */
+/** 创建武器运行时：未知武器 id 回退默认武器（存档容错），解析指定/默认攻击模组的攻击链，再应用数值覆写 */
 export const createWeaponRuntime = (
     weaponId: string | undefined,
     overrides: WeaponOverrides = {},
-    holdMode?: HoldMode,
+    attackModule?: AttackModuleId,
 ): WeaponRuntime => {
-    const preset = weaponPresetOrDefault(weaponId)
+    const preset = (weaponId !== undefined ? findWeaponLike(weaponId) : undefined) ?? weaponPresetOrDefault(weaponId)
     const weapon = preset.type === 'melee'
         ? applyMeleeOverrides(preset, overrides)
         : applyRangedOverrides(preset, overrides)
-    const mode = holdMode !== undefined && weapon.holdModes.includes(holdMode) ? holdMode : defaultHoldMode(weapon)
+    const module = attackModule !== undefined && weapon.attackModules.some(def => def.id === attackModule)
+        ? attackModule
+        : defaultAttackModule(weapon)
     return {
         weapon,
-        holdMode: mode,
-        attacks: weaponAttacksOf(weapon, mode),
+        attackModule: module,
+        attacks: weaponAttacksOf(weapon, module),
     }
 }
 
 /** 武器 id 是否存在于预设目录（面板/存档校验提示用） */
-export const isKnownWeaponId = (weaponId: string): boolean => findWeaponPreset(weaponId) !== undefined
+export const isKnownWeaponId = (weaponId: string): boolean => findWeaponLike(weaponId) !== undefined

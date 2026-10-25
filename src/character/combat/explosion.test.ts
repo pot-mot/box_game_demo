@@ -31,7 +31,7 @@ const makeMock = (
         id,
         config: {speed: 0, jumpHeight: 0, scale: 1},
         combat,
-        bodyState: {holdMode: 'one_handed'},
+        bodyState: {attackModule: 'one_handed'},
     })
     characterState.physics.isOnGround = true
     return {

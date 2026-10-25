@@ -1,10 +1,12 @@
-import {BufferAttribute, BufferGeometry, CapsuleGeometry, DynamicDrawUsage, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type Group, Mesh, MeshBasicMaterial, type MeshStandardMaterial} from 'three'
+import {BoxGeometry, BufferAttribute, BufferGeometry, CapsuleGeometry, DynamicDrawUsage, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type Group, Mesh, MeshBasicMaterial, type MeshStandardMaterial} from 'three'
 import type {SkeletonDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {skeletonFromDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {createJointHierarchy} from '../../../../../skeleton/render/joint_hierarchy.ts'
 import type {CharacterMaterialId} from '../../../../../render/character_materials.ts'
 import {createMeshBuilder, type MeshBuilder} from '../../../appearance/mesh_builder.ts'
-import {createWeaponMesh, WEAPON_MESH_GRIPS, type WeaponMeshConfig, type WeaponLocalHitBox} from '../../../appearance/weapon_mesh.ts'
+import {createWeaponMesh, resolveAttackBoxes, WEAPON_MESH_GRIPS, type WeaponMeshConfig} from '../../../appearance/weapon_mesh.ts'
+import type {EquipmentMountSpec} from '../../../../../character/equipment/types.ts'
+import type {WeaponAttackBoxSpec} from '../../../../../character/weapon/mesh_config.ts'
 import {COLLIDER_MESH_OPACITY} from '../../../render/constants.ts'
 import {WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
 import type {CreatureModel, WeaponEquipConfig} from '../../../appearance/types.ts'
@@ -76,11 +78,14 @@ interface WeaponSlot {
     group: Group | null
     hitCenter: Mesh | null
     tip: Mesh | null
-    hitBox: WeaponLocalHitBox | null
+    attackBoxes: readonly WeaponAttackBoxSpec[]
     cleanup: (() => void) | null
+    /** 主挂载之外的逐关节武器模型（多肢体天然武器） */
+    extraGroups: {readonly group: Group; readonly cleanup: () => void}[]
     gripY: number
     supportGripOffset: number
     meshConfig: WeaponMeshConfig | undefined
+    mountsConfig: readonly EquipmentMountSpec<WeaponMeshConfig>[] | undefined
 }
 
 const requireGroup = (groups: ReadonlyMap<string, Group>, jointId: string, what: string): Group => {
@@ -231,7 +236,7 @@ const createColliderDebugMeshes = (groups: ReadonlyMap<string, Group>, layout: r
         if (joint === undefined) continue
         const geom = spec.kind === 'capsule'
             ? new CapsuleGeometry(spec.radius, spec.halfHeight * 2, 6, 12)
-            : new CapsuleGeometry(Math.max(spec.half.x, spec.half.z), Math.max(0.001, spec.half.y * 2), 6, 12)
+            : new BoxGeometry(spec.half.x * 2, spec.half.y * 2, spec.half.z * 2)
         const mesh = new Mesh(geom, new MeshBasicMaterial({color: 0x888888, transparent: true, opacity: COLLIDER_MESH_OPACITY, depthWrite: false}))
         mesh.userData.colliderDebug = true
         mesh.position.y = spec.offsetY
@@ -307,7 +312,7 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
     const appearance = createCreatureAppearance(groups, spec.parts, spec.colliderLayout)
 
     const createSlot = (mountJoint: Group, mountJointId: string | undefined): WeaponSlot => ({
-        mountJoint, defaultMountJoint: mountJoint, mountJointId, mountRotation: [WEAPON_GRIP_FLEX, 0, 0], group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0, supportGripOffset: 0, meshConfig: undefined,
+        mountJoint, defaultMountJoint: mountJoint, mountJointId, mountRotation: [WEAPON_GRIP_FLEX, 0, 0], group: null, hitCenter: null, tip: null, attackBoxes: [], cleanup: null, extraGroups: [], gripY: 0, supportGripOffset: 0, meshConfig: undefined, mountsConfig: undefined,
     })
     const mainSlot = createSlot(requireGroup(groups, spec.mainMountId, 'CreatureModel'), spec.mainMountId)
     const offSlot = spec.offMountId !== undefined ? createSlot(requireGroup(groups, spec.offMountId, 'CreatureModel'), spec.offMountId) : undefined
@@ -316,8 +321,13 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
     const clearSlot = (slot: WeaponSlot): void => {
         if (slot.group !== null) slot.mountJoint.remove(slot.group)
         slot.cleanup?.()
-        slot.group = null; slot.hitCenter = null; slot.tip = null; slot.hitBox = null; slot.cleanup = null
-        slot.gripY = 0; slot.supportGripOffset = 0; slot.meshConfig = undefined
+        for (const extra of slot.extraGroups) {
+            extra.group.removeFromParent()
+            extra.cleanup()
+        }
+        slot.extraGroups = []
+        slot.group = null; slot.hitCenter = null; slot.tip = null; slot.attackBoxes = []; slot.cleanup = null
+        slot.gripY = 0; slot.supportGripOffset = 0; slot.meshConfig = undefined; slot.mountsConfig = undefined
         slot.mountJoint.rotation.set(0, 0, 0)
     }
     const equipSlot = (
@@ -325,14 +335,48 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
         meshConfig: WeaponMeshConfig | undefined,
         mountJointId: string | undefined,
         mountRotation: readonly [number, number, number] | undefined,
+        attackBoxes: readonly WeaponAttackBoxSpec[] | undefined,
+        mounts: readonly EquipmentMountSpec<WeaponMeshConfig>[] | undefined,
     ): void => {
-        if (slot.meshConfig === meshConfig && slot.mountJointId === mountJointId && slot.mountRotation === mountRotation) return
+        if (slot.meshConfig === meshConfig && slot.mountJointId === mountJointId
+            && slot.mountRotation === mountRotation && slot.mountsConfig === mounts) return
         clearSlot(slot)
+        if (mounts !== undefined && mounts.length > 0) {
+            /* 逐关节武器模型：同一武器的每个关节独立模型 / 偏移 / 旋转；首项作为主挂载（刀尖 / 枪口采样） */
+            const created: {group: Group; result: ReturnType<typeof createWeaponMesh>; joint: Group; jointId: string; mount: EquipmentMountSpec<WeaponMeshConfig>}[] = []
+            for (const mount of mounts) {
+                const joint = groups.get(mount.jointId)
+                if (joint === undefined) continue
+                const result = createWeaponMesh(mount.mesh)
+                result.group.position.set(mount.offset?.x ?? 0, mount.offset?.y ?? 0, mount.offset?.z ?? 0)
+                result.group.rotation.set(mount.rotation?.x ?? 0, mount.rotation?.y ?? 0, mount.rotation?.z ?? 0)
+                result.group.scale.set(mount.scale?.x ?? 1, mount.scale?.y ?? 1, mount.scale?.z ?? 1)
+                joint.add(result.group)
+                created.push({group: result.group, result, joint, jointId: mount.jointId, mount})
+            }
+            const primary = created[0]
+            if (primary === undefined) return
+            slot.group = primary.group
+            slot.hitCenter = primary.result.hitCenter
+            slot.tip = primary.result.tip
+            slot.cleanup = primary.result.cleanup
+            slot.gripY = primary.result.gripY
+            slot.supportGripOffset = primary.result.supportGripOffset
+            slot.meshConfig = primary.mount.mesh
+            slot.mountsConfig = mounts
+            slot.mountJoint = primary.joint
+            slot.mountJointId = primary.jointId
+            slot.mountRotation = [0, 0, 0]
+            slot.attackBoxes = resolveAttackBoxes(primary.result, primary.jointId, attackBoxes)
+            slot.extraGroups = created.slice(1).map(item => ({group: item.group, cleanup: item.result.cleanup}))
+            return
+        }
         if (meshConfig === undefined) return
         const result = createWeaponMesh(meshConfig)
-        slot.group = result.group; slot.hitCenter = result.hitCenter; slot.tip = result.tip; slot.hitBox = result.hitBox
+        slot.group = result.group; slot.hitCenter = result.hitCenter; slot.tip = result.tip
         slot.cleanup = result.cleanup; slot.gripY = result.gripY; slot.supportGripOffset = result.supportGripOffset
         slot.meshConfig = meshConfig
+        slot.mountsConfig = undefined
         /* 挂点覆盖：武器可指定专属挂点关节（如马踢击挂前蹄、飞龙爪击挂翼爪）；
          * 未指定时回退体形默认挂点（否则换装后会残留上一个武器的专属挂点） */
         slot.mountJoint = mountJointId !== undefined ? requireGroup(groups, mountJointId, 'CreatureModel') : slot.defaultMountJoint
@@ -340,6 +384,7 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
         slot.mountRotation = mountRotation ?? [WEAPON_GRIP_FLEX, 0, 0]
         slot.mountJoint.add(result.group)
         slot.mountJoint.rotation.set(slot.mountRotation[0], slot.mountRotation[1], slot.mountRotation[2])
+        slot.attackBoxes = resolveAttackBoxes(result, slot.mountJoint.name, attackBoxes)
     }
     /** 装备外观：由体形 `appearance/equipment.ts` 构建真实网格，模型只负责生命周期与换装 */
     let equipmentAppearance: {dispose: () => void} | undefined
@@ -369,8 +414,8 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
         slotGroup.quaternion.setFromEuler(new Euler(grip?.rx ?? 0, grip?.ry ?? 0, grip?.rz ?? 0))
     }
     const equipWeapon = (equipConfig: WeaponEquipConfig): void => {
-        equipSlot(mainSlot, equipConfig.main, equipConfig.mainMountJointId, equipConfig.mainMountRotation)
-        if (offSlot !== undefined) equipSlot(offSlot, equipConfig.offhand, equipConfig.offMountJointId, undefined)
+        equipSlot(mainSlot, equipConfig.main, equipConfig.mainMountJointId, equipConfig.mainMountRotation, equipConfig.mainAttackBoxes, equipConfig.mainMounts)
+        if (offSlot !== undefined) equipSlot(offSlot, equipConfig.offhand, equipConfig.offMountJointId, undefined, equipConfig.offhandAttackBoxes, undefined)
         setOffhandStowed(equipConfig.offhandStowed === true)
     }
     const removeWeapon = (): void => {
@@ -397,13 +442,13 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
         get weaponMesh() { return mainSlot.hitCenter },
         get weaponTip() { return mainSlot.tip },
         get weaponGroup() { return mainSlot.group },
-        get weaponHitBox() { return mainSlot.hitBox },
+        get weaponAttackBoxes() { return mainSlot.attackBoxes },
         get weaponGripY() { return mainSlot.gripY },
         get weaponSupportGripOffset() { return mainSlot.supportGripOffset },
         get offhandWeaponMesh() { return offSlot?.hitCenter ?? null },
         get offhandWeaponTip() { return offSlot?.tip ?? null },
         get offhandWeaponGroup() { return offSlot?.group ?? null },
-        get offhandWeaponHitBox() { return offSlot?.hitBox ?? null },
+        get offhandWeaponAttackBoxes() { return offSlot?.attackBoxes ?? [] },
         get offhandWeaponGripY() { return offSlot?.gripY ?? 0 },
         recolor: () => {},
         dispose,

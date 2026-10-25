@@ -41,10 +41,25 @@ export type WeaponMeshConfig = WeaponMeshCommon & (
     | { id: 'none' }
 )
 
-/** 武器本地命中箱（武器本地坐标） */
+/** 武器本地命中箱模板（武器网格生成器输出；单一、未绑定骨骼节点） */
 export interface WeaponLocalHitBox {
     readonly center: { readonly x: number; readonly y: number; readonly z: number }
     readonly half: { readonly x: number; readonly y: number; readonly z: number }
     /** 命中箱沿武器本地 +Y 轴的最大前伸量（距握把最远距离） */
+    readonly reach: number
+}
+
+/**
+ * 武器攻击箱（数组项）：每个箱显式绑定骨骼节点 + 局部坐标 + 局部旋转。
+ * 天然武器 / 多肢体攻击在武器模型中声明；普通可视武器缺省由网格模板生成一项并绑定到槽位主挂点。
+ */
+export interface WeaponAttackBoxSpec {
+    /** 骨骼节点 id（装备时由槽位/模型解析；天然武器显式声明） */
+    readonly jointId: string
+    readonly center: { readonly x: number; readonly y: number; readonly z: number }
+    readonly half: { readonly x: number; readonly y: number; readonly z: number }
+    /** 相对绑定关节局部的欧拉角（弧度，XYZ） */
+    readonly rotation: { readonly x: number; readonly y: number; readonly z: number }
+    /** 命中箱沿绑定关节局部 +Y 轴的最大前伸量 */
     readonly reach: number
 }

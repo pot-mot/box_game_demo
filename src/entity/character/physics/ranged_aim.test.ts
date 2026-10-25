@@ -113,10 +113,12 @@ describe('远程瞄准与弹道朝向', () => {
         system.setPlayerMove(0, 0, false, 0, 1)
         system.setPlayerAttack('light')
 
-        /* 飞镖为单 release 段：起手即出弹；玩家弹道取瞄准方向，与身体是否已转向无关 */
-        system.update(FIXED_TIME_STEP)
-
-        const bullet = findBulletBody(shared)
+        /* 新远程动作有前摇：推进到 draw 结束 / release 起始后才出弹；玩家弹道取瞄准方向 */
+        let bullet: RAPIER.RigidBody | undefined
+        for (let i = 0; i < 120 && bullet === undefined; i++) {
+            system.update(FIXED_TIME_STEP)
+            bullet = findBulletBody(shared)
+        }
         expect(bullet).toBeDefined()
         const linvel = bullet!.linvel()
         expect(linvel.z).toBeGreaterThan(0)
@@ -157,7 +159,7 @@ describe('远程瞄准与弹道朝向', () => {
 
         /* 松开：推进到 release 并发射，满蓄力按 maxSpeedScale */
         system.endPlayerAttackHold('light', 1)
-        for (let i = 0; i < 30 && findBulletBody(shared) === undefined; i++) system.update(FIXED_TIME_STEP)
+        for (let i = 0; i < 90 && findBulletBody(shared) === undefined; i++) system.update(FIXED_TIME_STEP)
         const bullet = findBulletBody(shared)
         expect(bullet).toBeDefined()
         const lv = bullet!.linvel()

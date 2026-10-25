@@ -19,7 +19,7 @@ export const WYVERN_BODY_FORM_ID = 'wyvern'
 
 /**
  * 双足飞龙（wyvern，双足 + 双翼，共 4 肢）体形计划。
- * 主武器固定为 `wyvern_claw`（五段爪击）；重击来自独立 `breath` 装备槽。
+ * 翼爪槽默认天然爪 `wyvern_claw`（五段轻爪 + 重爪）；吐息槽默认基础天然吐息，重击可使用已装备吐息。
  */
 export const WYVERN_BODY_FORM: BodyForm = {
     id: WYVERN_BODY_FORM_ID,
@@ -48,7 +48,8 @@ export const WYVERN_BODY_FORM: BodyForm = {
     armorPieces: WYVERN_ARMOR_PIECES,
     limbPieces: WYVERN_LIMB_PIECES,
     weapons: WYVERN_WEAPONS,
-    defaultWeaponId: 'wyvern_claw',
+    defaultWeaponLoadout: {wing_claw: 'wyvern_claw', breath: 'breath_natural'},
     editor: {weaponControl: true, handedness: false},
+    uprightRoot: false,
     breathModules: WYVERN_BREATH_MODULES,
 }

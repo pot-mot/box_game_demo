@@ -73,7 +73,7 @@ export const RANGED_SPACING = 2.4
 
 /**
  * 种族展示条目：装备四槽同种族肢体（默认 replace，完整替换为骷髅 / 兽人 / 精灵），
- * 站立行走各 2s 交替循环。
+ * 动作由展示台左侧面板切换。
  */
 export interface RaceShowcaseEntry {
     kind: 'race'
@@ -86,7 +86,7 @@ export interface RaceShowcaseEntry {
     faction: number
 }
 
-/** 套装展示条目：装备成套护甲 + 人类肢体，站立行走各 2s 交替循环 */
+/** 套装展示条目：装备成套护甲 + 人类肢体，动作由展示台左侧面板切换 */
 export interface ArmorSetShowcaseEntry {
     kind: 'armor_set'
     /** 护甲槽位 → 护甲 id（`ARMOR_PRESETS`） */
@@ -181,8 +181,6 @@ export const SHOWCASE_APPEARANCE_SPACING = 3.0
 /** 外观图鉴行间距（m） */
 export const SHOWCASE_APPEARANCE_ROW_SPACING = 3.4
 
-/** 站立 / 行走各持续时长（秒）：到达即切换到另一姿态并循环 */
-export const RACE_SHOWCASE_HOLD_SECONDS = 2.0
 
 /** 展示角色模型缩放（放大便于观察关节细节） */
 export const ACTOR_SCALE = 1.3

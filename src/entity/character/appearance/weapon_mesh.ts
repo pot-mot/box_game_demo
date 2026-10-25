@@ -1,7 +1,7 @@
 import {Euler, Vector3, type Group, type Mesh} from 'three'
 import {createMeshBuilder, type MeshBuilder} from './mesh_builder.ts'
 
-import {WEAPON_MESH_IDS, type WeaponMeshConfig, type WeaponMeshId, type WeaponLocalHitBox} from '../../../character/weapon/mesh_config.ts'
+import {WEAPON_MESH_IDS, type WeaponAttackBoxSpec, type WeaponMeshConfig, type WeaponMeshId, type WeaponLocalHitBox} from '../../../character/weapon/mesh_config.ts'
 
 export {WEAPON_MESH_IDS}
 export type {WeaponMeshConfig, WeaponMeshId, WeaponLocalHitBox}
@@ -210,7 +210,7 @@ const genSpear = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'spear' }): Weap
     const hitHighY = cfg.poleLen + cfg.headLen
     const hitHalfX = Math.max(pR, 0.05 / 2) + hitMargin
     const hitHalfZ = Math.max(pR, 0.04 / 2) + hitMargin
-    return finish(b, 0, cfg.poleLen * 0.6, 0, 0, cfg.poleLen + cfg.headLen, 0, cfg.poleLen * 0.08,
+    return finish(b, 0, cfg.poleLen * 0.6, 0, 0, cfg.poleLen + cfg.headLen, 0, cfg.poleLen * 0.5,
         0, (hitLowY + hitHighY) / 2, 0,
         hitHalfX, (hitHighY - hitLowY) / 2 + hitMargin, hitHalfZ)
 }
@@ -232,22 +232,18 @@ const genDualAxe = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'dual_axe' }):
     b.add(b.cylinder(gR, gR, gLen, 6), gm, 0, handleTop - gLen / 2, 0)
     /* 低多面体楔形斧刃（收窄棱台） */
     b.add(b.frustum(bladeD, bladeD, bladeH, bladeW / bladeD), bm, 0, bladeY, bladeZ, Math.PI / 12, 0, 0)
-    /* 命中箱：单盒包裹整把武器（柄 + 绕 X 倾斜的斧刃），柄相交同样造成伤害。
+    /* 命中箱：只包斧刃（不把整根柄算进攻击范围），避免挥空时柄部大盒误伤 / 调试箱过大。
      * 绕 X 旋转 rx 后刃在 Y/Z 上的半长按旋转分量展开 */
-    const hitMargin = 0.05
+    const hitMargin = 0.02
     const rx = Math.PI / 12
     const bladeHy = bladeH / 2 * Math.cos(rx) + bladeW / 2 * Math.sin(rx)
     const bladeHz = bladeH / 2 * Math.sin(rx) + bladeW / 2 * Math.cos(rx)
-    const hitLowY = Math.min(handleTop - gLen, bladeY - bladeHy)
-    const hitHighY = Math.max(handleTop, bladeY + bladeHy)
-    const hitLowZ = Math.min(-gR, bladeZ - bladeHz)
-    const hitHighZ = Math.max(gR, bladeZ + bladeHz)
-    const hitHalfX = Math.max(gR, bladeD / 2) + hitMargin
+    const hitHalfX = bladeD / 2 + hitMargin
     /* 刀尖采样点 = 刃外上角 */
     return finish(b, 0, bladeY, bladeZ, 0, bladeY + bladeH / 2, bladeZ + bladeW / 2,
         -(sz * 0.15 + gLen / 2),
-        0, (hitLowY + hitHighY) / 2, (hitLowZ + hitHighZ) / 2,
-        hitHalfX, (hitHighY - hitLowY) / 2 + hitMargin, (hitHighZ - hitLowZ) / 2 + hitMargin)
+        0, bladeY, bladeZ,
+        hitHalfX, bladeHy + hitMargin, bladeHz + hitMargin)
 }
 
 const genWarHammer = (b: MeshBuilder, cfg: WeaponMeshConfig & { id: 'war_hammer' }): WeaponMeshResult => {
@@ -481,4 +477,31 @@ export const createWeaponMesh = (config: WeaponMeshConfig): WeaponMeshResult => 
     result.group.rotation.set(grip.rx, grip.ry, grip.rz)
     result.supportGripOffset = config.supportGripOffset ?? 0
     return result
+}
+
+/**
+ * 解析武器攻击箱：显式声明优先；否则由网格命中箱模板 + 武器握持变换生成一项，
+ * 绑定到实际武器挂点关节（关节局部坐标 + 旋转）。
+ */
+export const resolveAttackBoxes = (
+    result: WeaponMeshResult,
+    jointId: string,
+    explicit: readonly WeaponAttackBoxSpec[] | undefined,
+): readonly WeaponAttackBoxSpec[] => {
+    if (explicit !== undefined && explicit.length > 0) {
+        return explicit.map(box => box.jointId === 'weaponMount' ? {...box, jointId} : box)
+    }
+    const template = result.hitBox
+    if (template === null) return []
+    const center = new Vector3(template.center.x, template.center.y, template.center.z)
+        .applyEuler(result.group.rotation)
+        .add(result.group.position)
+    const euler = new Euler().setFromQuaternion(result.group.quaternion, 'XYZ')
+    return [{
+        jointId,
+        center: {x: center.x, y: center.y, z: center.z},
+        half: {x: template.half.x, y: template.half.y, z: template.half.z},
+        rotation: {x: euler.x, y: euler.y, z: euler.z},
+        reach: template.reach,
+    }]
 }

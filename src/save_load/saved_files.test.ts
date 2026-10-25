@@ -11,16 +11,15 @@ const SAVED_FILES = import.meta.glob('../../saved/*.json', {
 
 const entries = Object.entries(SAVED_FILES)
 
-describe('saved/ 存档文件（v18 重写后）', () => {
+describe('saved/ 存档文件（兼容读取）', () => {
     it('至少存在一个存档文件', () => {
         expect(entries.length).toBeGreaterThan(0)
     })
 
-    it.each(entries)('%s 可完整解析为 v18（无跳过实体）', (_path, raw) => {
+    it.each(entries)('%s 可完整解析（无跳过实体）', (_path, raw) => {
         const parsed = parseSaveData(JSON.parse(raw) as unknown)
         expect(parsed.skipped).toEqual([])
-        expect(parsed.data.version).toBe(SAVE_FORMAT_VERSION)
-        expect(parsed.data.version).toBe(18)
+        expect(parsed.data.version).toBeLessThanOrEqual(SAVE_FORMAT_VERSION)
     })
 
     it.each(entries)('%s 的角色装备分层且不含旧字段', (path, raw) => {

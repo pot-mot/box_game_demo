@@ -1,5 +1,7 @@
 import type {Group, Mesh} from 'three'
-import type {WeaponMeshConfig, WeaponLocalHitBox} from './weapon_mesh.ts'
+import type {WeaponMeshConfig} from './weapon_mesh.ts'
+import type {WeaponAttackBoxSpec} from '../../../character/weapon/mesh_config.ts'
+import type {EquipmentMountSpec} from '../../../character/equipment/types.ts'
 import type {TrackedBoxPart} from '../../../render/box_parts.ts'
 import type {AttackPhaseName} from '../../../character/combat/attack_phases.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
@@ -27,6 +29,12 @@ export interface WeaponEquipConfig {
     readonly mainMountRotation?: readonly [number, number, number]
     /** 副手武器挂点关节 id 覆盖（生物体形用；缺省 = 模型默认副挂点） */
     readonly offMountJointId?: string
+    /** 主手逐骨骼节点挂载配置（多肢体天然武器） */
+    readonly mainMounts?: readonly EquipmentMountSpec<WeaponMeshConfig>[]
+    /** 主手攻击箱数组（显式声明优先；缺省由武器网格生成） */
+    readonly mainAttackBoxes?: readonly WeaponAttackBoxSpec[]
+    /** 副手攻击箱数组（显式声明优先；缺省由武器网格生成） */
+    readonly offhandAttackBoxes?: readonly WeaponAttackBoxSpec[]
 }
 
 /**
@@ -83,8 +91,8 @@ export interface CreatureModel {
     /** 当前武器模型根节点（null = 未装备），命中箱 OBB 的世界变换来源 */
     readonly weaponGroup: Group | null
 
-    /** 当前武器攻击判定箱本地盒参数（null = 未装备），略大于武器模型 */
-    readonly weaponHitBox: WeaponLocalHitBox | null
+    /** 当前武器攻击判定箱数组（每项绑定骨骼节点 + 局部坐标 / 旋转；空数组 = 未装备） */
+    readonly weaponAttackBoxes: readonly WeaponAttackBoxSpec[]
 
     /** 原始几何中的主握把 Y 坐标（未装备 = 0），用于检视实际模型握点 */
     readonly weaponGripY: number
@@ -97,8 +105,8 @@ export interface CreatureModel {
     readonly offhandWeaponTip?: Mesh | null
     /** 副手武器模型根节点（null = 无副手） */
     readonly offhandWeaponGroup?: Group | null
-    /** 副手武器攻击判定箱本地盒参数（null = 无副手） */
-    readonly offhandWeaponHitBox?: WeaponLocalHitBox | null
+    /** 副手武器攻击判定箱数组（空数组 = 无副手） */
+    readonly offhandWeaponAttackBoxes?: readonly WeaponAttackBoxSpec[]
     /** 副手握把中心在武器本地 Y 轴上的坐标（无副手 = 0） */
     readonly offhandWeaponGripY?: number
 
@@ -126,7 +134,7 @@ export interface HumanoidModel extends FormModel {
     readonly offhandWeaponMesh: Mesh | null
     readonly offhandWeaponTip: Mesh | null
     readonly offhandWeaponGroup: Group | null
-    readonly offhandWeaponHitBox: WeaponLocalHitBox | null
+    readonly offhandWeaponAttackBoxes: readonly WeaponAttackBoxSpec[]
     readonly offhandWeaponGripY: number
 }
 

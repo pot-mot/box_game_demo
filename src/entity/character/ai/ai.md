@@ -177,18 +177,18 @@ interface CombatStateHandler {
 
 ### 2.5 攻击检测箱（attackDetectChecker）
 
-AI 出招门控不用圆形距离判定（`dist <= weapon.range`），而是用**攻击检测箱**——与角色位置/朝向绑定的朝向 OBB，尺寸与位置由近战武器配置的 `detectBox` 属性显式驱动（**逐武器按动作模组离线估算**，非统一值）：
+AI 出招门控不用圆形距离判定（`dist <= weapon.range`），而是用**攻击检测箱数组**——每项绑定骨骼节点 + 局部偏移 + 旋转，由近战武器配置的 `detectBoxes` 显式驱动（**逐武器按动作模组离线估算**，非统一值）：
 
 ```ts
 /** 攻击检测箱检查器：目标是否在角色的攻击检测箱内（缺失时 AI 回退圆形距离判定） */
 export type AttackDetectChecker = (character: CharacterEntity, target: CharacterEntity) => boolean
 ```
 
-- **几何**：`entity/character/combat/melee_executor.ts` 导出 `attackDetectOBB(pos, detectBox, scale, yaw)`：
-    - `detectBox` 为 `MeleeWeaponConfig.detectBox`（`character/weapon/melee_weapon.ts` `MeleeDetectBox`）：`size{x,y,z}` 盒尺寸 + `offset{x,y,z}` 相对身体中心偏移（身体局部坐标，+Z = 朝向）；同模块的 `name` 为武器中文名（面板 / 展示标签展示用，不参与任何判定）
+- **几何**：`entity/character/combat/melee_executor.ts` 导出 `attackDetectOBBFromJoint(joint, detectBox, scale)` 与 `testAttackDetect(jointGroups, detectBoxes, …)`：
+    - `detectBoxes` 为 `MeleeWeaponConfig.detectBoxes`（`character/weapon/melee_weapon.ts` `MeleeDetectBoxSpec[]`）：每项含 `jointId`、`size{x,y,z}`、`offset{x,y,z}`、`rotation{x,y,z}`；任一项与目标受击箱相交即视为在范围内
     - 半长 = `size / 2 × scale`；盒中心 = 身体位置 + `offset × scale` 绕 yaw 旋转（局部 +Z → (sin, 0, cos)），主体覆盖角色前方与两侧，身后覆盖由 `offset.z - size.z / 2` 决定（预设保留少量贴背余量）
 - **判定**：`testAttackDetect()` 用检测箱 OBB 与目标受击箱 OBB（与碰撞箱同尺寸的竖直胶囊包围盒，随目标朝向旋转）做 15 轴 SAT 相交（`combat/obb.ts`）。
-- **注入链路**：`world.ts` `activateAI` 创建 AI 时传入闭包——近战直接取当前技能武器的 `detectBox` 走 `testAttackDetect`（朝向取 `facingAngles`，无需武器模型在场）；远程回退 `Math.hypot <= weapon.range` 圆形判定（保持原有行为，edit debug 以橙色射程圆环显示，半径 = `weapon.range`）。近战武器配置已无 `range` 字段，攻击触发判定完全由武器 `detectBox` 驱动。
+- **注入链路**：`world.ts` `activateAI` 创建 AI 时传入闭包——近战取当前武器 `detectBoxes` 与模型关节世界矩阵走 `testAttackDetect`；远程回退 `Math.hypot <= weapon.range` 圆形判定（edit debug 以橙色射程圆环显示，半径 = `weapon.range`）。近战武器配置已无 `range` 字段，攻击触发判定完全由武器 `detectBoxes` 驱动。
 - **体形化（生物）**：AI 的感知与出招几何一律经 `entity/character/body_form/common/geometry.ts` 读**体形属性**——眼部高度 `formEyeHeight`（`BodyForm.base.eyeHeight`）、目标体半径 `formBodyRadius`、目标受击箱半长 `formHurtHalf`（`BodyForm.base.size`）；**禁止**再写死人形常量。索敌半径仍取武器 `detectionRange`（因此生物天然武器的 `detectionRange` 必须在其 `body_form/<form>/equipment/weapons.ts` 中按体形语义调对，不能沿用人体近战的 6–10 或天然武器的 2.x）。生物天然武器可经 `mountJointId` 挂到正确关节（马踢击 / 飞龙爪击），命中盒由 `weapon_mesh.ts` 的 `genNone` 给出（覆盖打击区）。
 - **生效点**（仅近战）：`attack.update` 出招门控、`attack → chase`（出箱）guard、`chase → attack`（入箱）guard、`kite` 射程内判定；`detectionRange`（索敌感知半径）语义不变。
 - **回退**：checker 缺失（测试环境）时回退圆形距离判定（近战用 `MELEE_FALLBACK_DETECT_RANGE`，远程用 `weapon.range`），保证无装配环境下 AI 行为不变。
@@ -618,7 +618,7 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 | AI 类型 | `src/entity/character/ai/types.ts` | `AIContext` 接口、`AttackDetectChecker` |
 | 视线检测 | `src/entity/character/ai/line_of_sight.ts` | `LineOfSightChecker`（`buildLineOfSight` + mesh / Rapier `LosRayCaster`；`hasLOS` + `castFan` 扇形扫描） |
 | OBB 几何 | `src/entity/character/combat/obb.ts` | `yawOBB` / `obbFromTransform` / 15 轴 SAT `obbIntersect` |
-| 攻击检测箱 | `src/entity/character/combat/melee_executor.ts` | `attackDetectOBB` / `testAttackDetect`（几何由武器 `detectBox` 配置驱动） |
+| 攻击检测箱 | `src/entity/character/combat/melee_executor.ts` | `attackDetectOBBFromJoint` / `testAttackDetect`（几何由武器 `detectBoxes` 数组驱动） |
 | Debug 可视化 | `src/entity/character/combat_vfx/hitbox_debug.ts` | 判定箱（红）/受击箱（青）/检测箱（橙）/射程圆环（橙，远程）/视线扇形（蓝） |
 | 导航 FSM | `src/entity/character/ai/nav/machine.ts` | navigating/steering/jumping/stuck 子状态机（stuck 超时输出倒退逃逸脉冲） |
 | 导航传感器 | `src/entity/character/ai/nav/sensor.ts` | `buildNavSensor` + mesh / Rapier `NavRayCaster`：前方扇面 + 侧向扫描 + 坑洞探针（斜坡感知） |

@@ -1,5 +1,5 @@
 import {v3Set, type RapVector3} from '../../../physics/rapier_utils.ts'
-import {Vector3, type Group} from 'three'
+import {Euler, Matrix4, Quaternion, Vector3, type Group} from 'three'
 import type {CharacterEntity} from '../../../character/types.ts'
 import type {SkillExecutor, ExecutorContext} from '../../../character/combat/executor.ts'
 import {applyDamage, isDamageImmune} from '../../../character/combat/damage.ts'
@@ -11,8 +11,8 @@ import {formCenterOffsetY, formHurtHalf} from '../body_form/common/geometry.ts'
 import {obbFromTransform, yawOBB, obbIntersect, type OBB, type Vec3Like} from './obb.ts'
 import {obbIntersectsHurt} from './shapes.ts'
 import type {CreatureModel} from '../appearance/types.ts'
-import type {WeaponLocalHitBox} from '../appearance/weapon_mesh.ts'
-import type {MeleeDetectBox, MeleeWeaponConfig} from '../../../character/weapon/melee_weapon.ts'
+import type {WeaponAttackBoxSpec} from '../../../character/weapon/mesh_config.ts'
+import type {MeleeDetectBoxSpec, MeleeWeaponConfig} from '../../../character/weapon/melee_weapon.ts'
 import type {WorldDamageTarget} from '../../../character/combat/world_targets.ts'
 
 const _tmpVec: RapVector3 = {x: 0, y: 0, z: 0}
@@ -82,48 +82,105 @@ export const testMeleeHit = (
         targetHurtOBB(targetPos, targetHalves, targetYaw),
     )
 
-/**
- * 攻击检测箱 OBB（AI 出招门控专用，与伤害判定箱解耦）：
- * 由近战武器的 detectBox 配置显式驱动（盒尺寸 + 相对身体中心偏移，
- * 局部 +Z = 朝向），按角色 scale 缩放并随角色 yaw 旋转到世界空间。
- */
-export const attackDetectOBB = (
-    pos: Vec3Like,
-    detectBox: MeleeDetectBox,
+/** 攻击检测箱 OBB（AI 出招门控专用）：由绑定骨骼节点的世界矩阵 + 局部偏移 / 旋转生成 */
+const _detectMatrix = new Matrix4()
+const _detectQuat = new Quaternion()
+const _detectEuler = new Euler()
+const _detectPos = new Vector3()
+const _detectScale = new Vector3(1, 1, 1)
+const _detectCombined = new Matrix4()
+const _detectCenter = new Vector3()
+const _detectRotation = new Quaternion()
+const _detectAxes = new Matrix4()
+
+export const attackDetectOBBFromJoint = (
+    joint: Group,
+    detectBox: MeleeDetectBoxSpec,
     scale: number,
-    yaw: number,
 ): OBB => {
-    const ox = detectBox.offset.x * scale
-    const oy = detectBox.offset.y * scale
-    const oz = detectBox.offset.z * scale
-    /* 局部偏移绕 Y 轴旋转 yaw（local +Z → (sin, 0, cos)） */
-    const sin = Math.sin(yaw)
-    const cos = Math.cos(yaw)
-    return yawOBB(
-        pos.x + ox * cos + oz * sin,
-        pos.y + oy,
-        pos.z - ox * sin + oz * cos,
-        detectBox.size.x * scale / 2,
-        detectBox.size.y * scale / 2,
-        detectBox.size.z * scale / 2,
-        yaw,
+    joint.updateWorldMatrix(true, false)
+    _detectEuler.set(detectBox.rotation.x, detectBox.rotation.y, detectBox.rotation.z, 'XYZ')
+    _detectQuat.setFromEuler(_detectEuler)
+    _detectMatrix.compose(
+        _detectPos.set(detectBox.offset.x * scale, detectBox.offset.y * scale, detectBox.offset.z * scale),
+        _detectQuat,
+        _detectScale,
     )
+    const combined = _detectCombined.multiplyMatrices(joint.matrixWorld, _detectMatrix)
+    const center = _detectCenter.setFromMatrixPosition(combined)
+    const quat = _detectRotation.setFromRotationMatrix(combined)
+    const axes = _detectAxes.makeRotationFromQuaternion(quat).elements
+    return {
+        center: {x: center.x, y: center.y, z: center.z},
+        axes: [
+            {x: axes[0], y: axes[1], z: axes[2]},
+            {x: axes[4], y: axes[5], z: axes[6]},
+            {x: axes[8], y: axes[9], z: axes[10]},
+        ],
+        half: {
+            x: detectBox.size.x * scale / 2,
+            y: detectBox.size.y * scale / 2,
+            z: detectBox.size.z * scale / 2,
+        },
+    }
 }
 
-/** 攻击检测：检测箱 OBB 与目标受击箱 OBB 相交判定（AI 出招触发用） */
+/** 检测箱数组是否任一与目标受击箱相交 */
 export const testAttackDetect = (
-    charPos: Vec3Like,
-    detectBox: MeleeDetectBox,
+    jointGroups: ReadonlyMap<string, Group>,
+    detectBoxes: readonly MeleeDetectBoxSpec[],
     scale: number,
-    yaw: number,
     targetPos: Vec3Like,
     targetHalves: HitBoxHalves,
     targetYaw: number,
-): boolean =>
-    obbIntersect(
-        attackDetectOBB(charPos, detectBox, scale, yaw),
-        targetHurtOBB(targetPos, targetHalves, targetYaw),
+): boolean => {
+    const target = targetHurtOBB(targetPos, targetHalves, targetYaw)
+    for (const box of detectBoxes) {
+        const joint = jointGroups.get(box.jointId)
+        if (joint === undefined) continue
+        if (obbIntersect(attackDetectOBBFromJoint(joint, box, scale), target)) return true
+    }
+    return false
+}
+
+/** 武器攻击箱世界 OBB：绑定关节矩阵 × 局部偏移 / 旋转 */
+const _weaponMatrix = new Matrix4()
+const _weaponQuat = new Quaternion()
+const _weaponEuler = new Euler()
+const _weaponPos = new Vector3()
+const _weaponScale = new Vector3(1, 1, 1)
+const _weaponCombined = new Matrix4()
+const _weaponCenter = new Vector3()
+const _weaponRotation = new Quaternion()
+const _weaponAxes = new Matrix4()
+
+export const attackBoxOBB = (joint: Group, box: WeaponAttackBoxSpec): OBB => {
+    joint.updateWorldMatrix(true, false)
+    _weaponEuler.set(box.rotation.x, box.rotation.y, box.rotation.z, 'XYZ')
+    _weaponQuat.setFromEuler(_weaponEuler)
+    _weaponMatrix.compose(
+        _weaponPos.set(box.center.x, box.center.y, box.center.z),
+        _weaponQuat,
+        _weaponScale,
     )
+    const combined = _weaponCombined.multiplyMatrices(joint.matrixWorld, _weaponMatrix)
+    const center = _weaponCenter.setFromMatrixPosition(combined)
+    const quat = _weaponRotation.setFromRotationMatrix(combined)
+    const axes = _weaponAxes.makeRotationFromQuaternion(quat).elements
+    const e = combined.elements
+    const sx = Math.hypot(e[0], e[1], e[2]) || 1
+    const sy = Math.hypot(e[4], e[5], e[6]) || 1
+    const sz = Math.hypot(e[8], e[9], e[10]) || 1
+    return {
+        center: {x: center.x, y: center.y, z: center.z},
+        axes: [
+            {x: axes[0], y: axes[1], z: axes[2]},
+            {x: axes[4], y: axes[5], z: axes[6]},
+            {x: axes[8], y: axes[9], z: axes[10]},
+        ],
+        half: {x: box.half.x * sx, y: box.half.y * sy, z: box.half.z * sz},
+    }
+}
 
 /** 命中回调：参数为命中点世界坐标（供顿帧/相机震动等打击感系统消费） */
 export type MeleeHitCallback = (x: number, y: number, z: number) => void
@@ -218,18 +275,15 @@ export const createMeleeExecutor = (
          * 伤害 = (该武器基础伤害 + 装备攻击加成，与武器类别匹配) × 当前段伤害倍率（重段 ×1.6）。
          * 双持时副手命中按**副手武器**结算（同类武器，数值可能因模型覆写不同）；每段每目标只结算一次。
          */
-        const strikeWith = (group: Group | null, local: WeaponLocalHitBox | null, slotWeapon: MeleeWeaponConfig): void => {
-            if (group === null || local === null) return
+        const strikeBox = (joint: Group, box: WeaponAttackBoxSpec, slotWeapon: MeleeWeaponConfig): void => {
             const segment = combat.activeSegment
             /* 蓄力重击：命中时按蓄力值连续放大伤害（chargeDamageBonus 为满蓄力加成，普通段为 0） */
             const damage = (slotWeapon.damage + combat.attackBonus[slotWeapon.damageType])
                 * (segment?.damageMultiplier ?? 1)
                 * (1 + combat.attackCharge * (segment?.chargeDamageBonus ?? 0))
-            /* matrixWorld 在渲染器绘制前可能滞后，先强制刷新武器子树变换 */
-            group.updateMatrixWorld()
-            const elements = group.matrixWorld.elements
-            const weaponOBB = obbFromTransform(elements, local.center, local.half)
-            const wPos = group.getWorldPosition(_tmpVec3)
+            /* matrixWorld 在渲染器绘制前可能滞后，先强制刷新绑定关节子树变换 */
+            const weaponOBB = attackBoxOBB(joint, box)
+            const wPos = joint.getWorldPosition(_tmpVec3)
             const wx = wPos.x
             const wy = wPos.y
             const wz = wPos.z
@@ -350,26 +404,32 @@ export const createMeleeExecutor = (
         /** 某槽位的命中窗口是否开启（默认窗口对所有已装备槽生效） */
         const windowActiveOf = (slotKey: string): boolean => defaultWindowActive || slotWindows.get(slotKey) === true
 
-        /** 解析槽位对应的武器运行时 / 模型挂点（无该槽位数据时回退主武器） */
+        /** 解析槽位对应的武器运行时 / 攻击箱数组（无该槽位数据时回退主武器） */
         const strikeSlot = (slotKey: string): void => {
             if (!windowActiveOf(slotKey)) return
             if (slotKey === 'off_hand') {
-                /* 副手武器缺失（异常数据）时回退主手数值，保证命中不丢失 */
+                /* 双手共持：副手只作为支撑手握主武器，副手武器攻击箱不得参与命中 */
+                if (combat.attackModules.get(combat.attackModule)?.def.holdMode === 'two_handed') return
                 const offhand = combat.weapons.get('off_hand')?.weapon ?? combat.offhand?.weapon
                 const offhandWeapon = offhand !== undefined && offhand.type === 'melee' ? offhand : weapon
-                strikeWith(model.offhandWeaponGroup ?? null, model.offhandWeaponHitBox ?? null, offhandWeapon)
+                for (const box of model.offhandWeaponAttackBoxes ?? []) {
+                    const joint = model.jointGroups?.get(box.jointId) ?? model.offhandWeaponGroup
+                    if (joint !== undefined && joint !== null) strikeBox(joint, box, offhandWeapon)
+                }
                 return
             }
             const slotRuntime = combat.weapons.get(slotKey)
             const slotWeapon = slotRuntime !== undefined && slotRuntime.weapon.type === 'melee' ? slotRuntime.weapon : weapon
             const mountIds = combat.activeSegment?.hitMountJointIds
-            if (mountIds !== undefined && mountIds.length > 0) {
-                for (const mountId of mountIds) {
-                    const mountGroup = model.jointGroups.get(mountId)
-                    if (mountGroup !== undefined) strikeWith(mountGroup, model.weaponHitBox, slotWeapon)
-                }
-            } else {
-                strikeWith(model.weaponGroup, model.weaponHitBox, slotWeapon)
+            const allowed = mountIds !== undefined && mountIds.length > 0 ? new Set(mountIds) : undefined
+            let boxes = model.weaponAttackBoxes
+            if (allowed !== undefined) {
+                const filtered = boxes.filter(box => allowed.has(box.jointId))
+                if (filtered.length > 0) boxes = filtered
+            }
+            for (const box of boxes) {
+                const joint = model.jointGroups?.get(box.jointId) ?? model.weaponGroup
+                if (joint !== undefined && joint !== null) strikeBox(joint, box, slotWeapon)
             }
         }
 

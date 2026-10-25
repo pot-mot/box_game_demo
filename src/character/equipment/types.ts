@@ -2,12 +2,63 @@ import type {DamageTypeProfile} from '../combat/damage_type.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
 import type {ArmorMeshConfig, LimbMeshConfig} from './mesh_config.ts'
 import type {WeaponMeshConfig} from '../weapon/mesh_config.ts'
+import type {CollisionCategory} from '../../physics/collision_category.ts'
+import type {HurtShape} from '../hurt_blocks.ts'
 
 /**
- * 装备领域契约：装备只影响角色数值（state）与外观（appearance），
- * 不修改骨骼节点、关节或动画。挂载点只是骨骼节点引用；槽位是游戏层限制，
- * 不要求槽位与特定骨骼节点一一对应。
+ * 装备领域契约：装备影响角色数值（state）、外观（appearance），并可通过声明式数组
+ * **扩展**碰撞箱与受击箱；不得增删骨骼节点、修改关节层级或动画。
+ * 挂载点只是骨骼节点引用；槽位是游戏层限制，不要求槽位与特定骨骼节点一一对应。
  */
+
+/** 三维坐标（装备局部偏移 / 旋转等） */
+export interface EquipVec3 {
+    readonly x: number
+    readonly y: number
+    readonly z: number
+}
+
+/**
+ * 单骨骼节点挂载规格：每个关节独立声明模型与局部偏移 / 旋转。
+ * `mesh` 允许同一件装备在不同关节使用不同外观配方。
+ */
+export interface EquipmentMountSpec<M> {
+    /** 目标骨骼节点 id（必须属于对应槽位的 mountJointIds 白名单） */
+    readonly jointId: string
+    /** 该关节上的装备模型配方 */
+    readonly mesh: M
+    /** 相对关节局部的坐标偏移（缺省 0） */
+    readonly offset?: EquipVec3
+    /** 相对关节局部的欧拉角旋转（弧度，XYZ；缺省 0） */
+    readonly rotation?: EquipVec3
+    /** 相对关节局部的缩放（缺省 1） */
+    readonly scale?: EquipVec3
+}
+
+/** 装备扩展碰撞体形状（与体形 colliderLayout 的盒/胶囊保持一致） */
+export type EquipmentColliderShape =
+    | {readonly kind: 'box'; readonly half: EquipVec3}
+    | {readonly kind: 'capsule'; readonly radius: number; readonly halfHeight: number}
+
+/** 装备扩展碰撞体：随绑定骨骼节点同步，追加到角色碰撞体列表 */
+export interface EquipmentColliderSpec {
+    readonly jointId: string
+    readonly shape: EquipmentColliderShape
+    readonly offset?: EquipVec3
+    readonly rotation?: EquipVec3
+    /** 碰撞类别（缺省 character；必须显式标注以免被解析为 ground） */
+    readonly category?: CollisionCategory
+}
+
+/** 装备扩展受击箱：随绑定骨骼节点世界化，追加到角色受击块列表 */
+export interface EquipmentHurtBoxSpec {
+    readonly jointId: string
+    readonly shape: HurtShape
+    readonly offset?: EquipVec3
+    readonly rotation?: EquipVec3
+    /** 稳定 id（缺省自动生成 equip:<pieceId>:<index>） */
+    readonly id?: string
+}
 
 export const EQUIP_KINDS = ['limb', 'weapon', 'armor'] as const
 export type EquipKind = typeof EQUIP_KINDS[number]
@@ -97,8 +148,14 @@ export interface EquipmentDef<S extends string = string, M = EquipmentVisual> ex
     readonly slot: S
     /** 允许装备该物品的体形 id（空 = 全部体形） */
     readonly allowedBodyFormIds: readonly string[]
-    /** 外观部件配方 */
+    /** 外观部件配方（未声明 `mounts` 时作为每个挂载关节的默认模型） */
     readonly mesh: M
+    /** 逐骨骼节点挂载配置；缺省 = 槽位 mountJointIds 各关节使用同一 `mesh`、零偏移/旋转 */
+    readonly mounts?: readonly EquipmentMountSpec<M>[]
+    /** 扩展碰撞体（逐项绑定骨骼节点；现有装备为空数组） */
+    readonly colliders?: readonly EquipmentColliderSpec[]
+    /** 扩展受击箱（逐项绑定骨骼节点；现有装备为空数组） */
+    readonly hurtBoxes?: readonly EquipmentHurtBoxSpec[]
 }
 
 /** 按槽位分组的装备状态（嵌套 limb / weapon / armor；槽位键 = kind:bodyPart） */

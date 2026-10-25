@@ -125,3 +125,9 @@ player/AI 输入 → attacking 状态机（release 阶段）
 - `character/combat/`：`damage.ts` / `explosion.ts` 提供命中与范围伤害结算。
 - `physics/collision_category.ts`：弹丸命中「可穿过类别」判定。
 - `entity/character/appearance/weapon_mesh.ts`：投掷物复用武器模型。
+
+## 调试攻击箱
+
+- **展示模式**：`modes/showcase/projectile.ts` 为每颗在飞弹丸维护一个攻击箱线框（半径 = `PROJECTILE_RADIUS`），随展示角色「攻击箱」开关显隐。
+- **编辑模式**：`world.ts` 的调试线框在选中远程角色时，于武器附近显示同尺寸的子弹攻击箱预览（暂停态也可观察）。
+- 该线框只表示弹丸命中体积，不参与真实伤害结算；远程武器自身的枪口攻击箱另由武器 `attackBoxes` 提供。

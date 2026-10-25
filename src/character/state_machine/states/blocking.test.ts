@@ -31,7 +31,7 @@ const makeMock = (weaponId = 'shield_medium'): CharacterEntity => {
         id: 1,
         config: {speed: 6, jumpHeight: 2, scale: 1},
         combat,
-        bodyState: {holdMode: runtime.holdMode},
+        bodyState: {attackModule: runtime.attackModule},
     })
     characterState.physics.isOnGround = true
     return {

@@ -70,8 +70,8 @@ describe('死亡倒下（世界层按最后受击方向合成根旋转）', () =
     })
 
     /** 生成角色 → 走伤害回调记录冲击方向（与真实命中路径一致）→ 置零血量致死 → 推进若干帧 */
-    const dieWithHitDir = (hitDirX: number, hitDirZ: number, frames = 30) => {
-        const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
+    const dieWithHitDir = (hitDirX: number, hitDirZ: number, frames = 30, config: CharacterSaveConfig = meleeSaveConfig()) => {
+        const {id} = system.add(config, 0, 0, 0)
         const entity = system.getAll().find(candidate => candidate.state.identity.id === id)!
         entity.state.combat.onDamageTaken?.(1, {
             sourceId: 999,
@@ -92,6 +92,18 @@ describe('死亡倒下（世界层按最后受击方向合成根旋转）', () =
         for (let i = 0; i < frames; i++) system.update(DT)
         return entity
     }
+
+
+    it('俯卧体形（狼）死亡不再向地面翻转，仅保留 yaw', () => {
+        const entity = dieWithHitDir(0, 1, 30, {
+            ...meleeSaveConfig(),
+            bodyFormId: 'wolf',
+            equipment: {limb: {}, weapon: {head: 'wolf_bite', claw: 'wolf_claw'}, armor: {}},
+        })
+        expect(entity.stateMachine.currentState).toBe('dying')
+        expect(Math.abs(entity.appearanceGroup.quaternion.x)).toBeLessThan(1e-6)
+        expect(Math.abs(entity.appearanceGroup.quaternion.z)).toBeLessThan(1e-6)
+    })
 
     it('受击来自 -Z（冲击方向 +Z）：绕 +X 轴前倒，面朝 +Z 的身体贴地', () => {
         const entity = dieWithHitDir(0, 1)

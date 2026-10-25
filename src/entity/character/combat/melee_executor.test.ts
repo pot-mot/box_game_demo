@@ -1,9 +1,9 @@
 import {describe, it, expect, vi} from 'vitest'
 import {Group} from 'three'
-import {testMeleeHit, testAttackDetect, attackDetectOBB, createMeleeExecutor, shieldCoverOBB} from './melee_executor.ts'
+import {testMeleeHit, testAttackDetect, attackDetectOBBFromJoint, createMeleeExecutor, shieldCoverOBB} from './melee_executor.ts'
 import {createWeaponMesh} from '../appearance/weapon_mesh.ts'
 import type {CharacterModel} from '../body_form/humanoid/appearance/types.ts'
-import type {MeleeDetectBox} from '../../../character/weapon/melee_weapon.ts'
+import type {MeleeDetectBoxSpec} from '../../../character/weapon/melee_weapon.ts'
 import {findWeaponPreset} from '../../../character/weapon/catalog.ts'
 import {SHIELD_BLOCK_MEDIUM} from '../../../character/weapon/constants.ts'
 import type {AttackSegment} from '../../../character/weapon/attack_chain.ts'
@@ -17,6 +17,9 @@ import {createCharacterStateMachine} from '../../../character/state_machine/mach
 import {HUMANOID_BODY_FORM} from '../body_form/index.ts'
 import {createTestCharacterState} from '../../../character/state/test_state.ts'
 
+const toBoxes = (local: {center: {x: number; y: number; z: number}; half: {x: number; y: number; z: number}; reach: number}) =>
+    [{jointId: 'weapon', center: local.center, half: local.half, rotation: {x: 0, y: 0, z: 0}, reach: local.reach}]
+
 /** 目标受击箱半长夹具（人形体形）：testMeleeHit 现按目标体形 `size` 取半长 */
 const TARGET_HALVES = {
     x: HUMANOID_BODY_FORM.base.size.width / 2,
@@ -26,8 +29,18 @@ const TARGET_HALVES = {
 
 
 /* 攻击检测箱夹具（与 long_sword / spear 预设一致）：前缘 = offset.z + size.z/2 */
-const swordDetectBox: MeleeDetectBox = {size: {x: 0.45, y: 1.1, z: 1.3}, offset: {x: 0, y: 0, z: 0.45}}
-const spearDetectBox: MeleeDetectBox = {size: {x: 0.4, y: 1.1, z: 2.1}, offset: {x: 0, y: 0, z: 0.85}}
+const swordDetectBox: MeleeDetectBoxSpec = {jointId: 'root', size: {x: 0.45, y: 1.1, z: 1.3}, offset: {x: 0, y: 0, z: 0.45}, rotation: {x: 0, y: 0, z: 0}}
+const spearDetectBox: MeleeDetectBoxSpec = {jointId: 'root', size: {x: 0.4, y: 1.1, z: 2.1}, offset: {x: 0, y: 0, z: 0.85}, rotation: {x: 0, y: 0, z: 0}}
+
+const detectJoint = (yaw: number): Group => {
+    const joint = new Group()
+    joint.rotation.y = yaw
+    joint.updateMatrixWorld(true)
+    return joint
+}
+const detectJoints = (yaw: number): ReadonlyMap<string, Group> => new Map([['root', detectJoint(yaw)]])
+const testAt = (box: MeleeDetectBoxSpec, scale: number, yaw: number, target: {x: number; y: number; z: number}): boolean =>
+    testAttackDetect(detectJoints(yaw), [box], scale, target, TARGET_HALVES, 0)
 
 /** 组装「yaw 旋转 + 平移」的 4×4 列主序矩阵（与 Three.js matrixWorld.elements 布局一致） */
 const yawMatrix = (px: number, py: number, pz: number, yaw: number): readonly number[] => {
@@ -90,13 +103,14 @@ describe('武器命中箱 reach（命中箱前伸量几何属性）', () => {
     it('长杆武器 reach 显著大于短刃（不同武器攻击距离差异）', () => {
         const sword = createWeaponMesh({id: 'sword', bladeLen: 0.5, color: 0, gripColor: 0})
         const spear = createWeaponMesh({id: 'spear', poleLen: 1.0, headLen: 0.2, color: 0, headColor: 0})
-        expect(spear.hitBox!.reach).toBeGreaterThan(sword.hitBox!.reach * 2)
+        /* 长枪握在枪杆中点，握点前方仍保留约 0.7m 枪身；明显长于短刃，但不再按尾握计算全长 */
+        expect(spear.hitBox!.reach).toBeGreaterThan(sword.hitBox!.reach * 1.4)
         sword.cleanup()
         spear.cleanup()
     })
 
     it.each(['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer'] as const)(
-        '%s 的本地命中箱覆盖柄（柄相交也判定命中）',
+        '%s 的本地命中箱覆盖有效攻击部位（战斧只覆盖斧刃，其余覆盖柄到打击端）',
         (id) => {
             const preset = findWeaponPreset(id)
             if (preset === undefined) throw new Error(`${id} 未注册`)
@@ -104,8 +118,13 @@ describe('武器命中箱 reach（命中箱前伸量几何属性）', () => {
             const {center, half, reach} = mesh.hitBox!
             const low = center.y - half.y
             const high = center.y + half.y
-            /* 下沿低于握把（覆盖柄），上沿高于握把（覆盖打击端） */
-            expect(low, `${id} 命中箱未覆盖柄`).toBeLessThan(mesh.gripY)
+            if (id === 'dual_axe') {
+                /* 战斧只让斧刃判定，柄部不计入攻击范围 */
+                expect(low, `${id} 命中箱不应覆盖柄`).toBeGreaterThan(mesh.gripY)
+            } else {
+                /* 下沿低于握把（覆盖柄） */
+                expect(low, `${id} 命中箱未覆盖柄`).toBeLessThan(mesh.gripY)
+            }
             expect(high, `${id} 命中箱未覆盖打击端`).toBeGreaterThan(mesh.gripY)
             expect(reach).toBeGreaterThan(0)
             mesh.cleanup()
@@ -115,7 +134,7 @@ describe('武器命中箱 reach（命中箱前伸量几何属性）', () => {
 
 describe('attackDetectOBB / testAttackDetect（攻击检测箱由武器 detectBox 驱动）', () => {
     it('几何参数：半长 = size/2，中心 = 身体位置 + 偏移（yaw=0 时沿 +Z）', () => {
-        const box = attackDetectOBB({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0)
+        const box = attackDetectOBBFromJoint(detectJoint(0), swordDetectBox, 1)
         expect(box.half.x).toBeCloseTo(0.45 / 2)
         expect(box.half.y).toBeCloseTo(1.1 / 2)
         expect(box.half.z).toBeCloseTo(1.3 / 2)
@@ -125,37 +144,37 @@ describe('attackDetectOBB / testAttackDetect（攻击检测箱由武器 detectBo
     })
 
     it('尺寸与偏移随角色 scale 等比缩放', () => {
-        const box = attackDetectOBB({x: 0, y: 0, z: 0}, swordDetectBox, 2, 0)
+        const box = attackDetectOBBFromJoint(detectJoint(0), swordDetectBox, 2)
         expect(box.half.z).toBeCloseTo(1.3)
         expect(box.center.z).toBeCloseTo(0.9)
     })
 
     it('身前目标命中，超出检测箱前缘未命中', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.0}, TARGET_HALVES, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.4}, TARGET_HALVES, 0)).toBe(false)
+        expect(testAt(swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.0})).toBe(true)
+        expect(testAt(swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.4})).toBe(false)
     })
 
     it('身后覆盖由 offset - size/2 决定（少量贴背余量）', () => {
         /* 后缘 = 0.45 - 0.65 = -0.2 */
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.15}, TARGET_HALVES, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.4}, TARGET_HALVES, 0)).toBe(false)
+        expect(testAt(swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.15})).toBe(true)
+        expect(testAt(swordDetectBox, 1, 0, {x: 0, y: 0, z: -0.4})).toBe(false)
     })
 
     it('侧面覆盖由 size.x 决定', () => {
         /* 侧向半宽 0.225 + 目标半宽 0.125 → x=0.3 命中，x=0.4 未命中 */
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0.3, y: 0, z: 0}, TARGET_HALVES, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0.4, y: 0, z: 0}, TARGET_HALVES, 0)).toBe(false)
+        expect(testAt(swordDetectBox, 1, 0, {x: 0.3, y: 0, z: 0})).toBe(true)
+        expect(testAt(swordDetectBox, 1, 0, {x: 0.4, y: 0, z: 0})).toBe(false)
     })
 
     it('深度随武器 detectBox 变化（长枪显著远于短刃）', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, spearDetectBox, 1, 0, {x: 0, y: 0, z: 1.8}, TARGET_HALVES, 0)).toBe(true)
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.8}, TARGET_HALVES, 0)).toBe(false)
+        expect(testAt(spearDetectBox, 1, 0, {x: 0, y: 0, z: 1.8})).toBe(true)
+        expect(testAt(swordDetectBox, 1, 0, {x: 0, y: 0, z: 1.8})).toBe(false)
     })
 
     it('检测箱随角色朝向旋转：转 90° 后前方由 +Z 变为 +X', () => {
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 1.0, y: 0, z: 0}, TARGET_HALVES, 0)).toBe(true)
+        expect(testAt(swordDetectBox, 1, Math.PI / 2, {x: 1.0, y: 0, z: 0})).toBe(true)
         /* 原 +Z 方向变为侧方，超出侧向半宽 */
-        expect(testAttackDetect({x: 0, y: 0, z: 0}, swordDetectBox, 1, Math.PI / 2, {x: 0, y: 0, z: 1.0}, TARGET_HALVES, 0)).toBe(false)
+        expect(testAt(swordDetectBox, 1, Math.PI / 2, {x: 0, y: 0, z: 1.0})).toBe(false)
     })
 })
 
@@ -177,7 +196,7 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
             id,
             config: {speed: 6, jumpHeight: 2, scale: 1},
             combat,
-            bodyState: {holdMode: 'one_handed'},
+            bodyState: {attackModule: 'one_handed'},
         })
         state.physics.isOnGround = true
         const entity: CharacterEntity = {
@@ -247,9 +266,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
             weaponGroup: mainGroup,
-            weaponHitBox: local,
+            weaponAttackBoxes: toBoxes(local),
             offhandWeaponGroup: offhandGroup,
-            offhandWeaponHitBox: local,
+            offhandWeaponAttackBoxes: toBoxes(local),
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
@@ -257,6 +276,38 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         executor.update(0.016, combat, attacker, {} as ExecutorContext)
         expect(combat.attackedTargets.has(2)).toBe(true)
         expect(targetCombat.health).toBeLessThan(15)
+    })
+
+    it('双手共持：副手武器攻击箱不参与命中（即使默认窗口开启）', () => {
+        const runtime = createWeaponRuntime('long_sword', {}, 'two_handed')
+        const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 15)
+        setCombatOffhand(combat, createWeaponRuntime('long_sword', {}, 'two_handed'))
+        combat.activeSegment = runtime.attacks.segments['long_sword_two_handed_light_1']
+        const attacker = makeEntity()
+        attacker.state.combat = combat
+
+        const targetCombat = createCombatComponent(
+            createWeaponRuntime('short_sword'), 1, () => true, {tendencyId: 'hostileExceptSelf'}, 15,
+        )
+        const target = makeEntity(2)
+        target.state.combat = targetCombat
+
+        const mainGroup = new Group()
+        mainGroup.position.set(100, 0, 0)
+        const offhandGroup = new Group()
+        const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
+        const model = {
+            weaponGroup: mainGroup,
+            weaponAttackBoxes: toBoxes(local),
+            offhandWeaponGroup: offhandGroup,
+            offhandWeaponAttackBoxes: toBoxes(local),
+        } as unknown as CharacterModel
+
+        const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
+        executor.setHitWindow(true)
+        executor.update(0.016, combat, attacker, {} as ExecutorContext)
+        expect(combat.attackedTargets.size).toBe(0)
+        expect(targetCombat.health).toBe(15)
     })
 
     it('目标物理防御固定减免近战伤害（攻击类别取自武器 damageType）', () => {
@@ -276,9 +327,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
             weaponGroup: new Group(),
-            weaponHitBox: local,
+            weaponAttackBoxes: toBoxes(local),
             offhandWeaponGroup: null,
-            offhandWeaponHitBox: null,
+            offhandWeaponAttackBoxes: [],
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
@@ -305,9 +356,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
             weaponGroup: new Group(),
-            weaponHitBox: local,
+            weaponAttackBoxes: toBoxes(local),
             offhandWeaponGroup: null,
-            offhandWeaponHitBox: null,
+            offhandWeaponAttackBoxes: [],
         } as unknown as CharacterModel
 
         const onHit = vi.fn()
@@ -345,9 +396,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
             weaponGroup: new Group(),
-            weaponHitBox: local,
+            weaponAttackBoxes: toBoxes(local),
             offhandWeaponGroup: null,
-            offhandWeaponHitBox: null,
+            offhandWeaponAttackBoxes: [],
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
@@ -372,9 +423,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
             weaponGroup: mainGroup,
-            weaponHitBox: local,
+            weaponAttackBoxes: toBoxes(local),
             offhandWeaponGroup: offhandGroup,
-            offhandWeaponHitBox: local,
+            offhandWeaponAttackBoxes: toBoxes(local),
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
@@ -407,9 +458,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
             weaponGroup: mainGroup,
-            weaponHitBox: local,
+            weaponAttackBoxes: toBoxes(local),
             offhandWeaponGroup: offhandGroup,
-            offhandWeaponHitBox: local,
+            offhandWeaponAttackBoxes: toBoxes(local),
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
@@ -438,9 +489,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
             weaponGroup: new Group(),
-            weaponHitBox: local,
+            weaponAttackBoxes: toBoxes(local),
             offhandWeaponGroup: null,
-            offhandWeaponHitBox: null,
+            offhandWeaponAttackBoxes: [],
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)
@@ -473,9 +524,9 @@ describe('命中窗口（setHitWindow 事件轨道驱动）', () => {
         const local = {center: {x: 0, y: 0, z: 0}, half: {x: 0.3, y: 0.5, z: 0.3}, reach: 0.3}
         const model = {
             weaponGroup: new Group(),
-            weaponHitBox: local,
+            weaponAttackBoxes: toBoxes(local),
             offhandWeaponGroup: null,
-            offhandWeaponHitBox: null,
+            offhandWeaponAttackBoxes: [],
         } as unknown as CharacterModel
 
         const executor = createMeleeExecutor(() => [attacker, target], () => model, () => 0)

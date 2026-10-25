@@ -33,6 +33,8 @@ export interface HurtBlock {
     readonly shape: HurtShape
     /** 相对关节局部的偏移 */
     readonly offsetLocal?: HurtVec3
+    /** 相对关节局部的欧拉角旋转（弧度，XYZ；缺省 0） */
+    readonly rotationLocal?: HurtVec3
 }
 
 export type HurtBlockProfile = readonly HurtBlock[]
@@ -72,10 +74,30 @@ export const worldizeHurtBlock = (block: HurtBlock, elements: readonly number[])
         y: elements[13] + c0.y * off.x + c1.y * off.y + c2.y * off.z,
         z: elements[14] + c0.z * off.x + c1.z * off.y + c2.z * off.z,
     }
+    const rx = block.rotationLocal?.x ?? 0
+    const ry = block.rotationLocal?.y ?? 0
+    const rz = block.rotationLocal?.z ?? 0
+    const localAxes: [HurtVec3, HurtVec3, HurtVec3] = [
+        rotateEuler({x: 1, y: 0, z: 0}, rx, ry, rz),
+        rotateEuler({x: 0, y: 1, z: 0}, rx, ry, rz),
+        rotateEuler({x: 0, y: 0, z: 1}, rx, ry, rz),
+    ]
     const axes: [HurtVec3, HurtVec3, HurtVec3] = [
-        {x: c0.x / len0, y: c0.y / len0, z: c0.z / len0},
-        {x: c1.x / len1, y: c1.y / len1, z: c1.z / len1},
-        {x: c2.x / len2, y: c2.y / len2, z: c2.z / len2},
+        normalize({
+            x: c0.x * localAxes[0].x + c1.x * localAxes[0].y + c2.x * localAxes[0].z,
+            y: c0.y * localAxes[0].x + c1.y * localAxes[0].y + c2.y * localAxes[0].z,
+            z: c0.z * localAxes[0].x + c1.z * localAxes[0].y + c2.z * localAxes[0].z,
+        }),
+        normalize({
+            x: c0.x * localAxes[1].x + c1.x * localAxes[1].y + c2.x * localAxes[1].z,
+            y: c0.y * localAxes[1].x + c1.y * localAxes[1].y + c2.y * localAxes[1].z,
+            z: c0.z * localAxes[1].x + c1.z * localAxes[1].y + c2.z * localAxes[1].z,
+        }),
+        normalize({
+            x: c0.x * localAxes[2].x + c1.x * localAxes[2].y + c2.x * localAxes[2].z,
+            y: c0.y * localAxes[2].x + c1.y * localAxes[2].y + c2.y * localAxes[2].z,
+            z: c0.z * localAxes[2].x + c1.z * localAxes[2].y + c2.z * localAxes[2].z,
+        }),
     ]
     const hb = boxHalfOf(block)
     const half = {x: hb.x * len0, y: hb.y * len1, z: hb.z * len2}
@@ -88,6 +110,26 @@ export const worldizeHurtBlock = (block: HurtBlock, elements: readonly number[])
         halfHeight = (block.shape.height / 2) * len1
     }
     return {id: block.id, kind: block.shape.kind, center, axes, half, radius, halfHeight}
+}
+
+const normalize = (v: HurtVec3): HurtVec3 => {
+    const len = Math.hypot(v.x, v.y, v.z) || 1
+    return {x: v.x / len, y: v.y / len, z: v.z / len}
+}
+
+/** 绕 XYZ 欧拉角旋转向量（与 three Euler 'XYZ' 一致的最小实现，领域层不依赖 three） */
+const rotateEuler = (v: HurtVec3, rx: number, ry: number, rz: number): HurtVec3 => {
+    const cx = Math.cos(rx); const sx = Math.sin(rx)
+    const cy = Math.cos(ry); const sy = Math.sin(ry)
+    const cz = Math.cos(rz); const sz = Math.sin(rz)
+    /* 先 X，再 Y，再 Z */
+    const y1 = v.y * cx - v.z * sx
+    const z1 = v.y * sx + v.z * cx
+    const x2 = v.x * cy + z1 * sy
+    const z2 = -v.x * sy + z1 * cy
+    const x3 = x2 * cz - y1 * sz
+    const y3 = x2 * sz + y1 * cz
+    return {x: x3, y: y3, z: z2}
 }
 
 /** 生成占位世界受击块（预分配到 entity.hurtBlocks，逐帧就地刷新，避免每帧分配） */

@@ -43,7 +43,7 @@ export const HUMANOID_BODY_FORM: BodyForm = {
     armorPieces: HUMANOID_ARMOR_PIECES,
     limbPieces: HUMANOID_LIMB_PIECES,
     weapons: HUMANOID_WEAPONS,
-    defaultWeaponId: 'unarmed',
+    defaultWeaponLoadout: {main_hand: 'unarmed', off_hand: 'unarmed'},
     editor: {weaponControl: true, handedness: true},
 }
 

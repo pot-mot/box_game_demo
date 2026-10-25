@@ -24,7 +24,7 @@ const entriesOf = (group: string): readonly BuiltinClipEntry[] =>
 /** 武器模组声明的全部攻击段 id（全部持握模式，与内置动作库同一枚举顺序） */
 const segmentIdsOf = (weapons: readonly WeaponConfig[]): ReadonlySet<string> =>
     new Set(weapons.flatMap(weapon =>
-        weapon.holdModes.flatMap(mode => orderedSegments(weaponAttacksOf(weapon, mode)).map(segment => segment.id)),
+        weapon.attackModules.flatMap(module => orderedSegments(weaponAttacksOf(weapon, module.id)).map(segment => segment.id)),
     ))
 
 /** 人形动作库覆盖全部人形武器（含天然武器空手） */
@@ -34,8 +34,8 @@ const RANGED_PRESETS = HUMANOID_WEAPONS.filter(weapon => weapon.type === 'ranged
 
 /** 近战武器全部攻击段总数（6 武器 × 3 模式；巨剑/长枪双手链各多一段） */
 const MELEE_SEGMENT_COUNT = MELEE_PRESETS
-    .reduce((sum, weapon) => sum + weapon.holdModes
-        .reduce((modeSum, mode) => modeSum + orderedSegments(weaponAttacksOf(weapon, mode)).length, 0), 0)
+    .reduce((sum, weapon) => sum + weapon.attackModules
+        .reduce((moduleSum, module) => moduleSum + orderedSegments(weaponAttacksOf(weapon, module.id)).length, 0), 0)
 
 const presetPositions = (): ReadonlyMap<string, Vector3> => {
     const definition = buildCharacterSkeletonDefinition()
@@ -82,17 +82,17 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         for (const entry of attacks) {
             expect(entry.weaponId, entry.label).toBeDefined()
             expect(entry.segmentId, entry.label).toBe(entry.id)
-            expect(entry.holdMode, entry.label).toBeDefined()
+            expect(entry.attackModule, entry.label).toBeDefined()
         }
         for (const entry of entriesOf('基础状态')) {
             expect(entry.weaponId).toBeUndefined()
             expect(entry.segmentId).toBeUndefined()
-            expect(entry.holdMode).toBeUndefined()
+            expect(entry.attackModule).toBeUndefined()
         }
         expect(findBuiltinClip('heavy_sword_two_handed_light_3')?.weaponId).toBe('heavy_sword')
         expect(findBuiltinClip('long_sword_one_handed_heavy_1')?.segmentId).toBe('long_sword_one_handed_heavy_1')
         expect(findBuiltinClip('longbow_shot')?.weaponId).toBe('longbow')
-        expect(findBuiltinClip('long_sword_dual_wield_light_1')?.holdMode).toBe('dual_wield')
+        expect(findBuiltinClip('long_sword_dual_wield_light_1')?.attackModule).toBe('dual_wield')
         expect(findBuiltinClip('unarmed_one_handed_light_1')?.weaponId).toBe('unarmed')
     })
 
@@ -146,13 +146,23 @@ describe('骨骼编辑器内置动作库（getBuiltinClips）', () => {
         for (const entry of attacks) {
             const records = entry.clip.eventTracks[0]?.records ?? []
             const names = records.map(record => record.eventName)
-            /* 双持主/副手各一对事件；其余模式仅主手一对 */
-            expect(names).toEqual(records.length === 4
-                ? ['hitbox_on', 'hitbox_off', 'hitbox_on', 'hitbox_off']
-                : ['hitbox_on', 'hitbox_off'])
+            /* 双持主/副手各一对事件；其余模式仅主手一对。同帧镜像的双持允许两对窗口时间重合。 */
+            expect(names.filter(name => name === 'hitbox_on').length).toBe(records.length === 4 ? 2 : 1)
+            expect(names.filter(name => name === 'hitbox_off').length).toBe(records.length === 4 ? 2 : 1)
+            const windows = new Map<string, {on?: number; off?: number}>()
             for (const record of records) {
                 expect(record.time).toBeGreaterThanOrEqual(0)
                 expect(record.time).toBeLessThanOrEqual(entry.clip.duration)
+                const slot = String(record.params?.slotKey ?? 'weapon:main_hand')
+                const window = windows.get(slot) ?? {}
+                if (record.eventName === 'hitbox_on') window.on = record.time
+                else if (record.eventName === 'hitbox_off') window.off = record.time
+                windows.set(slot, window)
+            }
+            for (const window of windows.values()) {
+                expect(window.on).toBeDefined()
+                expect(window.off).toBeDefined()
+                expect(window.on!).toBeLessThan(window.off!)
             }
         }
         const lightOne = findBuiltinClip('long_sword_one_handed_light_1')

@@ -7,6 +7,7 @@ import {buildWolfSkeleton} from './skeleton/skeleton.ts'
 import {WOLF_BODY_FORM} from './body_form.ts'
 import {wolfAttackClip, wolfBaseClip} from './skeleton_animation/clips.ts'
 import {WOLF_HURT_BLOCKS} from './skeleton/hurt.ts'
+import {WOLF_COLLIDER_LAYOUT} from './skeleton/skeleton.ts'
 import {wolfAttackPose} from './skeleton_animation/pose_fns.ts'
 import {isPoseWithPosition, type JointPose} from '../common/creature_runtime/pose.ts'
 
@@ -20,6 +21,18 @@ describe('狼体形（forms/wolf）', () => {
         for (const id of ['root', 'body', 'bodyCollider', 'neck', 'head', 'jaw', 'mouthMount', 'tailA', 'flHip', 'frHip', 'rlHip', 'rrHip']) {
             expect(ids.has(id), id).toBe(true)
         }
+    })
+
+    it('碰撞布局：足底主胶囊 + 随躯干/头部旋转的贴合碰撞体', () => {
+        const definition = buildWolfSkeleton()
+        const ids = new Set(definition.joints.map(joint => joint.id))
+        expect(WOLF_COLLIDER_LAYOUT[0]?.nodeId).toBe('groundCollider')
+        expect(WOLF_COLLIDER_LAYOUT[0]?.kind).toBe('capsule')
+        for (const collider of WOLF_COLLIDER_LAYOUT) expect(ids.has(collider.nodeId), collider.nodeId).toBe(true)
+        const bodyCollider = definition.joints.find(joint => joint.id === 'bodyCollider')!
+        expect(bodyCollider.parentId).toBe('body')
+        const headCollider = definition.joints.find(joint => joint.id === 'headCollider')!
+        expect(headCollider.parentId).toBe('head')
     })
 
     it('受击子块关节均在骨架内', () => {
@@ -63,8 +76,22 @@ describe('狼体形（forms/wolf）', () => {
         expect(records[1].time).toBeLessThanOrEqual(clip.duration)
     })
 
+
+    it('天然爪为独立武器并可烘焙爪击段', () => {
+        const weapon = findWeaponPreset('wolf_claw')
+        if (weapon === undefined) throw new Error('狼爪未注册')
+        expect(weapon.natural).toBe(true)
+        expect(weapon.attackModules.map(module => module.id)).toEqual(['claw'])
+        const attacks = weaponAttacksOf(weapon)
+        const segment = attacks.segments[attacks.chains.light.steps[0]!]!
+        const clip = wolfAttackClip(segment)
+        expect(clip.duration).toBeGreaterThan(0)
+        expect(clip.jointTracks.length).toBeGreaterThan(0)
+    })
+
     it('天然撕咬为默认武器，武器表全部归属狼体形且包含撕咬', () => {
-        expect(WOLF_BODY_FORM.defaultWeaponId).toBe('wolf_bite')
+        expect(WOLF_BODY_FORM.defaultWeaponLoadout.head).toBe('wolf_bite')
+        expect(WOLF_BODY_FORM.defaultWeaponLoadout.claw).toBe('wolf_claw')
         expect(WOLF_BODY_FORM.weapons.every(w => w.formId === WOLF_BODY_FORM.id)).toBe(true)
         expect(WOLF_BODY_FORM.weapons.map(w => w.id)).toContain('wolf_bite')
     })

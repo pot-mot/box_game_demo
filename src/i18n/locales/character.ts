@@ -18,6 +18,7 @@ export type CharacterLocale = {
     'attack_key.light': string
     'attack_key.heavy': string
     'attack_key.air': string
+    'attack_module.breath': string
     'body_form.humanoid': string
     'body_form.wolf': string
     'body_form.horse': string
@@ -45,11 +46,12 @@ export type CharacterLocale = {
     'weapon.wolf_bite': string
     'weapon.wolf_short_sword': string
     'weapon.wolf_long_sword': string
+    'weapon.wolf_claw': string
     'weapon.wolf_claw_blade': string
     'weapon.horse_iron_hoof': string
-    'weapon.horse_head_blade': string
     'weapon.wyvern_claw': string
     'weapon.wyvern_wing_blade': string
+    'breath.natural': string
     'breath.fireball': string
     'breath.lightning': string
     'breath.laser': string
@@ -154,6 +156,9 @@ export type CharacterLocale = {
     'character.weapon': string
     'character.offhand': string
     'character.hold': string
+    'character.attack_module': string
+    'character.attack_module_tip': string
+    'character.attack_module_hint': string
     'character.range': string
     'character.damage': string
     'character.cooldown': string
@@ -258,6 +263,7 @@ export const characterZh: CharacterLocale = {
     'attack_key.light': '轻击',
     'attack_key.heavy': '重击',
     'attack_key.air': '空中攻击',
+    'attack_module.breath': '吐息',
     'body_form.humanoid': '人形',
     'body_form.wolf': '狼',
     'body_form.horse': '马',
@@ -288,11 +294,12 @@ export const characterZh: CharacterLocale = {
     'weapon.wolf_bite': '撕咬',
     'weapon.wolf_short_sword': '口含短剑',
     'weapon.wolf_long_sword': '口含长剑',
+    'weapon.wolf_claw': '狼爪',
     'weapon.wolf_claw_blade': '爪刃',
     'weapon.horse_iron_hoof': '铁蹄',
-    'weapon.horse_head_blade': '衔刃',
     'weapon.wyvern_claw': '龙爪',
     'weapon.wyvern_wing_blade': '翼刃',
+    'breath.natural': '天然吐息',
     'breath.fireball': '火球吐息',
     'breath.lightning': '雷电吐息',
     'breath.laser': '激光吐息',
@@ -397,6 +404,9 @@ export const characterZh: CharacterLocale = {
     'character.weapon': '武器',
     'character.offhand': '副手',
     'character.hold': '持握',
+    'character.attack_module': '攻击模组',
+    'character.attack_module_tip': '攻击模组：由角色全部武器槽的装备情况决定可用列表',
+    'character.attack_module_hint': '当前可用模组由武器槽装备提供；Ctrl 可环切',
     'character.range': '射程',
     'character.damage': '伤害',
     'character.cooldown': '冷却',
@@ -501,6 +511,7 @@ export const characterEn: CharacterLocale = {
     'attack_key.light': 'Light',
     'attack_key.heavy': 'Heavy',
     'attack_key.air': 'Air',
+    'attack_module.breath': 'Breath',
     'body_form.humanoid': 'Humanoid',
     'body_form.wolf': 'Wolf',
     'body_form.horse': 'Horse',
@@ -528,11 +539,12 @@ export const characterEn: CharacterLocale = {
     'weapon.wolf_bite': 'Bite',
     'weapon.wolf_short_sword': 'Mouthed Short Sword',
     'weapon.wolf_long_sword': 'Mouthed Long Sword',
+    'weapon.wolf_claw': 'Wolf Claw',
     'weapon.wolf_claw_blade': 'Claw Blade',
     'weapon.horse_iron_hoof': 'Iron Hoof',
-    'weapon.horse_head_blade': 'Mouthed Blade',
     'weapon.wyvern_claw': 'Dragon Claw',
     'weapon.wyvern_wing_blade': 'Wing Blade',
+    'breath.natural': 'Natural Breath',
     'breath.fireball': 'Fireball Breath',
     'breath.lightning': 'Lightning Breath',
     'breath.laser': 'Laser Breath',
@@ -637,6 +649,9 @@ export const characterEn: CharacterLocale = {
     'character.weapon': 'Wpn',
     'character.offhand': 'Off',
     'character.hold': 'Hold',
+    'character.attack_module': 'Attack Module',
+    'character.attack_module_tip': 'Attack modules are determined by all equipped weapon slots',
+    'character.attack_module_hint': 'Available modules come from equipped weapon slots; Ctrl cycles them',
     'character.range': 'Range',
     'character.damage': 'Damage',
     'character.cooldown': 'Cooldown',

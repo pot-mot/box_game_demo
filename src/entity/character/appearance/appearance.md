@@ -25,7 +25,7 @@
 - `equipWeapon` / `setOffhandStowed` / `setHandedness` / `removeWeapon`
 - `equipArmor` / `equipLimbs`（人形专用快捷入口）
 - `equipEquipmentState`（通用：按体形 `equipSlots` 挂载护甲 / 肢体外观；各体形自带构建器）
-- `weaponGroup` / `weaponHitBox` / `weaponSupportGripOffset` / `offhandWeaponGroup`
+- `weaponGroup` / `weaponAttackBoxes` / `weaponSupportGripOffset` / `offhandWeaponGroup` / `offhandWeaponAttackBoxes`
 - `updateDeform?` / `recolor` / `dispose`
 
 `jointParts` 仅服务外观 / 拾取；**受击块不读取其几何**，只使用 `BodyForm.skeleton.hurtProfile`。

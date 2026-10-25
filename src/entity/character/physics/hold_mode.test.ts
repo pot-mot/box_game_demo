@@ -4,7 +4,6 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import {createSharedWorld} from '../../../physics/world.ts'
 import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
-import {humanoidBodyStateOf} from '../body_form/humanoid/state/body_state.ts'
 
 /** happy-dom 不支持 canvas 2d：注入最小上下文桩（外观装配用） */
 const originalGetContext = HTMLCanvasElement.prototype.getContext
@@ -68,15 +67,15 @@ describe('持握模式运行时（setHoldMode / cyclePlayerHoldMode / 副手挂�
     it('默认单持；副手为同类近战时双持可用，否则 setHoldMode 回退默认并返回 false', () => {
         const {id} = system.add(characterConfig(), 0, 0, 0)
         const entity = system.getAll().find(e => e.state.identity.id === id)!
-        expect(humanoidBodyStateOf(entity.state.bodyState).holdMode).toBe('one_handed')
+        expect(entity.state.combat.attackModule).toBe('one_handed')
 
-        /* 无副手：双持请求被拒绝（回退默认单持） */
-        expect(system.setHoldMode(id, 'dual_wield')).toBe(false)
-        expect(humanoidBodyStateOf(entity.state.bodyState).holdMode).toBe('one_handed')
+        /* 副手默认天然手，与主手长剑不同类：双持请求被拒绝（回退默认单持） */
+        expect(system.setAttackModule(id, 'dual_wield')).toBe(false)
+        expect(entity.state.combat.attackModule).toBe('one_handed')
         /* 双手共持始终可用 */
-        expect(system.setHoldMode(id, 'two_handed')).toBe(true)
-        expect(humanoidBodyStateOf(entity.state.bodyState).holdMode).toBe('two_handed')
-        expect(system.setHoldMode(id, 'one_handed')).toBe(true)
+        expect(system.setAttackModule(id, 'two_handed')).toBe(true)
+        expect(entity.state.combat.attackModule).toBe('two_handed')
+        expect(system.setAttackModule(id, 'one_handed')).toBe(true)
     })
 
     it('副手同类近战（经 updateCharacterConfig 装配）：双持可用且副手回手；双手共持时副手挂背', () => {
@@ -86,8 +85,8 @@ describe('持握模式运行时（setHoldMode / cyclePlayerHoldMode / 副手挂�
         /* 装备同类副手（长剑） */
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, undefined, {weaponId: 'long_sword'})
         expect(entity.state.combat.offhand?.weapon.id).toBe('long_sword')
-        expect(system.setHoldMode(id, 'dual_wield')).toBe(true)
-        expect(humanoidBodyStateOf(entity.state.bodyState).holdMode).toBe('dual_wield')
+        expect(system.setAttackModule(id, 'dual_wield')).toBe(true)
+        expect(entity.state.combat.attackModule).toBe('dual_wield')
         const leftMount = findJoint(entity, 'leftWeaponMount')!
         const backMount = findJoint(entity, 'backWeaponMount')!
         expect(leftMount.children).toHaveLength(1)
@@ -95,13 +94,13 @@ describe('持握模式运行时（setHoldMode / cyclePlayerHoldMode / 副手挂�
 
         /* 双手共持：副手换父节点到背部挂点（同一 Group，不重建） */
         const offhandGroup = leftMount.children[0]
-        expect(system.setHoldMode(id, 'two_handed')).toBe(true)
+        expect(system.setAttackModule(id, 'two_handed')).toBe(true)
         expect(leftMount.children).toHaveLength(0)
         expect(backMount.children).toHaveLength(1)
         expect(backMount.children[0]).toBe(offhandGroup)
 
         /* 回单持：副手回手 */
-        expect(system.setHoldMode(id, 'one_handed')).toBe(true)
+        expect(system.setAttackModule(id, 'one_handed')).toBe(true)
         expect(leftMount.children).toHaveLength(1)
         expect(backMount.children).toHaveLength(0)
     })
@@ -111,8 +110,8 @@ describe('持握模式运行时（setHoldMode / cyclePlayerHoldMode / 副手挂�
         const entity = system.getAll().find(e => e.state.identity.id === id)!
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, undefined, {weaponId: 'longbow'})
         expect(entity.state.combat.offhand?.weapon.id).toBe('longbow')
-        expect(system.setHoldMode(id, 'dual_wield')).toBe(false)
-        expect(humanoidBodyStateOf(entity.state.bodyState).holdMode).toBe('one_handed')
+        expect(system.setAttackModule(id, 'dual_wield')).toBe(false)
+        expect(entity.state.combat.attackModule).toBe('one_handed')
     })
 
     it('玩家持握环切：单持 → 双手共持 → 双持（有同类副手时）→ 单持', () => {
@@ -121,28 +120,28 @@ describe('持握模式运行时（setHoldMode / cyclePlayerHoldMode / 副手挂�
         system.updateCharacterConfig(id, {}, undefined, undefined, undefined, undefined, undefined, undefined, {weaponId: 'long_sword'})
         const entity = system.getAll().find(e => e.state.identity.id === id)!
 
-        expect(system.cyclePlayerHoldMode()).toBe('two_handed')
-        expect(system.cyclePlayerHoldMode()).toBe('dual_wield')
-        expect(system.cyclePlayerHoldMode()).toBe('one_handed')
-        expect(humanoidBodyStateOf(entity.state.bodyState).holdMode).toBe('one_handed')
+        expect(system.cyclePlayerAttackModule()).toBe('two_handed')
+        expect(system.cyclePlayerAttackModule()).toBe('dual_wield')
+        expect(system.cyclePlayerAttackModule()).toBe('one_handed')
+        expect(entity.state.combat.attackModule).toBe('one_handed')
     })
 
     it('存档：未知副手武器 id 安全丢弃；合法副手与持握模式按存档恢复', () => {
         const {id} = system.add(characterConfig({
             equipment: {limb: {}, weapon: {main_hand: 'long_sword', off_hand: 'no_such_weapon'}, armor: {}},
-            bodyState: {holdMode: 'dual_wield'},
+            bodyState: {attackModule: 'dual_wield'},
         }), 0, 0, 0)
         const entity = system.getAll().find(e => e.state.identity.id === id)!
-        /* 未知副手被丢弃 → 双持不可用 → 回退默认单持 */
-        expect(entity.state.combat.offhand).toBeUndefined()
-        expect(humanoidBodyStateOf(entity.state.bodyState).holdMode).toBe('one_handed')
+        /* 未知副手被回填为天然手 → 与主手不同类 → 双持不可用 → 回退默认单持 */
+        expect(entity.state.combat.offhand?.weapon.id).toBe('unarmed')
+        expect(entity.state.combat.attackModule).toBe('one_handed')
 
         const {id: id2} = system.add(characterConfig({
             equipment: {limb: {}, weapon: {main_hand: 'long_sword', off_hand: 'long_sword'}, armor: {}},
-            bodyState: {holdMode: 'dual_wield'},
+            bodyState: {attackModule: 'dual_wield'},
         }), 1, 0, 0)
         const entity2 = system.getAll().find(e => e.state.identity.id === id2)!
         expect(entity2.state.combat.offhand?.weapon.id).toBe('long_sword')
-        expect(humanoidBodyStateOf(entity2.state.bodyState).holdMode).toBe('dual_wield')
+        expect(entity2.state.combat.attackModule).toBe('dual_wield')
     })
 })

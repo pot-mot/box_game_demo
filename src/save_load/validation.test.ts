@@ -266,14 +266,14 @@ describe('validateSaveData', () => {
             }],
         })
 
-        const valid = validateSaveData(characterConfig({bodyState: {holdMode: 'dual_wield', handedness: 'left'}}))
+        const valid = validateSaveData(characterConfig({bodyState: {attackModule: 'dual_wield', handedness: 'left'}}))
         const e0 = valid.entities[0]
         if (e0.type === 'character') {
-            expect(e0.config.bodyState).toEqual({holdMode: 'dual_wield', handedness: 'left'})
+            expect(e0.config.bodyState).toEqual({attackModule: 'dual_wield', handedness: 'left'})
         }
 
-        expect(() => validateSaveData(characterConfig({bodyState: {holdMode: 42}}))).not.toThrow()
-        const invalid = validateSaveData(characterConfig({bodyState: {holdMode: 42}}))
+        expect(() => validateSaveData(characterConfig({bodyState: {attackModule: 42}}))).not.toThrow()
+        const invalid = validateSaveData(characterConfig({bodyState: {attackModule: 42}}))
         const e1 = invalid.entities[0]
         if (e1.type === 'character') {
             expect(e1.config.bodyState).toBeUndefined()

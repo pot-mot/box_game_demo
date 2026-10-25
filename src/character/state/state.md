@@ -19,7 +19,7 @@
 
 - `identity`：id / isPlayer / rowText
 - `config`：速度、跳跃、缩放、体形 id、bodyState 等配置
-- `bodyState`：体形不透明状态
+- `bodyState`：体形不透明状态（通用 `attackModule`；人形 `handedness`）
 - `combat`：战斗组件（当前聚合属性 / 装备 / 计时；后续可细分，但不得另存）
 - `stateMachine`：当前/上一状态名、`stateTime`（**只存数据**；状态机逻辑对象在运行时句柄）
 - `physics`：着地、地面法线、郊狼计时、悬空/支撑计时

@@ -300,6 +300,44 @@ const swordPose = (segment: AttackSegment, t: number): JointEulers => {
     }
 }
 
-/** 攻击姿态：按段 id 区分撕咬 / 口含剑 */
-export const wolfAttackPose = (segment: AttackSegment): PoseFunction => (t) =>
-    segment.id.includes('sword') ? swordPose(segment, t) : bitePose(segment, t)
+
+/** 天然爪击：前 / 后爪交替挥抓，身体配合前扑；不含武器网格 */
+const clawPose = (segment: AttackSegment, t: number): JointEulers => {
+    const phase = attackPhaseProgress(t, segment)
+    const windup = easeOutCubic(phase.windup)
+    const strike = easeInCubic(phase.strike)
+    const recover = smoothstep(phase.recovery)
+    const thrust = strike * (1 - recover)
+    const front = segment.key !== 'light' || segment.step === 1
+    const legs: readonly LegKey[] = front ? [LEGS.fl, LEGS.fr] : [LEGS.rl, LEGS.rr]
+    const out: Record<string, readonly [number, number, number]> = {}
+    for (const [index, leg] of legs.entries()) {
+        const side = index === 0 ? 1 : -1
+        putLeg(
+            out,
+            leg,
+            -windup * 0.55 + thrust * (front ? 0.9 : 0.45),
+            0.1 + windup * 0.35 + thrust * 0.2,
+            -0.02 + thrust * 0.25 + side * thrust * 0.12,
+        )
+    }
+    return {
+        body: poseAt(
+            [0.04 + windup * 0.1 + thrust * (front ? 0.22 : 0.1), thrust * 0.12, thrust * 0.08],
+            [0, BODY_Y - windup * 0.025 + thrust * 0.02, BODY_Z + thrust * 0.14],
+        ),
+        neck: [0.06 + windup * 0.08 - thrust * 0.16, thrust * 0.18, -thrust * 0.08],
+        head: [-0.04 - windup * 0.04 + thrust * 0.1, thrust * 0.22, -thrust * 0.1],
+        jaw: [0.12 + thrust * 0.18, 0, 0],
+        ...out,
+        ...tailPose(t, 3.2, 0.16, -thrust * 0.8),
+        ...earPose(t, 0.18 + windup * 0.2),
+    }
+}
+
+/** 攻击姿态：按段 id 区分撕咬 / 天然爪 / 口含剑或爪刃 */
+export const wolfAttackPose = (segment: AttackSegment): PoseFunction => (t) => {
+    if (segment.id.includes('claw_blade') || segment.id.includes('sword')) return swordPose(segment, t)
+    if (segment.id.includes('_claw_')) return clawPose(segment, t)
+    return bitePose(segment, t)
+}

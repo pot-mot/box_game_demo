@@ -4,8 +4,9 @@ import {buildBoneEdges} from '../../common/creature_runtime/skeleton_bones.ts'
 
 /** 狼碰撞布局（骨架唯一来源）：竖胶囊 + 躯干横胶囊 + 头部盒。 */
 export const WOLF_COLLIDER_LAYOUT: readonly ColliderSpec[] = [
-    {nodeId: 'bodyCollider', kind: 'capsule', radius: 0.2, halfHeight: 0.25, offsetY: 0},
-    {nodeId: 'torsoCollider', kind: 'capsule', radius: 0.2, halfHeight: 0.2, offsetY: 0},
+    /* 主碰撞体 = 足底小胶囊：保证四足落地；躯干 / 头使用贴合体形的横胶囊与盒 */
+    {nodeId: 'groundCollider', kind: 'capsule', radius: 0.16, halfHeight: 0.02, offsetY: 0},
+    {nodeId: 'bodyCollider', kind: 'capsule', radius: 0.22, halfHeight: 0.28, offsetY: 0},
     {nodeId: 'headCollider', kind: 'box', half: {x: 0.12, y: 0.13, z: 0.2}, offsetY: 0},
 ]
 
@@ -22,9 +23,10 @@ export const buildWolfSkeleton = (): SkeletonDefinition => {
     const joints: SkeletonDefinition['joints'] = [
         {id: 'root', name: '根', position: [0, 0, 0], rotation: I},
         {id: 'body', name: '躯干', parentId: 'root', position: [0, 0.45, 0.05], rotation: I},
-        {id: 'bodyCollider', name: '主碰撞体（竖胶囊·落地）', parentId: 'root', position: [0, 0.45, 0.05], rotation: I},
-        {id: 'torsoCollider', name: '躯干碰撞体（横胶囊·体长）', parentId: 'root', position: [0, 0.45, -0.05], rotation: QX90},
-        {id: 'headCollider', name: '头部碰撞体', parentId: 'root', position: [0, 0.62, 0.42], rotation: I},
+        {id: 'groundCollider', name: '足底碰撞体（落地）', parentId: 'root', position: [0, 0.18, 0.05], rotation: I},
+        {id: 'bodyCollider', name: '躯干碰撞体（横胶囊·体长）', parentId: 'body', position: [0, 0, 0], rotation: QX90},
+        {id: 'torsoCollider', name: '备用躯干碰撞节点', parentId: 'body', position: [0, 0, -0.1], rotation: QX90},
+        {id: 'headCollider', name: '头部碰撞体', parentId: 'head', position: [0, 0.02, -0.09], rotation: I},
 
         {id: 'neck', name: '颈', parentId: 'body', position: [0, 0.1, 0.3], rotation: I},
         {id: 'head', name: '头', parentId: 'neck', position: [0, 0.05, 0.16], rotation: I},

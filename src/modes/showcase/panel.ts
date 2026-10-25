@@ -15,6 +15,8 @@ export interface PanelCallbacks {
     readonly onDebugToggle: (kind: ShowcaseDebugKind, on: boolean) => void
     /** 切换 Tab（仅多 Tab 舞台提供） */
     readonly onTab?: (key: string) => void
+    /** 切换外观展示动作（仅提供动作选择器的舞台） */
+    readonly onAction?: (value: string) => void
 }
 
 /** 建行所需的静态信息 */
@@ -50,10 +52,21 @@ export interface ShowcasePanel {
 }
 
 /** 面板标题 / 副标题 / Tab 文案键（不同子模块可自定义；缺省沿用攻击动作展示台文案） */
+export interface PanelActionChoice {
+    readonly value: string
+    readonly labelKey: StringLocaleKey
+}
+
 export interface PanelOptions {
     readonly titleKey?: StringLocaleKey
     readonly subtitleKey?: StringLocaleKey
     readonly tabs?: readonly PanelTab[]
+    /** 动作选择器（外观展示：切换到任意非攻击动作） */
+    readonly actionSelect?: {
+        readonly labelKey: StringLocaleKey
+        readonly initialValue: string
+        readonly choices: readonly PanelActionChoice[]
+    }
 }
 
 /** 调试开关文案键 */
@@ -87,6 +100,9 @@ const injectStyles = (): HTMLStyleElement => {
 .sch-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
 .sch-debug { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .sch-debug .sch-debug-label { color: var(--dc-text-dim); font-size: 11px; }
+.sch-action { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.sch-action .sch-action-label { color: var(--dc-text-dim); font-size: 11px; flex: none; }
+.sch-action .sch-select { flex: 1; max-width: none; }
 .sch-btn {
     background: var(--dc-bg-3); color: var(--dc-text); border: 1px solid var(--dc-border);
     border-radius: var(--dc-radius); padding: 4px 10px; cursor: pointer; font: inherit;
@@ -251,6 +267,33 @@ export const createPanel = (initialInfos: readonly PanelRowInfo[], callbacks: Pa
     })
     controls.appendChild(focusSelect)
     panel.appendChild(controls)
+
+    /* 动作选择行（外观展示：全部非攻击动作；仅提供选择器时创建） */
+    if (options?.actionSelect !== undefined) {
+        const actionSelect = options.actionSelect
+        const actionBar = document.createElement('div')
+        actionBar.className = 'sch-action'
+        const actionLabel = document.createElement('span')
+        actionLabel.className = 'sch-action-label'
+        localizeText(actionLabel, actionSelect.labelKey)
+        actionBar.appendChild(actionLabel)
+
+        const actionDropdown = document.createElement('select')
+        actionDropdown.className = 'sch-select'
+        for (const choice of actionSelect.choices) {
+            const opt = document.createElement('option')
+            opt.value = choice.value
+            localizeText(opt, choice.labelKey)
+            actionDropdown.appendChild(opt)
+        }
+        actionDropdown.value = actionSelect.initialValue
+        actionDropdown.addEventListener('change', () => {
+            callbacks.onAction?.(actionDropdown.value)
+            actionDropdown.blur()
+        })
+        actionBar.appendChild(actionDropdown)
+        panel.appendChild(actionBar)
+    }
 
     /* 调试开关行（碰撞箱 / 受击箱 / 攻击箱，默认全关） */
     const debugBar = document.createElement('div')
@@ -517,7 +560,7 @@ export const createPanel = (initialInfos: readonly PanelRowInfo[], callbacks: Pa
 
             const st = statusById.get(info.id)
             if (st === undefined) {
-                setText(refs.hit, translate('showcase.status.stand_walk'))
+                setText(refs.hit, translate('showcase.status.action'))
                 setText(refs.phase, '')
                 setBar(refs.fill, 0)
                 continue
@@ -552,7 +595,7 @@ export const createPanel = (initialInfos: readonly PanelRowInfo[], callbacks: Pa
             const st = focusedStatus
             const info = infoById.get(st.id)
             setText(detailTitle, info === undefined
-                ? `${st.weaponName} · ${st.holdModeLabel}`
+                ? `${st.weaponName} · ${st.attackModuleLabel}`
                 : `${info.nameOf()} · ${info.subOf()}`)
             setText(detailHit, st.isBlocking
                 ? translate('showcase.detail.status_blocking')

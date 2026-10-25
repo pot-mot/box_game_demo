@@ -1,6 +1,6 @@
 import {
     BoxGeometry, EdgesGeometry, LineBasicMaterial, LineSegments, LineLoop,
-    BufferGeometry, BufferAttribute, Matrix4, Vector3, Quaternion,
+    BufferGeometry, BufferAttribute, Matrix4, Vector3, Quaternion, Euler,
     type Scene,
 } from 'three'
 import {
@@ -11,7 +11,10 @@ import {VISION_FAN_RAY_COUNT} from '../ai/constants.ts'
 import type {WorldHurtBlock} from '../../../character/hurt_blocks.ts'
 
 /** 受击子块调试线框容量（人形 12 块，留余量） */
-const HURT_DEBUG_CAPACITY = 16
+const HURT_DEBUG_CAPACITY = 32
+
+/** 武器 / 检测箱调试线框容量（攻击箱、检测箱均为数组） */
+const ATTACK_DEBUG_CAPACITY = 12
 
 /* 模块级共享的单位立方体棱线几何与材质（各实例通过 scale/matrix 调整尺寸，
  * 实体删除时只从场景移除，不销毁共享资源） */
@@ -44,19 +47,23 @@ const _localMat = new Matrix4()
 const _localPos = new Vector3()
 const _localScale = new Vector3()
 const _identityQuat = new Quaternion()
+const _localQuat = new Quaternion()
+const _localEuler = new Euler()
 
 /** 单个角色的战斗判定调试线框集合 */
 export interface AttackHitBoxes {
-    /** 攻击判定箱线框（红）：跟随武器模型 matrixWorld，几何 = 武器本地命中箱 */
-    readonly weaponBox: LineSegments
-    /** 副手（左手）攻击判定箱线框：双持时跟随副手武器模型 */
-    readonly offhandWeaponBox: LineSegments
+    /** 攻击判定箱线框（红）：逐项跟随绑定关节 + 局部坐标 / 旋转 */
+    readonly weaponBoxes: LineSegments[]
+    /** 副手（左手）攻击判定箱线框 */
+    readonly offhandWeaponBoxes: LineSegments[]
     /** 受击箱线框（青）：中心 = body 位置，半长由角色 scale 决定，随朝向旋转 */
     readonly targetBox: LineSegments
     /** 受击子块线框池（青）：按 entity.hurtBlocks 逐块摆位；容量 HURT_DEBUG_CAPACITY */
     readonly hurtBoxes: LineSegments[]
-    /** 攻击检测箱线框（橙）：与角色位置/朝向绑定，覆盖身前与两侧（仅近战） */
-    readonly detectBox: LineSegments
+    /** 攻击检测箱线框（橙）：逐项跟随绑定关节 */
+    readonly detectBoxes: LineSegments[]
+    /** 远程子弹攻击箱预览（红）：枪口 / 武器附近的子弹命中体积 */
+    readonly projectileBox: LineSegments
     /** 远程射程圆环（橙）：半径 = weapon.range，与圆形距离出招门控同源（仅远程） */
     readonly rangeRing: LineLoop
     /** 视线检测调试线段（蓝）：扇形扫描射线（截断到遮挡点）+ 当前目标连线（每帧写入顶点） */
@@ -71,16 +78,33 @@ export interface AttackHitBoxes {
 
 /** 创建角色的战斗判定调试线框（初始隐藏，可见性由 setCollisionVisible 控制） */
 export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
-    const weaponBox = new LineSegments(_unitEdges, _weaponBoxMat)
-    /* 命中箱完全由 matrix（matrixWorld × 本地盒变换）驱动，禁用自动矩阵 */
-    weaponBox.matrixAutoUpdate = false
+    const weaponBoxes: LineSegments[] = []
+    const offhandWeaponBoxes: LineSegments[] = []
+    const detectBoxes: LineSegments[] = []
+    for (let i = 0; i < ATTACK_DEBUG_CAPACITY; i++) {
+        const weaponBox = new LineSegments(_unitEdges, _weaponBoxMat)
+        weaponBox.matrixAutoUpdate = false
+        weaponBox.visible = false
+        scene.add(weaponBox)
+        weaponBoxes.push(weaponBox)
+        const offhandBox = new LineSegments(_unitEdges, _weaponBoxMat)
+        offhandBox.matrixAutoUpdate = false
+        offhandBox.visible = false
+        scene.add(offhandBox)
+        offhandWeaponBoxes.push(offhandBox)
+        const detectBox = new LineSegments(_unitEdges, _detectBoxMat)
+        detectBox.matrixAutoUpdate = false
+        detectBox.visible = false
+        scene.add(detectBox)
+        detectBoxes.push(detectBox)
+    }
 
-    /* 副手命中箱（双持）：与主手同规格，独立矩阵 */
-    const offhandWeaponBox = new LineSegments(_unitEdges, _weaponBoxMat)
-    offhandWeaponBox.matrixAutoUpdate = false
+    const projectileBox = new LineSegments(_unitEdges, _weaponBoxMat)
+    projectileBox.matrixAutoUpdate = false
+    projectileBox.visible = false
+    scene.add(projectileBox)
 
     const targetBox = new LineSegments(_unitEdges, _targetBoxMat)
-    const detectBox = new LineSegments(_unitEdges, _detectBoxMat)
 
     /* 受击子块线框池（青色，与 targetBox 同材质）：逐块矩阵驱动 */
     const hurtBoxes: LineSegments[] = []
@@ -102,34 +126,30 @@ export const createAttackHitBoxes = (scene: Scene): AttackHitBoxes => {
     /* 顶点逐帧改写，禁用视锥剔除避免包围盒滞后误剔除 */
     visionFan.frustumCulled = false
 
-    weaponBox.visible = false
-    offhandWeaponBox.visible = false
     targetBox.visible = false
-    detectBox.visible = false
     rangeRing.visible = false
     visionFan.visible = false
-    scene.add(weaponBox)
-    scene.add(offhandWeaponBox)
     scene.add(targetBox)
-    scene.add(detectBox)
     scene.add(rangeRing)
     scene.add(visionFan)
 
     return {
-        weaponBox,
-        offhandWeaponBox,
+        weaponBoxes,
+        offhandWeaponBoxes,
         targetBox,
         hurtBoxes,
-        detectBox,
+        detectBoxes,
+        projectileBox,
         rangeRing,
         visionFan,
         visionPositions,
         markVisionDirty: () => { visionAttr.needsUpdate = true },
         dispose: () => {
-            scene.remove(weaponBox)
-            scene.remove(offhandWeaponBox)
+            for (const box of weaponBoxes) scene.remove(box)
+            for (const box of offhandWeaponBoxes) scene.remove(box)
+            for (const box of detectBoxes) scene.remove(box)
+            scene.remove(projectileBox)
             scene.remove(targetBox)
-            scene.remove(detectBox)
             scene.remove(rangeRing)
             scene.remove(visionFan)
             for (const box of hurtBoxes) scene.remove(box)
@@ -147,10 +167,17 @@ export const syncWeaponDebugBox = (
     matrixWorld: Matrix4,
     localCenter: {x: number; y: number; z: number},
     localHalf: {x: number; y: number; z: number},
+    localRotation?: {x: number; y: number; z: number},
 ): void => {
     _localPos.set(localCenter.x, localCenter.y, localCenter.z)
     _localScale.set(localHalf.x * 2, localHalf.y * 2, localHalf.z * 2)
-    _localMat.compose(_localPos, _identityQuat, _localScale)
+    if (localRotation === undefined) {
+        _localQuat.copy(_identityQuat)
+    } else {
+        _localEuler.set(localRotation.x, localRotation.y, localRotation.z, 'XYZ')
+        _localQuat.setFromEuler(_localEuler)
+    }
+    _localMat.compose(_localPos, _localQuat, _localScale)
     box.matrix.copy(matrixWorld).multiply(_localMat)
 }
 

@@ -3,6 +3,7 @@ import {Scene} from 'three'
 import {createShowcaseActor} from './actor.ts'
 import {findWeaponPreset, weaponAttacksOf} from '../../character/weapon/catalog.ts'
 import {createWeaponRuntime} from '../../character/weapon/weapon_runtime.ts'
+import {composeWithHeavySlot} from '../../character/combat/attack_modules.ts'
 import {orderedSegments} from '../../character/weapon/attack_chain.ts'
 
 const longSwordPreset = findWeaponPreset('long_sword')!
@@ -32,7 +33,7 @@ describe('展示模式：近战重击蓄力前置', () => {
         const scene = new Scene()
         const weapon = longSwordPreset
         const actor = createShowcaseActor({
-            id: 1, scene, weapon, holdMode: 'one_handed', faction: 0, x: 0, z: 0, weaponName: weapon.name,
+            id: 1, scene, weapon, attackModule: 'one_handed', faction: 0, x: 0, z: 0, weaponName: weapon.name,
         })
         const segments = orderedSegments(weaponAttacksOf(weapon, 'one_handed'))
         const firstHeavyPos = segments.findIndex(segment => segment.key === 'heavy')
@@ -59,7 +60,7 @@ describe('展示模式：近战重击蓄力前置', () => {
         const scene = new Scene()
         const weapon = longSwordPreset
         const actor = createShowcaseActor({
-            id: 3, scene, weapon, holdMode: 'one_handed', faction: 0, x: 0, z: 0, weaponName: weapon.name,
+            id: 3, scene, weapon, attackModule: 'one_handed', faction: 0, x: 0, z: 0, weaponName: weapon.name,
         })
         const segments = orderedSegments(weaponAttacksOf(weapon, 'one_handed'))
         const firstHeavy = segments.findIndex(segment => segment.key === 'heavy') + 1
@@ -89,7 +90,7 @@ describe('展示模式：近战重击蓄力前置', () => {
         const scene = new Scene()
         const weapon = createWeaponRuntime('long_sword', {charge: {maxChargeMultiplier: 300, maxChargeTime: 2}}).weapon
         const actor = createShowcaseActor({
-            id: 2, scene, weapon, holdMode: 'one_handed', faction: 0, x: 0, z: 0, weaponName: weapon.name,
+            id: 2, scene, weapon, attackModule: 'one_handed', faction: 0, x: 0, z: 0, weaponName: weapon.name,
         })
         const segments = orderedSegments(weaponAttacksOf(weapon, 'one_handed'))
         const firstHeavy = segments.findIndex(segment => segment.key === 'heavy') + 1
@@ -108,6 +109,41 @@ describe('展示模式：近战重击蓄力前置', () => {
         expect(chargingStart).toBeGreaterThanOrEqual(0)
         expect(attackingStart - chargingStart).toBeGreaterThanOrEqual(115)
         expect(attackingStart - chargingStart).toBeLessThanOrEqual(125)
+        actor.dispose()
+    })
+})
+
+describe('展示模式：远程弹丸与吐息模组', () => {
+    const makeActor = (id: number, weaponId: string, attackModule: string, extra: {bodyFormId?: string; attacks?: import('../../character/weapon/attack_chain.ts').WeaponAttacks; attackWeapons?: ReadonlyMap<string, import('../../character/weapon/catalog.ts').WeaponConfig>} = {}) => {
+        const weapon = findWeaponPreset(weaponId)!
+        return createShowcaseActor({
+            id, scene: new Scene(), weapon, attackModule, faction: 0, x: 0, z: 0, weaponName: weapon.name, ...extra,
+        })
+    }
+
+    it('远程攻击真正生成弹丸视觉（不结算伤害）', () => {
+        const actor = makeActor(10, 'longbow', 'two_handed')
+        for (let i = 0; i < 180; i++) actor.update(1 / 60)
+        expect(actor.projectileCount()).toBeGreaterThan(0)
+        actor.dispose()
+    })
+
+    it('龙吐息模组的 heavy 段生成对应吐息弹丸', () => {
+        const weapon = findWeaponPreset('wyvern_claw')!
+        const breath = createWeaponRuntime('breath_fireball')
+        if (breath.weapon.type !== 'ranged') throw new Error('火球吐息应为远程')
+        const composed = composeWithHeavySlot(weaponAttacksOf(weapon, 'breath'), breath)
+        const actor = makeActor(11, 'wyvern_claw', 'breath', {
+            bodyFormId: 'wyvern',
+            attacks: composed.attacks,
+            attackWeapons: composed.attackWeapons,
+        })
+        let fired = false
+        for (let i = 0; i < 1200 && !fired; i++) {
+            actor.update(1 / 60)
+            fired = actor.projectileCount() > 0
+        }
+        expect(fired).toBe(true)
         actor.dispose()
     })
 })

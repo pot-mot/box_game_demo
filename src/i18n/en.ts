@@ -127,7 +127,7 @@ export const localeEn: MainLocale = {
     'input.action.jump': 'Jump',
     'input.action.roll': 'Roll',
     'input.action.boost': 'Boost',
-    'input.action.cycle_hold_mode': 'Cycle Hold Mode',
+    'input.action.cycle_attack_module': 'Cycle Attack Module',
     'input.action.cycle_spawn_up': 'Previous Spawn Type',
     'input.action.cycle_spawn_down': 'Next Spawn Type',
     'input.action.delete_entity': 'Delete Entity',

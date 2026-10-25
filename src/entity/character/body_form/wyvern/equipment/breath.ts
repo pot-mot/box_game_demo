@@ -28,6 +28,12 @@ interface BreathSpec {
 
 const SPECS: readonly BreathSpec[] = [
     {
+        id: 'breath_natural', itemId: '', name: '天然吐息', nameKey: 'breath.natural',
+        damage: 3, range: 7, projectileSpeed: 12, projectileLifetime: 2.2,
+        projectile: {kind: 'magic_orb', color: 0xff9a4a, explosionStyle: 'fire'},
+        explosionRadius: 1.0,
+    },
+    {
         id: 'breath_fireball', itemId: 'item_breath_fireball', name: '火球吐息', nameKey: 'breath.fireball',
         damage: 8, range: 12, projectileSpeed: 14, projectileLifetime: 3.2,
         projectile: {kind: 'magic_orb', color: 0xff7a2a, explosionStyle: 'fire'},
@@ -49,11 +55,12 @@ const SPECS: readonly BreathSpec[] = [
 ]
 
 const build = (spec: BreathSpec): BreathModuleConfig => {
-    const kind: BreathModuleConfig['breathKind'] = spec.id === 'breath_fireball'
+    const kind: BreathModuleConfig['breathKind'] = spec.id === 'breath_natural' || spec.id === 'breath_fireball'
         ? 'fireball'
         : spec.id === 'breath_lightning' ? 'lightning' : 'laser'
     const base = rangedClass({
-        id: spec.id, type: 'ranged', natural: true, damageType: 'magic', holdModes: ['one_handed'],
+        id: spec.id, type: 'ranged', natural: true, damageType: 'magic',
+        attackModules: [{id: 'breath', nameKey: spec.nameKey}],
         damage: spec.damage,
         range: spec.range,
         knockbackForce: spec.chainCount !== undefined ? 2 : 4,
@@ -80,6 +87,8 @@ const build = (spec: BreathSpec): BreathModuleConfig => {
         id: spec.id, classId: spec.id, formId: FORM_ID, name: spec.name, nameKey: spec.nameKey,
         equipBodyParts: ['breath'],
         mesh: {id: 'none'},
+        colliders: [],
+        hurtBoxes: [],
     }
     const resolved = resolveRangedWeapon(base, model)
     return {...resolved, breathKind: kind, itemId: spec.itemId}

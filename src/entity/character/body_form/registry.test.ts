@@ -55,7 +55,7 @@ describe('体形计划注册表', () => {
     })
 
     it('humanoid 默认武器为已知武器 id', () => {
-        expect(isKnownWeaponId(HUMANOID_BODY_FORM.defaultWeaponId)).toBe(true)
+        expect(isKnownWeaponId(Object.values(HUMANOID_BODY_FORM.defaultWeaponLoadout)[0]!)).toBe(true)
     })
 })
 
@@ -63,7 +63,7 @@ describe('狼体形计划', () => {
     it('已注册且默认武器为已知 id', () => {
         expect(BODY_FORM_IDS).toContain(WOLF_BODY_FORM_ID)
         expect(BODY_FORMS[WOLF_BODY_FORM_ID]).toBe(WOLF_BODY_FORM)
-        expect(isKnownWeaponId(WOLF_BODY_FORM.defaultWeaponId)).toBe(true)
+        expect(isKnownWeaponId(Object.values(WOLF_BODY_FORM.defaultWeaponLoadout)[0]!)).toBe(true)
     })
 
     it('装备槽覆盖爪 / 头 / 躯干 / 腿 / 尾与武器槽', () => {
@@ -81,7 +81,7 @@ describe('狼体形计划', () => {
     })
 
     it('天然撕咬为默认武器，武器表全部归属狼体形且包含撕咬', () => {
-        expect(WOLF_BODY_FORM.defaultWeaponId).toBe('wolf_bite')
+        expect(WOLF_BODY_FORM.defaultWeaponLoadout.head).toBe('wolf_bite')
         expect(WOLF_BODY_FORM.weapons.every(w => w.formId === WOLF_BODY_FORM.id)).toBe(true)
         expect(WOLF_BODY_FORM.weapons.map(w => w.id)).toContain('wolf_bite')
     })

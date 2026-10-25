@@ -1,6 +1,7 @@
 import {Group, Mesh, Sprite} from 'three'
 import type {Material, Scene} from 'three'
 import {createHumanoidModel} from '../../entity/character/body_form/humanoid/body_form.ts'
+import {HUMANOID_BASE} from '../../entity/character/body_form/humanoid/state/form_base.ts'
 import {HUMANOID_ANIMATION} from '../../entity/character/body_form/humanoid/skeleton_animation/system.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/types.ts'
 import type {AnimationContext} from '../../entity/character/appearance/types.ts'
@@ -10,13 +11,15 @@ import {createActorDebug} from './actor_debug.ts'
 import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
 import {resolveLimbLoadout, resolveArmorLoadout} from '../../character/armor/catalog.ts'
 import type {LimbLoadout, ArmorLoadout} from '../../character/armor/types.ts'
-import {ACTOR_JUMP_HEIGHT, ACTOR_SCALE, ACTOR_SPEED, DIMMED_OPACITY, RACE_SHOWCASE_HOLD_SECONDS} from './constants.ts'
+import {ACTOR_JUMP_HEIGHT, ACTOR_SCALE, ACTOR_SPEED, DIMMED_OPACITY} from './constants.ts'
 import type {NameLabel} from './label.ts'
-import type {ShowcaseActorHandle} from './actor_handle.ts'
+import type {ShowcaseActorHandle, ShowcaseAction} from './actor_handle.ts'
+import {applyShowcaseRootPosture} from './root_posture.ts'
 
-/** 种族 / 套装展示角色：在通用展示角色接口上暴露当前姿态（idle / walking），便于校验循环时序 */
+/** 种族 / 套装展示角色：在通用展示角色接口上暴露当前动作，便于面板 / 测试校验 */
 export interface RaceShowcaseActor extends ShowcaseActorHandle {
-    readonly state: 'idle' | 'walking'
+    readonly state: ShowcaseAction
+    readonly setAction: (action: ShowcaseAction) => void
 }
 
 export interface RaceActorInit {
@@ -45,10 +48,10 @@ interface MaterialSnapshot {
 /**
  * 种族 / 套装展示驱动器：与武器展示驱动器（`actor.ts`）并列的第二种展示角色。
  *
- * 时间线：站立 2s ↔ 行走 2s 交替循环（`RACE_SHOWCASE_HOLD_SECONDS`），
- * 行走时注入 `horizontalSpeed = ACTOR_SPEED` 使步频正常、位置原地不动（纯动画展示）。
- * 动画注入镜像生产 `world.ts`：构造同名同语义 `AnimationContext` 交给 `HUMANOID_ANIMATION.createSystem()`，
- * 状态在 `idle` / `walking` 间切换触发快照混合，衔接平滑。
+ * 动作由左侧面板经 `setAction()` 切换（不再定时轮换）：默认待机，可切到全部非攻击基础状态。
+ * 行走 / 游泳注入 `horizontalSpeed = ACTOR_SPEED` 使步频正常、位置原地不动（纯动画展示）；
+ * 游泳额外镜像生产 `world.ts` 的俯卧根姿态。动画上下文同义注入
+ * `HUMANOID_ANIMATION.createSystem()`，动作切换触发快照混合，衔接平滑。
  *
  * 外观：`createCharacterModel` + `equipLimbs` / `equipArmor`；空肢体 = 默认人类肢体，
  * 肢体的披挂 / 发色随 `faction` 对应的阵营调色板着色（`createCharacterModel` 已按 faction 取色）。
@@ -74,15 +77,17 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
 
     const system: AppearanceSystem = HUMANOID_ANIMATION.createSystem()
 
-    /* —— 站立 / 行走交替时间线 —— */
-    let currentState: 'idle' | 'walking' = 'idle'
+    /* —— 当前动作（由左侧面板切换） —— */
+    let currentState: ShowcaseAction = 'idle'
     let stateTime = 0
+    const centerOffsetY = HUMANOID_BASE.centerOffsetY * ACTOR_SCALE
 
-    /** 注入动画上下文（镜像 world.ts 装配）：空手站立 / 行走，速度用于步频 */
+    /** 注入动画上下文（镜像 world.ts 装配）：空手动作，速度用于步频 / 下落收腿 */
     const applyAnimation = (dt: number): void => {
         const ctx: AnimationContext = {
             stateTime,
-            horizontalSpeed: currentState === 'walking' ? ACTOR_SPEED : 0,
+            horizontalSpeed: currentState === 'walking' || currentState === 'swimming' ? ACTOR_SPEED : 0,
+            verticalSpeed: currentState === 'falling' ? -8 : 0,
             /* 空手：持握模式对基础姿态无影响（无武器），取单持 */
             humanoid: {holdMode: 'one_handed', handedness: DEFAULT_HANDEDNESS, shieldHands: {main: false, off: false}},
             attackSegment: undefined,
@@ -95,15 +100,19 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
             weaponHeld: false,
         }
         system.update(dt, model, currentState, ctx)
+        applyShowcaseRootPosture(model.group, currentState, centerOffsetY, true)
     }
 
     const update = (dt: number): void => {
         stateTime += dt
-        if (stateTime >= RACE_SHOWCASE_HOLD_SECONDS) {
-            stateTime -= RACE_SHOWCASE_HOLD_SECONDS
-            currentState = currentState === 'idle' ? 'walking' : 'idle'
-        }
         applyAnimation(dt)
+    }
+
+    const setAction = (action: ShowcaseAction): void => {
+        if (action === currentState) return
+        currentState = action
+        stateTime = 0
+        applyAnimation(0)
     }
 
     /* —— 头顶名称标签：sprite 挂锚点、dispose 句柄留存，随 dispose 统一回收 —— */
@@ -147,8 +156,8 @@ export const createRaceActor = (init: RaceActorInit): RaceShowcaseActor => {
     }
 
     return {
-        id, anchor, weaponName: name, holdModeLabel: subtitle, factionColor: faction,
-        update, attachLabel, setDimmed, dispose,
+        id, anchor, weaponName: name, attackModuleLabel: subtitle, factionColor: faction,
+        update, setAction, attachLabel, setDimmed, dispose,
         setDebugVisible: (kind, on) => debug.setVisible(kind, on),
         debugTick: () => debug.tick(),
         get state() { return currentState },

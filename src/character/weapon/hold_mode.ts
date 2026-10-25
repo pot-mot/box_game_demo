@@ -6,8 +6,8 @@
  * - `two_handed` 双手共持：双手握同一把武器（攻击时由离线烘焙的支撑手双轨贴合主手武器）；副手武器挂背
  * - `dual_wield` 双持：左右手各握一把武器（需与主手同类近战，左手握副手武器）
  *
- * 角色实体持久化当前 `holdMode`；武器**类**以 `holdModes` 数组声明**可支持的全部模式**，
- * 并以持握模式为键的 map 提供各模式对应的攻击连段（见 `attack_chain.ts` 的 `HoldModeAttacks`）。
+ * 攻击模组以 `holdMode` 字段复用这些语义；角色持久化的通用选择键是 `bodyState.attackModule`。
+ * 武器通过 `attackModules` 声明可用模组，并以模组 id 为键提供攻击连段。
  */
 
 import type {StringLocaleKey} from '../../i18n/index.ts'

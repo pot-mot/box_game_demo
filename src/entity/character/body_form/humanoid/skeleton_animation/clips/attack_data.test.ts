@@ -8,10 +8,10 @@ import {CHARACTER_JOINT_IDS} from './base_clips.ts'
 import {compileAuthoredAttackClip} from '../../../common/skeleton_animation/authored_attack.ts'
 import {buildCharacterSkeletonDefinition} from '../../skeleton/skeleton.ts'
 import {SUPPORT_HAND_ATTACKS} from './generated/support_hand_attacks.ts'
-import {isTwoHandedAttackClip, weaponOfClip} from './support_hand_bake.ts'
+import {needsBakedSupportHand, weaponOfClip} from './support_hand_bake.ts'
 
 const segments = weaponsOfForm(HUMANOID_BODY_FORM_ID).flatMap(weapon =>
-    weapon.holdModes.flatMap(mode => orderedSegments(weaponAttacksOf(weapon, mode))),
+    weapon.attackModules.flatMap(module => orderedSegments(weaponAttacksOf(weapon, module.id))),
 )
 
 /** 段实际引用的 clip id（空手通过 poseRef 复用短剑段） */
@@ -67,9 +67,9 @@ describe('攻击段作者数据', () => {
     it('双手段有支撑手数据，非双手段没有', () => {
         for (const segment of segments) {
             const clipId = clipIdOf(segment)
-            const twoHanded = isTwoHandedAttackClip(clipId)
-            expect(SUPPORT_HAND_ATTACKS[clipId] !== undefined, clipId).toBe(twoHanded)
-            if (twoHanded) expect(weaponOfClip(clipId), clipId).toBeDefined()
+            const baked = needsBakedSupportHand(clipId)
+            expect(SUPPORT_HAND_ATTACKS[clipId] !== undefined, clipId).toBe(baked)
+            if (baked) expect(weaponOfClip(clipId), clipId).toBeDefined()
         }
     })
 

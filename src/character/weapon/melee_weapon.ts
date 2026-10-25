@@ -1,24 +1,30 @@
 import type { WeaponMeshConfig } from './mesh_config.ts'
 import type { StringLocaleKey } from '../../i18n/index.ts'
 import type { DamageType } from '../combat/damage_type.ts'
-import type { HoldMode } from './hold_mode.ts'
-import type { HoldModeAttacks, WeaponAttacks } from './attack_chain.ts'
+import type { AttackModuleDef, AttackModuleId } from './attack_module.ts'
+import type { AttackModuleAttacks, WeaponAttacks } from './attack_chain.ts'
 import { withAttackSlotKeyMap, withChargeTuningMap } from './attack_chain.ts'
 import { buildMeleeAttacks, DEFAULT_HEAVY_CHARGE, DEFAULT_MELEE_AIR_ATTACK, type BuildMeleeAttacksOptions, type HeavyChargeConfig, type MeleeAirAttackConfig, type MeleeAirSegmentKey, type MeleeSegmentKey } from './melee_attacks.ts'
 import type { AttackImpulse } from './attack_chain.ts'
+import type { WeaponAttackBoxSpec } from './mesh_config.ts'
+import type { EquipmentColliderSpec, EquipmentHurtBoxSpec, EquipmentMountSpec } from '../equipment/types.ts'
 import type { WeaponModelConfig } from './weapon_class.ts'
 import type { ShieldBlockConfig } from './constants.ts'
 
 /**
  * 攻击检测箱（AI 出招触发判定专用，与红色伤害判定箱解耦）：
- * 盒尺寸 + 相对身体中心的偏移；身体局部坐标（+Z = 朝向），按角色 scale 缩放。
- * 攻击触发判定由武器上的这个属性直接驱动。
+ * 每项显式绑定骨骼节点 + 局部偏移 + 局部旋转；按角色 scale 缩放。
+ * 攻击触发判定遍历武器上的全部检测箱，任一项与目标相交即视为在范围内。
  */
-export interface MeleeDetectBox {
+export interface MeleeDetectBoxSpec {
+    /** 绑定骨骼节点 id */
+    readonly jointId: string
     /** 盒尺寸：x = 侧向宽、y = 竖直高、z = 前后深（m，scale=1） */
     readonly size: { readonly x: number; readonly y: number; readonly z: number }
-    /** 盒中心相对身体中心的偏移：z 正向 = 朝向前方（m，scale=1） */
+    /** 盒中心相对绑定关节局部的偏移（m，scale=1） */
     readonly offset: { readonly x: number; readonly y: number; readonly z: number }
+    /** 相对绑定关节局部的欧拉角（弧度，XYZ；缺省 0） */
+    readonly rotation: { readonly x: number; readonly y: number; readonly z: number }
 }
 
 /**
@@ -48,12 +54,14 @@ export interface MeleeWeaponClassConfig {
     readonly knockbackY: number
     /** AI 侦测范围 */
     readonly detectionRange: number
-    /** 攻击检测箱：尺寸 + 身体偏移，驱动出招触发判定 */
-    readonly detectBox: MeleeDetectBox
-    /** 可支持的持握模式（数组；首个为默认模式，换武器时角色持握模式重置为首个） */
-    readonly holdModes: readonly HoldMode[]
-    /** 持握模式 → 攻击链 map（键 = `holdModes` 中受支持的模式；动画为段引用的 pose 组合） */
-    readonly attacks: HoldModeAttacks
+    /** 攻击检测箱数组：逐项绑定骨骼节点，驱动出招触发判定 */
+    readonly detectBoxes: readonly MeleeDetectBoxSpec[]
+    /** 动作时间倍率（缺省 1；盾牌等重型武器可整体放慢，2:1:2.5 阶段比例不变） */
+    readonly timeScale?: number
+    /** 可支持的攻击模组（数组；首个为默认模组，换武器时角色模组重置为首个） */
+    readonly attackModules: readonly AttackModuleDef[]
+    /** 攻击模组 → 攻击链 map（键 = `attackModules` 中受支持的模组；动画为段引用的 pose 组合） */
+    readonly attacks: AttackModuleAttacks
     /**
      * 重击蓄力配置（可选；缺省 = `DEFAULT_HEAVY_CHARGE`：满蓄力 1s、+100% 伤害、冷却 0.8s）。
      * 所有模式的攻击链都会生成对应的「蓄力重击」变体段。
@@ -92,27 +100,36 @@ export interface MeleeWeaponConfig extends MeleeWeaponClassConfig {
     readonly equipBodyParts: readonly string[]
     /** 程序化武器模型（主手 / 右手） */
     readonly mesh: WeaponMeshConfig
+    /** 逐骨骼节点挂载配置（缺省 = 槽位/惯用手解析单挂载） */
+    readonly mounts?: readonly EquipmentMountSpec<WeaponMeshConfig>[]
+    /** 攻击箱数组（显式声明；缺省 = 由网格模板在装备时生成一项并绑定槽位主挂点） */
+    readonly attackBoxes: readonly WeaponAttackBoxSpec[]
+    /** 装备扩展碰撞体（现有武器为空数组） */
+    readonly colliders?: readonly EquipmentColliderSpec[]
+    /** 装备扩展受击箱（现有武器为空数组） */
+    readonly hurtBoxes?: readonly EquipmentHurtBoxSpec[]
 }
 
-/** 近战武器类的各持握模式链编排（未声明的模式不注入攻击链） */
-export type MeleeModeChains = Readonly<Partial<Record<HoldMode, BuildMeleeAttacksOptions>>>
+/** 近战武器类的各攻击模组链编排（未声明的模组不注入攻击链） */
+export type MeleeModuleChains = Readonly<Partial<Record<AttackModuleId, BuildMeleeAttacksOptions>>>
 
 /**
- * 近战武器类装配：按支持的持握模式逐一注入固有攻击链。
+ * 近战武器类装配：按支持的攻击模组逐一注入固有攻击链。
  * 由各体形的 `weapons.ts` 调用（武器类数据由所属体形拥有）。
  */
 export const meleeClass = (
     base: Omit<MeleeWeaponClassConfig, 'attacks'>,
-    modeChains: MeleeModeChains,
+    moduleChains: MeleeModuleChains,
 ): MeleeWeaponClassConfig => {
-    const attacks: Partial<Record<HoldMode, WeaponAttacks>> = {}
+    const attacks: Partial<Record<AttackModuleId, WeaponAttacks>> = {}
     const heavyCharge = base.heavyCharge ?? DEFAULT_HEAVY_CHARGE
     const airAttack: MeleeAirAttackConfig = {...DEFAULT_MELEE_AIR_ATTACK, ...base.airAttack}
-    for (const mode of base.holdModes) {
-        const options = modeChains[mode]
+    for (const module of base.attackModules) {
+        const options = moduleChains[module.id]
         if (options === undefined) continue
-        attacks[mode] = buildMeleeAttacks(base.id, mode, {
+        attacks[module.id] = buildMeleeAttacks(base.id, module.id, {
             ...options,
+            timeScale: base.timeScale ?? 1,
             heavyCharge,
             air: {...airAttack, ...(options.air ?? {})},
             impulses: options.impulses ?? base.impulses,
@@ -143,5 +160,9 @@ export const resolveMeleeWeapon = (weaponClass: MeleeWeaponClassConfig, model: W
         nameKey: model.nameKey,
         equipBodyParts: model.equipBodyParts,
         mesh: model.mesh,
+        mounts: model.mounts,
+        attackBoxes: model.attackBoxes ?? [],
+        colliders: model.colliders ?? [],
+        hurtBoxes: model.hurtBoxes ?? [],
     }
 }

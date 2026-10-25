@@ -21,7 +21,7 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 ```
 
 - `src/character/state/` 声明 `CharacterState` 基础接口与子域类型。
-- 每个 `body_form/<form>/state/` 实现自己的具体 state（人形持握/惯用手；狼/马步态；飞龙飞行等）。
+- 每个 `body_form/<form>/state/` 实现自己的具体 state（通用攻击模组；人形惯用手；狼/马步态；飞龙飞行等）。
 - `CharacterEntity` 只保留 `state` 与运行时句柄：
   - `state`；
   - Rapier body / colliders；
@@ -36,7 +36,7 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 
 - `identity`：id、isPlayer、config、bodyFormId
 - `attributes`：生命、韧性、格挡槽、最终数值（当前聚合在 `combat` 子域，后续可细分，但不得另存）
-- `equipment`：装备、武器、副手、`bodyState`（当前武器运行时在 `combat`、装备状态在 `config` / `combat`，后续可细分）
+- `equipment`：全部武器槽装备、护甲/肢体、`bodyState`（当前武器运行时在 `combat`、装备状态在 `config` / `combat`，后续可细分）
 - `timers`：全部计时器（受击、无敌、冷却、状态计时等）
 - `stateMachine`：当前/上一状态名、阶段、攻击段/阶段/计时/蓄力/保持
 - `physics`：位置、朝向、线速度、角速度、垂直速度、着地、地面法线、环境场
@@ -45,7 +45,7 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 - `interaction`：交互目标与计时
 - `environment`：流体比例、区域场
 - `animation`：
-  - `params`：水平/垂直速度、转向/角速度、瞄准方向、蓄力、持握/盾/武器类/惯用手等；
+  - `params`：水平/垂直速度、转向/角速度、瞄准方向、蓄力、人形持握语义/盾/武器类/惯用手等；
   - `current`：当前组合 id、根 progress、各层有效权重、additive 权重、事件游标。
 
 ## 4. 写入所有权

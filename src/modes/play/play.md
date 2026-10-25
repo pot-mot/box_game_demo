@@ -28,12 +28,12 @@
 
 - `WASD` 相对相机水平移动、空格跳跃、`Shift`（动作 `roll`）边沿触发**翻滚**；移动/翻滚/跳跃由 `createPlayerControl` 的 `move()` 统一读取并写入 `characterSystem.setPlayerMove`，应在角色状态机更新前调用。
 
-## 持握模式切换（「切换持握模式」绑定，默认 Ctrl）
+## 攻击模组切换（「切换攻击模组」绑定，默认 Ctrl）
 
-- 近战武器按 `availableHoldModes`（武器声明 ∩ 双持需副手同类近战）环切：单持 → 双手共持 → 双持 → 单持；`src/modes/control/player_control.ts` 的 `move()` 轮询输入动作 `cycle_hold_mode` 后调用 `characterSystem.cyclePlayerHoldMode()`。
-- 仅 Ctrl 单独按下时生效：`isActionActive('cycle_hold_mode')` 走最长组合遮蔽，Ctrl+S / Ctrl+O 按下时该动作被 `save_world` / `load_world` 的绑定遮蔽，不会误触发切换（play 模式 `save_world` 无回调，见上文）。
-- 切换由 `world.ts` 的 `setHoldMode` 统一处理（重解析攻击链、清段冷却与当前段、同步副手挂背/回手）；HUD 装备行显示当前武器与持握模式。
-- 副手装备与持握模式的显式选择在编辑模式角色面板「装备」区（副手武器下拉 + 持握下拉），存档字段 `offhand` / `holdMode`（v6）。
+- 攻击模组按角色全部武器槽解析结果环切（人形持械仍为单持 → 双手共持 → 双持；生物为嘴 / 爪 / 蹄 / 吐息等）；`src/modes/control/player_control.ts` 的 `move()` 轮询输入动作 `cycle_attack_module` 后调用 `characterSystem.cyclePlayerAttackModule()`。
+- 仅 Ctrl 单独按下时生效：`isActionActive('cycle_attack_module')` 走最长组合遮蔽，Ctrl+S / Ctrl+O 按下时该动作被 `save_world` / `load_world` 的绑定遮蔽，不会误触发切换（play 模式 `save_world` 无回调，见上文）。
+- 切换由 `world.ts` 的 `setAttackModule` 统一处理（重解析攻击链、清段冷却与当前段、同步副手挂背/回手）；HUD 装备行显示当前武器与攻击模组。
+- 各武器槽装备与攻击模组的显式选择在编辑模式角色面板「装备」区；存档字段为 `bodyState.attackModule` 与分层 `equipment.weapon`（v19）。
 
 ## 镜头锁定（「锁定目标」绑定，默认鼠标中键）
 

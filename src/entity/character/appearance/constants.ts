@@ -73,6 +73,9 @@ export const WALK_SPEED_MAX_SCALE = 2
 export const walkSpeedScale = (speed: number): number =>
     Math.max(WALK_SPEED_MIN_SCALE, Math.min(WALK_SPEED_MAX_SCALE, speed / WALK_BASE_SPEED))
 
+/** 游泳俯卧前倾角（绕本地 X 轴，face-down；供世界根姿态与展示台共用） */
+export const SWIM_PRONE_PITCH = Math.PI * 0.38
+
 /** 身体朝向旋转速度（rad/s） */
 export const ROTATION_SPEED = 10
 

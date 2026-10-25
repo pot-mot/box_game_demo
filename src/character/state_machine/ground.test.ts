@@ -11,7 +11,7 @@ const makeEntity = (isOnGround: boolean, ny: number, nx = 0, nz = 0): CharacterE
     const state = createTestCharacterState({
         id: 1,
         config: {speed: 6, jumpHeight: 2, scale: 1},
-        bodyState: {holdMode: 'one_handed'},
+        bodyState: {attackModule: 'one_handed'},
     })
     state.physics.isOnGround = isOnGround
     state.physics.groundNormal = {x: nx, y: ny, z: nz}

@@ -67,9 +67,25 @@ const ZERO: JointEulerState = {rx: 0, ry: 0, rz: 0}
 /** 持械握持：施加在左右手武器骨骼上的固定屈角，使武器相对前臂保持垂直 */
 const GRIP_BONE_POSE: JointEulerState = {rx: WEAPON_GRIP_FLEX, ry: 0, rz: 0}
 
+/**
+ * 待机 / 行走的武器骨骼屈角。
+ * 弓需要与地面垂直：以「净屈角 = 90°」反推武器骨骼，使弓臂沿世界上下、箭向水平；
+ * 肩 / 肘摆动时同步补偿，弓身始终竖直。其他武器沿用通用握持屈角。
+ */
+const weaponMountPose = (ctx: PoseContext): JointEulerState =>
+    ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
+
+/* 弓的待机 / 行走持握：右手（持弦手）收在身前中线，弓身竖直、箭向朝前；
+ * 左支撑手可自然搭到弓把（离线烘焙无需拉长手臂）。 */
+const BOW_IDLE_SHOULDER: JointEulerState = {rx: 0.15, ry: 0.45, rz: 0}
+const BOW_IDLE_ELBOW_RX = -2.1
+const BOW_IDLE_MOUNT: JointEulerState = {rx: -2.747647, ry: -0.065046, rz: 0.445593}
+
 /** 生成器上下文（horizontalSpeed 用于 falling 腿张开随速度；行走步频由播放器 setSpeed 变速） */
 export interface PoseContext {
     readonly weaponHeld: boolean
+    /** 当前武器 classId（用于弓等武器固有持握姿态；空手 / 未提供 = 通用握持） */
+    readonly weaponClassId?: string
     readonly horizontalSpeed: number
     /** 垂直速度（m/s，向上为正）：falling 收腿 / 抬头参数 */
     readonly verticalSpeed?: number
@@ -82,29 +98,30 @@ export interface PoseContext {
 
 const clamp01 = (v: number): number => Math.min(Math.max(v, 0), 1)
 
-const idlePose = (t: number, ctx: PoseContext): PoseState => ({
-    rightArmShoulder: {
-        rx: ctx.weaponHeld ? WEAPON_READY_SHOULDER + Math.sin(t * 1.8) * WEAPON_READY_SWAY : Math.sin(t * 1.8) * 0.06,
-        ry: 0,
-        rz: 0,
-    },
-    rightArmElbow: {rx: ctx.weaponHeld ? WEAPON_READY_ELBOW : -0.08, ry: 0, rz: 0},
-    rightHandPivot: ZERO,
-    rightWristPivot: ZERO,
-    rightWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
-    leftArmShoulder: {rx: -Math.sin(t * 1.8) * 0.06, ry: 0, rz: 0},
-    leftArmElbow: {rx: -0.08, ry: 0, rz: 0},
-    leftHandPivot: ZERO,
-    leftWristPivot: ZERO,
-    leftWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
-    rightLegHip: ZERO,
-    rightLegKnee: ZERO,
-    leftLegHip: ZERO,
-    leftLegKnee: ZERO,
-    headNeck: {rx: Math.sin(t * 2.5) * 0.02, ry: 0, rz: 0},
-    spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
-    root: {rotation: ZERO},
-})
+const idlePose = (t: number, ctx: PoseContext): PoseState => {
+    const bow = ctx.weaponHeld && ctx.weaponClassId === 'longbow'
+    const idleShoulder = ctx.weaponHeld ? WEAPON_READY_SHOULDER + Math.sin(t * 1.8) * WEAPON_READY_SWAY : Math.sin(t * 1.8) * 0.06
+    const idleElbow = ctx.weaponHeld ? WEAPON_READY_ELBOW : -0.08
+    return {
+        rightArmShoulder: bow ? {...BOW_IDLE_SHOULDER} : {rx: idleShoulder, ry: 0, rz: 0},
+        rightArmElbow: {rx: bow ? BOW_IDLE_ELBOW_RX : idleElbow, ry: 0, rz: 0},
+        rightHandPivot: ZERO,
+        rightWristPivot: ZERO,
+        rightWeaponMount: bow ? {...BOW_IDLE_MOUNT} : weaponMountPose(ctx),
+        leftArmShoulder: {rx: -Math.sin(t * 1.8) * 0.06, ry: 0, rz: 0},
+        leftArmElbow: {rx: -0.08, ry: 0, rz: 0},
+        leftHandPivot: ZERO,
+        leftWristPivot: ZERO,
+        leftWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
+        rightLegHip: ZERO,
+        rightLegKnee: ZERO,
+        leftLegHip: ZERO,
+        leftLegKnee: ZERO,
+        headNeck: {rx: Math.sin(t * 2.5) * 0.02, ry: 0, rz: 0},
+        spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
+        root: {rotation: ZERO},
+    }
+}
 
 const walkingPose = (t: number, ctx: PoseContext): PoseState => {
     const legSwing = Math.sin(t) * 0.5
@@ -112,16 +129,15 @@ const walkingPose = (t: number, ctx: PoseContext): PoseState => {
     const swingAbs = Math.abs(Math.sin(t))
     const armSwing = -Math.sin(t) * 0.35
     const armBend = Math.max(0, Math.cos(t)) * 0.2
+    const bow = ctx.weaponHeld && ctx.weaponClassId === 'longbow'
+    const walkShoulder = ctx.weaponHeld ? WEAPON_READY_SHOULDER - Math.sin(t) * WEAPON_WALK_ARM_SWING : armSwing
+    const walkElbow = ctx.weaponHeld ? WEAPON_READY_ELBOW : -(armBend + 0.05)
     return {
-        rightArmShoulder: {
-            rx: ctx.weaponHeld ? WEAPON_READY_SHOULDER - Math.sin(t) * WEAPON_WALK_ARM_SWING : armSwing,
-            ry: 0,
-            rz: 0,
-        },
-        rightArmElbow: {rx: ctx.weaponHeld ? WEAPON_READY_ELBOW : -(armBend + 0.05), ry: 0, rz: 0},
+        rightArmShoulder: bow ? {...BOW_IDLE_SHOULDER} : {rx: walkShoulder, ry: 0, rz: 0},
+        rightArmElbow: {rx: bow ? BOW_IDLE_ELBOW_RX : walkElbow, ry: 0, rz: 0},
         rightHandPivot: ZERO,
         rightWristPivot: ZERO,
-        rightWeaponMount: ctx.weaponHeld ? GRIP_BONE_POSE : ZERO,
+        rightWeaponMount: bow ? {...BOW_IDLE_MOUNT} : weaponMountPose(ctx),
         leftArmShoulder: {rx: -armSwing, ry: 0, rz: 0},
         leftArmElbow: {rx: -(armBend + 0.05), ry: 0, rz: 0},
         leftHandPivot: ZERO,

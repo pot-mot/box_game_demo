@@ -19,9 +19,9 @@ describe('蓄力调参（一次函数）', () => {
 
     it('单武器（模型）覆盖模板默认，并重烘焙攻击链可蓄力段', () => {
         const weaponClass = meleeClass({
-            id: 'x', type: 'melee', damageType: 'physical', holdModes: ['one_handed'],
+            id: 'x', type: 'melee', damageType: 'physical', attackModules: [{id: 'one_handed', nameKey: 'hold_mode.one_handed', holdMode: 'one_handed'}],
             damage: 1, knockbackForce: 0, knockbackY: 0, detectionRange: 1,
-            detectBox: {size: {x: 0.1, y: 0.1, z: 0.1}, offset: {x: 0, y: 0, z: 0}},
+            detectBoxes: [{jointId: 'root', size: {x: 0.1, y: 0.1, z: 0.1}, offset: {x: 0, y: 0.5, z: 0}, rotation: {x: 0, y: 0, z: 0}}],
         }, {one_handed: {}})
         const overridden = resolveMeleeWeapon(weaponClass, {
             id: 'x', classId: 'x', formId: 'humanoid', name: 'x', nameKey: 'weapon.unarmed',

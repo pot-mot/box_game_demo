@@ -22,6 +22,8 @@ export interface CharacterEntity {
     mainCollider: RAPIER.Collider
     /** 体形全部碰撞体（按体形计划 colliderLayout 顺序；质量由附加质量统一决定） */
     colliders: RAPIER.Collider[]
+    /** 装备扩展碰撞体（换装时重建；不参与 mainCollider 语义） */
+    equipmentColliders?: RAPIER.Collider[]
     /** 状态机逻辑对象（运行时句柄，不是 state 数据） */
     stateMachine: CharacterStateMachine
 }

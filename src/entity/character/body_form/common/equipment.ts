@@ -1,4 +1,4 @@
-import type {EquipSlotDef, EquipmentModuleDef} from '../../../../character/equipment/types.ts'
+import type {EquipSlotDef, EquipmentModuleDef, EquipmentMountSpec} from '../../../../character/equipment/types.ts'
 import type {ArmorPieceConfig, LimbPieceConfig} from '../../../../character/armor/types.ts'
 import type {WeaponConfig} from '../../../../character/weapon/catalog.ts'
 import type {BreathModuleConfig} from '../../../../character/weapon/breath_module.ts'
@@ -77,6 +77,31 @@ export const validateEquipmentModules = (
             errors.push(`装备模组 ${module.id} 的 mountJointIds 与槽位不一致`)
         }
         if (module.pieceIds.length === 0) errors.push(`装备模组 ${module.id} 没有装备`)
+    }
+    return errors
+}
+
+/** 解析装备的逐关节挂载：显式 `mounts` 优先；否则按槽位 mountJointIds 各关节使用同一模型 */
+export const resolveEquipmentMounts = <M>(
+    piece: {readonly mesh: M; readonly mounts?: readonly EquipmentMountSpec<M>[]},
+    slot: EquipSlotDef,
+): readonly EquipmentMountSpec<M>[] =>
+    piece.mounts ?? slot.mountJointIds.map(jointId => ({jointId, mesh: piece.mesh}))
+
+/** 校验逐关节挂载：关节必须在槽位白名单内且不重复 */
+export const validateEquipmentMounts = <M>(
+    piece: {readonly id: string; readonly mounts?: readonly EquipmentMountSpec<M>[]},
+    slot: EquipSlotDef,
+    mounts: readonly EquipmentMountSpec<M>[],
+): readonly string[] => {
+    const errors: string[] = []
+    if (mounts.length === 0) errors.push(`装备 ${piece.id} 没有挂载骨骼`)
+    const allowed = new Set(slot.mountJointIds)
+    const seen = new Set<string>()
+    for (const mount of mounts) {
+        if (!allowed.has(mount.jointId)) errors.push(`装备 ${piece.id} 挂载关节 ${mount.jointId} 不在槽位 ${slot.bodyPart} 白名单内`)
+        if (seen.has(mount.jointId)) errors.push(`装备 ${piece.id} 重复挂载关节 ${mount.jointId}`)
+        seen.add(mount.jointId)
     }
     return errors
 }

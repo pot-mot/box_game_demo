@@ -1,8 +1,9 @@
 import type { Faction, AttackTendency, TendencyConfig } from '../faction.ts'
 import type { AttackSegment, WeaponAttacks } from '../weapon/attack_chain.ts'
 import type { WeaponConfig } from '../weapon/catalog.ts'
-import { defaultHoldMode } from '../weapon/catalog.ts'
-import { composeClawAndBreath, type BreathRuntime } from './breath_runtime.ts'
+import type { BreathRuntime } from './breath_runtime.ts'
+import type { AttackModuleId, AttackModuleRuntime } from '../weapon/attack_module.ts'
+import { resolveAttackModules } from './attack_modules.ts'
 import type { WeaponRuntime } from '../weapon/weapon_runtime.ts'
 import type { ShieldBlockConfig } from '../weapon/constants.ts'
 import type { HoldMode } from '../weapon/hold_mode.ts'
@@ -45,9 +46,13 @@ export type AttackResult = typeof ATTACK_RESULT_CODES[number]
 export interface CombatComponent {
     /** 装备状态（limb / weapon / armor 分层；槽位键 = kind:bodyPart） */
     equipment: EquipmentState
-    /** 槽位 bodyPart → 武器运行时（主手 / 副手 / 翼爪 / 吐息 …；天然武器也在此表） */
+    /** 槽位 bodyPart → 武器运行时（全部武器槽；天然武器也在装备槽中） */
     readonly weapons: Map<string, WeaponRuntime>
-    /** 当前驱动攻击链的主武器（= 主攻击槽位武器；无槽位体形为默认武器） */
+    /** 当前攻击模组 id */
+    attackModule: AttackModuleId
+    /** 当前全部可用攻击模组（由全部武器槽解析） */
+    attackModules: ReadonlyMap<AttackModuleId, AttackModuleRuntime>
+    /** 当前驱动攻击链的主武器（= 当前模组主槽武器） */
     weapon: WeaponConfig
     /**
      * 副手武器运行时（双持 / 副手槽时装备；双手共持时挂背；undefined = 无副手武器）。
@@ -57,7 +62,7 @@ export interface CombatComponent {
     offhand: WeaponRuntime | undefined
     /** 攻击链（武器固有段定义 + 起手段冷却覆写）；换武器时由 `setCombatWeapon` 同步更新 */
     attacks: WeaponAttacks
-    /** 主武器自身的攻击链（不含吐息组合）；装备 / 卸下吐息时据此重新组合 */
+    /** 当前模组的基础攻击链（不含跨槽重击组合） */
     baseAttacks: WeaponAttacks
     /**
      * 段 id → 实际攻击武器（可选；龙吐息等“轻链爪击 + 重链吐息”组合用）。
@@ -66,7 +71,7 @@ export interface CombatComponent {
     attackWeapons: ReadonlyMap<string, WeaponConfig>
     /** 当前攻击段实际使用的武器（未攻击 = 主武器）；执行器 / 枪口采样 / 数值均读此字段 */
     activeWeapon: WeaponConfig
-    /** 当前装备的吐息模组（仅 wyvern；undefined = 未装备） */
+    /** 当前装备的吐息模组（仅带 breath 槽的体形；undefined = 未装备） */
     breath: BreathRuntime | undefined
 
     /** 段冷却剩余（秒）：段 id → 剩余时间（仅非 0 冷却的起手段写入） */
@@ -214,27 +219,83 @@ export interface CombatComponent {
     onDeath: ((sourceId?: number, hitHurtBlocks?: readonly string[]) => void) | null
 }
 
-/**
- * 换装/数值覆写变更：整体替换主攻击武器运行时（攻击链同步跟随）。
- * `bodyPart` 提供时同步写入槽位武器表（如 `main_hand` / `wing_claw`）。
- * `holdMode` 供盾牌来源重解析：双手共持时副手武器挂背、其盾不再计为可用盾。
- */
-export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime, holdMode?: HoldMode, bodyPart?: string): void => {
-    if (bodyPart !== undefined) c.weapons.set(bodyPart, runtime)
-    c.weapon = runtime.weapon
-    c.baseAttacks = runtime.attacks
-    /* 换武器 / 换持握模式后必须重新组合吐息重击链，否则已装备的吐息会被静默丢弃 */
-    const composed = composeClawAndBreath(c.baseAttacks, c.breath)
-    c.attacks = composed.attacks
-    c.attackWeapons = composed.attackWeapons
-    /* 攻击中换武器 / 换持握模式：activeWeapon 必须仍指向当前段的实际武器 */
-    c.activeWeapon = c.activeSegment !== undefined
-        ? (c.attackWeapons.get(c.activeSegment.id) ?? runtime.weapon)
-        : runtime.weapon
-    updateShieldBlock(c, holdMode)
+/** 当前模组派生的握持语义（仅人形有；生物模组返回 undefined） */
+export const holdModeOfCombat = (c: CombatComponent): HoldMode | undefined =>
+    c.attackModules.get(c.attackModule)?.def.holdMode
+
+/** 用当前解析出的模组表刷新当前模组；preferred 不可用时回退第一个 */
+const applyResolvedModules = (c: CombatComponent, preferred?: AttackModuleId): void => {
+    const modules = resolveAttackModules(c.weapons)
+    c.attackModules = modules
+    const nextId = preferred !== undefined && modules.has(preferred)
+        ? preferred
+        : modules.keys().next().value
+    if (nextId === undefined) {
+        c.attackModule = ''
+        c.attacks = c.baseAttacks
+        c.attackWeapons = new Map()
+        c.activeWeapon = c.weapon
+        updateShieldBlock(c)
+        return
+    }
+    setCombatAttackModule(c, nextId)
 }
 
-/** 写入组合攻击链与按段武器映射（吐息装备变更时由 world 调用） */
+export const refreshCombatAttackModules = (c: CombatComponent, preferred?: AttackModuleId): void => {
+    applyResolvedModules(c, preferred)
+}
+
+/** 设置某武器槽的运行时（undefined = 清空该槽）；随后重建模组表并尽量保持当前模组 */
+export const setCombatWeaponSlot = (c: CombatComponent, slot: string, runtime: WeaponRuntime | undefined): void => {
+    if (runtime === undefined) c.weapons.delete(slot)
+    else c.weapons.set(slot, runtime)
+    if (slot === 'off_hand') c.offhand = runtime
+    applyResolvedModules(c, c.attackModule === '' ? undefined : c.attackModule)
+}
+
+/** 兼容入口：设置主武器槽（缺省 main_hand；生物请使用 `setCombatWeaponSlot` 指定实际槽位） */
+export const setCombatWeapon = (c: CombatComponent, runtime: WeaponRuntime, _holdMode?: HoldMode, bodyPart = 'main_hand'): void => {
+    setCombatWeaponSlot(c, bodyPart, runtime)
+}
+
+/** 兼容入口：设置副手槽（人形双持 / 副手装备） */
+export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | undefined, _holdMode?: HoldMode, bodyPart = 'off_hand'): void => {
+    setCombatWeaponSlot(c, bodyPart, runtime)
+}
+
+/** 设置 / 卸下吐息槽武器；undefined = 清空（世界层负责回填天然默认吐息） */
+export const setCombatBreath = (c: CombatComponent, breath: BreathRuntime | undefined): void => {
+    c.breath = breath
+    if (breath === undefined) {
+        setCombatWeaponSlot(c, 'breath', undefined)
+        return
+    }
+    setCombatWeaponSlot(c, 'breath', {weapon: breath.module, attackModule: '', attacks: breath.attacks})
+    /* 运行时重建会按武器声明的第一模组重新解析，这里显式使用吐息武器自身的模组 id */
+    const runtime = c.weapons.get('breath')
+    if (runtime !== undefined) {
+        c.weapons.set('breath', {...runtime, attackModule: breath.module.attackModules[0]?.id ?? ''})
+        applyResolvedModules(c, c.attackModule === '' ? undefined : c.attackModule)
+    }
+}
+
+/** 切换攻击模组：不可用返回 false 并回退当前/默认（不抛错） */
+export const setCombatAttackModule = (c: CombatComponent, moduleId: AttackModuleId): boolean => {
+    const module = c.attackModules.get(moduleId)
+    if (module === undefined) return false
+    c.attackModule = moduleId
+    c.weapon = module.primaryWeapon
+    c.baseAttacks = module.attacks
+    c.attacks = module.attacks
+    c.attackWeapons = module.attackWeapons
+    c.activeWeapon = c.activeSegment !== undefined
+        ? (c.attackWeapons.get(c.activeSegment.id) ?? module.primaryWeapon)
+        : module.primaryWeapon
+    updateShieldBlock(c, module.def.holdMode)
+    return true
+}
+
+/** 兼容旧调用的攻击链写入（吐息组合已由模组解析器负责） */
 export const setCombatAttackSet = (
     c: CombatComponent,
     attacks: WeaponAttacks,
@@ -244,27 +305,6 @@ export const setCombatAttackSet = (
     c.attacks = attacks
     c.attackWeapons = attackWeapons
     if (c.activeSegment === undefined) c.activeWeapon = c.weapon
-}
-
-/** 设置 / 卸下吐息模组，并重建“主武器轻链 + 吐息重链”的组合攻击链 */
-export const setCombatBreath = (c: CombatComponent, breath: BreathRuntime | undefined): void => {
-    c.breath = breath
-    if (breath === undefined) c.weapons.delete('breath')
-    else c.weapons.set('breath', {weapon: breath.module, holdMode: defaultHoldMode(breath.module), attacks: breath.attacks})
-    const composed = composeClawAndBreath(c.baseAttacks, breath)
-    c.attacks = composed.attacks
-    c.attackWeapons = composed.attackWeapons
-    c.activeWeapon = c.activeSegment !== undefined
-        ? (c.attackWeapons.get(c.activeSegment.id) ?? c.weapon)
-        : c.weapon
-}
-
-/** 变更副手武器（undefined = 卸下；双持可用性判定见 world.ts 的 setHoldMode） */
-export const setCombatOffhand = (c: CombatComponent, runtime: WeaponRuntime | undefined, holdMode?: HoldMode, bodyPart = 'off_hand'): void => {
-    c.offhand = runtime
-    if (runtime === undefined) c.weapons.delete(bodyPart)
-    else c.weapons.set(bodyPart, runtime)
-    updateShieldBlock(c, holdMode)
 }
 
 /** 取当前盾牌格挡槽上限（无盾 = 0） */
@@ -326,6 +366,8 @@ export const createCombatComponent = (
     const combat: CombatComponent = {
         equipment: EMPTY_EQUIPMENT_STATE,
         weapons: new Map(),
+        attackModule: runtime.attackModule,
+        attackModules: new Map(),
         weapon: runtime.weapon,
         offhand: undefined,
         attacks: runtime.attacks,
@@ -392,5 +434,7 @@ export const createCombatComponent = (
         onDeath: null,
     }
     updateShieldBlock(combat)
+    combat.weapons.set('main_hand', runtime)
+    applyResolvedModules(combat, runtime.attackModule)
     return combat
 }

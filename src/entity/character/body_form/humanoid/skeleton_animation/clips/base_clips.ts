@@ -58,6 +58,7 @@ const buildBaseClipWithJoints = (
     shieldArms: readonly ('right' | 'left')[] = [],
     handedness: Handedness = DEFAULT_HANDEDNESS,
     blockArmOverride?: 'right' | 'left',
+    weaponClassId?: string,
 ): BoneAnimationClip => {
     const meta = BASE_CLIP_META[state]
     const sampler = BASE_POSE_SAMPLERS[state]
@@ -73,6 +74,7 @@ const buildBaseClipWithJoints = (
             const sampled = sampler(t, {
                 weaponHeld,
                 horizontalSpeed,
+                ...(weaponClassId !== undefined ? {weaponClassId} : {}),
                 ...(blockArm !== undefined ? {blockArm} : {}),
             })
             const pose = orientShieldArms(adjustArmsForHoldMode(sampled, holdMode, weaponHeld, state), shieldArms)
@@ -105,8 +107,9 @@ export const buildBaseClip = (
     weaponHeld: boolean,
     horizontalSpeed = 0,
     handedness: Handedness = DEFAULT_HANDEDNESS,
+    weaponClassId?: string,
 ): BoneAnimationClip =>
-    buildBaseClipWithJoints(state, CHARACTER_JOINT_IDS, weaponHeld, horizontalSpeed, undefined, [], handedness)
+    buildBaseClipWithJoints(state, CHARACTER_JOINT_IDS, weaponHeld, horizontalSpeed, undefined, [], handedness, undefined, weaponClassId)
 
 /** falling 腿张开速度档（legSpread = min(speed,4)×0.04，取整档避免频繁切 clip） */
 export const fallingSpeedTier = (horizontalSpeed: number): number =>
@@ -165,6 +168,7 @@ export const getCanonicalBaseClip = (
         [],
         DEFAULT_HANDEDNESS,
         blockArm,
+        weaponClassId,
     )
     const support = includeSupport && weaponHeld && weaponClassId !== undefined
         ? SUPPORT_HAND_BASE[weaponClassId]?.[state]

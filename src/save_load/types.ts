@@ -30,10 +30,11 @@ import type {LockPointConfig} from '../character/lock_point.ts'
  * v16 起 character 增加体形计划 bodyFormId（可选，缺省 / 未知 id 安全回退 humanoid）；
  * v17 起 character 增加吐息模组 breathModuleId（可选，未知 id 安全视为未装备）。
  * v18 起 character 改用 `bodyFormId + bodyState + equipment`（limb/weapon/armor 分层）：
- *  删除顶层 attack / offhand / holdMode / handedness / armor / limb / breathModuleId；
- *  天然武器不写入 equipment；旧版本文件在加载时按元素粒度跳过（不做字段迁移）。
+ *  删除顶层 attack / offhand / holdMode / handedness / armor / limb / breathModuleId。
+ * v19 起 `bodyState` 使用 `attackModule`（跨体形攻击模组）；天然武器写入角色装备槽；
+ *  缺失 / 非法武器槽加载时回填体形天然默认；不做旧 `holdMode` 语义迁移。
  */
-export const SAVE_FORMAT_VERSION = 18
+export const SAVE_FORMAT_VERSION = 19
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -137,7 +138,7 @@ export interface CharacterSaveConfig {
     scale: number
     /** 体形计划 id（基础模组）：缺省 / 未知 id 加载时安全回退 humanoid */
     bodyFormId?: string
-    /** 体形专属状态（人形：holdMode / handedness；其他体形不携带这些键） */
+    /** 体形专属状态（通用 attackModule；人形额外 handedness） */
     bodyState?: Readonly<Record<string, string>>
     /** 装备状态（limb / weapon / armor 分层；槽位键 = kind:bodyPart） */
     equipment?: EquipmentState

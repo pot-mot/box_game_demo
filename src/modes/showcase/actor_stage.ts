@@ -2,7 +2,8 @@ import {Raycaster, Vector2, Vector3, Mesh, RingGeometry, MeshBasicMaterial, Doub
 import type {Object3D, Scene, WebGLRenderer} from 'three'
 import {setupShowcaseScene} from './scene.ts'
 import type {ShowcaseScene} from './scene.ts'
-import type {ShowcaseActorHandle} from './actor_handle.ts'
+import type {ShowcaseActorHandle, ShowcaseAction} from './actor_handle.ts'
+import {SHOWCASE_ACTIONS, isShowcaseAction} from './actor_handle.ts'
 import {SHOWCASE_DEBUG_KINDS, type ShowcaseDebugKind} from './actor_debug.ts'
 import {createPanel} from './panel.ts'
 import type {PanelRowInfo, PanelTab} from './panel.ts'
@@ -36,6 +37,10 @@ export interface ActorStageOptions {
     readonly titleKey: StringLocaleKey
     readonly subtitleKey: StringLocaleKey
     readonly tabs: readonly ActorStageTab[]
+    /** 外观展示：左侧面板提供非攻击动作选择（切换作用于全部 Tab 角色） */
+    readonly actionPicker?: {
+        readonly initial?: ShowcaseAction
+    }
 }
 
 /**
@@ -125,7 +130,10 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
     const switchTab = (index: number): void => {
         if (index < 0 || index === activeTab) return
         clearDebug(tabDatas[activeTab]?.actors ?? [])
-        for (const actor of tabDatas[activeTab]?.actors ?? []) actor.anchor.visible = false
+        for (const actor of tabDatas[activeTab]?.actors ?? []) {
+            actor.clearProjectiles?.()
+            actor.anchor.visible = false
+        }
         activeTab = index
         setFocus(null)
         const tab = tabDatas[activeTab]
@@ -153,8 +161,30 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
             applyDebugTo(tabDatas[activeTab]?.actors ?? [])
         },
         onTab: (key: string) => switchTab(tabDatas.findIndex(tab => tab.key === key)),
-    }, {titleKey: options.titleKey, subtitleKey: options.subtitleKey, tabs: panelTabs})
+        onAction: (value: string) => {
+            if (isShowcaseAction(value)) applyAction(value)
+        },
+    }, {
+        titleKey: options.titleKey,
+        subtitleKey: options.subtitleKey,
+        tabs: panelTabs,
+        ...(options.actionPicker === undefined ? {} : {
+            actionSelect: {
+                labelKey: 'showcase.action.title' as const,
+                initialValue: options.actionPicker.initial ?? 'idle',
+                choices: SHOWCASE_ACTIONS.map(action => ({
+                    value: action,
+                    labelKey: `entity.state.${action}`,
+                })),
+            },
+        }),
+    })
     panel.setInfos(tabDatas[0]?.infos ?? [], tabDatas[0]?.key)
+
+    const applyAction = (action: ShowcaseAction): void => {
+        for (const actor of allActors) actor.setAction?.(action)
+    }
+    if (options.actionPicker !== undefined) applyAction(options.actionPicker.initial ?? 'idle')
 
     /* 点击拾取：按下位移小于阈值视为点击（区分拖拽旋转），命中子网格向上回溯到角色锚点 */
     const raycaster = new Raycaster()

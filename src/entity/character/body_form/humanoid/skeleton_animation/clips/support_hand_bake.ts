@@ -10,7 +10,7 @@ import {DEFAULT_IK_MAX_ITERATIONS} from '../../../../../../skeleton/constants.ts
 import type {SkeletonJoint} from '../../../../../../skeleton/joint.ts'
 import {buildCharacterSkeletonDefinition} from '../../skeleton/skeleton.ts'
 import {HUMANOID_WEAPONS} from '../../equipment/weapons.ts'
-import {defaultHoldMode, type WeaponConfig} from '../../../../../../character/weapon/catalog.ts'
+import {attackModuleDefOf, defaultAttackModule, type WeaponConfig} from '../../../../../../character/weapon/catalog.ts'
 import {ATTACK_CLIPS} from '../attack_clips/index.ts'
 import {createWeaponMesh, WEAPON_MESH_GRIPS} from '../../../../appearance/weapon_mesh.ts'
 import type {SupportHandTrackData} from './support_hand_merge.ts'
@@ -39,7 +39,7 @@ const supportGripLocalCache = new Map<string, Vector3>()
 
 /** 全部支持双手共持的人形武器（按 classId 唯一） */
 export const TWO_HANDED_WEAPONS: readonly WeaponConfig[] =
-    HUMANOID_WEAPONS.filter(weapon => weapon.holdModes.includes('two_handed'))
+    HUMANOID_WEAPONS.filter(weapon => weapon.attackModules.some(module => module.holdMode === 'two_handed'))
 
 export const weaponOfClip = (clipId: string): WeaponConfig | undefined =>
     TWO_HANDED_WEAPONS.find(weapon =>
@@ -50,8 +50,12 @@ export const isTwoHandedAttackClip = (clipId: string): boolean => {
     const weapon = weaponOfClip(clipId)
     if (weapon === undefined) return false
     if (clipId.includes('_two_handed_')) return true
-    return weapon.type === 'ranged' && defaultHoldMode(weapon) === 'two_handed'
+    return weapon.type === 'ranged' && attackModuleDefOf(weapon, defaultAttackModule(weapon))?.holdMode === 'two_handed'
 }
+
+/** 双手段是否需要离线烘焙支撑手：作者声明 `supportHand: 'authored'` 的段由左臂作者数据直接驱动 */
+export const needsBakedSupportHand = (clipId: string): boolean =>
+    isTwoHandedAttackClip(clipId) && ATTACK_CLIPS[clipId]?.supportHand !== 'authored'
 
 /**
  * 武器副握点在挂点局部的坐标：与 `createWeaponMesh` 的 Group 变换一致。
@@ -61,7 +65,12 @@ export const supportGripLocalOf = (weapon: WeaponConfig): Vector3 | undefined =>
     const cached = supportGripLocalCache.get(weapon.classId)
     if (cached !== undefined) return cached.clone()
     const result = createWeaponMesh(weapon.mesh)
-    const local = new Vector3(0, result.supportGripOffset, 0)
+    /* 长枪的副握点按「相对主握点的距离」解析（主握点已改到枪杆中点）；
+     * 其余武器沿用既有配置语义，避免改变已验收的双手握距。 */
+    const axisOffset = weapon.classId === 'spear'
+        ? result.gripY + result.supportGripOffset
+        : result.supportGripOffset
+    const local = new Vector3(0, axisOffset, 0)
         .applyQuaternion(result.group.quaternion)
         .add(result.group.position)
     result.cleanup()
@@ -152,10 +161,15 @@ const replaceTrack = (
  * 在原有动作时间轴上按 30fps 采样，逐帧求解 `leftArmShoulder → leftArmElbow → 腕/武器挂点`
  * 到主武器副握点，并写入左肩 / 左肘 track（线性插值）。
  */
+/** 支撑手肘部外展权重：默认向下+外展；长枪手臂需明显外翻避免横穿躯干 */
+export const supportElbowOutwardOf = (classId: string): number =>
+    classId === 'spear' ? 3 : 0.5
+
 export const bakeSupportHandToGrip = (
     clip: BoneAnimationClip,
     gripLocal: Vector3,
     includeOriginalTimes = true,
+    elbowOutward = 0.5,
 ): BoneAnimationClip => {
     const skeleton = skeletonFromDefinition(buildCharacterSkeletonDefinition())
     const restPose = skeleton.readPose()
@@ -210,7 +224,7 @@ export const bakeSupportHandToGrip = (
         if (supportShoulder !== undefined && mainShoulder !== undefined) {
             const poleWorld = new Vector3(0, -1, 0)
             const outward = supportShoulder.clone().sub(mainShoulder)
-            if (outward.lengthSq() > 1e-8) poleWorld.addScaledVector(outward.normalize(), 0.5).normalize()
+            if (outward.lengthSq() > 1e-8) poleWorld.addScaledVector(outward.normalize(), elbowOutward).normalize()
             applyElbowPole(skeleton, shoulder, elbow, end, poleWorld)
             skeleton.updateWorldTransforms()
         }
@@ -264,12 +278,12 @@ export const computeSupportHandFingerprint = (): string => {
     ]
     for (const weapon of TWO_HANDED_WEAPONS) {
         const grip = WEAPON_MESH_GRIPS[weapon.mesh.id]
-        parts.push(weapon.classId, JSON.stringify(weapon.mesh), JSON.stringify(grip))
+        parts.push(weapon.classId, String(supportElbowOutwardOf(weapon.classId)), JSON.stringify(weapon.mesh), JSON.stringify(grip))
         for (const state of Object.keys(BASE_POSE_SAMPLERS) as (keyof typeof BASE_POSE_SAMPLERS)[]) {
             const meta = BASE_CLIP_META[state]
             parts.push(state, String(meta.duration), String(meta.loop))
             for (const ratio of [0, 0.25, 0.5, 0.75, 1]) {
-                const pose = BASE_POSE_SAMPLERS[state](meta.duration * ratio, {weaponHeld: true, horizontalSpeed: 0})
+                const pose = BASE_POSE_SAMPLERS[state](meta.duration * ratio, {weaponHeld: true, weaponClassId: weapon.classId, horizontalSpeed: 0})
                 parts.push(ratio.toFixed(2), JSON.stringify(pose))
             }
         }
@@ -294,10 +308,10 @@ export const extractSupportTracks = (clip: BoneAnimationClip): SupportHandTrackD
 
 /** 攻击 clip 入口：识别双手段并按其所属武器副握点烘焙 */
 export const bakeTwoHandedSupportHand = (clipId: string, clip: BoneAnimationClip): BoneAnimationClip => {
-    if (!isTwoHandedAttackClip(clipId)) return clip
+    if (!needsBakedSupportHand(clipId)) return clip
     const weapon = weaponOfClip(clipId)
     if (weapon === undefined) return clip
     const gripLocal = supportGripLocalOf(weapon)
     if (gripLocal === undefined) return clip
-    return bakeSupportHandToGrip(clip, gripLocal)
+    return bakeSupportHandToGrip(clip, gripLocal, true, supportElbowOutwardOf(weapon.classId))
 }

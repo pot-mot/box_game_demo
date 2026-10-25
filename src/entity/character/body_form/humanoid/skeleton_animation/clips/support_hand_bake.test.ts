@@ -9,7 +9,7 @@ import {getAttackClipById} from './attack_clips.ts'
 import {previewHumanoidClip} from '../preview.ts'
 import {SUPPORT_HAND_BASE} from './generated/support_hand_base.ts'
 import {SUPPORT_HAND_ATTACKS} from './generated/support_hand_attacks.ts'
-import {TWO_HANDED_WEAPONS, isTwoHandedAttackClip, supportGripLocalOf, weaponOfClip} from './support_hand_bake.ts'
+import {TWO_HANDED_WEAPONS, needsBakedSupportHand, supportGripLocalOf, weaponOfClip} from './support_hand_bake.ts'
 import {SUPPORT_HAND_VISUAL_TOLERANCE} from '../../../../../../test_setup.ts'
 
 /** 逐帧采样 clip，返回支撑链真实末端（左武器挂点）到副握点的最大距离 */
@@ -40,7 +40,7 @@ const maxMountDistance = (clip: BoneAnimationClip, gripLocal: Vector3): number =
 
 describe('支撑手离线烘焙残差', () => {
     it('全部双手段的支撑链末端落在副握点视觉容忍范围内', () => {
-        const ids = Object.keys(ATTACK_CLIPS).filter(isTwoHandedAttackClip)
+        const ids = Object.keys(ATTACK_CLIPS).filter(needsBakedSupportHand)
         expect(ids.length).toBeGreaterThan(0)
         for (const clipId of ids) {
             const weapon = weaponOfClip(clipId)

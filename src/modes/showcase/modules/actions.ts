@@ -4,10 +4,13 @@ import {createShowcaseActor} from '../actor.ts'
 import {createNameLabel} from '../label.ts'
 import type {ShowcaseActorHandle} from '../actor_handle.ts'
 import type {PanelRowInfo} from '../panel.ts'
-import {weaponPresetOrDefault, defaultHoldMode, weaponDisplayName} from '../../../character/weapon/catalog.ts'
-import {HOLD_MODES, HOLD_MODE_LABELS, type HoldMode} from '../../../character/weapon/hold_mode.ts'
+import {attackModuleDefOf, defaultAttackModule, weaponAttacksOf, weaponPresetOrDefault, weaponDisplayName} from '../../../character/weapon/catalog.ts'
+import {composeWithHeavySlot} from '../../../character/combat/attack_modules.ts'
+import {createWeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
+import {HOLD_MODES, type HoldMode} from '../../../character/weapon/hold_mode.ts'
 import {factionColorOf} from '../../../entity/character/appearance/constants.ts'
 import type {WeaponConfig} from '../../../character/weapon/catalog.ts'
+import type {WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import {
     MELEE_ROW_Z,
@@ -20,10 +23,29 @@ import {
 } from '../constants.ts'
 
 /** 各体形 Tab 的天然 / 允许武器（攻击模组）清单（武器只属于一种体形，用其体形专属 id） */
-const CREATURE_TABS: readonly {readonly key: string; readonly labelKey: StringLocaleKey; readonly weapons: readonly string[]}[] = [
-    {key: 'wyvern', labelKey: 'showcase.tab.wyvern', weapons: ['wyvern_claw']},
-    {key: 'horse', labelKey: 'showcase.tab.horse', weapons: ['horse_iron_hoof']},
-    {key: 'wolf', labelKey: 'showcase.tab.wolf', weapons: ['wolf_bite', 'wolf_short_sword', 'wolf_long_sword']},
+const CREATURE_TABS: readonly {
+    readonly key: string
+    readonly labelKey: StringLocaleKey
+    readonly modules: readonly {readonly weaponId: string; readonly moduleId: string; readonly breathWeaponId?: string; readonly row?: number}[]
+}[] = [
+    {key: 'wyvern', labelKey: 'showcase.tab.wyvern', modules: [
+        /* 近战排 */
+        {weaponId: 'wyvern_claw', moduleId: 'claw', row: 0},
+        {weaponId: 'wyvern_wing_blade', moduleId: 'claw', row: 0},
+        /* 远程 / 吐息排 */
+        {weaponId: 'wyvern_claw', moduleId: 'breath', breathWeaponId: 'breath_natural', row: 1},
+        {weaponId: 'wyvern_claw', moduleId: 'breath', breathWeaponId: 'breath_fireball', row: 1},
+        {weaponId: 'wyvern_claw', moduleId: 'breath', breathWeaponId: 'breath_lightning', row: 1},
+        {weaponId: 'wyvern_claw', moduleId: 'breath', breathWeaponId: 'breath_laser', row: 1},
+    ]},
+    {key: 'horse', labelKey: 'showcase.tab.horse', modules: [{weaponId: 'horse_iron_hoof', moduleId: 'hoof'}]},
+    {key: 'wolf', labelKey: 'showcase.tab.wolf', modules: [
+        {weaponId: 'wolf_bite', moduleId: 'mouth'},
+        {weaponId: 'wolf_claw', moduleId: 'claw'},
+        {weaponId: 'wolf_short_sword', moduleId: 'mouth'},
+        {weaponId: 'wolf_long_sword', moduleId: 'mouth'},
+        {weaponId: 'wolf_claw_blade', moduleId: 'claw'},
+    ]},
 ]
 
 /** 盾牌（攻击模组 = 盾击；待机 = 格挡姿态） */
@@ -46,33 +68,56 @@ export const actionsModule: ShowcaseModule = {
             scene: Parameters<ActorStageTab['populate']>[0],
             register: (actor: ShowcaseActorHandle, info: PanelRowInfo) => void,
             weapon: WeaponConfig,
-            holdMode: HoldMode,
+            attackModule: string,
             x: number,
             z: number,
             bodyFormId: string,
+            breathWeaponId?: string,
         ): void => {
             const id = nextId++
+            const breathRuntime = attackModule === 'breath'
+                ? createWeaponRuntime(breathWeaponId ?? 'breath_natural')
+                : undefined
+            const composed = breathRuntime !== undefined && breathRuntime.weapon.type === 'ranged'
+                ? composeWithHeavySlot(weaponAttacksOf(weapon, 'breath'), breathRuntime)
+                : undefined
+            /* 吐息演示只播重击吐息段，不重复展示同一模组里的轻爪部分 */
+            const breathOnly: WeaponAttacks | undefined = composed !== undefined
+                ? {
+                    segments: composed.attacks.segments,
+                    chains: {
+                        light: {key: 'light', entries: [], steps: []},
+                        heavy: composed.attacks.chains.heavy,
+                        air: {key: 'air', entries: [], steps: []},
+                    },
+                }
+                : undefined
             const actor = createShowcaseActor({
                 id,
                 scene,
                 weapon,
-                holdMode,
+                attackModule,
+                ...(breathOnly !== undefined ? {attacks: breathOnly, attackWeapons: composed?.attackWeapons} : {}),
+                ...(breathRuntime !== undefined ? {moduleLabel: weaponDisplayName(breathRuntime.weapon)} : {}),
                 faction: id,
                 x,
                 z,
                 weaponName: weaponDisplayName(weapon),
                 bodyFormId,
             })
+            const moduleDef = attackModuleDefOf(weapon, attackModule)
+                ?? attackModuleDefOf(weapon, defaultAttackModule(weapon))
+            const moduleLabel = (): string => breathRuntime !== undefined
+                ? weaponDisplayName(breathRuntime.weapon)
+                : translate(moduleDef?.nameKey ?? 'character.idle')
             actor.attachLabel(createNameLabel(() => ({
                 title: weaponDisplayName(weapon),
-                subtitle: weapon.type === 'melee'
-                    ? translate({key: 'showcase.weapon.melee_subtitle', args: [translate(HOLD_MODE_LABELS[holdMode])]})
-                    : translate('showcase.weapon.ranged'),
+                subtitle: moduleLabel(),
             })))
             register(actor, {
                 id,
                 nameOf: () => weaponDisplayName(weapon),
-                subOf: () => translate(HOLD_MODE_LABELS[holdMode]),
+                subOf: moduleLabel,
                 colorHex: `#${factionColorOf(id).toString(16).padStart(6, '0')}`,
             })
         }
@@ -87,7 +132,7 @@ export const actionsModule: ShowcaseModule = {
                         const entry = entries[i]
                         if (entry === undefined) continue
                         const weapon = weaponPresetOrDefault(entry.skillId)
-                        const mode = entry.holdMode ?? defaultHoldMode(weapon)
+                        const mode = entry.holdMode ?? defaultAttackModule(weapon)
                         place(scene, register, weapon, mode, (i - (entries.length - 1) / 2) * spacing, rowZ, 'humanoid')
                     }
                 }
@@ -99,11 +144,12 @@ export const actionsModule: ShowcaseModule = {
                 const shieldZ = RANGED_ROW_Z - MELEE_ROW_SPACING
                 SHIELD_IDS.forEach((weaponId, i) => {
                     const weapon = weaponPresetOrDefault(weaponId)
-                    place(scene, register, weapon, defaultHoldMode(weapon), (i - (SHIELD_IDS.length - 1) / 2) * RANGED_SPACING, shieldZ, 'humanoid')
+                    place(scene, register, weapon, defaultAttackModule(weapon), (i - (SHIELD_IDS.length - 1) / 2) * RANGED_SPACING, shieldZ, 'humanoid')
                 })
-                /* 空手：独立一排，展示拳击动作（无可见武器） */
+                /* 空手：独立一排，展示单拳 / 双拳两个攻击模组（无可见武器） */
                 const unarmed = weaponPresetOrDefault(SHOWCASE_UNARMED_ID)
-                place(scene, register, unarmed, defaultHoldMode(unarmed), 0, shieldZ - MELEE_ROW_SPACING, 'humanoid')
+                place(scene, register, unarmed, 'one_handed', -RANGED_SPACING / 2, shieldZ - MELEE_ROW_SPACING, 'humanoid')
+                place(scene, register, unarmed, 'dual_wield', RANGED_SPACING / 2, shieldZ - MELEE_ROW_SPACING, 'humanoid')
             },
         }
 
@@ -111,11 +157,25 @@ export const actionsModule: ShowcaseModule = {
             key: tab.key,
             labelKey: tab.labelKey,
             populate: (scene, register) => {
-                const n = tab.weapons.length
-                tab.weapons.forEach((weaponId, i) => {
-                    const weapon = weaponPresetOrDefault(weaponId)
-                    place(scene, register, weapon, defaultHoldMode(weapon), (i - (n - 1) / 2) * RANGED_SPACING, RANGED_ROW_Z, tab.key)
-                })
+                const rows = new Map<number, typeof tab.modules[number][]>()
+                for (const entry of tab.modules) {
+                    const row = entry.row ?? 0
+                    const list = rows.get(row) ?? []
+                    list.push(entry)
+                    rows.set(row, list)
+                }
+                for (const [row, entries] of rows) {
+                    const n = entries.length
+                    entries.forEach((entry, i) => {
+                        const weapon = weaponPresetOrDefault(entry.weaponId)
+                        place(
+                            scene, register, weapon, entry.moduleId,
+                            (i - (n - 1) / 2) * RANGED_SPACING,
+                            RANGED_ROW_Z - row * MELEE_ROW_SPACING,
+                            tab.key, entry.breathWeaponId,
+                        )
+                    })
+                }
             },
         }))
 

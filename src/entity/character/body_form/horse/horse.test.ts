@@ -2,8 +2,8 @@ import {describe, it, expect} from 'vitest'
 import {BASE_CLIP_STATES} from '../../../../character/state_machine/types.ts'
 import {findWeaponPreset, weaponAttacksOf} from '../../../../character/weapon/catalog.ts'
 import {bodyFormOf, isKnownBodyFormId} from '../../body_form/index.ts'
-import {buildHorseSkeleton} from './skeleton/skeleton.ts'
 import {HORSE_BODY_FORM} from './body_form.ts'
+import {HORSE_COLLIDER_LAYOUT, buildHorseSkeleton} from './skeleton/skeleton.ts'
 import {horseAttackClip, horseBaseClip} from './skeleton_animation/clips.ts'
 
 const STATES = BASE_CLIP_STATES
@@ -18,12 +18,22 @@ describe('马体形（forms/horse）', () => {
         }
     })
 
-    it('武器表包含天然铁蹄与人形化头武器，且全部归属本体', () => {
-        expect(HORSE_BODY_FORM.defaultWeaponId).toBe('horse_iron_hoof')
-        expect(new Set(HORSE_BODY_FORM.weapons.map(w => w.id))).toEqual(new Set(['horse_iron_hoof', 'horse_head_blade']))
+    it('碰撞布局：足底主胶囊 + 随躯干/颈部旋转的贴合碰撞体', () => {
+        const definition = buildHorseSkeleton()
+        const ids = new Set(definition.joints.map(joint => joint.id))
+        expect(HORSE_COLLIDER_LAYOUT[0]?.nodeId).toBe('groundCollider')
+        expect(HORSE_COLLIDER_LAYOUT[0]?.kind).toBe('capsule')
+        for (const collider of HORSE_COLLIDER_LAYOUT) expect(ids.has(collider.nodeId), collider.nodeId).toBe(true)
+        expect(definition.joints.find(joint => joint.id === 'bodyCollider')?.parentId).toBe('body')
+        expect(definition.joints.find(joint => joint.id === 'headCollider')?.parentId).toBe('neck')
+    })
+
+    it('武器表仅保留天然铁蹄，且归属本体', () => {
+        expect(HORSE_BODY_FORM.defaultWeaponLoadout.hooves).toBe('horse_iron_hoof')
+        expect(new Set(HORSE_BODY_FORM.weapons.map(w => w.id))).toEqual(new Set(['horse_iron_hoof']))
         expect(HORSE_BODY_FORM.weapons.every(w => w.formId === HORSE_BODY_FORM.id)).toBe(true)
         expect(findWeaponPreset('horse_iron_hoof')?.natural).toBe(true)
-        expect(findWeaponPreset('horse_head_blade')?.natural).not.toBe(true)
+        expect(findWeaponPreset('horse_head_blade')).toBeUndefined()
     })
 
     it('轻击为前踢 → 后踹，重击为单段蓄力践踏；命中挂点按蹄切换', () => {

@@ -23,7 +23,9 @@ const {
     computeSupportHandFingerprint,
     extractSupportTracks,
     isTwoHandedAttackClip,
+    needsBakedSupportHand,
     supportGripLocalOf,
+    supportElbowOutwardOf,
     weaponOfClip,
 } = await import('../src/entity/character/body_form/humanoid/skeleton_animation/clips/support_hand_bake.ts')
 
@@ -36,8 +38,8 @@ for (const weapon of TWO_HANDED_WEAPONS) {
     if (gripLocal === undefined) continue
     const states = {}
     for (const state of Object.keys(BASE_POSE_SAMPLERS)) {
-        const clip = buildBaseClip(state, true, 0, 'right')
-        const baked = bakeSupportHandToGrip(clip, gripLocal, false)
+        const clip = buildBaseClip(state, true, 0, 'right', weapon.classId)
+        const baked = bakeSupportHandToGrip(clip, gripLocal, false, supportElbowOutwardOf(weapon.classId))
         const tracks = extractSupportTracks(baked)
         if (tracks !== undefined) states[state] = tracks
     }
@@ -46,13 +48,13 @@ for (const weapon of TWO_HANDED_WEAPONS) {
 
 const attacks = {}
 for (const clipId of Object.keys(ATTACK_CLIPS)) {
-    if (!isTwoHandedAttackClip(clipId)) continue
+    if (!needsBakedSupportHand(clipId)) continue
     const weapon = weaponOfClip(clipId)
     if (weapon === undefined) continue
     const gripLocal = supportGripLocalOf(weapon)
     if (gripLocal === undefined) continue
     const body = compileAuthoredAttackClip(clipId, ATTACK_CLIPS[clipId], attackSkeleton, CHARACTER_JOINT_IDS)
-    const tracks = extractSupportTracks(bakeSupportHandToGrip(body, gripLocal, true))
+    const tracks = extractSupportTracks(bakeSupportHandToGrip(body, gripLocal, true, supportElbowOutwardOf(weapon.classId)))
     if (tracks !== undefined) attacks[clipId] = tracks
 }
 

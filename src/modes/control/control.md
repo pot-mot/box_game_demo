@@ -53,7 +53,7 @@
 const control = createPlayerControl(camera, domElement, {
     getTarget,            // () => Vector3 | undefined；无目标时退化为自由飞行
     move,                 // (dx, dz, jump, forwardX, forwardZ, roll) => void（写角色）
-    cycleHoldMode?,       // 持握模式切换回调
+    cycleAttackModule?,       // 攻击模组切换回调
     combat?,              // 攻击 / 蓄力回调（play）
     lock?,                // 镜头锁定回调（play）
     pointerActions,       // MOUSE_ACTIONS_BY_MODE.<mode>

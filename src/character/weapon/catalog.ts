@@ -1,10 +1,10 @@
 import type {MeleeWeaponConfig} from './melee_weapon.ts'
 import type {RangedWeaponConfig} from './ranged_weapon.ts'
-import type {HoldMode} from './hold_mode.ts'
-import {HOLD_MODES} from './hold_mode.ts'
+import type {AttackModuleDef, AttackModuleId} from './attack_module.ts'
 import type {WeaponAttacks} from './attack_chain.ts'
-import {attacksForHoldMode} from './attack_chain.ts'
+import {attacksForAttackModule} from './attack_chain.ts'
 import {translate} from '../../i18n/index.ts'
+import {breathModuleOf} from './breath_module.ts'
 
 /**
  * 武器目录：近战 + 远程统一查询入口。
@@ -44,6 +44,10 @@ export const allWeaponPresets = (): readonly WeaponConfig[] => [...WEAPON_BY_ID.
 /** 按 id 查武器（体形注册表） */
 export const findWeaponPreset = (weaponId: string): WeaponConfig | undefined => WEAPON_BY_ID.get(weaponId)
 
+/** 按 id 查武器或吐息模组（吐息是独立装备槽，但同样参与武器槽装载） */
+export const findWeaponLike = (weaponId: string): WeaponConfig | undefined =>
+    findWeaponPreset(weaponId) ?? breathModuleOf(weaponId)
+
 /** 按 id 查武器，未知 id 回退默认武器（存档 / 面板容错） */
 export const weaponPresetOrDefault = (weaponId: string | undefined): WeaponConfig => {
     const found = weaponId !== undefined ? findWeaponPreset(weaponId) : undefined
@@ -74,37 +78,51 @@ export const isDualWieldPair = (main: WeaponConfig, offhand: WeaponConfig | unde
     offhand !== undefined && main.type === 'melee' && offhand.type === 'melee' && main.classId === offhand.classId
 
 /**
- * 角色当前实际可用的持握模式：武器声明的模式中，双持额外要求副手为同类近战武器。
- * （武器数据仍以 `holdModes` 声明支持能力；可用性是角色级判定。）
+ * 角色当前实际可用的攻击模组：武器声明的模组中，双持额外要求副手为同类近战武器，
+ * `requiredSlots` 必须全部已被武器槽占用（如龙吐息要求 breath 槽）。
+ * （武器数据以 `attackModules` 声明能力；可用性是角色级判定。）
  */
-export const availableHoldModes = (weapon: WeaponConfig, offhand?: WeaponConfig): readonly HoldMode[] =>
-    weapon.holdModes.filter(mode => mode !== 'dual_wield' || isDualWieldPair(weapon, offhand))
+export const availableAttackModules = (
+    weapon: WeaponConfig,
+    offhand?: WeaponConfig,
+    occupiedWeaponSlots?: ReadonlySet<string>,
+): readonly AttackModuleDef[] =>
+    weapon.attackModules.filter(module => {
+        if (module.holdMode === 'dual_wield' && !isDualWieldPair(weapon, offhand)) return false
+        if (module.requiredSlots !== undefined && occupiedWeaponSlots !== undefined
+            && module.requiredSlots.some(slot => !occupiedWeaponSlots.has(slot))) return false
+        return true
+    })
 
-/** 武器支持的全部持握模式（数组首个 = 默认模式） */
-export const weaponHoldModes = (weapon: WeaponConfig): readonly HoldMode[] => weapon.holdModes
+/** 武器支持的全部攻击模组（数组首个 = 默认模组） */
+export const weaponAttackModules = (weapon: WeaponConfig): readonly AttackModuleDef[] => weapon.attackModules
 
-/** 武器默认持握模式（换武器 / 未显式指定时使用） */
-export const defaultHoldMode = (weapon: WeaponConfig): HoldMode => weapon.holdModes[0]
+/** 武器默认攻击模组（换武器 / 未显式指定时使用） */
+export const defaultAttackModule = (weapon: WeaponConfig): AttackModuleId => weapon.attackModules[0]?.id ?? ''
 
-/** 武器是否支持某持握模式 */
-export const supportsHoldMode = (weapon: WeaponConfig, holdMode: HoldMode): boolean =>
-    weapon.holdModes.includes(holdMode)
+/** 武器是否支持某攻击模组 */
+export const supportsAttackModule = (weapon: WeaponConfig, moduleId: AttackModuleId): boolean =>
+    weapon.attackModules.some(module => module.id === moduleId)
 
-/** 段 id 属于哪个持握模式的攻击链（枚举武器的全部已声明链；找不到返回 undefined） */
-export const holdModeOfSegment = (weapon: WeaponConfig, segmentId: string): HoldMode | undefined =>
-    HOLD_MODES.find(mode => attacksForHoldMode(weapon.attacks, mode)?.segments[segmentId] !== undefined)
+/** 取某攻击模组定义 */
+export const attackModuleDefOf = (weapon: WeaponConfig, moduleId: AttackModuleId): AttackModuleDef | undefined =>
+    weapon.attackModules.find(module => module.id === moduleId)
+
+/** 段 id 属于哪个攻击模组的攻击链（枚举武器的全部已声明链；找不到返回 undefined） */
+export const attackModuleOfSegment = (weapon: WeaponConfig, segmentId: string): AttackModuleId | undefined =>
+    weapon.attackModules.find(module => attacksForAttackModule(weapon.attacks, module.id)?.segments[segmentId] !== undefined)?.id
 
 /**
- * 取某持握模式的攻击链；未指定或该模式未声明时回退默认模式，
- * 默认模式也缺失（过渡期数据）时回退 `HOLD_MODES` 顺序中首个已声明模式。
+ * 取某攻击模组的攻击链；未指定或该模组未声明时回退默认模组，
+ * 默认模组也缺失（过渡期数据）时回退声明顺序中首个已声明链。
  */
-export const weaponAttacksOf = (weapon: WeaponConfig, holdMode?: HoldMode): WeaponAttacks => {
-    const requested = holdMode !== undefined && supportsHoldMode(weapon, holdMode) ? holdMode : defaultHoldMode(weapon)
-    const attacks = attacksForHoldMode(weapon.attacks, requested)
-        ?? attacksForHoldMode(weapon.attacks, defaultHoldMode(weapon))
-        ?? HOLD_MODES.map(mode => attacksForHoldMode(weapon.attacks, mode)).find(set => set !== undefined)
+export const weaponAttacksOf = (weapon: WeaponConfig, moduleId?: AttackModuleId): WeaponAttacks => {
+    const requested = moduleId !== undefined && supportsAttackModule(weapon, moduleId) ? moduleId : defaultAttackModule(weapon)
+    const attacks = attacksForAttackModule(weapon.attacks, requested)
+        ?? attacksForAttackModule(weapon.attacks, defaultAttackModule(weapon))
+        ?? weapon.attackModules.map(module => attacksForAttackModule(weapon.attacks, module.id)).find(set => set !== undefined)
     if (attacks === undefined) {
-        throw new Error(`武器 "${weapon.id}" 缺少攻击链（holdModes=${weapon.holdModes.join('/')}）`)
+        throw new Error(`武器 "${weapon.id}" 缺少攻击链（attackModules=${weapon.attackModules.map(module => module.id).join('/')}）`)
     }
     return attacks
 }

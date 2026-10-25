@@ -137,7 +137,7 @@ export const setupHakoniwa = (
         }
         const primarySlot = form.equipSlots.find(candidate => candidate.kind === 'weapon' && candidate.bodyPart === 'main_hand')
             ?? form.equipSlots.find(candidate => candidate.kind === 'weapon')
-        const mainWeaponId = (primarySlot !== undefined ? state.weapon[primarySlot.bodyPart] : undefined) ?? form.defaultWeaponId
+        const mainWeaponId = (primarySlot !== undefined ? state.weapon[primarySlot.bodyPart] : undefined) ?? Object.values(form.defaultWeaponLoadout)[0] ?? form.weapons[0]?.id ?? ''
         const offWeaponId = state.weapon.off_hand
         characterSystem.updateCharacterConfig(
             player.state.identity.id,
@@ -147,7 +147,6 @@ export const setupHakoniwa = (
             {equipment: state},
             offWeaponId !== undefined ? {weaponId: offWeaponId} : null,
         )
-        characterSystem.setBreathModule(player.state.identity.id, state.weapon.breath)
         refreshPreview()
     }
 

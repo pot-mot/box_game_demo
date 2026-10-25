@@ -127,7 +127,7 @@ export const localeZhCn: MainLocale = {
     'input.action.jump': '跳跃',
     'input.action.roll': '翻滚',
     'input.action.boost': '加速',
-    'input.action.cycle_hold_mode': '切换持握模式',
+    'input.action.cycle_attack_module': '切换攻击模组',
     'input.action.cycle_spawn_up': '上一个生成类型',
     'input.action.cycle_spawn_down': '下一个生成类型',
     'input.action.delete_entity': '删除实体',

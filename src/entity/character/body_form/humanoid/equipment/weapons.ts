@@ -3,6 +3,12 @@ import type {WeaponModelConfig} from '../../../../../character/weapon/weapon_cla
 import {meleeClass, resolveMeleeWeapon, type MeleeWeaponClassConfig} from '../../../../../character/weapon/melee_weapon.ts'
 import {rangedClass, resolveRangedWeapon, type RangedWeaponClassConfig} from '../../../../../character/weapon/ranged_weapon.ts'
 import {SHIELD_BLOCK_LARGE, SHIELD_BLOCK_MEDIUM, SHIELD_BLOCK_SMALL} from '../../../../../character/weapon/constants.ts'
+import {HOLD_MODE_LABELS, type HoldMode} from '../../../../../character/weapon/hold_mode.ts'
+import {Box3, Vector3} from 'three'
+import {createWeaponMesh, resolveAttackBoxes} from '../../../appearance/weapon_mesh.ts'
+import type {AttackModuleDef} from '../../../../../character/weapon/attack_module.ts'
+import type {MeleeDetectBoxSpec} from '../../../../../character/weapon/melee_weapon.ts'
+import {HUMANOID_SIZE} from '../state/form_base.ts'
 
 /**
  * 人形武器表（formId = 'humanoid'）：全部近战 / 远程武器类与模型。
@@ -15,17 +21,73 @@ const FORM_ID = 'humanoid'
 /** 人形武器可装备部位：主手 / 副手（同一武器模型可装任一手） */
 const HUMANOID_WEAPON_SLOTS = ['main_hand', 'off_hand'] as const
 
+/** 人形身体中心（脚底原点起算）：检测箱 offset 以身体中心为基准 */
+const BODY_CENTER_Y = HUMANOID_SIZE.height / 2
+
+const holdModules = (modes: readonly HoldMode[]): readonly AttackModuleDef[] =>
+    modes.map(id => ({id, nameKey: HOLD_MODE_LABELS[id], holdMode: id}))
+
+const detectBoxes = (
+    size: {x: number; y: number; z: number},
+    offset: {x: number; y: number; z: number},
+): readonly MeleeDetectBoxSpec[] => [{
+    jointId: 'root',
+    size,
+    offset: {x: offset.x, y: offset.y + BODY_CENTER_Y, z: offset.z},
+    rotation: {x: 0, y: 0, z: 0},
+}]
+
+/** `weaponMount` 为占位关节：装备时由主 / 副手槽解析为实际武器挂点 */
+const WEAPON_MOUNT = 'weaponMount'
+
+const attackBoxesOf = (mesh: WeaponModelConfig['mesh']): readonly import('../../../../../character/weapon/mesh_config.ts').WeaponAttackBoxSpec[] => {
+    const result = createWeaponMesh(mesh)
+    const boxes = resolveAttackBoxes(result, WEAPON_MOUNT, undefined)
+    result.cleanup()
+    return boxes
+}
+
+/** 远程武器攻击箱：用真实武器网格包围盒生成，贴合枪身 / 弓身（仅展示 / 调试用） */
+const attackBoxesOfMeshBounds = (mesh: WeaponModelConfig['mesh']): readonly import('../../../../../character/weapon/mesh_config.ts').WeaponAttackBoxSpec[] => {
+    const result = createWeaponMesh(mesh)
+    const position = result.group.position.clone()
+    const quaternion = result.group.quaternion.clone()
+    const rotation = {x: result.group.rotation.x, y: result.group.rotation.y, z: result.group.rotation.z}
+    /* 在武器本地空间取包围盒，再按握持变换放回挂点空间：得到贴合模型的定向盒 */
+    result.group.position.set(0, 0, 0)
+    result.group.quaternion.identity()
+    result.group.updateWorldMatrix(true, true)
+    const bounds = new Box3().setFromObject(result.group)
+    result.group.position.copy(position)
+    result.group.quaternion.copy(quaternion)
+    result.cleanup()
+    const localCenter = bounds.getCenter(new Vector3()).applyQuaternion(quaternion).add(position)
+    const size = bounds.getSize(new Vector3())
+    const margin = 0.01
+    return [{
+        jointId: WEAPON_MOUNT,
+        center: localCenter,
+        half: {
+            x: Math.max(0.02, size.x / 2 + margin),
+            y: Math.max(0.02, size.y / 2 + margin),
+            z: Math.max(0.02, size.z / 2 + margin),
+        },
+        rotation,
+        reach: Math.max(size.y, size.z) / 2 + margin,
+    }]
+}
+
 /** 近战武器类目录（键 = 类 id） */
 const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     short_sword: meleeClass({
         id: 'short_sword', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
+        attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 2,
         knockbackForce: 2, knockbackY: 1,
         detectionRange: 6,
         /* 前缘 = (0.5 + reach 0.3125) × 0.8 = 0.65，外扩 +0.05 见 src/entity/character/ai/ai.md 2.5.1 */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.8 }, offset: { x: 0, y: 0, z: 0.275 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.8 }, { x: 0, y: 0, z: 0.275 }),
     }, {
         one_handed: {},
         two_handed: {},
@@ -34,12 +96,12 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     long_sword: meleeClass({
         id: 'long_sword', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
+        attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 3,
         knockbackForce: 5, knockbackY: 2,
         detectionRange: 8,
         /* 前缘 = (0.5 + reach 0.4875) × 0.8 = 0.79 */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.94 }, { x: 0, y: 0, z: 0.345 }),
     }, {
         one_handed: {},
         two_handed: {},
@@ -49,12 +111,12 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     heavy_sword: meleeClass({
         id: 'heavy_sword', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
+        attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 8,
         knockbackForce: 8, knockbackY: 3,
         detectionRange: 10,
         /* 前缘 = (0.5 + reach 0.6025) × 0.8 = 0.882 */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 1.032 }, offset: { x: 0, y: 0, z: 0.391 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 1.032 }, { x: 0, y: 0, z: 0.391 }),
         /* 空中：两段旋风斩（姿势基底取轻 1/轻 2），动量略低、保留少量操控 */
         airAttack: {steps: ['air_1', 'air_2'], loop: false, momentum: 0.9, airControl: 0.25, poseKeys: ['light_1', 'light_2']},
     }, {
@@ -66,12 +128,12 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     spear: meleeClass({
         id: 'spear', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
+        attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 5,
         knockbackForce: 4, knockbackY: 1,
         detectionRange: 10,
         /* 前缘 = (0.5 + reach 1.17) × 0.8 = 1.336（长杆武器攻击距离优势） */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 1.486 }, offset: { x: 0, y: 0, z: 0.618 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 1.486 }, { x: 0, y: 0, z: 0.618 }),
         /* 空中：单段下刺（姿势基底取重 1 突刺），几乎保持惯性 */
         airAttack: {steps: ['air_1'], loop: false, momentum: 0.95, airControl: 0.3, poseKeys: ['heavy_1']},
     }, {
@@ -83,12 +145,12 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     dual_axe: meleeClass({
         id: 'dual_axe', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
+        attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 6,
         knockbackForce: 7, knockbackY: 2,
         detectionRange: 7,
         /* 前缘 = (0.5 + reach 0.4193) × 0.8 = 0.73544 */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.88544 }, offset: { x: 0, y: 0, z: 0.31772 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.88544 }, { x: 0, y: 0, z: 0.31772 }),
     }, {
         one_handed: {},
         two_handed: {},
@@ -97,12 +159,12 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     war_hammer: meleeClass({
         id: 'war_hammer', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed', 'two_handed', 'dual_wield'],
+        attackModules: holdModules(['one_handed', 'two_handed', 'dual_wield']),
         damage: 10,
         knockbackForce: 10, knockbackY: 4,
         detectionRange: 8,
         /* 前缘 = (0.5 + reach 0.4875) × 0.8 = 0.79（战锤握把偏低，reach 已计入 gripY） */
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.94 }, { x: 0, y: 0, z: 0.345 }),
         /* 空中：跳跃砸地——单段重砸（姿势基底取重 1） */
         airAttack: {steps: ['air_1'], loop: false, momentum: 0.7, airControl: 0.12, poseKeys: ['heavy_1']},
         /* 段内自身冲击：砸地在下砸到打击帧（段内 0.5s，与 clip hitbox_on 同刻）时向下砸；离地才施加 */
@@ -118,11 +180,13 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     shield_small: meleeClass({
         id: 'shield_small', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed'],
+        /* 盾击 / 盾撞整体放慢：保留 2:1:2.5，下砸不再瞬跳 */
+        timeScale: 2,
+        attackModules: holdModules(['one_handed']),
         damage: 2,
         knockbackForce: 3, knockbackY: 1,
         detectionRange: 3,
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.7 }, offset: { x: 0, y: 0, z: 0.225 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.7 }, { x: 0, y: 0, z: 0.225 }),
         block: SHIELD_BLOCK_SMALL,
     }, {
         one_handed: {},
@@ -130,11 +194,13 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     shield_medium: meleeClass({
         id: 'shield_medium', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed'],
+        /* 盾击 / 盾撞整体放慢：保留 2:1:2.5，下砸不再瞬跳 */
+        timeScale: 2,
+        attackModules: holdModules(['one_handed']),
         damage: 3,
         knockbackForce: 4, knockbackY: 2,
         detectionRange: 4,
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.8 }, offset: { x: 0, y: 0, z: 0.275 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.8 }, { x: 0, y: 0, z: 0.275 }),
         block: SHIELD_BLOCK_MEDIUM,
     }, {
         one_handed: {},
@@ -142,27 +208,31 @@ const MELEE_CLASSES: Record<string, MeleeWeaponClassConfig> = {
     shield_large: meleeClass({
         id: 'shield_large', type: 'melee',
         damageType: 'physical',
-        holdModes: ['one_handed'],
+        /* 盾击 / 盾撞整体放慢：保留 2:1:2.5，下砸不再瞬跳 */
+        timeScale: 2,
+        attackModules: holdModules(['one_handed']),
         damage: 4,
         knockbackForce: 5, knockbackY: 2,
         detectionRange: 5,
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.94 }, offset: { x: 0, y: 0, z: 0.345 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.94 }, { x: 0, y: 0, z: 0.345 }),
         block: SHIELD_BLOCK_LARGE,
     }, {
         one_handed: {},
     }),
-    /* 空手：天然武器类别（无武器时的 default 分配）。无可视模型，命中盒贴掌；
-     * 动作复用短剑单持段关键帧（拳击 / 挥拳），外观由身体手部件表达。 */
+    /* 空手：天然武器类别（主手 / 副手默认）。无可视模型，攻击箱贴掌；
+     * 动作复用短剑单持 / 双持段关键帧（单拳直拳 / 双拳交替），外观由身体手部件表达。
+     * 不支持双手共持：双拳 = 主手 + 副手各装备 `unarmed` 后切换 `dual_wield`。 */
     unarmed: meleeClass({
         id: 'unarmed', type: 'melee', natural: true,
         damageType: 'physical',
-        holdModes: ['one_handed'],
+        attackModules: holdModules(['one_handed', 'dual_wield']),
         damage: 1,
         knockbackForce: 2, knockbackY: 1,
         detectionRange: 3,
-        detectBox: { size: { x: 0.5, y: 1.15, z: 0.5 }, offset: { x: 0, y: 0, z: 0.2 } },
+        detectBoxes: detectBoxes({ x: 0.5, y: 1.15, z: 0.5 }, { x: 0, y: 0, z: 0.2 }),
     }, {
         one_handed: {poseRef: (own: string) => own.replace(/^unarmed_/, 'short_sword_')},
+        dual_wield: {poseRef: (own: string) => own.replace(/^unarmed_/, 'short_sword_')},
     }),
 }
 
@@ -217,6 +287,11 @@ const MELEE_MODELS: Record<string, WeaponModelConfig> = {
         id: 'unarmed', classId: 'unarmed', formId: FORM_ID, name: '空手', nameKey: 'weapon.unarmed',
         equipBodyParts: HUMANOID_WEAPON_SLOTS,
         mesh: { id: 'none' },
+        /* 拳头攻击箱：缩小并拆到前臂 / 手两段关节；`forearm` / `hand` 在装备时按主副手侧解析 */
+        attackBoxes: [
+            {jointId: 'forearm', center: {x: 0, y: -0.09, z: 0}, half: {x: 0.055, y: 0.1, z: 0.055}, rotation: {x: 0, y: 0, z: 0}, reach: 0.2},
+            {jointId: 'hand', center: {x: 0, y: -0.04, z: 0.02}, half: {x: 0.06, y: 0.06, z: 0.07}, rotation: {x: 0, y: 0, z: 0}, reach: 0.12},
+        ],
     },
 }
 
@@ -225,7 +300,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     longbow: rangedClass({
         id: 'longbow', type: 'ranged',
         damageType: 'physical',
-        holdModes: ['two_handed'],
+        attackModules: holdModules(['two_handed']),
         damage: 2, range: 10,
         knockbackForce: 3, projectileSpeed: 20, projectileLifetime: 3,
         detectionRange: 20, idealRange: 7, retreatRange: 4,
@@ -236,7 +311,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     crossbow: rangedClass({
         id: 'crossbow', type: 'ranged',
         damageType: 'physical',
-        holdModes: ['two_handed'],
+        attackModules: holdModules(['two_handed']),
         damage: 5, range: 8,
         knockbackForce: 4, projectileSpeed: 45, projectileLifetime: 1.5,
         detectionRange: 15, idealRange: 5, retreatRange: 3,
@@ -245,7 +320,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     shotgun: rangedClass({
         id: 'shotgun', type: 'ranged',
         damageType: 'physical',
-        holdModes: ['two_handed'],
+        attackModules: holdModules(['two_handed']),
         damage: 1, range: 6,
         knockbackForce: 6, projectileSpeed: 15, projectileLifetime: 1.5,
         detectionRange: 10, idealRange: 3, retreatRange: 2,
@@ -255,7 +330,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     staff: rangedClass({
         id: 'staff', type: 'ranged',
         damageType: 'magic',
-        holdModes: ['two_handed'],
+        attackModules: holdModules(['two_handed']),
         damage: 3, range: 8,
         knockbackForce: 4, projectileSpeed: 10, projectileLifetime: 5,
         detectionRange: 18, idealRange: 5, retreatRange: 3,
@@ -265,7 +340,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     magic_wand: rangedClass({
         id: 'magic_wand', type: 'ranged',
         damageType: 'magic',
-        holdModes: ['one_handed'],
+        attackModules: holdModules(['one_handed']),
         damage: 1.5, range: 10,
         knockbackForce: 2, projectileSpeed: 8, projectileLifetime: 4,
         detectionRange: 16, idealRange: 6, retreatRange: 4,
@@ -275,7 +350,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     throwing_axe: rangedClass({
         id: 'throwing_axe', type: 'ranged',
         damageType: 'physical',
-        holdModes: ['one_handed'],
+        attackModules: holdModules(['one_handed']),
         damage: 6, range: 10,
         knockbackForce: 5, projectileSpeed: 15, projectileLifetime: 3,
         detectionRange: 12, idealRange: 6, retreatRange: 3,
@@ -287,7 +362,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     grenade: rangedClass({
         id: 'grenade', type: 'ranged',
         damageType: 'physical',
-        holdModes: ['one_handed'],
+        attackModules: holdModules(['one_handed']),
         damage: 4, range: 10,
         knockbackForce: 8, projectileSpeed: 10, projectileLifetime: 4,
         detectionRange: 14, idealRange: 6, retreatRange: 3,
@@ -298,7 +373,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     molotov: rangedClass({
         id: 'molotov', type: 'ranged',
         damageType: 'physical',
-        holdModes: ['one_handed'],
+        attackModules: holdModules(['one_handed']),
         damage: 2, range: 10,
         knockbackForce: 5, projectileSpeed: 10, projectileLifetime: 4,
         detectionRange: 12, idealRange: 6, retreatRange: 3,
@@ -309,7 +384,7 @@ const RANGED_CLASSES: Record<string, RangedWeaponClassConfig> = {
     throwing_dart: rangedClass({
         id: 'throwing_dart', type: 'ranged',
         damageType: 'physical',
-        holdModes: ['one_handed'],
+        attackModules: holdModules(['one_handed']),
         damage: 1.5, range: 12,
         knockbackForce: 1, projectileSpeed: 30, projectileLifetime: 2,
         detectionRange: 16, idealRange: 8, retreatRange: 4,
@@ -370,6 +445,16 @@ const RANGED_MODELS: Record<string, WeaponModelConfig> = {
 
 /** 人形全部武器（近战在前、远程在后；面板下拉 / 存档校验用） */
 export const HUMANOID_WEAPONS: readonly WeaponConfig[] = [
-    ...Object.values(MELEE_MODELS).map(model => resolveMeleeWeapon(MELEE_CLASSES[model.classId]!, model)),
-    ...Object.values(RANGED_MODELS).map(model => resolveRangedWeapon(RANGED_CLASSES[model.classId]!, model)),
+    ...Object.values(MELEE_MODELS).map(model => resolveMeleeWeapon(MELEE_CLASSES[model.classId]!, {
+        ...model,
+        attackBoxes: model.attackBoxes ?? attackBoxesOf(model.mesh),
+        colliders: [],
+        hurtBoxes: [],
+    })),
+    ...Object.values(RANGED_MODELS).map(model => resolveRangedWeapon(RANGED_CLASSES[model.classId]!, {
+        ...model,
+        attackBoxes: attackBoxesOfMeshBounds(model.mesh),
+        colliders: [],
+        hurtBoxes: [],
+    })),
 ]

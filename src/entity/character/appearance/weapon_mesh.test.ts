@@ -28,6 +28,12 @@ describe('程序化武器模型（weapon_mesh）', () => {
         }
     })
 
+    it('长枪主握点位于枪杆中点', () => {
+        const spear = createWeaponMesh({id: 'spear', poleLen: 1, headLen: 0.2, color: 0x886644, headColor: 0xaaaaaa})
+        expect(spear.gripY).toBeCloseTo(0.5, 6)
+        spear.cleanup()
+    })
+
     it('远程武器不生成近战攻击箱，近战 / 天然武器保留', () => {
         const ranged: readonly WeaponMeshConfig[] = [
             {id: 'bow', size: 0.7, color: 0x886633, stringColor: 0xddddcc},

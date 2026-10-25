@@ -1,6 +1,6 @@
 import {describe, it, expect} from 'vitest'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS} from '../pose_fns.ts'
-import {TWO_HANDED_WEAPONS, computeSupportHandFingerprint, isTwoHandedAttackClip, weaponOfClip} from './support_hand_bake.ts'
+import {TWO_HANDED_WEAPONS, computeSupportHandFingerprint, needsBakedSupportHand, weaponOfClip} from './support_hand_bake.ts'
 import {SUPPORT_HAND_BASE} from './generated/support_hand_base.ts'
 import {SUPPORT_HAND_ATTACKS} from './generated/support_hand_attacks.ts'
 import {SUPPORT_HAND_BAKE_FINGERPRINT} from './generated/support_hand_fingerprint.ts'
@@ -23,7 +23,7 @@ describe('支撑手离线烘焙数据', () => {
     })
 
     it('攻击支撑手数据与双手段集合完全一致', () => {
-        const expected = Object.keys(ATTACK_CLIPS).filter(isTwoHandedAttackClip)
+        const expected = Object.keys(ATTACK_CLIPS).filter(needsBakedSupportHand)
         expect(Object.keys(SUPPORT_HAND_ATTACKS).sort()).toEqual(expected.sort())
         for (const clipId of expected) {
             expect(weaponOfClip(clipId), clipId).toBeDefined()

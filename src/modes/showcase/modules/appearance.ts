@@ -31,7 +31,8 @@ const SETS_PER_ROW = 3
  * - 第一排：三族肢体（骷髅 / 兽人 / 精灵，四槽同族肢体 replace）；
  * - 第二排起：各材质护甲**整套**（布 / 皮 / 铁 / 鳞 / 石 / 法师，四槽同套），每行 3 套；
  * - 末排：非人形体形（狼 / 马 / 双足飞龙）。
- * 全部角色站立 2s ↔ 行走 2s 交替循环（`RACE_SHOWCASE_HOLD_SECONDS`），位置原地不动，纯外观展示。
+ * 动作不再定时轮换，统一由左侧面板「当前动作」切换；支持全部非攻击基础状态（含游泳 / 漂浮等），
+ * 位置原地不动，纯外观展示。
  */
 export const appearanceModule: ShowcaseModule = {
     id: 'appearance',
@@ -40,6 +41,7 @@ export const appearanceModule: ShowcaseModule = {
     setup: host => setupActorStage(host.renderer, {
         titleKey: 'showcase.module.appearance.title',
         subtitleKey: 'showcase.module.appearance.desc',
+        actionPicker: {initial: 'idle'},
         tabs: [{
             key: 'appearance',
             labelKey: 'showcase.module.appearance.title',
@@ -99,7 +101,7 @@ export const appearanceModule: ShowcaseModule = {
                 })))
             }
 
-            /* 末排：非人形体形（狼 / 马 / 双足飞龙），循环播放对应体形的 idle ↔ walking */
+            /* 末排：非人形体形（狼 / 马 / 双足飞龙），与外观角色共用左侧动作选择 */
             const creatureEntries = CREATURE_SHOWCASE_ROSTER
             const creatureZ = -rowIndex * SHOWCASE_APPEARANCE_ROW_SPACING
             for (let i = 0; i < creatureEntries.length; i++) {

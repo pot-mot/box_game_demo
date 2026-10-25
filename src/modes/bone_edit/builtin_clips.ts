@@ -4,7 +4,7 @@ import {orderedSegments, segmentDisplayName, type AttackSegment} from '../../cha
 import {weaponAttacksOf, weaponDisplayName, weaponsOfForm} from '../../character/weapon/catalog.ts'
 import {HUMANOID_BODY_FORM_ID, bodyFormOf} from '../../entity/character/body_form/index.ts'
 import {DEFAULT_FORM_CLIP_VARIANT, type FormClipVariant} from '../../entity/character/body_form/common/skeleton_animation/form_animation.ts'
-import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
+import type {HoldMode} from '../../character/weapon/hold_mode.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
 /** 基础状态键（与姿态采样器状态一致） */
@@ -29,7 +29,9 @@ export interface BuiltinClipEntry {
     readonly weaponId?: string
     /** 攻击条目对应的武器段 id（基础状态条目为 undefined） */
     readonly segmentId?: string
-    /** 攻击条目所在攻击链的持握模式（编辑器据此决定双手贴合 / 副手装备；基础状态条目为 undefined） */
+    /** 攻击条目所在攻击模组（编辑器据此决定双手贴合 / 副手装备；基础状态条目为 undefined） */
+    readonly attackModule?: string
+    /** 攻击模组的握持语义（仅人形；生物为 undefined） */
     readonly holdMode?: HoldMode
     /**
      * 基础状态持械标记（仅 待机/行走 的持械-空手变体携带）：
@@ -42,6 +44,7 @@ export interface BuiltinClipEntry {
 interface EntryOrigin {
     readonly weaponId?: string
     readonly segmentId?: string
+    readonly attackModule?: string
     readonly holdMode?: HoldMode
     readonly weaponHeld?: boolean
 }
@@ -91,6 +94,7 @@ const entryOf = (
     clip: {...source, name: label},
     weaponId: origin.weaponId,
     segmentId: origin.segmentId,
+    attackModule: origin.attackModule,
     holdMode: origin.holdMode,
     weaponHeld: origin.weaponHeld,
 })
@@ -198,14 +202,14 @@ const buildAttackEntries = (formId: string, provider: ClipProvider): BuiltinClip
     /* 吐息是独立装备槽，不属于 `bodyForm.weapons`；编辑器仍应能直接预览 */
     const weapons = [...weaponsOfForm(formId), ...(bodyFormOf(formId).breathModules ?? [])]
     return weapons.flatMap(weapon => {
-        const multiMode = weapon.holdModes.length > 1
-        return weapon.holdModes.flatMap(holdMode => {
-            const segments = orderedSegments(weaponAttacksOf(weapon, holdMode))
+        const multiModule = weapon.attackModules.length > 1
+        return weapon.attackModules.flatMap(module => {
+            const segments = orderedSegments(weaponAttacksOf(weapon, module.id))
             return segments.map(segment => {
                 const labelOf = (): string => segments.length > 1
-                    ? `${weaponDisplayName(weapon)} · ${multiMode ? `${translate(HOLD_MODE_LABELS[holdMode])} · ` : ''}${segmentDisplayName(segment)}`
+                    ? `${weaponDisplayName(weapon)} · ${multiModule ? `${translate(module.nameKey)} · ` : ''}${segmentDisplayName(segment)}`
                     : weaponDisplayName(weapon)
-                /* 吐息段在运行时由 `composeClawAndBreath` 标记 attackWeaponId；编辑器直接预览时补上，
+                /* 吐息段在运行时由组合器标记 attackWeaponId；编辑器直接预览时补上，
                  * 避免把吐息段误当作近战段生成 hitbox 事件轨 */
                 const source = weapon.id.startsWith('breath_')
                     ? {...segment, attackWeaponId: weapon.id}
@@ -214,8 +218,8 @@ const buildAttackEntries = (formId: string, provider: ClipProvider): BuiltinClip
                     segment.id,
                     weapon.type === 'melee' ? GROUP_MELEE : GROUP_RANGED,
                     labelOf(),
-                    provider.previewAttack(source, holdMode),
-                    {weaponId: weapon.id, segmentId: segment.id, holdMode},
+                    provider.previewAttack(source, module.holdMode ?? 'one_handed'),
+                    {weaponId: weapon.id, segmentId: segment.id, attackModule: module.id, holdMode: module.holdMode},
                     labelOf,
                 )
             })

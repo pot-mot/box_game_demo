@@ -44,30 +44,34 @@ export const createCreatureEquipmentAppearance = (
         const slot = ctx.equipSlots.find(candidate => candidate.kind === kind && candidate.bodyPart === bodyPart)
         if (slot === undefined) return
         const fallbackMaterial = kind === 'armor' ? style.armorMaterial : style.limbMaterial
-        const materialId = kind === 'armor' && 'material' in piece.mesh && piece.mesh.material !== undefined
-            ? piece.mesh.material
-            : fallbackMaterial
-        const color = colorOf(piece.mesh, kind === 'armor' ? 0x8a8f98 : 0x6f9a4a)
-        const material = ctx.builder.materialById(materialId, color)
         const baseW = Math.max(0.02, size.w)
         const baseH = Math.max(0.02, size.h)
         const baseD = Math.max(0.02, size.d)
-        for (const jointId of slot.mountJointIds) {
-            const joint = ctx.groups.get(jointId)
+        const mounts: readonly {jointId: string; mesh: typeof piece.mesh; offset?: {x: number; y: number; z: number}; rotation?: {x: number; y: number; z: number}; scale?: {x: number; y: number; z: number}}[] = piece.mounts ?? slot.mountJointIds.map(jointId => ({jointId, mesh: piece.mesh}))
+        for (const mount of mounts) {
+            const joint = ctx.groups.get(mount.jointId)
             if (joint === undefined) continue
-            const offset = size.offset ?? [0, baseH / 2, 0]
+            const meshInfo = mount.mesh
+            const materialId = kind === 'armor' && 'material' in meshInfo && meshInfo.material !== undefined
+                ? meshInfo.material
+                : fallbackMaterial
+            const color = colorOf(meshInfo, kind === 'armor' ? 0x8a8f98 : 0x6f9a4a)
+            const material = ctx.builder.materialById(materialId, color)
+            const offset = mount.offset ?? {x: size.offset?.[0] ?? 0, y: size.offset?.[1] ?? baseH / 2, z: size.offset?.[2] ?? 0}
+            const rotation = mount.rotation ?? {x: 0, y: 0, z: 0}
+            const scale = mount.scale ?? {x: 1, y: 1, z: 1}
             const mesh = ctx.builder.add(
-                ctx.builder.frustum(baseW, baseW * 0.94, baseH, baseD / baseW),
+                ctx.builder.frustum(baseW * scale.x, baseW * 0.94 * scale.x, baseH * scale.y, baseD / baseW),
                 material,
-                offset[0],
-                offset[1],
-                offset[2],
-                0,
-                0,
-                0,
+                offset.x,
+                offset.y,
+                offset.z,
+                rotation.x,
+                rotation.y,
+                rotation.z,
                 joint,
             )
-            mesh.userData.jointId = jointId
+            mesh.userData.jointId = mount.jointId
             meshes.push(mesh)
         }
     }

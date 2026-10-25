@@ -35,7 +35,7 @@ describe('编辑器武器规格（weaponSpecOf / isTwoHandedWeapon）', () => {
         const fallback = weaponSpecOf(DEFAULT_WEAPON_ID, undefined, 'humanoid')
         /* 攻击动作（含内置副本）→ 该武器 + 段所属持握模式 */
         const spearSpec = resolveAutoWeapon(
-            {weaponId: 'spear', segmentId: 'spear_two_handed_light_1', holdMode: 'two_handed'},
+            {weaponId: 'spear', segmentId: 'spear_two_handed_light_1', attackModule: 'two_handed'},
             undefined,
             fallback,
             'humanoid',

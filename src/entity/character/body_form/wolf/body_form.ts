@@ -18,7 +18,7 @@ export const WOLF_BODY_FORM_ID = 'wolf'
 
 /**
  * 狼（四足）体形计划：状态 / 骨架 / 外观 / 动画 / 装备各自独立来源。
- * 天然武器 `wolf_bite`（撕咬，melee）为 default；口部挂点 `mouthMount` 可含短剑 / 长剑（口含剑）。
+ * 头槽默认天然嘴 `wolf_bite`、爪槽默认天然爪 `wolf_claw`；头槽可换短剑 / 长剑（口含剑），爪槽可换爪刃。
  */
 export const WOLF_BODY_FORM: BodyForm = {
     id: WOLF_BODY_FORM_ID,
@@ -47,7 +47,8 @@ export const WOLF_BODY_FORM: BodyForm = {
     armorPieces: WOLF_ARMOR_PIECES,
     limbPieces: WOLF_LIMB_PIECES,
     weapons: WOLF_WEAPONS,
-    defaultWeaponId: 'wolf_bite',
+    defaultWeaponLoadout: {head: 'wolf_bite', claw: 'wolf_claw'},
     editor: {weaponControl: true, handedness: false},
+    uprightRoot: false,
     rollSpinTurns: 0,
 }

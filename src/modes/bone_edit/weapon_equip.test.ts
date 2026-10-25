@@ -11,7 +11,7 @@ import {HUMANOID_BODY_FORM_ID} from '../../entity/character/body_form/index.ts'
 const SUPPORT_GRIP_MIN = 0.06
 const SUPPORT_GRIP_MAX = 0.4
 const TWO_HANDED_WEAPON_IDS = weaponsOfForm(HUMANOID_BODY_FORM_ID)
-    .filter(weapon => weapon.holdModes.includes('two_handed') && (weapon.mesh.supportGripOffset ?? 0) !== 0)
+    .filter(weapon => weapon.attackModules.some(module => module.holdMode === 'two_handed') && (weapon.mesh.supportGripOffset ?? 0) !== 0)
     .map(weapon => weapon.id)
 
 /** 编辑器武器装载（真实场景图 + 预设骨架）：保证武器「挂得上、看得见、跟得动」，并按惯用手选挂点 / 镜像 */

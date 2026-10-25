@@ -12,11 +12,11 @@
   - `BodyForm.assemble` / `createModel`（`appearance/`）：网格、材质、装备外观；只消费骨架派生数据。
   - `BodyForm.animation`（`skeleton_animation/`）：动画 provider（运行时系统 + 编辑器 base/attack clip）；不能增删骨骼节点。
   - `BodyForm.equipSlots` + `equipmentModules`（`state/` + `equipment/`）：槽位与装备模组。
-    同一模组共享槽位的 `mountJointIds`（骨骼挂载配置），单件只声明数值与外观。
+    槽位 `mountJointIds` 是允许挂载关节白名单；单件可用 `mounts` 数组逐关节声明模型 / 坐标 / 旋转。
 - 注册表 `BODY_FORMS`（`index.ts`）；`bodyFormOf(id)` 对未知 / 缺省 id **安全回退人形**（存档容错）。
   `isKnownBodyFormId` 供校验。装配时会校验装备模组与槽位表一致，不一致直接 fail loudly。
 - `CharacterConfig.bodyFormId?`（缺省 = `humanoid`）是体形的持久化键；
-  `CharacterConfig.bodyState?` 是不透明体形状态（人形解释 `holdMode` / `handedness`）。
+  `CharacterConfig.bodyState?` 是不透明体形状态（通用 `attackModule`；人形额外解释 `handedness`）。
 - 装备状态 `EquipmentState` 嵌套 `limb` / `weapon` / `armor`，槽位键 = `kind:bodyPart`。
   **装备只影响数值与外观，不修改 skeleton / 关节 / 动画**；武器额外拥有攻击动画模组，属于领域允许项。
 
@@ -36,7 +36,7 @@
 
 - **humanoid**（`body_form/humanoid/`）：自包含状态 / 骨架 / 受击块 / 模型 / 装配 / 姿态 / 动画系统 /
   基础与攻击 clip / 支撑手烘焙 / 护甲与肢体网格 / 武器与装备模组。
-  `createModel` 经 `createHumanoidModel`，`animation = HUMANOID_ANIMATION`，`defaultWeaponId = 'unarmed'`。
+  `createModel` 经 `createHumanoidModel`，`animation = HUMANOID_ANIMATION`，`defaultWeaponLoadout = {main_hand:'unarmed', off_hand:'unarmed'}`。
   人形护甲 / 肢体预设数据位于 `humanoid/equipment/armor.ts` / `limb.ts`，由 `body_form/index.ts` 在装配时经 `character/armor/catalog.ts` 注册；`equipment/modules.ts` 负责按槽位批量生成装备模组。
 - **wolf**（`body_form/wolf/`）：四足；自包含骨架（`joints` + `bones` 层级段）/ 状态 / 外观 / `pose_fns.ts` / `clips.ts`；
   口含短剑 / 长剑横向咬持；撕咬轻 1–2、口含剑轻 1–3，重击均为单段蓄力。
@@ -68,15 +68,16 @@
 ## BodyForm 字段（`common/types.ts`）
 
 `id` / `nameKey` / `base` / `createState` / `skeleton` / `assemble` / `palette?` / `createModel` / `animation` /
-`equipSlots` / `equipmentModules` / `armorPieces?` / `limbPieces?` / `weapons` / `defaultWeaponId` /
-`editor` / `breathModules?` / `rollSpinTurns?` / `onFrame?`。
+`equipSlots` / `equipmentModules` / `armorPieces?` / `limbPieces?` / `weapons` / `defaultWeaponLoadout` /
+`editor` / `breathModules?` / `rollSpinTurns?` / `uprightRoot?` / `onFrame?`。`uprightRoot` 缺省 `true`；狼 / 马 / 飞龙为 `false`，游泳 / 死亡 / 倒地 / 起身不再叠加向地面的根旋转。
 
 - `base`：`size` / `centerOffsetY` / `eyeHeight` / `baseHealth` / `baseDefense` / `baseAttack` /
   `baseMoveSpeedMultiplier` / `basePoise` / `animation`。读取尺寸 / 眼高一律走 `base`（或 `common/geometry.ts` 派生函数）。
 - `createState`：由 `body_form/<form>/state/runtime.ts` 提供，构造该体形的具体 `CharacterState`；生产生成只走此入口。
 - `skeleton`：`build` / `jointNameKeys?` / `colliderLayout` / `hurtProfile`。
-- `equipmentModules`：由槽位 + 单件装备批量化生成；模块 `mountJointIds` 必须与槽位一致。
+- `equipmentModules`：由槽位 + 单件装备批量化生成；单件 `mounts` 的关节必须是槽位白名单子集。
 - `weapons`：该体形拥有的全部武器；`weaponSelectableFor(form, weapon) = weapon.formId === form.id`。
+- `defaultWeaponLoadout`：每个武器槽 `bodyPart → 天然默认武器 id`；缺失 / 非法槽位加载时回填。
 - `breathModules`：体形专属吐息模组（仅 wyvern）；不进入主武器下拉，由 `weapon:breath` 槽装备。
 - `editor`：骨骼编辑器能力声明（`weaponControl` / `handedness`），编辑器不按体形 id 硬编码。
 
@@ -84,11 +85,11 @@
 
 - 槽位表由各体形 `state/equip_slots.ts` 声明；槽位是游戏层限制，不要求与特定骨骼节点一一对应。
 - 装备模组由 `common/equipment.ts` 的 `buildEquipmentModules` 从槽位 + 单件装备生成：
-  同模组全部装备共享 `mountJointIds`；`validateEquipmentModules` 在 `body_form/index.ts` 装配期校验。
+  槽位 `mountJointIds` 是允许关节；单件 `mounts` 可逐关节覆盖模型、偏移、旋转；`validateEquipmentModules` 在 `body_form/index.ts` 装配期校验。
 - 当前槽位覆盖：
   - 飞龙 limb：`wing_claw / wing / head / torso / legs / tail`；weapon：`wing_claw / breath`；
     armor：`head / torso / legs / wing / tail`。
-  - 马 limb：`head / torso / legs / tail`；weapon：`hooves / head`；armor：`hooves / head / torso / legs`。
+  - 马 limb：`head / torso / legs / tail`；weapon：`hooves`；armor：`hooves / head / torso / legs`。
   - 狼 limb：`claw / head / torso / legs / tail`；weapon：`claw / head`；armor：`claw / head / torso / legs`。
 - 每个槽位至少有一件可装备物品（缺失会由 `contracts.test.ts` 的模组校验发现）。
 
@@ -96,17 +97,18 @@
 
 每个武器**只属于一种体形**（`WeaponModelConfig.formId`），数据声明在 `body_form/<form>/equipment/weapons.ts`，
 只复用 `appearance/weapon_mesh.ts` 的网格生成器。`body_form/index.ts` 装配 `BODY_FORMS` 时经
-`registerFormWeapons(form.id, form.weapons)` 注册。**切体形一律落到新体形 `defaultWeaponId`**。
+`registerFormWeapons(form.id, form.weapons)` 注册。**切体形一律按新体形 `defaultWeaponLoadout` 回填全部武器槽**。
+天然武器同样是装备槽中的近战武器，可写入角色装备存档；缺失 / 非法值回填天然默认。
 
-生物天然武器可经 `mountJointId` 指定专属挂点关节；多肢体攻击段用 `AttackSegment.hitMountJointIds` 分别指定。
-吐息模组通过独立 `breath` 装备槽装备。
+生物天然武器可经 `mountJointId` 指定专属挂点关节；多肢体攻击段用 `AttackSegment.hitMountJointIds` 过滤武器攻击箱的关节子集。
+吐息模组通过独立 `breath` 装备槽装备；默认回填基础天然吐息。
 
 ## 运行时切换（world.setBodyForm）
 
 `world.setBodyForm(id, planId)`：未知 id 或同一体形返回 `false`；否则依次——
 
 1. 重设 `config.bodyFormId`（humanoid 用缺省表示）；
-2. 武器策略落到新体形 `defaultWeaponId`，装备按 `filterEquipmentState(plan.equipSlots, …)` 过滤；
+2. 清空全部武器槽并按新体形 `defaultWeaponLoadout` 回填；护甲 / 肢体按槽位过滤保留；
 3. 基础定义（防御 / 攻击 / 移速 / 韧性 / 生命）从 `plan.state` 重建最终数值；
 4. dispose 旧模型并按新 plan 重建（`plan.createModel`），动画系统按新 plan 重建；
 5. 受击子块与碰撞体按新 `skeleton.hurtProfile` / `skeleton.colliderLayout` 重建；
@@ -130,4 +132,23 @@
 - **受击块只由骨架数据声明**：`shape.half` + `offsetLocal` 必须随 `config.scale` 正确缩放；
   禁止再从外观部件读取尺寸（否则外观会反向影响判定）。
 - 外观装配器返回 `colliderMeshes`（edit / bone_edit 可视化）。
-- **生物攻击姿态 / clip 缓存必须按段 `id` 判别**：狼撕咬与口含剑、马前踢/后踹/践踏、龙五段爪击与吐息各自使用独立 clip。
+- **生物攻击姿态 / clip 缓存必须按段 `id` / `moduleId` 判别**：狼嘴 / 爪 / 口含剑、马蹄、龙爪 / 重爪 / 吐息各自使用独立 clip。
+
+## 装备逐关节挂载与物理扩展
+
+- 槽位 `mountJointIds` 是**允许挂载关节白名单**；单件装备可用 `mounts` 数组逐关节声明：
+  - `jointId`、该关节独立 `mesh`、局部 `offset` / `rotation` / `scale`。
+- 未声明 `mounts` 时由槽位白名单派生：每个关节使用同一 `mesh`、零偏移/旋转（兼容旧装备）。
+- 武器模型同样可声明 `mounts`；天然多肢体武器（马蹄 / 狼爪 / 龙翼爪）用它逐关节挂模型，攻击箱数组按 `jointId` 命中。
+- 装备可声明 `colliders` / `hurtBoxes` 数组扩展角色碰撞箱与受击箱：
+  - 每项绑定 `jointId` + 形状 + 局部 offset / rotation；
+  - 碰撞体必须显式 `category`（缺省 `character`，fail-closed）；
+  - 现有装备保持空数组 / 省略即无扩展；
+  - 换装、切体形、scale 变更时重建，逐帧只同步关节世界变换。
+
+## 四足 / 双足生物碰撞布局
+
+- 主碰撞体（`colliderLayout[0]`）是**足底小胶囊**，保证四足 / 双足稳定落地。
+- 躯干使用沿身体长轴的横胶囊或盒，头部使用随颈 / 头关节的盒；节点分别挂在 `body` / `neck` / `head`，随动画姿态贴合。
+- `groundCollider` 节点挂在 `root`，只负责地面接触；不随躯干俯仰摆动。
+- 调试碰撞可视化按 `ColliderSpec.kind` 使用胶囊或盒几何，角度由骨骼节点旋转驱动。

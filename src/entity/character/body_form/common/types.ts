@@ -110,8 +110,11 @@ export interface BodyForm {
     readonly equipmentModules: readonly EquipmentModuleDef[]
     /** 该体形拥有的全部武器（武器只属于一种体形） */
     readonly weapons: readonly import('../../../../character/weapon/catalog.ts').WeaponConfig[]
-    /** 默认武器 id（须在 `weapons` 内） */
-    readonly defaultWeaponId: string
+    /**
+     * 每个武器槽 bodyPart → 默认天然武器 id（须在 `weapons` / `breathModules` 内）。
+     * 槽位缺失、存档值为 null / undefined / 未知 id 时按此回填。
+     */
+    readonly defaultWeaponLoadout: Readonly<Record<string, string>>
 
     /** 骨骼编辑器能力声明（避免编辑器按体形 id 硬编码） */
     readonly editor: {
@@ -130,6 +133,12 @@ export interface BodyForm {
      * 翻滚根自转圈数（可选；缺省 1 = 前滚翻一周，人形默认）。
      */
     readonly rollSpinTurns?: number
+
+    /**
+     * 基准姿态是否为竖直站立（缺省 true）。俯卧体形（狼 / 马 / 飞龙）为 false：
+     * 游泳 / 死亡 / 倒地 / 起身不再叠加「向地面旋转」的根姿态，仅保留朝向 yaw。
+     */
+    readonly uprightRoot?: boolean
 
     /** 每帧体形专属同步（可选；在受击块/碰撞体同步之外调用） */
     readonly onFrame?: (entity: CharacterEntity, model: CreatureModel) => void

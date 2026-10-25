@@ -1,4 +1,4 @@
-import {Group, Vector3, Mesh, Sprite} from 'three'
+import {Group, Vector3, Mesh, Sprite, Quaternion} from 'three'
 import type {Material, Scene} from 'three'
 import {bodyFormOf} from '../../entity/character/body_form/index.ts'
 import type {AnimationContext, CreatureModel} from '../../entity/character/appearance/types.ts'
@@ -10,11 +10,12 @@ import {createWeaponTrail} from '../../entity/character/appearance/weapon_trail.
 import type {NameLabel} from './label.ts'
 import {resolvePhases, phaseDurationOf, isWindupStrike} from '../../character/combat/attack_phases.ts'
 import type {AttackPhaseName} from '../../character/combat/attack_phases.ts'
-import {weaponAttacksOf} from '../../character/weapon/catalog.ts'
-import {HOLD_MODE_LABELS, type HoldMode} from '../../character/weapon/hold_mode.ts'
+import {attackModuleDefOf, defaultAttackModule, weaponAttacksOf} from '../../character/weapon/catalog.ts'
 import {DEFAULT_HANDEDNESS} from '../../character/handedness.ts'
 import {translate} from '../../i18n/index.ts'
 import type {WeaponConfig} from '../../character/weapon/catalog.ts'
+import type {RangedWeaponConfig} from '../../character/weapon/ranged_weapon.ts'
+import {createShowcaseProjectiles} from './projectile.ts'
 import {
     orderedSegments,
     segmentDisplayName,
@@ -73,8 +74,8 @@ export interface ActorStatus {
      */
     readonly skillName: string
     readonly weaponName: string
-    /** 当前持握模式中文名（单持 / 双手共持 / 双持） */
-    readonly holdModeLabel: string
+    /** 当前攻击模组中文名 */
+    readonly attackModuleLabel: string
     readonly isMelee: boolean
     /** 是否正在演示格挡姿态（盾牌待机时举盾） */
     readonly isBlocking: boolean
@@ -98,6 +99,8 @@ export interface ActorStatus {
 /** 武器攻击展示驱动器：在通用展示角色接口之上额外提供攻击状态快照 */
 export interface ShowcaseActor extends ShowcaseActorHandle {
     status: () => ActorStatus
+    /** 展示弹丸在飞数量（测试 / 调试用） */
+    projectileCount: () => number
 }
 
 export interface ShowcaseActorInit {
@@ -105,8 +108,14 @@ export interface ShowcaseActorInit {
     readonly scene: Scene
     /** 展示武器模组：攻击链（段/时长/阶段/冷却/倾斜角）+ 模型一并取自它 */
     readonly weapon: WeaponConfig
-    /** 展示的持握模式（近战三模式分开展示；远程 = 默认模式） */
-    readonly holdMode: HoldMode
+    /** 展示的攻击模组 id（人形三持握 / 生物嘴爪吐息等） */
+    readonly attackModule: string
+    /** 可选：覆盖模组的攻击链（跨槽组合模组，如龙吐息） */
+    readonly attacks?: import('../../character/weapon/attack_chain.ts').WeaponAttacks
+    /** 可选：段 id → 实际开火武器（龙吐息等跨槽模组） */
+    readonly attackWeapons?: ReadonlyMap<string, WeaponConfig>
+    /** 可选：面板副名覆盖（如具体吐息名称） */
+    readonly moduleLabel?: string
     readonly faction: number
     readonly x: number
     readonly z: number
@@ -142,11 +151,14 @@ interface MaterialSnapshot {
  * 4. 刀光镜像 world.ts：strike/release/spin 阶段激活，采样 weaponTip。
  *
  * 展示场景省略的部分（与生产差异）：物理速度缩放（moveSpeedMultiplier）、
- * 命中执行器、hitstop、hitbox——攻击中角色静止站立。段冷却计时仅镜像展示（进入段即挂、逐帧递减），
- * 不阻断脚本推进。
+ * 命中执行器、hitstop、伤害 / 受击结算——攻击中角色静止站立；远程 / 吐息段仍生成真实弹丸视觉（`showcase/projectile.ts`），
+ * 但不产生伤害与受击。段冷却计时仅镜像展示（进入段即挂、逐帧递减），不阻断脚本推进。
  */
 export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
-    const {id, scene, faction, x, z, weaponName, holdMode} = init
+    const {id, scene, faction, x, z, weaponName, attackModule} = init
+    const moduleDef = attackModuleDefOf(init.weapon, attackModule)
+        ?? attackModuleDefOf(init.weapon, defaultAttackModule(init.weapon))
+    const holdMode = moduleDef?.holdMode
     const isMelee = init.weapon.type === 'melee'
     /** 盾牌（声明 block）：攻击模组之外，待机时改为演示**格挡姿态** */
     const isShield = isMelee && init.weapon.block !== undefined
@@ -154,7 +166,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
      * 演示脚本 = 段展示顺序本身（下标 0..n-1 即播放顺序）：
      * 播放顺序、面板计时行顺序与清单顺序三者一致（统一枚举源，无需重排映射）。
      */
-    const segments: readonly AttackSegment[] = orderedSegments(weaponAttacksOf(init.weapon, holdMode))
+    const segments: readonly AttackSegment[] = orderedSegments(init.attacks ?? weaponAttacksOf(init.weapon, attackModule))
     if (segments.length === 0) {
         throw new Error(`[showcase] actor ${id} 武器 ${init.weapon.id} 没有可展示的攻击段`)
     }
@@ -174,15 +186,24 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
      * 远程无副手。 */
     /* 天然武器可指定专属挂点（如马踢击挂前蹄 / 飞龙爪击挂翼爪） */
     const mainMount = init.weapon.mountJointId !== undefined ? {mainMountJointId: init.weapon.mountJointId} : {}
-    if (isMelee && holdMode !== 'one_handed') {
+    if (isMelee && holdMode !== undefined && holdMode !== 'one_handed') {
+        /* 双持：副手握同类武器；双手共持：副手武器挂背（保留实际装备与外观，支撑手仍握主武器） */
         model.equipWeapon({
             main: init.weapon.mesh,
+            mainMounts: init.weapon.mounts,
+            mainAttackBoxes: init.weapon.attackBoxes,
             offhand: init.weapon.mesh,
+            offhandAttackBoxes: init.weapon.attackBoxes,
             offhandStowed: holdMode === 'two_handed',
             ...mainMount,
         })
     } else {
-        model.equipWeapon({main: init.weapon.mesh, ...mainMount})
+        model.equipWeapon({
+            main: init.weapon.mesh,
+            mainMounts: init.weapon.mounts,
+            mainAttackBoxes: init.weapon.attackBoxes,
+            ...mainMount,
+        })
     }
 
     const anchor = new Group()
@@ -192,8 +213,28 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
 
     /* 调试箱（物理碰撞箱 / 受击箱 / 攻击箱）：默认全隐 */
     const debug = createActorDebug(scene, model, hurtProfile)
+    debug.setOffhandAttackEnabled(holdMode !== 'two_handed')
+    /** 展示弹丸：只做视觉与弹道，不结算伤害 / 受击 */
+    const projectiles = createShowcaseProjectiles(scene)
 
-    const system: AppearanceSystem = bodyFormOf(init.bodyFormId).animation.createSystem({})
+    /** 当前生效的攻击箱槽位（hitbox_on/off 事件驱动）；非空 = 攻击箱 100%，空 = 30% */
+    const activeAttackSlots = new Set<string>()
+    const syncAttackWindow = (): void => debug.setAttackActive(activeAttackSlots.size > 0)
+    const system: AppearanceSystem = bodyFormOf(init.bodyFormId).animation.createSystem({
+        onAttackEvent: (record) => {
+            if (record.eventName === 'hitbox_on') {
+                const slot = typeof record.params?.slotKey === 'string' ? record.params.slotKey : 'default'
+                activeAttackSlots.add(slot)
+            } else if (record.eventName === 'hitbox_off') {
+                const slot = record.params?.slotKey
+                if (typeof slot === 'string') activeAttackSlots.delete(slot)
+                else activeAttackSlots.clear()
+            } else {
+                return
+            }
+            syncAttackWindow()
+        },
+    })
     /* 远程角色同样创建刀光 —— 对齐生产 world.ts：远程 release 阶段的拖尾同样存在，
      * 激活门控已在 applyAnimation 中按 strike/release/spin 阶段判断 */
     const trail: WeaponTrail = createWeaponTrail(scene)
@@ -205,6 +246,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     let attackTimer = 0
     let phaseTimer = 0
     let phaseIndex = 0
+    /** 当前段是否已发射过（避免 release 阶段逐帧重复开火） */
+    let firedSegmentId: string | undefined
     /** 满蓄力前置保持计时（charging 模式用） */
     let chargeHoldTimer = 0
     /** 当前脚本位置（0 起；段末推进/重新起链时移动） */
@@ -240,9 +283,12 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     const enterAttacking = (pos: number, nextLink: LinkLabel, startTimer = 0): void => {
         scriptPos = pos
         mode = 'attacking'
+        activeAttackSlots.clear()
+        syncAttackWindow()
         attackTimer = startTimer
         phaseTimer = startTimer
         phaseIndex = 0
+        firedSegmentId = undefined
         link = nextLink
         /* 触发即挂自身冷却（镜像生产起手 enter） */
         cooldownTimers.set(currentSegment().id, currentSegment().cooldown)
@@ -250,6 +296,8 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
 
     /** 进入指定脚本位置的段：蓄力重击先播满蓄力前置（charging），其余直接出招 */
     const beginSegment = (pos: number, nextLink: LinkLabel, preserveStateTime: boolean): void => {
+        activeAttackSlots.clear()
+        syncAttackWindow()
         if (!preserveStateTime) stateTime = 0
         const segment = segments[pos] ?? segments[0]
         if (isChargeHeavy(segment)) {
@@ -343,6 +391,26 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         }
     }
 
+    /** 展示开火：仅在 release 阶段生成一次真实弹丸视觉（无伤害 / 受击） */
+    const fireIfNeeded = (segment: AttackSegment, inAttacking: boolean, phases: readonly import('../../character/combat/attack_phases.ts').AttackPhase[]): void => {
+        if (!inAttacking || firedSegmentId === segment.id) return
+        const phase = phaseIndex < phases.length ? phases[phaseIndex] : undefined
+        if (phase?.name !== 'release') return
+        const fireWeapon = init.attackWeapons?.get(segment.id) ?? init.weapon
+        if (fireWeapon.type !== 'ranged') return
+        firedSegmentId = segment.id
+        const mountId = fireWeapon.mountJointId
+        const joint = mountId !== undefined ? model.jointGroups.get(mountId) : undefined
+        const originSource = joint ?? model.weaponGroup ?? model.group
+        originSource.updateWorldMatrix(true, false)
+        const origin = originSource.getWorldPosition(new Vector3())
+        const forward = new Vector3(0, 0, 1).applyQuaternion(model.group.getWorldQuaternion(new Quaternion()))
+        forward.y = 0
+        if (forward.lengthSq() < 1e-6) forward.set(0, 0, 1)
+        forward.normalize()
+        projectiles.spawn(fireWeapon as RangedWeaponConfig, origin, forward, fireWeapon.throwAngle ?? 0)
+    }
+
     /**
      * 动画注入 —— 镜像 world.ts 动画上下文装配：
      * 构造 AnimationContext（同名同语义，含 attackSegment）→ system.update（动画键 = state:segmentId，
@@ -359,14 +427,20 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
         const ctxPhaseName: AttackPhaseName | undefined = inAttacking && phaseIndex < phases.length
             ? phases[phaseIndex].name
             : undefined
+        if (!inAttacking && activeAttackSlots.size > 0) {
+            activeAttackSlots.clear()
+            syncAttackWindow()
+        }
+        fireIfNeeded(segment, inAttacking, phases)
 
         const ctx: AnimationContext = {
             stateTime,
             /* 展示场景站立攻击：速度恒 0（生产为物理体实时速度） */
             horizontalSpeed: 0,
             humanoid: {
-                holdMode,
+                holdMode: holdMode ?? 'one_handed',
                 handedness: DEFAULT_HANDEDNESS,
+                weaponClassId: init.weapon.classId,
                 shieldHands: {main: isShield && mode === 'idle', off: false},
             },
             /* 蓄力前置同样携带 attackSegment（外观据此取该段攻击 clip 的抬手段） */
@@ -383,7 +457,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             attackHolding: inCharging,
             weaponHeld: model.weaponMesh !== null,
         }
-        system.update(dt, model, mode === 'idle' ? (isShield ? 'blocking' : 'idle') : 'attacking', ctx)
+        system.update(dt, model, mode === 'idle' ? 'idle' : 'attacking', ctx)
 
         const tip = model.weaponTip
         if (tip !== null) {
@@ -409,6 +483,7 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             advanceIdle(dt)
         }
         applyAnimation(dt)
+        projectiles.update(dt)
     }
 
     const status = (): ActorStatus => {
@@ -419,9 +494,9 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
             skillId: segment.id,
             skillName: weaponName,
             weaponName,
-            holdModeLabel: translate(HOLD_MODE_LABELS[holdMode]),
+            attackModuleLabel: translate(moduleDef?.nameKey ?? 'character.idle'),
             isMelee,
-            isBlocking: isShield && mode === 'idle',
+            isBlocking: false,
             mode,
             hitNumber: scriptPos + 1,
             totalHits,
@@ -492,14 +567,19 @@ export const createShowcaseActor = (init: ShowcaseActorInit): ShowcaseActor => {
     const dispose = (): void => {
         setDimmed(false)
         debug.dispose()
+        projectiles.dispose()
         trail.dispose()
         labelDispose?.()
         model.dispose()
         scene.remove(anchor)
     }
 
-    return {id, anchor, weaponName, holdModeLabel: translate(HOLD_MODE_LABELS[holdMode]), factionColor: faction, update, status, attachLabel, setDimmed, dispose,
-        setDebugVisible: (kind, on) => debug.setVisible(kind, on),
+    return {id, anchor, weaponName, attackModuleLabel: init.moduleLabel ?? translate(moduleDef?.nameKey ?? 'character.idle'), factionColor: faction, update, status, projectileCount: () => projectiles.count(), attachLabel, setDimmed, dispose,
+        clearProjectiles: () => projectiles.clear(),
+        setDebugVisible: (kind, on) => {
+            debug.setVisible(kind, on)
+            if (kind === 'attack') projectiles.setAttackDebugVisible(on)
+        },
         debugTick: () => debug.tick(),
     }
 }

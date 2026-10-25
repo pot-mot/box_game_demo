@@ -49,7 +49,7 @@ export interface PlayerControlOptions {
     /** 移动输出：dx/dz 为相机水平基准方向上的合成输入，roll 为本次翻滚边沿，swimLift 为游泳竖直意图（-1..1） */
     readonly move: (dx: number, dz: number, jump: boolean, forwardX: number, forwardZ: number, roll: boolean, swimLift: number) => void
     /** 持握模式切换（默认 Ctrl）回调；缺省不处理 */
-    readonly cycleHoldMode?: () => void
+    readonly cycleAttackModule?: () => void
     /** 攻击回调（含蓄力）；缺省 = 无战斗 */
     readonly combat?: MouseAttackCallbacks
     /** 镜头锁定回调；缺省 = 无锁定 */
@@ -264,9 +264,9 @@ export const createPlayerControl = (
 
         /* 持握模式切换（默认 Ctrl）：isActionActive 走最长组合遮蔽，
          * Ctrl+S / Ctrl+O 按下时该动作被更长组合覆盖，不会误触发切换 */
-        if (options.cycleHoldMode !== undefined
-            && input.wasActionPressed('cycle_hold_mode') && input.isActionActive('cycle_hold_mode')) {
-            options.cycleHoldMode()
+        if (options.cycleAttackModule !== undefined
+            && input.wasActionPressed('cycle_attack_module') && input.isActionActive('cycle_attack_module')) {
+            options.cycleAttackModule()
         }
     }
 

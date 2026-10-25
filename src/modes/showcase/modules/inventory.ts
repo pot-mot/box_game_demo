@@ -140,7 +140,7 @@ export const inventoryModule: ShowcaseModule = {
                     if (itemId === undefined) continue
                     state = withEquipmentAt(state, def.equipKind, def.equipSlot, itemId)
                 }
-                const mainWeaponId = state.weapon.main_hand ?? HUMANOID_BODY_FORM.defaultWeaponId
+                const mainWeaponId = state.weapon.main_hand ?? Object.values(HUMANOID_BODY_FORM.defaultWeaponLoadout)[0] ?? 'unarmed'
                 const offWeaponId = state.weapon.off_hand
                 characterSystem.updateCharacterConfig(
                     playerId,

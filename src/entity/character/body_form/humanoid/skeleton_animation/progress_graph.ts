@@ -202,7 +202,7 @@ const baseGraph = (
     const blockArm = state === 'blocking'
         ? (shieldArms.includes('right') ? 'right' : shieldArms.includes('left') ? 'left' : undefined)
         : undefined
-    const bodyClip = getCanonicalBaseClip(state, weaponHeld, 0, handedness, undefined, false, blockArm)
+    const bodyClip = getCanonicalBaseClip(state, weaponHeld, 0, handedness, variant.weaponClassId, false, blockArm)
     const layers: ProgressAnimationLayer[] = [{
         source: createProgressClipLeaf(`humanoid:body:${key}`, bodyClip),
         from: 0,

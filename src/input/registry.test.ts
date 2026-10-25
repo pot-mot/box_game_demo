@@ -14,7 +14,7 @@ const EXPECTED_DEFAULTS: Record<InputAction, readonly (readonly string[])[]> = {
     jump: [['Space']],
     roll: [['ShiftLeft'], ['ShiftRight']],
     boost: [['ShiftLeft'], ['ShiftRight']],
-    cycle_hold_mode: [['ControlLeft'], ['ControlRight']],
+    cycle_attack_module: [['ControlLeft'], ['ControlRight']],
     cycle_spawn_up: [['ArrowUp']],
     cycle_spawn_down: [['ArrowDown']],
     delete_entity: [['Delete']],

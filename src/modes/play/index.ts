@@ -14,8 +14,6 @@ import {createPlayerDebugHUD} from './player_debug_hud.ts'
 import {createPlayerHUD} from './player_hud.ts'
 import {createDeathScreen} from './death_screen.ts'
 import {orderedSegments, segmentDisplayName} from '../../character/weapon/attack_chain.ts'
-import {HOLD_MODE_LABELS} from '../../character/weapon/hold_mode.ts'
-import {humanoidBodyStateOf} from '../../entity/character/body_form/humanoid/state/body_state.ts'
 import {weaponDisplayName} from '../../character/weapon/catalog.ts'
 import {translate} from '../../i18n/index.ts'
 import {segmentCooldownRemaining} from '../../character/combat/attack_runtime.ts'
@@ -63,7 +61,7 @@ export const setupPlayMode = (
         },
         move: (dx, dz, jump, forwardX, forwardZ, roll, swimLift) =>
             characterSystem.setPlayerMove(dx, dz, jump, forwardX, forwardZ, roll, swimLift),
-        cycleHoldMode: () => characterSystem.cyclePlayerHoldMode(),
+        cycleAttackModule: () => characterSystem.cyclePlayerAttackModule(),
         combat: {
             onLightAttackStart: () => characterSystem.beginPlayerAttackHold('light'),
             onLightAttack: (held) => characterSystem.endPlayerAttackHold('light', held),
@@ -214,7 +212,7 @@ export const setupPlayMode = (
                     timers,
                     skillTimers,
                     weaponLabel: weaponDisplayName(player.state.combat.weapon),
-                    holdModeLabel: translate(HOLD_MODE_LABELS[humanoidBodyStateOf(player.state.bodyState).holdMode]),
+                    attackModuleLabel: translate(player.state.combat.attackModules.get(player.state.combat.attackModule)?.def.nameKey ?? 'character.idle'),
                     positionX: pos?.x ?? player.mesh.position.x,
                     positionY: pos?.y ?? player.mesh.position.y,
                     positionZ: pos?.z ?? player.mesh.position.z,

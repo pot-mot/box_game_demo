@@ -5,7 +5,8 @@ import {humanoidBodyStateOf} from '../state/body_state.ts'
 import type {CharacterColorPalette, WeaponEquipConfig} from '../../../appearance/types.ts'
 import type {CharacterModel} from './types.ts'
 import type {ResolvedArmorLoadout, ResolvedLimbLoadout} from '../../../../../character/armor/types.ts'
-import {createWeaponMesh, isShieldMeshId, WEAPON_MESH_GRIPS, type WeaponMeshConfig, type WeaponLocalHitBox} from '../../../appearance/weapon_mesh.ts'
+import {createWeaponMesh, isShieldMeshId, resolveAttackBoxes, WEAPON_MESH_GRIPS, type WeaponMeshConfig} from '../../../appearance/weapon_mesh.ts'
+import type {WeaponAttackBoxSpec} from '../../../../../character/weapon/mesh_config.ts'
 import {createArmorMesh, createLimbMesh, ARMOR_BODY_PART_JOINTS, type ArmorBodyPart} from './armor_mesh.ts'
 import {resolveArmorLoadout, resolveLimbLoadout} from '../../../../../character/armor/catalog.ts'
 import {SELECT_PALETTE, WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
@@ -14,6 +15,7 @@ import {recolorTwoFaceBoxPart, recolorHeadBoxPart, type TrackedBoxPart} from '..
 import {skeletonFromDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {createJointHierarchy} from '../../../../../skeleton/render/joint_hierarchy.ts'
 import type {BodyForm} from '../../common/types.ts'
+import {resolveEquipmentMounts} from '../../common/equipment.ts'
 
 /** 单个武器槽（主手/副手各一）：武器骨骼挂点 + 武器网格状态 */
 interface WeaponSlot {
@@ -21,13 +23,31 @@ interface WeaponSlot {
     group: Group | null
     hitCenter: Mesh | null
     tip: Mesh | null
-    hitBox: WeaponLocalHitBox | null
+    attackBoxes: readonly WeaponAttackBoxSpec[]
     cleanup: (() => void) | null
     /** 原始几何中的主握把 Y 坐标（供骨骼编辑器校验主握点） */
     gripY: number
     supportGripOffset: number
     /** 当前装配的网格配置引用（同引用时跳过重建，只做挂背/回手换父节点） */
     meshConfig: WeaponMeshConfig | undefined
+}
+
+/** 解析人形武器攻击箱的符号关节：weaponMount / hand / forearm / upperArm → 主副手侧实际关节 */
+const resolveHumanoidAttackBoxJoints = (
+    boxes: readonly WeaponAttackBoxSpec[] | undefined,
+    mountJointId: string,
+): readonly WeaponAttackBoxSpec[] | undefined => {
+    if (boxes === undefined) return undefined
+    const side = mountJointId.startsWith('left') ? 'left' : 'right'
+    return boxes.map(box => {
+        switch (box.jointId) {
+            case 'weaponMount': return {...box, jointId: mountJointId}
+            case 'hand': return {...box, jointId: `${side}HandPivot`}
+            case 'forearm': return {...box, jointId: `${side}ArmElbow`}
+            case 'upperArm': return {...box, jointId: `${side}ArmShoulder`}
+            default: return box
+        }
+    })
 }
 
 /** 取关节 Group；预设骨架保证存在，缺失即数据结构错误 */
@@ -86,7 +106,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
     const backWeaponMount = requireGroup(groups, 'backWeaponMount')
 
     const createSlot = (mountJoint: Group): WeaponSlot => ({
-        mountJoint, group: null, hitCenter: null, tip: null, hitBox: null, cleanup: null, gripY: 0, supportGripOffset: 0, meshConfig: undefined,
+        mountJoint, group: null, hitCenter: null, tip: null, attackBoxes: [], cleanup: null, gripY: 0, supportGripOffset: 0, meshConfig: undefined,
     })
     const rightSlot = createSlot(rightWeaponMount)
     const leftSlot = createSlot(leftWeaponMount)
@@ -108,7 +128,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
         slot.group = null
         slot.hitCenter = null
         slot.tip = null
-        slot.hitBox = null
+        slot.attackBoxes = []
         slot.cleanup = null
         slot.gripY = 0
         slot.supportGripOffset = 0
@@ -117,7 +137,11 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
         slot.mountJoint.rotation.set(0, 0, 0)
     }
 
-    const equipSlot = (slot: WeaponSlot, meshConfig: WeaponMeshConfig | undefined): void => {
+    const equipSlot = (
+        slot: WeaponSlot,
+        meshConfig: WeaponMeshConfig | undefined,
+        attackBoxes: readonly WeaponAttackBoxSpec[] | undefined,
+    ): void => {
         /* 同一网格配置引用：跳过重建（换持握模式只改挂背状态时零开销） */
         if (slot.meshConfig === meshConfig) return
         clearSlot(slot)
@@ -127,7 +151,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
         slot.group = result.group
         slot.hitCenter = result.hitCenter
         slot.tip = result.tip
-        slot.hitBox = result.hitBox
+        slot.attackBoxes = resolveAttackBoxes(result, slot.mountJoint.name, resolveHumanoidAttackBoxJoints(attackBoxes, slot.mountJoint.name))
         slot.cleanup = result.cleanup
         slot.gripY = result.gripY
         slot.supportGripOffset = result.supportGripOffset
@@ -160,8 +184,8 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
     }
 
     const equipWeapon = (equipConfig: WeaponEquipConfig): void => {
-        equipSlot(mainSlot(), equipConfig.main)
-        equipSlot(offSlot(), equipConfig.offhand)
+        equipSlot(mainSlot(), equipConfig.main, equipConfig.mainAttackBoxes)
+        equipSlot(offSlot(), equipConfig.offhand, equipConfig.offhandAttackBoxes)
         /* 缺省 = 握在副手；显式 offhandStowed = 挂背（双手共持） */
         setOffhandStowed(equipConfig.offhandStowed === true)
     }
@@ -218,11 +242,17 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
             if (piece === undefined) continue
             const slot = plan.equipSlots.find(candidate => candidate.kind === 'armor' && candidate.bodyPart === bodyPart)
             if (slot === undefined) continue
-            for (const jointId of slot.mountJointIds) {
-                const joint = groups.get(jointId)
+            for (const mount of resolveEquipmentMounts(piece, slot)) {
+                const joint = groups.get(mount.jointId)
                 if (joint === undefined) continue
-                const result = createArmorMesh(piece.mesh, jointId)
-                result.group.scale.x = mirrorScale()
+                const result = createArmorMesh(mount.mesh, mount.jointId)
+                result.group.position.set(mount.offset?.x ?? 0, mount.offset?.y ?? 0, mount.offset?.z ?? 0)
+                result.group.rotation.set(mount.rotation?.x ?? 0, mount.rotation?.y ?? 0, mount.rotation?.z ?? 0)
+                result.group.scale.set(
+                    (mount.scale?.x ?? 1) * mirrorScale(),
+                    mount.scale?.y ?? 1,
+                    mount.scale?.z ?? 1,
+                )
                 joint.add(result.group)
                 mountedArmor.push({group: result.group, cleanup: result.cleanup})
             }
@@ -243,11 +273,17 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
             if (piece === undefined) continue
             const slot = plan.equipSlots.find(candidate => candidate.kind === 'limb' && candidate.bodyPart === bodyPart)
             if (slot === undefined) continue
-            for (const jointId of slot.mountJointIds) {
-                const joint = groups.get(jointId)
+            for (const mount of resolveEquipmentMounts(piece, slot)) {
+                const joint = groups.get(mount.jointId)
                 if (joint === undefined) continue
-                const result = createLimbMesh(piece.mesh, jointId, currentPalette)
-                result.group.scale.x = mirrorScale()
+                const result = createLimbMesh(mount.mesh, mount.jointId, currentPalette)
+                result.group.position.set(mount.offset?.x ?? 0, mount.offset?.y ?? 0, mount.offset?.z ?? 0)
+                result.group.rotation.set(mount.rotation?.x ?? 0, mount.rotation?.y ?? 0, mount.rotation?.z ?? 0)
+                result.group.scale.set(
+                    (mount.scale?.x ?? 1) * mirrorScale(),
+                    mount.scale?.y ?? 1,
+                    mount.scale?.z ?? 1,
+                )
                 joint.add(result.group)
                 mountedLimbs.push({group: result.group, cleanup: result.cleanup})
             }
@@ -260,7 +296,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
         const g = a.group; a.group = b.group; b.group = g
         const h = a.hitCenter; a.hitCenter = b.hitCenter; b.hitCenter = h
         const t = a.tip; a.tip = b.tip; b.tip = t
-        const hb = a.hitBox; a.hitBox = b.hitBox; b.hitBox = hb
+        const ab = a.attackBoxes; a.attackBoxes = b.attackBoxes; b.attackBoxes = ab
         const c = a.cleanup; a.cleanup = b.cleanup; b.cleanup = c
         const gy = a.gripY; a.gripY = b.gripY; b.gripY = gy
         const s = a.supportGripOffset; a.supportGripOffset = b.supportGripOffset; b.supportGripOffset = s
@@ -282,7 +318,7 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
             slot.mountJoint.add(slot.group)
             slot.group.scale.x = mirrorScale()
         }
-        for (const part of [...mountedArmor, ...mountedLimbs]) part.group.scale.x = mirrorScale()
+        for (const part of [...mountedArmor, ...mountedLimbs]) part.group.scale.x *= -1
         setOffhandStowed(offStowed)
     }
 
@@ -378,13 +414,13 @@ export const createCharacterModel = (config: CharacterConfig, faction: number, p
         get weaponMesh() { return mainSlot().hitCenter },
         get weaponTip() { return mainSlot().tip },
         get weaponGroup() { return mainSlot().group },
-        get weaponHitBox() { return mainSlot().hitBox },
+        get weaponAttackBoxes() { return mainSlot().attackBoxes },
         get weaponGripY() { return mainSlot().gripY },
         get weaponSupportGripOffset() { return mainSlot().supportGripOffset },
         get offhandWeaponMesh() { return offSlot().hitCenter },
         get offhandWeaponTip() { return offSlot().tip },
         get offhandWeaponGroup() { return offSlot().group },
-        get offhandWeaponHitBox() { return offSlot().hitBox },
+        get offhandWeaponAttackBoxes() { return offSlot().attackBoxes },
         get offhandWeaponGripY() { return offSlot().gripY },
         dispose,
     }

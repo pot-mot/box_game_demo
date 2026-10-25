@@ -88,12 +88,12 @@ export const addItem / removeAt / moveStack / equipStack / unequipSlot / equippe
 
 - 与背包共用大面板：`open_inventory`（B）开背包，`open_equipment`（默认 E）开并聚焦装备视图，面板内可切标签。装备槽由 `getSlots()` 返回的 `BodyForm.equipSlots` 驱动，按 `bodyPart` 锚点环绕模型画布；`main_hand` / `off_hand` 不再是全局硬编码槽。
 - 预览 `createEquipmentPreview(): {canvas, setEquipment, render, dispose}`：独立 `WebGLRenderer(alpha:true)` + 独立场景/相机/灯光，**惰性创建**；`createCharacterModel(config, 0)` 后 `equipWeapon` / `equipArmor(resolveArmorLoadout(loadout))`，默认静止姿态。拖拽旋转 / 滚轮缩放后按需 `render()`，**不启动额外 RAF**。
-- 槽交互：`equipStack` 按槽位键 + 物品类别 + 体形校验，拖入装备、拖回网格卸下、点击槽查看并卸下；装备后立即 `applyEquipment` 同步数值与外观并刷新预览。`holdMode` 属于人形 `bodyState`，由角色属性面板维护，不在背包面板硬编码。
+- 槽交互：`equipStack` 按槽位键 + 物品类别 + 体形校验，拖入装备、拖回网格卸下、点击槽查看并卸下；装备后立即 `applyEquipment` 同步数值与外观并刷新预览。`attackModule` 属于 `bodyState`，由角色属性面板维护；武器槽缺失时回填天然默认，不在背包面板硬编码。
 - 唯一数据源 `InventoryState`；每次变更后重算并 `applyEquipment` + `preview.setEquipment`。
 
 ## 与角色装备 / 战斗互通（`modes/play/equipment.ts`）
 
-- `applyEquipment`（`modes/play/hakoniwa.ts`）：遍历 `inventory.equipment` 构建 `EquipmentState`，主武器槽 → `updateCharacterConfig({weaponId})` + `equipment`，副手 → `newOffhand`，护甲 / 肢体随 `equipment` 同步到 `setCombatEquipment` + 外观装配；空主手回退体形 `defaultWeaponId`。
+- `applyEquipment`（`modes/play/hakoniwa.ts`）：遍历 `inventory.equipment` 构建 `EquipmentState`，主武器槽 → `updateCharacterConfig({weaponId})` + `equipment`，副手 → `newOffhand`，护甲 / 肢体随 `equipment` 同步到 `setCombatEquipment` + 外观装配；空武器槽回退体形 `defaultWeaponLoadout`。
 - 角色存档以 `equipment`（limb / weapon / armor）+ `bodyState` 为准；`inventory.equipment` 记录实例 id，加载后按当前体形槽表校正（v18 起槽位键为 `kind:bodyPart`）。
 
 ## 存档

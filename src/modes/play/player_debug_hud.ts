@@ -41,8 +41,8 @@ export interface PlayerDebugHUDData {
     skillTimers: ReadonlyArray<SkillTimerRowData>
     /** 当前武器名（装备行显示） */
     weaponLabel: string
-    /** 当前持握模式中文名（单持 / 双手共持 / 双持） */
-    holdModeLabel: string
+    /** 当前攻击模组中文名 */
+    attackModuleLabel: string
     /** 玩家渲染插值坐标（身体中心） */
     positionX: number
     positionY: number
@@ -247,7 +247,7 @@ export const createPlayerDebugHUD = (): PlayerDebugHUD => {
 
     const update = (data: PlayerDebugHUDData): void => {
         stateEl.textContent = translate({key: 'play.hud.state', args: [data.stateName, data.stateTime.toFixed(2)]})
-        loadoutEl.textContent = translate({key: 'play.hud.loadout', args: [data.weaponLabel, data.holdModeLabel]})
+        loadoutEl.textContent = translate({key: 'play.hud.loadout', args: [data.weaponLabel, data.attackModuleLabel]})
         positionEl.textContent = translate({
             key: 'play.debug.position',
             args: [data.positionX.toFixed(2), data.positionY.toFixed(2), data.positionZ.toFixed(2)],

@@ -16,6 +16,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 1},
         moveSpeedMultiplier: 1,
         mesh: {race: 'skeleton', color: 0xe6e2d3, accentColor: 0x8a8578},
+        colliders: [],
+        hurtBoxes: [],
     },
     skeleton_arms: {
         id: 'skeleton_arms', name: '骷髅臂骨', slot: 'arms',
@@ -23,6 +25,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 1},
         moveSpeedMultiplier: 1.02,
         mesh: {race: 'skeleton', color: 0xe6e2d3, accentColor: 0x8a8578},
+        colliders: [],
+        hurtBoxes: [],
     },
     skeleton_body: {
         id: 'skeleton_body', name: '骷髅躯干', slot: 'body',
@@ -30,6 +34,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {race: 'skeleton', color: 0xe6e2d3, accentColor: 0x8a8578},
+        colliders: [],
+        hurtBoxes: [],
     },
     skeleton_legs: {
         id: 'skeleton_legs', name: '骷髅腿骨', slot: 'legs',
@@ -37,6 +43,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1.05,
         mesh: {race: 'skeleton', color: 0xe6e2d3, accentColor: 0x8a8578},
+        colliders: [],
+        hurtBoxes: [],
     },
 
     /* ── 兽人（绿皮主色 / 物防 · 物攻厚重） ── */
@@ -46,6 +54,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.98,
         mesh: {race: 'orc', color: 0x6f9a4a, accentColor: 0x35502a},
+        colliders: [],
+        hurtBoxes: [],
     },
     orc_arms: {
         id: 'orc_arms', name: '兽人臂膀', slot: 'arms',
@@ -53,6 +63,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 1, magic: 0},
         moveSpeedMultiplier: 0.97,
         mesh: {race: 'orc', color: 0x6f9a4a, accentColor: 0x35502a},
+        colliders: [],
+        hurtBoxes: [],
     },
     orc_body: {
         id: 'orc_body', name: '兽人躯干', slot: 'body',
@@ -60,6 +72,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 1, magic: 0},
         moveSpeedMultiplier: 0.95,
         mesh: {race: 'orc', color: 0x6f9a4a, accentColor: 0x35502a},
+        colliders: [],
+        hurtBoxes: [],
     },
     orc_legs: {
         id: 'orc_legs', name: '兽人腿脚', slot: 'legs',
@@ -67,6 +81,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.96,
         mesh: {race: 'orc', color: 0x6f9a4a, accentColor: 0x35502a},
+        colliders: [],
+        hurtBoxes: [],
     },
 
     /* ── 精灵（苍白皮主色 / 均衡魔攻 · 灵动） ── */
@@ -76,6 +92,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 1},
         moveSpeedMultiplier: 1.02,
         mesh: {race: 'elf', color: 0xe8d3b0, accentColor: 0x8fbf6f},
+        colliders: [],
+        hurtBoxes: [],
     },
     elf_arms: {
         id: 'elf_arms', name: '精灵手臂', slot: 'arms',
@@ -83,6 +101,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 1},
         moveSpeedMultiplier: 1,
         mesh: {race: 'elf', color: 0xe8d3b0, accentColor: 0x8fbf6f},
+        colliders: [],
+        hurtBoxes: [],
     },
     elf_body: {
         id: 'elf_body', name: '精灵身躯', slot: 'body',
@@ -90,6 +110,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {race: 'elf', color: 0xe8d3b0, accentColor: 0x8fbf6f},
+        colliders: [],
+        hurtBoxes: [],
     },
     elf_legs: {
         id: 'elf_legs', name: '精灵腿脚', slot: 'legs',
@@ -97,6 +119,8 @@ const LIMB_PIECES: Record<string, LimbPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1.08,
         mesh: {race: 'elf', color: 0xe8d3b0, accentColor: 0x8fbf6f},
+        colliders: [],
+        hurtBoxes: [],
     },
 }
 

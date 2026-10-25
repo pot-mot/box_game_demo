@@ -4,8 +4,9 @@ import {buildBoneEdges} from '../../common/creature_runtime/skeleton_bones.ts'
 
 /** 马碰撞布局（骨架唯一来源）：竖胶囊 + 桶状横胶囊 + 头颈盒。 */
 export const HORSE_COLLIDER_LAYOUT: readonly ColliderSpec[] = [
-    {nodeId: 'bodyCollider', kind: 'capsule', radius: 0.3, halfHeight: 0.65, offsetY: 0},
-    {nodeId: 'torsoCollider', kind: 'capsule', radius: 0.3, halfHeight: 0.35, offsetY: 0},
+    /* 主碰撞体 = 足底小胶囊；躯干横胶囊沿身体长轴，头部盒跟随颈部 */
+    {nodeId: 'groundCollider', kind: 'capsule', radius: 0.28, halfHeight: 0.02, offsetY: 0},
+    {nodeId: 'bodyCollider', kind: 'capsule', radius: 0.3, halfHeight: 0.4, offsetY: 0},
     {nodeId: 'headCollider', kind: 'box', half: {x: 0.18, y: 0.26, z: 0.3}, offsetY: 0},
 ]
 
@@ -23,9 +24,10 @@ export const buildHorseSkeleton = (): SkeletonDefinition => {
     const joints: SkeletonDefinition['joints'] = [
         {id: 'root', name: '根', position: [0, 0, 0], rotation: I},
         {id: 'body', name: '躯干', parentId: 'root', position: [0, 0.95, 0.05], rotation: I},
-        {id: 'bodyCollider', name: '主碰撞体（竖胶囊·落地）', parentId: 'root', position: [0, 0.95, 0.05], rotation: I},
-        {id: 'torsoCollider', name: '桶状碰撞体（横胶囊·体长）', parentId: 'root', position: [0, 0.95, -0.1], rotation: QX90},
-        {id: 'headCollider', name: '头颈碰撞体', parentId: 'root', position: [0, 1.5, 0.7], rotation: I},
+        {id: 'groundCollider', name: '足底碰撞体（落地）', parentId: 'root', position: [0, 0.27, 0.05], rotation: I},
+        {id: 'bodyCollider', name: '桶状碰撞体（横胶囊·体长）', parentId: 'body', position: [0, 0, -0.1], rotation: QX90},
+        {id: 'torsoCollider', name: '备用躯干碰撞节点', parentId: 'body', position: [0, 0, -0.1], rotation: QX90},
+        {id: 'headCollider', name: '头颈碰撞体', parentId: 'neck', position: [0, -0.06, 0.11], rotation: I},
 
         {id: 'withers', name: '颈根', parentId: 'body', position: [0, 0.3, 0.42], rotation: I},
         {id: 'neck', name: '颈', parentId: 'withers', position: [0, 0.31, 0.12], rotation: I},

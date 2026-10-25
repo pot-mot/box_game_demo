@@ -13,6 +13,10 @@ export type ShowcaseDebugKind = typeof SHOWCASE_DEBUG_KINDS[number]
 /** 展示角色的调试可视化（默认全隐；每种可独立开关） */
 export interface ActorDebug {
     readonly setVisible: (kind: ShowcaseDebugKind, on: boolean) => void
+    /** 攻击箱命中窗口是否生效：生效 = 100% 不透明；未生效 = 30% 不透明 */
+    readonly setAttackActive: (active: boolean) => void
+    /** 是否显示副手武器攻击箱（双手共持时副手挂背，不参与判定） */
+    readonly setOffhandAttackEnabled: (enabled: boolean) => void
     /** 逐帧同步（在角色动画 / 根姿态写完之后调用） */
     readonly tick: () => void
     readonly dispose: () => void
@@ -21,7 +25,7 @@ export interface ActorDebug {
 /* 模块级共享的单位立方体棱线与材质（各实例只从场景增删，不销毁共享资源） */
 const _unitEdges = new EdgesGeometry(new BoxGeometry(1, 1, 1))
 const _hurtMat = new LineBasicMaterial({color: TARGET_HIT_BOX_COLOR})
-const _attackMat = new LineBasicMaterial({color: ATTACK_HIT_BOX_COLOR})
+const ATTACK_INACTIVE_OPACITY = 0.3
 
 /**
  * 为展示角色创建调试箱可视化：
@@ -43,21 +47,29 @@ export const createActorDebug = (
         scene.add(box)
         hurtBoxes.push(box)
     }
-    const attackBox = new LineSegments(_unitEdges, _attackMat)
-    attackBox.matrixAutoUpdate = false
-    attackBox.visible = false
-    scene.add(attackBox)
-    /* 副手（左手）攻击箱：双持时跟随副手武器模型 */
-    const offhandAttackBox = new LineSegments(_unitEdges, _attackMat)
-    offhandAttackBox.matrixAutoUpdate = false
-    offhandAttackBox.visible = false
-    scene.add(offhandAttackBox)
+    const attackMat = new LineBasicMaterial({color: ATTACK_HIT_BOX_COLOR, transparent: true, opacity: ATTACK_INACTIVE_OPACITY})
+    const attackBoxes: LineSegments[] = []
+    const offhandAttackBoxes: LineSegments[] = []
+    for (let i = 0; i < 12; i++) {
+        const box = new LineSegments(_unitEdges, attackMat)
+        box.matrixAutoUpdate = false
+        box.visible = false
+        scene.add(box)
+        attackBoxes.push(box)
+        const offBox = new LineSegments(_unitEdges, attackMat)
+        offBox.matrixAutoUpdate = false
+        offBox.visible = false
+        scene.add(offBox)
+        offhandAttackBoxes.push(offBox)
+    }
 
     /* 默认全关：模型自带的碰撞可视化初始隐藏 */
     for (const m of model.colliderMeshes) m.visible = false
 
     let hurt = false
     let attack = false
+    let attackActive = false
+    let offhandAttackEnabled = true
 
     const setVisible = (kind: ShowcaseDebugKind, on: boolean): void => {
         if (kind === 'collision') {
@@ -68,10 +80,16 @@ export const createActorDebug = (
         } else {
             attack = on
             if (!on) {
-                attackBox.visible = false
-                offhandAttackBox.visible = false
+                for (const box of attackBoxes) box.visible = false
+                for (const box of offhandAttackBoxes) box.visible = false
             }
         }
+    }
+
+    const setAttackActive = (active: boolean): void => {
+        if (attackActive === active) return
+        attackActive = active
+        attackMat.opacity = active ? 1 : ATTACK_INACTIVE_OPACITY
     }
 
     const tick = (): void => {
@@ -92,34 +110,36 @@ export const createActorDebug = (
                 box.visible = true
             }
         }
-        /* 攻击箱：仅在确有武器命中箱时才可见（否则隐藏，避免残留单位盒停在原点） */
-        if (attack) {
-            const mainGroup = model.weaponGroup
-            const mainBox = model.weaponHitBox
-            if (mainGroup !== null && mainBox !== null) {
-                mainGroup.updateWorldMatrix(true, false)
-                syncWeaponDebugBox(attackBox, mainGroup.matrixWorld, mainBox.center, mainBox.half)
-                attackBox.matrixWorldNeedsUpdate = true
+        /* 攻击箱：逐项绑定关节 + 局部坐标 / 旋转 */
+        const syncBoxes = (boxes: readonly import('../../character/weapon/mesh_config.ts').WeaponAttackBoxSpec[], targets: readonly LineSegments[]): void => {
+            for (let i = 0; i < targets.length; i++) {
+                const spec = boxes[i]
+                if (!attack || spec === undefined) { targets[i].visible = false; continue }
+                const joint = model.jointGroups.get(spec.jointId)
+                if (joint === undefined) { targets[i].visible = false; continue }
+                joint.updateWorldMatrix(true, false)
+                syncWeaponDebugBox(targets[i], joint.matrixWorld, spec.center, spec.half, spec.rotation)
+                targets[i].matrixWorldNeedsUpdate = true
+                targets[i].visible = true
             }
-            attackBox.visible = mainGroup !== null && mainBox !== null
-            const offGroup = model.offhandWeaponGroup
-            const offBox = model.offhandWeaponHitBox
-            if (offGroup != null && offBox != null) {
-                offGroup.updateWorldMatrix(true, false)
-                syncWeaponDebugBox(offhandAttackBox, offGroup.matrixWorld, offBox.center, offBox.half)
-                offhandAttackBox.matrixWorldNeedsUpdate = true
-            }
-            offhandAttackBox.visible = offGroup != null && offBox != null
         }
+        syncBoxes(model.weaponAttackBoxes, attackBoxes)
+        syncBoxes(offhandAttackEnabled ? (model.offhandWeaponAttackBoxes ?? []) : [], offhandAttackBoxes)
     }
 
     return {
         setVisible,
+        setAttackActive,
+        setOffhandAttackEnabled: (enabled) => {
+            offhandAttackEnabled = enabled
+            if (!enabled) for (const box of offhandAttackBoxes) box.visible = false
+        },
         tick,
         dispose: () => {
             for (const box of hurtBoxes) scene.remove(box)
-            scene.remove(attackBox)
-            scene.remove(offhandAttackBox)
+            for (const box of attackBoxes) scene.remove(box)
+            for (const box of offhandAttackBoxes) scene.remove(box)
+            attackMat.dispose()
         },
     }
 }

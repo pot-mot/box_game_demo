@@ -4,11 +4,11 @@ import {BASE_CLIP_STATES} from '../../../../character/state_machine/types.ts'
 import {findWeaponPreset, weaponAttacksOf} from '../../../../character/weapon/catalog.ts'
 import {breathModuleOf} from '../../../../character/weapon/breath_module.ts'
 import {composeClawAndBreath} from '../../../../character/combat/breath_runtime.ts'
-import {createCombatComponent, setCombatBreath, setCombatWeapon} from '../../../../character/combat/types.ts'
+import {createCombatComponent, setCombatAttackModule, setCombatBreath, setCombatWeapon} from '../../../../character/combat/types.ts'
 import {createWeaponRuntime} from '../../../../character/weapon/weapon_runtime.ts'
 import {bodyFormOf, isKnownBodyFormId} from '../../body_form/index.ts'
 import {WYVERN_BODY_FORM} from './body_form.ts'
-import {buildWyvernSkeleton} from './skeleton/skeleton.ts'
+import {buildWyvernSkeleton, WYVERN_COLLIDER_LAYOUT} from './skeleton/skeleton.ts'
 import {wyvernAttackClip, wyvernBaseClip} from './skeleton_animation/clips.ts'
 import {WYVERN_BREATH_MODULES} from './equipment/breath.ts'
 import {wyvernAttackPose, wyvernPose} from './skeleton_animation/pose_fns.ts'
@@ -29,6 +29,16 @@ describe('双足飞龙体形（forms/wyvern）', () => {
         ]) {
             expect(ids.has(id), id).toBe(true)
         }
+    })
+
+    it('碰撞布局：足底主胶囊 + 随躯干/头部旋转的贴合碰撞体', () => {
+        const definition = buildWyvernSkeleton()
+        const ids = new Set(definition.joints.map(joint => joint.id))
+        expect(WYVERN_COLLIDER_LAYOUT[0]?.nodeId).toBe('groundCollider')
+        expect(WYVERN_COLLIDER_LAYOUT[0]?.kind).toBe('capsule')
+        for (const collider of WYVERN_COLLIDER_LAYOUT) expect(ids.has(collider.nodeId), collider.nodeId).toBe(true)
+        expect(definition.joints.find(joint => joint.id === 'bodyCollider')?.parentId).toBe('body')
+        expect(definition.joints.find(joint => joint.id === 'headCollider')?.parentId).toBe('head')
     })
 
     it('放松 / 移动时双前爪保持分居两侧，普通攻击不越过身体中线', () => {
@@ -91,12 +101,13 @@ describe('双足飞龙体形（forms/wyvern）', () => {
         model.dispose()
     })
 
-    it('爪击轻击为完整五段，命中挂点按爪 / 口 / 尾 / 双爪切换；重击留给吐息', () => {
+    it('爪击轻击为完整五段，命中挂点按爪 / 口 / 尾 / 双爪切换；爪模组重击为重爪', () => {
         const weapon = findWeaponPreset('wyvern_claw')
         if (weapon === undefined) throw new Error('龙爪未注册')
         const attacks = weaponAttacksOf(weapon)
         expect(attacks.chains.light.steps).toHaveLength(5)
-        expect(attacks.chains.heavy.steps).toHaveLength(0)
+        expect(attacks.chains.heavy.steps).toHaveLength(1)
+        expect(attacks.chains.heavy.steps[0]).toBe('wyvern_claw_claw_heavy_1')
         expect(attacks.chains.air.steps).toHaveLength(2)
         const segments = attacks.chains.light.steps.map(id => attacks.segments[id]!)
         expect(segments[0]?.hitMountJointIds).toEqual(['wingRWrist', 'wingRClaw'])
@@ -106,8 +117,20 @@ describe('双足飞龙体形（forms/wyvern）', () => {
         expect(segments[4]?.hitMountJointIds?.length).toBe(4)
     })
 
+
+    it('爪模组包含重爪段与完整命中关节', () => {
+        const weapon = findWeaponPreset('wyvern_claw')
+        if (weapon === undefined) throw new Error('龙爪未注册')
+        expect(weapon.attackModules.map(module => module.id)).toEqual(['claw', 'breath'])
+        const attacks = weaponAttacksOf(weapon)
+        const heavy = attacks.segments[attacks.chains.heavy.steps[0]!]!
+        expect(heavy.id).toBe('wyvern_claw_claw_heavy_1')
+        expect(heavy.hitMountJointIds).toEqual(['wingLWrist', 'wingRWrist', 'wingLClaw', 'wingRClaw'])
+        expect(wyvernAttackClip(heavy).duration).toBeGreaterThan(0)
+    })
+
     it('三件吐息模组已注册，且装备槽只对 wyvern 开放', () => {
-        expect(WYVERN_BREATH_MODULES.map(m => m.breathKind).sort()).toEqual(['fireball', 'laser', 'lightning'])
+        expect(WYVERN_BREATH_MODULES.map(m => m.breathKind).sort()).toEqual(['fireball', 'fireball', 'laser', 'lightning'])
         expect(breathModuleOf('breath_fireball')?.breathKind).toBe('fireball')
         expect(breathModuleOf('breath_lightning')?.breathKind).toBe('lightning')
         expect(breathModuleOf('breath_laser')?.breathKind).toBe('laser')
@@ -135,10 +158,12 @@ describe('双足飞龙体形（forms/wyvern）', () => {
         const runtime = createWeaponRuntime('wyvern_claw')
         const combat = createCombatComponent(runtime, 0, () => true, {tendencyId: 'hostileExceptSelf'}, 18)
         setCombatBreath(combat, {module, attacks: weaponAttacksOf(module)})
+        expect(setCombatAttackModule(combat, 'breath')).toBe(true)
         expect(combat.attacks.chains.heavy.steps).toHaveLength(1)
 
-        /* 模拟面板 / 持握模式切换：整体替换主武器运行时 */
+        /* 模拟面板 / 模组切换：整体替换主武器运行时后仍保留当前 breath 模组 */
         setCombatWeapon(combat, createWeaponRuntime('wyvern_claw'))
+        expect(setCombatAttackModule(combat, 'breath')).toBe(true)
         expect(combat.attacks.chains.heavy.steps).toHaveLength(1)
         expect(combat.attackWeapons.get(combat.attacks.chains.heavy.steps[0]!)?.id).toBe('breath_fireball')
     })

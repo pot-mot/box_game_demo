@@ -26,7 +26,7 @@ const profileOf = (form: BodyForm): BoneEditFormProfile => ({
     formId: form.id,
     form,
     preset: createBodyFormSkeletonPreset(form),
-    defaultWeaponId: form.defaultWeaponId,
+    defaultWeaponId: Object.values(form.defaultWeaponLoadout)[0] ?? form.weapons[0]?.id ?? '',
     supportsWeaponControl: form.editor.weaponControl,
     supportsHandedness: form.editor.handedness,
     builtinClips: () => getBuiltinClips(form.id),

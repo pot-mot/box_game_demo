@@ -40,7 +40,7 @@ const equipmentToSave = (state: EquipmentState, bodyFormId: string): EquipmentSt
         if (!allowedSlots.has(entry.key)) continue
         if (entry.kind === 'weapon') {
             const weapon = findWeaponPreset(entry.itemId)
-            if (weapon === undefined || weapon.formId !== plan.id || weapon.natural === true) continue
+            if (weapon === undefined || weapon.formId !== plan.id) continue
             if (!weapon.equipBodyParts.includes(entry.bodyPart)) continue
         } else {
             const piece = entry.kind === 'armor' ? findArmorPreset(entry.itemId) : findLimbPreset(entry.itemId)
@@ -174,7 +174,7 @@ export const collectWorldState = (
                     scale: e.state.config.scale,
                     /* 体形计划（基础模组）：缺省 humanoid */
                     bodyFormId: e.state.config.bodyFormId,
-                    /* 体形专属状态（人形：holdMode / handedness） */
+                    /* 体形专属状态（attackModule + 人形 handedness） */
                     bodyState: e.state.bodyState,
                     peaceStrategy: e.state.ai.peaceStrategy,
                     combatStrategy: e.state.ai.combatStrategy,

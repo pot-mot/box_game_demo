@@ -47,8 +47,9 @@ export const HORSE_BODY_FORM: BodyForm = {
     armorPieces: HORSE_ARMOR_PIECES,
     limbPieces: HORSE_LIMB_PIECES,
     weapons: HORSE_WEAPONS,
-    defaultWeaponId: 'horse_iron_hoof',
+    defaultWeaponLoadout: {hooves: 'horse_iron_hoof'},
     editor: {weaponControl: true, handedness: false},
     /* 四足：翻滚改为低伏冲刺，不做前滚翻 */
+    uprightRoot: false,
     rollSpinTurns: 0,
 }

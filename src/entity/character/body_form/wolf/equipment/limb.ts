@@ -15,6 +15,8 @@ const piece = (
     id, name, nameKey, slot, defense, attack, moveSpeedMultiplier,
     allowedBodyFormIds: ['wolf'],
     mesh: {race: 'orc', color, accentColor: 0x35502a},
+    colliders: [],
+    hurtBoxes: [],
 })
 
 export const WOLF_LIMB_PIECES: readonly LimbPieceConfig[] = [

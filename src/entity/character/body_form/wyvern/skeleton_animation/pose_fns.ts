@@ -385,6 +385,8 @@ const breathPose = (segment: AttackSegment, t: number): JointEulers => {
 export const wyvernAttackPose = (segment: AttackSegment): PoseFunction => {
     const isBreath = segment.attackWeaponId !== undefined || segment.id.startsWith('breath_')
     if (isBreath) return (t) => breathPose(segment, t)
+    /* 重爪：双翼高举后双爪下砸（与轻击第 5 段同源但占用重击节奏与蓄力） */
+    if (segment.key === 'heavy') return (t) => doubleClaw(segment, t)
     if (segment.key === 'air') {
         return (t) => (segment.step === 2 ? doubleClaw(segment, t) : rightWingStrike(segment, t, segment.step === 1 ? 1 : -1))
     }

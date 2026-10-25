@@ -9,7 +9,7 @@ import {createRangedExecutor} from './ranged_executor.ts'
 import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.ts'
 import {findWeaponPreset} from '../../../character/weapon/catalog.ts'
 import {resolvePhases} from '../../../character/combat/attack_phases.ts'
-import {defaultHoldMode, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
+import {defaultAttackModule, weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import type {WeaponRuntime} from '../../../character/weapon/weapon_runtime.ts'
 import type {ExecutorContext} from '../../../character/combat/executor.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
@@ -35,7 +35,7 @@ const makeWeaponRuntime = (weaponOverrides: Partial<RangedWeaponConfig> = {}, da
         knockbackForce: 0,
         ...weaponOverrides,
     }
-    return {weapon, holdMode: defaultHoldMode(weapon), attacks: weaponAttacksOf(weapon)}
+    return {weapon, attackModule: defaultAttackModule(weapon), attacks: weaponAttacksOf(weapon)}
 }
 
 /** 在 +Z 方向开火：进入段的 release 阶段后首次 update 生成子弹（武器参数取自 combat.weapon）。

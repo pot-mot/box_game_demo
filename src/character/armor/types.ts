@@ -1,5 +1,5 @@
 import type {ArmorMeshConfig, LimbMeshConfig} from '../equipment/mesh_config.ts'
-import type {EquipmentStats} from '../equipment/types.ts'
+import type {EquipmentColliderSpec, EquipmentHurtBoxSpec, EquipmentMountSpec, EquipmentStats} from '../equipment/types.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
 
 /**
@@ -18,8 +18,14 @@ export interface EquipPieceConfig<S extends string, M> extends EquipmentStats {
     readonly slot: S
     /** 允许装备该物品的体形 id（缺省 = 全部体形） */
     readonly allowedBodyFormIds?: readonly string[]
-    /** 外观部件配方 */
+    /** 外观部件配方（未声明 `mounts` 时作为每个挂载关节的默认模型） */
     readonly mesh: M
+    /** 逐骨骼节点挂载配置；缺省 = 槽位 mountJointIds 各关节使用同一 `mesh` */
+    readonly mounts?: readonly EquipmentMountSpec<M>[]
+    /** 扩展碰撞体（现有装备为空数组） */
+    readonly colliders?: readonly EquipmentColliderSpec[]
+    /** 扩展受击箱（现有装备为空数组） */
+    readonly hurtBoxes?: readonly EquipmentHurtBoxSpec[]
 }
 
 /** 单件护甲（覆盖对应身体部位的外观） */

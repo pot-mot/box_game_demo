@@ -88,7 +88,7 @@ export const makeChar = (
         id,
         config: {speed, jumpHeight: 2, scale: 1},
         combat,
-        bodyState: {holdMode: runtime.holdMode},
+        bodyState: {attackModule: runtime.attackModule},
     })
     const stateMachine = createCharacterStateMachine()
     return {

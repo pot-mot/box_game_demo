@@ -1,6 +1,7 @@
 import {isWindupStrike, phaseDurationOf, resolvePhases, type AttackPhase} from '../combat/attack_phases.ts'
 import type {ImpactLevel} from '../combat/impact.ts'
-import {HOLD_MODES, type HoldMode} from './hold_mode.ts'
+import {HOLD_MODES} from './hold_mode.ts'
+import type {AttackModuleId} from './attack_module.ts'
 import {chargeDamageBonusOf, type ChargeTuning} from './charge_tuning.ts'
 import {translate, type StringLocaleKey} from '../../i18n/index.ts'
 
@@ -75,8 +76,10 @@ export interface AttackImpulse {
 
 /** 攻击段（武器模组拥有的一次可播放动作；id 同时是动画键与展示/编辑器清单键） */
 export interface AttackSegment {
-    /** 段 id（武器内唯一，形如 `{weaponId}_{key}_{step}`） */
+    /** 段 id（武器内唯一，形如 `{weaponId}_{moduleId}_{key}_{step}`） */
     readonly id: string
+    /** 所属攻击模组 id */
+    readonly moduleId: AttackModuleId
     /** 所属攻击键 */
     readonly key: AttackKey
     /** 链内序号（1-based） */
@@ -154,15 +157,15 @@ export interface WeaponAttacks {
 }
 
 /**
- * 武器按持握模式划分的攻击链 map（键 = 持握模式，仅声明 `holdModes` 中受支持的模式）：
- * 同一把武器在不同持握方式下可拥有各自独立的连段（如单持快剑链 / 双手重劈链）。
- * 缺省入口（`catalog.ts` 的 `weaponAttacksOf`）取武器 `holdModes` 中首个已声明模式。
+ * 武器按攻击模组划分的攻击链 map（键 = 模组 id，仅声明 `attackModules` 中受支持的模组）。
+ * 同一把武器在不同模组下可拥有各自独立的连段（如人形单持快剑链 / 双手重劈链）。
+ * 缺省入口（`catalog.ts` 的 `weaponAttacksOf`）取武器 `attackModules` 中首个已声明模组。
  */
-export type HoldModeAttacks = Readonly<Partial<Record<HoldMode, WeaponAttacks>>>
+export type AttackModuleAttacks = Readonly<Partial<Record<AttackModuleId, WeaponAttacks>>>
 
-/** 取某持握模式的攻击链（该模式未声明攻击链时返回 undefined） */
-export const attacksForHoldMode = (attacks: HoldModeAttacks, holdMode: HoldMode): WeaponAttacks | undefined =>
-    attacks[holdMode]
+/** 取某攻击模组的攻击链（该模组未声明攻击链时返回 undefined） */
+export const attacksForAttackModule = (attacks: AttackModuleAttacks, moduleId: AttackModuleId): WeaponAttacks | undefined =>
+    attacks[moduleId]
 
 /* ── 守卫原语（武器模组组合使用） ── */
 
@@ -251,27 +254,30 @@ export const withChargeTuning = (attacks: WeaponAttacks, tuning: ChargeTuning): 
     return {...attacks, segments}
 }
 
-/** 对持握模式 map 的每个模式应用蓄力调参覆写（换持握模式不丢失；克隆段不改共享数据） */
-export const withChargeTuningMap = (attacks: HoldModeAttacks, tuning: ChargeTuning): HoldModeAttacks => {
-    const out: Partial<Record<HoldMode, WeaponAttacks>> = {}
+/** 对攻击模组 map 的每个模组应用蓄力调参覆写（换模组不丢失；克隆段不改共享数据） */
+export const withChargeTuningMap = (attacks: AttackModuleAttacks, tuning: ChargeTuning): AttackModuleAttacks => {
+    const out: Partial<Record<AttackModuleId, WeaponAttacks>> = {}
     for (const mode of HOLD_MODES) {
         const set = attacks[mode]
         if (set !== undefined) out[mode] = withChargeTuning(set, tuning)
+    }
+    for (const [moduleId, set] of Object.entries(attacks)) {
+        if (set === undefined || HOLD_MODES.some(mode => mode === moduleId)) continue
+        out[moduleId] = withChargeTuning(set, tuning)
     }
     return out
 }
 
 /** 为未声明 `attackSlotKey` 的段补默认槽位（武器模型解析时调用；不改武器类共享数据） */
-export const withAttackSlotKeyMap = (attacks: HoldModeAttacks, slotKey: string): HoldModeAttacks => {
-    const out: Partial<Record<HoldMode, WeaponAttacks>> = {}
-    for (const mode of HOLD_MODES) {
-        const set = attacks[mode]
+export const withAttackSlotKeyMap = (attacks: AttackModuleAttacks, slotKey: string): AttackModuleAttacks => {
+    const out: Partial<Record<AttackModuleId, WeaponAttacks>> = {}
+    for (const [moduleId, set] of Object.entries(attacks)) {
         if (set === undefined) continue
         const segments: Record<string, AttackSegment> = {}
         for (const [id, segment] of Object.entries(set.segments)) {
             segments[id] = segment.attackSlotKey === undefined ? {...segment, attackSlotKey: slotKey} : segment
         }
-        out[mode] = {...set, segments}
+        out[moduleId] = {...set, segments}
     }
     return out
 }

@@ -22,8 +22,9 @@ import {
     type AttackTransitionContext,
 } from './attack_chain.ts'
 import type {AttackSegment, WeaponAttacks} from './attack_chain.ts'
-import {allWeaponPresets, defaultHoldMode, findWeaponPreset, weaponAttacksOf, weaponPresetOrDefault} from './catalog.ts'
+import {allWeaponPresets, defaultAttackModule, findWeaponPreset, weaponAttacksOf, weaponPresetOrDefault} from './catalog.ts'
 import type {MeleeWeaponConfig} from './melee_weapon.ts'
+import type {WeaponConfig} from './catalog.ts'
 import type {RangedWeaponConfig} from './ranged_weapon.ts'
 import {buildMeleeAttacks} from './melee_attacks.ts'
 import {createWeaponRuntime} from './weapon_runtime.ts'
@@ -32,6 +33,9 @@ import {
     createTestWeaponRuntime,
     TEST_WEAPON_ID,
 } from '../../test_fixtures/test_weapon.ts'
+
+const attackModuleIds = (weapon: WeaponConfig | MeleeWeaponConfig): readonly string[] =>
+    weapon.attackModules.map(module => module.id)
 
 const MELEE_WEAPON_IDS = ['short_sword', 'long_sword', 'heavy_sword', 'spear', 'dual_axe', 'war_hammer']
 const RANGED_WEAPON_IDS = ['longbow', 'crossbow', 'shotgun', 'staff', 'magic_wand', 'throwing_axe', 'grenade', 'molotov', 'throwing_dart']
@@ -70,7 +74,7 @@ const MELEE_CHAIN_STEPS: Readonly<Record<string, {light: readonly string[]; heav
 describe('近战武器攻击链（武器类固有数据，默认单持）', () => {
     it.each(MELEE_WEAPON_IDS)('%s：默认模式主干段与链编排一致', (weaponId) => {
         const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId])
-        const mode = defaultHoldMode(MELEE_WEAPON_PRESETS[weaponId])
+        const mode = defaultAttackModule(MELEE_WEAPON_PRESETS[weaponId])
         const expected = MELEE_CHAIN_STEPS[weaponId]
         const stepIds = new Set([...expected.light, ...expected.heavy].map(step => segmentIdOf(weaponId, mode, step)))
         const allIds = Object.keys(attacks.segments)
@@ -83,7 +87,7 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
 
     it.each(MELEE_WEAPON_IDS)('%s：轻重键起手候选分别为 轻 1 / 重 1（蓄力由段内 chargeFullTime 表达，不再用起手变体）', (weaponId) => {
         const weapon = MELEE_WEAPON_PRESETS[weaponId]
-        const mode = defaultHoldMode(weapon)
+        const mode = defaultAttackModule(weapon)
         const attacks = weaponAttacksOf(weapon)
         expect(chainOf(attacks, 'light').entries).toEqual([{segmentId: segmentIdOf(weaponId, mode, 'light_1')}])
         expect(chainOf(attacks, 'heavy').entries).toEqual([{segmentId: segmentIdOf(weaponId, mode, 'heavy_1')}])
@@ -91,7 +95,7 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
 
     it.each(MELEE_WEAPON_IDS)('%s：同链依编排推进（末段回到首段 = 循环链）', (weaponId) => {
         const weapon = MELEE_WEAPON_PRESETS[weaponId]
-        const mode = defaultHoldMode(weapon)
+        const mode = defaultAttackModule(weapon)
         const attacks = weaponAttacksOf(weapon)
         const expected = MELEE_CHAIN_STEPS[weaponId]
         for (const key of ['light', 'heavy'] as const) {
@@ -106,7 +110,7 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
 
     it.each(MELEE_WEAPON_IDS)('%s：主干段时长/伤害倍率（轻 0.6+0.5、重 0.72+0.6 ×1.6）', (weaponId) => {
         const weapon = MELEE_WEAPON_PRESETS[weaponId]
-        const mode = defaultHoldMode(weapon)
+        const mode = defaultAttackModule(weapon)
         const attacks = weaponAttacksOf(weapon)
         const expected = MELEE_CHAIN_STEPS[weaponId]
         const stepIds = new Set([...expected.light, ...expected.heavy].map(step => segmentIdOf(weaponId, mode, step)))
@@ -137,7 +141,7 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
 
     it('通用重击蓄力：所有近战武器每种模式的重击段均可蓄力（时长/伤害加成/冷却），轻击段不可', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
-            for (const mode of MELEE_WEAPON_PRESETS[weaponId].holdModes) {
+            for (const mode of attackModuleIds(MELEE_WEAPON_PRESETS[weaponId])) {
                 const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
                 const heavy1 = findSegment(attacks, `${weaponId}_${mode}_heavy_1`)!
                 expect(heavy1.chargeFullTime, `${weaponId}/${mode}`).toBe(1)
@@ -156,8 +160,8 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
     it('全部近战武器类：三种持握模式各自声明独立连段（段 id 带模式命名空间）', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
             const weaponClass = MELEE_WEAPON_PRESETS[weaponId]
-            expect(weaponClass.holdModes, weaponId).toEqual(['one_handed', 'two_handed', 'dual_wield'])
-            for (const mode of weaponClass.holdModes) {
+            expect(attackModuleIds(weaponClass), weaponId).toEqual(['one_handed', 'two_handed', 'dual_wield'])
+            for (const mode of attackModuleIds(weaponClass)) {
                 const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
                 const segments = orderedSegments(attacks)
                 expect(segments.length, `${weaponId}/${mode}`).toBeGreaterThanOrEqual(4)
@@ -166,14 +170,14 @@ describe('近战武器攻击链（武器类固有数据，默认单持）', () =
                 }
             }
             /* 三模式链互不相同（独立连段数据） */
-            const lightSteps = new Set(weaponClass.holdModes.map(mode => weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode).chains.light.steps.join(',')))
+            const lightSteps = new Set(attackModuleIds(weaponClass).map(mode => weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode).chains.light.steps.join(',')))
             expect(lightSteps.size, weaponId).toBe(3)
         }
     })
 
     it('主干段冷却全为 0（节奏由动作 + 恢复时间形成；条件变体段可自带冷却）', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
-            for (const mode of MELEE_WEAPON_PRESETS[weaponId].holdModes) {
+            for (const mode of attackModuleIds(MELEE_WEAPON_PRESETS[weaponId])) {
                 const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
                 const stepIds = new Set([...chainOf(attacks, 'light').steps, ...chainOf(attacks, 'heavy').steps])
                 for (const segment of Object.values(attacks.segments)) {
@@ -215,7 +219,7 @@ describe('段清单顺序（orderedSegments）', () => {
     it('每把近战武器默认链：轻击键段整体在重击键段之前，且每键内先主干段（按编排顺序）后变体段', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
             const weapon = MELEE_WEAPON_PRESETS[weaponId]
-            const mode = defaultHoldMode(weapon)
+            const mode = defaultAttackModule(weapon)
             const attacks = weaponAttacksOf(weapon)
             const ordered = orderedSegments(attacks)
             const lightSegments = ordered.filter(segment => segment.key === 'light')
@@ -254,7 +258,7 @@ describe('段清单顺序（orderedSegments）', () => {
 
     it('全部生产武器的段顺序中，轻链整体位于重链之前', () => {
         for (const weapon of ALL_WEAPON_PRESETS) {
-            for (const mode of weapon.holdModes) {
+            for (const mode of attackModuleIds(weapon)) {
                 const segments = orderedSegments(weaponAttacksOf(weapon, mode))
                 const lastLight = segments.map(segment => segment.key).lastIndexOf('light')
                 const firstHeavy = segments.map(segment => segment.key).indexOf('heavy')
@@ -403,11 +407,11 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
 
     it('追加条件变体段：起手候选守卫 + 挂到某个段的 next 上（无需改状态机）', () => {
         const charge: AttackSegment = {
-            id: 'demo_axe_charge', key: 'light', step: 1, label: '蓄力重劈',
+            id: 'demo_axe_charge', moduleId: 'dual_wield', key: 'light', step: 1, label: '蓄力重劈',
             duration: 0.4, recovery: 0.3, phases: [], poseId: 'demo_axe_charge', damageMultiplier: 2, impact: 'heavy', poiseDamage: 4, cooldown: 1, next: [],
         }
         const thrust: AttackSegment = {
-            id: 'demo_axe_thrust', key: 'light', step: 2, label: '方向突刺',
+            id: 'demo_axe_thrust', moduleId: 'dual_wield', key: 'light', step: 2, label: '方向突刺',
             duration: 0.25, recovery: 0.2, phases: [], poseId: 'demo_axe_thrust', damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0, next: [],
         }
         const attacks = buildMeleeAttacks('demo_axe', 'dual_wield', {
@@ -428,7 +432,7 @@ describe('武器扩展：链编排与追加段（buildMeleeAttacks 选项）', (
 
     it('追加段 id 与模板段冲突时构建失败（fail loudly）', () => {
         const duplicate: AttackSegment = {
-            id: 'demo_sword_one_handed_light_1', key: 'light', step: 1,
+            id: 'demo_sword_one_handed_light_1', moduleId: 'one_handed', key: 'light', step: 1,
             duration: 0.2, recovery: 0.2, phases: [], poseId: 'demo_sword_one_handed_light_1', damageMultiplier: 1, impact: 'medium', poiseDamage: 1, cooldown: 0, next: [],
         }
         expect(() => buildMeleeAttacks('demo_sword', 'one_handed', {extraSegments: [duplicate]})).toThrow()
@@ -496,7 +500,7 @@ describe('武器运行时（createWeaponRuntime）', () => {
 
 describe('空中攻击链（跳跃中按攻击键，武器种类独立模组）', () => {
     it.each(MELEE_WEAPON_IDS)('%s：每种模式都声明 air 链，起手为第一段、段键为 air、不可蓄力', (weaponId) => {
-        for (const mode of MELEE_WEAPON_PRESETS[weaponId].holdModes) {
+        for (const mode of attackModuleIds(MELEE_WEAPON_PRESETS[weaponId])) {
             const attacks = weaponAttacksOf(MELEE_WEAPON_PRESETS[weaponId], mode)
             const air = chainOf(attacks, 'air')
             expect(air.entries.length, `${weaponId}/${mode}`).toBeGreaterThan(0)
@@ -514,7 +518,7 @@ describe('空中攻击链（跳跃中按攻击键，武器种类独立模组）'
     it('空中段动画自烘焙：pose 指向段自身（不再复用地面段 pose）', () => {
         for (const weaponId of MELEE_WEAPON_IDS) {
             const weapon = MELEE_WEAPON_PRESETS[weaponId]
-            for (const mode of weapon.holdModes) {
+            for (const mode of attackModuleIds(weapon)) {
                 const attacks = weaponAttacksOf(weapon, mode)
                 for (const segmentId of chainOf(attacks, 'air').steps) {
                     const segment = findSegment(attacks, segmentId)!

@@ -135,7 +135,7 @@ type CoreLocale = {
     'input.action.jump': string
     'input.action.roll': string
     'input.action.boost': string
-    'input.action.cycle_hold_mode': string
+    'input.action.cycle_attack_module': string
     'input.action.cycle_spawn_up': string
     'input.action.cycle_spawn_down': string
     'input.action.delete_entity': string

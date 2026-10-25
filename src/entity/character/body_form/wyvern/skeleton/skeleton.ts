@@ -4,8 +4,10 @@ import {buildBoneEdges} from '../../common/creature_runtime/skeleton_bones.ts'
 
 /** 飞龙碰撞布局（骨架唯一来源）：竖直胶囊 + 宽矮躯干盒；双翼/尾不参与物理。 */
 export const WYVERN_COLLIDER_LAYOUT: readonly ColliderSpec[] = [
-    {nodeId: 'bodyCollider', kind: 'capsule', radius: 0.3, halfHeight: 0.7, offsetY: 0},
-    {nodeId: 'torsoCollider', kind: 'box', half: {x: 0.42, y: 0.3, z: 0.55}, offsetY: 0},
+    /* 主碰撞体 = 足底小胶囊；躯干与头部使用贴合体形的盒 */
+    {nodeId: 'groundCollider', kind: 'capsule', radius: 0.25, halfHeight: 0.02, offsetY: 0},
+    {nodeId: 'bodyCollider', kind: 'box', half: {x: 0.42, y: 0.28, z: 0.55}, offsetY: 0},
+    {nodeId: 'headCollider', kind: 'box', half: {x: 0.22, y: 0.16, z: 0.28}, offsetY: 0},
 ]
 
 const I: readonly [number, number, number, number] = [0, 0, 0, 1]
@@ -47,12 +49,14 @@ const side = (s: 'l' | 'r', sign: number): readonly Joint[] => {
 const buildJoints = (): SkeletonDefinition['joints'] => [
     {id: 'root', name: '根', position: P(0, 0, 0), rotation: I},
     {id: 'body', name: '躯干', parentId: 'root', position: P(0, 1.0, 0), rotation: I},
-    {id: 'bodyCollider', name: '主碰撞体（竖胶囊·落地）', parentId: 'root', position: P(0, 1.0, 0), rotation: I},
-    {id: 'torsoCollider', name: '躯干碰撞体（盒）', parentId: 'root', position: P(0, 1.0, 0), rotation: I},
+    {id: 'groundCollider', name: '足底碰撞体（落地）', parentId: 'root', position: P(0, 0.27, 0), rotation: I},
+    {id: 'bodyCollider', name: '躯干碰撞体（盒）', parentId: 'body', position: P(0, 0, 0), rotation: I},
+    {id: 'torsoCollider', name: '备用躯干碰撞节点', parentId: 'body', position: P(0, 0, 0), rotation: I},
 
     {id: 'withers', name: '肩部', parentId: 'body', position: P(0, 0.25, 0.35), rotation: I},
     {id: 'neck', name: '颈', parentId: 'withers', position: P(0, 0.2, 0.15), rotation: I},
     {id: 'head', name: '头', parentId: 'neck', position: P(0, 0.3, 0.3), rotation: I},
+    {id: 'headCollider', name: '头部碰撞体', parentId: 'head', position: P(0, 0.05, 0.2), rotation: I},
     {id: 'jaw', name: '下颚', parentId: 'head', position: P(0, 0, 0.3), rotation: I},
     {id: 'mouthMount', name: '口部挂点', parentId: 'jaw', position: P(0, -0.05, 0.3), rotation: I},
 

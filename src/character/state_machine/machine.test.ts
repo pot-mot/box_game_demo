@@ -53,7 +53,7 @@ const makeMock = (runtime: WeaponRuntime = createWeaponRuntime('long_sword')): C
         id: 1,
         config: {speed: 6, jumpHeight: 2, scale: 1},
         combat,
-        bodyState: {holdMode: runtime.holdMode},
+        bodyState: {attackModule: runtime.attackModule},
     })
     characterState.physics.isOnGround = true
     return {
@@ -766,7 +766,7 @@ describe('远程蓄力（按住冻结 + 累积 + 松开推进）', () => {
         const charge = e.state.combat.attackCharge
         expect(charge).toBeGreaterThan(0.5)
 
-        hold(e, 8, false)
+        hold(e, 40, false)
         expect(e.state.combat.attackHolding).toBe(false)
         expect(e.state.combat.attackCharge).toBeCloseTo(charge, 5)
         expect(e.state.combat.phaseIndex).toBeGreaterThanOrEqual(1)

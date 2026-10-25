@@ -15,6 +15,8 @@ const piece = (
     id, name, nameKey, slot, defense, attack, moveSpeedMultiplier,
     allowedBodyFormIds: ['wyvern'],
     mesh: {id: 'plate', color, accentColor: 0x3f4a34, material: 'scale'},
+    colliders: [],
+    hurtBoxes: [],
 })
 
 export const WYVERN_ARMOR_PIECES: readonly ArmorPieceConfig[] = [

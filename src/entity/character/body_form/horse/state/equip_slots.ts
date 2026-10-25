@@ -7,7 +7,6 @@ export const HORSE_EQUIP_SLOTS: readonly EquipSlotDef[] = [
     {kind: 'limb', bodyPart: 'legs', mountJointIds: ['flHip', 'frHip', 'rlHip', 'rrHip'], nameKey: 'equip_slot.legs'},
     {kind: 'limb', bodyPart: 'tail', mountJointIds: ['tailA'], nameKey: 'equip_slot.tail'},
     {kind: 'weapon', bodyPart: 'hooves', mountJointIds: ['flFoot', 'frFoot', 'rlFoot', 'rrFoot'], nameKey: 'equip_slot.hooves'},
-    {kind: 'weapon', bodyPart: 'head', mountJointIds: ['mouthMount'], nameKey: 'equip_slot.head'},
     {kind: 'armor', bodyPart: 'hooves', mountJointIds: ['flFoot', 'frFoot', 'rlFoot', 'rrFoot'], nameKey: 'equip_slot.hooves'},
     {kind: 'armor', bodyPart: 'head', mountJointIds: ['head'], nameKey: 'equip_slot.head'},
     {kind: 'armor', bodyPart: 'torso', mountJointIds: ['body'], nameKey: 'equip_slot.torso'},

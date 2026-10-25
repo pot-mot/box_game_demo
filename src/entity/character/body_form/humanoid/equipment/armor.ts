@@ -15,6 +15,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'cap', color: 0x8b7d5a, accentColor: 0x5f553c},
+        colliders: [],
+        hurtBoxes: [],
     },
     iron_helmet: {
         id: 'iron_helmet', name: '铁盔', slot: 'head',
@@ -22,6 +24,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.98, poise: 2,
         mesh: {id: 'helmet', color: 0x8a8f98, accentColor: 0x5a5f68},
+        colliders: [],
+        hurtBoxes: [],
     },
     /* 法师系头盔：除魔法防御外提供法术攻击力 */
     mage_hood: {
@@ -30,6 +34,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 1},
         moveSpeedMultiplier: 1,
         mesh: {id: 'hood', color: 0x4455aa, accentColor: 0x2a3370},
+        colliders: [],
+        hurtBoxes: [],
     },
 
     /* ── 胸甲 ── */
@@ -39,6 +45,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'vest', color: 0x8b7d5a, accentColor: 0x5f553c},
+        colliders: [],
+        hurtBoxes: [],
     },
     leather_armor: {
         id: 'leather_armor', name: '皮甲', slot: 'chest',
@@ -46,6 +54,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'vest', color: 0x7a5230, accentColor: 0x4a3018, material: 'leather'},
+        colliders: [],
+        hurtBoxes: [],
     },
     iron_plate: {
         id: 'iron_plate', name: '铁胸甲', slot: 'chest',
@@ -53,6 +63,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.9, poise: 4,
         mesh: {id: 'plate', color: 0x8a8f98, accentColor: 0x5a5f68},
+        colliders: [],
+        hurtBoxes: [],
     },
     mage_robe: {
         id: 'mage_robe', name: '法袍', slot: 'chest',
@@ -60,6 +72,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'robe', color: 0x4455aa, accentColor: 0x2a3370},
+        colliders: [],
+        hurtBoxes: [],
     },
     scale_mail: {
         id: 'scale_mail', name: '鳞甲', slot: 'chest',
@@ -67,6 +81,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.92, poise: 5,
         mesh: {id: 'plate', color: 0x6b7a5a, accentColor: 0x3f4a34, material: 'scale'},
+        colliders: [],
+        hurtBoxes: [],
     },
 
     /* ── 臂甲 ── */
@@ -76,6 +92,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'bracer', color: 0x8b7d5a, accentColor: 0x5f553c, material: 'cloth'},
+        colliders: [],
+        hurtBoxes: [],
     },
     iron_bracers: {
         id: 'iron_bracers', name: '铁臂甲', slot: 'arms',
@@ -83,6 +101,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 1, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'bracer', color: 0x8a8f98, accentColor: 0x5a5f68},
+        colliders: [],
+        hurtBoxes: [],
     },
     battle_bracers: {
         id: 'battle_bracers', name: '战臂甲', slot: 'arms',
@@ -90,6 +110,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 2, magic: 0},
         moveSpeedMultiplier: 0.97, poise: 1,
         mesh: {id: 'bracer', color: 0x6a6f78, accentColor: 0xaa8833},
+        colliders: [],
+        hurtBoxes: [],
     },
     mage_wraps: {
         id: 'mage_wraps', name: '法印护腕', slot: 'arms',
@@ -97,6 +119,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 1},
         moveSpeedMultiplier: 1,
         mesh: {id: 'bracer', color: 0x4455aa, accentColor: 0x2a3370, material: 'cloth'},
+        colliders: [],
+        hurtBoxes: [],
     },
 
     /* ── 护腿 ── */
@@ -106,6 +130,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'legwrap', color: 0x8b7d5a, accentColor: 0x5f553c},
+        colliders: [],
+        hurtBoxes: [],
     },
     iron_greaves: {
         id: 'iron_greaves', name: '铁胫甲', slot: 'legs',
@@ -113,6 +139,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.95, poise: 2,
         mesh: {id: 'greaves', color: 0x8a8f98, accentColor: 0x5a5f68},
+        colliders: [],
+        hurtBoxes: [],
     },
     mage_leggings: {
         id: 'mage_leggings', name: '法师护腿', slot: 'legs',
@@ -120,6 +148,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'legwrap', color: 0x4455aa, accentColor: 0x2a3370},
+        colliders: [],
+        hurtBoxes: [],
     },
     /* 加速鞋类：占护腿槽位换取移速（无防御收益） */
     swift_boots: {
@@ -128,6 +158,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1.15,
         mesh: {id: 'boots', color: 0x9a7b4f, accentColor: 0xd9c08a, hideBodyParts: ['rightShin', 'leftShin']},
+        colliders: [],
+        hurtBoxes: [],
     },
     wind_boots: {
         id: 'wind_boots', name: '疾风靴', slot: 'legs',
@@ -135,6 +167,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1.25,
         mesh: {id: 'boots', color: 0x3f8f8f, accentColor: 0xcfe8e8, hideBodyParts: ['rightShin', 'leftShin']},
+        colliders: [],
+        hurtBoxes: [],
     },
 
     /* ── 皮甲套（补全头 / 臂 / 腿；胸甲为 leather_armor） ── */
@@ -144,6 +178,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'cap', color: 0x7a5230, accentColor: 0x4a3018, material: 'leather'},
+        colliders: [],
+        hurtBoxes: [],
     },
     leather_bracers: {
         id: 'leather_bracers', name: '皮护腕', slot: 'arms',
@@ -151,6 +187,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'bracer', color: 0x7a5230, accentColor: 0x4a3018, material: 'leather'},
+        colliders: [],
+        hurtBoxes: [],
     },
     leather_legs: {
         id: 'leather_legs', name: '皮护腿', slot: 'legs',
@@ -158,6 +196,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 1,
         mesh: {id: 'legwrap', color: 0x7a5230, accentColor: 0x4a3018, material: 'leather'},
+        colliders: [],
+        hurtBoxes: [],
     },
 
     /* ── 鳞甲套（补全头 / 臂 / 腿；胸甲为 scale_mail） ── */
@@ -167,6 +207,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.98, poise: 1,
         mesh: {id: 'helmet', color: 0x6b7a5a, accentColor: 0x3f4a34, material: 'scale'},
+        colliders: [],
+        hurtBoxes: [],
     },
     scale_bracers: {
         id: 'scale_bracers', name: '鳞护腕', slot: 'arms',
@@ -174,6 +216,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.97,
         mesh: {id: 'bracer', color: 0x6b7a5a, accentColor: 0x3f4a34, material: 'scale'},
+        colliders: [],
+        hurtBoxes: [],
     },
     scale_legs: {
         id: 'scale_legs', name: '鳞护腿', slot: 'legs',
@@ -181,6 +225,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.96, poise: 2,
         mesh: {id: 'greaves', color: 0x6b7a5a, accentColor: 0x3f4a34, material: 'scale'},
+        colliders: [],
+        hurtBoxes: [],
     },
 
     /* ── 石甲套（全新四件套，最厚最重） ── */
@@ -190,6 +236,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.95, poise: 2,
         mesh: {id: 'helmet', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
+        colliders: [],
+        hurtBoxes: [],
     },
     stone_plate: {
         id: 'stone_plate', name: '石胸甲', slot: 'chest',
@@ -197,6 +245,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.9, poise: 4,
         mesh: {id: 'plate', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
+        colliders: [],
+        hurtBoxes: [],
     },
     stone_bracers: {
         id: 'stone_bracers', name: '石护腕', slot: 'arms',
@@ -204,6 +254,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.95, poise: 1,
         mesh: {id: 'bracer', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
+        colliders: [],
+        hurtBoxes: [],
     },
     stone_legs: {
         id: 'stone_legs', name: '石护腿', slot: 'legs',
@@ -211,6 +263,8 @@ const ARMOR_PIECES: Record<string, ArmorPieceConfig> = {
         attack: {physical: 0, magic: 0},
         moveSpeedMultiplier: 0.94, poise: 2,
         mesh: {id: 'greaves', color: 0x8a8a86, accentColor: 0x5f5f5c, material: 'stone'},
+        colliders: [],
+        hurtBoxes: [],
     },
 }
 

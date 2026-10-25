@@ -1,12 +1,12 @@
 import {describe, it, expect} from 'vitest'
 import {
-    availableHoldModes,
-    defaultHoldMode,
+    availableAttackModules,
+    defaultAttackModule,
     isDualWieldPair,
     sameWeaponClass,
-    supportsHoldMode,
+    supportsAttackModule,
     weaponAttacksOf,
-    weaponHoldModes,
+    weaponAttackModules,
     weaponsOfForm,
 } from '../../../../../character/weapon/catalog.ts'
 import {HUMANOID_BODY_FORM_ID} from '../../index.ts'
@@ -23,24 +23,24 @@ const MELEE_IDS = ALL_WEAPON_PRESETS
 describe('武器持握模式数组 + 攻击链 map', () => {
     it('每把武器至少声明一种持握模式，默认模式为数组首个', () => {
         for (const weapon of ALL_WEAPON_PRESETS) {
-            const modes = weaponHoldModes(weapon)
+            const modes = weaponAttackModules(weapon).map(module => module.id)
             expect(modes.length, weapon.id).toBeGreaterThan(0)
-            expect(defaultHoldMode(weapon)).toBe(modes[0])
-            expect(supportsHoldMode(weapon, modes[0])).toBe(true)
+            expect(defaultAttackModule(weapon)).toBe(modes[0])
+            expect(supportsAttackModule(weapon, modes[0]!)).toBe(true)
         }
     })
 
     it('全部近战武器支持三种模式且默认单持；远程保持既有单/双手声明', () => {
         for (const weaponId of MELEE_IDS) {
             const weapon = ALL_WEAPON_PRESETS.find(candidate => candidate.id === weaponId)!
-            expect(weaponHoldModes(weapon), weaponId).toEqual(['one_handed', 'two_handed', 'dual_wield'])
-            expect(defaultHoldMode(weapon), weaponId).toBe('one_handed')
+            expect(weaponAttackModules(weapon).map(module => module.id), weaponId).toEqual(['one_handed', 'two_handed', 'dual_wield'])
+            expect(defaultAttackModule(weapon), weaponId).toBe('one_handed')
         }
     })
 
     it('每把武器的每种声明模式都声明了攻击链（map 覆盖全部模式）', () => {
         for (const weapon of ALL_WEAPON_PRESETS) {
-            for (const mode of weaponHoldModes(weapon)) {
+            for (const mode of weaponAttackModules(weapon).map(module => module.id)) {
                 const attacks = weaponAttacksOf(weapon, mode)
                 expect(orderedSegments(attacks).length, `${weapon.id}/${mode}`).toBeGreaterThan(0)
             }
@@ -80,12 +80,13 @@ describe('武器类 / 模型与双持可用性', () => {
         expect(isDualWieldPair(sword, undefined)).toBe(false)
     })
 
-    it('availableHoldModes：双持仅在副手同类近战时可用', () => {
+    it('availableAttackModules：双持仅在副手同类近战时可用', () => {
         const sword = ALL_WEAPON_PRESETS.find(weapon => weapon.id === 'long_sword')!
-        expect(availableHoldModes(sword, undefined)).toEqual(['one_handed', 'two_handed'])
-        expect(availableHoldModes(sword, sword)).toEqual(['one_handed', 'two_handed', 'dual_wield'])
+        expect(availableAttackModules(sword, undefined).map(module => module.id)).toEqual(['one_handed', 'two_handed'])
+        expect(availableAttackModules(sword, sword).map(module => module.id)).toEqual(['one_handed', 'two_handed', 'dual_wield'])
+        expect(availableAttackModules(ALL_WEAPON_PRESETS.find(weapon => weapon.id === 'unarmed')!, ALL_WEAPON_PRESETS.find(weapon => weapon.id === 'unarmed')!).map(module => module.id)).toEqual(['one_handed', 'dual_wield'])
         const bow = ALL_WEAPON_PRESETS.find(weapon => weapon.id === 'longbow')!
-        expect(availableHoldModes(bow, undefined)).toEqual(['two_handed'])
+        expect(availableAttackModules(bow, undefined).map(module => module.id)).toEqual(['two_handed'])
     })
 })
 
@@ -94,7 +95,7 @@ describe('攻击段动画引用（每段一个 pose id）', () => {
         for (const weapon of ALL_WEAPON_PRESETS) {
             /* 天然武器（空手/撕咬/爪/踢/吐息）的动画由体形分包提供，不在人形关键帧数据内 */
             if (weapon.natural === true) continue
-            for (const mode of weaponHoldModes(weapon)) {
+            for (const mode of weaponAttackModules(weapon).map(module => module.id)) {
                 for (const segment of orderedSegments(weaponAttacksOf(weapon, mode))) {
                     expect(segment.poseId.length, segment.id).toBeGreaterThan(0)
                     expect(getAttackClipById(segment.poseId).duration).toBeGreaterThan(0)
