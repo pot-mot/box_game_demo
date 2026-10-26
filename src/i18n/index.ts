@@ -76,6 +76,7 @@ type CoreLocale = {
     'element.group.fragment': string
     'element.group.interactable': string
     'element.group.item': string
+    'element.group.diorama': string
     'element.group.other': string
 
     /* ── 生成类型选择 ── */
@@ -85,6 +86,79 @@ type CoreLocale = {
     'spawn.terrain': string
     'spawn.building': string
     'spawn.interactable': string
+    'spawn.diorama': string
+
+    /* ── 箱庭 ── */
+    'diorama.panel.recipe': string
+    'diorama.panel.seed': string
+    'diorama.panel.rebuild': string
+    'diorama.panel.delete': string
+    'diorama.panel.delete_title': string
+    'diorama.panel.ok': string
+    'diorama.panel.error': string
+    'diorama.panel.warning': string
+    'diorama.panel.nodes': string
+    'diorama.panel.population': string
+    'diorama.panel.node_id': string
+    'diorama.panel.rule_id': string
+    'diorama.panel.yaw': string
+    'diorama.panel.add_building': string
+    'diorama.panel.add_terrain': string
+    'diorama.panel.add_area': string
+    'diorama.panel.add_connection': string
+    'diorama.panel.add_box': string
+    'diorama.panel.add_item': string
+    'diorama.panel.add_interactable': string
+    'diorama.panel.add_decor': string
+    'diorama.panel.add_character': string
+    'diorama.panel.connection_kind': string
+    'diorama.panel.corridor': string
+    'diorama.panel.stairs': string
+    'diorama.panel.from_node': string
+    'diorama.panel.from_slot': string
+    'diorama.panel.to_node': string
+    'diorama.panel.to_slot': string
+    'diorama.panel.host_node': string
+    'diorama.panel.width': string
+    'diorama.panel.railing': string
+    'diorama.panel.zone': string
+    'diorama.panel.placement': string
+    'diorama.panel.ground': string
+    'diorama.panel.roof': string
+    'diorama.panel.interior': string
+    'diorama.panel.anchor': string
+    'diorama.panel.count': string
+    'diorama.panel.spacing': string
+    'diorama.panel.anchor_node': string
+    'diorama.panel.anchor_slot': string
+    'diorama.panel.auto': string
+    'diorama.panel.root': string
+    'diorama.panel.def_id': string
+    'diorama.panel.count_per_spawn': string
+    'diorama.panel.prop_kind': string
+    'diorama.panel.apply_draft': string
+    'diorama.panel.unsaved': string
+    'diorama.panel.advanced': string
+    'diorama.panel.group_note': string
+    'diorama.panel.body_form': string
+    'diorama.panel.scale': string
+    'diorama.panel.terrain': string
+    'diorama.panel.capacity': string
+    'diorama.panel.mass': string
+    'diorama.node.building': string
+    'diorama.node.terrain': string
+    'diorama.node.area': string
+    'diorama.node.connection': string
+    'diorama.node.group': string
+    'diorama.rule.character': string
+    'diorama.rule.interactable': string
+    'diorama.rule.item': string
+    'diorama.rule.box': string
+    'diorama.rule.decor': string
+    'diorama.panel.blueprint_json': string
+    'diorama.panel.apply_json': string
+    'diorama.panel.invalid_json': string
+    'diorama.recipe.fortress': string
 
     /* ── 操作设置面板 ── */
     'input.operations_title': string

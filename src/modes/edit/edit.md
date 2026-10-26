@@ -9,6 +9,7 @@
 
 ## 显示控制（实体列表上方）
 
+- 实体列表按类型分组；归属某个箱庭的子实体会缩进列在对应箱庭行下方（`.dc-list-children`），归属失效时回到原类型分组。
 - 实体列表上方常驻「显示控制」小面板（`modes/edit/debug_view_panel.ts`），五类角色调试可视化独立勾选、默认全部关闭：碰撞箱 / 攻击箱 / 受击箱 / 攻击检测区（橙检测箱 + 橙射程圆环）/ 视线扇形（蓝）。
 - 勾选后对**全部角色**常态显示，且选中角色不会绕过开关；未勾选时即使选中也不显示。碰撞箱关闭只隐藏胶囊可视化，保留 `mesh` 供射线拾取与选中线框。
 - 可视化本体由角色渲染层 [`render/debug_view.ts`](../../entity/character/render/debug_view.ts) 的 `CharacterDebugView` 提供（与展示模式共用），编辑模式只负责开关与帧数据；攻击箱默认 50% 不透明，命中 / 释放阶段恢复 100%。
@@ -66,7 +67,7 @@
 | 显示控制 | 实体列表上方面板勾选碰撞箱 / 攻击箱 / 受击箱 / 攻击检测区 / 视线扇形（默认全关） | `modes/edit/debug_view_panel.ts` |
 | 选中 | 左键点击实体选中，点击空白取消 | `modes/edit/pointer_interaction.ts` |
 | 变换 | 拖拽 gizmo 平移 / 旋转圆弧；角色仅保留 Y 轴旋转 | `modes/edit/transform_gizmo.ts` |
-| 生成 | 「生成物体」绑定（默认 Ctrl+左键）在指针处生成当前生成类型 | `pointer_interaction.ts` + `modes/edit/spawn_mode.ts` |
+| 生成 | 「生成物体」绑定（默认 Ctrl+左键）在指针处生成当前生成类型（含箱庭）；坐标按类型对齐（角色 / 交互物 0.5 格，其余含箱庭 1 格，三轴） | `pointer_interaction.ts` + `modes/edit/spawn_mode.ts` + `spawn_alignment.ts` |
 | 地形雕刻 | 选中地形后，在**地形雕刻面板**主动勾选「启用（滚轮雕刻）」，滚轮升降（笔刷半径 / 强度见 `modes/edit/constants.ts`）；勾选期间仅关闭相机滚轮缩放，保留旋转 / 平移 | `entity/terrain/base/edit/sculpt.ts` + `entity/terrain/base/ui/sculpt_panel.ts` |
 | 删除实体 | Delete（删除当前选中元素；无选中时删除指针悬停的列表项） | `ui/element_list_panel.ts` |
 | 其他面板 | 生成类型面板 / 元素列表面板 / 选中实体属性面板 / 相机 HUD | `ui/` |
@@ -79,6 +80,7 @@
 |------|------|
 | `src/modes/edit/index.ts` | 编辑模式装配（相机、gizmo、指针交互、面板），返回 `updater` 与执行面板控制器 |
 | `src/modes/edit/execute_panel.ts` | 执行面板 DOM 与交互状态机（语义约定见文件头注释） |
+| `src/modes/edit/spawn_alignment.ts` | 生成坐标对齐纯函数（按模式取 0.5 / 1 步长，三轴对齐并归一化 -0） |
 | `src/modes/edit/debug_view_panel.ts` | 实体列表上方的显示控制面板（碰撞 / 攻击 / 受击 / 检测） |
 | `src/character/debug_views.ts` | 角色调试可视化分类常量与类型 |
 | `src/modes/edit/execute_panel.test.ts` | 面板交互契约单测：Execute/Stop/Reset 的派发规则与互斥 |

@@ -8,6 +8,8 @@ import {CHUNK_SIZE, MAX_FILL_BLOCKS, VOXEL_SIZE} from './constants.ts'
 import {chunkCoordOf, chunkKey, chunkLocalOf, getBlock, parseChunkKey, setBlock as writeVoxel, type ChunkStore} from './grid/block_world.ts'
 import {decodeWorldChunks, encodeWorldChunks} from './grid/world_codec.ts'
 import {generateBuilding, type BlockWriter} from './generators/structures.ts'
+import {buildingAnchors} from './generators/anchors.ts'
+import {corridor, dougong, floorSlab, pillar, pitchedRoof, spiralStairs, stairs} from './generators/architecture.ts'
 import {createWorldMeshRenderer, type WorldMeshRenderer} from './render/chunk_renderer.ts'
 import {createPropMesh, disposePropMesh} from './render/prop_mesh.ts'
 import {createBoxOutline, hideBoxOutline, setBoxOutline} from './render/overlay.ts'
@@ -15,7 +17,7 @@ import {createWorldColliderManager, type WorldColliderManager} from './physics/c
 import {BUILDING_PROP_KINDS, type BuildingPropKind} from './props/kinds.ts'
 import {DEFAULT_BUILDING_CONFIG, type BuildingConfig} from './validation.ts'
 import type {
-    BlockPick, BuildingGeneratorContext, BuildingProp, BuildingWorld, BuildingWorldSaveData,
+    BlockPick, BuildingGeneratorContext, BuildingProp, BuildingStructureSpec, BuildingWorld, BuildingWorldSaveData,
 } from './types/index.ts'
 import {formatRowText, createBuildingPanel} from './ui'
 
@@ -197,8 +199,8 @@ export const setupBuildingGenerator = (scene: Scene, shared: SharedWorld): Build
         boundsDirty.add(world.id)
     }
 
-    const add = (config: BuildingConfig, x: number, y: number, z: number): BuildingWorld => {
-        const world = createWorld(config, x, y, z, 0)
+    const add = (config: BuildingConfig, x: number, y: number, z: number, yawQuarter = 0): BuildingWorld => {
+        const world = createWorld(config, x, y, z, yawQuarter)
         const writer: BlockWriter = {
             set: (lx, ly, lz, material: SurfaceMaterialId) => writeBlock(world, lx, ly, lz, SURFACE_MATERIAL_INDEX[material]),
             clear: (lx, ly, lz) => writeBlock(world, lx, ly, lz, 0),
@@ -212,6 +214,50 @@ export const setupBuildingGenerator = (scene: Scene, shared: SharedWorld): Build
         refreshRowText(world)
         rebuildPanelInfo()
         return world
+    }
+
+    const stampStructure = (id: number, spec: BuildingStructureSpec): void => {
+        const world = worlds.find(w => w.id === id)
+        if (world === undefined) return
+        const writer: BlockWriter = {
+            set: (lx, ly, lz, material: SurfaceMaterialId) => writeBlock(world, lx, ly, lz, SURFACE_MATERIAL_INDEX[material]),
+            clear: (lx, ly, lz) => writeBlock(world, lx, ly, lz, 0),
+        }
+        switch (spec.kind) {
+            case 'stairs':
+                stairs(writer, spec.ox, spec.oy, spec.oz, spec.dirQuarter, spec.steps, spec.width, spec.material, spec.run)
+                break
+            case 'spiral_stairs':
+                spiralStairs(writer, spec.ox, spec.oy, spec.oz, spec.radius, spec.totalRise, spec.material)
+                break
+            case 'pillar':
+                pillar(writer, spec.ox, spec.oy, spec.oz, spec.height, spec.material, spec.thick)
+                break
+            case 'dougong':
+                dougong(writer, spec.ox, spec.oy, spec.oz, spec.material)
+                break
+            case 'pitched_roof':
+                pitchedRoof(
+                    writer, spec.ox, spec.oy, spec.oz,
+                    spec.sizeX, spec.sizeZ, spec.height, spec.material, spec.ridgeAxis,
+                )
+                break
+            case 'corridor':
+                corridor(
+                    writer, spec.x0, spec.z0, spec.x1, spec.z1,
+                    spec.y, spec.width, spec.material, spec.railing, spec.railMaterial,
+                )
+                break
+            case 'floor_slab':
+                floorSlab(writer, spec.ox, spec.oy, spec.oz, spec.sizeX, spec.sizeZ, spec.material)
+                break
+        }
+        refreshRowText(world)
+    }
+
+    const getAnchors = (id: number) => {
+        const world = worlds.find(w => w.id === id)
+        return world === undefined ? [] : buildingAnchors(world.config)
     }
 
     const updateConfig = (id: number, config: BuildingConfig): void => {
@@ -497,12 +543,15 @@ export const setupBuildingGenerator = (scene: Scene, shared: SharedWorld): Build
                 position: [prop.position[0], prop.position[1], prop.position[2]],
                 yawQuarter: prop.yawQuarter,
             })),
+            ...(world.owner !== undefined ? {owner: world.owner} : {}),
         }))
 
-    const loadSaveWorlds = (list: BuildingWorldSaveData[]): void => {
+    const loadSaveWorlds = (list: BuildingWorldSaveData[]): BuildingWorld[] => {
+        const created: BuildingWorld[] = []
         for (const data of list) {
             const [x, y, z] = data.origin
             const world = createWorld({...DEFAULT_BUILDING_CONFIG, recipe: 'saved'}, x, y, z, data.yawQuarter)
+            if (data.owner !== undefined) world.owner = data.owner
             const decoded = decodeWorldChunks(data.palette, data.chunks)
             for (const [key, value] of decoded) {
                 world.chunks.set(key, value)
@@ -522,9 +571,11 @@ export const setupBuildingGenerator = (scene: Scene, shared: SharedWorld): Build
             }
             rebuildPropMeshes(world)
             worlds.push(world)
+            created.push(world)
             refreshRowText(world)
         }
         rebuildPanelInfo()
+        return created
     }
 
     const cameraLocal = new Vector3()
@@ -556,6 +607,8 @@ export const setupBuildingGenerator = (scene: Scene, shared: SharedWorld): Build
         events: sourceEvents,
         panelInfo,
         add,
+        stampStructure,
+        getAnchors,
         updateConfig,
         spawnAt,
         remove,

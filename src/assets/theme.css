@@ -456,6 +456,16 @@ textarea {
     background: var(--dc-bg-3);
 }
 
+.dc-list-children {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-left: var(--dc-space-2);
+    padding-left: var(--dc-space-2);
+    border-left: 1px solid var(--dc-border);
+}
+
+
 .dc-list-row.is-selected {
     background: color-mix(in srgb, var(--dc-blue) 32%, transparent);
 }

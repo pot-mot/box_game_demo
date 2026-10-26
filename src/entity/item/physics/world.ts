@@ -170,15 +170,21 @@ export const setupItemEntities = (scene: Scene, shared: SharedWorld): ItemEntity
 
     const getSave = (): SavableItemEntry[] => items.map(e => {
         const t = e.body.translation()
-        return {defId: e.defId, count: e.count, position: [t.x, t.y - FLOAT_HEIGHT, t.z], quaternion: [0, 0, 0, 1]}
+        return {id: e.id, defId: e.defId, count: e.count, position: [t.x, t.y - FLOAT_HEIGHT, t.z], quaternion: [0, 0, 0, 1]}
     })
 
-    const loadSave = (entries: readonly SavableItemEntry[]): void => {
+    const loadSave = (entries: readonly SavableItemEntry[]): Array<number | undefined> => {
+        const created: Array<number | undefined> = []
         for (const e of [...items]) remove(e.id)
         for (const entry of entries) {
-            if (!isKnownItemId(entry.defId)) continue
-            add(entry.defId, entry.count, entry.position[0], entry.position[1], entry.position[2])
+            if (!isKnownItemId(entry.defId)) {
+                created.push(undefined)
+                continue
+            }
+            const e = add(entry.defId, entry.count, entry.position[0], entry.position[1], entry.position[2])
+            created.push(e.id)
         }
+        return created
     }
 
     const ctxWithoutPanel: Omit<ItemEntityContext, 'panel'> = {

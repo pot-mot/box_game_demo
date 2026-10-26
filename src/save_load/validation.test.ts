@@ -584,3 +584,80 @@ describe('validateSaveData', () => {
         expect(() => validateSaveData(data)).not.toThrow()
     })
 })
+
+describe('箱庭与归属校验', () => {
+    const dioramaSave = () => ({
+        entities: [{
+            type: 'diorama' as const,
+            dioramaId: 'd1',
+            blueprint: {
+                version: 1,
+                recipeId: 'test',
+                seed: 1,
+                nodes: [{
+                    kind: 'building' as const,
+                    nodeId: 'house',
+                    position: [0, 0, 0] as [number, number, number],
+                    yawQuarter: 0,
+                    config: {recipe: 'house', seed: 1, sizeX: 8, sizeY: 5, sizeZ: 8},
+                }],
+                population: [],
+            },
+            seed: 1,
+            origin: [0, 0, 0] as [number, number, number],
+            yawQuarter: 0,
+        }],
+    })
+
+    it('合法箱庭条目保留蓝图', () => {
+        const data = validateSaveData(dioramaSave())
+        const entity = data.entities[0]
+        expect(entity.type).toBe('diorama')
+        if (entity.type !== 'diorama') throw new Error('type')
+        expect(entity.blueprint.nodes.length).toBe(1)
+        expect(entity.dioramaId).toBe('d1')
+    })
+
+    it('非法蓝图按元素粒度跳过，不整档失败', () => {
+        const save = dioramaSave()
+        save.entities[0].blueprint.nodes[0].config.sizeX = 0
+        const parsed = parseSaveData(save)
+        expect(parsed.data.entities).toHaveLength(0)
+        expect(parsed.skipped).toHaveLength(1)
+    })
+
+    it('合法 owner 保留；非法 owner 只丢弃归属，实体保留', () => {
+        const valid = makeValidSave()
+        const withOwner = {entities: [{...valid.entities[0], owner: {dioramaId: 'd1', nodeId: 'house'}}]}
+        const data = validateSaveData(withOwner)
+        const entity = data.entities[0]
+        if (entity.type !== 'box') throw new Error('type')
+        expect(entity.owner).toEqual({dioramaId: 'd1', nodeId: 'house'})
+
+        const invalid = {entities: [{...valid.entities[0], owner: {dioramaId: 42}}]}
+        const data2 = validateSaveData(invalid)
+        expect(data2.entities).toHaveLength(1)
+        const entity2 = data2.entities[0]
+        if (entity2.type !== 'box') throw new Error('type')
+        expect(entity2.owner).toBeUndefined()
+    })
+
+    it('建筑世界 owner 随存档往返保留', () => {
+        const data = validateSaveData({
+            entities: [{
+                type: 'building_generator',
+                worlds: [{
+                    origin: [0, 0, 0],
+                    yawQuarter: 0,
+                    palette: [],
+                    chunks: [],
+                    props: [],
+                    owner: {dioramaId: 'd1', nodeId: 'house'},
+                }],
+            }],
+        })
+        const entity = data.entities[0]
+        if (entity.type !== 'building_generator') throw new Error('type')
+        expect(entity.worlds[0].owner).toEqual({dioramaId: 'd1', nodeId: 'house'})
+    })
+})

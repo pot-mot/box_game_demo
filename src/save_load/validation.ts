@@ -9,8 +9,16 @@ import {CHARACTER_CONFIG_DEFAULTS} from '../entity/character/constants.ts'
 import {SURFACE_MATERIAL_IDS} from '../render/materials/ids.ts'
 import {BUILDING_PROP_KINDS} from '../entity/building_generator/props/kinds.ts'
 import {BREAKABLE_SOURCES} from '../entity/interactable/kinds.ts'
+import {BuildingConfigSchema} from '../entity/building_generator/validation.ts'
+import type {DioramaNode, DioramaBlueprint, PopulationRule} from '../composition/diorama/types.ts'
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0])
+/* 箱庭归属：缺省 / 非法结构安全回退 undefined，但保留实体本身 */
+const OwnerSchema = z.object({
+    dioramaId: z.string().min(1),
+    nodeId: z.string().min(1),
+}).optional().catch(undefined)
+
 const Quat = z.tuple([z.number(), z.number(), z.number(), z.number()]).default([0, 0, 0, 1])
 
 const CollisionRecordSchema = z.object({
@@ -26,6 +34,7 @@ const SavableBox = z.object({
     config: BoxConfigSchema.default(DEFAULT_BOX_CONFIG),
     position: Vec3,
     quaternion: Quat,
+    owner: OwnerSchema,
     destructible: z.object({
         health: z.number().optional(),
         collisions: z.array(CollisionRecordSchema).optional(),
@@ -47,6 +56,7 @@ const SavableArea = z.object({
     config: AreaConfigSchema.default(DEFAULT_AREA_CONFIG),
     position: Vec3,
     quaternion: Quat,
+    owner: OwnerSchema,
 })
 
 const SavableTerrain = z.object({
@@ -55,6 +65,7 @@ const SavableTerrain = z.object({
     position: Vec3,
     quaternion: Quat,
     heights: z.array(z.array(z.number())).default([[0]]),
+    owner: OwnerSchema,
 })
 
 const FragmentDataJSONSchema = z.object({
@@ -72,6 +83,7 @@ const SavableFragment = z.object({
     config: FragmentConfigSchema.default(DEFAULT_FRAGMENT_CONFIG),
     position: Vec3,
     quaternion: Quat,
+    owner: OwnerSchema,
     data: FragmentDataJSONSchema.default({
         renderVertices: [] as number[],
         renderIndices: [] as number[],
@@ -104,6 +116,7 @@ const BuildingWorldSave = z.object({
     palette: z.array(z.enum(SURFACE_MATERIAL_IDS)).catch([]).default([]),
     chunks: z.array(BuildingChunkSave).catch([]).default([]),
     props: z.array(BuildingPropSave).catch([]).default([]),
+    owner: OwnerSchema,
 })
 
 const SavableBuildingGenerator = z.object({
@@ -168,6 +181,7 @@ const SavableInteractable = z.object({
     on: z.boolean().default(false),
     container: InventorySaveSchema,
     health: z.number().default(1),
+    owner: OwnerSchema,
 })
 
 /* 掉落物：未知 defId 由运行时丢弃，数量非法回退 1，不抛错 */
@@ -179,6 +193,7 @@ const SavableItem = z.object({
     }).default({defId: '', count: 1}),
     position: Vec3,
     quaternion: Quat,
+    owner: OwnerSchema,
 })
 
 /* 装备状态：limb / weapon / armor 三层的 槽位 bodyPart → 物品 id 映射。
@@ -302,6 +317,117 @@ const SavableCharacter = z.object({
     quaternion: Quat,
     /* 朝向角（度）：旧存档无此字段时缺省为 0（+Z 前方） */
     facing: z.number().min(0).max(360).optional(),
+    owner: OwnerSchema,
+})
+
+/* ── 箱庭蓝图 ── */
+const DioramaSlotSchema = z.object({
+    id: z.string().min(1),
+    position: Vec3,
+    dir: z.enum(['+x', '-x', '+z', '-z']),
+})
+
+const DIORAMA_NODE_BASE = {
+    nodeId: z.string().min(1),
+    position: Vec3,
+    yawQuarter: z.number().int().min(0).max(3).default(0),
+}
+
+const DioramaNodeSchema: z.ZodType<DioramaNode> = z.lazy(() => z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('building'),
+        ...DIORAMA_NODE_BASE,
+        config: BuildingConfigSchema,
+        slots: z.array(DioramaSlotSchema).optional(),
+    }),
+    z.object({
+        kind: z.literal('terrain'),
+        ...DIORAMA_NODE_BASE,
+        config: BaseTerrainConfigSchema.default(DEFAULT_TERRAIN_CONFIG),
+    }),
+    z.object({
+        kind: z.literal('area'),
+        ...DIORAMA_NODE_BASE,
+        config: AreaConfigSchema.default(DEFAULT_AREA_CONFIG),
+    }),
+    z.object({
+        kind: z.literal('connection'),
+        ...DIORAMA_NODE_BASE,
+        connectionKind: z.enum(['stairs', 'corridor']),
+        fromNodeId: z.string().min(1),
+        fromSlotId: z.string().min(1),
+        toNodeId: z.string().min(1),
+        toSlotId: z.string().min(1),
+        hostNodeId: z.string().min(1).optional(),
+        material: z.enum(SURFACE_MATERIAL_IDS).default('wood'),
+        width: z.number().positive().optional(),
+        railing: z.boolean().optional(),
+    }),
+    z.object({
+        kind: z.literal('group'),
+        ...DIORAMA_NODE_BASE,
+        children: z.array(DioramaNodeSchema).default([]),
+    }),
+]))
+
+const POPULATION_BASE = {
+    id: z.string().min(1),
+    zoneId: z.string().default(''),
+    placement: z.enum(['ground', 'roof', 'interior', 'anchor']).default('ground'),
+    anchorNodeId: z.string().min(1).optional(),
+    anchorSlotId: z.string().min(1).optional(),
+    count: z.number().positive().optional(),
+    density: z.number().positive().optional(),
+    minSpacing: z.number().min(0).optional(),
+}
+
+const PopulationRuleSchema: z.ZodType<PopulationRule> = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('character'),
+        ...POPULATION_BASE,
+        config: CharacterConfigInner.default(CHARACTER_SAVE_CONFIG_DEFAULTS),
+    }),
+    z.object({
+        kind: z.literal('interactable'),
+        ...POPULATION_BASE,
+        config: InteractableConfigSchema,
+    }),
+    z.object({
+        kind: z.literal('item'),
+        ...POPULATION_BASE,
+        defId: z.string().min(1),
+        countPerSpawn: z.number().int().positive().optional(),
+    }),
+    z.object({
+        kind: z.literal('box'),
+        ...POPULATION_BASE,
+        config: BoxConfigSchema.default(DEFAULT_BOX_CONFIG),
+    }),
+    z.object({
+        kind: z.literal('decor'),
+        ...POPULATION_BASE,
+        propKind: z.enum(BUILDING_PROP_KINDS).default('lantern'),
+        material: z.enum(SURFACE_MATERIAL_IDS).default('wood'),
+        yawQuarter: z.number().int().min(0).max(3).optional(),
+    }),
+])
+
+const DioramaBlueprintSchema: z.ZodType<DioramaBlueprint> = z.object({
+    version: z.number().int().positive().default(1),
+    recipeId: z.string().default(''),
+    seed: z.number().default(0),
+    nodes: z.array(DioramaNodeSchema).default([]),
+    population: z.array(PopulationRuleSchema).default([]),
+})
+
+const SavableDiorama = z.object({
+    type: z.literal('diorama'),
+    dioramaId: z.string().min(1),
+    blueprint: DioramaBlueprintSchema,
+    seed: z.number().default(0),
+    origin: Vec3,
+    yawQuarter: z.number().int().min(0).max(3).default(0),
+    owner: OwnerSchema,
 })
 
 const SavableEntity = z.discriminatedUnion('type', [
@@ -313,6 +439,7 @@ const SavableEntity = z.discriminatedUnion('type', [
     SavableInteractable,
     SavableItem,
     SavableCharacter,
+    SavableDiorama,
 ])
 
 const CameraInfo = z.object({
@@ -400,3 +527,9 @@ export const parseSaveData = (input: unknown): ParsedSaveData => {
 /** 校验并存档：返回合法实体，跳过非法元素（如需跳过明细请用 `parseSaveData`） */
 export const validateSaveData = (data: unknown): ValidatedSaveData =>
     parseSaveData(data).data
+
+/** 解析单个箱庭蓝图（供编辑面板 JSON 导入；非法结构返回 undefined） */
+export const parseDioramaBlueprintJson = (input: unknown): DioramaBlueprint | undefined => {
+    const result = DioramaBlueprintSchema.safeParse(input)
+    return result.success ? result.data : undefined
+}

@@ -354,6 +354,7 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
     const preSync = (dt: number, _time: number): void => update(dt)
 
     const getSave = (): InteractableSaveEntry[] => entities.map(e => ({
+        id: e.id,
         config: {...e.config, size: [...e.config.size] as [number, number, number]},
         position: [e.base.x, e.base.y, e.base.z],
         yawQuarter: Math.round(e.group.rotation.y / (Math.PI / 2)) & 3,
@@ -364,20 +365,26 @@ export const setupInteractables = (scene: Scene, shared: SharedWorld): Interacta
         health: e.health,
     }))
 
-    const loadSave = (entries: readonly InteractableSaveEntry[]): void => {
+    const loadSave = (entries: readonly InteractableSaveEntry[]): Array<number | undefined> => {
+        const created: Array<number | undefined> = []
         for (const e of [...entities]) remove(e.id)
         animatedNodesById.clear()
         signals.clear()
         for (const entry of entries) {
             const {id} = add(entry.config, entry.position[0], entry.position[1], entry.position[2], entry.yawQuarter)
             const e = byId.get(id)
-            if (e === undefined) continue
+            if (e === undefined) {
+                created.push(undefined)
+                continue
+            }
             e.progress = entry.progress
             e.target = entry.target
             e.on = entry.on
             e.container = inventoryFromSave(entry.container)
             e.health = entry.health
+            created.push(id)
         }
+        return created
     }
 
     const setHooks = (next: InteractableHooks): void => {

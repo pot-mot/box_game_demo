@@ -4,6 +4,7 @@ import {createInputRegistry} from '../input/registry.ts'
 import {createEmitter, type SourceEmitter} from '../entity/box/base/types/event_emitter.ts'
 import type {EntityInfoSource} from '../entity/box/base/types/entity_info.ts'
 import type {EntityType} from '../entity/constants.ts'
+import {createOwnershipStore} from '../types/ownership_store.ts'
 
 interface FakeSource {
     readonly source: EntityInfoSource
@@ -34,6 +35,16 @@ const createFakeSource = (type: EntityType, selectedId?: number): FakeSource => 
         setTransform: () => {},
     }
     return {source, removed}
+}
+
+const setPanelInfo = (source: EntityInfoSource, id: number, type: EntityType): void => {
+    source.panelInfo.push({
+        id,
+        type,
+        badgeLabel: type === 'diorama' ? 'D' : 'B',
+        badgeColor: '#888888',
+        rowText: `${type} ${id}`,
+    })
 }
 
 const pressDelete = (): void => {
@@ -88,5 +99,58 @@ describe('元素列表面板：Delete 删除', () => {
         setupElementListPanel([source])
         pressDelete()
         expect(removed).toEqual([])
+    })
+})
+
+
+describe('元素列表面板：箱庭子实体嵌套', () => {
+    beforeEach(() => {
+        document.body.innerHTML = ''
+        localStorage.clear()
+        createInputRegistry()
+    })
+
+    it('归属实体列在箱庭行下方并带缩进容器', () => {
+        const diorama = createFakeSource('diorama')
+        const box = createFakeSource('box')
+        setPanelInfo(diorama.source, 1, 'diorama')
+        setPanelInfo(box.source, 10, 'box')
+        const ownership = createOwnershipStore()
+        ownership.set({type: 'box', runtimeId: 10}, {dioramaId: 'd1', nodeId: 'house'})
+
+        const update = setupElementListPanel([diorama.source, box.source], {
+            ownership,
+            dioramaIdToEntityId: id => id === 'd1' ? 1 : undefined,
+        })
+        update()
+
+        const dioramaRow = document.querySelector<HTMLElement>('[data-id="1"][data-type="diorama"]')
+        const boxRow = document.querySelector<HTMLElement>('[data-id="10"][data-type="box"]')
+        expect(dioramaRow).not.toBeNull()
+        expect(boxRow).not.toBeNull()
+        const children = boxRow!.parentElement!
+        expect(children.classList.contains('dc-list-children')).toBe(true)
+        expect(children.previousElementSibling).toBe(dioramaRow)
+    })
+
+    it('归属失效后子实体回到类型分组', () => {
+        const diorama = createFakeSource('diorama')
+        const box = createFakeSource('box')
+        setPanelInfo(diorama.source, 1, 'diorama')
+        setPanelInfo(box.source, 10, 'box')
+        const ownership = createOwnershipStore()
+        ownership.set({type: 'box', runtimeId: 10}, {dioramaId: 'd1', nodeId: 'house'})
+
+        const update = setupElementListPanel([diorama.source, box.source], {
+            ownership,
+            dioramaIdToEntityId: id => id === 'd1' ? 1 : undefined,
+        })
+        update()
+        ownership.remove({type: 'box', runtimeId: 10})
+        update()
+
+        const boxRow = document.querySelector<HTMLElement>('[data-id="10"][data-type="box"]')
+        expect(boxRow).not.toBeNull()
+        expect(boxRow!.parentElement!.classList.contains('dc-list-children')).toBe(false)
     })
 })

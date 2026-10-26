@@ -20,6 +20,7 @@ import {setupFragmentEntities} from './entity/fragment/common/physics/world.ts'
 import {setupAreas} from './entity/area/physics/world.ts'
 import {setupTerrain} from './entity/terrain/common/physics/world.ts'
 import {setupBuildingGenerator} from './entity/building_generator/world.ts'
+import {setupDioramas} from './composition/diorama/world.ts'
 import {setupInteractables} from './entity/interactable/index.ts'
 import {setupItemEntities} from './entity/item/index.ts'
 import {setupHakoniwa} from './modes/play/hakoniwa.ts'
@@ -45,6 +46,8 @@ import {loadWorldFromData, clearAllEntities, type LoadWorldResult} from './save_
 import {cacheSaveData, loadCachedSaveData} from './save_load/cache.ts'
 import {promptLoadFile} from './save_load/actions.ts'
 import {showSkippedEntitiesNotice} from './ui/components/message_dialog.ts'
+import {parseDioramaBlueprintJson} from './save_load/validation.ts'
+import {createOwnershipStore} from './types/ownership_store.ts'
 import {MAX_DT, FIXED_TIME_STEP, MAX_SUB_STEPS} from './physics/constants.ts'
 import {createFixedStepClock} from './physics/fixed_step.ts'
 import {createInputRegistry} from './input/registry.ts'
@@ -103,6 +106,18 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const characterSystem: CharacterEntitySystem = setupCharacterEntities(scene, shared)
     const boxes = setupBoxes(scene, shared, {fragmentCtx: fragments, velocitySnapshots, physicsEnv})
     const areas = setupAreas(scene, physicsEnv)
+    /** 箱庭 → 子实体 / 建筑世界归属索引（随世界清空与存档往返重建） */
+    const ownership = createOwnershipStore()
+    const dioramas = setupDioramas(scene, {
+        building,
+        ownership,
+        terrain: terrainSource,
+        area: areas,
+        box: boxes,
+        interactable: interactables,
+        item: itemEntities,
+        character: characterSystem,
+    }, {parseBlueprint: parseDioramaBlueprintJson})
 
     // 注册 body provider
     physicsEnv.bodyProviders.push(
@@ -118,11 +133,10 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     physicsEnv.registerEnvironmentProvider((body) => characterSystem.getCharacterByBody(body)?.state.environment)
 
     // 按 type 索引
-    const systems: EntitySystem[] = [boxes, fragments, areas, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem]
+    const systems: EntitySystem[] = [boxes, fragments, areas, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem, dioramas as EntitySystem]
     const systemsByType = new Map<string, EntityInfoSource>(
         systems.map(s => [s.type, s]),
     )
-
     characterSystem.setupAI(systems)
 
     /**
@@ -133,6 +147,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const clearWorld = (): void => {
         characterSystem.clearBullets()
         clearAllEntities(systemsByType, allTerrainSources)
+        ownership.clear()
     }
 
     /* 箱子生成回调（供 builder AI 使用）：特性由 preset 决定，质量 = 单位质量 × 体积 */
@@ -162,7 +177,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 }
             }
             clearWorld()
-            loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources)
+            loadResult = loadWorldFromData(dataToLoad, systemsByType, allTerrainSources, ownership)
         }
     }
 
@@ -175,7 +190,10 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     let showcaseExited = false
 
     if (mode === 'edit') {
-        editMode = setupEditMode(camera, renderer, scene, systems, allTerrainSources, terrainSource, building, excludeFromBackground, characterSystem)
+        editMode = setupEditMode(camera, renderer, scene, systems, allTerrainSources, terrainSource, building, excludeFromBackground, characterSystem, {
+            ownership,
+            dioramaIdToEntityId: (dioramaId) => dioramas.getAll().find(entity => entity.dioramaId === dioramaId)?.id,
+        })
     } else if (mode === 'play') {
         playMode = setupPlayMode(scene, camera, renderer, shared, allTerrainSources, characterSystem, boxSpawner)
     } else if (mode === 'showcase') {
@@ -199,7 +217,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const hakoniwa = mode === 'play' ? setupHakoniwa(characterSystem, itemEntities, interactables, building, savedPlay) : undefined
     interactables.setHooks({
         onSavePoint: () => {
-            const state = collectWorldState(systemsByType, allTerrainSources, mode, camera.position, camera.rotation)
+            const state = collectWorldState(systemsByType, allTerrainSources, mode, camera.position, camera.rotation, undefined, ownership)
             if (mode === 'play' && hakoniwa !== undefined) {
                 state.modeInfo = {...(state.modeInfo ?? {}), play: {...(state.modeInfo?.play ?? {}), ...hakoniwa.getSaveData()}}
             }
@@ -237,6 +255,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             'edit',
             camera.position,
             camera.rotation,
+            undefined,
+            ownership,
         )
         steppedSinceBaseline = false
     }
@@ -245,7 +265,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         if (!snapshot) return
         /* Reset 还原整个世界：实体由快照重建，执行期子弹一并清除 */
         clearWorld()
-        loadWorldFromData(snapshot, systemsByType, allTerrainSources)
+        loadWorldFromData(snapshot, systemsByType, allTerrainSources, ownership)
         saveSnapshot()
     }
 
@@ -316,6 +336,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             camera.position,
             camera.rotation,
             cached?.data.modeInfo,
+            ownership,
         )
         /* play 模式的背包 / 传送点数据并入 modeInfo.play */
         if (mode === 'play' && hakoniwa !== undefined) {
@@ -337,7 +358,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
             cacheSaveData(data)
             /* 载入新世界：连同执行期子弹一起清空，避免旧子弹飞入新世界 */
             clearWorld()
-            const result = loadWorldFromData(data, systemsByType, allTerrainSources)
+            const result = loadWorldFromData(data, systemsByType, allTerrainSources, ownership)
             if (mode === 'edit') {
                 if (result.editCameraPos) camera.position.set(result.editCameraPos.x, result.editCameraPos.y, result.editCameraPos.z)
                 if (result.editCameraRot) camera.rotation.set(result.editCameraRot.x, result.editCameraRot.y, result.editCameraRot.z)

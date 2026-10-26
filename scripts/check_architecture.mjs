@@ -41,6 +41,9 @@ for (const file of sourceFiles) {
             /src\/skeleton\/anim\/player\.ts$/.test(target)) {
             violations.add(`clip-player-in-body-form:${fileRel}`)
         }
+        if (fileRel.startsWith('src/entity/') && target.startsWith('src/composition/')) {
+            violations.add(`entity->composition:${fileRel}`)
+        }
     }
 }
 

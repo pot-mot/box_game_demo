@@ -17,6 +17,8 @@ export interface DroppedItemEntity {
 
 /** 掉落物存档条目 */
 export interface SavableItemEntry {
+    /** 运行时 id（仅序列化归属用，不写入存档字段） */
+    id?: number
     defId: string
     count: number
     position: [number, number, number]
@@ -35,5 +37,6 @@ export interface ItemEntityContext extends EntityInfoSource {
     /** 拾取回调：返回 true 表示已拾取（实体移除），false 表示背包满（实体保留） */
     setPickupHandler: (handler: (defId: string, count: number) => boolean) => void
     getSave: () => SavableItemEntry[]
-    loadSave: (items: readonly SavableItemEntry[]) => void
+    /** 批量恢复；返回与输入等长的 id 列表（未知物品 / 非法条目为 undefined） */
+    loadSave: (items: readonly SavableItemEntry[]) => Array<number | undefined>
 }

@@ -44,7 +44,6 @@ const RECIPE_LABELS: Record<string, StringLocaleKey> = {
     bridge: 'recipe.bridge',
     great_hall: 'recipe.great_hall',
     keep: 'recipe.keep',
-    garden: 'recipe.garden',
 }
 
 interface RecipeSpec {
@@ -67,14 +66,13 @@ const RECIPE_SPECS: readonly RecipeSpec[] = [
     {recipe: 'bridge', sizeX: 12, sizeY: 6, sizeZ: 5},
     {recipe: 'great_hall', sizeX: 12, sizeY: 8, sizeZ: 12},
     {recipe: 'keep', sizeX: 14, sizeY: 12, sizeZ: 14},
-    {recipe: 'garden', sizeX: 12, sizeY: 6, sizeZ: 12},
 ]
 
 /**
  * 复杂地形与建筑子模块。
  *
- * 内容：一片 FBM 起伏地形 + 全部 12 种建筑生成配方（平房 / 塔楼 / 城墙 / 平台 / 废墟 / 树木 / 阶梯 / 旋转楼梯 /
- * 廊桥 / 大殿 / 主楼 / 箱庭）按网格摆放，建筑基座自动贴合地形高度。面板可切换地形生成器（FBM / 正弦 / 阶梯 /
+ * 内容：一片 FBM 起伏地形 + 全部 11 种建筑生成配方（平房 / 塔楼 / 城墙 / 平台 / 废墟 / 树木 / 阶梯 / 旋转楼梯 /
+ * 廊桥 / 大殿 / 主楼）按网格摆放，建筑基座自动贴合地形高度。面板可切换地形生成器（FBM / 正弦 / 阶梯 /
  * 平坦）与「随机重建」——切换生成器会重铺地形并按新高度重新放置全部建筑。
  *
  * 使用生产同一套 `setupTerrain` + `setupBuildingGenerator`（体素块存储、贪心网格合并、粗 LOD、按距离卸载、

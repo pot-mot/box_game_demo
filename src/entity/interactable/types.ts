@@ -116,6 +116,8 @@ export interface InteractableRuntimeContext {
 
 /** 交互物存档条目（显式字段，避免序列化本地引用） */
 export interface InteractableSaveEntry {
+    /** 运行时 id（仅序列化归属用，不写入存档字段） */
+    id?: number
     config: InteractableConfig
     position: [number, number, number]
     yawQuarter: number
@@ -147,7 +149,8 @@ export interface InteractableContext extends EntityInfoSource {
     /** 可破坏道具目标提供（供战斗执行器查询） */
     collectBreakableTargets: () => readonly WorldDamageTarget[]
     getSave: () => InteractableSaveEntry[]
-    loadSave: (entries: readonly InteractableSaveEntry[]) => void
+    /** 批量恢复；返回与输入等长的 id 列表（非法条目为 undefined） */
+    loadSave: (entries: readonly InteractableSaveEntry[]) => Array<number | undefined>
 }
 
 

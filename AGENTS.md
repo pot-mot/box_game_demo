@@ -87,8 +87,8 @@
 
 ## 架构规则
 
-1. **分包原则** — 代码按 `character/`（角色领域模型）、`entity/`（实体实现）、`modes/`（游戏模式）、`physics/`（共享物理）、`render/`（渲染管线）、`input/`（输入注册表）、`i18n/`（国际化，叶子包，不依赖其它 `src/` 包）、`ui/`（面板）、`save_load/`（存档）分包。禁止循环依赖。
-2. **依赖方向** — `character/` 是独立领域层，不依赖 `entity/`。`entity/character/` 依赖 `character/`。各 entity 之间不相互引用（**唯一例外**：`entity/character/skeleton/` 可引用通用骨架层 `entity/skeleton/`；`entity/skeleton/` 保持与人形无关，人形定义与外观装配由 `entity/character/` 提供并经 `SkeletonPreset` 注入，不得反向引用 `entity/character/`）。
+1. **分包原则** — 代码按 `character/`（角色领域模型）、`entity/`（实体实现）、`composition/`（组合层，当前为 `diorama` 箱庭）、`modes/`（游戏模式）、`physics/`（共享物理）、`render/`（渲染管线）、`input/`（输入注册表）、`i18n/`（国际化，叶子包，不依赖其它 `src/` 包）、`ui/`（面板）、`save_load/`（存档）分包。禁止循环依赖。
+2. **依赖方向** — `character/` 是独立领域层，不依赖 `entity/`。`entity/character/` 依赖 `character/`。各 entity 之间不相互引用（**唯一例外**：`entity/character/skeleton/` 可引用通用骨架层 `entity/skeleton/`；`entity/skeleton/` 保持与人形无关，人形定义与外观装配由 `entity/character/` 提供并经 `SkeletonPreset` 注入，不得反向引用 `entity/character/`）。`composition/` 可依赖 `entity/` 的公开上下文接口；`entity/` 禁止反向依赖 `composition/`；`save_load/` 只以 `import type` 引用组合层类型。
 3. **单 RAF 循环** — 所有帧驱动逻辑集中在 `main.ts` 的 `tick()` 中，禁止自行启动 RAF。渲染帧只负责按累加器决定本帧执行几个 **固定 1/60 物理步**（`physics/fixed_step.ts` 的 `createFixedStepClock`，不追赶、超限丢欠账）；play / 展示模式的状态机 / 计时器 / 动画在物理步内按 `FIXED_TIME_STEP` 推进，渲染帧再按 `alpha` 做**滞后一拍插值**（`physics/render_interpolation.ts`）；编辑模式 Execute 保持原有变速步进语义。子系统 updater 分为每渲染帧（输入 / 相机 / HUD）与每物理步（游戏逻辑）两类。
 4. **常量集中** — 各分包的 magic number 必须提取到对应的 `constants.ts`，禁止散落在函数体内。
 5. **状态机驱动角色** — `entity/character/physics/world.ts` 在 play / 展示模式每物理步调用 `stateMachine.update(FIXED_TIME_STEP, entity)`（编辑模式由 `tick` 按渲染 delta 调用）→ 状态直接操作 `entity.body`（`setLinvel` 等）→ `syncTrueTransforms()` 写真实位置供碰撞体同步 → 渲染帧 `syncPositions(alpha)` 写插值后的可视变换。输入注入链路：`input/` 注册表动作抽象（`getInputRegistry()`）→ `modes/control/player_control.ts` 的 `move()` 每渲染帧读取动作并调用 `characterSystem.setPlayerMove()`（跳跃 / 翻滚边沿锁存到物理步消费）→ `world.ts` 统一转成 `stateMachine.setInput()`，不直接调 move/jump。详见 [`src/character/state_machine/state_machine.md`](src/character/state_machine/state_machine.md)。
@@ -111,6 +111,7 @@
 - **攻击模组由武器槽决定** — Ctrl 切换的可用模组来自角色全部武器槽当前装备（含天然默认）；禁止按体形硬编码模组列表。人形 `holdMode` 只是模组的人形握持语义，不是跨体形选择器。
 - **攻击箱 / 检测箱数组** — 武器攻击箱与 AI 检测箱均为数组，每项显式绑定 `jointId` + 局部坐标 + 旋转；`AttackSegment.hitMountJointIds` 仅作关节子集过滤。天然武器攻击箱写在武器数据中，禁止写入体型基础模型或受击块。
 - **存档兼容** — 改存档结构必须同步 `save_load/types.ts` / `validation.ts` / `serialize.ts`，可选字段旧档缺失一律安全回退默认、未知 id 安全丢弃，不得抛错。见 [`src/save_load/save_load.md`](src/save_load/save_load.md)。
+- **箱庭只经公开端口** — 组合层不得直接操作其它实体内部：生成 / 删除 / 变换子实体一律经实体公开上下文；建筑世界归属按运行时 world id 记录。读档时箱庭只恢复蓝图与根变换（`materialize=false`），子实体以显式存档为准，禁止自动重生。见 [`src/composition/diorama/diorama.md`](src/composition/diorama/diorama.md)。
 - **state 唯一权威** — 角色游戏数据只能存在 `CharacterState`；禁止在 `CharacterEntity`、动画、骨骼、战斗、AI 中另存副本。引擎句柄只在 `CharacterRuntime`。动画系统只写 `state.animation.current`，不得回写参数。见 [`docs/design/character_state.md`](docs/design/character_state.md)。
 - **动画组合禁止时间与整身变体** — 动画组合只能使用 progress，禁止出现时间/时长/倍速；禁止整身离散变体烘焙（falling 档、盾臂、武器类、持握模式、支撑手合并）与播放倍速步态。所有体形共用组合树，动作按关节权重与移动/跳跃共存。见 [`docs/design/animation_composition.md`](docs/design/animation_composition.md)。
 - **状态过渡根关节** — `snapshotJoints` / `applyJointBlend` 禁止包含或混合 `root` 根关节：根位移由物理 body / 展示根姿态管理，根旋转由世界朝向管理。把根纳入快照会与位置同步互相拉扯，编辑模式连续战斗时表现为模型闪回出生点 / 原地抖动；所有体形与动作共用同一快照函数。见 [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md)。
@@ -133,6 +134,7 @@ src/
 │   ├── building_generator/      # 建筑生成器（体素 / 结构原语 / 分块面剔除渲染 / 距离卸载 / trimesh 物理）
 │   ├── box/ fragment/ destroyed/ area/ terrain/   # 统一箱子（可组合特性）/ 碎片 / Voronoi 断裂 / 区域（几何+材质+物理场）/ Trimesh 地形
 ├── inventory/                   # 背包与物品领域模型（items 目录 / grid 俄罗斯方块布局 / 增删装备 / 存档转换）
+├── composition/                 # 组合层：diorama 箱庭（蓝图 / 布局 / 人口 / 归属 / 场景装配）
 ├── modes/                       # control / bone_edit / edit / play / showcase
 ├── ui/                          # 面板（相机HUD、属性面板、列表侧栏、设置）
 ├── save_load/                   # 存档序列化 / 反序列化
@@ -182,6 +184,7 @@ src/
 | 区域 | [`src/entity/area/area.md`](src/entity/area/area.md) | 几何/视觉材质/物理场、角色环境通道 |
 | 地形 | [`src/entity/terrain/terrain.md`](src/entity/terrain/terrain.md) | Trimesh 地形、雕刻 |
 | 背包 | [`src/inventory/inventory.md`](src/inventory/inventory.md) | 背包/装备 UI 与持久化 |
+| 箱庭组合层 | [`src/composition/diorama/diorama.md`](src/composition/diorama/diorama.md) | 蓝图 / 布局 / 人口 / 归属 / 编辑生成 |
 | 操作方案 | [`src/modes/control/control.md`](src/modes/control/control.md) | 相机/移动、翻滚/加速 |
 | 游玩模式 | [`src/modes/play/play.md`](src/modes/play/play.md) | 第三人称、锁定、箱庭子系统 |
 | 编辑模式 | [`src/modes/edit/edit.md`](src/modes/edit/edit.md) | 指针、执行面板、雕刻 |
@@ -191,7 +194,7 @@ src/
 | 全局 i18n | [`docs/i18n.md`](docs/i18n.md) | 文案 |
 | 全局动作规范 | [`docs/bone_animation/动作设计规范.md`](docs/bone_animation/动作设计规范.md) | 调动作 |
 | AI 行为原点策略（设计记录，已实现） | [`docs/design/ai_origin_strategy.md`](docs/design/ai_origin_strategy.md) | 调整原点策略 / 追击半径设计前 |
-| 箱庭重构 + 生成对齐（设计，未实现） | [`docs/design/diorama.md`](docs/design/diorama.md) | 移除建筑箱庭 / 实现组合式箱庭 / 调整生成对齐前 |
+| 箱庭重构 + 生成对齐（设计记录，阶段 A-D 已实现基础版） | [`docs/design/diorama.md`](docs/design/diorama.md) | 箱庭架构决策 / 后续扩展前 |
 | 固定物理步 + 渲染插值 + 相机去平滑（设计记录，已实现） | [`docs/design/fixed_step_interpolation.md`](docs/design/fixed_step_interpolation.md) | 调整物理步进 / 角色位移抖动 / 相机跟随前 |
 
 > 文档状态标记：`当前实现`（默认，描述现状）/ `设计记录`（可能未实现）。已完成的执行计划与旧设计不再保留在活跃索引中。

@@ -8,7 +8,7 @@ import type {SpawnMode} from '../../types/spawnMode.ts'
 import {setupSpawnModeManager} from './spawn_mode.ts'
 import {setupPointerInteraction} from './pointer_interaction.ts'
 import {setupSpawnModePanel} from '../../ui/spawn_mode_panel.ts'
-import {setupElementListPanel} from '../../ui/element_list_panel.ts'
+import {setupElementListPanel, type ElementListPanelOptions} from '../../ui/element_list_panel.ts'
 import {setupEditDebugPanel, type EditDebugViewSource} from './debug_view_panel.ts'
 import {setupExecutePanel, type ExecutePanel} from './execute_panel.ts'
 import {createTransformGizmo} from './transform_gizmo.ts'
@@ -40,6 +40,7 @@ export const setupEditMode = (
     building: BuildingGeneratorContext,
     excludeFromBackground: (obj: Object3D) => void,
     characterDebug: EditDebugViewSource,
+    elementListOptions?: ElementListPanelOptions,
 ): EditModeController => {
     // 编辑控制
     const cameraControl = createCameraControl(camera, renderer.domElement, {
@@ -78,7 +79,7 @@ export const setupEditMode = (
     // UI 面板
     const spawnModePanelUpdate = setupSpawnModePanel(spawnMode.getSpawnMode, spawnMode.setSpawnMode)
     setupEditDebugPanel(characterDebug)
-    const elementListPanelUpdate = setupElementListPanel(systems, {top: 216})
+    const elementListPanelUpdate = setupElementListPanel(systems, {top: 216, ...elementListOptions})
 
     const updater = (dt: number): void => {
         cameraControl.update(dt)

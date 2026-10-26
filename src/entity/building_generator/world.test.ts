@@ -264,6 +264,44 @@ describe('building_generator 建筑世界', () => {
         expect(ctx2.getSaveWorlds()).toEqual(ctx.getSaveWorlds())
     })
 
+    it('按四分之一圈偏航创建世界并写入存档', () => {
+        const world = ctx.add(HOUSE, 1, 0, 2, 3)
+        expect(world.yawQuarter).toBe(3)
+        expect(world.group.rotation.y).toBeCloseTo(Math.PI * 1.5, 6)
+        const saved = ctx.getSaveWorlds()
+        expect(saved[0].yawQuarter).toBe(3)
+    })
+
+    it('结构原语经公开端口写入目标世界', () => {
+        const world = ctx.add({recipe: 'platform', seed: 1, sizeX: 2, sizeY: 1, sizeZ: 2}, 0, 0, 0)
+        ctx.stampStructure(world.id, {
+            kind: 'stairs', ox: 0, oy: 1, oz: 0,
+            dirQuarter: 0, steps: 4, width: 1, material: 'brick',
+        })
+        expect(ctx.getBlockMaterial(world.id, 0, 1, 0)).toBe('brick')
+        expect(ctx.getBlockMaterial(world.id, 3, 4, 0)).toBe('brick')
+    })
+
+    it('按配方返回连接锚点', () => {
+        const house = ctx.add(HOUSE, 0, 0, 0)
+        expect(ctx.getAnchors(house.id).some(anchor => anchor.id === 'door')).toBe(true)
+        const wall = ctx.add({recipe: 'wall', seed: 1, sizeX: 6, sizeY: 2, sizeZ: 1}, 0, 0, 0)
+        const anchors = ctx.getAnchors(wall.id)
+        expect(anchors.find(anchor => anchor.id === 'start')?.position).toEqual([0, 0, 0])
+        expect(anchors.find(anchor => anchor.id === 'end')?.position).toEqual([5, 0, 0])
+    })
+
+    it('批量载入返回世界列表并保留归属', () => {
+        ctx.add(HOUSE, 0, 0, 0)
+        const saved = ctx.getSaveWorlds()
+        saved[0].owner = {dioramaId: 'd1', nodeId: 'n1'}
+        const ctx2 = setupBuildingGenerator(new Scene(), createSharedWorld())
+        const created = ctx2.loadSaveWorlds(saved)
+        expect(created.length).toBe(1)
+        expect(created[0].owner).toEqual({dioramaId: 'd1', nodeId: 'n1'})
+        expect(ctx2.getSaveWorlds()[0].owner).toEqual({dioramaId: 'd1', nodeId: 'n1'})
+    })
+
     it('remove 清理世界与网格', () => {
         const world = ctx.add(HOUSE, 0, 0, 0)
         const camera = new PerspectiveCamera()

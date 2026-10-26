@@ -205,68 +205,6 @@ const keep: GeneratorFn = (config, writer) => {
     writer.clear(doorX, 2, 0)
 }
 
-/** 箱庭：台地 + 外墙 + 角塔 + 主楼 + 连廊 + 庭院 + 树石点缀（固定 40×40 布局） */
-const garden: GeneratorFn = (config, writer) => {
-    const S = 40
-    const rng = createRng(config.seed)
-    /* 台地 */
-    fillBox(writer, -4, 0, -4, S + 3, 0, S + 3, 'rock')
-    fillBox(writer, 0, 1, 0, S - 1, 1, S - 1, 'soil')
-    /* 外墙（带垛口） */
-    wallPerimeter(writer, S, S, 2, 5, 'rock')
-    for (let x = 0; x < S; x += 3) {
-        writer.set(x, 6, 0, 'rock')
-        writer.set(x, 6, S - 1, 'rock')
-        writer.set(0, 6, x, 'rock')
-        writer.set(S - 1, 6, x, 'rock')
-    }
-    /* 四角塔 */
-    for (const [cx, cz] of [[0, 0], [S - 2, 0], [0, S - 2], [S - 2, S - 2]] as const) {
-        pillar(writer, cx, 0, cz, 9, 'brick', 3)
-        pitchedRoof(writer, cx - 1, 9, cz - 1, 5, 5, 3, 'tile', 'x')
-    }
-    /* 中央主楼 */
-    const keepX = Math.floor(S / 2) - 4
-    const keepZ = Math.floor(S / 2) - 4
-    floorSlab(writer, keepX, 2, keepZ, 9, 9, 'rock')
-    wallPerimeter9(writer, keepX, keepZ, 3, 11, 'brick')
-    for (let y = 5; y < 11; y += 3) fillBox(writer, keepX + 1, y, keepZ + 1, keepX + 7, y, keepZ + 7, 'wood')
-    spiralStairs(writer, keepX + 4, 3, keepZ + 4, 2.5, 9, 'wood')
-    const gateX = keepX + 4
-    writer.clear(gateX, 3, keepZ)
-    writer.clear(gateX, 4, keepZ)
-    pitchedRoof(writer, keepX, 12, keepZ, 9, 9, 4, 'tile', 'x')
-    /* 连廊：主楼 → 四角塔 */
-    corridor(writer, keepX, keepZ + 4, 2, 4, 6, 2, 'wood')
-    corridor(writer, keepX + 8, keepZ + 4, S - 3, 4, 6, 2, 'wood')
-    corridor(writer, keepX + 4, keepZ, keepX + 4, 3, 6, 2, 'wood')
-    corridor(writer, keepX + 4, keepZ + 8, keepX + 4, S - 4, 6, 2, 'wood')
-    /* 庭院斗拱灯台与树木点缀 */
-    for (let i = 0; i < 10; i++) {
-        const px = 3 + Math.floor(rng() * (S - 6))
-        const pz = 3 + Math.floor(rng() * (S - 6))
-        /* 避开主楼区域 */
-        if (px > keepX - 2 && px < keepX + 11 && pz > keepZ - 2 && pz < keepZ + 11) continue
-        pillar(writer, px, 2, pz, 3, 'wood')
-        dougong(writer, px, 5, pz, 'wood')
-        writer.set(px, 8, pz, 'tile')
-    }
-}
-
-/** 主楼 9×9 外墙（局部坐标偏移版，避开 wallPerimeter 从 0 起算） */
-const wallPerimeter9 = (
-    writer: BlockWriter, ox: number, oz: number, y0: number, y1: number, material: SurfaceMaterialId,
-): void => {
-    for (let y = y0; y <= y1; y++) {
-        for (let i = 0; i < 9; i++) {
-            writer.set(ox + i, y, oz, material)
-            writer.set(ox + i, y, oz + 8, material)
-            writer.set(ox, y, oz + i, material)
-            writer.set(ox + 8, y, oz + i, material)
-        }
-    }
-}
-
 const RECIPES: Record<string, GeneratorFn> = {
     house, tower, wall, platform, ruin, tree,
     stairs: stairsRecipe,
@@ -274,7 +212,6 @@ const RECIPES: Record<string, GeneratorFn> = {
     bridge: bridgeRecipe,
     great_hall: greatHall,
     keep,
-    garden,
 }
 /** 可用建筑配方 id 列表 */
 export const BUILDING_RECIPE_IDS: readonly string[] = Object.keys(RECIPES)

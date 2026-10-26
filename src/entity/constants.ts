@@ -11,6 +11,7 @@ const ENTITY_TYPE_VALUES = [
     'building_generator',
     'interactable',
     'item',
+    'diorama',
 ] as const
 type EntityType = typeof ENTITY_TYPE_VALUES[number]
 

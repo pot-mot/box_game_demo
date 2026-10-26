@@ -5,9 +5,10 @@ import {getInputRegistry} from '../input/registry.ts'
 import {localizeText, localizeTitle} from '../i18n/dom.ts'
 import type {StringLocaleKey} from '../i18n/index.ts'
 import {createIcon} from './icons/icon.ts'
+import type {OwnershipStore} from '../types/ownership_store.ts'
 
 /** 实体列表分组标识（与展示名解耦，展示名走本地化） */
-const ENTITY_GROUPS = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'other'] as const
+const ENTITY_GROUPS = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'diorama', 'other'] as const
 type EntityGroup = typeof ENTITY_GROUPS[number]
 
 /** 实体类型 → 列表分组的映射 */
@@ -20,6 +21,7 @@ const TYPE_GROUPS: Record<EntityType, EntityGroup> = {
     'fragment/common': 'fragment',
     'interactable': 'interactable',
     item: 'item',
+    diorama: 'diorama',
 }
 
 const GROUP_LABELS: Record<EntityGroup, StringLocaleKey> = {
@@ -31,6 +33,7 @@ const GROUP_LABELS: Record<EntityGroup, StringLocaleKey> = {
     fragment: 'element.group.fragment',
     interactable: 'element.group.interactable',
     item: 'element.group.item',
+    diorama: 'element.group.diorama',
     other: 'element.group.other',
 }
 
@@ -72,6 +75,10 @@ const createGroupContainer = (group: EntityGroup): HTMLElement => {
 export interface ElementListPanelOptions {
     /** 面板顶部位置（px；编辑模式为显示控制小面板让出空间） */
     readonly top?: number
+    /** 箱庭归属索引：用于把子实体嵌套到对应箱庭行下方 */
+    readonly ownership?: OwnershipStore
+    /** 箱庭稳定 id → 运行时实体 id（用于定位父行） */
+    readonly dioramaIdToEntityId?: (dioramaId: string) => number | undefined
 }
 
 export const setupElementListPanel = (sources: EntityInfoSource[], options: ElementListPanelOptions = {}): () => void => {
@@ -99,6 +106,8 @@ export const setupElementListPanel = (sources: EntityInfoSource[], options: Elem
     el.appendChild(list)
 
     const rows = new Map<string, HTMLElement>()
+    /** 箱庭行下方的子实体容器（键 = 箱庭行 key） */
+    const childContainers = new Map<string, HTMLElement>()
 
     let emptyEl: HTMLElement | undefined
 
@@ -106,6 +115,37 @@ export const setupElementListPanel = (sources: EntityInfoSource[], options: Elem
 
     const findSource = (entry: EntityPanelInfo): EntityInfoSource | undefined =>
         sourcesByType.get(entry.type)
+
+    const createChildContainer = (): HTMLElement => {
+        const c = document.createElement('div')
+        c.className = 'dc-list dc-list-children'
+        return c
+    }
+
+    /** 创建 / 复用行并保证其位于目标容器 */
+    const renderRow = (entry: EntityPanelInfo, container: HTMLElement): HTMLElement => {
+        const key = getRowKey(entry)
+        let row = rows.get(key)
+        if (!row) {
+            row = createRow(entry.id, entry.badgeLabel, entry.badgeColor)
+            row.dataset.type = entry.type
+            rows.set(key, row)
+        }
+        if (row.parentElement !== container) container.appendChild(row)
+
+        /* 徽章（阵营 / 玩家 / 类型）可能在运行时变化，需随每帧刷新 */
+        const badge = row.children[0] as HTMLElement
+        badge.textContent = entry.badgeLabel
+        badge.style.background = entry.badgeColor
+
+        const span = row.children[1] as HTMLElement
+        span.textContent = entry.rowTextOf !== undefined ? entry.rowTextOf() : entry.rowText
+
+        const source = findSource(entry)
+        const selId = source?.getSelectedId()
+        row.classList.toggle('is-selected', entry.id === selId)
+        return row
+    }
 
     const tryDeleteHovered = (): void => {
         if (hoveredId !== undefined && hoveredType !== undefined) {
@@ -173,7 +213,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[], options: Elem
     input.onActionDown('delete_entity', tryDeleteSelected)
 
     /** 需要按顺序渲染的分组 */
-    const GROUP_ORDER: EntityGroup[] = ['character', 'box', 'area', 'terrain', 'building', 'fragment']
+    const GROUP_ORDER: EntityGroup[] = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'diorama']
     /** 分组容器 */
     const groupContainers = new Map<EntityGroup, HTMLElement>()
 
@@ -186,21 +226,42 @@ export const setupElementListPanel = (sources: EntityInfoSource[], options: Elem
 
     return () => {
         const allItems: EntityPanelInfo[] = sources.flatMap(s => s.panelInfo)
+        const existingKeys = new Set(allItems.map(getRowKey))
 
-        // 按键分组
+        // 归属于箱庭的实体：嵌套到对应箱庭行下方；其余按类型分组
+        const nestedByDiorama = new Map<string, EntityPanelInfo[]>()
         const itemsByGroup = new Map<EntityGroup, EntityPanelInfo[]>()
         for (const item of allItems) {
+            const owner = item.type === 'diorama'
+                ? undefined
+                : options.ownership?.get({type: item.type, runtimeId: item.id})
+            const dioramaEntityId = owner === undefined
+                ? undefined
+                : options.dioramaIdToEntityId?.(owner.dioramaId)
+            const parentKey = dioramaEntityId === undefined ? undefined : `diorama-${dioramaEntityId}`
+            if (parentKey !== undefined && existingKeys.has(parentKey)) {
+                let arr = nestedByDiorama.get(parentKey)
+                if (!arr) { arr = []; nestedByDiorama.set(parentKey, arr) }
+                arr.push(item)
+                continue
+            }
             const groupName = TYPE_GROUPS[item.type] ?? 'other'
             let arr = itemsByGroup.get(groupName)
             if (!arr) { arr = []; itemsByGroup.set(groupName, arr) }
             arr.push(item)
         }
 
-        // 清理已移除的行
+        // 清理已移除的行 / 子容器
         for (const [key, row] of rows) {
-            if (!allItems.some(e => getRowKey(e) === key)) {
+            if (!existingKeys.has(key)) {
                 row.remove()
                 rows.delete(key)
+            }
+        }
+        for (const [key, child] of childContainers) {
+            if (!existingKeys.has(key)) {
+                child.remove()
+                childContainers.delete(key)
             }
         }
 
@@ -213,26 +274,22 @@ export const setupElementListPanel = (sources: EntityInfoSource[], options: Elem
             if (!items || items.length === 0) continue
 
             for (const entry of items) {
+                renderRow(entry, container)
+                if (entry.type !== 'diorama') continue
+
                 const key = getRowKey(entry)
-                let row = rows.get(key)
-                if (!row) {
-                    row = createRow(entry.id, entry.badgeLabel, entry.badgeColor)
-                    row.dataset.type = entry.type
-                    container.appendChild(row)
-                    rows.set(key, row)
+                const row = rows.get(key)
+                if (row === undefined) continue
+                let child = childContainers.get(key)
+                if (child === undefined) {
+                    child = createChildContainer()
+                    childContainers.set(key, child)
                 }
-
-                /* 徽章（阵营 / 玩家 / 类型）可能在运行时变化，需随每帧刷新 */
-                const badge = row.children[0] as HTMLElement
-                badge.textContent = entry.badgeLabel
-                badge.style.background = entry.badgeColor
-
-                const span = row.children[1] as HTMLElement
-                span.textContent = entry.rowTextOf !== undefined ? entry.rowTextOf() : entry.rowText
-
-                const source = findSource(entry)
-                const selId = source?.getSelectedId()
-                row.classList.toggle('is-selected', entry.id === selId)
+                /* 子容器紧跟在箱庭行之后，保证缩进层级与阅读顺序 */
+                if (row.nextSibling !== child) container.insertBefore(child, row.nextSibling)
+                const children = nestedByDiorama.get(key) ?? []
+                child.style.display = children.length > 0 ? '' : 'none'
+                for (const childEntry of children) renderRow(childEntry, child)
             }
         }
 

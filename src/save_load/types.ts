@@ -12,6 +12,8 @@ import type {DamageTypeProfile} from '../character/combat/damage_type.ts'
 import type {EquipmentState} from '../character/equipment/types.ts'
 import type {LockPointConfig} from '../character/lock_point.ts'
 import type {StaminaConfig} from '../character/stamina/types.ts'
+import type {DioramaOwner} from '../types/ownership_store.ts'
+import type {DioramaContext, DioramaBlueprint} from '../composition/diorama/types.ts'
 
 /** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」；
  *  v4 起 character 增加基础防御 defense 与护甲装备 armor；
@@ -35,8 +37,9 @@ import type {StaminaConfig} from '../character/stamina/types.ts'
  * v19 起 `bodyState` 使用 `attackModule`（跨体形攻击模组）；天然武器写入角色装备槽；
  *  缺失 / 非法武器槽加载时回填体形天然默认；不做旧 `holdMode` 语义迁移。
  * v20 起 character 增加飞行开关 flightEnabled 与体力基础配置 stamina（均可选，旧档安全回退默认）。
+ * v21 起新增 diorama 实体（蓝图 + 根变换），可保存实体增加可选 owner，建筑世界存档增加可选 owner。
  */
-export const SAVE_FORMAT_VERSION = 20
+export const SAVE_FORMAT_VERSION = 21
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -62,6 +65,8 @@ export interface SavableBox {
     config: BoxConfig
     position: Vec3JSON
     quaternion: QuatJSON
+    /** 箱庭归属（可选） */
+    owner?: DioramaOwner
     /** 可破坏特性运行态（生命 / 碰撞恢复数据） */
     destructible?: {
         health?: number
@@ -83,6 +88,8 @@ export interface SavableArea {
     config: AreaConfig
     position: Vec3JSON
     quaternion: QuatJSON
+    /** 箱庭归属（可选） */
+    owner?: DioramaOwner
 }
 
 export interface SavableTerrain {
@@ -91,6 +98,8 @@ export interface SavableTerrain {
     position: Vec3JSON
     quaternion: QuatJSON
     heights: number[][]
+    /** 箱庭归属（可选） */
+    owner?: DioramaOwner
 }
 
 export interface SavableFragment {
@@ -99,6 +108,8 @@ export interface SavableFragment {
     position: Vec3JSON
     quaternion: QuatJSON
     data: FragmentDataJSON
+    /** 箱庭归属（可选） */
+    owner?: DioramaOwner
 }
 
 /** 建筑生成器：显式体素数据（palette + 每 chunk Base64 RLE），与生成器代码版本解耦 */
@@ -119,18 +130,34 @@ export interface SavableInteractable {
     /** 容器内容（仅 chest；缺省 = 空容器） */
     container?: InventorySaveData
     health: number
+    /** 箱庭归属（可选） */
+    owner?: DioramaOwner
 }
 
 /** 掉落物：物品定义 id + 数量 + 世界变换 */
+export interface SavableDiorama {
+    type: 'diorama'
+    dioramaId: string
+    blueprint: DioramaBlueprint
+    seed: number
+    origin: Vec3JSON
+    yawQuarter: number
+    /** 箱庭自身通常不带 owner（子实体各自携带） */
+    owner?: DioramaOwner
+}
+
 export interface SavableItem {
     type: 'item'
     config: {defId: string; count: number}
     position: Vec3JSON
     quaternion: QuatJSON
+    /** 箱庭归属（可选） */
+    owner?: DioramaOwner
 }
 
 export type SavableEntity = SavableBox | SavableArea | SavableTerrain
     | SavableFragment | SavableBuildingGenerator | SavableInteractable | SavableItem | SavableCharacter
+    | SavableDiorama
 
 // ── 角色 ──
 
@@ -199,6 +226,8 @@ export interface SavableCharacter {
     quaternion: QuatJSON
     /** 朝向角（度，0-360，0 = 世界 +Z 前方）；刚体 lockRotations 不参与旋转，朝向单独持久化 */
     facing?: number
+    /** 箱庭归属（可选） */
+    owner?: DioramaOwner
 }
 
 // ── 模式信息（强类型嵌套）──
@@ -265,4 +294,5 @@ export type EntitySourceMap = {
     'building_generator': BuildingGeneratorContext
     'interactable': InteractableContext
     'item': ItemEntityContext
+    'diorama': DioramaContext
 }

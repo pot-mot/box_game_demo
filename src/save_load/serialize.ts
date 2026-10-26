@@ -11,6 +11,7 @@ import {findWeaponPreset} from '../character/weapon/catalog.ts'
 import {findArmorPreset, findLimbPreset} from '../character/armor/catalog.ts'
 import type {EquipmentState} from '../character/equipment/types.ts'
 import {EMPTY_EQUIPMENT_STATE, equipmentEntriesOf, withEquipmentAt} from '../character/equipment/types.ts'
+import type {OwnershipStore, OwnedRef, DioramaOwner} from '../types/ownership_store.ts'
 
 /** 将 {x, y, z} 转为 [x, y, z] */
 const vec3ToTuple = (v: {x: number; y: number; z: number}): [number, number, number] =>
@@ -52,6 +53,12 @@ const equipmentToSave = (state: EquipmentState, bodyFormId: string): EquipmentSt
     return out
 }
 
+/** 读取归属并按需展开为可选字段（未登记时不写入 JSON） */
+const ownerField = (ownership: OwnershipStore | undefined, ref: OwnedRef): {owner?: DioramaOwner} => {
+    const owner = ownership?.get(ref)
+    return owner === undefined ? {} : {owner}
+}
+
 /** 收集当前世界所有可序列化实体的状态 */
 export const collectWorldState = (
     systems: Map<string, EntityInfoSource>,
@@ -60,6 +67,7 @@ export const collectWorldState = (
     cameraPos?: {x: number; y: number; z: number},
     cameraRot?: {x: number; y: number; z: number},
     prevModeInfo?: ModeInfoJSON,
+    ownership?: OwnershipStore,
 ): SaveData => {
     const entities: SavableEntity[] = []
 
@@ -78,6 +86,7 @@ export const collectWorldState = (
                 config: e.config,
                 position: vec3ToTuple(e.body.translation()),
                 quaternion: quatToTuple(e.body.rotation()),
+                ...ownerField(ownership, {type: 'box', runtimeId: e.id}),
                 ...(dest !== undefined && !dest.destroyed
                     ? {destructible: {
                         health: dest.health,
@@ -101,6 +110,7 @@ export const collectWorldState = (
                 config: e.config,
                 position: [e.transform.x, e.transform.y, e.transform.z],
                 quaternion: [e.transform.qx, e.transform.qy, e.transform.qz, e.transform.qw],
+                ...ownerField(ownership, {type: 'area', runtimeId: e.id}),
             })
         }
     }
@@ -115,6 +125,7 @@ export const collectWorldState = (
                 position: [e.mesh.position.x, e.mesh.position.y, e.mesh.position.z],
                 quaternion: quatToTuple(e.mesh.quaternion),
                 heights: e.heights,
+                ...ownerField(ownership, {type: 'terrain', runtimeId: e.id}),
             })
         }
     }
@@ -123,6 +134,12 @@ export const collectWorldState = (
     const building = getSource('building_generator')
     if (building?.getAll) {
         const worlds = building.getSaveWorlds()
+        const runtimeWorlds = building.getAll()
+        for (let i = 0; i < worlds.length && i < runtimeWorlds.length; i++) {
+            const world = runtimeWorlds[i]
+            const owner = ownership?.get({type: 'building_generator', runtimeId: world.id})
+            if (owner !== undefined) worlds[i].owner = owner
+        }
         if (worlds.length > 0) {
             entities.push({type: 'building_generator', worlds})
         }
@@ -142,6 +159,9 @@ export const collectWorldState = (
                 on: entry.on,
                 container: entry.container,
                 health: entry.health,
+                ...(entry.id === undefined
+                    ? {}
+                    : ownerField(ownership, {type: 'interactable', runtimeId: entry.id})),
             })
         }
     }
@@ -155,6 +175,25 @@ export const collectWorldState = (
                 config: {defId: entry.defId, count: entry.count},
                 position: entry.position,
                 quaternion: entry.quaternion,
+                ...(entry.id === undefined
+                    ? {}
+                    : ownerField(ownership, {type: 'item', runtimeId: entry.id})),
+            })
+        }
+    }
+
+    // 箱庭（蓝图 + 根变换；子实体由各系统显式保存）
+    const diorama = getSource('diorama')
+    if (diorama?.getAll) {
+        for (const e of diorama.getAll()) {
+            entities.push({
+                type: 'diorama',
+                dioramaId: e.dioramaId,
+                blueprint: e.blueprint,
+                seed: e.seed,
+                origin: [e.origin[0], e.origin[1], e.origin[2]],
+                yawQuarter: e.yawQuarter,
+                ...ownerField(ownership, {type: 'diorama', runtimeId: e.id}),
             })
         }
     }
@@ -165,15 +204,16 @@ export const collectWorldState = (
         for (const e of character.getAll()) {
             /* position 存脚底原点（实体原点语义）：物理身体中心回退半高 */
             const bodyPos = e.body.translation()
-            const halfH = bodyFormOf(e.state.config.bodyFormId).base.centerOffsetY * e.state.config.scale
+            const form = bodyFormOf(e.state.config.bodyFormId)
+            const halfH = form.base.centerOffsetY * e.state.config.scale
             entities.push({
                 type: 'character',
                 config: {
                     speed: e.state.config.speed,
                     jumpHeight: e.state.config.jumpHeight,
                     scale: e.state.config.scale,
-                    /* 体形计划（基础模组）：缺省 humanoid */
-                    bodyFormId: e.state.config.bodyFormId,
+                    /* 体形计划（基础模组）：写出解析后的 id，旧档缺省值也会落为 humanoid */
+                    bodyFormId: form.id,
                     /* 体形专属状态（attackModule + 人形 handedness） */
                     bodyState: e.state.bodyState,
                     peaceStrategy: e.state.ai.peaceStrategy,
@@ -184,7 +224,7 @@ export const collectWorldState = (
                     /* 基础防御 + 基础攻击 + 装备状态（limb / weapon / armor 分层） */
                     defense: e.state.combat.baseDefense,
                     baseAttack: e.state.combat.baseAttack,
-                    equipment: equipmentToSave(e.state.combat.equipment, bodyFormOf(e.state.config.bodyFormId).id),
+                    equipment: equipmentToSave(e.state.combat.equipment, form.id),
                     /* 额外锁定点（拷贝为 JSON-safe 元组；缺省 = 仅默认身体中心点） */
                     lockPoints: e.state.lockPoints.map((point): LockPointConfig => ({
                         jointId: point.jointId,
@@ -215,6 +255,7 @@ export const collectWorldState = (
                 quaternion: quatToTuple(e.body.rotation()),
                 /* 刚体 lockRotations，朝向不在 body 上，单独从 facingAngles 持久化 */
                 facing: character.getFacing(e.state.identity.id),
+                ...ownerField(ownership, {type: 'character', runtimeId: e.state.identity.id}),
             })
         }
     }
@@ -229,6 +270,7 @@ export const collectWorldState = (
                 position: vec3ToTuple(e.body.translation()),
                 quaternion: quatToTuple(e.body.rotation()),
                 data: fragmentDataToJSON(e.fragmentData),
+                ...ownerField(ownership, {type: 'fragment/common', runtimeId: e.id}),
             })
         }
     }

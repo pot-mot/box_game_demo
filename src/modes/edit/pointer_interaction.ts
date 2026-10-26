@@ -5,6 +5,7 @@ import {SPAWN_DIST, CLICK_THRESHOLD} from './constants.ts'
 import {getInputRegistry} from '../../input/registry.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {focusPanel} from '../../ui/entity_control_panel.ts'
+import {alignSpawnPosition} from './spawn_alignment.ts'
 import type {TransformGizmo, DragState, GizmoPartType} from './transform_gizmo.ts'
 
 /** 命中对象 → 实体：直接匹配，或沿父节点向上匹配（建筑 chunk 网格的实体是父 Group） */
@@ -199,7 +200,9 @@ export const setupPointerInteraction = (
             raycaster.ray.at(SPAWN_DIST, spawnPos)
         }
 
-        source.spawnAt(spawnPos.x, spawnPos.y, spawnPos.z)
+        /* 生成坐标按模式对齐：角色 / 交互物 0.5 格，其余 1 格；命中与射线远点共用此路径 */
+        const [x, y, z] = alignSpawnPosition(mode, spawnPos.x, spawnPos.y, spawnPos.z)
+        source.spawnAt(x, y, z)
     }
 
     /** 「生成物体」绑定为鼠标键：在指针处生成（gizmo 拖拽中屏蔽，避免拖拽过程意外创建实体） */
