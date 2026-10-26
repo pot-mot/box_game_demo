@@ -8,7 +8,7 @@ import {FLINCH_DURATION} from '../../../../../character/combat/attack_phases.ts'
 import {DEFAULT_GET_UP_DURATION, DEFAULT_KNOCKDOWN_DURATION} from '../../../../../character/combat/constants.ts'
 import {ROLL_DURATION} from '../../../../../character/combat/roll_skill.ts'
 import {INTERACTION_DURATION} from '../../../../../character/interaction/types.ts'
-import {WALK_CYCLE_FREQ, JUMP_EXTEND_END, FALL_END} from './constants.ts'
+import {WALK_CYCLE_FREQ, SWIM_CYCLE_FREQ, JUMP_EXTEND_END, FALL_END} from './constants.ts'
 
 /** 人形基础尺寸（scale=1）：人形是几何真源，其余体形各自声明自己的尺寸 */
 export const HUMANOID_SIZE = {width: 0.25, height: 1, depth: 0.1625} as const
@@ -25,7 +25,7 @@ export const HUMANOID_CLIP_STATE_META: Readonly<Record<BaseClipState, {duration:
     jumping: {duration: JUMP_EXTEND_END, loop: false},
     falling: {duration: 1, loop: true},
     flying: {duration: (Math.PI * 2) / 1.4, loop: true},
-    swimming: {duration: (Math.PI * 2) / 4, loop: true},
+    swimming: {duration: (Math.PI * 2) / SWIM_CYCLE_FREQ, loop: true},
     floating: {duration: (Math.PI * 2) / 1.6, loop: true},
     dying: {duration: FALL_END, loop: false},
     rolling: {duration: ROLL_DURATION, loop: false},

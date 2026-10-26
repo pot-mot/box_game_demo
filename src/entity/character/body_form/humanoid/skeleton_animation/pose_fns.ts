@@ -16,10 +16,11 @@ import {
     BLOCK_IDLE_ELBOW,
     SHIELD_FACE_NET_X,
     WALK_CYCLE_FREQ,
+    SWIM_CYCLE_FREQ,
     JUMP_EXTEND_END as EXTEND_END,
     FALL_END,
 } from '../state/constants.ts'
-import {BLOCKING_POSE_PERIOD, GUARD_BROKEN_POSE_DURATION, HIP_Y, WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
+import {BLOCKING_POSE_PERIOD, GUARD_BROKEN_POSE_DURATION, HIP_Y, SWIM_PRONE_PITCH, WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
 import {FLINCH_DURATION} from '../../../../../character/combat/attack_phases.ts'
 import {
     DEFAULT_GET_UP_DURATION,
@@ -315,7 +316,8 @@ const floatingPose = (t: number, ctx: PoseContext): PoseState => {
 
 /** 游泳（俯卧由 world.ts 根姿态合成）：双臂交替划水、双腿打水 */
 const swimmingPose = (t: number, ctx: PoseContext): PoseState => {
-    const stroke = Math.sin(t * 2)
+    /* clip 时长 = 2π / SWIM_CYCLE_FREQ，采样频率必须同源，才能一个 clip 播放完整划水周期 */
+    const stroke = Math.sin(t * SWIM_CYCLE_FREQ)
     const grip = ctx.weaponHeld ? GRIP_BONE_POSE : ZERO
     return {
         rightArmShoulder: {rx: -Math.PI * 0.75 + stroke * 0.8, ry: 0, rz: -0.2},
@@ -332,7 +334,8 @@ const swimmingPose = (t: number, ctx: PoseContext): PoseState => {
         rightLegKnee: {rx: 0.2, ry: 0, rz: 0},
         leftLegHip: {rx: -stroke * 0.4, ry: 0, rz: 0},
         leftLegKnee: {rx: 0.2, ry: 0, rz: 0},
-        headNeck: {rx: 0.4, ry: 0, rz: 0},
+        /* 根节点已前倾 SWIM_PRONE_PITCH；颈部反向旋转抵消，使脸朝向前方而不是一直向下 */
+        headNeck: {rx: -SWIM_PRONE_PITCH, ry: 0, rz: 0},
         spine: {rotation: ZERO, position: [0, HIP_Y, 0]},
         root: {rotation: ZERO},
     }

@@ -21,6 +21,9 @@ export const CLIP_SAMPLE_FPS = 60
 /** 行走步态周期频率（用于步行 clip 时长与相位） */
 export const WALK_CYCLE_FREQ = 6
 
+/** 游泳划水周期频率（rad/s）：clip 时长与姿态采样共用，保证一个 clip 正好一个完整划水周期 */
+export const SWIM_CYCLE_FREQ = 2
+
 /** 跳跃伸展动作结束时长（秒） */
 export const JUMP_EXTEND_END = 0.3
 

@@ -3,7 +3,8 @@ import {Euler, Quaternion, Vector3} from 'three'
 import {buildBaseClip, CHARACTER_JOINT_IDS, CHARACTER_JOINT_REST_POSITIONS} from './base_clips.ts'
 import {previewHumanoidClip} from '../preview.ts'
 import {BASE_CLIP_META, BASE_POSE_SAMPLERS, type PoseState} from '../pose_fns.ts'
-import {WEAPON_GRIP_FLEX} from '../../../../appearance/constants.ts'
+import {SWIM_PRONE_PITCH, WEAPON_GRIP_FLEX} from '../../../../appearance/constants.ts'
+import {SWIM_CYCLE_FREQ} from '../../state/constants.ts'
 import {GET_UP_PLANT_END, GET_UP_PUSH_END} from '../../../../../../character/combat/constants.ts'
 import {sampleClip} from '../../../../../../skeleton/anim/sampling.ts'
 import type {BoneAnimationClip} from '../../../../../../skeleton/anim/types.ts'
@@ -63,7 +64,7 @@ describe('基础状态 clip 生成器', () => {
     }
 
     it('循环动画 wrap 无缝：首帧与末帧值一致（同频波形）', () => {
-        for (const state of ['walking', 'sprinting', 'falling', 'flying'] as const) {
+        for (const state of ['walking', 'sprinting', 'falling', 'flying', 'swimming', 'floating'] as const) {
             const clip = buildBaseClip(state, false)
             const pose0 = sampleClip(clip, 0)
             const poseEnd = sampleClip(clip, clip.duration)
@@ -73,6 +74,29 @@ describe('基础状态 clip 生成器', () => {
                 expect(q0.angleTo(qe)).toBeLessThan(1e-3)
             }
         }
+    })
+
+    it('游泳在一个 clip 内完成完整划水循环（手脚经过正弦正负两端）', () => {
+        const meta = BASE_CLIP_META.swimming
+        const ctx = {weaponHeld: false, horizontalSpeed: 0}
+        const quarter = BASE_POSE_SAMPLERS.swimming(meta.duration * 0.25, ctx)
+        const threeQuarter = BASE_POSE_SAMPLERS.swimming(meta.duration * 0.75, ctx)
+        expect(quarter.rightArmShoulder.rx).toBeCloseTo(-Math.PI * 0.75 + 0.8)
+        expect(threeQuarter.rightArmShoulder.rx).toBeCloseTo(-Math.PI * 0.75 - 0.8)
+        expect(quarter.rightLegHip.rx).toBeCloseTo(0.4)
+        expect(threeQuarter.rightLegHip.rx).toBeCloseTo(-0.4)
+        expect(quarter.leftArmShoulder.rx).toBeCloseTo(-Math.PI * 0.75 - 0.8)
+        expect(threeQuarter.leftArmShoulder.rx).toBeCloseTo(-Math.PI * 0.75 + 0.8)
+    })
+
+    it('游泳划水周期为 2 rad/s（放慢到 50%）', () => {
+        expect(SWIM_CYCLE_FREQ).toBe(2)
+        expect(BASE_CLIP_META.swimming.duration).toBeCloseTo((Math.PI * 2) / SWIM_CYCLE_FREQ)
+    })
+
+    it('游泳颈部抵消俯卧根姿态，脸朝向前方', () => {
+        const pose = BASE_POSE_SAMPLERS.swimming(0.3, {weaponHeld: false, horizontalSpeed: 0})
+        expect(pose.headNeck.rx + SWIM_PRONE_PITCH).toBeCloseTo(0)
     })
 
     it('持械变体：idle/walking 持械 clip 与空手 clip 肩肘姿态不同', () => {
