@@ -2,7 +2,7 @@ import type {AttackSegment} from '../../../../../character/weapon/attack_chain.t
 import type {CharacterStateName} from '../../../../../character/state_machine/types.ts'
 import {attackPhaseProgress} from '../../common/creature_runtime/timing.ts'
 import {poseAt, type JointEulers, type PoseFunction} from '../../common/creature_runtime/pose.ts'
-import {clamp01, cyclePhase, easeInCubic, easeInOutCubic, easeOutCubic, footSwing, loopBreath, loopSin, phaseOffset, smoothstep, TAU} from '../../common/creature_runtime/gait.ts'
+import {clamp01, cyclePhase, easeInCubic, easeInOutCubic, easeOutCubic, footSwing, loopBreath, loopSin, phaseOffset, smoothstep, TAU, type FootCycle} from '../../common/creature_runtime/gait.ts'
 
 /**
  * 狼姿态函数（四足）：对角小跑 + 躯干起伏 + 颈头反向稳定 + 三节尾跟随。
@@ -55,6 +55,25 @@ const trotPose = (phase: number, amplitude: number, liftScale = 1): JointEulers 
     stride('rr', 0)
     stride('fr', 0.5)
     stride('rl', 0.5)
+    return out
+}
+
+/** 奔跑（bound）：左右腿同相，前后肢交替；避免高速时仍用对角小跑导致左右交错 */
+const boundPose = (phase: number, amplitude: number, liftScale = 1): JointEulers => {
+    const out: Record<string, readonly [number, number, number]> = {}
+    const stride = (key: keyof typeof LEGS, foot: FootCycle): void => {
+        const hip = -foot.forward * amplitude
+        const push = Math.max(0, -foot.forward)
+        const knee = foot.lift * 0.9 * liftScale + push * 0.18
+        const ankle = -foot.lift * 0.5 * liftScale + Math.max(0, foot.forward) * 0.1
+        putLeg(out, LEGS[key], hip, knee, ankle)
+    }
+    const front = footSwing(phase, 0.58)
+    const rear = footSwing(phaseOffset(phase, 0.5), 0.58)
+    stride('fl', front)
+    stride('fr', front)
+    stride('rl', rear)
+    stride('rr', rear)
     return out
 }
 
@@ -140,7 +159,7 @@ const walking: PoseFunction = (t, total) => {
     }
 }
 
-/** 跑步：更快的对角小跑、身体更低、尾巴拉平 */
+/** 跑步（bound）：左右腿同相、身体更低、尾巴拉平 */
 const sprinting: PoseFunction = (t, total) => {
     const phase = cyclePhase(t, total)
     const bob = loopSin(phase, 2) * 0.035
@@ -152,7 +171,7 @@ const sprinting: PoseFunction = (t, total) => {
         ),
         neck: [0.12 - bob * 0.8, loopSin(phase, 1, 0.3) * 0.04, -roll * 0.5],
         head: [-0.08 + bob * 0.4, -loopSin(phase, 1, 0.3) * 0.06, -roll * 0.7],
-        ...trotPose(phase, 0.8, 1.25),
+        ...boundPose(phase, 0.8, 1.25),
         ...loopTail(phase, 0.1, -loopSin(phase, 1) * 0.05, 1),
         ...earWave(phase, 1, 0.12),
     }

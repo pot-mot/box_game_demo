@@ -1,5 +1,5 @@
 import {describe, it, expect} from 'vitest'
-import {Mesh} from 'three'
+import {Mesh, Vector3} from 'three'
 import {BASE_CLIP_STATES} from '../../../../character/state_machine/types.ts'
 import {findWeaponPreset, weaponAttacksOf} from '../../../../character/weapon/catalog.ts'
 import {breathModuleOf} from '../../../../character/weapon/breath_module.ts'
@@ -74,6 +74,93 @@ describe('双足飞龙体形（forms/wyvern）', () => {
                 expect(clawX('wingLClaw'), segment.id).toBeLessThan(-0.05)
                 expect(clawX('wingRClaw'), segment.id).toBeGreaterThan(0.05)
             }
+        }
+        model.dispose()
+    })
+
+    it('飞行时肩 / 肘保持外展', () => {
+        const model = WYVERN_BODY_FORM.createModel({speed: 3, jumpHeight: 1, scale: 1}, 0)
+        const bridge = createCharacterSkeletonBridge(model)
+        const clip = wyvernBaseClip('flying')
+        const player = createBoneAnimationPlayer(bridge, clip)
+        /* 下挥到底时翼展最大 */
+        player.seek(clip.duration * 0.25)
+        bridge.updateWorldTransforms()
+        const jointX = (jointId: string): number => bridge.getWorldPosition(jointId)?.x ?? Number.NaN
+        const base = jointX('wingRBase')
+        expect(jointX('wingRElbow'), '肩→肘应向外伸展').toBeGreaterThan(base + 0.4)
+        expect(jointX('wingRWrist'), '翼腕应保持在身体外侧').toBeGreaterThan(base + 0.4)
+        model.dispose()
+    })
+
+    it('飞行振翅有明确的上下挥摆与翅膜面积变化', () => {
+        const model = WYVERN_BODY_FORM.createModel({speed: 3, jumpHeight: 1, scale: 1}, 0)
+        const bridge = createCharacterSkeletonBridge(model)
+        let membrane: Mesh | undefined
+        model.group.traverse(object => {
+            if (object instanceof Mesh && object.userData.deform === 'wing_membrane' && object.userData.jointId === 'wingRWrist') {
+                membrane = object
+            }
+        })
+        const rightMembrane = membrane
+        if (rightMembrane === undefined) throw new Error('缺少右翼翅膜')
+        const sample = (ratio: number): {tipY: number; area: number} => {
+            const clip = wyvernBaseClip('flying')
+            const player = createBoneAnimationPlayer(bridge, clip)
+            player.seek(clip.duration * ratio)
+            bridge.updateWorldTransforms()
+            model.updateDeform?.()
+            rightMembrane.updateWorldMatrix(true, false)
+            const positions = rightMembrane.geometry.getAttribute('position')
+            const vertex = (index: number): Vector3 =>
+                new Vector3().fromBufferAttribute(positions, index).applyMatrix4(rightMembrane.matrixWorld)
+            const wrist = vertex(2)
+            /* 顶点顺序：0 翼根、1 翼肘、2 翼腕、3..6 翼指 A–D 末端 */
+            const rim = [0, 1, 3, 4, 5, 6].map(vertex)
+            let area = 0
+            for (let i = 0; i < rim.length; i++) {
+                const a = rim[i]!.clone().sub(wrist)
+                const b = rim[(i + 1) % rim.length]!.clone().sub(wrist)
+                area += a.cross(b).length() / 2
+            }
+            return {tipY: rim[rim.length - 1]!.y, area}
+        }
+        const down = sample(0.25)
+        const up = sample(0.75)
+        expect(down.tipY, '下挥时翼尖应明显低于上挥').toBeLessThan(up.tipY - 0.3)
+        expect(down.area, '下挥时翅膜面积应大于上挥').toBeGreaterThan(up.area * 1.25)
+        model.dispose()
+    })
+
+    it('飞行振翅由肩关节 XY / ZY 面共同挥摆，肘关节角度变化很小', () => {
+        const duration = wyvernBaseClip('flying').duration
+        const pose = wyvernPose('flying')
+        const up = pose(duration * 0.75, duration)
+        const down = pose(duration * 0.25, duration)
+        const rotOf = (joint: JointPose | undefined): readonly [number, number, number] => {
+            if (joint === undefined) return [0, 0, 0]
+            return isPoseWithPosition(joint) ? joint.rotation : joint
+        }
+        const baseXDelta = Math.abs(rotOf(up.wingRBase)[0] - rotOf(down.wingRBase)[0])
+        const baseZDelta = Math.abs(rotOf(up.wingRBase)[2] - rotOf(down.wingRBase)[2])
+        const elbowDelta = Math.abs(rotOf(up.wingRElbow)[2] - rotOf(down.wingRElbow)[2])
+        expect(baseXDelta, '肩关节 ZY 面（X 轴）总摆幅限制为 0.3 rad').toBeCloseTo(0.3)
+        expect(baseZDelta, '肩关节 XY 面（Z 轴）应有明显上下挥摆').toBeGreaterThan(0.6)
+        expect(elbowDelta, '肘关节角度变化应保持很小').toBeLessThan(0.2)
+    })
+
+    it('行走 / 奔跑时翼作为前肢前后摆动', () => {
+        const model = WYVERN_BODY_FORM.createModel({speed: 3, jumpHeight: 1, scale: 1}, 0)
+        const bridge = createCharacterSkeletonBridge(model)
+        const clawZ = (state: 'walking' | 'sprinting', ratio: number): number => {
+            const clip = wyvernBaseClip(state)
+            const player = createBoneAnimationPlayer(bridge, clip)
+            player.seek(clip.duration * ratio)
+            bridge.updateWorldTransforms()
+            return bridge.getWorldPosition('wingRClaw')?.z ?? Number.NaN
+        }
+        for (const state of ['walking', 'sprinting'] as const) {
+            expect(Math.abs(clawZ(state, 0) - clawZ(state, 0.5)), state).toBeGreaterThan(0.1)
         }
         model.dispose()
     })

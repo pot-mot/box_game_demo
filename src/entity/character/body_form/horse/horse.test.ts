@@ -5,6 +5,7 @@ import {bodyFormOf, isKnownBodyFormId} from '../../body_form/index.ts'
 import {HORSE_BODY_FORM} from './body_form.ts'
 import {HORSE_COLLIDER_LAYOUT, buildHorseSkeleton} from './skeleton/skeleton.ts'
 import {horseAttackClip, horseBaseClip} from './skeleton_animation/clips.ts'
+import {horsePose} from './skeleton_animation/pose_fns.ts'
 
 const STATES = BASE_CLIP_STATES
 
@@ -65,5 +66,13 @@ describe('马体形（forms/horse）', () => {
         expect(front.jointTracks.length).toBeGreaterThan(0)
         expect(rear.jointTracks.length).toBeGreaterThan(0)
         expect(stomp.duration).toBeGreaterThan(front.duration)
+    })
+
+    it('奔跑（bound）时左右腿同相摆动，不再四拍交错', () => {
+        const pose = horsePose('sprinting')(0.37, 1)
+        expect(pose.flHip).toEqual(pose.frHip)
+        expect(pose.rlHip).toEqual(pose.rrHip)
+        expect(pose.flKnee).toEqual(pose.frKnee)
+        expect(pose.rlKnee).toEqual(pose.rrKnee)
     })
 })

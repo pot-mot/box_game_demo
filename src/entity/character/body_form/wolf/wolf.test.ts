@@ -8,7 +8,7 @@ import {WOLF_BODY_FORM} from './body_form.ts'
 import {wolfAttackClip, wolfBaseClip} from './skeleton_animation/clips.ts'
 import {WOLF_HURT_BLOCKS} from './skeleton/hurt.ts'
 import {WOLF_COLLIDER_LAYOUT} from './skeleton/skeleton.ts'
-import {wolfAttackPose} from './skeleton_animation/pose_fns.ts'
+import {wolfAttackPose, wolfPose} from './skeleton_animation/pose_fns.ts'
 import {isPoseWithPosition, type JointPose} from '../common/creature_runtime/pose.ts'
 
 const STATES = BASE_CLIP_STATES
@@ -142,5 +142,13 @@ describe('狼体形（forms/wolf）', () => {
         const heavyEnd = wolfAttackPose(heavy)(heavy.duration + heavy.recovery, heavy.duration + heavy.recovery)
         expect(Math.abs(normalise(yawOf(heavyEnd.body!)))).toBeLessThan(1e-6)
         expect(Math.abs(normalise(yawOf(heavyEnd.head!)))).toBeLessThan(1e-6)
+    })
+
+    it('奔跑（bound）时左右腿同相摆动，不再对角交错', () => {
+        const pose = wolfPose('sprinting')(0.37, 1)
+        expect(pose.flHip).toEqual(pose.frHip)
+        expect(pose.rlHip).toEqual(pose.rrHip)
+        expect(pose.flKnee).toEqual(pose.frKnee)
+        expect(pose.rlKnee).toEqual(pose.rrKnee)
     })
 })

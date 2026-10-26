@@ -4,7 +4,7 @@ import {attackPhaseProgress} from '../../common/creature_runtime/timing.ts'
 import {isPoseWithPosition, poseAt, type JointEulers, type JointPose, type PoseFunction} from '../../common/creature_runtime/pose.ts'
 import {clamp01, cyclePhase, easeInCubic, easeInOutCubic, easeOutCubic, footSwing, loopBreath, loopSin, phaseOffset, smoothstep, TAU, type FootCycle} from '../../common/creature_runtime/gait.ts'
 
-/** wyvern 姿态函数（双足 + 双翼）：翼折叠撑地 / 振翅、双足行走、四节尾与翼指层次。 */
+/** wyvern 姿态函数（双足 + 双翼）：翼折叠撑地 / 振翅、四足式行走（翼作前肢）、四节尾与翼指层次。 */
 
 const BODY_Y = 1.0
 
@@ -53,23 +53,69 @@ const wingOf = (sign: number, pose: WingPose): JointEulers => {
     }
 }
 
+/** 翼根 / 翼肘 / 翼指 Z 展开量（正数；展开时肩、肘、翼指一起向外打开） */
+const WING_SPREAD_Z = 1
+const WING_ELBOW_SPREAD_Z = 1.4
+const WING_FINGER_SPREAD_Z = 0.7
+/** 收翼时的展开参数（行走 / 待机共用） */
+const FOLDED_SPREAD = 0.08
+
 const wings = (spread: number, flap: number): JointEulers => {
     const s = clamp01(spread)
     /*
-     * 翼根 Z 为正（左翼取负）才会把翼臂向外侧展开；负值会越过身体中线。
-     * 翼肘 / 腕不再叠加 Z（否则前臂向内折、双爪在胸前聚拢），展开量由翼根与 X 轴振翅控制。
+     * 翼根 Z 取负（左翼取正）让上臂向外伸展；翼肘 Z 取正（左翼取负）让前臂继续向外展开。
+     * 翼指 Z 同步扇开翅膜，避免只有翼腕外移而翼指仍折在背后。
+     * 仅靠翼根 Z 会让肩外展但前臂折回胸前，故展开量需同时分配到翼根 / 翼肘 / 翼指。
      */
     const pose: WingPose = {
-        base: [-0.1 + flap * 0.35, 0, 0.02 + s * 0.55],
-        elbow: [0.05 - flap * 0.25, 0, 0],
+        base: [-0.1 + flap * 0.35, 0, -s * WING_SPREAD_Z],
+        elbow: [0.05 - flap * 0.25, 0, s * WING_ELBOW_SPREAD_Z],
         wrist: [0.1 + flap * 0.2, 0, 0],
         claw: [0.1, 0, 0],
-        finger: [0, 0, 0],
+        finger: [0, 0, -s * WING_FINGER_SPREAD_Z],
     }
     return {...wingOf(-1, pose), ...wingOf(1, pose)}
 }
 
-const foldedWings = (sway: number): JointEulers => wings(0.08 + sway, 0)
+const foldedWings = (sway: number): JointEulers => wings(FOLDED_SPREAD + sway, 0)
+
+/**
+ * 飞行振翅：一个完整上下挥翼循环。
+ * `flap = -1` 为最高点（翼上收、翅膜面积最小），`flap = 1` 为最低点（翼下压、翅膜完全展开）。
+ * 肩 / 肘只做小幅支撑摆动；主要振翅由翼腕 → 翼指绕 X 轴的 ZY 面旋转完成，
+ * 翼指 Z 同步控制翅膜扇开面积，避免整条手臂向下前方“伸长”。
+ */
+const flappingWings = (flap: number): JointEulers => {
+    const down = clamp01((flap + 1) / 2)
+    const pose: WingPose = {
+        /* 肩关节同时做 XY 面（Z 轴、翼上下摆）与小幅度 ZY 面（X 轴、前后划弧，总幅 0.3 rad）转动 */
+        base: [-0.1 - flap * 0.15, 0, -0.95 - flap * 0.45],
+        elbow: [0.05, 0, 1.45 + 0.1 * (down - 0.5)],
+        /* 翼腕 / 翼爪 / 翼指绕 X 轴摆动；最外侧翼指的扇开量收小，避免翼尖过度外翻 */
+        wrist: [-flap * 0.35, 0, 0],
+        claw: [-flap * 0.2, 0, 0],
+        finger: [-flap * 0.3, 0, -(0.05 + 0.35 * down)],
+    }
+    return {...wingOf(-1, pose), ...wingOf(1, pose)}
+}
+
+/**
+ * 行走 / 奔跑时的前肢（翼）摆动：翼根前后摆，摆动相抬肘让爪尖离地。
+ * 前肢与对角后腿同相（左翼随右后腿、右翼随左后腿），形成四足式步态。
+ */
+const walkWings = (left: FootCycle, right: FootCycle, amplitude: number): JointEulers => {
+    const baseZ = -FOLDED_SPREAD * WING_SPREAD_Z
+    const elbowZ = FOLDED_SPREAD * WING_ELBOW_SPREAD_Z
+    const fingerZ = -FOLDED_SPREAD * WING_FINGER_SPREAD_Z
+    const poseOf = (foot: FootCycle): WingPose => ({
+        base: [-0.1 - foot.forward * amplitude, 0, baseZ],
+        elbow: [0.05 + foot.lift * 0.18, 0, elbowZ],
+        wrist: [0.1 - foot.lift * 0.06, 0, 0],
+        claw: [0.1, 0, 0],
+        finger: [0, 0, fingerZ],
+    })
+    return {...wingOf(-1, poseOf(left)), ...wingOf(1, poseOf(right))}
+}
 
 /** 非攻击侧翼的支撑姿态（避免单翼攻击时另一侧停在完全展开的静止姿态） */
 const braceWing = (sign: number, crouch: number): JointEulers => {
@@ -185,7 +231,7 @@ const walking: PoseFunction = (t, total) => {
         neck: [0.28 - bob * 0.55, loopSin(phase, 1, 0.2) * 0.04, -roll * 0.3],
         head: [-0.22 + bob * 0.3, -loopSin(phase, 1, 0.2) * 0.05, -roll * 0.5],
         ...loopTail(phase, 0.13, -loopSin(phase, 1) * 0.07, 1),
-        ...foldedWings(loopSin(phase, 1) * 0.03),
+        ...walkWings(right, left, 0.32),
         ...walkLeg('l', left),
         ...walkLeg('r', right),
     }
@@ -207,13 +253,13 @@ const sprinting: PoseFunction = (t, total) => {
         neck: [0.34 - bob * 0.6, loopSin(phase, 1, 0.2) * 0.05, -roll * 0.35],
         head: [-0.26 + bob * 0.35, -loopSin(phase, 1, 0.2) * 0.06, -roll * 0.55],
         ...loopTail(phase, 0.14, -loopSin(phase, 1) * 0.08, 1),
-        ...foldedWings(loopSin(phase, 1) * 0.04),
+        ...walkWings(right, left, 0.45),
         ...walkLeg('l', left),
         ...walkLeg('r', right),
     }
 }
 
-/** 飞行：大幅振翅、双腿收起（悬停 / 升降共用同一轮廓） */
+/** 飞行：完整上下振翅、双腿收起（悬停 / 升降共用同一轮廓） */
 const flying: PoseFunction = (t, total) => {
     const phase = cyclePhase(t, total)
     const flap = loopSin(phase, 1)
@@ -222,7 +268,7 @@ const flying: PoseFunction = (t, total) => {
         withers: [-0.05 + flap * 0.015, 0, 0],
         neck: [0.24 - flap * 0.02, 0, 0],
         head: [-0.2 + flap * 0.015, 0, 0],
-        ...wings(0.93 + flap * 0.035, flap),
+        ...flappingWings(flap),
         ...loopTail(phase, 0.13, loopSin(phase, 1) * 0.04, 1),
         ...allLegs(0.55, 0.72, 0.22),
     }

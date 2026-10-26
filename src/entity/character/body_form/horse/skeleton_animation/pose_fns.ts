@@ -2,7 +2,7 @@ import type {AttackSegment} from '../../../../../character/weapon/attack_chain.t
 import type {CharacterStateName} from '../../../../../character/state_machine/types.ts'
 import {attackPhaseProgress} from '../../common/creature_runtime/timing.ts'
 import {poseAt, type JointEulers, type PoseFunction} from '../../common/creature_runtime/pose.ts'
-import {clamp01, cyclePhase, easeInCubic, easeOutCubic, footSwing, loopBreath, loopSin, phaseOffset, smoothstep, TAU} from '../../common/creature_runtime/gait.ts'
+import {clamp01, cyclePhase, easeInCubic, easeOutCubic, footSwing, loopBreath, loopSin, phaseOffset, smoothstep, TAU, type FootCycle} from '../../common/creature_runtime/gait.ts'
 
 /** 马姿态函数（四足，高腿长颈）：四拍步态 + 躯干起伏 + 长颈/尾滞后。 */
 
@@ -39,28 +39,40 @@ const allLegs = (hip: number, knee: number, fetlock: number, foot: number): Join
 }
 
 /** 四拍步：左后 → 左前 → 右后 → 右前；支撑相后推、摆动相抬蹄前送 */
+const applyFront = (out: Record<string, readonly [number, number, number]>, leg: FrontLeg, s: FootCycle, amplitude: number): void => {
+    const push = Math.max(0, -s.forward)
+    out[leg[0]] = [-s.forward * amplitude, 0, 0]
+    out[leg[1]] = [0.02 + s.lift * 0.9 + push * 0.1, 0, 0]
+    out[leg[2]] = [-0.02 - s.lift * 0.55, 0, 0]
+    out[leg[3]] = [-s.lift * 0.4 + Math.max(0, s.forward) * 0.05, 0, 0]
+}
+
+const applyRear = (out: Record<string, readonly [number, number, number]>, leg: RearLeg, s: FootCycle, amplitude: number): void => {
+    const push = Math.max(0, -s.forward)
+    out[leg[0]] = [-s.forward * amplitude * 0.9, 0, 0]
+    out[leg[1]] = [0.08 + s.lift * 0.6 + push * 0.08, 0, 0]
+    out[leg[2]] = [-0.12 - s.lift * 0.75, 0, 0]
+    out[leg[3]] = [-0.03 + s.lift * 0.35, 0, 0]
+}
+
 const walkLegs = (phase: number, amplitude: number): JointEulers => {
     const out: Record<string, readonly [number, number, number]> = {}
-    const front = (leg: FrontLeg, offset: number): void => {
-        const s = footSwing(phaseOffset(phase, offset), 0.62)
-        const push = Math.max(0, -s.forward)
-        out[leg[0]] = [-s.forward * amplitude, 0, 0]
-        out[leg[1]] = [0.02 + s.lift * 0.9 + push * 0.1, 0, 0]
-        out[leg[2]] = [-0.02 - s.lift * 0.55, 0, 0]
-        out[leg[3]] = [-s.lift * 0.4 + Math.max(0, s.forward) * 0.05, 0, 0]
-    }
-    const rear = (leg: RearLeg, offset: number): void => {
-        const s = footSwing(phaseOffset(phase, offset), 0.62)
-        const push = Math.max(0, -s.forward)
-        out[leg[0]] = [-s.forward * amplitude * 0.9, 0, 0]
-        out[leg[1]] = [0.08 + s.lift * 0.6 + push * 0.08, 0, 0]
-        out[leg[2]] = [-0.12 - s.lift * 0.75, 0, 0]
-        out[leg[3]] = [-0.03 + s.lift * 0.35, 0, 0]
-    }
-    rear(REAR.rl, 0)
-    front(FRONT.fl, 0.25)
-    rear(REAR.rr, 0.5)
-    front(FRONT.fr, 0.75)
+    applyRear(out, REAR.rl, footSwing(phase, 0.62), amplitude)
+    applyFront(out, FRONT.fl, footSwing(phaseOffset(phase, 0.25), 0.62), amplitude)
+    applyRear(out, REAR.rr, footSwing(phaseOffset(phase, 0.5), 0.62), amplitude)
+    applyFront(out, FRONT.fr, footSwing(phaseOffset(phase, 0.75), 0.62), amplitude)
+    return out
+}
+
+/** 奔跑（bound）：左右腿同相，前肢 / 后肢成对交替，不再使用四拍交错步 */
+const boundLegs = (phase: number, amplitude: number): JointEulers => {
+    const out: Record<string, readonly [number, number, number]> = {}
+    const front = footSwing(phase, 0.62)
+    const rear = footSwing(phaseOffset(phase, 0.5), 0.62)
+    applyFront(out, FRONT.fl, front, amplitude)
+    applyFront(out, FRONT.fr, front, amplitude)
+    applyRear(out, REAR.rl, rear, amplitude)
+    applyRear(out, REAR.rr, rear, amplitude)
     return out
 }
 
@@ -141,7 +153,7 @@ const walking: PoseFunction = (t, total) => {
     }
 }
 
-/** 跑步：步幅更大的快速步态、躯干前倾、鬃尾向后拖曳 */
+/** 跑步（bound）：左右腿同相、躯干前倾、鬃尾向后拖曳 */
 const sprinting: PoseFunction = (t, total) => {
     const phase = cyclePhase(t, total)
     const bob = loopSin(phase, 2) * 0.028
@@ -154,7 +166,7 @@ const sprinting: PoseFunction = (t, total) => {
         withers: [0.16 - bob * 0.5, loopSin(phase, 1, 0.2) * 0.04, -roll * 0.4],
         neck: [0.12 + bob * 0.35, loopSin(phase, 1, 0.1) * 0.05, -roll * 0.3],
         head: [-0.28 - loopSin(phase, 2, -0.85) * 0.07, -loopSin(phase, 1) * 0.05, -roll * 0.6],
-        ...walkLegs(phase, 0.82),
+        ...boundLegs(phase, 0.82),
         ...loopTail(phase, 0.14, -loopSin(phase, 1) * 0.08, 1),
         ...earWave(phase, 1, 0.1),
     }
