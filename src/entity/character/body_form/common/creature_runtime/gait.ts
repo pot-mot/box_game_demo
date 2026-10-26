@@ -40,6 +40,24 @@ export const phaseOffset = (phase: number, offset: number): number => {
     return value < 0 ? value + 1 : value
 }
 
+/**
+ * 循环相位：把 clip 内时间归一化为 [0,1)，`t = total` 时精确回到 0。
+ * 烘焙首帧（t=0）与末帧（t=total）因此取到同一姿态，循环接缝无跳变。
+ */
+export const cyclePhase = (t: number, total: number): number => {
+    if (!(total > 0)) return 0
+    const phase = (t % total) / total
+    return phase < 0 ? phase + 1 : phase
+}
+
+/** 循环正弦：`cycles` 必须为整数，首尾的值与变化率才能同时相接（斜率连续） */
+export const loopSin = (phase: number, cycles: number, offset = 0): number =>
+    Math.sin(phase * TAU * cycles + offset)
+
+/** 循环呼吸起伏（只返回 0–1）：`cycles` 必须为整数 */
+export const loopBreath = (phase: number, cycles: number, offset = 0): number =>
+    (loopSin(phase, cycles, offset) + 1) / 2
+
 /** 单足周期采样：forward = 足端相对躯干的前后位置（+1 最前 / -1 最后），lift = 抬脚高度（0–1） */
 export interface FootCycle {
     readonly forward: number
@@ -65,7 +83,3 @@ export const footSwing = (phase: number, stanceRatio = 0.62): FootCycle => {
 /** 关节相位跟随：目标值按延迟相位采样（尾巴 / 颈部滞后） */
 export const lagged = (t: number, frequency: number, lag: number, amplitude: number): number =>
     Math.sin(t * frequency - lag) * amplitude
-
-/** 呼吸起伏（只返回 0–1） */
-export const breath = (t: number, frequency: number): number =>
-    (Math.sin(t * frequency) + 1) / 2

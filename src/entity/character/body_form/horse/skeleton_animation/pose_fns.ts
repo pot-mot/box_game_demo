@@ -2,7 +2,7 @@ import type {AttackSegment} from '../../../../../character/weapon/attack_chain.t
 import type {CharacterStateName} from '../../../../../character/state_machine/types.ts'
 import {attackPhaseProgress} from '../../common/creature_runtime/timing.ts'
 import {poseAt, type JointEulers, type PoseFunction} from '../../common/creature_runtime/pose.ts'
-import {breath, clamp01, easeInCubic, easeOutCubic, footSwing, phaseOffset, smoothstep, TAU} from '../../common/creature_runtime/gait.ts'
+import {clamp01, cyclePhase, easeInCubic, easeOutCubic, footSwing, loopBreath, loopSin, phaseOffset, smoothstep, TAU} from '../../common/creature_runtime/gait.ts'
 
 /** 马姿态函数（四足，高腿长颈）：四拍步态 + 躯干起伏 + 长颈/尾滞后。 */
 
@@ -64,83 +64,110 @@ const walkLegs = (phase: number, amplitude: number): JointEulers => {
     return out
 }
 
-const tailPose = (t: number, speed: number, amplitude: number, yawBias = 0): JointEulers => ({
-    tailA: [0.1 + Math.sin(t * speed * 0.5) * amplitude * 0.4, yawBias + Math.sin(t * speed) * amplitude, 0],
-    tailB: [0.02 + Math.sin(t * speed * 0.5 - 0.5) * amplitude * 0.55, yawBias * 1.2 + Math.sin(t * speed - 0.45) * amplitude * 1.2, 0],
-    tailC: [Math.sin(t * speed * 0.5 - 0.9) * amplitude * 0.7, yawBias * 1.4 + Math.sin(t * speed - 0.85) * amplitude * 1.4, 0],
-})
+/** 尾部摆动：[yaw, pitch] 为各轴每 clip 周期的摆动次数 */
+const tailWave = (
+    phase: number,
+    cycles: readonly [yaw: number, pitch: number],
+    amplitude: number,
+    yawBias = 0,
+): JointEulers => {
+    const yaw = phase * TAU * cycles[0]
+    const pitch = phase * TAU * cycles[1]
+    return {
+        tailA: [0.1 + Math.sin(pitch) * amplitude * 0.4, yawBias + Math.sin(yaw) * amplitude, 0],
+        tailB: [0.02 + Math.sin(pitch - 0.5) * amplitude * 0.55, yawBias * 1.2 + Math.sin(yaw - 0.45) * amplitude * 1.2, 0],
+        tailC: [Math.sin(pitch - 0.9) * amplitude * 0.7, yawBias * 1.4 + Math.sin(yaw - 0.85) * amplitude * 1.4, 0],
+    }
+}
 
-const earPose = (t: number, flatten = 0): JointEulers => {
-    const twitch = Math.max(0, Math.sin(t * 1.7) - 0.94) * 0.5
+/** 循环状态尾部：各轴取整数周期，首尾严格相接 */
+const loopTail = (phase: number, amplitude: number, yawBias = 0, cycles = 1): JointEulers =>
+    tailWave(phase, [cycles, Math.max(1, Math.round(cycles / 2))], amplitude, yawBias)
+
+/** 非循环状态 / 攻击：沿用绝对时间的摆动速度 */
+const freeTail = (t: number, speed: number, amplitude: number, yawBias = 0): JointEulers =>
+    tailWave(t, [speed / TAU, (speed * 0.5) / TAU], amplitude, yawBias)
+
+/** 耳部抖动：[phase, cycles] 形式保证循环状态首尾一致 */
+const earWave = (phase: number, cycles: number, flatten = 0): JointEulers => {
+    const twitch = Math.max(0, loopSin(phase, cycles) - 0.94) * 0.5
     return {
         earL: [flatten, 0, 0.14 + twitch],
         earR: [flatten * 0.9, 0, -0.14 - twitch * 0.6],
     }
 }
 
-const idle: PoseFunction = (t) => {
-    const breathe = breath(t, 1.35)
-    const shift = Math.sin(t * 0.55)
+/** 非循环状态：沿用绝对时间的耳部抖动 */
+const freeEar = (t: number, flatten = 0): JointEulers => earWave(t, 1.7 / TAU, flatten)
+
+const idle: PoseFunction = (t, total) => {
+    const phase = cyclePhase(t, total)
+    const breathe = loopBreath(phase, 2)
+    const shift = loopSin(phase, 1)
     return {
         body: poseAt(
-            [Math.sin(t * 0.55) * 0.01 + shift * 0.006, Math.sin(t * 0.4) * 0.012, Math.sin(t * 0.8) * 0.008],
+            [loopSin(phase, 1) * 0.01 + shift * 0.006, loopSin(phase, 1) * 0.012, loopSin(phase, 1) * 0.008],
             [shift * 0.008, BODY_Y + breathe * 0.008, BODY_Z],
         ),
-        withers: [0.1 + Math.sin(t * 1.4) * 0.025 + breathe * 0.01, Math.sin(t * 0.4) * 0.05, 0],
-        neck: [0.02 + Math.sin(t * 1.3 + 0.3) * 0.02, Math.sin(t * 0.4 + 0.15) * 0.06, 0],
-        head: [-0.15 - Math.sin(t * 1.4 + 0.7) * 0.02, Math.sin(t * 0.4 + 0.3) * 0.08, Math.sin(t * 0.9) * 0.015],
-        ...tailPose(t, 1.2, 0.1),
-        ...earPose(t),
+        withers: [0.1 + loopSin(phase, 2) * 0.025 + breathe * 0.01, loopSin(phase, 1) * 0.05, 0],
+        neck: [0.02 + loopSin(phase, 2, 0.3) * 0.02, loopSin(phase, 1, 0.15) * 0.06, 0],
+        head: [-0.15 - loopSin(phase, 2, 0.7) * 0.02, loopSin(phase, 1, 0.3) * 0.08, loopSin(phase, 1) * 0.015],
+        ...loopTail(phase, 0.1, 0, 2),
+        ...earWave(phase, 2),
         ...allLegs(0, 0.04, 0.02, -0.03),
         flHip: [0.01 + shift * 0.012, 0, 0],
         frHip: [0.01 - shift * 0.012, 0, 0],
     }
 }
 
-const walking: PoseFunction = (t) => {
-    const phase = (t % 0.8) / 0.8
-    const bob = Math.sin(phase * TAU * 2) * 0.016
-    const roll = Math.sin(phase * TAU) * 0.02
+/** 待机首帧静态姿态：交互 / 格挡 / 破防等无专属动作的状态停在此姿态，避免借用 idle 的短周期摆动 */
+const IDLE_BASE: JointEulers = idle(0, 1)
+
+const walking: PoseFunction = (t, total) => {
+    const phase = cyclePhase(t, total)
+    const bob = loopSin(phase, 2) * 0.016
+    const roll = loopSin(phase, 1) * 0.02
     return {
         body: poseAt(
-            [0.012 + Math.sin(phase * TAU * 2 + 0.45) * 0.01, Math.sin(phase * TAU) * 0.014, roll],
-            [Math.sin(phase * TAU) * 0.006, BODY_Y + bob, BODY_Z],
+            [0.012 + loopSin(phase, 2, 0.45) * 0.01, loopSin(phase, 1) * 0.014, roll],
+            [loopSin(phase, 1) * 0.006, BODY_Y + bob, BODY_Z],
         ),
-        withers: [0.1 - bob * 0.35 + Math.sin(phase * TAU * 2 + 0.7) * 0.012, Math.sin(phase * TAU + 0.2) * 0.03, -roll * 0.3],
-        neck: [0.02 + bob * 0.3 + Math.sin(phase * TAU * 2 - 0.35) * 0.016, Math.sin(phase * TAU + 0.1) * 0.04, -roll * 0.2],
-        head: [-0.15 - Math.sin(phase * TAU * 2 - 0.85) * 0.055, -Math.sin(phase * TAU) * 0.04, -roll * 0.5],
+        withers: [0.1 - bob * 0.35 + loopSin(phase, 2, 0.7) * 0.012, loopSin(phase, 1, 0.2) * 0.03, -roll * 0.3],
+        neck: [0.02 + bob * 0.3 + loopSin(phase, 2, -0.35) * 0.016, loopSin(phase, 1, 0.1) * 0.04, -roll * 0.2],
+        head: [-0.15 - loopSin(phase, 2, -0.85) * 0.055, -loopSin(phase, 1) * 0.04, -roll * 0.5],
         ...walkLegs(phase, 0.55),
-        ...tailPose(t, 2.4, 0.12, -Math.sin(phase * TAU) * 0.06),
-        ...earPose(t),
+        ...loopTail(phase, 0.12, -loopSin(phase, 1) * 0.06, 1),
+        ...earWave(phase, 1),
     }
 }
 
 /** 跑步：步幅更大的快速步态、躯干前倾、鬃尾向后拖曳 */
-const sprinting: PoseFunction = (t) => {
-    const phase = (t % 0.55) / 0.55
-    const bob = Math.sin(phase * TAU * 2) * 0.028
-    const roll = Math.sin(phase * TAU) * 0.03
+const sprinting: PoseFunction = (t, total) => {
+    const phase = cyclePhase(t, total)
+    const bob = loopSin(phase, 2) * 0.028
+    const roll = loopSin(phase, 1) * 0.03
     return {
         body: poseAt(
-            [0.04 + Math.sin(phase * TAU * 2 + 0.4) * 0.016, Math.sin(phase * TAU) * 0.02, roll],
-            [Math.sin(phase * TAU) * 0.01, BODY_Y + bob, BODY_Z],
+            [0.04 + loopSin(phase, 2, 0.4) * 0.016, loopSin(phase, 1) * 0.02, roll],
+            [loopSin(phase, 1) * 0.01, BODY_Y + bob, BODY_Z],
         ),
-        withers: [0.16 - bob * 0.5, Math.sin(phase * TAU + 0.2) * 0.04, -roll * 0.4],
-        neck: [0.12 + bob * 0.35, Math.sin(phase * TAU + 0.1) * 0.05, -roll * 0.3],
-        head: [-0.28 - Math.sin(phase * TAU * 2 - 0.85) * 0.07, -Math.sin(phase * TAU) * 0.05, -roll * 0.6],
+        withers: [0.16 - bob * 0.5, loopSin(phase, 1, 0.2) * 0.04, -roll * 0.4],
+        neck: [0.12 + bob * 0.35, loopSin(phase, 1, 0.1) * 0.05, -roll * 0.3],
+        head: [-0.28 - loopSin(phase, 2, -0.85) * 0.07, -loopSin(phase, 1) * 0.05, -roll * 0.6],
         ...walkLegs(phase, 0.82),
-        ...tailPose(t, 3.8, 0.14, -Math.sin(phase * TAU) * 0.08),
-        ...earPose(t, 0.1),
+        ...loopTail(phase, 0.14, -loopSin(phase, 1) * 0.08, 1),
+        ...earWave(phase, 1, 0.1),
     }
 }
 
 /** 飞行：四肢收拢、身体接近水平，尾巴向后伸展 */
-const flying: PoseFunction = (t) => {
-    const bob = Math.sin(t * 1.7) * 0.02
+const flying: PoseFunction = (t, total) => {
+    const phase = cyclePhase(t, total)
+    const bob = loopSin(phase, 1) * 0.02
     return {
         body: poseAt([-0.14 + bob * 0.25, 0, 0], [0, BODY_Y + bob, BODY_Z]),
         withers: [0.3, 0, 0], neck: [0.14, 0, 0], head: [-0.24, 0, 0],
-        ...tailPose(t, 2.6, 0.1, 0.02),
+        ...loopTail(phase, 0.1, 0.02, 1),
         flHip: [-0.62, 0, 0], flKnee: [0.72, 0, 0], flFetlock: [0.26, 0, 0], flFoot: [0.1, 0, 0],
         frHip: [-0.62, 0, 0], frKnee: [0.72, 0, 0], frFetlock: [0.26, 0, 0], frFoot: [0.1, 0, 0],
         rlHip: [0.5, 0, 0], rlKnee: [0.7, 0, 0], rlHock: [0.28, 0, 0], rlFoot: [0.12, 0, 0],
@@ -153,7 +180,7 @@ const jumping: PoseFunction = (t) => {
     return {
         body: poseAt([-0.2 + k * 0.1, 0, 0], [0, BODY_Y + 0.02 + k * 0.015, BODY_Z]),
         withers: [0.34 - k * 0.06, 0, 0], neck: [0.04 - k * 0.02, 0, 0], head: [-0.2, 0, 0],
-        ...tailPose(t, 1.4, 0.16, 0.08),
+        ...freeTail(t, 1.4, 0.16, 0.08),
         flHip: [-0.35 - k * 0.18, 0, 0], flKnee: [0.45 + k * 0.2, 0, 0], flFetlock: [0.2, 0, 0], flFoot: [0.08, 0, 0],
         frHip: [-0.35 - k * 0.18, 0, 0], frKnee: [0.45 + k * 0.2, 0, 0], frFetlock: [0.2, 0, 0], frFoot: [0.08, 0, 0],
         rlHip: [0.55 + k * 0.15, 0, 0], rlKnee: [0.55, 0, 0], rlHock: [0.18, 0, 0], rlFoot: [0.1, 0, 0],
@@ -161,31 +188,35 @@ const jumping: PoseFunction = (t) => {
     }
 }
 
-const falling: PoseFunction = (t) => ({
-    body: poseAt([0.1, 0, 0], [0, BODY_Y, BODY_Z]),
-    withers: [0.14, 0, 0], neck: [0.03, 0, 0], head: [-0.12, 0, 0],
-    ...tailPose(t, 2.6, 0.14, 0.06),
-    flHip: [-0.5, 0, 0], flKnee: [0.4, 0, 0], flFetlock: [0.18, 0, 0], flFoot: [0.1, 0, 0],
-    frHip: [-0.5, 0, 0], frKnee: [0.4, 0, 0], frFetlock: [0.18, 0, 0], frFoot: [0.1, 0, 0],
-    rlHip: [0.2, 0, 0], rlKnee: [0.6, 0, 0], rlHock: [0.15, 0, 0], rlFoot: [0.1, 0, 0],
-    rrHip: [0.2, 0, 0], rrKnee: [0.6, 0, 0], rrHock: [0.15, 0, 0], rrFoot: [0.1, 0, 0],
-})
-
-const swimming: PoseFunction = (t) => {
-    const phase = (t % 1.0) / 1.0
+const falling: PoseFunction = (t, total) => {
+    const phase = cyclePhase(t, total)
     return {
-        body: poseAt([0.12, Math.sin(phase * TAU) * 0.02, 0], [0, BODY_Y + Math.sin(phase * TAU * 2) * 0.008, BODY_Z]),
-        withers: [0.12, 0, 0], neck: [0.03, Math.sin(phase * TAU + 0.2) * 0.03, 0], head: [-0.1, -Math.sin(phase * TAU) * 0.04, 0],
-        ...walkLegs(phase, 0.65),
-        ...tailPose(t, 3.2, 0.16, Math.sin(phase * TAU) * 0.08),
+        body: poseAt([0.1, 0, 0], [0, BODY_Y, BODY_Z]),
+        withers: [0.14, 0, 0], neck: [0.03, 0, 0], head: [-0.12, 0, 0],
+        ...loopTail(phase, 0.14, 0.06, 1),
+        flHip: [-0.5, 0, 0], flKnee: [0.4, 0, 0], flFetlock: [0.18, 0, 0], flFoot: [0.1, 0, 0],
+        frHip: [-0.5, 0, 0], frKnee: [0.4, 0, 0], frFetlock: [0.18, 0, 0], frFoot: [0.1, 0, 0],
+        rlHip: [0.2, 0, 0], rlKnee: [0.6, 0, 0], rlHock: [0.15, 0, 0], rlFoot: [0.1, 0, 0],
+        rrHip: [0.2, 0, 0], rrKnee: [0.6, 0, 0], rrHock: [0.15, 0, 0], rrFoot: [0.1, 0, 0],
     }
 }
 
-const floating: PoseFunction = (t) => {
-    const paddle = Math.sin(t * 3)
+const swimming: PoseFunction = (t, total) => {
+    const phase = cyclePhase(t, total)
+    return {
+        body: poseAt([0.12, loopSin(phase, 1) * 0.02, 0], [0, BODY_Y + loopSin(phase, 2) * 0.008, BODY_Z]),
+        withers: [0.12, 0, 0], neck: [0.03, loopSin(phase, 1, 0.2) * 0.03, 0], head: [-0.1, -loopSin(phase, 1) * 0.04, 0],
+        ...walkLegs(phase, 0.65),
+        ...loopTail(phase, 0.16, loopSin(phase, 1) * 0.08, 1),
+    }
+}
+
+const floating: PoseFunction = (t, total) => {
+    const phase = cyclePhase(t, total)
+    const paddle = loopSin(phase, 1)
     return {
         body: poseAt([0.3, 0, 0], [0, BODY_Y, BODY_Z]), withers: [0.3, 0, 0], neck: [0.06, 0, 0], head: [-0.2, 0, 0],
-        ...tailPose(t, 2.0, 0.12),
+        ...loopTail(phase, 0.12, 0, 1),
         flHip: [-0.4 + paddle * 0.18, 0, 0], flKnee: [0.55 - paddle * 0.12, 0, 0], flFetlock: [0.2, 0, 0], flFoot: [0.1, 0, 0],
         frHip: [-0.4 - paddle * 0.18, 0, 0], frKnee: [0.55 + paddle * 0.12, 0, 0], frFetlock: [0.2, 0, 0], frFoot: [0.1, 0, 0],
         rlHip: [0.5, 0, 0], rlKnee: [0.4, 0, 0], rlHock: [0.2, 0, 0], rlFoot: [0.1, 0, 0],
@@ -204,13 +235,13 @@ const rolling: PoseFunction = (t) => {
     return {
         body: poseAt([0.45 + k * 0.2, 0, 0.25 * k], [0, BODY_Y - 0.15 * k, BODY_Z]),
         withers: [0.5, 0, 0], head: [0.25, 0, 0],
-        ...tailPose(t, 4, 0.1), ...allLegs(0.85, 0.85, 0.35, 0.2),
+        ...freeTail(t, 4, 0.1), ...allLegs(0.85, 0.85, 0.35, 0.2),
     }
 }
 
 const flinching: PoseFunction = (t) => ({
     body: poseAt([-0.18, 0.03, -0.04], [0, BODY_Y, BODY_Z]), withers: [-0.25, 0, 0.1], neck: [-0.1, 0, 0.06], head: [0.2, -0.12, 0],
-    ...tailPose(t, 5, 0.06), ...earPose(t, 0.4), ...allLegs(-0.15, 0.28, 0.1, 0),
+    ...freeTail(t, 5, 0.06), ...freeEar(t, 0.4), ...allLegs(-0.15, 0.28, 0.1, 0),
 })
 
 const knockdown: PoseFunction = () => ({
@@ -228,7 +259,11 @@ const gettingUp: PoseFunction = (t) => {
 }
 
 const POSES: Partial<Record<CharacterStateName, PoseFunction>> = {
-    walking, sprinting, jumping, falling, flying, swimming, floating, dying, rolling, flinching, knockdown, getting_up: gettingUp,
+    walking, sprinting, jumping, falling, flying, swimming, floating, dying, rolling, flinching,
+    interacting: () => IDLE_BASE,
+    blocking: () => IDLE_BASE,
+    guard_broken: () => IDLE_BASE,
+    knockdown, getting_up: gettingUp,
 }
 
 export const horsePose = (state: CharacterStateName): PoseFunction => POSES[state] ?? idle
@@ -248,7 +283,7 @@ export const horseAttackPose = (segment: AttackSegment): PoseFunction => (t) => 
             frHip: [raise * 0.2 - kick * 1.02, 0, 0], frKnee: [0.1 + raise * 0.3 - kick * 0.3, 0, 0], frFetlock: [0.02 - kick * 0.15, 0, 0], frFoot: [-0.03 - kick * 0.2, 0, 0],
             rlHip: [-kick * 0.2 + 0.15, 0, 0], rlKnee: [0.3 + kick * 0.1, 0, 0], rlHock: [0.1, 0, 0], rlFoot: [0, 0, 0],
             rrHip: [-kick * 0.2 + 0.15, 0, 0], rrKnee: [0.3 + kick * 0.1, 0, 0], rrHock: [0.1, 0, 0], rrFoot: [0, 0, 0],
-            ...tailPose(t, 4.4, 0.2, -kick * 0.2),
+            ...freeTail(t, 4.4, 0.2, -kick * 0.2),
         }
     }
     if (segment.key === 'heavy') {
@@ -265,7 +300,7 @@ export const horseAttackPose = (segment: AttackSegment): PoseFunction => (t) => 
             frHip: [-raise * 1.18 + slam * 0.06, 0, 0], frKnee: [0.08 + raise * 0.52 - slam * 0.13, 0, 0], frFetlock: [0.02 + raise * 0.3 - slam * 0.08, 0, 0], frFoot: [-0.03 + raise * 0.14 - slam * 0.17, 0, 0],
             rlHip: [-raise * 0.12 + slam * 0.05, 0, 0], rlKnee: [0.3 + raise * 0.12, 0, 0], rlHock: [0.1 + raise * 0.05, 0, 0], rlFoot: [0, 0, 0],
             rrHip: [-raise * 0.12 + slam * 0.05, 0, 0], rrKnee: [0.3 + raise * 0.12, 0, 0], rrHock: [0.1 + raise * 0.05, 0, 0], rrFoot: [0, 0, 0],
-            ...tailPose(t, 3.8, 0.2, -raise * 0.2 + slam * 0.12),
+            ...freeTail(t, 3.8, 0.2, -raise * 0.2 + slam * 0.12),
         }
     }
     if (segment.step === 2) {
@@ -279,7 +314,7 @@ export const horseAttackPose = (segment: AttackSegment): PoseFunction => (t) => 
             frHip: [-gather * 0.15 - kick * 0.08, 0, 0], frKnee: [0.22 + gather * 0.08, 0, 0], frFetlock: [0.08, 0, 0], frFoot: [0, 0, 0],
             rlHip: [-gather * 0.5 + kick * 1.2, 0, 0], rlKnee: [0.08 + gather * 0.65 - kick * 0.3, 0, 0], rlHock: [-0.12 + gather * 0.45 - kick * 0.3, 0, 0], rlFoot: [-0.03 + gather * 0.2 - kick * 0.15, 0, 0],
             rrHip: [-gather * 0.46 + kick * 1.12, 0, 0], rrKnee: [0.08 + gather * 0.62 - kick * 0.28, 0, 0], rrHock: [-0.12 + gather * 0.42 - kick * 0.28, 0, 0], rrFoot: [-0.03 + gather * 0.18 - kick * 0.14, 0, 0],
-            ...tailPose(t, 4.6, 0.22, -kick * 0.25),
+            ...freeTail(t, 4.6, 0.22, -kick * 0.25),
         }
     }
     return {
@@ -291,6 +326,6 @@ export const horseAttackPose = (segment: AttackSegment): PoseFunction => (t) => 
         frHip: [raise * 0.22 - kick * 1.18, 0, raise * 0.04], frKnee: [0.08 + raise * 0.56 - kick * 0.34, 0, 0], frFetlock: [0.02 + raise * 0.36 - kick * 0.2, 0, 0], frFoot: [-0.03 + raise * 0.18 - kick * 0.26, 0, 0],
         rlHip: [0.12 + raise * 0.08, 0, 0], rlKnee: [0.3 + raise * 0.1, 0, 0], rlHock: [0.1, 0, 0], rlFoot: [0, 0, 0],
         rrHip: [0.12 + raise * 0.08, 0, 0], rrKnee: [0.3 + raise * 0.1, 0, 0], rrHock: [0.1, 0, 0], rrFoot: [0, 0, 0],
-        ...tailPose(t, 3.8, 0.2, -kick * 0.2 + raise * 0.08),
+        ...freeTail(t, 3.8, 0.2, -kick * 0.2 + raise * 0.08),
     }
 }

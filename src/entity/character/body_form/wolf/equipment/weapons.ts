@@ -39,6 +39,7 @@ const CLASSES: Record<string, MeleeWeaponClassConfig> = {
         id: 'wolf_bite', type: 'melee', natural: true, damageType: 'physical',
         attackModules: moduleOf('mouth', 'weapon.wolf_bite'),
         damage: 4, knockbackForce: 3, knockbackY: 1, detectionRange: 6,
+        timeScale: 2,
         mountJointId: 'mouthMount',
         detectBoxes: [{jointId: 'body', size: {x: 0.45, y: 0.5, z: 0.9}, offset: {x: 0, y: 0, z: 0.45}, rotation: {x: 0, y: 0, z: 0}}],
         impulses: {
@@ -64,6 +65,7 @@ const CLASSES: Record<string, MeleeWeaponClassConfig> = {
         id: 'wolf_claw', type: 'melee', natural: true, damageType: 'physical',
         attackModules: moduleOf('claw', 'weapon.wolf_claw'),
         damage: 3, knockbackForce: 3, knockbackY: 1, detectionRange: 5,
+        timeScale: 2,
         mountJointId: 'flFoot',
         detectBoxes: [{jointId: 'body', size: {x: 0.6, y: 0.6, z: 0.7}, offset: {x: 0, y: 0, z: 0.3}, rotation: {x: 0, y: 0, z: 0}}],
     }, {
@@ -87,6 +89,7 @@ const CLASSES: Record<string, MeleeWeaponClassConfig> = {
         id: 'wolf_short_sword', type: 'melee', damageType: 'physical',
         attackModules: moduleOf('mouth', 'weapon.wolf_short_sword'),
         damage: 2, knockbackForce: 2, knockbackY: 1, detectionRange: 6,
+        timeScale: 2,
         /* 口含剑横咬：绕 X 转 90° 使刃身指向前方（+Z），再绕刃轴转 90° 让刃面水平 */
         mountJointId: 'mouthMount', mountRotation: [Math.PI / 2, Math.PI / 2, 0],
         detectBoxes: [{jointId: 'body', size: {x: 0.9, y: 0.7, z: 0.8}, offset: {x: 0, y: 0, z: 0.35}, rotation: {x: 0, y: 0, z: 0}}],
@@ -106,6 +109,7 @@ const CLASSES: Record<string, MeleeWeaponClassConfig> = {
         id: 'wolf_claw_blade', type: 'melee', damageType: 'physical',
         attackModules: moduleOf('claw', 'weapon.wolf_claw_blade'),
         damage: 3, knockbackForce: 3, knockbackY: 1, detectionRange: 5,
+        timeScale: 2,
         mountJointId: 'flFoot',
         detectBoxes: [{jointId: 'body', size: {x: 0.6, y: 0.6, z: 0.7}, offset: {x: 0, y: 0, z: 0.3}, rotation: {x: 0, y: 0, z: 0}}],
     }, {
@@ -124,6 +128,7 @@ const CLASSES: Record<string, MeleeWeaponClassConfig> = {
         id: 'wolf_long_sword', type: 'melee', damageType: 'physical',
         attackModules: moduleOf('mouth', 'weapon.wolf_long_sword'),
         damage: 3, knockbackForce: 5, knockbackY: 2, detectionRange: 8,
+        timeScale: 2,
         /* 口含剑横咬：绕 X 转 90° 使刃身指向前方（+Z），再绕刃轴转 90° 让刃面水平 */
         mountJointId: 'mouthMount', mountRotation: [Math.PI / 2, Math.PI / 2, 0],
         detectBoxes: [{jointId: 'body', size: {x: 1.0, y: 0.7, z: 0.94}, offset: {x: 0, y: 0, z: 0.4}, rotation: {x: 0, y: 0, z: 0}}],

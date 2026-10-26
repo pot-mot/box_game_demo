@@ -43,11 +43,11 @@ const RANGED_ATTACK_SPECS: Record<string, RangedAttackSpec> = {
     grenade: {segmentId: 'grenade_throw', duration: 0.8, cooldown: 0, chargeable: true, speedMultiplier: 1.5},
     molotov: {segmentId: 'molotov_throw', duration: 0.8, cooldown: 0, chargeable: true, speedMultiplier: 1.5},
     throwing_dart: {segmentId: 'throwing_dart_fling', duration: 0.2, cooldown: 0, chargeable: true},
-    /* 龙吐息（三种机制共用蓄力/释放时序） */
-    breath_natural: {segmentId: 'breath_natural_blast', duration: 0.6, cooldown: 0, chargeable: true},
-    breath_fireball: {segmentId: 'breath_fireball_blast', duration: 0.65, cooldown: 0, chargeable: true},
-    breath_lightning: {segmentId: 'breath_lightning_blast', duration: 0.55, cooldown: 0, chargeable: true},
-    breath_laser: {segmentId: 'breath_laser_beam', duration: 1.1, cooldown: 0, chargeable: true},
+    /* 龙吐息（三种机制共用蓄力/释放时序）；随生物攻击整体再减速 50% */
+    breath_natural: {segmentId: 'breath_natural_blast', duration: 0.6, cooldown: 0, chargeable: true, speedMultiplier: 0.5},
+    breath_fireball: {segmentId: 'breath_fireball_blast', duration: 0.65, cooldown: 0, chargeable: true, speedMultiplier: 0.5},
+    breath_lightning: {segmentId: 'breath_lightning_blast', duration: 0.55, cooldown: 0, chargeable: true, speedMultiplier: 0.5},
+    breath_laser: {segmentId: 'breath_laser_beam', duration: 1.1, cooldown: 0, chargeable: true, speedMultiplier: 0.5},
 }
 
 /** 远程武器段 id（缺省 = `{weaponId}_shot`） */

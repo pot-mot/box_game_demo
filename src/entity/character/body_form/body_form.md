@@ -58,6 +58,12 @@
   转向 / 瞄准 additive 层；falling 垂直速度收腿；播放后 `model.updateDeform()`；**不执行运行时 IK**）。
 - `skeleton_animation/form_animation.ts`：编辑器 clip 预览类型与 `FormAnimation` 接口；运行时不再使用 clip player。
 - `skeleton_animation/authored_attack.ts`：跨体形作者攻击数据格式与编译器（`AuthoredAttackClip`）。
+- **循环动画接缝**：`idle` / `walking` / `sprinting` / `swimming` / `floating` / `flying` / `falling` / `blocking` 等
+  `loop = true` 的 pose 函数必须用 `creature_runtime/gait.ts` 的 `cyclePhase(t, total)` 归一化相位，周期项一律经
+  `loopSin` / `loopBreath` 并以**整数** `cycles` 驱动（尾部 / 耳部对应 `loopTail` / `earWave`）。禁止在循环状态中
+  直接用绝对 `t` 采样三角函数——那会让烘焙 clip 的首帧与末帧不相等，循环时尾部 / 四肢出现跳变。
+  非循环状态（攻击、跳跃、倒地等）继续用 `freeTail` / `freeEar` 的绝对时间语义。回归用例见
+  `common/skeleton_animation/creature_loop.test.ts`（逐关节校验首尾姿态一致）。
 - `common/base.ts`：`BodyFormBase` / `BodyFormResolved` / `resolveBodyFormBase`（基础属性 + 装备 → 最终数值）。
 - `creature_runtime/equipment.ts`：生物装备外观公共装配器（体形提供尺寸 / 材质风格）。
 - `creature_runtime/pose.ts`：`bakePoseClip`（逐帧欧拉角 / 带位置姿态 → clip）。

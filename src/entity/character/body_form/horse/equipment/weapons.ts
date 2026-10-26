@@ -25,6 +25,7 @@ const CLASSES: Record<string, MeleeWeaponClassConfig> = {
         id: 'horse_iron_hoof', type: 'melee', natural: true, damageType: 'physical',
         attackModules: [{id: 'hoof', nameKey: 'weapon.horse_iron_hoof'}],
         damage: 5, knockbackForce: 8, knockbackY: 2, detectionRange: 6,
+        timeScale: 2,
         mountJointId: 'flFoot',
         detectBoxes: [{jointId: 'body', size: {x: 0.7, y: 0.8, z: 1.0}, offset: {x: 0, y: 0, z: 0.45}, rotation: {x: 0, y: 0, z: 0}}],
     }, {

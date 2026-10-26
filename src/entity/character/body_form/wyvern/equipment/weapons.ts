@@ -40,6 +40,7 @@ const CLASSES: Record<string, MeleeWeaponClassConfig> = {
             {id: 'breath', nameKey: 'attack_module.breath', requiredSlots: ['breath'], heavySlot: 'breath'},
         ],
         damage: 4, knockbackForce: 5, knockbackY: 2, detectionRange: 7,
+        timeScale: 2,
         mountJointId: 'wingRWrist',
         detectBoxes: [{jointId: 'body', size: {x: 0.9, y: 0.8, z: 0.9}, offset: {x: 0, y: 0, z: 0.4}, rotation: {x: 0, y: 0, z: 0}}],
     }, {
@@ -71,6 +72,7 @@ const CLASSES: Record<string, MeleeWeaponClassConfig> = {
             {id: 'breath', nameKey: 'attack_module.breath', requiredSlots: ['breath'], heavySlot: 'breath'},
         ],
         damage: 3, knockbackForce: 4, knockbackY: 1, detectionRange: 6,
+        timeScale: 2,
         mountJointId: 'wingRWrist',
         detectBoxes: [{jointId: 'body', size: {x: 1.0, y: 0.9, z: 1.0}, offset: {x: 0, y: 0, z: 0.45}, rotation: {x: 0, y: 0, z: 0}}],
     }, {
