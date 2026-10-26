@@ -13,7 +13,7 @@ import {setupInteractables, defaultInteractableConfig, INTERACTABLE_LABELS} from
 import type {InteractableContext, InteractableKind} from '../../../entity/interactable/index.ts'
 import type {InteractionTarget} from '../../../character/interaction/types.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
-import {getInputRegistry} from '../../../input/registry.ts'
+import {getInputRegistry, isTextEntryTarget} from '../../../input/registry.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../../input/types.ts'
 import {
     INTERACTABLE_SPACING,
@@ -256,6 +256,7 @@ export const interactablesModule: ShowcaseModule = {
         /* 击杀快捷键（K）：独立事件监听，随模式释放 */
         const events = new AbortController()
         window.addEventListener('keydown', (e: KeyboardEvent) => {
+            if (isTextEntryTarget(e.target)) return
             if (e.code === KILL_KEY && !e.repeat) killPlayer()
         }, {signal: events.signal})
 

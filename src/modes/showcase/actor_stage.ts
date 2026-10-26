@@ -9,7 +9,7 @@ import {createPanel} from './panel.ts'
 import type {PanelRowInfo, PanelTab} from './panel.ts'
 import type {ShowcaseModuleRuntime} from './module.ts'
 import type {StringLocaleKey} from '../../i18n/index.ts'
-import {getInputRegistry} from '../../input/registry.ts'
+import {getInputRegistry, isFocusInteractive} from '../../input/registry.ts'
 import {MOUSE_ACTIONS_BY_MODE} from '../../input/types.ts'
 import {
     CLICK_SLOP_PX,
@@ -223,6 +223,7 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
     }, {signal: events.signal})
 
     window.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (isFocusInteractive(e.target) && e.code !== 'Escape') return
         if (e.code === 'Space') {
             e.preventDefault()
             if (e.repeat) return

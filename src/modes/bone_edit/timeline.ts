@@ -1,3 +1,4 @@
+import {isTextEntryTarget} from '../../input/registry.ts'
 import {Quaternion, Vector3} from 'three'
 import type {ClipJSON} from '../../skeleton/anim/serialization.ts'
 import {createBoneAnimationPlayer} from '../../skeleton/anim/player.ts'
@@ -540,8 +541,7 @@ export const setupTimelinePanel = (
 
     /* ── 键盘（面板聚焦时）：Ctrl+Z / Ctrl+Shift+Z / Ctrl+C / Ctrl+V / Delete ── */
     const onKeyDown = (e: KeyboardEvent): void => {
-        const target = e.target as HTMLElement | null
-        if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) return
+        if (isTextEntryTarget(e.target)) return
         if (e.ctrlKey && e.key.toLowerCase() === 'z') {
             e.preventDefault()
             if (e.shiftKey) history.redo()

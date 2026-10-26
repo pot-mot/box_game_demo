@@ -169,3 +169,95 @@ describe('输入注册表：Tab 焦点切换拦截', () => {
         field.remove()
     })
 })
+
+describe('输入注册表：交互控件焦点隔离', () => {
+    beforeEach(() => {
+        localStorage.clear()
+        createInputRegistry()
+    })
+
+    const focusedControl = (tag: 'input' | 'select' | 'textarea'): HTMLElement => {
+        const control = document.createElement(tag)
+        document.body.appendChild(control)
+        control.focus()
+        return control
+    }
+
+    it('焦点在输入框 / select / 文本域内时不响应字母键与方向键', () => {
+        const input = getInputRegistry()
+        for (const tag of ['input', 'select', 'textarea'] as const) {
+            const control = focusedControl(tag)
+
+            const letter = new KeyboardEvent('keydown', {code: 'KeyA', bubbles: true, cancelable: true})
+            control.dispatchEvent(letter)
+            expect(letter.defaultPrevented, tag).toBe(false)
+            expect(input.isActionActive('move_left'), tag).toBe(false)
+
+            const arrow = new KeyboardEvent('keydown', {code: 'ArrowUp', bubbles: true, cancelable: true})
+            control.dispatchEvent(arrow)
+            expect(arrow.defaultPrevented, tag).toBe(false)
+            expect(input.isActionActive('cycle_spawn_up'), tag).toBe(false)
+
+            control.remove()
+        }
+    })
+
+    it('按住移动键后焦点进入输入框，立即清空按住状态', () => {
+        const input = getInputRegistry()
+        window.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyW', bubbles: true}))
+        expect(input.isActionActive('move_forward')).toBe(true)
+
+        const field = document.createElement('input')
+        document.body.appendChild(field)
+        field.dispatchEvent(new FocusEvent('focusin', {bubbles: true}))
+
+        expect(input.isActionActive('move_forward')).toBe(false)
+        field.remove()
+    })
+
+    it('按钮聚焦时空格 / 回车让位给原生激活，不触发游戏跳跃', () => {
+        const input = getInputRegistry()
+        const button = document.createElement('button')
+        document.body.appendChild(button)
+        button.focus()
+
+        const space = new KeyboardEvent('keydown', {code: 'Space', bubbles: true, cancelable: true})
+        button.dispatchEvent(space)
+        expect(space.defaultPrevented).toBe(false)
+        expect(input.isActionActive('jump')).toBe(false)
+
+        const enter = new KeyboardEvent('keydown', {code: 'Enter', bubbles: true, cancelable: true})
+        button.dispatchEvent(enter)
+        expect(enter.defaultPrevented).toBe(false)
+        button.remove()
+    })
+
+    it('交互控件内按 Escape 仍保留关闭面板的全局退路', () => {
+        const input = getInputRegistry()
+        let closed = false
+        input.onActionDown('close_panel', () => { closed = true })
+
+        const field = focusedControl('input')
+        const event = new KeyboardEvent('keydown', {code: 'Escape', bubbles: true, cancelable: true})
+        field.dispatchEvent(event)
+
+        expect(closed).toBe(true)
+        expect(event.defaultPrevented).toBe(true)
+        field.remove()
+    })
+
+    it('重绑捕获优先于焦点隔离', () => {
+        const input = getInputRegistry()
+        let captured: KeyCombo | undefined
+        input.setInputCapture(combo => { captured = combo })
+
+        const button = document.createElement('button')
+        document.body.appendChild(button)
+        button.focus()
+        button.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyK', bubbles: true}))
+        button.dispatchEvent(new KeyboardEvent('keyup', {code: 'KeyK', bubbles: true}))
+
+        expect(captured).toEqual(['KeyK'])
+        button.remove()
+    })
+})

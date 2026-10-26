@@ -69,6 +69,28 @@ describe('纯摄像机：自由飞行 + 聚焦', () => {
         expect(orbit.target.z).toBeCloseTo(start.z - MOVE_STEP * FREE_FLIGHT_BOOST_MULTIPLIER)
     })
 
+    it('焦点进入输入控件后停止键盘自由飞行（原生下拉吞 keyup 回归）', () => {
+        const start = orbit.target.clone()
+        press('KeyW')
+        orbit.update(1 / 60)
+        expect(orbit.target.z).toBeLessThan(start.z)
+
+        const select = document.createElement('select')
+        document.body.appendChild(select)
+        select.dispatchEvent(new FocusEvent('focusin', {bubbles: true}))
+
+        const stopped = orbit.target.clone()
+        /* 即使没收到 keyup，焦点进入 select 后也不应再继续移动 */
+        orbit.update(1 / 60)
+        expect(orbit.target.distanceTo(stopped)).toBeCloseTo(0)
+
+        /* 控件内的方向键 / 字母键不驱动相机 */
+        select.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyW', bubbles: true}))
+        orbit.update(1 / 60)
+        expect(orbit.target.distanceTo(stopped)).toBeCloseTo(0)
+        select.remove()
+    })
+
     it('聚焦时暂停自由移动，Esc 恢复自由飞行', () => {
         const focus = new Vector3(3, 1, 3)
         orbit.focusTo(focus)

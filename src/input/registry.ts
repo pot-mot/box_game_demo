@@ -22,7 +22,7 @@ const isStrictSubset = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean
  * 游戏画面内（焦点落在 body）按 Tab 不得切换浏览器焦点，故需拦截默认行为；
  * 设置面板等控件内则保留 Tab 的默认焦点导航。
  */
-const isFocusInteractive = (target: EventTarget | null): boolean => {
+export const isFocusInteractive = (target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false
     if (target.isContentEditable) return true
     switch (target.tagName) {
@@ -31,6 +31,24 @@ const isFocusInteractive = (target: EventTarget | null): boolean => {
         case 'SELECT':
         case 'BUTTON':
         case 'A':
+            return true
+        default:
+            return false
+    }
+}
+
+/**
+ * 焦点是否位于会消费字符 / 方向键的输入控件（输入框 / 文本域 / 下拉 / 可编辑区）。
+ * 这类控件获得焦点时游戏输入完全让位，键盘事件只交给控件自身处理。
+ * 按钮 / 链接不消费字母与方向键，只在激活键（空格 / 回车）上让位，避免破坏点击按钮后的 WASD 操作。
+ */
+export const isTextEntryTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false
+    if (target.isContentEditable) return true
+    switch (target.tagName) {
+        case 'INPUT':
+        case 'TEXTAREA':
+        case 'SELECT':
             return true
         default:
             return false
@@ -52,6 +70,8 @@ class InputRegistryImpl implements InputRegistry {
     private onKeyDownBound: (e: KeyboardEvent) => void
     private onKeyUpBound: (e: KeyboardEvent) => void
     private onBlurBound: () => void
+    private onFocusInBound: (e: FocusEvent) => void
+    private onVisibilityChangeBound: () => void
     private onMouseDownBound: (e: MouseEvent) => void
     private onMouseUpBound: (e: MouseEvent) => void
     private onClickBound: (e: MouseEvent) => void
@@ -67,6 +87,8 @@ class InputRegistryImpl implements InputRegistry {
         this.onKeyDownBound = (e) => this.handleKeyDown(e)
         this.onKeyUpBound = (e) => this.handleKeyUp(e)
         this.onBlurBound = () => this.handleBlur()
+        this.onFocusInBound = (e) => this.handleFocusIn(e)
+        this.onVisibilityChangeBound = () => this.handleVisibilityChange()
         this.onMouseDownBound = (e) => this.handleMouseDown(e)
         this.onMouseUpBound = (e) => this.handleMouseUp(e)
         this.onClickBound = (e) => this.handleSuppressedMouseEvent(e)
@@ -75,6 +97,11 @@ class InputRegistryImpl implements InputRegistry {
         window.addEventListener('keydown', this.onKeyDownBound)
         window.addEventListener('keyup', this.onKeyUpBound)
         window.addEventListener('blur', this.onBlurBound)
+        /* 焦点进入输入框 / select 等交互控件时立即清空按键：
+         * 原生下拉在部分浏览器会吞掉 keyup，若不清空会让相机 / 角色持续运动 */
+        document.addEventListener('focusin', this.onFocusInBound)
+        /* 切后台 / 最小化同样视为一次输入状态复位 */
+        document.addEventListener('visibilitychange', this.onVisibilityChangeBound)
         /* 鼠标捕获走捕获阶段：stopPropagation 可拦住画布/窗口上的相机、拾取等监听 */
         window.addEventListener('mousedown', this.onMouseDownBound, {capture: true})
         window.addEventListener('mouseup', this.onMouseUpBound, {capture: true})
@@ -109,10 +136,10 @@ class InputRegistryImpl implements InputRegistry {
     readonly setInputCapture = (handler: ((combo: KeyCombo) => void) | undefined): void => {
         this.inputCapture = handler
         this.captureMax = undefined
-        if (handler) {
-            this.activeKeys.clear()
-            this.lastWinningActions.clear()
-        }
+        /* 进入 / 退出捕获都复位按住状态：避免捕获期间或原生控件吞键后残留移动键 */
+        this.activeKeys.clear()
+        this.pressedThisFrame.clear()
+        this.lastWinningActions.clear()
     }
 
     readonly matchesMouseButton = (action: InputAction, button: number): boolean => {
@@ -189,6 +216,8 @@ class InputRegistryImpl implements InputRegistry {
         window.removeEventListener('keydown', this.onKeyDownBound)
         window.removeEventListener('keyup', this.onKeyUpBound)
         window.removeEventListener('blur', this.onBlurBound)
+        document.removeEventListener('focusin', this.onFocusInBound)
+        document.removeEventListener('visibilitychange', this.onVisibilityChangeBound)
         window.removeEventListener('mousedown', this.onMouseDownBound, {capture: true})
         window.removeEventListener('mouseup', this.onMouseUpBound, {capture: true})
         window.removeEventListener('click', this.onClickBound, {capture: true})
@@ -242,6 +271,9 @@ class InputRegistryImpl implements InputRegistry {
     private handleKeyDown(e: KeyboardEvent): void {
         if (this.destroyed) return
 
+        /* 输入法组合期间不处理游戏输入（中文输入时字母键只作用于输入法） */
+        if (e.isComposing) return
+
         /* 捕获模式 */
         if (this.inputCapture) {
             e.preventDefault()
@@ -265,12 +297,18 @@ class InputRegistryImpl implements InputRegistry {
             return
         }
 
-        /* 忽略捕获中仍触发的 keydown（安全保护） */
         /* Tab：游戏画面内拦截浏览器默认焦点切换（避免焦点跳到面板按钮后空格 / 回车误触），
          * 可交互控件（输入框 / 下拉 / 按钮）内的 Tab 保留默认导航 */
         if (e.code === 'Tab' && !isFocusInteractive(e.target)) {
             e.preventDefault()
         }
+
+        /* 焦点在输入控件内：键盘事件只交给控件自身处理（输入框 / 文本域 / select / 可编辑区），
+         * 不进入游戏动作、不阻止默认行为。Escape 例外：保留关闭面板的全局退路。 */
+        if (isTextEntryTarget(e.target) && e.code !== 'Escape') return
+
+        /* 按钮 / 链接的激活键让位给原生行为，避免空格同时触发跳跃 */
+        if (isFocusInteractive(e.target) && (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter')) return
 
         /* 更新 activeKeys */
         this.activeKeys.add(e.code)
@@ -364,8 +402,24 @@ class InputRegistryImpl implements InputRegistry {
 
     private handleBlur(): void {
         this.activeKeys.clear()
+        this.pressedThisFrame.clear()
         this.lastWinningActions.clear()
         /* 捕获模式的 handler 不触发 — 失去焦点应取消 */
+    }
+
+    /** 焦点进入输入控件：清空按住状态，避免原生控件吞掉 keyup 后相机 / 角色持续运动 */
+    private handleFocusIn(e: FocusEvent): void {
+        if (this.destroyed) return
+        /* 捕获键盘绑定时不打断（此时按键属于绑定输入，不属于游戏控制） */
+        if (this.inputCapture) return
+        if (!isTextEntryTarget(e.target)) return
+        this.handleBlur()
+    }
+
+    /** 页面切到后台 / 最小化：清空按键，避免回来后残留按住状态 */
+    private handleVisibilityChange(): void {
+        if (this.destroyed) return
+        if (document.visibilityState === 'hidden') this.handleBlur()
     }
 
     /** 根据最长匹配规则计算当前获胜的动作集合 */

@@ -282,6 +282,7 @@ export const createCameraControl = (
     const pointerActions = options.pointerActions
     const signal = options.signal
     let dragging: 'orbit' | 'pan' | null = null
+    const clearDragging = (): void => { dragging = null }
     domElement.addEventListener('mousedown', (e: MouseEvent) => {
         if (!enabled) return
         /* 按键被本模式「修饰键+鼠标」的其它动作覆盖时让位（如聚焦键加了修饰键组合） */
@@ -290,8 +291,12 @@ export const createCameraControl = (
         else if (panEnabled && input.matchesMouseButton('mouse_pan', e.button)
             && !input.isMouseButtonOverridden(e.button, pointerActions, 'mouse_pan')) dragging = 'pan'
     }, {signal})
-    window.addEventListener('mouseup', () => {
-        dragging = null
+    window.addEventListener('mouseup', clearDragging, {signal})
+    /* 窗口失焦 / 切后台时释放拖拽：在窗口外或原生弹层上松开鼠标可能收不到 mouseup，
+     * 否则之后仅移动鼠标也会继续旋转 / 平移 */
+    window.addEventListener('blur', clearDragging, {signal})
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') clearDragging()
     }, {signal})
     window.addEventListener('mousemove', (e: MouseEvent) => {
         if (dragging === null) return
