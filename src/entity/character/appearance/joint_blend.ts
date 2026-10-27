@@ -12,13 +12,19 @@ export interface JointSnapshot {
     readonly pz: number
 }
 
-/** 收集模型全部关节（含根；顺序稳定） */
+/**
+ * 收集参与过渡混合的关节（顺序稳定）。
+ * 根关节不参与：根位移由物理 body / 展示根姿态管理，根旋转由世界朝向管理；
+ * 若把根写入快照，状态切换时会把模型拉回切换前的位置（编辑模式战斗表现为原地抖动/闪回出生点）。
+ */
 export const snapshotJoints = (model: CreatureModel): readonly JointSnapshot[] =>
-    [...model.jointGroups.values()].map(joint => ({
-        joint,
-        rx: joint.rotation.x, ry: joint.rotation.y, rz: joint.rotation.z,
-        px: joint.position.x, py: joint.position.y, pz: joint.position.z,
-    }))
+    [...model.jointGroups.entries()]
+        .filter(([jointId]) => jointId !== 'root')
+        .map(([, joint]) => ({
+            joint,
+            rx: joint.rotation.x, ry: joint.rotation.y, rz: joint.rotation.z,
+            px: joint.position.x, py: joint.position.y, pz: joint.position.z,
+        }))
 
 /**
  * 状态过渡：把当前关节向切换前快照加权收敛（三次 ease-out）。

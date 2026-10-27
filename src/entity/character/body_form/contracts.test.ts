@@ -9,6 +9,8 @@ import {EMPTY_EQUIPMENT_STATE} from '../../../character/equipment/types.ts'
 import {weaponAttacksOf} from '../../../character/weapon/catalog.ts'
 import {orderedSegments} from '../../../character/weapon/attack_chain.ts'
 import {DEFAULT_FORM_CLIP_VARIANT} from './common/skeleton_animation/form_animation.ts'
+import {BASE_CLIP_STATES} from '../../../character/state_machine/types.ts'
+import type {AnimationContext} from '../appearance/types.ts'
 
 /** 场景图节点数（用于验证装备外观挂载 / 卸载） */
 const objectCount = (group: Group): number => {
@@ -170,6 +172,57 @@ describe('体形计划公共契约（全部注册体形）', () => {
                 })
                 expect(attack.duration, `${form.id}:attack`).toBeGreaterThan(0)
             })
+        })
+    }
+})
+
+/** 全部体形 / 全部基础状态：状态过渡混合不得移动根关节（否则编辑模式战斗会闪回出生点） */
+describe('动画状态过渡：根关节不参与混合', () => {
+    const ctx = (stateTime: number, attackSegment?: AnimationContext['attackSegment']): AnimationContext => ({
+        stateTime,
+        horizontalSpeed: 0,
+        attackSegment,
+        attackPhase: undefined,
+        attackPhaseProgress: 0,
+        attackTotalProgress: 0.2,
+        attackPhaseIndex: 0,
+        attackCharge: 0,
+        attackHolding: false,
+        weaponHeld: false,
+    })
+
+    for (const id of BODY_FORM_IDS) {
+        it(id, () => {
+            const form = BODY_FORMS[id]
+            const model = form.createModel({speed: 3, jumpHeight: 2, scale: 1}, 0)
+            const root = model.jointGroups.get('root')
+            if (root === undefined) throw new Error(`${id} 缺少 root 关节`)
+            const system = form.animation.createSystem({})
+
+            root.position.set(5, 0, 5)
+            system.update(1 / 60, model, 'idle', ctx(0))
+            for (const state of BASE_CLIP_STATES) {
+                /* 第一次 update 建立该状态快照；随后模拟物理把根移到新位置，混合不能再把它拉回快照 */
+                root.position.set(6, 0, 6)
+                system.update(1 / 60, model, state, ctx(0.2))
+                root.position.set(7, 0, 7)
+                system.update(1 / 60, model, state, ctx(0.25))
+                expect(root.position.x, `${id}:${state}:x`).toBeCloseTo(7)
+                expect(root.position.z, `${id}:${state}:z`).toBeCloseTo(7)
+            }
+
+            /* 攻击动作同样走同一快照函数：验证攻击状态切换也不移动根关节 */
+            const weapon = form.weapons[0]!
+            const segment = orderedSegments(weaponAttacksOf(weapon, weapon.attackModules[0]!.id))[0]
+            if (segment !== undefined) {
+                root.position.set(6, 0, 6)
+                system.update(1 / 60, model, 'attacking', ctx(0, segment))
+                root.position.set(7, 0, 7)
+                system.update(1 / 60, model, 'attacking', ctx(0.02, segment))
+                expect(root.position.x, `${id}:attacking:x`).toBeCloseTo(7)
+                expect(root.position.z, `${id}:attacking:z`).toBeCloseTo(7)
+            }
+            model.dispose()
         })
     }
 })

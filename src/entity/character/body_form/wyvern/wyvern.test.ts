@@ -15,6 +15,7 @@ import {wyvernAttackPose, wyvernPose} from './skeleton_animation/pose_fns.ts'
 import {isPoseWithPosition, type JointPose} from '../common/creature_runtime/pose.ts'
 import {createBoneAnimationPlayer} from '../../../../skeleton/anim/player.ts'
 import {createCharacterSkeletonBridge} from '../../appearance/skeleton_bridge.ts'
+import {applyJointBlend, snapshotJoints} from '../../appearance/joint_blend.ts'
 
 const STATES = BASE_CLIP_STATES
 
@@ -347,5 +348,19 @@ describe('双足飞龙体形（forms/wyvern）', () => {
         const breath = breathAttacks.segments[breathAttacks.chains.heavy.steps[0]!]!
         const breathEnd = wyvernAttackPose(breath)(breath.duration + breath.recovery, breath.duration + breath.recovery)
         expect(yawOf(breathEnd.jaw!)).toBeCloseTo(0, 6)
+    })
+
+    it('状态过渡混合不包含根关节，避免模型被拉回出生坐标', () => {
+        const model = WYVERN_BODY_FORM.createModel({speed: 3, jumpHeight: 1, scale: 1}, 0)
+        const root = model.jointGroups.get('root')!
+        root.position.set(5, 0, 5)
+        const snapshot = snapshotJoints(model)
+        expect(snapshot.some(item => item.joint === root)).toBe(false)
+
+        root.position.set(6, 0, 6)
+        applyJointBlend(snapshot, 0, 0.05, 0.15)
+        expect(root.position.x).toBe(6)
+        expect(root.position.z).toBe(6)
+        model.dispose()
     })
 })

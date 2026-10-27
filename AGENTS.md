@@ -113,6 +113,7 @@
 - **存档兼容** — 改存档结构必须同步 `save_load/types.ts` / `validation.ts` / `serialize.ts`，可选字段旧档缺失一律安全回退默认、未知 id 安全丢弃，不得抛错。见 [`src/save_load/save_load.md`](src/save_load/save_load.md)。
 - **state 唯一权威** — 角色游戏数据只能存在 `CharacterState`；禁止在 `CharacterEntity`、动画、骨骼、战斗、AI 中另存副本。引擎句柄只在 `CharacterRuntime`。动画系统只写 `state.animation.current`，不得回写参数。见 [`docs/design/character_state.md`](docs/design/character_state.md)。
 - **动画组合禁止时间与整身变体** — 动画组合只能使用 progress，禁止出现时间/时长/倍速；禁止整身离散变体烘焙（falling 档、盾臂、武器类、持握模式、支撑手合并）与播放倍速步态。所有体形共用组合树，动作按关节权重与移动/跳跃共存。见 [`docs/design/animation_composition.md`](docs/design/animation_composition.md)。
+- **状态过渡根关节** — `snapshotJoints` / `applyJointBlend` 禁止包含或混合 `root` 根关节：根位移由物理 body / 展示根姿态管理，根旋转由世界朝向管理。把根纳入快照会与位置同步互相拉扯，编辑模式连续战斗时表现为模型闪回出生点 / 原地抖动；所有体形与动作共用同一快照函数。见 [`src/entity/character/appearance/appearance.md`](src/entity/character/appearance/appearance.md)。
 
 ## 项目结构
 
