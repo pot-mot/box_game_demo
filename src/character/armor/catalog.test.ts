@@ -61,6 +61,15 @@ describe('体形注册目录（跨体形）', () => {
         expect(limbPiecesOfSlot('head')).toContain(LIMB_A)
     })
 
+    it('按体形过滤槽位候选：其他体形的同类装备不出现，缺省体形返回全部', () => {
+        expect(armorPiecesOfSlot('head', 'test_form')).toContain(ARMOR_A)
+        expect(armorPiecesOfSlot('head', 'other_form')).not.toContain(ARMOR_A)
+        expect(limbPiecesOfSlot('head', 'test_form')).toContain(LIMB_A)
+        expect(limbPiecesOfSlot('head', 'other_form')).not.toContain(LIMB_A)
+        expect(armorPiecesOfSlot('head')).toContain(ARMOR_A)
+        expect(limbPiecesOfSlot('head')).toContain(LIMB_A)
+    })
+
     it('未知 / 缺省 id 安全返回 undefined', () => {
         expect(findArmorPreset('no_such_armor')).toBeUndefined()
         expect(findArmorPreset(undefined)).toBeUndefined()

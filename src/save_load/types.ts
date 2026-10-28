@@ -170,6 +170,8 @@ export interface CharacterSaveConfig {
     getUpDuration?: number
     isPlayer: boolean
     navEnabled?: boolean
+    /** 该角色的 AI 是否启用：缺省 true；旧存档无此字段时安全回退 */
+    aiEnabled?: boolean
     /**
      * 行为原点更新策略（持久化）：缺省 = resident（恒以初始原点为准）；
      * 旧存档无此字段时安全回退，非法值加载时安全丢弃。

@@ -102,3 +102,4 @@ src/entity/character/body_form/<form>/state/runtime.ts  # 具体体形 state 实
 - 用 `state` 命名体形静态定义（统一用 `base`）。
 - 让动画系统回写 `animation.params`。
 - 依赖 `state.animation.current` 反向驱动权威游戏逻辑。
+- **让多个角色共享同一个 `config` 对象**：`state.config` 会被面板 / 换体形直接写入（`bodyFormId`、速度、飞行、体力等）。`spawnEntity` 必须为每个角色克隆 config（含 `bodyState` / `stamina` 嵌套），禁止直接把 `DEFAULT_CHARACTER_CONFIG` 或 reset / 读档快照中的 config 作为 `state.config`；否则新角色会继承上一个角色的体形与生命档位，重置后旧角色也会被改写成当前体形。

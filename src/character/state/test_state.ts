@@ -31,6 +31,7 @@ export const createTestCharacterState = (options: TestCharacterStateOptions): Ch
         groundedTime: 0,
     },
     ai: {
+        aiEnabled: true,
         navEnabled: true,
         peaceStrategy: 'patrol',
         combatStrategy: 'tactical',

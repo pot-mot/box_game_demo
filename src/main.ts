@@ -419,6 +419,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 characterSystem.clearEnvironments()
                 for (const s of systems) { if (s !== interactables) s.preSync?.(delta, time) }
                 for (const s of systems) s.syncPositions()
+                /* 编辑模式不走滞后插值：先按刚体真实位置对齐，再在 update 后捕获当前帧 */
+                characterSystem.syncTrueTransforms()
             } else if (stepActive) {
                 /* 单步 / 排队步进同样会推进世界：基线随之固定 */
                 steppedSinceBaseline = true
@@ -430,6 +432,8 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 characterSystem.clearEnvironments()
                 for (const s of systems) { if (s !== interactables) s.preSync?.(FIXED_TIME_STEP, time) }
                 for (const s of systems) s.syncPositions()
+                /* 编辑模式不走滞后插值：先按刚体真实位置对齐，再在 update 后捕获当前帧 */
+                characterSystem.syncTrueTransforms()
                 editMode?.execute.consumeStep()
             }
             /* else: 编辑暂停态，物理世界完全冻结 */
@@ -447,8 +451,12 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
                 editMode?.updater(delta)
                 if (simActive) {
                     characterSystem.update(delta)
+                    characterSystem.captureRenderState()
+                    characterSystem.syncPositions()
                 } else if (stepActive) {
                     characterSystem.update(FIXED_TIME_STEP)
+                    characterSystem.captureRenderState()
+                    characterSystem.syncPositions()
                 }
             } else if (mode === 'showcase') {
                 /* 展示模式：物理冻结，仅推进展示时间线（渲染在 updater 内完成） */

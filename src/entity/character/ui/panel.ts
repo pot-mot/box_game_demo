@@ -15,7 +15,7 @@ import type {RangedWeaponConfig} from '../../../character/weapon/ranged_weapon.t
 import type {ChargeTuning} from '../../../character/weapon/charge_tuning.ts'
 import {chainOf, segmentDisplayName, type WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {equipBodyPartLabelKey} from '../../../character/equipment/types.ts'
-import {armorPiecesOfSlot, armorPieceDisplayName, attackTermsOf, defenseTermsOf, findArmorPreset, findLimbPreset, limbPiecesOfSlot, moveSpeedTermsOf, poiseTermsOf, resolveArmorLoadout, resolveLimbLoadout, staminaDrainTermsOf, staminaEntryTermsOf, staminaRegenTermsOf, type StatTerm} from '../../../character/armor/catalog.ts'
+import {armorPiecesOfSlot, armorPieceDisplayName, attackTermsOf, defenseTermsOf, findArmorPreset, findLimbPreset, limbPiecesOfSlot, moveSpeedTermsOf, pieceAllowedForBodyForm, poiseTermsOf, resolveArmorLoadout, resolveLimbLoadout, staminaDrainTermsOf, staminaEntryTermsOf, staminaRegenTermsOf, type StatTerm} from '../../../character/armor/catalog.ts'
 import type {ArmorLoadout, ArmorPieceConfig, LimbLoadout, LimbPieceConfig} from '../../../character/armor/types.ts'
 import type {DefenseProfile} from '../../../character/combat/defense.ts'
 import type {DamageType, DamageTypeProfile} from '../../../character/combat/damage_type.ts'
@@ -329,6 +329,39 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     el.appendChild(createSection('panel.config'))
 
+    /* 基础模组 + 允许飞行同一行（切换体形运行时重建骨架 / 外观 / 碰撞 / 受击 / 装备槽，见 world.setBodyForm） */
+    const configRow = document.createElement('div')
+    configRow.className = 'dc-row'
+    const bodyFormLabel = document.createElement('label')
+    bodyFormLabel.className = 'dc-label'
+    appendLocalizedText(bodyFormLabel, 'character.body_form')
+    bodyFormLabel.appendChild(document.createTextNode(' '))
+    const bodyFormSelect = document.createElement('select')
+    bodyFormSelect.id = 'body-form-select'
+    bodyFormSelect.className = 'dc-select'
+    for (const planId of BODY_FORM_IDS) {
+        const o = document.createElement('option')
+        o.value = planId
+        localizeText(o, BODY_FORMS[planId].nameKey)
+        bodyFormSelect.appendChild(o)
+    }
+    bodyFormLabel.appendChild(bodyFormSelect)
+    configRow.appendChild(bodyFormLabel)
+
+    /* 飞行开关：仅影响能否通过双击跳跃键进入飞行，不限制体形 */
+    const flightCheck = document.createElement('input')
+    flightCheck.type = 'checkbox'
+    flightCheck.className = 'dc-check'
+    flightCheck.id = 'chk-flight-enabled'
+    const flightLabel = document.createElement('label')
+    flightLabel.className = 'dc-label'
+    flightLabel.htmlFor = 'chk-flight-enabled'
+    localizeText(flightLabel, 'character.flight_enabled')
+    flightLabel.style.cssText = 'cursor:pointer'
+    configRow.appendChild(flightCheck)
+    configRow.appendChild(flightLabel)
+    el.appendChild(configRow)
+
     /* 惯用手：右撇子（默认）/ 左撇子（主副手槽位互换 + 动作与外观镜像） */
     const handednessLabel = document.createElement('label')
     handednessLabel.className = 'dc-label'
@@ -346,44 +379,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     handednessLabel.appendChild(handednessSelect)
     el.appendChild(handednessLabel)
 
-    /* 基础模组（体形）：切换运行时重建骨架 / 外观 / 碰撞 / 受击 / 装备槽（见 world.setBodyForm） */
-    const bodyFormLabel = document.createElement('label')
-    bodyFormLabel.className = 'dc-label'
-    appendLocalizedText(bodyFormLabel, 'character.body_form')
-    bodyFormLabel.appendChild(document.createTextNode(' '))
-    const bodyFormSelect = document.createElement('select')
-    bodyFormSelect.id = 'body-form-select'
-    bodyFormSelect.className = 'dc-select'
-    for (const planId of BODY_FORM_IDS) {
-        const o = document.createElement('option')
-        o.value = planId
-        localizeText(o, BODY_FORMS[planId].nameKey)
-        bodyFormSelect.appendChild(o)
-    }
-    bodyFormLabel.appendChild(bodyFormSelect)
-    el.appendChild(bodyFormLabel)
-
-    /* 飞行开关：仅影响能否通过双击跳跃键进入飞行，不限制体形 */
-    const flightRow = document.createElement('div')
-    flightRow.className = 'dc-row'
-    const flightCheck = document.createElement('input')
-    flightCheck.type = 'checkbox'
-    flightCheck.className = 'dc-check'
-    flightCheck.id = 'chk-flight-enabled'
-    const flightLabel = document.createElement('label')
-    flightLabel.className = 'dc-label'
-    flightLabel.htmlFor = 'chk-flight-enabled'
-    localizeText(flightLabel, 'character.flight_enabled')
-    flightLabel.style.cssText = 'cursor:pointer'
-    flightRow.appendChild(flightCheck)
-    flightRow.appendChild(flightLabel)
-    el.appendChild(flightRow)
-
     el.appendChild(createSection('panel.faction'))
     const faction = createLabeledNumberInput(el, 'character.faction', {min: '0', step: '1', value: '0'})
     const tendencyLabel = document.createElement('label')
     tendencyLabel.className = 'dc-label'
-    appendLocalizedText(tendencyLabel, 'character.tendency')
+    appendLocalizedText(tendencyLabel, 'character.ai_tendency')
     tendencyLabel.appendChild(document.createTextNode(' '))
     const tendSelect = document.createElement('select')
     tendSelect.className = 'dc-select'
@@ -405,7 +405,11 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
 
     const targetFactionsLabel = document.createElement('label')
     targetFactionsLabel.className = 'dc-label'
-    appendLocalizedText(targetFactionsLabel, 'character.target_factions')
+    const targetFactionsText = document.createElement('span')
+    const targetFactionsLabelKey = (): StringLocaleKey =>
+        tendSelect.value === 'hostileExcept' ? 'character.exclude_factions' : 'character.target_factions'
+    localizeApply(targetFactionsText, el => { el.textContent = translate(targetFactionsLabelKey()) })
+    targetFactionsLabel.appendChild(targetFactionsText)
     targetFactionsLabel.appendChild(document.createTextNode(' '))
     targetFactionsLabel.style.cssText = 'display:none'
     const targetFactionsInput = document.createElement('input')
@@ -419,6 +423,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const showTargetFactions = (): void => {
         const needs = tendSelect.value === 'hostileTo' || tendSelect.value === 'hostileExcept'
         targetFactionsLabel.style.display = needs ? '' : 'none'
+        targetFactionsText.textContent = translate(targetFactionsLabelKey())
         if (!needs) targetFactionsInput.value = ''
     }
     tendSelect.onchange = showTargetFactions
@@ -532,8 +537,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     const armorSelects = new Map<string, HTMLSelectElement>()
     const limbSelects = new Map<string, HTMLSelectElement>()
 
-    /** 填充装备下拉（首项「无」+ 该槽位全部预设） */
+    /** 填充装备下拉（先清空；首项「无」+ 传入的预设列表） */
     const fillEquipSelect = (select: HTMLSelectElement, pieces: readonly (ArmorPieceConfig | LimbPieceConfig)[]): void => {
+        select.replaceChildren()
         const noneOption = document.createElement('option')
         noneOption.value = ''
         noneOption.textContent = translate('common.none')
@@ -569,7 +575,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         armorSelect.id = `armor-slot-${armor}`
         armorSelect.className = 'dc-select'
         armorSelect.style.cssText = 'max-width:180px'
-        fillEquipSelect(armorSelect, armorPiecesOfSlot(armor))
+        fillEquipSelect(armorSelect, armorPiecesOfSlot(armor, bodyFormOf(undefined).id))
         armorLabel.appendChild(armorSelect)
         row.appendChild(armorLabel)
         armorSelects.set(armor, armorSelect)
@@ -586,7 +592,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         limbSelect.id = `limb-slot-${limb}`
         limbSelect.className = 'dc-select'
         limbSelect.style.cssText = 'max-width:180px'
-        fillEquipSelect(limbSelect, limbPiecesOfSlot(limb))
+        fillEquipSelect(limbSelect, limbPiecesOfSlot(limb, bodyFormOf(undefined).id))
         limbLabel.appendChild(limbSelect)
         row.appendChild(limbLabel)
         limbSelects.set(limb, limbSelect)
@@ -607,32 +613,64 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         }
     }
 
+    /** 按体形重建护甲 / 肢体下拉选项（仅保留该体形声明的槽位与 allowedBodyFormIds 允许的装备） */
+    const rebuildEquipSelects = (form: BodyForm): void => {
+        for (const [slot, select] of armorSelects) fillEquipSelect(select, armorPiecesOfSlot(slot, form.id))
+        for (const [slot, select] of limbSelects) fillEquipSelect(select, limbPiecesOfSlot(slot, form.id))
+    }
+
+    /** 目标体形允许的护甲条目（槽位声明 + allowedBodyFormIds；未知 / 跨体形 id 返回 undefined） */
+    const armorPieceForForm = (form: BodyForm, slot: string, id: string | undefined): ArmorPieceConfig | undefined => {
+        if (!form.equipSlots.some(candidate => candidate.kind === 'armor' && candidate.bodyPart === slot)) return undefined
+        const piece = findArmorPreset(id)
+        return piece !== undefined && piece.slot === slot && pieceAllowedForBodyForm(piece, form.id) ? piece : undefined
+    }
+
+    /** 目标体形允许的肢体条目（槽位声明 + allowedBodyFormIds；未知 / 跨体形 id 返回 undefined） */
+    const limbPieceForForm = (form: BodyForm, slot: string, id: string | undefined): LimbPieceConfig | undefined => {
+        if (!form.equipSlots.some(candidate => candidate.kind === 'limb' && candidate.bodyPart === slot)) return undefined
+        const piece = findLimbPreset(id)
+        return piece !== undefined && piece.slot === slot && pieceAllowedForBodyForm(piece, form.id) ? piece : undefined
+    }
+
     /* 属性模块：状态类（生命 / 韧性）与属性类（攻击 / 防御 / 移速 / 跳跃高度 / 体型）排成公式行。
        展示形态「结果 | (基础值 + 逐项加值) × 逐项乘区」：结果在前，公式拆解逐项列出来源（如装备名）。
        每行只可编辑「当前值 / 基础值」输入框，加值 / 乘区 / 结果均为基于当前装备选择实时计算的只读文本。 */
     el.appendChild(createSection('character.section.attributes'))
 
-    /** 读取当前护甲选择（空 value = 空槽） */
-    const readArmorLoadout = (): ArmorLoadout => {
+    /** 读取当前护甲选择（空 value = 空槽；仅保留目标体形允许的条目） */
+    const readArmorLoadout = (form: BodyForm): ArmorLoadout => {
         const loadout: Record<string, string> = {}
         for (const [slot, select] of armorSelects) {
-            if (select.value.length > 0) loadout[slot] = select.value
+            const piece = armorPieceForForm(form, slot, select.value)
+            if (piece !== undefined) loadout[slot] = piece.id
         }
         return loadout
     }
 
-    /** 读取当前肢体选择（空 value = 默认人类肢体） */
-    const readLimbLoadout = (): LimbLoadout => {
+    /** 读取当前肢体选择（空 value = 默认人类肢体；仅保留目标体形允许的条目） */
+    const readLimbLoadout = (form: BodyForm): LimbLoadout => {
         const loadout: Record<string, string> = {}
         for (const [slot, select] of limbSelects) {
-            if (select.value.length > 0) loadout[slot] = select.value
+            const piece = limbPieceForForm(form, slot, select.value)
+            if (piece !== undefined) loadout[slot] = piece.id
         }
         return loadout
+    }
+
+    /** 回显装备选择（仅当前体形允许的条目；未知 / 跨体形 id 视为空槽） */
+    const echoEquipSelections = (entity: CharacterEntity, form: BodyForm): void => {
+        for (const [slot, select] of armorSelects) {
+            select.value = armorPieceForForm(form, slot, entity.state.combat.equipment.armor[slot])?.id ?? ''
+        }
+        for (const [slot, select] of limbSelects) {
+            select.value = limbPieceForForm(form, slot, entity.state.combat.equipment.limb[slot])?.id ?? ''
+        }
     }
 
     /* 当前选择解析后的护甲 / 肢体（公式的加值取值口径，与运行时 setCombatEquipment 一致） */
-    const resolvedArmor = (): ReturnType<typeof resolveArmorLoadout> => resolveArmorLoadout(readArmorLoadout())
-    const resolvedLimb = (): ReturnType<typeof resolveLimbLoadout> => resolveLimbLoadout(readLimbLoadout())
+    const resolvedArmor = (): ReturnType<typeof resolveArmorLoadout> => resolveArmorLoadout(readArmorLoadout(bodyFormOf(bodyFormSelect.value)))
+    const resolvedLimb = (): ReturnType<typeof resolveLimbLoadout> => resolveLimbLoadout(readLimbLoadout(bodyFormOf(bodyFormSelect.value)))
 
     /** 主手武器对指定攻击类别的加值项（武器伤害仅计入其固有攻击类别） */
     const weaponAttackTerms = (category: DamageType): StatTerm[] => {
@@ -1053,6 +1091,23 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
     navRow.appendChild(navLabel)
     el.appendChild(navRow)
 
+    /* 关闭 AI：勾选后停止该角色的 AI 输入（保持静止），不影响全局 AI 系统开关 */
+    const aiDisabledRow = document.createElement('div')
+    aiDisabledRow.className = 'dc-row'
+    aiDisabledRow.style.cssText = 'margin-top:4px'
+    const aiDisabledCheck = document.createElement('input')
+    aiDisabledCheck.type = 'checkbox'
+    aiDisabledCheck.className = 'dc-check'
+    aiDisabledCheck.id = 'chk-ai-disabled'
+    const aiDisabledLabel = document.createElement('label')
+    aiDisabledLabel.className = 'dc-label'
+    aiDisabledLabel.htmlFor = 'chk-ai-disabled'
+    localizeText(aiDisabledLabel, 'character.disable_ai')
+    aiDisabledLabel.style.cssText = 'cursor:pointer'
+    aiDisabledRow.appendChild(aiDisabledCheck)
+    aiDisabledRow.appendChild(aiDisabledLabel)
+    el.appendChild(aiDisabledRow)
+
     /* 建造配置区（仅 build 策略可见）：标题与全部控件包进同一容器，统一显隐 */
     const buildPanel = document.createElement('div')
     el.appendChild(buildPanel)
@@ -1104,6 +1159,20 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         chaseRadiusInput.parentElement!.style.display = isPlayer ? 'none' : ''
         blockReactionRow.style.display = isPlayer ? 'none' : ''
     }
+
+    /** 玩家标记相关的面板显隐（仅更新界面；运行时标记在 Apply 时写入） */
+    const applyPlayerPanelVisibility = (isPlayer: boolean): void => {
+        aiSection.style.display = isPlayer ? 'none' : ''
+        peaceRow.style.display = isPlayer ? 'none' : ''
+        combatRow.style.display = isPlayer ? 'none' : ''
+        navRow.style.display = isPlayer ? 'none' : ''
+        aiDisabledRow.style.display = isPlayer ? 'none' : ''
+        applyBuildVisibility(peaceSelect.value, isPlayer)
+        applyOriginVisibility(originSelect.value, isPlayer)
+    }
+
+    /* 勾选玩家时立即更新面板显隐，无需等待 Apply */
+    playerCheck.addEventListener('change', () => applyPlayerPanelVisibility(playerCheck.checked))
 
     const {container: btnRow, applyBtn, deleteBtn} = createButtonRow()
     el.appendChild(btnRow)
@@ -1261,6 +1330,36 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
             extraWeaponSlotSelects.set(slot.bodyPart, select)
         }
     }
+
+    /** 体形下拉预览：立即按目标体形重建武器 / 装备候选项与显隐（不写入运行时，Apply 时提交） */
+    const previewBodyForm = (form: BodyForm): void => {
+        handednessLabel.style.display = form.editor.handedness ? '' : 'none'
+        applyEquipVisibility(form.id)
+        rebuildEquipSelects(form)
+        const primarySlot = primarySlotOf(form)
+        fillWeaponSelect(weaponSelect, false, form, primarySlot)
+        fillWeaponSelect(offhandSelect, false, form, 'off_hand')
+        const hasOffhand = form.equipSlots.some(slot => slot.kind === 'weapon' && slot.bodyPart === 'off_hand')
+        offhandRow.style.display = hasOffhand ? '' : 'none'
+        updateOffhandAvailability()
+        rebuildExtraWeaponSlots(form, undefined)
+        const primaryDefault = primarySlot !== undefined ? form.defaultWeaponLoadout[primarySlot] : undefined
+        if (primaryDefault !== undefined) weaponSelect.value = primaryDefault
+        const offhandDefault = form.defaultWeaponLoadout.off_hand
+        if (offhandDefault !== undefined) offhandSelect.value = offhandDefault
+        const main = selectedWeaponOf(weaponSelect)
+        const offhand = selectedWeaponOf(offhandSelect)
+        if (main !== undefined) autoFillFromWeapon(main.id, mainAttackFields, weaponTag)
+        else weaponTag.textContent = ''
+        if (offhand !== undefined) autoFillFromWeapon(offhand.id, offhandAttackFields)
+        showAttackFields(mainAttackFields, main)
+        showAttackFields(offhandAttackFields, offhand)
+        applyOffhandFieldVisibility(hasOffhand)
+        refreshStatFormulas()
+    }
+
+    /* 切换基础模组时立即刷新面板武器 / 装备候选项与显隐，无需等待 Apply */
+    bodyFormSelect.addEventListener('change', () => previewBodyForm(bodyFormOf(bodyFormSelect.value)))
 
     /** 重建攻击模组选项：来自当前角色全部武器槽解析出的可用模组表 */
     const rebuildAttackModuleOptions = (): void => {
@@ -1421,6 +1520,7 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         handednessLabel.style.display = selectedForm.editor.handedness ? '' : 'none'
         bodyFormSelect.value = selectedForm.id
         applyEquipVisibility(sel.state.config.bodyFormId)
+        rebuildEquipSelects(selectedForm)
 
         maxHP.value = String(sel.state.combat.maxHealth)
         curHP.value = String(sel.state.combat.health)
@@ -1487,15 +1587,8 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         updateOffhandAvailability()
         rebuildAttackModuleOptions()
 
-        /* 护甲 / 肢体与防御回显：无效 / 槽位不匹配的存档 id 显示为「无」（下拉中不存在该选项时选回空槽） */
-        for (const [slot, select] of armorSelects) {
-            const piece = findArmorPreset(sel.state.combat.equipment.armor[slot])
-            select.value = piece !== undefined && piece.slot === slot ? piece.id : ''
-        }
-        for (const [slot, select] of limbSelects) {
-            const piece = findLimbPreset(sel.state.combat.equipment.limb[slot])
-            select.value = piece !== undefined && piece.slot === slot ? piece.id : ''
-        }
+        /* 护甲 / 肢体与防御回显：无效 / 槽位不匹配 / 跨体形的存档 id 显示为「无」 */
+        echoEquipSelections(sel, form)
         baseDefPhys.value = formatNumber(sel.state.combat.baseDefense.physical)
         baseDefMagic.value = formatNumber(sel.state.combat.baseDefense.magic)
         baseAtkPhys.value = formatNumber(sel.state.combat.baseAttack.physical)
@@ -1533,17 +1626,13 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
         peaceSelect.value = sel.state.ai.peaceStrategy
         combatSelect.value = sel.state.ai.combatStrategy
         navCheck.checked = sel.state.ai.navEnabled
+        aiDisabledCheck.checked = sel.state.ai.aiEnabled === false
         originSelect.value = sel.state.ai.originStrategy
         originIntervalInput.value = formatNumber(sel.state.ai.originInterval)
         chaseRadiusInput.value = formatNumber(sel.state.ai.chaseLeashRadius)
         aiBlockDurationInput.value = formatNumber(sel.state.ai.aiBlockDuration)
         aiBlockCooldownInput.value = formatNumber(sel.state.ai.aiBlockCooldown)
-        aiSection.style.display = sel.state.identity.isPlayer ? 'none' : ''
-        peaceRow.style.display = sel.state.identity.isPlayer ? 'none' : ''
-        combatRow.style.display = sel.state.identity.isPlayer ? 'none' : ''
-        navRow.style.display = sel.state.identity.isPlayer ? 'none' : ''
-        applyBuildVisibility(sel.state.ai.peaceStrategy, sel.state.identity.isPlayer)
-        applyOriginVisibility(sel.state.ai.originStrategy, sel.state.identity.isPlayer)
+        applyPlayerPanelVisibility(sel.state.identity.isPlayer)
         refreshOriginValue(sel)
         showAttackFields(mainAttackFields, selectedWeaponOf(weaponSelect))
         applyOffhandFieldVisibility(hasOffhand)
@@ -1572,13 +1661,9 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 if (playerCheck.checked) ctx.markPlayer(cur.state.identity.id)
                 else if (cur.state.identity.isPlayer) ctx.unmarkPlayer()
                 const isPlayer = playerCheck.checked
-                aiSection.style.display = isPlayer ? 'none' : ''
-                peaceRow.style.display = isPlayer ? 'none' : ''
-                combatRow.style.display = isPlayer ? 'none' : ''
-                navRow.style.display = isPlayer ? 'none' : ''
-                applyBuildVisibility(peaceSelect.value, isPlayer)
-                applyOriginVisibility(originSelect.value, isPlayer)
+                applyPlayerPanelVisibility(isPlayer)
                 ctx.setNavEnabled?.(cur.state.identity.id, navCheck.checked)
+                ctx.setCharacterAIEnabled?.(cur.state.identity.id, !aiDisabledCheck.checked)
                 const peaceStrat = peaceSelect.value
                 if (isPeaceSubStrategy(peaceStrat)) {
                     ctx.setPeaceStrategy?.(cur.state.identity.id, peaceStrat)
@@ -1633,9 +1718,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 const newOffhand: AttackConfig | null = !hasOffhandSlot
                     ? null
                     : attackConfigOf(selectedOffhand, offhandAttackFields, selectedOffhand?.id ?? offhandFallbackId ?? offhandSelect.value)
-                /* 护甲 / 肢体装备在本次 Apply 中读取一次，供防御重算与韧性上界换算共用 */
-                const armorLoadout = readArmorLoadout()
-                const limbLoadout = readLimbLoadout()
+                /* 护甲 / 肢体装备在本次 Apply 中读取一次，供防御重算与韧性上界换算共用。
+                 * 按目标体形过滤：切换体形时丢弃旧体形的同名槽位装备。 */
+                const armorLoadout = readArmorLoadout(targetForm)
+                const limbLoadout = readLimbLoadout(targetForm)
                 /* 韧性属性（可选）：非法输入不写入，保留运行时原值 */
                 const poiseCfg: Partial<CharacterConfig> = {}
                 const parseOpt = (v: string): number | undefined => {
@@ -1721,6 +1807,10 @@ export const createCharacterPanel = (ctx: Omit<CharacterEntitySystem, 'panel'>):
                 })))
                 const updated = getSelected()
                 if (updated) {
+                    /* 装备下拉按应用后的实际体形重建并回显（切换体形后不再保留旧体形候选项） */
+                    const appliedForm = bodyFormOf(updated.state.config.bodyFormId)
+                    rebuildEquipSelects(appliedForm)
+                    echoEquipSelections(updated, appliedForm)
                     maxHP.value = String(updated.state.combat.maxHealth)
                     curHP.value = String(updated.state.combat.health)
                     baseAtkPhys.value = formatNumber(updated.state.combat.baseAttack.physical)

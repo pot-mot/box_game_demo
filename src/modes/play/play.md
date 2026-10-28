@@ -9,6 +9,7 @@
 
 ## 陷阱
 
+- **不要手动调用 `syncPositions()` 替代固定步运行器**：play 固定步分支按 `world.step → preSync → syncTrueTransforms → fixedUpdate/update → captureRenderState → syncPositions(alpha)` 执行。缺少 `captureRenderState` 会复用旧插值历史，出现模型停住 / 失重 / 闪现；渲染侧只做相机 / HUD（`renderUpdate`）。
 - play 交互输入分两段：`sampleInput()` 每渲染帧捕获 `interact` 按下边沿并解析目标（高刷下存在 0 物理步帧，边沿必须锁存）；`fixedUpdate(FIXED_TIME_STEP)` 每物理步推进计时并**在首个物理步消费一次边沿**，且必须早于 `characterSystem.update(FIXED_TIME_STEP)`，否则交互脉冲晚一步、目标守卫失效。
 - 脱困不设快捷键，走右上角设置菜单「传送至最近存档点」（`setupSettingsPanel` 第三参，`hakoniwa.teleportToNearestSavePoint()`）。
 - **游玩模式不注册 Ctrl+S 存档**：Ctrl+S 会与「Ctrl 单独按下切换持握」冲突，故 `main.ts` 仅编辑模式注册 `save_world` 回调（绑定保留以继续遮蔽浏览器默认保存）。手动存档改走右上角设置菜单「保存世界」（`setupSettingsPanel` 第四参 → `exportSaveWorld`，编辑 / 游玩模式均可用）。

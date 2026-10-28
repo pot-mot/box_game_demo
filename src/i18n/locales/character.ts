@@ -153,8 +153,9 @@ export type CharacterLocale = {
     'character.handedness': string
     'character.body_form': string
     'character.faction': string
-    'character.tendency': string
+    'character.ai_tendency': string
     'character.target_factions': string
+    'character.exclude_factions': string
     'character.weapon': string
     'character.offhand': string
     'character.hold': string
@@ -206,6 +207,7 @@ export type CharacterLocale = {
     'character.done': string
     'character.mark_player': string
     'character.enable_nav': string
+    'character.disable_ai': string
     'character.hold_mode_hint': string
     'character.offhand_tip': string
     'character.hold_tip': string
@@ -417,8 +419,9 @@ export const characterZh: CharacterLocale = {
     'character.handedness': '惯用手',
     'character.body_form': '基础模组',
     'character.faction': '阵营',
-    'character.tendency': '倾向',
+    'character.ai_tendency': 'AI倾向',
     'character.target_factions': '目标阵营',
+    'character.exclude_factions': '排除阵营',
     'character.weapon': '武器',
     'character.offhand': '副手',
     'character.hold': '持握',
@@ -470,6 +473,7 @@ export const characterZh: CharacterLocale = {
     'character.done': '完成',
     'character.mark_player': '标记为玩家',
     'character.enable_nav': '启用导航感知',
+    'character.disable_ai': '关闭 AI',
     'character.hold_mode_hint': '双持需副手装备同类近战武器',
     'character.offhand_tip': '副手武器：单持时副手持握、双手共持时挂背；与主手同类近战可双持',
     'character.hold_tip': '持握模式：单持 / 双手共持 / 双持（双持需副手装备同类近战武器）',
@@ -488,11 +492,11 @@ export const characterZh: CharacterLocale = {
     'character.tag.move_speed': (n) => `移速×${n}`,
     'character.armor_desc': (name, tags) => `${name}（${tags}）`,
     'character.idle': '待机',
-    'character.tendency.hostile_all': '敌对全部',
-    'character.tendency.hostile_except_self': '敌对除自身外',
-    'character.tendency.hostile_to': '敌对指定...',
-    'character.tendency.hostile_except': '除指定外敌对...',
-    'character.tendency.pacifist': '和平',
+    'character.tendency.hostile_all': '敌对全部阵营（含本阵营）',
+    'character.tendency.hostile_except_self': '敌对非本阵营',
+    'character.tendency.hostile_to': '仅敌对指定阵营',
+    'character.tendency.hostile_except': '敌对指定阵营以外的所有阵营',
+    'character.tendency.pacifist': '不攻击任何阵营',
     'character.peace.patrol': '巡逻',
     'character.peace.build': '建造',
     'character.preset.common': '普通',
@@ -502,7 +506,7 @@ export const characterZh: CharacterLocale = {
     'character.preset.elastic': '弹性',
     'character.peace_label': '和平',
     'character.combat_label': '战斗',
-    'character.combat.tactical': '战术（默认）',
+    'character.combat.tactical': '战术',
     'character.combat.aggressive': '激进',
     'character.combat.cowardly': '怯懦',
     'character.origin_label': '原点策略',
@@ -678,8 +682,9 @@ export const characterEn: CharacterLocale = {
     'character.handedness': 'Handed',
     'character.body_form': 'Body plan',
     'character.faction': 'Faction',
-    'character.tendency': 'Tendency',
+    'character.ai_tendency': 'AI Tendency',
     'character.target_factions': 'TargetFactions',
+    'character.exclude_factions': 'ExcludedFactions',
     'character.weapon': 'Wpn',
     'character.offhand': 'Off',
     'character.hold': 'Hold',
@@ -731,6 +736,7 @@ export const characterEn: CharacterLocale = {
     'character.done': 'Done',
     'character.mark_player': 'Mark as Player',
     'character.enable_nav': 'Enable Nav Sensing',
+    'character.disable_ai': 'Disable AI',
     'character.hold_mode_hint': 'Dual wield needs an offhand melee weapon of the same class',
     'character.offhand_tip': 'Offhand weapon: held in the off hand when one-handed, stowed on back when two-handed; dual wield needs the same melee class as the main hand',
     'character.hold_tip': 'Hold mode: one-handed / two-handed / dual wield (dual wield needs an offhand melee weapon of the same class)',
@@ -749,11 +755,11 @@ export const characterEn: CharacterLocale = {
     'character.tag.move_speed': (n) => `Spd×${n}`,
     'character.armor_desc': (name, tags) => `${name} (${tags})`,
     'character.idle': 'Idle',
-    'character.tendency.hostile_all': 'Hostile All',
-    'character.tendency.hostile_except_self': 'Hostile Except Self',
-    'character.tendency.hostile_to': 'Hostile To...',
-    'character.tendency.hostile_except': 'Hostile Except...',
-    'character.tendency.pacifist': 'Pacifist',
+    'character.tendency.hostile_all': 'Hostile to all factions (incl. own)',
+    'character.tendency.hostile_except_self': 'Hostile to non-own factions',
+    'character.tendency.hostile_to': 'Hostile only to specified factions',
+    'character.tendency.hostile_except': 'Hostile to all except specified factions',
+    'character.tendency.pacifist': 'Attacks no factions',
     'character.peace.patrol': 'Patrol',
     'character.peace.build': 'Build',
     'character.preset.common': 'Common',
@@ -763,7 +769,7 @@ export const characterEn: CharacterLocale = {
     'character.preset.elastic': 'Elastic',
     'character.peace_label': 'Peace',
     'character.combat_label': 'Combat',
-    'character.combat.tactical': 'Tactical (default)',
+    'character.combat.tactical': 'Tactical',
     'character.combat.aggressive': 'Aggressive',
     'character.combat.cowardly': 'Cowardly',
     'character.origin_label': 'Origin',

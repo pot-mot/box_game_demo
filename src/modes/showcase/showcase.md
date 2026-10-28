@@ -11,6 +11,7 @@
 ## 陷阱
 
 - 子模块若自建 `SharedWorld`，**一律经 `physics/fixed_step.ts` 的 `createFixedStepStepper` 步进**（清力内聚在运行器内）；**严禁**手写 `world.step` / `eventBus.drain` 子步循环（曾因漏清力导致玩家跳跃时无限升空）。
+- **不要绕过运行器手动 `syncPositions()`**：运行器按 `syncTrueTransforms → fixedUpdate → captureRenderState → syncPositions(alpha)` 执行；漏掉 `captureRenderState` 会复用旧插值历史，角色模型停在原地而物理 / 骨骼继续运动（与编辑模式曾出现的失重 / 闪现同源）。
 
 ## 入口
 

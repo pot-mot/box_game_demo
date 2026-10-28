@@ -26,6 +26,19 @@ describe('filterEquipmentState（按体形过滤装备状态）', () => {
         })
     })
 
+    it('提供体形 id 时丢弃同名槽位的跨体形护甲 / 肢体', () => {
+        const state = {
+            limb: {head: 'orc_head', claw: 'wolf_claw_wrap'},
+            weapon: {},
+            armor: {head: 'iron_helmet', torso: 'wolf_hide'},
+        }
+        expect(filterEquipmentState(WOLF_BODY_FORM.equipSlots, state, 'wolf')).toEqual({
+            limb: {claw: 'wolf_claw_wrap'},
+            weapon: {},
+            armor: {torso: 'wolf_hide'},
+        })
+    })
+
     it('hasEquipSlot 按 kind + bodyPart 判定，不混淆同名部位', () => {
         expect(hasEquipSlot(HUMANOID_BODY_FORM.equipSlots, 'weapon', 'main_hand')).toBe(true)
         expect(hasEquipSlot(HUMANOID_BODY_FORM.equipSlots, 'limb', 'chest')).toBe(false)

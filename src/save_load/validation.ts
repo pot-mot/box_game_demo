@@ -266,6 +266,7 @@ const CharacterConfigInner = z.object({
     bodyState: BodyStateSchema,
     isPlayer: z.boolean().default(false),
     navEnabled: z.boolean().default(true),
+    aiEnabled: z.boolean().default(true),
     /* 行为原点策略 / 间隔 / 追击半径：非法值安全回退 undefined（运行时用默认），不抛错 */
     originStrategy: z.enum(['resident', 'fighter', 'hunter', 'roamer']).optional().catch(undefined),
     originInterval: z.number().positive().optional().catch(undefined),
@@ -290,6 +291,7 @@ const CHARACTER_SAVE_CONFIG_DEFAULTS = {
     equipment: {limb: {}, weapon: {}, armor: {}},
     isPlayer: false,
     navEnabled: true,
+    aiEnabled: true,
 }
 
 const SavableCharacter = z.object({

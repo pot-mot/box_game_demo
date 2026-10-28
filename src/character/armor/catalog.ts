@@ -102,13 +102,22 @@ export const findArmorPreset = (id: string | undefined): ArmorPieceConfig | unde
 export const findLimbPreset = (id: string | undefined): LimbPieceConfig | undefined =>
     id === undefined ? undefined : EXTRA_LIMB_PRESETS.get(id)
 
-/** 某槽位可选护甲（面板下拉用） */
-export const armorPiecesOfSlot = (slot: string): readonly ArmorPieceConfig[] =>
-    allArmorPresets().filter(piece => piece.slot === slot)
+/** 装备是否允许装备到指定体形（allowedBodyFormIds 缺省 = 全部体形） */
+export const pieceAllowedForBodyForm = (
+    piece: {readonly allowedBodyFormIds?: readonly string[]},
+    bodyFormId: string | undefined,
+): boolean =>
+    bodyFormId === undefined
+    || piece.allowedBodyFormIds === undefined
+    || piece.allowedBodyFormIds.includes(bodyFormId)
 
-/** 某槽位可选肢体（面板下拉用） */
-export const limbPiecesOfSlot = (slot: string): readonly LimbPieceConfig[] =>
-    allLimbPresets().filter(piece => piece.slot === slot)
+/** 某槽位可选护甲（面板下拉用；提供 bodyFormId 时仅返回该体形允许的装备） */
+export const armorPiecesOfSlot = (slot: string, bodyFormId?: string): readonly ArmorPieceConfig[] =>
+    allArmorPresets().filter(piece => piece.slot === slot && pieceAllowedForBodyForm(piece, bodyFormId))
+
+/** 某槽位可选肢体（面板下拉用；提供 bodyFormId 时仅返回该体形允许的装备） */
+export const limbPiecesOfSlot = (slot: string, bodyFormId?: string): readonly LimbPieceConfig[] =>
+    allLimbPresets().filter(piece => piece.slot === slot && pieceAllowedForBodyForm(piece, bodyFormId))
 
 /** 校验护甲装备表：未知 id / 槽位与 id 不符 → 空槽 */
 export const resolveArmorLoadout = (loadout: ArmorLoadout | undefined): ResolvedArmorLoadout => {
@@ -234,15 +243,13 @@ export const resolveEquipmentPieces = (
     bodyFormId: string,
 ): readonly (ArmorPieceConfig | LimbPieceConfig)[] => {
     const pieces: (ArmorPieceConfig | LimbPieceConfig)[] = []
-    const allowed = (piece: ArmorPieceConfig | LimbPieceConfig): boolean =>
-        piece.allowedBodyFormIds === undefined || piece.allowedBodyFormIds.includes(bodyFormId)
     for (const [slot, id] of Object.entries(state.armor)) {
         const piece = findArmorPreset(id)
-        if (piece !== undefined && piece.slot === slot && allowed(piece)) pieces.push(piece)
+        if (piece !== undefined && piece.slot === slot && pieceAllowedForBodyForm(piece, bodyFormId)) pieces.push(piece)
     }
     for (const [slot, id] of Object.entries(state.limb)) {
         const piece = findLimbPreset(id)
-        if (piece !== undefined && piece.slot === slot && allowed(piece)) pieces.push(piece)
+        if (piece !== undefined && piece.slot === slot && pieceAllowedForBodyForm(piece, bodyFormId)) pieces.push(piece)
     }
     return pieces
 }

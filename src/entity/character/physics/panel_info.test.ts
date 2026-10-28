@@ -6,6 +6,7 @@ import {setupCharacterEntities, type CharacterEntitySystem} from './world.ts'
 import type {CharacterSaveConfig} from '../../../save_load/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
 import type {CharacterEntity} from '../../../character/types.ts'
+import {translate} from '../../../i18n/index.ts'
 
 /** happy-dom 不支持 canvas 2d，这里注入一个最小 2d 上下文桩（仅覆盖 model.ts 用到的方法） */
 const canvasCtxStub = (): Record<string, unknown> => {
@@ -111,6 +112,73 @@ describe('角色 panelInfo 同步', () => {
         const row = system.panelInfo.find(p => p.id === id)
         expect(row).toBeDefined()
         expect(row!.badgeLabel).toBe('F0')
+    })
+
+    it('列表行展示倾向与三层 AI 策略，不展示 AI倾向字样 / 武器攻击力 / 防御 / 移速', () => {
+        const {id} = system.add(meleeSaveConfig({tendency: {tendencyId: 'hostileAll'}}), 0, 0, 0)
+        const row = system.panelInfo.find(p => p.id === id)!
+        const text = row.rowTextOf?.() ?? row.rowText
+        expect(text).toContain(translate('character.tendency.hostile_all'))
+        expect(text).toContain(translate('character.peace.patrol'))
+        expect(text).toContain(translate('character.combat.tactical'))
+        expect(text).toContain(translate('character.origin.resident'))
+        expect((text.match(/\|/g) ?? []).length).toBe(3)
+        expect(text).not.toContain(translate('character.ai_tendency'))
+        expect(text).not.toContain(translate('character.peace_label'))
+        expect(text).not.toContain(translate('character.combat_label'))
+        expect(text).not.toContain(translate('character.origin_label'))
+        expect(text).not.toContain('(5)')
+        expect(text).not.toContain('def:')
+        expect(text).not.toContain('spd:')
+    })
+
+    it('编辑态同步序列：update 后 capture + syncPositions 反映刚体真实位移', () => {
+        const {id} = system.add(meleeSaveConfig(), 0, 5, 0)
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
+        entity.body.setTranslation({x: 3, y: 7, z: 2}, true)
+        system.syncTrueTransforms()
+        system.captureRenderState()
+        system.syncPositions()
+        expect(entity.mesh.position.x).toBeCloseTo(3, 6)
+        expect(entity.mesh.position.z).toBeCloseTo(2, 6)
+        expect(entity.appearanceGroup.position.x).toBeCloseTo(3, 6)
+        expect(entity.appearanceGroup.position.z).toBeCloseTo(2, 6)
+    })
+
+    it('spawnAt 使用独立 config：上一个角色切体形 / 改配置不污染后续新建', () => {
+        system.spawnAt(0, 0, 0)
+        const first = system.getAll()[0]!
+        expect(first.state.config.bodyFormId).toBeUndefined()
+        expect(first.state.combat.maxHealth).toBe(15)
+
+        /* 切龙 + 改速度：状态只写当前角色，不得改写默认模板 */
+        expect(system.setBodyForm(first.state.identity.id, 'wyvern')).toBe(true)
+        system.updateCharacterConfig(first.state.identity.id, {speed: 9})
+        expect(first.state.combat.maxHealth).toBe(18)
+
+        system.spawnAt(2, 0, 0)
+        const second = system.getAll()[1]!
+        expect(second.state.config.bodyFormId).toBeUndefined()
+        expect(second.state.combat.maxHealth).toBe(15)
+        expect(second.state.config.speed).not.toBe(9)
+    })
+
+    it('add / setBodyForm 不修改传入存档 config（reset 快照不被污染）', () => {
+        const save = meleeSaveConfig()
+        const {id} = system.add(save, 0, 0, 0)
+        expect(system.setBodyForm(id, 'wyvern')).toBe(true)
+        expect(save.bodyFormId).toBeUndefined()
+        expect(save.bodyState).toBeUndefined()
+    })
+
+    it('setCharacterAIEnabled 按角色切换 AI 开关（读档值也生效）', () => {
+        const {id} = system.add(meleeSaveConfig({aiEnabled: false}), 0, 0, 0)
+        const entity = system.getAll().find(e => e.state.identity.id === id)!
+        expect(entity.state.ai.aiEnabled).toBe(false)
+        system.setCharacterAIEnabled(id, true)
+        expect(entity.state.ai.aiEnabled).toBe(true)
+        system.setCharacterAIEnabled(id, false)
+        expect(entity.state.ai.aiEnabled).toBe(false)
     })
 
     it('updateCharacterConfig 编辑后阵营徽标立即更新（无需 syncPositions）', () => {

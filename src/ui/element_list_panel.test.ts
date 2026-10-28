@@ -64,6 +64,25 @@ describe('元素列表面板：Delete 删除', () => {
         expect(terrain.removed).toEqual([3])
     })
 
+    it('每帧刷新徽章与行文本（阵营 / 倾向等变化即时同步）', () => {
+        const {source} = createFakeSource('character')
+        const update = setupElementListPanel([source])
+        source.panelInfo.push({id: 1, type: 'character', badgeLabel: 'F0', badgeColor: '#111111', rowText: 'old'})
+        update()
+        const row = document.querySelector<HTMLElement>('[data-id="1"]')!
+        expect(row.children[0].textContent).toBe('F0')
+        expect((row.children[0] as HTMLElement).style.background).not.toBe('')
+        expect(row.children[1].textContent).toBe('old')
+
+        const entry = source.panelInfo[0]!
+        entry.badgeLabel = 'F2'
+        entry.badgeColor = '#ff0000'
+        entry.rowTextOf = () => 'new'
+        update()
+        expect(row.children[0].textContent).toBe('F2')
+        expect(row.children[1].textContent).toBe('new')
+    })
+
     it('无选中且无悬停时不删除任何元素', () => {
         const {source, removed} = createFakeSource('box')
         setupElementListPanel([source])

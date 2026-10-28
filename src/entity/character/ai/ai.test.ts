@@ -483,6 +483,36 @@ describe('AI 攻击检测箱（attackDetectChecker）', () => {
         expect(guard.guard(ctx, char, enemies)).toBe(true)
     })
 
+    it('chase update：近战进入攻击检测箱后停止移动（冷却期也不顶向目标）', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee', {cooldownTimer: 1})
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'chase'
+        ctx.attackDetectChecker = () => true
+        const enemy = makeChar(2, 1, 0, 1, 'melee')
+        let captured: {dx: number; dz: number; attack: boolean} | undefined
+        chaseHandler.update(0.016, ctx, char, [char, enemy], (dx, dz, attack) => {
+            captured = {dx, dz, attack}
+        })
+        expect(captured).toEqual({dx: 0, dz: 0, attack: false})
+    })
+
+    it('attack update：近战原地出招，只把目标方向作为攻击意图', () => {
+        const char = makeChar(1, 0, 0, 0, 'melee', {attackActive: true})
+        const ctx = makeCtx('tactical', 2)
+        ctx.combatState = 'attack'
+        ctx.attackDetectChecker = () => true
+        const enemy = makeChar(2, 1, 0, 1, 'melee')
+        let captured: {dx: number; dz: number; attack: boolean; attackDX?: number; attackDZ?: number} | undefined
+        attackHandler.update(0.016, ctx, char, [char, enemy], (dx, dz, attack, attackDX, attackDZ) => {
+            captured = {dx, dz, attack, attackDX, attackDZ}
+        })
+        expect(captured?.dx).toBe(0)
+        expect(captured?.dz).toBe(0)
+        expect(captured?.attack).toBe(true)
+        expect(captured?.attackDX).toBeCloseTo(1, 6)
+        expect(captured?.attackDZ).toBeCloseTo(0, 6)
+    })
+
     it('attack update：checker 命中才发攻击输入', () => {
         const char = makeChar(1, 0, 0, 0, 'melee')
         const ctx = makeCtx('tactical', 2)

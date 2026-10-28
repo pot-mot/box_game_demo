@@ -222,6 +222,11 @@ export const setupElementListPanel = (sources: EntityInfoSource[], options: Elem
                     rows.set(key, row)
                 }
 
+                /* 徽章（阵营 / 玩家 / 类型）可能在运行时变化，需随每帧刷新 */
+                const badge = row.children[0] as HTMLElement
+                badge.textContent = entry.badgeLabel
+                badge.style.background = entry.badgeColor
+
                 const span = row.children[1] as HTMLElement
                 span.textContent = entry.rowTextOf !== undefined ? entry.rowTextOf() : entry.rowText
 

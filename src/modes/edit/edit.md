@@ -16,6 +16,7 @@
 
 ## 陷阱
 
+- **执行期不得复用旧渲染插值历史**：角色在创建 / 换体形 / 瞬移时会初始化插值 prev/curr。Execute 与单步分支若只调用 `syncPositions()`，模型会停在初始位姿而刚体 / 骨骼继续运动（失重、停住、闪现）。必须按 `syncTrueTransforms()` → `characterSystem.update()` → `captureRenderState()` → `syncPositions()` 顺序同步；编辑模式的单步 / 暂停不做滞后插值。
 - 建筑笔刷启用时必须关闭指针实体选中 / 生成交互（`pointer.setEnabled(false)`），见 `src/entity/building_generator/building_generator.md`。
 - 地形雕刻启用后仅关闭相机缩放、保留旋转 / 平移。
 

@@ -19,15 +19,15 @@ export const TENDENCIES = {
     hostileAll: (): AttackTendency =>
         () => true,
 
-    /** 攻击除自己以外所有阵营 */
+    /** 攻击非本阵营（self !== target）；同阵营互不攻击 */
     hostileExceptSelf: (): AttackTendency =>
         (self, target) => self !== target,
 
-    /** 只攻击指定阵营列表（不做自我排除） */
+    /** 只攻击指定阵营列表（不做自我排除；列表含本阵营时会攻击同阵营） */
     hostileTo: (...targetFactions: Faction[]): AttackTendency =>
         (_self, target) => targetFactions.includes(target),
 
-    /** 攻击除指定列表外所有阵营 */
+    /** 攻击排除列表以外的所有阵营（本阵营不在排除列表时会攻击同阵营） */
     hostileExcept: (...excludeFactions: Faction[]): AttackTendency =>
         (_self, target) => !excludeFactions.includes(target),
 

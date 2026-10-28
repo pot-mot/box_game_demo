@@ -13,6 +13,7 @@
 
 ## 陷阱
 
+- **渲染插值历史是有状态的**：`syncPositions()` 在存在历史时只写 `lerp(prev, curr, alpha)`，不会读刚体当前位置。非固定插值路径（编辑模式 / 单步 / 任何自建循环）**禁止**在没有本帧 `captureRenderState` 的情况下直接调用 `syncPositions()` 复用旧历史，否则刚体 / 骨骼已移动而模型停在旧位姿（表现为「失去重力」与闪现）。正确顺序：`syncTrueTransforms()`（写真实位置）→ 游戏逻辑 `fixedUpdate` / `update` → `captureRenderState()` → `syncPositions()`。只有 `fixed_step.ts` 的 `createFixedStepStepper` 与 `main.ts` play 固定步分支按此顺序执行。
 - **Rapier `addForce` 不会在 `step` 后自动清除**，本项目所有施力为**每帧瞬态**语义：任何自建 `SharedWorld` 必须每个物理子步结束后 `clearAllForces`；**严禁**在子模块内手写 `world.step` / `eventBus.drain` 子步循环（曾因漏清力导致角色跳跃后持续升空）。固定步循环中 `preSync` 按每物理步执行，故施力是「每物理步」瞬态。
 - **禁止按渲染帧频率推进游戏逻辑**：渲染帧只决定本帧执行几个物理步（累加器），状态机 / 计时器 / 动画必须在物理步内以 `FIXED_TIME_STEP` 推进；否则掉帧或高刷时会出现时间漂移与滑步。
 - 休眠 body 无视 velocity 写入：操作 velocity 前必须 `body.wakeUp()`；`setLinvel(vel, true)` 第二参数同样唤醒，本项目一律传 `true`。

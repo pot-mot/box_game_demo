@@ -23,5 +23,7 @@
 ## 陷阱
 
 - 物理 body 与 three mesh 位置同步在渲染帧 `syncPositions(alpha)` 中覆盖；手动移动 mesh 后要通过 `body.setTranslation` / `body.setRotation` 同步，并调用 `resetRenderState(id)`（或依赖插值器的传送吸附）避免从旧位置插值滑行。
+- **每个角色必须拥有独立的 `config`**：`spawnEntity` 会克隆传入 config（含 `bodyState` / `stamina` 嵌套），调用方不得依赖传入对象保持不变。禁止把 `DEFAULT_CHARACTER_CONFIG` 或 reset / 读档快照 config 直接作为 `state.config` 引用——面板改体形 / 生命 / 飞行 / 体力会写 `state.config`，共享引用会污染默认模板与快照，表现为新建角色继承上个角色体形（生命 15/12/18 随人形 / 狼 / 龙变化）、重置后旧角色也变成龙。
+- **编辑模式 / 非固定插值路径必须避开旧插值历史**：角色 `add()` / `setBodyForm()` / `setTransform()` 会初始化 `render_interpolation` 历史，若编辑执行时只调用 `syncPositions()` 而不 `captureRenderState()`，模型会停在初始化位姿，而刚体与骨骼继续运动（表现为失重 / 模型停住 / 闪现）。正确时序：物理步后 `syncTrueTransforms()` → `characterSystem.update(dt)` → `captureRenderState()` → `syncPositions()`（见 `src/main.ts` 编辑模式分支）。
 - **移动平台载客走「物理接触 + 步进前位置携带」**：移动平台（闸门/升降梯/未来载具）用 `setTranslation` **瞬移**（**禁止 `setNextKinematicTranslation`**：多子步下运动学体会把整帧位移压进首个子步，顶到乘客产生冲量 → 抖动），并每帧按位置/四元数差分得到速度注册进 `SharedWorld.movingSupports`（静止写 0）；`checkGround` 记录**真实接触**的支撑刚体 handle（郊狼宽限不赋值），在 `world.step` **之前**由 `applySupportCarry(dt)` 按平台位移/`ω·dt` 平移乘客位姿（**位置携带，不叠加速度**），对**所有被支撑角色（含 AI）**生效。**禁止**用 `config.size` 几何 / `PlayerAccess` 判定是否站在平台上。
 - 地面接触法线必须经 `physics/contact_tracking.ts` 的 `queryColliderContacts` 取，禁止直接用 `Collider.contactCollider`（详见 `src/physics/physics.md`）。

@@ -9,9 +9,8 @@ import {refreshStaminaProfile} from '../../../character/stamina/runtime.ts'
 import {bodyFormOf, isKnownBodyFormId, HUMANOID_BODY_FORM, weaponSelectableFor, type ColliderSpec} from '../body_form/index.ts'
 import {type ContactTracker, createContactTracker, queryColliderContacts} from '../../../physics/contact_tracking.ts'
 import type {CharacterConfig, CharacterEntity} from '../../../character/types.ts'
-import {moveSpeedOf} from '../../../character/types.ts'
 import type {AttackConfig} from '../../../character/archetypes.ts'
-import type {TendencyConfig} from '../../../character/faction.ts'
+import type {TendencyConfig, TendencyId} from '../../../character/faction.ts'
 import {resolveTendency} from '../../../character/faction.ts'
 import type {AttackResult} from '../../../character/combat/types.ts'
 import {createCombatComponent, holdModeOfCombat, refreshCombatAttackModules, setCombatAttackModule, setCombatBreath, setCombatEquipment, setCombatWeaponSlot, updateShieldBlock} from '../../../character/combat/types.ts'
@@ -397,6 +396,8 @@ export interface CharacterEntitySystem extends EntityInfoSource {
     setupAI: (systems: readonly EntityInfoSource[]) => void
     /** 设置单角色导航感知开关 */
     setNavEnabled: (id: number, enabled: boolean) => void
+    /** 设置单角色 AI 开关（关闭后停止 AI 输入并保持静止） */
+    setCharacterAIEnabled: (id: number, enabled: boolean) => void
     /** 设置近战命中冲击监听器（参数为命中点世界坐标，null 清除） */
     setOnMeleeImpact: (listener: ((x: number, y: number, z: number) => void) | null) => void
     /** 注册世界受击目标提供者（可破坏场景道具），近战 / 远程 / 爆炸 / 翻滚命中路径据此结算 */
@@ -668,15 +669,41 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             : `${state}|${translate('entity.ai.peace')}:${translate(PEACE_STATE_KEYS[ai.peaceState])}`
     }
 
-    /** 单条角色列表行文本（含本地化武器名 / 攻击类别短名；语言切换后由 element_list 按需重算） */
+    /** 攻击倾向 → 列表行文案键 */
+    const TENDENCY_LABEL_KEYS: Record<TendencyId, StringLocaleKey> = {
+        hostileAll: 'character.tendency.hostile_all',
+        hostileExceptSelf: 'character.tendency.hostile_except_self',
+        hostileTo: 'character.tendency.hostile_to',
+        hostileExcept: 'character.tendency.hostile_except',
+        pacifist: 'character.tendency.pacifist',
+    }
+    /** 和平 / 战斗 / 原点策略 → 列表行文案键 */
+    const PEACE_STRATEGY_LABEL_KEYS: Record<PeaceSubStrategy, StringLocaleKey> = {
+        patrol: 'character.peace.patrol',
+        build: 'character.peace.build',
+    }
+    const COMBAT_STRATEGY_LABEL_KEYS: Record<CombatSubStrategy, StringLocaleKey> = {
+        tactical: 'character.combat.tactical',
+        aggressive: 'character.combat.aggressive',
+        cowardly: 'character.combat.cowardly',
+    }
+    const ORIGIN_STRATEGY_LABEL_KEYS: Record<OriginSubStrategy, StringLocaleKey> = {
+        resident: 'character.origin.resident',
+        fighter: 'character.origin.fighter',
+        hunter: 'character.origin.hunter',
+        roamer: 'character.origin.roamer',
+    }
+
+    /** 单条角色列表行文本（武器名 / 倾向 / 三层 AI 策略；语言切换后由 element_list 按需重算） */
     const characterRowText = (ch: CharacterEntity): string => {
         const playerPrefix = ch.state.identity.isPlayer ? translate('entity.player_prefix') : ''
         const weapon = ch.state.combat.weapon
         const weaponName = weaponDisplayName(weapon)
-        const def = ch.state.combat.defense
-        /* 有效移速 = 基础移速 × 装备移速乘数；保留两位小数避免浮点尾巴，整数不显示小数点 */
-        const speed = Number(moveSpeedOf(ch).toFixed(2))
-        return `${playerPrefix}#${ch.state.identity.id}  HP:${ch.state.combat.health}/${ch.state.combat.maxHealth}  ${weaponName}(${weapon.damage})  def:${translate('entity.def_phys_short')}${def.physical}/${translate('entity.def_magic_short')}${def.magic}  spd:${speed}  [${stateLabelOf(ch)}]`
+        const tendency = translate(TENDENCY_LABEL_KEYS[ch.state.combat.tendencyConfig.tendencyId])
+        const peace = translate(PEACE_STRATEGY_LABEL_KEYS[ch.state.ai.peaceStrategy])
+        const combat = translate(COMBAT_STRATEGY_LABEL_KEYS[ch.state.ai.combatStrategy])
+        const origin = translate(ORIGIN_STRATEGY_LABEL_KEYS[ch.state.ai.originStrategy])
+        return `${playerPrefix}#${ch.state.identity.id}  HP:${ch.state.combat.health}/${ch.state.combat.maxHealth}  ${weaponName}  ${tendency} | ${peace} | ${combat} | ${origin}  [${stateLabelOf(ch)}]`
     }
 
     const refreshPlayerLabel = (): void => {
@@ -702,7 +729,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
     }
 
     const spawnEntity = (
-        config: CharacterConfig,
+        configInput: CharacterConfig,
         attack: AttackConfig,
         offhandAttack: AttackConfig | undefined,
         tendencyConfig: TendencyConfig,
@@ -712,6 +739,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         peaceStrategy: PeaceSubStrategy = 'patrol',
         combatStrategy: CombatSubStrategy = 'tactical',
         navEnabled: boolean = true,
+        aiEnabled: boolean = true,
         originStrategy: OriginSubStrategy = 'resident',
         originInterval: number = DEFAULT_ROAMER_INTERVAL,
         chaseLeashRadius: number = DEFAULT_CHASE_LEASH_RADIUS,
@@ -719,6 +747,22 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         aiBlockCooldown: number = DEFAULT_AI_BLOCK_COOLDOWN,
         equipment: EquipmentState = EMPTY_EQUIPMENT_STATE,
     ): CharacterEntity => {
+        /* 每个角色必须拥有独立的 config：后续面板改体形 / 生命 / 飞行 / 体力会直接写 state.config。
+         * 若直接引用调用方对象（如 DEFAULT_CHARACTER_CONFIG 或 reset 快照），会把模板 / 快照一起改脏，
+         * 导致新建角色继承上一个角色的体形（生命 15/12/18 随体形变化）、重置后旧角色也变体形。 */
+        const config: CharacterConfig = {
+            ...configInput,
+            ...(configInput.bodyState !== undefined ? {bodyState: {...configInput.bodyState}} : {}),
+            ...(configInput.stamina !== undefined
+                ? {
+                    stamina: {
+                        ...configInput.stamina,
+                        ...(configInput.stamina.entryCost !== undefined ? {entryCost: {...configInput.stamina.entryCost}} : {}),
+                        ...(configInput.stamina.drainPerSec !== undefined ? {drainPerSec: {...configInput.stamina.drainPerSec}} : {}),
+                    },
+                }
+                : {}),
+        }
         /* 体形计划（骨架 / 外观 / 碰撞布局 / 受击子块 / 装备槽 / 武器策略）：缺省 = 人形 */
         const plan = bodyFormOf(config.bodyFormId)
         const primarySlot = primaryWeaponSlotOf(plan) ?? 'main_hand'
@@ -841,6 +885,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             stateMachine: stateMachineData,
             environment: createBodyEnvironment(),
             ai: {
+                aiEnabled,
                 navEnabled,
                 peaceStrategy,
                 combatStrategy,
@@ -1619,7 +1664,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             checkGround(entity, dt)
 
             const aiCtx = aiMap.get(entity.state.identity.id)
-            if (aiCtx && aiEnabled) {
+            if (aiCtx && aiEnabled && !entity.state.identity.isPlayer && entity.state.ai.aiEnabled) {
                 /* 战斗中把当前攻击目标排除出导航感知：目标相对走位由战斗 FSM 负责，
                  * 否则贴脸前会被当成墙绕行（两个近战 AI 互相绕圈不打） */
                 const combatTarget = aiCtx.activeFsm === 'combat' && aiCtx.combatTargetId !== undefined
@@ -1662,8 +1707,12 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
 
                     entity.stateMachine.setInput(finalDX, finalDZ, jump, attack, false, 'light', 0, false, false, block ?? false)
                     /* 记录意图方向（过滤前）：驱动朝向持续对准目标/路点，被接触阻断/nav 卡住时
-                     * 仍能转正朝向，保证攻击检测箱门控与发射方向可用（过滤后方向会清零导致朝向自锁） */
-                    aiTargetDirs.set(entity.state.identity.id, {dx, dz})
+                     * 仍能转正朝向，保证攻击检测箱门控与发射方向可用（过滤后方向会清零导致朝向自锁）。
+                     * 站定攻击 / 停步对峙时移动分量为 0，改用 AI 显式提供的攻击方向维持面向目标。 */
+                    const hasMoveIntent = dx !== 0 || dz !== 0
+                    const faceDX = hasMoveIntent ? dx : (attackDX ?? dx)
+                    const faceDZ = hasMoveIntent ? dz : (attackDZ ?? dz)
+                    aiTargetDirs.set(entity.state.identity.id, {dx: faceDX, dz: faceDZ})
                     if (attack) {
                         /* 攻击方向：AI 显式指定（如边逃边射面向敌人）优先，缺省取移动方向 */
                         const adx = attackDX ?? dx
@@ -1697,6 +1746,9 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
                     entity.state.combat.attackDirX = playerForwardX
                     entity.state.combat.attackDirZ = playerForwardZ
                 }
+            } else if (aiCtx !== undefined) {
+                /* 单角色 AI 已关闭：每步清零输入，避免沿用关闭前的移动 / 攻击意图 */
+                entity.stateMachine.setInput(0, 0, false, false)
             }
 
             entity.stateMachine.update(dt, entity)
@@ -2140,6 +2192,17 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
     }
 
+    const setCharacterAIEnabled = (id: number, enabled: boolean): void => {
+        const entity = characters.find(c => c.state.identity.id === id)
+        if (!entity) return
+        entity.state.ai.aiEnabled = enabled
+        if (!enabled) {
+            /* 立即停止本帧后的 AI 驱动：清空输入与朝向意图，角色原地保持 */
+            entity.stateMachine.setInput(0, 0, false, false)
+            aiTargetDirs.delete(id)
+        }
+    }
+
     const activateAI = (): void => {
         for (const entity of characters) {
             if (!entity.state.identity.isPlayer && !aiMap.has(entity.state.identity.id)) {
@@ -2217,13 +2280,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
             ...(saveConfig.flightEnabled !== undefined ? {flightEnabled: saveConfig.flightEnabled} : {}),
             ...(saveConfig.stamina !== undefined ? {stamina: saveConfig.stamina} : {}),
         }
-        /* 装备：只保留当前体形声明的槽位；缺失/非法的武器槽由 spawnEntity 回填天然默认 */
-        const equipment = filterEquipmentState(plan.equipSlots, saveConfig.equipment ?? EMPTY_EQUIPMENT_STATE)
+        /* 装备：只保留当前体形声明的槽位与该体形允许的护甲 / 肢体；缺失/非法的武器槽由 spawnEntity 回填天然默认 */
+        const equipment = filterEquipmentState(plan.equipSlots, saveConfig.equipment ?? EMPTY_EQUIPMENT_STATE, plan.id)
         const primarySlot = primaryWeaponSlotOf(plan) ?? 'main_hand'
         const mainWeaponId = resolveWeaponIdForSlot(plan, primarySlot, equipment)
         if (mainWeaponId === undefined) throw new Error(`体形 ${plan.id} 缺少武器槽默认武器`)
         const attack: AttackConfig = {weaponId: mainWeaponId}
-        const entity = spawnEntity(cfg, attack, undefined, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true, saveConfig.originStrategy ?? 'resident', saveConfig.originInterval ?? DEFAULT_ROAMER_INTERVAL, saveConfig.chaseLeashRadius ?? DEFAULT_CHASE_LEASH_RADIUS, saveConfig.aiBlockDuration ?? DEFAULT_AI_BLOCK_DURATION, saveConfig.aiBlockCooldown ?? DEFAULT_AI_BLOCK_COOLDOWN, equipment)
+        const entity = spawnEntity(cfg, attack, undefined, saveConfig.tendency, saveConfig.faction, x, y, z, saveConfig.isPlayer, saveConfig.peaceStrategy ?? 'patrol', saveConfig.combatStrategy ?? 'tactical', saveConfig.navEnabled ?? true, saveConfig.aiEnabled ?? true, saveConfig.originStrategy ?? 'resident', saveConfig.originInterval ?? DEFAULT_ROAMER_INTERVAL, saveConfig.chaseLeashRadius ?? DEFAULT_CHASE_LEASH_RADIUS, saveConfig.aiBlockDuration ?? DEFAULT_AI_BLOCK_DURATION, saveConfig.aiBlockCooldown ?? DEFAULT_AI_BLOCK_COOLDOWN, equipment)
         /* 防御 / 攻击：旧档缺字段回退零防御零攻击；装备汇总已在 spawnEntity 内完成 */
         entity.state.combat.baseDefense = saveConfig.defense ?? plan.base.baseDefense
         entity.state.combat.baseAttack = saveConfig.baseAttack ?? plan.base.baseAttack
@@ -2468,10 +2531,10 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         }
         if (newEquipment) {
             /* 基础防御 / 基础攻击 / 装备变更：重算防御、攻击加成与移速并同步外观（未传项保持原值）。
-             * 按**当前体形**装备槽过滤（切体形后提交的旧槽位装备须剔除，避免无槽体形获得装备数值）。 */
+             * 按**当前体形**装备槽与 allowedBodyFormIds 过滤（切体形后提交的旧槽位 / 跨体形装备须剔除）。 */
             const plan = bodyFormOf(entity.state.config.bodyFormId)
             let filtered = newEquipment.equipment !== undefined
-                ? filterEquipmentState(plan.equipSlots, newEquipment.equipment)
+                ? filterEquipmentState(plan.equipSlots, newEquipment.equipment, plan.id)
                 : entity.state.combat.equipment
             if (newEquipment.equipment !== undefined) {
                 /* 全部武器槽按装备表重建（缺失 / 非法槽位回填天然默认），并保留本次提交的逐手数值覆写 */
@@ -2564,13 +2627,13 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         else entity.state.config.bodyFormId = plan.id
 
         /* 2) 武器策略：武器只属于一种体形 → 切体形清空全部武器槽，由新体形天然默认回填。
-         * 护甲 / 肢体按新体形槽位过滤后保留。 */
+         * 护甲 / 肢体按新体形槽位 + allowedBodyFormIds 过滤后保留（同名槽位的跨体形装备丢弃）。 */
         const newFormId = plan.id
         let equipment = filterEquipmentState(plan.equipSlots, {
             limb: entity.state.combat.equipment.limb,
             weapon: {},
             armor: entity.state.combat.equipment.armor,
-        })
+        }, plan.id)
         const loadout = resolveWeaponLoadout(plan, equipment)
         equipment = loadout.equipment
         entity.state.combat.weapons.clear()
@@ -2846,6 +2909,7 @@ export const setupCharacterEntities = (scene: Scene, shared: SharedWorld): Chara
         setLockPoints,
         setupAI,
         setNavEnabled,
+        setCharacterAIEnabled,
         setOnMeleeImpact,
         registerWorldDamageTargets,
         clearBullets,

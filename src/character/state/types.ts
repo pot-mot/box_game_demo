@@ -69,6 +69,8 @@ export interface CharacterPhysicsState {
 
 /** AI 数据（由 AI / 面板写入） */
 export interface CharacterAiState {
+    /** 该角色的 AI 是否启用（false = 停止 AI 输入并保持静止；不影响全局 AI 系统开关） */
+    aiEnabled: boolean
     navEnabled: boolean
     peaceStrategy: PeaceSubStrategy
     combatStrategy: CombatSubStrategy

@@ -115,7 +115,7 @@
 `world.setBodyForm(id, planId)`：未知 id 或同一体形返回 `false`；否则依次——
 
 1. 重设 `config.bodyFormId`（humanoid 用缺省表示）；
-2. 清空全部武器槽并按新体形 `defaultWeaponLoadout` 回填；护甲 / 肢体按槽位过滤保留；
+2. 清空全部武器槽并按新体形 `defaultWeaponLoadout` 回填；护甲 / 肢体按新体形槽位 + `allowedBodyFormIds` 过滤保留（同名槽位的跨体形装备丢弃）；
 3. 基础定义（防御 / 攻击 / 移速 / 韧性 / 生命）从 `plan.state` 重建最终数值；
 4. dispose 旧模型并按新 plan 重建（`plan.createModel`），动画系统按新 plan 重建；
 5. 受击子块与碰撞体按新 `skeleton.hurtProfile` / `skeleton.colliderLayout` 重建；

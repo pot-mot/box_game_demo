@@ -1,9 +1,9 @@
 import {v3Set, v3Length, type RapVector3} from '../../../../../physics/rapier_utils.ts'
 import type {CombatStateHandler} from '../types.ts'
 import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
-import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
 import {aimAndFireAt} from '../aim.ts'
+import {inMeleeAttackRegion} from '../range.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -22,10 +22,9 @@ export const attackHandler: CombatStateHandler = {
         const weapon = character.state.combat.weapon
 
         /* 出招门控：目标在攻击检测箱内才出招（checker 缺失时回退圆形距离判定；近战无射程概念用常量默认值） */
-        const fallbackRange = weapon.type === 'ranged' ? weapon.range : MELEE_FALLBACK_DETECT_RANGE
-        const inHitRegion = ctx.attackDetectChecker
-            ? ctx.attackDetectChecker(character, target)
-            : dist <= fallbackRange
+        const inHitRegion = weapon.type === 'ranged'
+            ? dist <= weapon.range
+            : inMeleeAttackRegion(ctx, character, target)
         if (!inHitRegion) { setInput(0, 0, false); return }
 
         const len = dist > 0.001 ? dist : 1
@@ -46,11 +45,13 @@ export const attackHandler: CombatStateHandler = {
             return
         }
 
-        /* 近战：攻击中持续按住 attack → 缓冲自动续链；未攻击时起手段就绪才起链 */
+        /* 近战：进入攻击距离后原地出招 / 续链，仅把目标方向作为攻击与朝向意图。
+         * 不能再输出移动分量，否则 AI 会持续把对方顶开再追上去（两近战反复弹开）。 */
         if (character.state.combat.attackActive || canStart) {
-            setInput(adx, adz, true)
+            setInput(0, 0, true, adx, adz)
         } else {
-            setInput(0, 0, false)
+            /* 攻击冷却期间同样原地保持面向目标，不向前顶 */
+            setInput(0, 0, false, adx, adz)
         }
     },
     exit: () => {},
@@ -82,11 +83,10 @@ export const attackHandler: CombatStateHandler = {
                 v3Set(_dir, tp.x - pos.x, 0, tp.z - pos.z)
                 const weapon = character.state.combat.weapon
                 const detRange = weapon.detectionRange
-                /* 出攻击检测箱 → 追击（checker 缺失时回退距离判定；近战用常量默认值） */
-                const fallbackRange = weapon.type === 'ranged' ? weapon.range : MELEE_FALLBACK_DETECT_RANGE
-                const outOfRegion = ctx.attackDetectChecker
-                    ? !ctx.attackDetectChecker(character, target)
-                    : v3Length(_dir) > fallbackRange
+                /* 出攻击检测箱 → 追击（近战与出招判定同源，ranged 用武器射程） */
+                const outOfRegion = weapon.type === 'ranged'
+                    ? v3Length(_dir) > weapon.range
+                    : !inMeleeAttackRegion(ctx, character, target)
                 return outOfRegion && v3Length(_dir) < detRange
             },
         },

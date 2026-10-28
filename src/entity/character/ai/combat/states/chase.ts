@@ -3,6 +3,7 @@ import type {CombatStateHandler} from '../types.ts'
 import {canStartAttack} from '../../../../../character/combat/attack_runtime.ts'
 import {MELEE_FALLBACK_DETECT_RANGE} from '../../../combat/constants.ts'
 import {COMBAT_LOSE_RANGE_FACTOR} from '../../constants.ts'
+import {inMeleeAttackRegion} from '../range.ts'
 
 const _dir: RapVector3 = {x: 0, y: 0, z: 0}
 
@@ -26,7 +27,16 @@ export const chaseHandler: CombatStateHandler = {
 
         if (dist < 0.01) { setInput(0, 0, false); return }
 
+        const adx = _dir.x / dist
+        const adz = _dir.z / dist
         const weapon = character.state.combat.weapon
+
+        /* 近战：进入攻击检测箱后立即停止移动（即便攻击仍在冷却），
+         * 只提供朝向目标的方向意图；否则会持续顶向目标 → 分离弹开 → 再撞的循环。 */
+        if (weapon.type === 'melee' && inMeleeAttackRegion(ctx, character, target)) {
+            setInput(0, 0, false, adx, adz)
+            return
+        }
 
         /* aggressive 策略：远程也追到近战距离 */
         if (ctx.combatStrategy === 'aggressive') {
@@ -38,9 +48,7 @@ export const chaseHandler: CombatStateHandler = {
             if (dist < weapon.idealRange * 1.3) { setInput(0, 0, false); return }
         }
 
-        _dir.x /= dist
-        _dir.z /= dist
-        setInput(_dir.x, _dir.z, false)
+        setInput(adx, adz, false)
     },
     exit: () => {},
     transitions: [

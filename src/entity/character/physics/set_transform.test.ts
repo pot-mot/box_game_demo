@@ -144,6 +144,17 @@ describe('角色 setTransform 瞬移与朝向映射', () => {
         expect(system.getAll()).toHaveLength(0)
     })
 
+    it('setBodyForm 丢弃同名槽位的跨体形护甲 / 肢体', () => {
+        const {id} = system.add(meleeSaveConfig({
+            equipment: {limb: {legs: 'orc_legs'}, weapon: {main_hand: 'long_sword'}, armor: {head: 'iron_helmet'}},
+        }), 0, 0, 0)
+        expect(system.setBodyForm(id, 'wolf')).toBe(true)
+        const entity = system.getAll().find(e => e.state.identity.id === id)
+        expect(entity).toBeDefined()
+        expect(entity!.state.combat.equipment.armor.head).toBeUndefined()
+        expect(entity!.state.combat.equipment.limb.legs).toBeUndefined()
+    })
+
     it('setBodyForm 切换体形后保留当前朝向（编辑暂停态不丢失）', () => {
         const {id} = system.add(meleeSaveConfig(), 0, 0, 0)
         /* 编辑期先把角色转向左（270°），再切到狼体形：新模型必须保持该朝向 */

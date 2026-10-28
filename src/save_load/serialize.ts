@@ -198,6 +198,7 @@ export const collectWorldState = (
                     getUpDuration: e.state.combat.getUpDuration,
                     isPlayer: e.state.identity.isPlayer,
                     navEnabled: e.state.ai.navEnabled,
+                    aiEnabled: e.state.ai.aiEnabled,
                     /* 行为原点策略 / 间隔 / 追击半径（写实际值；旧代码读到缺字段安全回退默认） */
                     originStrategy: e.state.ai.originStrategy,
                     originInterval: e.state.ai.originInterval,

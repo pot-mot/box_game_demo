@@ -76,11 +76,11 @@ AI 决策层（entity/character/ai/machine.ts）
 
 | 状态 | 适用武器 | 行为 |
 |------|----------|------|
-| `chase` | 近战/远程 | 直接朝目标移动（水平方向） |
+| `chase` | 近战/远程 | 朝目标移动；**近战进入攻击检测箱后原地停步**（含冷却期），远程到理想距离停止 |
 | `approach` | 仅远程 | 朝目标移动，到达射击范围后**站定转向瞄准 → 开火** |
 | `volley` | 仅远程 | 围绕目标环形移动，两次射击之间走位、节流到点后站定瞄准射击 |
 | `kite` | 仅远程 | 面朝移动方向远离目标，节流到点且射程内时回身站定射击 |
-| `attack` | 近战/远程 | 面向目标并攻击（远程站定转向瞄准后开火） |
+| `attack` | 近战/远程 | 面向目标并攻击；**近战原地出招**（移动输入为 0，仅传递目标方向作为攻击 / 朝向意图），远程站定转向瞄准后开火 |
 | `flee` | 近战/远程 | 面朝移动方向逃跑（远程为「逃跑 / 站定回身射击」交替，见 §3.3） |
 | `inactive` | — | 空操作终止状态，触发返回和平 FSM |
 
@@ -190,7 +190,7 @@ export type AttackDetectChecker = (character: CharacterEntity, target: Character
 - **判定**：`testAttackDetect()` 用检测箱 OBB 与目标受击箱 OBB（与碰撞箱同尺寸的竖直胶囊包围盒，随目标朝向旋转）做 15 轴 SAT 相交（`combat/obb.ts`）。
 - **注入链路**：`world.ts` `activateAI` 创建 AI 时传入闭包——近战取当前武器 `detectBoxes` 与模型关节世界矩阵走 `testAttackDetect`；远程回退 `Math.hypot <= weapon.range` 圆形判定（edit debug 以橙色射程圆环显示，半径 = `weapon.range`）。近战武器配置已无 `range` 字段，攻击触发判定完全由武器 `detectBoxes` 驱动。
 - **体形化（生物）**：AI 的感知与出招几何一律经 `entity/character/body_form/common/geometry.ts` 读**体形属性**——眼部高度 `formEyeHeight`（`BodyForm.base.eyeHeight`）、目标体半径 `formBodyRadius`、目标受击箱半长 `formHurtHalf`（`BodyForm.base.size`）；**禁止**再写死人形常量。索敌半径仍取武器 `detectionRange`（因此生物天然武器的 `detectionRange` 必须在其 `body_form/<form>/equipment/weapons.ts` 中按体形语义调对，不能沿用人体近战的 6–10 或天然武器的 2.x）。生物天然武器可经 `mountJointId` 挂到正确关节（马踢击 / 飞龙爪击），命中盒由 `weapon_mesh.ts` 的 `genNone` 给出（覆盖打击区）。
-- **生效点**（仅近战）：`attack.update` 出招门控、`attack → chase`（出箱）guard、`chase → attack`（入箱）guard、`kite` 射程内判定；`detectionRange`（索敌感知半径）语义不变。
+- **生效点**（仅近战）：`attack.update` 出招门控、`attack → chase`（出箱）guard、`chase → attack`（入箱）guard、**`chase.update` 入箱停步**（冷却期也不得继续前进）、`kite` 射程内判定；`detectionRange`（索敌感知半径）语义不变。`chase` / `attack` 共用 `combat/range.ts` 的 `inMeleeAttackRegion`，保证「停步距离」与「出招距离」同源。
 - **回退**：checker 缺失（测试环境）时回退圆形距离判定（近战用 `MELEE_FALLBACK_DETECT_RANGE`，远程用 `weapon.range`），保证无装配环境下 AI 行为不变。
 - **与伤害判定的边界**：攻击检测箱仅用于 AI 出招触发（橙色 debug 线框）；实际伤害由**攻击判定箱**（武器本地盒随 `weaponGroup.matrixWorld` 变换的世界 OBB，红色 debug 线框）与受击箱 SAT 相交决定，两者职责分离、几何不同。
 
@@ -251,6 +251,8 @@ detectBox.offset   = 估算 offset
 - 设置 `dx`/`dz` 为归一化方向向量
 - 远程角色在最佳距离（`idealRange`）时停止移动
 - Aggressive 策略持续逼近到 `skillRange` 距离
+- **近战进入攻击检测箱即停步**（`inMeleeAttackRegion`，与出招门控同源；即使攻击仍在冷却）：移动输入归零，只把目标方向作为朝向 / 攻击意图。若冷却期仍输出前进分量，角色会持续顶向对方，被分离力弹开后又继续追，形成两近战「靠近 → 弹开 → 再靠近」的循环。
+- **近战 `attack` 同样原地出招**：`setInput(0, 0, true, adx, adz)`——移动分量为 0，目标方向仅用于攻击方向与站定朝向。禁止在攻击状态继续输出移动分量。
 
 ### 3.3 逃跑移动（`flee.ts`）
 
@@ -457,6 +459,8 @@ AI 的移动输入在到达动作层前要经过两道"清零闸门"：**接触�
 
 > 窗口时长与冷却为**逐角色属性**（与 `chaseLeashRadius` / `originInterval` 同性质）：`state.ai.aiBlockDuration` / `aiBlockCooldown`，编辑面板可改、存档持久化（可选字段，旧档安全回退常量默认）。
 
+**逐角色 AI 开关**：`state.ai.aiEnabled`（默认 `true`，编辑面板「关闭 AI」反向勾选、存档持久化）。`world.ts` 仅在全局 AI 开启且该角色 `aiEnabled === true` 时调用 `updateAI`；关闭时每个物理步清零状态机输入，角色原地保持，不会沿用关闭前的移动 / 攻击意图。`CharacterEntitySystem.setCharacterAIEnabled(id, enabled)` 为运行时入口，与全局 `setAIEnabled` 互不影响。
+
 ---
 
 ## 五、关键类型定义
@@ -581,7 +585,13 @@ edit 模式 debug 可视化（蓝色线条，`combat_vfx/hitbox_debug.ts`）：�
 
 - `Faction` — 数值型阵营标识
 - `AttackTendency` — `(selfFaction: Faction, targetFaction: Faction) => boolean`
-- `TendencyConfig` — 攻击倾向配置，支持预设（敌对全部 / 仅敌对指定阵营等）
+- `TendencyConfig` — 攻击倾向配置。预设语义与面板文案必须一致：
+    - `hostileAll`：敌对全部阵营，**含本阵营**（会攻击同阵营）；
+    - `hostileExceptSelf`：敌对**非本阵营**（同阵营互不攻击）；
+    - `hostileTo`：**仅**敌对 `targetFactions` 列表中的阵营（列表含本阵营时也会攻击同阵营）；
+    - `hostileExcept`：敌对 `targetFactions` 列表以外的**所有**阵营（本阵营不在排除列表时会攻击同阵营）；
+    - `pacifist`：不攻击任何阵营。
+    - 面板 `hostileTo` 时输入框标签为「目标阵营」，`hostileExcept` 时为「排除阵营」。
 
 ---
 

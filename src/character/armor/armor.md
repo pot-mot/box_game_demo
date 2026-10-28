@@ -295,8 +295,8 @@ export type ResolvedLimbLoadout = Readonly<Record<string, LimbPieceConfig>>
 export const registerArmorPresets / registerLimbPresets = (pieces) => ...
 export const allArmorPresets / allLimbPresets = () => ...
 export const findArmorPreset / findLimbPreset = (id: string | undefined) => ...
-/** 某槽位可选装备（面板下拉用） */
-export const armorPiecesOfSlot / limbPiecesOfSlot = (slot) => ...
+/** 某槽位可选装备（面板下拉用；提供 bodyFormId 时仅返回该体形允许的装备） */
+export const armorPiecesOfSlot / limbPiecesOfSlot = (slot, bodyFormId?) => ...
 /** 校验单类装备表：未知 id / 槽位不匹配 → 空槽（存档容错，不抛错） */
 export const resolveArmorLoadout / resolveLimbLoadout = (loadout) => ...
 /** 跨体形装备解析：未知 id / 槽位不匹配 / allowedBodyFormIds 不含本体形 → 剔除 */
@@ -472,11 +472,13 @@ const ARMOR_SLOT_JOINTS: Record<string, readonly string[]> = {
 - `add()`（存档载入）：spawn 后调用 `setCombatEquipment(entity.state.combat, saveConfig.defense ?? ZERO_PROFILE, saveConfig.armor ?? {}, saveConfig.limb ?? {})`，再 `model.equipArmor(resolveArmorLoadout(...))` 与 `model.equipLimbs(resolveLimbLoadout(...))`（与 maxHealth 覆盖同层，加载后刷新列表行）。
 - `updateCharacterConfig()`（面板应用）：末位可选参数 `newEquipment?: {baseDefense?: DefenseProfile; armor?: ArmorLoadout; limb?: LimbLoadout}`，内部 `setCombatEquipment` +（对应项传入时）`model.equipArmor` / `model.equipLimbs`；未传项保持原值（`setCombatEquipment` 的 `limb` 省略 = 保持原肢体）。
 - 换阵营：`newFaction` 分支调用 `model.recolor(SELECT_PALETTE(newFaction))`，已装备肢体会据此重建外观。
-- 列表行 `rowText`：防御展示 `def:物X/魔Y`，移速展示**有效移速**（保留两位小数去尾，如 `spd:6.69`）。
+- 列表行 `rowText`：展示 `#id HP:当前/上限 武器名 倾向值 | 和平策略 | 战斗策略 | 原点策略 [状态/AI状态]`；策略只显示值，不显示「和平 / 战斗 / 原点策略」标签；不展示武器攻击力、`AI倾向` 字样、防御与移速。阵营徽标（`badgeLabel` / `badgeColor`）随每帧刷新，修改阵营后立即同步。
 
 ### 4.4 面板（`entity/character/ui/panel.ts`）
 
 角色面板按「装备 / 属性」两模块组织（与其它分区同风格，复用 `createSection` / `createLabeledNumberInput`）。
+
+**基础配置区**：「基础模组」与「允许飞行」同一行，惯用手在其后。切换基础模组立即刷新武器 / 装备候选项、副手显隐与属性公式（仅预览，Apply 时写入运行时）；勾选 / 取消「标记为玩家」立即切换 AI 区显隐。AI 区提供「关闭 AI」（`state.ai.aiEnabled`，默认开启），关闭后该角色停止 AI 输入并原地保持，全局 AI 系统开关不受影响。
 
 **装备模块**：武器与装备统一放置——武器下拉（含数值覆写与攻击类别标签）、**全部武器槽下拉**（人形 main/off、狼 head/claw、马 hooves、龙 wing_claw/breath）与**攻击模组下拉**（选项 = 全部武器槽解析出的可用模组）、**四行两列装备区**。武器下拉与副手下拉按 **近战武器 / 盾牌 / 远程武器** 三组 `optgroup` 组织（盾为近战类、经 `block !== undefined` 归入盾牌组，i18n `character.weapon_group_shield`）；盾类不参与双持。Apply 顺序 = 全部武器槽配置 → `setAttackModule`（详见 [`src/character/weapon/weapon.md`](../weapon/weapon.md)）。
 
@@ -484,8 +486,10 @@ const ARMOR_SLOT_JOINTS: Record<string, readonly string[]> = {
 
 | 控件 | 类型 | 行为 |
 |------|------|------|
-| 左列：头盔 / 臂甲 / 胸甲 / 护腿 | 四个 `<select>`（首项「无」= 空槽；选项文案由 `describeArmorPiece` 生成，列出非零的防御 / 攻击加成 / 移速修正） | 读取 `armorPiecesOfSlot(slot)` |
-| 右列：肢体（标签文案「肢体·`LIMB_SLOT_LABELS[slot]`」，如「肢体·头部」） | 四个 `<select>`（首项「无」= 默认人类肢体；选项 = 骷髅 / 兽人 / 精灵） | 读取 `limbPiecesOfSlot(slot)` |
+| 左列：头盔 / 臂甲 / 胸甲 / 护腿 | 四个 `<select>`（首项「无」= 空槽；选项文案由 `describeArmorPiece` 生成，列出非零的防御 / 攻击加成 / 移速修正） | 按当前体形读取 `armorPiecesOfSlot(slot, form.id)` |
+| 右列：肢体（标签文案「肢体·`LIMB_SLOT_LABELS[slot]`」，如「肢体·头部」） | 四个 `<select>`（首项「无」= 默认人类肢体；选项 = 骷髅 / 兽人 / 精灵） | 按当前体形读取 `limbPiecesOfSlot(slot, form.id)` |
+
+**体形切换**：`bodyFormSelect` 变更时立即按目标体形重建护甲 / 肢体下拉（仅该体形声明槽位 + `allowedBodyFormIds` 允许的装备），Apply 前不写入运行时。`readArmorLoadout` / `readLimbLoadout`、公式预览与 Apply 回显均按目标体形校验，同名槽位（如人形 `head` 与狼 `head`）的跨体形装备不会保留或计入数值。
 
 **属性模块**：状态类（生命 / 韧性）与属性类（攻击 / 防御 / 移速 / 跳跃高度 / 体型）排成「公式行」，展示形态 `结果 | (基础值 + 逐项加值) × 逐项乘区`（结果在前，公式拆解逐项列出来源）——仅「当前值 / 基础值」为可编辑数字输入，结果 / 加值 / 乘区均为只读文本，装备 / 武器选择、基础值变化即时刷新。
 
@@ -616,7 +620,7 @@ limb?: {head?: string; arms?: string; body?: string; legs?: string}
 | 层级 | 文件 | 断言要点 |
 |------|------|----------|
 | 单测 | `combat/damage.test.ts` | 修饰器先结算、防御按类别生效、最小 1 保底、亚 1 点伤害不被放大、`baseAmount` 不变、无 `defense` 时行为与旧版一致 |
-| 单测 | `armor/catalog.test.ts` | 跨体形注册 / 按 id 查回同一实例、未知 id 返回 undefined、重复注册去重；`resolveEquipmentPieces` 体形 / 槽位 fail-closed；`equipmentDefenseOf` / `equipmentAttackOf` / `equipmentMoveSpeedOf` / `equipmentPoiseOf` 汇总与空列表回退 |
+| 单测 | `armor/catalog.test.ts` | 跨体形注册 / 按 id 查回同一实例、未知 id 返回 undefined、重复注册去重；槽位查询的 `allowedBodyFormIds` 过滤；`resolveEquipmentPieces` 体形 / 槽位 fail-closed；`equipmentDefenseOf` / `equipmentAttackOf` / `equipmentMoveSpeedOf` / `equipmentPoiseOf` 汇总与空列表回退 |
 | 单测 | `body_form/humanoid/equipment/armor.test.ts` | 人形护甲 id/槽位/体形合法、数值非负、四件满配护栏；`resolveEquipmentPieces` + 汇总函数贯通；`resolveArmorLoadout` 与逐项拆解；本地化显示名 |
 | 单测 | `body_form/humanoid/equipment/limb.test.ts` | 人形肢体 id/槽位/种族合法、每个肢体槽覆盖三族；单件数值护栏；装备状态解析；护甲 + 肢体合并汇总 |
 | 单测 | `appearance/limb_mesh.test.ts` | 三族在全部肢体关节生成部件、cleanup 清空；未知关节空；骷髅 < 精灵 < 兽人粗壮度；纵向对齐不沉地；阵营调色板改变材质颜色；头部主块带种族脸部 map 且三族各异；头部含种族特征几何（部件数 > 主块、兽人獠牙前伸） |

@@ -194,6 +194,7 @@ syncPositions(alpha)   // 每渲染帧
 
 - 「单步 / 暂停」语义保持不变：单步路径仍精确推进 1 步，`alpha = 1`，不做插值。
 - 持续执行（`executing`）路径可复用同一累加器；改动以不破坏编辑基线（`steppedSinceBaseline`）为前提。
+- 编辑模式**不走滞后插值**：步进后先 `syncTrueTransforms()` 按刚体真实位置对齐，`characterSystem.update()` 后再 `captureRenderState()` + `syncPositions()`。否则沿用旧插值历史会让模型停在原地（刚体 / 骨骼仍在运动），表现为角色失去重力与闪现。
 
 ## 6. 文件级改动清单
 

@@ -194,6 +194,7 @@ describe('validateSaveData', () => {
             expect(result.entities[0].config.maxHealth).toBe(100)
             expect(result.entities[0].config.isPlayer).toBe(false)
             expect(result.entities[0].config.navEnabled).toBe(true)
+            expect(result.entities[0].config.aiEnabled).toBe(true)
             expect(result.entities[0].config.tendency.tendencyId).toBe('hostileExceptSelf')
                         expect(result.entities[0].health).toBe(15)
             expect(result.entities[0].position).toEqual([0, 0, 0])
@@ -466,7 +467,7 @@ describe('validateSaveData', () => {
         })
 
         for (const strategy of ['resident', 'fighter', 'hunter', 'roamer'] as const) {
-            const valid = validateSaveData(characterConfig({originStrategy: strategy, originInterval: 12, chaseLeashRadius: 30, aiBlockDuration: 0.6, aiBlockCooldown: 2}))
+            const valid = validateSaveData(characterConfig({originStrategy: strategy, originInterval: 12, chaseLeashRadius: 30, aiBlockDuration: 0.6, aiBlockCooldown: 2, aiEnabled: false}))
             const e = valid.entities[0]
             if (e.type === 'character') {
                 expect(e.config.originStrategy).toBe(strategy)
@@ -474,6 +475,7 @@ describe('validateSaveData', () => {
                 expect(e.config.chaseLeashRadius).toBe(30)
                 expect(e.config.aiBlockDuration).toBe(0.6)
                 expect(e.config.aiBlockCooldown).toBe(2)
+                expect(e.config.aiEnabled).toBe(false)
             }
         }
 
