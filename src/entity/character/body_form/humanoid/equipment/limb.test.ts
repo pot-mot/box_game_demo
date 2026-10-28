@@ -25,7 +25,7 @@ describe('人形肢体预设（数据归属体形分包）', () => {
             expect(piece.moveSpeedMultiplier, piece.id).toBeGreaterThan(0)
         }
         for (const slot of ['head', 'arms', 'body', 'legs']) {
-            const races = limbPiecesOfSlot(slot).map(piece => piece.mesh.race)
+            const races = limbPiecesOfSlot(slot, 'humanoid').map(piece => piece.mesh.race)
             expect(new Set(races), slot).toEqual(new Set(['skeleton', 'orc', 'elf']))
         }
     })

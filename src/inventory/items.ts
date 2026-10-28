@@ -3,6 +3,7 @@ import type {BoxPresetId} from '../types/boxPreset.ts'
 import type {AreaPresetId} from '../types/areaPreset.ts'
 import {translate, type StringLocaleKey} from '../i18n/index.ts'
 import type {IconName} from '../ui/icons/sprite.ts'
+import {CREATURE_LIMB_SETS, creatureLimbPieceName, creatureLimbPresetId} from '../character/armor/creature_limbs.ts'
 
 export const ITEM_CATEGORIES = ['weapon', 'armor', 'limb', 'breath', 'block', 'consumable', 'material', 'key'] as const
 export type ItemCategory = typeof ITEM_CATEGORIES[number]
@@ -50,6 +51,10 @@ export interface ItemDef {
     readonly areaPreset?: AreaPresetId
     readonly dropSize: readonly [number, number, number]
     readonly description: string
+    /** 可选：名称文案键（优先于 `ITEM_NAME_KEYS` 与数据 `name`） */
+    readonly nameKey?: StringLocaleKey
+    /** 可选：描述文案键（优先于 `ITEM_DESC_KEYS` 与数据 `description`） */
+    readonly descriptionKey?: StringLocaleKey
 }
 
 const weapon = (id: string, name: string, shape: readonly string[], weaponId: string, damage: string, icon: IconName, slot = 'main_hand'): ItemDef => ({
@@ -144,6 +149,29 @@ const block = (
  * 覆盖**全部武器模型**（近战 6 + 盾牌 3 + 远程 9）、**全部护甲预设**（27）与**全部方块实体**（5 类箱子 + 水方块）；
  * 由 `items.test.ts` 对照武器 / 护甲目录与实体类型锁定完整性，新增武器 / 护甲 / 方块须同步补条目。
  */
+/** 非人形肢体物品：由共享配色组（体形 / 槽位 / 颜色）生成，名称键复用颜色名 */
+const creatureLimbItems = (): readonly ItemDef[] => CREATURE_LIMB_SETS.flatMap(set =>
+    set.slots.flatMap(slot => set.palettes.map(palette => {
+        const presetId = creatureLimbPresetId(set.formId, palette.key, slot.slot)
+        return {
+            id: `limb_${presetId}`,
+            name: creatureLimbPieceName(palette, slot),
+            category: 'limb',
+            icon: 'item-cloth-vest',
+            shape: ['#'],
+            maxStack: 1,
+            limbId: presetId,
+            equipKind: 'limb',
+            equipSlot: slot.slot,
+            equipBodyFormId: set.formId,
+            dropSize: [0.3, 0.3, 0.3],
+            description: creatureLimbPieceName(palette, slot),
+            nameKey: palette.nameKey,
+            descriptionKey: 'item.limb_generic.desc',
+        } satisfies ItemDef
+    })),
+)
+
 export const ITEM_DEFS: readonly ItemDef[] = [
     /* ── 近战武器 ── */
     weapon('weapon_short_sword', '短剑', ['#', '#', '#'], 'short_sword', '轻快短兵', 'item-short-sword'),
@@ -215,35 +243,34 @@ export const ITEM_DEFS: readonly ItemDef[] = [
     limb('limb_elf_arms', '精灵手臂', ['#'], 'elf_arms', 'arms', 'item-mage-wraps', 'humanoid'),
     limb('limb_elf_body', '精灵身躯', ['#'], 'elf_body', 'body', 'item-mage-robe', 'humanoid'),
     limb('limb_elf_legs', '精灵腿脚', ['#'], 'elf_legs', 'legs', 'item-mage-leggings', 'humanoid'),
-    /* ── 非人形护甲 / 肢体 ── */
-    armor('armor_wolf_head_guard', '狼首骨甲', ['#'], 'wolf_head_guard', 'head', '轻便护甲', 'item-cloth-cap'),
-    armor('armor_wolf_hide', '狼皮胸甲', ['##', '##'], 'wolf_hide', 'torso', '物理防御', 'item-leather-armor'),
-    armor('armor_wolf_leg_wraps', '狼腿束带', ['#', '#'], 'wolf_leg_wraps', 'legs', '轻便护腿', 'item-cloth-pants'),
-    armor('armor_wolf_claw_guard', '狼爪护刃', ['#'], 'wolf_claw_guard', 'claw', '爪部护刃', 'item-cloth-bracers'),
-    limb('limb_wolf_claw_wrap', '狼爪束甲', ['#'], 'wolf_claw_wrap', 'claw', 'item-cloth-bracers', 'wolf'),
-    limb('limb_wolf_head_guard', '狼首护具', ['#'], 'wolf_head_guard', 'head', 'item-cloth-cap', 'wolf'),
-    limb('limb_wolf_leg_guards', '狼腿护具', ['#', '#'], 'wolf_leg_guards', 'legs', 'item-cloth-pants', 'wolf'),
-    limb('limb_wolf_tail_guard', '狼尾护甲', ['#'], 'wolf_tail_guard', 'tail', 'item-cloth-pants', 'wolf'),
-    limb('limb_wolf_torso_harness', '狼躯束具', ['##'], 'wolf_torso_harness', 'torso', 'item-leather-armor', 'wolf'),
+    /* ── 非人形护甲（两套具装） ── */
+    armor('armor_wolf_head_guard', '皮革护首', ['#'], 'wolf_head_guard', 'head', '轻便护甲', 'item-cloth-cap'),
+    armor('armor_wolf_hide', '皮革胸甲', ['##', '##'], 'wolf_hide', 'torso', '物理防御', 'item-leather-armor'),
+    armor('armor_wolf_leg_wraps', '皮革护腿', ['#', '#'], 'wolf_leg_wraps', 'legs', '轻便护腿', 'item-cloth-pants'),
+    armor('armor_wolf_claw_guard', '皮革护爪', ['#'], 'wolf_claw_guard', 'claw', '爪部护刃', 'item-cloth-bracers'),
+    armor('armor_wolf_bone_head', '狼骨护首', ['#'], 'wolf_bone_head', 'head', '皮毛骨甲', 'item-cloth-cap'),
+    armor('armor_wolf_bone_torso', '狼骨护胸', ['##'], 'wolf_bone_torso', 'torso', '皮毛骨甲', 'item-leather-armor'),
+    armor('armor_wolf_bone_legs', '狼骨护腿', ['#', '#'], 'wolf_bone_legs', 'legs', '皮毛骨甲', 'item-cloth-pants'),
+    armor('armor_wolf_bone_claw', '狼骨护爪', ['#'], 'wolf_bone_claw', 'claw', '皮毛骨甲', 'item-cloth-bracers'),
     armor('armor_horse_head_armor', '马首面甲', ['#'], 'horse_head_armor', 'head', '物理防御', 'item-iron-helmet'),
     armor('armor_horse_barding', '马身具装', ['##', '##'], 'horse_barding', 'torso', '重型防御', 'item-iron-plate'),
     armor('armor_horse_hoof_shoes', '马蹄铁', ['#'], 'horse_hoof_shoes', 'hooves', '蹄部护甲', 'item-iron-greaves'),
     armor('armor_horse_leg_guards', '马腿铁甲', ['#', '#'], 'horse_leg_guards', 'legs', '重型护腿', 'item-iron-greaves'),
-    limb('limb_horse_iron_legs', '马铁腿甲', ['#', '#'], 'horse_iron_legs', 'legs', 'item-iron-greaves', 'horse'),
-    limb('limb_horse_torso_barding', '马躯革甲', ['##'], 'horse_torso_barding', 'torso', 'item-leather-armor', 'horse'),
-    limb('limb_horse_tail_banner', '马尾长缨', ['#'], 'horse_tail_banner', 'tail', 'item-cloth-pants', 'horse'),
-    limb('limb_horse_head_plume', '马首翎羽', ['#'], 'horse_head_plume', 'head', 'item-cloth-cap', 'horse'),
+    armor('armor_horse_leather_head', '马革护首', ['#'], 'horse_leather_head', 'head', '皮革护具', 'item-leather-cap'),
+    armor('armor_horse_leather_torso', '马革护胸', ['##'], 'horse_leather_torso', 'torso', '皮革护具', 'item-leather-armor'),
+    armor('armor_horse_leather_legs', '马革护腿', ['#', '#'], 'horse_leather_legs', 'legs', '皮革护具', 'item-cloth-pants'),
     armor('armor_wyvern_head_crest', '龙首甲冠', ['#'], 'wyvern_head_crest', 'head', '复合防御', 'item-scale-helm'),
     armor('armor_wyvern_scale_plate', '龙鳞胸甲', ['##', '##'], 'wyvern_scale_plate', 'torso', '复合防御', 'item-scale-mail'),
     armor('armor_wyvern_wing_guards', '龙翼护甲', ['##'], 'wyvern_wing_guards', 'wing', '翼部护甲', 'item-scale-bracers'),
     armor('armor_wyvern_tail_spikes', '龙尾棘甲', ['#'], 'wyvern_tail_spikes', 'tail', '尾部护甲', 'item-scale-legs'),
     armor('armor_wyvern_leg_guards', '龙腿鳞甲', ['#', '#'], 'wyvern_leg_guards', 'legs', '鳞甲护腿', 'item-scale-legs'),
-    limb('limb_wyvern_wing_claw_blade', '龙翼爪刃', ['#', '#'], 'wyvern_wing_claw_blade', 'wing_claw', 'item-short-sword', 'wyvern'),
-    limb('limb_wyvern_wing_guard', '龙翼肢甲', ['#'], 'wyvern_wing_guard', 'wing', 'item-scale-bracers', 'wyvern'),
-    limb('limb_wyvern_torso_plates', '龙躯腹甲', ['##'], 'wyvern_torso_plates', 'torso', 'item-scale-mail', 'wyvern'),
-    limb('limb_wyvern_leg_guards', '龙腿肢甲', ['#', '#'], 'wyvern_leg_guards', 'legs', 'item-scale-legs', 'wyvern'),
-    limb('limb_wyvern_head_horns', '龙首角饰', ['#'], 'wyvern_head_horns', 'head', 'item-iron-helmet', 'wyvern'),
-    limb('limb_wyvern_tail_blade', '龙尾刃甲', ['#', '#'], 'wyvern_tail_blade', 'tail', 'item-long-sword', 'wyvern'),
+    armor('armor_wyvern_bone_head', '龙骸护首', ['#'], 'wyvern_bone_head', 'head', '骨白护具', 'item-iron-helmet'),
+    armor('armor_wyvern_bone_tail', '龙骸护尾', ['#', '#'], 'wyvern_bone_tail', 'tail', '骨白护具', 'item-long-sword'),
+    armor('armor_wyvern_bone_wing', '龙骸护翼', ['#'], 'wyvern_bone_wing', 'wing', '骨白护具', 'item-scale-bracers'),
+    armor('armor_wyvern_bone_torso', '龙骸护胸', ['##'], 'wyvern_bone_torso', 'torso', '骨白护具', 'item-scale-mail'),
+    armor('armor_wyvern_bone_legs', '龙骸护腿', ['#', '#'], 'wyvern_bone_legs', 'legs', '骨白护具', 'item-scale-legs'),
+    /* ── 非人形肢体（逐槽位配色，由共享配色数据生成） ── */
+    ...creatureLimbItems(),
     /* ── 方块 ── */
     block('block_common', '普通方块', ['#'], 'box', '基础物理方块', 'item-block', {box: 'common'}),
     block('block_destruction', '可破坏方块', ['#'], 'box', '受击碎裂', 'item-block-destruction', {box: 'destructible'}),
@@ -316,6 +343,38 @@ const ITEM_NAME_KEYS: Record<string, StringLocaleKey> = {
     armor_mage_leggings: 'armor.mage_leggings',
     armor_swift_boots: 'armor.swift_boots',
     armor_wind_boots: 'armor.wind_boots',
+    /* 非人形护甲 / 肢体（复用目录名称键） */
+    armor_wolf_head_guard: 'armor.wolf_head_guard',
+    armor_wolf_hide: 'armor.wolf_hide',
+    armor_wolf_leg_wraps: 'armor.wolf_leg_wraps',
+    armor_wolf_claw_guard: 'armor.wolf_claw_guard',
+    armor_wolf_bone_head: 'armor.wolf_bone_head',
+    armor_wolf_bone_torso: 'armor.wolf_bone_torso',
+    armor_wolf_bone_legs: 'armor.wolf_bone_legs',
+    armor_wolf_bone_claw: 'armor.wolf_bone_claw',
+    armor_wolf_bone_tail: 'armor.wolf_bone_tail',
+    armor_horse_leather_head: 'armor.horse_leather_head',
+    armor_horse_leather_torso: 'armor.horse_leather_torso',
+    armor_horse_leather_legs: 'armor.horse_leather_legs',
+    armor_horse_leather_tail: 'armor.horse_leather_tail',
+    armor_wyvern_bone_wing_claw: 'armor.wyvern_bone_wing_claw',
+    armor_wyvern_bone_head: 'armor.wyvern_bone_head',
+    armor_wyvern_bone_tail: 'armor.wyvern_bone_tail',
+    armor_wyvern_bone_wing: 'armor.wyvern_bone_wing',
+    armor_wyvern_bone_torso: 'armor.wyvern_bone_torso',
+    armor_wyvern_bone_legs: 'armor.wyvern_bone_legs',
+    limb_wolf_blue: 'limb.wolf_limb_blue',
+    limb_wolf_red: 'limb.wolf_limb_red',
+    limb_wolf_white: 'limb.wolf_limb_white',
+    limb_horse_white: 'limb.horse_limb_white',
+    limb_horse_black: 'limb.horse_limb_black',
+    limb_horse_yellow: 'limb.horse_limb_yellow',
+    limb_wyvern_white: 'limb.wyvern_limb_white',
+    limb_wyvern_black: 'limb.wyvern_limb_black',
+    limb_wyvern_red: 'limb.wyvern_limb_red',
+    limb_wyvern_yellow: 'limb.wyvern_limb_yellow',
+    limb_wyvern_purple: 'limb.wyvern_limb_purple',
+    limb_wyvern_blue: 'limb.wyvern_limb_blue',
     /* 龙吐息 */
     item_breath_fireball: 'item.item_breath_fireball.name',
     item_breath_lightning: 'item.item_breath_lightning.name',
@@ -374,6 +433,34 @@ const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
     armor_mage_leggings: 'item.armor_generic.desc',
     armor_swift_boots: 'item.armor_generic.desc',
     armor_wind_boots: 'item.armor_generic.desc',
+    /* 非人形护甲 / 肢体 */
+    armor_wolf_bone_head: 'item.armor_generic.desc',
+    armor_wolf_bone_torso: 'item.armor_generic.desc',
+    armor_wolf_bone_legs: 'item.armor_generic.desc',
+    armor_wolf_bone_claw: 'item.armor_generic.desc',
+    armor_wolf_bone_tail: 'item.armor_generic.desc',
+    armor_horse_leather_head: 'item.armor_generic.desc',
+    armor_horse_leather_torso: 'item.armor_generic.desc',
+    armor_horse_leather_legs: 'item.armor_generic.desc',
+    armor_horse_leather_tail: 'item.armor_generic.desc',
+    armor_wyvern_bone_wing_claw: 'item.armor_generic.desc',
+    armor_wyvern_bone_head: 'item.armor_generic.desc',
+    armor_wyvern_bone_tail: 'item.armor_generic.desc',
+    armor_wyvern_bone_wing: 'item.armor_generic.desc',
+    armor_wyvern_bone_torso: 'item.armor_generic.desc',
+    armor_wyvern_bone_legs: 'item.armor_generic.desc',
+    limb_wolf_blue: 'item.limb_generic.desc',
+    limb_wolf_red: 'item.limb_generic.desc',
+    limb_wolf_white: 'item.limb_generic.desc',
+    limb_horse_white: 'item.limb_generic.desc',
+    limb_horse_black: 'item.limb_generic.desc',
+    limb_horse_yellow: 'item.limb_generic.desc',
+    limb_wyvern_white: 'item.limb_generic.desc',
+    limb_wyvern_black: 'item.limb_generic.desc',
+    limb_wyvern_red: 'item.limb_generic.desc',
+    limb_wyvern_yellow: 'item.limb_generic.desc',
+    limb_wyvern_purple: 'item.limb_generic.desc',
+    limb_wyvern_blue: 'item.limb_generic.desc',
     item_breath_fireball: 'item.item_breath_fireball.desc',
     item_breath_lightning: 'item.item_breath_lightning.desc',
     item_breath_laser: 'item.item_breath_laser.desc',
@@ -390,12 +477,12 @@ const ITEM_DESC_KEYS: Record<string, StringLocaleKey> = {
 
 /** 物品本地化显示名（未知 id 回退数据 `name`，未知 def 回退 id 文本由调用方处理） */
 export const itemDisplayName = (def: ItemDef): string => {
-    const key = ITEM_NAME_KEYS[def.id]
+    const key = def.nameKey ?? ITEM_NAME_KEYS[def.id]
     return key === undefined ? def.name : translate(key)
 }
 
 /** 物品本地化描述（未知 id 回退数据 `description`） */
 export const itemDisplayDescription = (def: ItemDef): string => {
-    const key = ITEM_DESC_KEYS[def.id]
+    const key = def.descriptionKey ?? ITEM_DESC_KEYS[def.id]
     return key === undefined ? def.description : translate(key)
 }

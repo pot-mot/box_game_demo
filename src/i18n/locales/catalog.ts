@@ -50,6 +50,7 @@ export type CatalogLocale = {
     'item.weapon_staff.desc': string
     'item.weapon_generic.desc': string
     'item.armor_generic.desc': string
+    'item.limb_generic.desc': string
     'item.armor_cloth_cap.name': string
     'item.armor_cloth_cap.desc': string
     'item.armor_iron_helmet.name': string
@@ -134,6 +135,7 @@ export const catalogZh: CatalogLocale = {
     'item.weapon_staff.desc': '法杖（施放魔法）',
     'item.weapon_generic.desc': '可装备武器（装备后替换主手，左侧模型即时预览）',
     'item.armor_generic.desc': '可穿戴护甲（装备后替换对应槽位，左侧模型即时预览）',
+    'item.limb_generic.desc': '可替换体形单个槽位的原始肢体材质（不叠加额外护甲块）',
     'item.armor_cloth_cap.name': '布帽',
     'item.armor_cloth_cap.desc': '布帽（轻便）',
     'item.armor_iron_helmet.name': '铁盔',
@@ -218,6 +220,7 @@ export const catalogEn: CatalogLocale = {
     'item.weapon_staff.desc': 'Staff (casts magic)',
     'item.weapon_generic.desc': 'Equippable weapon (replaces main hand; previewed on the left)',
     'item.armor_generic.desc': 'Wearable armor (replaces its slot; previewed on the left)',
+    'item.limb_generic.desc': 'Replaces one body-form limb slot material (no overlay armor blocks)',
     'item.armor_cloth_cap.name': 'Cloth Cap',
     'item.armor_cloth_cap.desc': 'Cloth Cap (light)',
     'item.armor_iron_helmet.name': 'Iron Helmet',

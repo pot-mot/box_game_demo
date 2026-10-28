@@ -14,12 +14,11 @@ import type {WeaponAttacks} from '../../../character/weapon/attack_chain.ts'
 import {translate, type StringLocaleKey} from '../../../i18n/index.ts'
 import {
     MELEE_ROW_Z,
-    MELEE_ROW_SPACING,
-    MELEE_SPACING,
     RANGED_ROW_Z,
     RANGED_SPACING,
     SHOWCASE_ROSTER,
     SHOWCASE_UNARMED_ID,
+    showcaseFormSpacingOf,
 } from '../constants.ts'
 
 /** 各体形 Tab 的天然 / 允许武器（攻击模组）清单（武器只属于一种体形，用其体形专属 id） */
@@ -136,20 +135,21 @@ export const actionsModule: ShowcaseModule = {
                         place(scene, register, weapon, mode, (i - (entries.length - 1) / 2) * spacing, rowZ, 'humanoid')
                     }
                 }
+                const spacing = showcaseFormSpacingOf('humanoid')
                 for (const [index, mode] of HOLD_MODES.entries()) {
-                    placeRow('melee', mode, MELEE_ROW_Z - index * MELEE_ROW_SPACING, MELEE_SPACING)
+                    placeRow('melee', mode, MELEE_ROW_Z - index * spacing.z, spacing.x)
                 }
                 placeRow('ranged', undefined, RANGED_ROW_Z, RANGED_SPACING)
                 /* 盾牌：攻击模组（盾击）之外，待机时演示格挡姿态（举盾） */
-                const shieldZ = RANGED_ROW_Z - MELEE_ROW_SPACING
+                const shieldZ = RANGED_ROW_Z - spacing.z
                 SHIELD_IDS.forEach((weaponId, i) => {
                     const weapon = weaponPresetOrDefault(weaponId)
                     place(scene, register, weapon, defaultAttackModule(weapon), (i - (SHIELD_IDS.length - 1) / 2) * RANGED_SPACING, shieldZ, 'humanoid')
                 })
                 /* 空手：独立一排，展示单拳 / 双拳两个攻击模组（无可见武器） */
                 const unarmed = weaponPresetOrDefault(SHOWCASE_UNARMED_ID)
-                place(scene, register, unarmed, 'one_handed', -RANGED_SPACING / 2, shieldZ - MELEE_ROW_SPACING, 'humanoid')
-                place(scene, register, unarmed, 'dual_wield', RANGED_SPACING / 2, shieldZ - MELEE_ROW_SPACING, 'humanoid')
+                place(scene, register, unarmed, 'one_handed', -RANGED_SPACING / 2, shieldZ - spacing.z, 'humanoid')
+                place(scene, register, unarmed, 'dual_wield', RANGED_SPACING / 2, shieldZ - spacing.z, 'humanoid')
             },
         }
 
@@ -157,6 +157,7 @@ export const actionsModule: ShowcaseModule = {
             key: tab.key,
             labelKey: tab.labelKey,
             populate: (scene, register) => {
+                const spacing = showcaseFormSpacingOf(tab.key)
                 const rows = new Map<number, typeof tab.modules[number][]>()
                 for (const entry of tab.modules) {
                     const row = entry.row ?? 0
@@ -170,8 +171,8 @@ export const actionsModule: ShowcaseModule = {
                         const weapon = weaponPresetOrDefault(entry.weaponId)
                         place(
                             scene, register, weapon, entry.moduleId,
-                            (i - (n - 1) / 2) * RANGED_SPACING,
-                            RANGED_ROW_Z - row * MELEE_ROW_SPACING,
+                            (i - (n - 1) / 2) * spacing.x,
+                            RANGED_ROW_Z - row * spacing.z,
                             tab.key, entry.breathWeaponId,
                         )
                     })

@@ -34,7 +34,7 @@ src/modes/showcase/
 ├── actor.ts           # 武器攻击展示角色驱动器（支持体形：人形 / 龙 / 马 / 狼）
 ├── projectile.ts      # 展示专用弹丸视觉（真实弹道，无伤害 / 受击）
 ├── race_actor.ts      # 种族 / 套装展示角色驱动器（面板切换非攻击动作）
-├── creature_actor.ts  # 体形（狼 / 马 / 双足飞龙）展示角色驱动器（面板切换非攻击动作）
+├── creature_actor.ts  # 体形（狼 / 马 / 双足飞龙）展示角色驱动器（可装配整套护甲 / 肢体 / 武器）
 ├── actor_debug.ts     # 展示角色调试箱（包装角色渲染层 CharacterDebugView；碰撞 / 受击 / 攻击逐种开关）
 ├── label.ts / actor_handle.ts / constants.ts
 └── modules/
@@ -50,7 +50,7 @@ src/modes/showcase/
 
 - **`ShowcaseModule`**：`{id, title, description, setup(host) → {updater, dispose}}`。`title` / `description` 为 i18n 文案键（强类型 `StringLocaleKey`）；`setup` 接收宿主 `{renderer}`，自建场景并返回每帧 updater 与释放函数。
 - **控制器**：持有 `SHOWCASE_MODULES` 注册表，`selectModule` 释放当前模块、装配新模块并隐藏菜单；`backToMenu` 释放模块、显示菜单；`exit` 释放模块 + 菜单 + 返回按钮后回调宿主。无激活模块时 updater 为空操作（菜单覆盖画布）。
-- **`actor_stage.ts`**：把「独立场景 + 自由飞行相机 + 多 Tab 展示角色 + 聚焦环 + 点击拾取 + 空格暂停/Esc 取消聚焦 + 调试箱开关 + 信息面板」这套通用编排集中一处，供 `actions` / `appearance` 复用。子模块按 `tabs`（`ActorStageTab[]`，单 Tab 不显示 Tab 栏）提供各自 `populate(scene, register)`；切换 Tab 时隐藏旧 Tab 角色、重建面板行、复位聚焦。面板含 **3 个调试箱开关**（物理碰撞箱 / 受击箱 / 攻击箱，默认全关，由 `actor_debug.ts` 包装角色渲染层 `CharacterDebugView` 实现；攻击箱未命中时 50% 不透明，命中窗口生效时 100%）。
+- **`actor_stage.ts`**：把「独立场景 + 自由飞行相机 + 多 Tab 展示角色 + 聚焦环 + 点击拾取 + 空格暂停/Esc 取消聚焦 + 调试箱开关 + 信息面板」这套通用编排集中一处，供 `actions` / `appearance` 复用。子模块按 `tabs`（`ActorStageTab[]`，单 Tab 不显示 Tab 栏）提供各自 `populate(scene, register)`；切换 Tab 时隐藏旧 Tab 角色、重建面板行、复位聚焦。**角色 id 必须跨 Tab 全局唯一**（聚焦下拉 / 面板行按 id 反查角色），且反查只在当前活动 Tab 内进行，避免跨 Tab 同号角色把相机聚焦到隐藏模型上（表现为聚焦位置与画面模型对不上）。面板含 **3 个调试箱开关**（物理碰撞箱 / 受击箱 / 攻击箱，默认全关，由 `actor_debug.ts` 包装角色渲染层 `CharacterDebugView` 实现；攻击箱未命中时 50% 不透明，命中窗口生效时 100%）。
 - **相机（两套方案）**：相机类子模块使用共享**纯摄像机** `modes/control/camera_control.ts`——`W/A/S/D` 前后左右、`Z/X` 升 / 降（`MOVE_STEP`，随相机偏航角），按住 `boost` 动作（默认 Shift）加速飞行；「旋转视角」绑定（默认鼠标左键）拖拽转视角、「平移视角」绑定（默认右键）拖拽平移、滚轮缩放；「聚焦」绑定（默认左键点击）命中角色 / 物件进入**聚焦**（相机平滑飞向目标并环绕，期间暂停自由移动），`Esc` 或点击空白恢复自由飞行。旋转 / 平移 / 聚焦均为可重绑的指针动作（操作设置面板「鼠标」分组）。**含玩家的子模块**（交互物 / 背包）使用共享**玩家主控** `modes/control/player_control.ts`：相机第三人称跟随玩家、鼠标拖拽环绕、滚轮缩放，`Shift` = 翻滚，**不提供右键平移**。
 - **新增子模块**：在 `module.ts` 的 `SHOWCASE_MODULE_IDS` 加 id → 新建 `modules/<id>.ts` → 在 `modules/index.ts` 登记 → 在 `locales/showcase.ts` 补 `showcase.module.<id>.title/desc` 与模块内文案 → 补单测（`modules.test.ts` 自动覆盖注册表一致性）。
 
@@ -59,6 +59,8 @@ src/modes/showcase/
 ### 攻击模组展示（actions）
 
 以 **Tab** 切换 人 / 龙 / 马 / 狼 各自攻击模组的展示台：人形 Tab 为全武器攻击动作（近战 6 武器 × 3 持握模式分三排 + 远程 9 单排 + **盾牌 3 件**：攻击模组 = 盾击，待机使用普通待机姿态（不再停留在格挡举盾，避免与攻击收招姿态互相跳变）），龙 / 马 / 狼 Tab 展示该体形的全部攻击模组（龙 = 近战排：爪 / 翼刃；远程排：天然吐息 / 火球 / 雷电 / 激光。马 = 蹄；狼 = 嘴 / 爪 / 口含短剑 / 口含长剑 / 爪刃）。每角色循环播放其连段（轻链 → 停顿 → 重链），信息面板复现段计时。远程 / 吐息段在 `release` 阶段生成真实弹丸视觉（不创建伤害 / 受击结算），便于观察弹道与视觉特效。远程武器也带贴合武器网格的攻击箱（仅展示 / 调试，不参与近战伤害）；每颗在飞弹丸另有独立的子弹攻击箱线框，随「攻击箱」开关显隐；近战攻击箱在命中窗口未生效时线框透明度为 50%，生效时恢复 100%；切换 Tab 时清空旧 Tab 的全部在飞弹丸，避免残留。
+
+- 体形间距由 `SHOWCASE_FORM_SPACING`（`showcaseFormSpacingOf(bodyFormId)`）按体形单独指定：人 / 狼 / 马共用默认 `x = 3.0`、`z = 3.4`，**龙为默认值的 1.5 倍**（`x = 4.5`、`z = 5.1`），避免大型模型互相遮挡；人形远程 / 盾牌 / 空手行仍使用更密的 `RANGED_SPACING` 横排。
 
 - 人形清单条目按**武器 id + 攻击模组**（`SHOWCASE_ROSTER`）；体形角色经 `createShowcaseActor({bodyFormId, weapon, attackModule})` 用 `bodyFormOf(id).createModel` / `createAnimation` 构建。武器参数与攻击链经 `weaponPresetOrDefault(id)` + `weaponAttacksOf(weapon, attackModule)` 取自武器模组。
 - 近战演示按该武器该模式的段展示顺序连播 → 停顿 0.6s（模拟松开攻击键）→ 重链 → 收尾待机 → 循环；每个**重击段播放前**先**缓慢蓄力**（与生产一致的蓄力前置：按段**有效蓄力时长** `segment.chargeFullTime` 逐帧推进，缺省回退常量 `CHARGE_HOLD_DURATION`，面板进度与 `attackCharge` 由 0 爬升到 1），随后从抬手段末续播该段（不重播抬手）。每段 tilt 为段固有值。
@@ -72,9 +74,13 @@ src/modes/showcase/
 
 ### 装备与外观（appearance）
 
-种族 / 整套护甲 / 体形图鉴：第一排三族肢体（骷髅 / 兽人 / 精灵，四槽同族肢体 replace，各自独立阵营着色）；第二排起按材质展示**整套护甲**（布 / 皮 / 铁 / 鳞 / 石 / 法师，各四槽齐全，`ARMOR_SET_SHOWCASE`，每行 3 套）——**以整套为整体预览，不单件展示**；末排展示非人形体形（狼 / 马 / 双足飞龙 wyvern，`CREATURE_SHOWCASE_ROSTER`）。共 **12** 个展示角色（3 种族 + 6 套护甲 + 3 体形）。**不再定时轮换动作**：左侧面板「当前动作」下拉统一切换全部外观角色，选项覆盖全部非攻击基础状态（待机 / 行走 / 跑步 / 跳跃 / 下落 / 飞行 / 游泳 / 漂浮 / 死亡 / 翻滚 / 受击 / 交互 / 倒地 / 起身 / 格挡 / 破防）。行走 / 跑步 / 游泳注入水平速度驱动步频；游泳只对竖直体形（种族 / 套装人形）镜像生产 `world.ts` 的俯卧根姿态，狼 / 马 / 飞龙骨架本身已水平，不再额外前倾。位置原地不动，纯外观展示。
+以 **Tab** 切换 人 / 龙 / 马 / 狼（与攻击模组展示同一套体形选择），角色横 / 纵向间距同样按体形取 `showcaseFormSpacingOf`（龙 ×1.5）：
 
-- **体形展示**（`creature_actor.ts`）：经 `bodyFormOf(id).createModel` / `createAnimation` 构建非人形角色，动画上下文注入镜像 `world.ts`（行走时 `horizontalSpeed = ACTOR_SPEED`）；标签高度按模型实际包围盒计算（各体形身高差异大），避免标签压进身体。
+- **人**：第一排三族肢体（骷髅 / 兽人 / 精灵，四槽同族肢体 replace，各自独立阵营着色）；第二排起按材质展示**整套护甲**（布 / 皮 / 铁 / 鳞 / 石 / 法师，各四槽齐全，`ARMOR_SET_SHOWCASE`，每行 3 套）——**以整套为整体预览，不单件展示**。共 **9** 个展示角色（3 种族 + 6 套护甲）。
+- **龙 / 马 / 狼**（`CREATURE_EQUIPMENT_SHOWCASE_TABS`）：每个 Tab 展示该体形的**全套装备**外观——第一排按 `form.armorSets` 逐套展示护甲（如狼皮 / 狼骨、马铁 / 马革、龙鳞 / 龙骸，缺省回退全部护甲视为一套）；第二排按颜色展示**逐槽位肢体全套**（同一颜色的全部肢体槽位同时装配：狼蓝 / 红 / 白毛，马白 / 黑 / 黄皮，龙白 / 黑 / 红 / 黄 / 紫 / 蓝鳞）；末排**全部武器**（体形 `weapons` 逐把展示，天然武器同样列出）。肢体是**逐槽位直接替换原模型材质**（`limbTint` 按槽位挂载关节子树替换，无额外网格、不改其它槽位），护甲则是独立叠加网格；套装行使用体形默认武器补齐轮廓。
+- **不再定时轮换动作**：左侧面板「当前动作」下拉统一切换全部外观角色，选项覆盖全部非攻击基础状态（待机 / 行走 / 跑步 / 跳跃 / 下落 / 飞行 / 游泳 / 漂浮 / 死亡 / 翻滚 / 受击 / 交互 / 倒地 / 起身 / 格挡 / 破防）。行走 / 跑步 / 游泳注入水平速度驱动步频；游泳只对竖直体形（种族 / 套装人形）镜像生产 `world.ts` 的俯卧根姿态，狼 / 马 / 飞龙骨架本身已水平，不再额外前倾。位置原地不动，纯外观展示。
+
+- **体形展示**（`creature_actor.ts`）：经 `bodyFormOf(id).createModel` / `createAnimation` 构建非人形角色，可选装配 `equipment` 与 `weapon`（含天然武器逐关节 `mounts`）。护甲走 `equipEquipmentState` 叠加护甲网格；肢体的 `limb: {槽位: id}` 由模型 `limbTint` 按槽位替换该关节子树内原始部件材质（恢复原色 = 清空对应槽位）。动画上下文注入镜像 `world.ts`（行走时 `horizontalSpeed = ACTOR_SPEED`）；标签高度按模型实际包围盒计算（各体形身高差异大），避免标签压进身体。
 
 ### AI 行为 × 复杂地形（ai_terrain）
 
@@ -127,6 +133,8 @@ src/modes/showcase/
   - `src/modes/showcase/actor.test.ts` — 近战满蓄力前置、远程 / 吐息弹丸生成。
   - `src/modes/showcase/projectile.test.ts` — 展示弹丸视觉生命周期。
   - `src/modes/showcase/race_actor.test.ts` — 种族 / 套装角色创建释放、不再定时切换动作、可切换全部非攻击动作（含游泳 / 漂浮）、位置不动、肢体替换外观生效。
+  - `src/modes/showcase/creature_actor.test.ts` — 龙 / 马 / 狼 Tab 均有护甲套装 / 逐槽位肢体 / 武器；护甲挂载增加网格、肢体按槽位只替换原模型材质色（不增网格、色相精确、保留花纹贴图）、动作可切换；默认武器可装配并释放；表面花纹三向投影 UV 在全身上下密度一致。
+  - `src/modes/showcase/spacing.test.ts` — 体形展示间距：人 / 狼 / 马共用默认值、龙 x / z 均放大 1.5 倍、未知体形安全回退。
   - `src/modes/showcase/scene.test.ts` — 纯摄像机自由飞行（WASD 沿朝向平移、Z/X 升降、按住 boost 加速）、聚焦期间暂停自由移动、Esc 恢复自由飞行、跟随目标。
   - `src/modes/control/camera_control.test.ts` / `src/modes/control/player_control.test.ts` — 两套共享操作方案的单测（缩放门控、朝向、移动合成与翻滚边沿、锁定输入）。
   - `src/modes/showcase/focus.test.ts` — 点击聚焦拾取器：命中对象后相机平滑聚焦到目标点、脚下呼吸圆环标记显示并随尺寸缩放、点击空处取消聚焦并隐藏标记。

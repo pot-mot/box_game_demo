@@ -124,3 +124,8 @@ export const WYVERN_PARTS: readonly CreaturePartSpec[] = [
     ...wing(-1),
     ...wing(1),
 ]
+
+/** 逐槽位肢体：龙的鳞片 / 腹鳞 / 角爪按该槽位肢体颜色替换材质；翅膜保持原色 */
+export const WYVERN_LIMB_TINT = {
+    materials: ['scale', 'belly', 'claw', 'horn'],
+} as const

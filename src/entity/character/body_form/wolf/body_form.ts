@@ -1,7 +1,7 @@
 import type {Group} from 'three'
 import type {BodyAppearance, BodyForm} from '../../body_form/common/types.ts'
 import {createCreatureAppearance, createCreatureModel} from '../common/creature_runtime/model.ts'
-import {WOLF_PARTS} from './appearance/appearance.ts'
+import {WOLF_LIMB_TINT, WOLF_PARTS} from './appearance/appearance.ts'
 import {createWolfEquipmentAppearance} from './appearance/equipment.ts'
 import {WOLF_ANIMATION} from './skeleton_animation/system.ts'
 import {WOLF_HURT_BLOCKS} from './skeleton/hurt.ts'
@@ -11,7 +11,7 @@ import {WOLF_EQUIPMENT_MODULES} from './equipment/modules.ts'
 import {WOLF_EQUIP_SLOTS} from './state/equip_slots.ts'
 import {WOLF_BASE} from './state/form_base.ts'
 import {createWolfState} from './state/runtime.ts'
-import {WOLF_ARMOR_PIECES} from './equipment/armor.ts'
+import {WOLF_ARMOR_PIECES, WOLF_ARMOR_SETS} from './equipment/armor.ts'
 import {WOLF_LIMB_PIECES} from './equipment/limb.ts'
 
 export const WOLF_BODY_FORM_ID = 'wolf'
@@ -39,6 +39,7 @@ export const WOLF_BODY_FORM: BodyForm = {
         colliderLayout: WOLF_COLLIDER_LAYOUT,
         equipSlots: WOLF_EQUIP_SLOTS,
         equipmentAppearance: createWolfEquipmentAppearance,
+        limbTint: WOLF_LIMB_TINT,
         scale: config.scale,
     }),
     animation: WOLF_ANIMATION,
@@ -46,6 +47,7 @@ export const WOLF_BODY_FORM: BodyForm = {
     equipmentModules: WOLF_EQUIPMENT_MODULES,
     armorPieces: WOLF_ARMOR_PIECES,
     limbPieces: WOLF_LIMB_PIECES,
+    armorSets: WOLF_ARMOR_SETS,
     weapons: WOLF_WEAPONS,
     defaultWeaponLoadout: {head: 'wolf_bite', claw: 'wolf_claw'},
     editor: {weaponControl: true, handedness: false},

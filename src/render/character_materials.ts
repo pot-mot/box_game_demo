@@ -13,6 +13,10 @@ export const CHARACTER_MATERIAL_IDS = [
 ] as const
 export type CharacterMaterialId = typeof CHARACTER_MATERIAL_IDS[number]
 
+/** 运行时校验字符串是否为合法材质 id（外部数据 / 场景 userData 容错） */
+export const isCharacterMaterialId = (value: string): value is CharacterMaterialId =>
+    (CHARACTER_MATERIAL_IDS as readonly string[]).includes(value)
+
 /** 程序纹理图案种类（多个材�?id 可共享同一图案纹理�?*/
 export type CharacterPatternKind = 'fur' | 'mane' | 'scale' | 'membrane' | 'hide' | 'leather' | 'cloth' | 'wood' | 'metal'
 
@@ -85,8 +89,7 @@ const shade = (color: number, factor: number): string => {
 }
 
 /** 在画布上绘制指定图案（低多面体表面细节） */
-const drawPattern = (ctx: CanvasRenderingContext2D, kind: CharacterPatternKind, size: number): void => {
-    const base = DEFS_BY_PATTERN[kind]
+const drawPattern = (ctx: CanvasRenderingContext2D, kind: CharacterPatternKind, size: number, base: number = DEFS_BY_PATTERN[kind]): void => {
     const rng = createRng(CHARACTER_PATTERN_SEED + kind.length * 97)
     ctx.fillStyle = shade(base, 1)
     ctx.fillRect(0, 0, size, size)
@@ -227,27 +230,37 @@ const DEFS_BY_PATTERN: Readonly<Record<CharacterPatternKind, number>> = {
     hide: 0x8a6a4a, leather: 0x7a5230, cloth: 0x8b7d5a, wood: 0x8a5a2b, metal: 0x8a8f98,
 }
 
-let _textures: Map<CharacterPatternKind, CanvasTexture | null> | undefined
+let _textures: Map<string, CanvasTexture | null> | undefined
 
 /**
- * 取图案共享纹理单例（可平铺）；无 2D 上下文（�?happy-dom 测试环境）时返回 undefined�? * 单例只读�?*不得**随实例释放；测试�?`disposeCharacterMaterialTextures` 统一清理�? */
-export const getCharacterMaterialTexture = (kind: CharacterPatternKind): CanvasTexture | undefined => {
+ * 中性花纹底色：仅提供明暗纹理，不携带色相。
+ * 供「换色材质」使用——材质 `color` 决定色相，贴图只贡献鳞片 / 毛发 / 皮肤细节。
+ */
+const NEUTRAL_PATTERN_BASE = 0xffffff
+
+/**
+ * 取图案共享纹理单例（可平铺）；无 2D 上下文（如 happy-dom 测试环境）时返回 undefined。
+ * `neutral = true` 时生成无彩色（白色基准）图案，只保留明暗细节，避免换色时把底图色相乘进来。
+ * 单例只读，**不得**随实例释放；测试经 `disposeCharacterMaterialTextures` 统一清理。
+ */
+export const getCharacterMaterialTexture = (kind: CharacterPatternKind, neutral = false): CanvasTexture | undefined => {
     if (_textures === undefined) _textures = new Map()
-    const cached = _textures.get(kind)
+    const cacheKey = neutral ? `${kind}:neutral` : kind
+    const cached = _textures.get(cacheKey)
     if (cached !== undefined) return cached ?? undefined
     const canvas = document.createElement('canvas')
     canvas.width = CHARACTER_TEXTURE_PX
     canvas.height = CHARACTER_TEXTURE_PX
     const ctx = canvas.getContext('2d')
     if (ctx === null) {
-        _textures.set(kind, null)
+        _textures.set(cacheKey, null)
         return undefined
     }
     /* 部分测试环境（happy-dom）仅提供不完整的 2D 上下文：绘制失败时安全回退为无纹理 */
     try {
-        drawPattern(ctx, kind, CHARACTER_TEXTURE_PX)
+        drawPattern(ctx, kind, CHARACTER_TEXTURE_PX, neutral ? NEUTRAL_PATTERN_BASE : undefined)
     } catch {
-        _textures.set(kind, null)
+        _textures.set(cacheKey, null)
         return undefined
     }
     const tex = new CanvasTexture(canvas)
@@ -258,12 +271,16 @@ export const getCharacterMaterialTexture = (kind: CharacterPatternKind): CanvasT
     tex.generateMipmaps = true
     tex.colorSpace = SRGBColorSpace
     tex.needsUpdate = true
-    _textures.set(kind, tex)
+    _textures.set(cacheKey, tex)
     return tex
 }
 
 /** 创建一�?*逐实�?*材质（可被受�?无敌效果原地改写）；可�?color 覆盖缺省基色 */
-export const createCharacterMaterial = (id: CharacterMaterialId, color?: number): MeshStandardMaterial => {
+export const createCharacterMaterial = (
+    id: CharacterMaterialId,
+    color?: number,
+    options?: {readonly neutralPattern?: boolean},
+): MeshStandardMaterial => {
     const def = DEFS[id]
     const params: MeshStandardMaterialParameters = {
         color: color ?? def.baseColor,
@@ -274,7 +291,7 @@ export const createCharacterMaterial = (id: CharacterMaterialId, color?: number)
     if (def.side !== undefined) params.side = def.side
     if (def.emissive !== undefined) params.emissive = def.emissive
     if (def.pattern !== undefined) {
-        const tex = getCharacterMaterialTexture(def.pattern)
+        const tex = getCharacterMaterialTexture(def.pattern, options?.neutralPattern === true)
         if (tex !== undefined) params.map = tex
     }
     return new MeshStandardMaterial(params)

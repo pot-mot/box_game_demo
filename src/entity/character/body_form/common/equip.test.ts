@@ -13,9 +13,9 @@ describe('filterEquipmentState（按体形过滤装备状态）', () => {
         expect(filterEquipmentState(HUMANOID_BODY_FORM.equipSlots, state)).toEqual(state)
     })
 
-    it('狼丢弃人形专属槽位，保留自身声明的爪 / 头 / 躯干 / 腿 / 尾', () => {
+    it('狼丢弃人形专属槽位，保留爪 / 头 / 躯干 / 腿 / 尾肢体与护甲', () => {
         const state = {
-            limb: {claw: 'wolf_claw_wrap', tail: 'wolf_tail_guard'},
+            limb: {claw: 'wolf_claw_wrap', tail: 'wolf_tail_guard', body: 'wolf_body_blue'},
             weapon: {main_hand: 'long_sword', claw: 'wolf_bite'},
             armor: {chest: 'iron_plate', torso: 'wolf_hide'},
         }

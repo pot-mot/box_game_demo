@@ -1,14 +1,14 @@
 import {describe, it, expect, vi} from 'vitest'
 import {Mesh, MeshStandardMaterial} from 'three'
 import type {BoxPartPalette} from '../../../../../render/box_parts.ts'
-import {LIMB_RACES, createLimbMesh, type ArmorMeshResult, type LimbMeshConfig} from './armor_mesh.ts'
+import {LIMB_RACES, createLimbMesh, type ArmorMeshResult, type LimbMeshConfig, type LimbRace} from './armor_mesh.ts'
 import {factionColorOf, SELECT_PALETTE} from '../../../appearance/constants.ts'
 
 const PALETTE_A: BoxPartPalette = {skinColor: 0xf0c8a0, hairColor: 0x3a2218, bodyColor: 0xe06040, legColor: 0x303050}
 
 const RACE_COLOR = {skeleton: 0xe6e2d3, orc: 0x6f9a4a, elf: 0xe8d3b0} as const
 
-const config = (race: LimbMeshConfig['race']): LimbMeshConfig => ({race, color: RACE_COLOR[race]})
+const config = (race: LimbRace): LimbMeshConfig => ({race, color: RACE_COLOR[race]})
 
 /** 部件数量（仅统计可见网格） */
 const partCount = (result: ArmorMeshResult): number =>

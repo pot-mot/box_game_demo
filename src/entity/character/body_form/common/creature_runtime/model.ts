@@ -1,17 +1,18 @@
-import {BoxGeometry, BufferAttribute, BufferGeometry, CapsuleGeometry, DynamicDrawUsage, Euler, Float32BufferAttribute, Matrix4, Quaternion, Vector3, type Group, Mesh, MeshBasicMaterial, type MeshStandardMaterial} from 'three'
+import {BoxGeometry, BufferAttribute, BufferGeometry, CapsuleGeometry, DynamicDrawUsage, Euler, Float32BufferAttribute, Matrix4, type Object3D, Quaternion, Vector3, type Group, Mesh, MeshBasicMaterial, MeshStandardMaterial} from 'three'
 import type {SkeletonDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {skeletonFromDefinition} from '../../../../../skeleton/anim/serialization.ts'
 import {createJointHierarchy} from '../../../../../skeleton/render/joint_hierarchy.ts'
-import type {CharacterMaterialId} from '../../../../../render/character_materials.ts'
+import {createCharacterMaterial, isCharacterMaterialId, type CharacterMaterialId} from '../../../../../render/character_materials.ts'
 import {createMeshBuilder, type MeshBuilder} from '../../../appearance/mesh_builder.ts'
 import {createWeaponMesh, resolveAttackBoxes, WEAPON_MESH_GRIPS, type WeaponMeshConfig} from '../../../appearance/weapon_mesh.ts'
 import type {EquipmentMountSpec} from '../../../../../character/equipment/types.ts'
 import type {WeaponAttackBoxSpec} from '../../../../../character/weapon/mesh_config.ts'
 import {COLLIDER_MESH_OPACITY} from '../../../render/constants.ts'
-import {WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
+import {CREATURE_SURFACE_TILE_SIZE, WEAPON_GRIP_FLEX} from '../../../appearance/constants.ts'
 import type {CreatureModel, WeaponEquipConfig} from '../../../appearance/types.ts'
 import type {BodyAppearance, ColliderSpec, EquipmentAppearanceBuilder} from '../types.ts'
 import type {EquipSlotDef, EquipmentState} from '../../../../../character/equipment/types.ts'
+import {findLimbPreset} from '../../../../../character/armor/catalog.ts'
 
 /** 体形部件几何形状（半写实基元 + 自定义三角扇） */
 export type CreatureShape =
@@ -54,6 +55,15 @@ export interface CreaturePartSpec {
     readonly scale?: readonly [number, number, number]
 }
 
+/**
+ * 逐槽位肢体替换规则：命中槽位挂载关节子树的基础部件材质按肢体颜色替换。
+ * 仅非人形体形使用；不生成额外网格，直接替换该槽位原始肢体的材质。
+ */
+export interface CreatureLimbTint {
+    /** 参与肢体换色的材质 id（如狼的皮毛 / 鬃毛、马的皮、龙的鳞片 / 角爪） */
+    readonly materials: readonly CharacterMaterialId[]
+}
+
 export interface CreatureModelSpec {
     readonly skeleton: SkeletonDefinition
     readonly parts: readonly CreaturePartSpec[]
@@ -64,6 +74,8 @@ export interface CreatureModelSpec {
     readonly equipSlots?: readonly EquipSlotDef[]
     /** 体形装备外观构建器（由 `appearance/equipment.ts` 提供；缺省 = 不显示装备外观） */
     readonly equipmentAppearance?: EquipmentAppearanceBuilder
+    /** 逐槽位肢体替换规则（缺省 = 不支持肢体换色） */
+    readonly limbTint?: CreatureLimbTint
     readonly scale: number
 }
 
@@ -129,6 +141,30 @@ const createFanGeometry = (points: readonly (readonly [number, number, number])[
     geom.setAttribute('uv', new Float32BufferAttribute(uvs, 2))
     geom.computeVertexNormals()
     return geom
+}
+
+/**
+ * 以物体空间三向投影重写 UV（按顶点法线选择投影轴）：
+ * 每个面的花纹尺寸只由物理长度决定，不随几何的球面 / 柱面 UV 参数化拉伸或旋转，
+ * 从而保证鳞片 / 毛发 / 皮肤在大小不同的部件上密度一致、朝向随表面。
+ */
+const applyTriplanarUvs = (geometry: BufferGeometry, tileSize: number): void => {
+    const position = geometry.getAttribute('position')
+    const normal = geometry.getAttribute('normal')
+    const uv = geometry.getAttribute('uv')
+    if (position === undefined || normal === undefined || uv === undefined) return
+    for (let i = 0; i < uv.count; i++) {
+        const nx = Math.abs(normal.getX(i))
+        const ny = Math.abs(normal.getY(i))
+        const nz = Math.abs(normal.getZ(i))
+        const x = position.getX(i) / tileSize
+        const y = position.getY(i) / tileSize
+        const z = position.getZ(i) / tileSize
+        if (nz >= nx && nz >= ny) uv.setXY(i, x, y)
+        else if (nx >= ny) uv.setXY(i, z, y)
+        else uv.setXY(i, x, z)
+    }
+    uv.needsUpdate = true
 }
 
 /** 按形状构建几何并登记到 builder（生命周期随 builder 统一释放） */
@@ -267,16 +303,19 @@ export const createCreatureAppearance = (
             const membrane = createWingMembrane(groups, spec.shape, material)
             builder.trackGeometry(membrane.mesh.geometry)
             membrane.mesh.userData.jointId = spec.jointId
+            membrane.mesh.userData.materialId = spec.material
             partMeshes.push(membrane.mesh)
             deformers.push(membrane.update)
             continue
         }
         const geometry = buildPartGeometry(builder, spec.shape)
+        applyTriplanarUvs(geometry, CREATURE_SURFACE_TILE_SIZE)
         const off = spec.offset ?? [0, 0, 0]
         const rot = spec.rot ?? [0, 0, 0]
         const mesh = builder.add(geometry, material, off[0], off[1], off[2], rot[0], rot[1], rot[2], joint)
         if (spec.scale !== undefined) mesh.scale.set(spec.scale[0], spec.scale[1], spec.scale[2])
         mesh.userData.jointId = spec.jointId
+        mesh.userData.materialId = spec.material
         partMeshes.push(mesh)
     }
     const colliderMeshes = createColliderDebugMeshes(groups, colliderLayout)
@@ -298,6 +337,18 @@ export const createCreatureAppearance = (
     return {boneParts: new Map(), jointParts: new Map(), partMeshes, colliderMeshes, cleanup, ...(update !== undefined ? {update} : {})}
 }
 
+/** 单个基础部件网格的材质替换记录（原材质 + 当前变体材质） */
+interface TintablePart {
+    readonly mesh: Mesh
+    readonly original: MeshStandardMaterial
+    readonly materialId: CharacterMaterialId
+    variant: MeshStandardMaterial | undefined
+}
+
+/** 用变体色 + **无彩色花纹贴图**创建材质：保留鳞片 / 毛发表面细节，同时不污染色相 */
+const createLimbVariantMaterial = (materialId: CharacterMaterialId, color: number): MeshStandardMaterial =>
+    createCharacterMaterial(materialId, color, {neutralPattern: true})
+
 /**
  * 通用四足 / 飞龙体形模型构建器（跨体形复用，非人形）：按骨架定义建 Group 层级、装配低多面体部件、
  * 挂武器位（口 / 侧挂点）、建碰撞体可视化，返回实现 `CreatureModel` 的门面。
@@ -310,6 +361,65 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
     group.scale.set(spec.scale, spec.scale, spec.scale)
 
     const appearance = createCreatureAppearance(groups, spec.parts, spec.colliderLayout)
+
+    /* 逐槽位肢体：按槽位挂载关节子树收集基础部件；嵌套槽位（翼爪 ⊂ 翼）只归最深槽位 */
+    const limbSlotParts = new Map<string, TintablePart[]>()
+    if (spec.limbTint !== undefined) {
+        const tintMaterials: readonly string[] = spec.limbTint.materials
+        const mountSlots: {readonly group: Object3D; readonly bodyPart: string; readonly depth: number}[] = []
+        for (const slot of spec.equipSlots ?? []) {
+            if (slot.kind !== 'limb') continue
+            for (const jointId of slot.mountJointIds) {
+                const group = groups.get(jointId)
+                if (group === undefined) continue
+                let depth = 0
+                let node: Object3D | null = group
+                while (node.parent !== null) { node = node.parent; depth += 1 }
+                mountSlots.push({group, bodyPart: slot.bodyPart, depth})
+            }
+            limbSlotParts.set(slot.bodyPart, [])
+        }
+        for (const mesh of appearance.partMeshes) {
+            const materialId = mesh.userData.materialId
+            if (typeof materialId !== 'string' || !isCharacterMaterialId(materialId) || !tintMaterials.includes(materialId)) continue
+            if (!(mesh.material instanceof MeshStandardMaterial)) continue
+            const jointId = mesh.userData.jointId
+            if (typeof jointId !== 'string') continue
+            let bestSlot: string | undefined
+            let bestDepth = -1
+            let node: Object3D | null = groups.get(jointId) ?? null
+            while (node !== null) {
+                for (const mount of mountSlots) {
+                    if (mount.group === node && mount.depth > bestDepth) {
+                        bestDepth = mount.depth
+                        bestSlot = mount.bodyPart
+                    }
+                }
+                node = node.parent
+            }
+            if (bestSlot === undefined) continue
+            limbSlotParts.get(bestSlot)?.push({mesh, original: mesh.material, materialId, variant: undefined})
+        }
+    }
+
+    /** 应用 / 还原各槽位肢体材质（槽位无条目 = 恢复该槽位原始材质） */
+    const applyLimbVisuals = (limb: EquipmentState['limb']): void => {
+        for (const [bodyPart, parts] of limbSlotParts) {
+            const piece = findLimbPreset(limb[bodyPart])
+            const variantColor = piece?.mesh.color
+            for (const part of parts) {
+                if (part.variant !== undefined) {
+                    part.mesh.material = part.original
+                    part.variant.dispose()
+                    part.variant = undefined
+                }
+                if (variantColor === undefined) continue
+                const variant = createLimbVariantMaterial(part.materialId, variantColor)
+                part.mesh.material = variant
+                part.variant = variant
+            }
+        }
+    }
 
     const createSlot = (mountJoint: Group, mountJointId: string | undefined): WeaponSlot => ({
         mountJoint, defaultMountJoint: mountJoint, mountJointId, mountRotation: [WEAPON_GRIP_FLEX, 0, 0], group: null, hitCenter: null, tip: null, attackBoxes: [], cleanup: null, extraGroups: [], gripY: 0, supportGripOffset: 0, meshConfig: undefined, mountsConfig: undefined,
@@ -394,6 +504,7 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
     }
     const equipEquipmentState = (state: EquipmentState): void => {
         clearEquipmentVisuals()
+        applyLimbVisuals(state.limb)
         if (spec.equipmentAppearance === undefined) return
         const builder = createMeshBuilder()
         equipmentAppearance = spec.equipmentAppearance(state, {
@@ -424,6 +535,7 @@ export const createCreatureModel = (spec: CreatureModelSpec): CreatureModel => {
     }
     const dispose = (): void => {
         clearEquipmentVisuals()
+        applyLimbVisuals({})
         removeWeapon()
         appearance.cleanup()
         hierarchy.cleanup()

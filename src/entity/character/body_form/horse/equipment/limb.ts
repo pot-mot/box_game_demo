@@ -1,27 +1,22 @@
 import type {LimbPieceConfig} from '../../../../../character/armor/types.ts'
-import type {StringLocaleKey} from '../../../../../i18n/index.ts'
+import {HORSE_LIMB_SET, creatureLimbPieceName, creatureLimbPresetId} from '../../../../../character/armor/creature_limbs.ts'
 
-/** 马肢体组件：头 / 躯干 / 腿 / 尾（数值契约；外观由体形部件承担） */
-const piece = (
-    id: string,
-    name: string,
-    slot: string,
-    defense: {physical: number; magic: number},
-    attack: {physical: number; magic: number},
-    moveSpeedMultiplier: number,
-    color: number,
-    nameKey: StringLocaleKey,
-): LimbPieceConfig => ({
-    id, name, nameKey, slot, defense, attack, moveSpeedMultiplier,
-    allowedBodyFormIds: ['horse'],
-    mesh: {race: 'elf', color, accentColor: 0x8fbf6f},
-    colliders: [],
-    hurtBoxes: [],
-})
-
-export const HORSE_LIMB_PIECES: readonly LimbPieceConfig[] = [
-    piece('horse_iron_legs', '马铁腿甲', 'legs', {physical: 2, magic: 0}, {physical: 0, magic: 0}, 0.97, 0x8a8f98, 'limb.horse_iron_legs'),
-    piece('horse_tail_banner', '马尾长缨', 'tail', {physical: 0, magic: 1}, {physical: 0, magic: 0}, 1.03, 0xe8d3b0, 'limb.horse_tail_banner'),
-    piece('horse_head_plume', '马首翎羽', 'head', {physical: 1, magic: 0}, {physical: 0, magic: 1}, 1, 0xe8d3b0, 'limb.horse_head_plume'),
-    piece('horse_torso_barding', '马躯革甲', 'torso', {physical: 2, magic: 0}, {physical: 0, magic: 0}, 0.99, 0x6a5236, 'limb.horse_torso_barding'),
-]
+/**
+ * 马肢体：按槽位（头 / 躯干 / 腿 / 尾）提供白 / 黑 / 黄三色皮肤替换件。
+ * 每件只控制一个槽位的原始肢体模型材质，不改变整身配色。
+ */
+export const HORSE_LIMB_PIECES: readonly LimbPieceConfig[] = HORSE_LIMB_SET.palettes.flatMap(palette =>
+    HORSE_LIMB_SET.slots.map(slot => ({
+        id: creatureLimbPresetId(HORSE_LIMB_SET.formId, palette.key, slot.slot),
+        name: creatureLimbPieceName(palette, slot),
+        nameKey: palette.nameKey,
+        slot: slot.slot,
+        defense: {physical: 0, magic: 0},
+        attack: {physical: 0, magic: 0},
+        moveSpeedMultiplier: 1,
+        allowedBodyFormIds: [HORSE_LIMB_SET.formId],
+        mesh: {color: palette.color, accentColor: palette.accentColor},
+        colliders: [],
+        hurtBoxes: [],
+    } satisfies LimbPieceConfig)),
+)

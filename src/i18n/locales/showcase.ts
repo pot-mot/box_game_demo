@@ -70,8 +70,10 @@ export type ShowcaseLocale = {
     'showcase.weapon.ranged': string
     'showcase.extra.race_limb': string
     'showcase.extra.armor_set': string
-    'showcase.extra.body_form': string
-    /* ── 攻击模组展示 Tab / 调试开关 ── */
+    /* ── 非人形体形全套装备展示副名 ── */
+    'showcase.creature_set.limb': string
+    'showcase.creature_set.weapon': string
+    /* ── 展示台体形 Tab / 调试开关 ── */
     'showcase.tab.humanoid': string
     'showcase.tab.wyvern': string
     'showcase.tab.horse': string
@@ -143,7 +145,7 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.module.actions.title': '攻击模组展示',
     'showcase.module.actions.desc': '全武器攻击动作 / 连段 / 蓄力与持握模式时序复现',
     'showcase.module.appearance.title': '装备与外观',
-    'showcase.module.appearance.desc': '种族肢体与全护甲件图鉴（非攻击动作可切换）',
+    'showcase.module.appearance.desc': '种族肢体 / 全护甲套 / 龙狼马全套装备图鉴（非攻击动作可切换）',
     'showcase.module.ai_terrain.title': 'AI 与复杂地形',
     'showcase.module.ai_terrain.desc': '双阵营 AI 在起伏地形中的寻路 / 跳跃 / 索敌攻击',
     'showcase.module.terrain.title': '复杂地形与建筑',
@@ -203,7 +205,8 @@ export const showcaseZh: ShowcaseLocale = {
     'showcase.weapon.ranged': '远程武器',
     'showcase.extra.race_limb': '种族肢体',
     'showcase.extra.armor_set': '护甲套装',
-    'showcase.extra.body_form': '体形',
+    'showcase.creature_set.limb': '全套肢体',
+    'showcase.creature_set.weapon': '武器外观',
     'showcase.tab.humanoid': '人',
     'showcase.tab.wyvern': '龙',
     'showcase.tab.horse': '马',
@@ -274,7 +277,7 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.module.actions.title': 'Attack Modules',
     'showcase.module.actions.desc': 'All-weapon attack actions / combos / charge and hold-mode timing',
     'showcase.module.appearance.title': 'Equipment & Look',
-    'showcase.module.appearance.desc': 'Race limbs and full armor-piece codex (switchable non-attack actions)',
+    'showcase.module.appearance.desc': 'Race limbs / full armor sets / full dragon-wolf-horse loadouts (switchable non-attack actions)',
     'showcase.module.ai_terrain.title': 'AI & Terrain',
     'showcase.module.ai_terrain.desc': 'Two factions pathfinding / jumping / engaging over rolling terrain',
     'showcase.module.terrain.title': 'Terrain & Buildings',
@@ -334,7 +337,8 @@ export const showcaseEn: ShowcaseLocale = {
     'showcase.weapon.ranged': 'Ranged Weapon',
     'showcase.extra.race_limb': 'Race Limbs',
     'showcase.extra.armor_set': 'Armor Set',
-    'showcase.extra.body_form': 'Body Form',
+    'showcase.creature_set.limb': 'Full Limbs',
+    'showcase.creature_set.weapon': 'Weapon Look',
     'showcase.tab.humanoid': 'Human',
     'showcase.tab.wyvern': 'Dragon',
     'showcase.tab.horse': 'Horse',

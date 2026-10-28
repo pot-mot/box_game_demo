@@ -1,6 +1,6 @@
 import type {EquipSlotDef} from '../../../../../character/equipment/types.ts'
 
-/** 马装备槽表：头 / 躯干 / 腿 / 尾（肢体与护甲），蹄 / 头（武器）。 */
+/** 马装备槽表：头 / 躯干 / 腿 / 尾（肢体与护甲），蹄（武器）。 */
 export const HORSE_EQUIP_SLOTS: readonly EquipSlotDef[] = [
     {kind: 'limb', bodyPart: 'head', mountJointIds: ['head'], nameKey: 'equip_slot.head'},
     {kind: 'limb', bodyPart: 'torso', mountJointIds: ['body'], nameKey: 'equip_slot.torso'},

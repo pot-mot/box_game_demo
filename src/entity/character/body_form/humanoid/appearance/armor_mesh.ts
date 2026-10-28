@@ -572,12 +572,14 @@ export const createLimbMesh = (config: LimbMeshConfig, jointId: string, palette:
     if (base === undefined || region === undefined) return emptyResult()
 
     const builder = createMeshBuilder()
+    /* 人形肢体配方必须带 race；非人形逐槽位肢体不会走到这里，缺省时安全回退 */
+    const race: LimbRace = config.race ?? 'orc'
     LIMB_REGION_GENS[region](builder, {
         base,
-        race: config.race,
+        race,
         color: config.color,
         accentColor: config.accentColor ?? darkenColor(config.color, 0.7),
-        material: LIMB_RACE_MATERIAL[config.race],
+        material: LIMB_RACE_MATERIAL[race],
         /* 阵营色：`palette.bodyColor` 即 `factionColorOf(faction)`（SELECT_PALETTE 唯一映射），与人类身体同源 */
         factionColor: palette.bodyColor,
         hairColor: palette.hairColor,

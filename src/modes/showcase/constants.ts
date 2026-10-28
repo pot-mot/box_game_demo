@@ -141,20 +141,23 @@ export const RACE_SHOWCASE_ROSTER: readonly ShowcaseExtraEntry[] = [
 ]
 
 /**
- * 体形展示条目：非人形体形（狼 / 马 / 双足飞龙 wyvern）——循环播放对应体形的 idle ↔ walking 动画。
- * 名称文案键取自体形计划（`body_form.*`），副名为「体形」。
+ * 非人形体形装备展示 Tab：切换体形查看该体形的全套护甲 / 全套肢体 / 全部武器外观。
+ * 体形名称文案键取自体形计划（`body_form.*`）。
  */
-export interface CreatureShowcaseEntry {
+export interface CreatureEquipmentShowcaseTab {
     /** 体形 id（`BodyForm.id`） */
     readonly bodyFormId: string
-    /** 展示名文案键（面板 / 头顶标签，经 `translate` 解析） */
-    readonly name: StringLocaleKey
+    /** Tab 文案键（与人形 Tab 共用 `showcase.tab.*`） */
+    readonly labelKey: StringLocaleKey
+    /** 体形名称文案键（面板 / 头顶标签，经 `translate` 解析） */
+    readonly nameKey: StringLocaleKey
 }
 
-export const CREATURE_SHOWCASE_ROSTER: readonly CreatureShowcaseEntry[] = [
-    {bodyFormId: 'wolf', name: 'body_form.wolf'},
-    {bodyFormId: 'horse', name: 'body_form.horse'},
-    {bodyFormId: 'wyvern', name: 'body_form.wyvern'},
+/** 非人形体形装备展示 Tab 清单（顺序同攻击模组展示：龙 / 马 / 狼） */
+export const CREATURE_EQUIPMENT_SHOWCASE_TABS: readonly CreatureEquipmentShowcaseTab[] = [
+    {bodyFormId: 'wyvern', labelKey: 'showcase.tab.wyvern', nameKey: 'body_form.wyvern'},
+    {bodyFormId: 'horse', labelKey: 'showcase.tab.horse', nameKey: 'body_form.horse'},
+    {bodyFormId: 'wolf', labelKey: 'showcase.tab.wolf', nameKey: 'body_form.wolf'},
 ]
 
 /** 外观图鉴：整套护甲展示条目（以整套为整体预览，不单件展示） */
@@ -176,11 +179,38 @@ export const ARMOR_SET_SHOWCASE: readonly ArmorSetShowcase[] = [
     {nameKey: 'showcase.set.mage', armor: {head: 'mage_hood', chest: 'mage_robe', arms: 'mage_wraps', legs: 'mage_leggings'}, faction: 2},
 ]
 
-/** 外观图鉴行角色间距（m） */
-export const SHOWCASE_APPEARANCE_SPACING = 3.0
-/** 外观图鉴行间距（m） */
-export const SHOWCASE_APPEARANCE_ROW_SPACING = 3.4
+/**
+ * 体形展示间距：`x` = 同一行角色间距，`z` = 行间距。
+ * 每个体形可单独指定；未登记体形回退默认值。
+ */
+export interface ShowcaseFormSpacing {
+    readonly x: number
+    readonly z: number
+}
 
+/** 人 / 狼 / 马共用的默认展示间距（m，与近战行间距同源） */
+export const DEFAULT_SHOWCASE_FORM_SPACING: ShowcaseFormSpacing = {
+    x: MELEE_SPACING,
+    z: MELEE_ROW_SPACING,
+}
+
+/** 龙体型更大：x / z 间距相对默认值的放大倍数 */
+export const SHOWCASE_WYVERN_SPACING_SCALE = 1.5
+
+/** 各体形展示间距（龙放大到默认的 1.5 倍，避免模型互相遮挡） */
+export const SHOWCASE_FORM_SPACING: Readonly<Record<string, ShowcaseFormSpacing>> = {
+    humanoid: DEFAULT_SHOWCASE_FORM_SPACING,
+    wolf: DEFAULT_SHOWCASE_FORM_SPACING,
+    horse: DEFAULT_SHOWCASE_FORM_SPACING,
+    wyvern: {
+        x: DEFAULT_SHOWCASE_FORM_SPACING.x * SHOWCASE_WYVERN_SPACING_SCALE,
+        z: DEFAULT_SHOWCASE_FORM_SPACING.z * SHOWCASE_WYVERN_SPACING_SCALE,
+    },
+}
+
+/** 取某体形的展示间距（未知体形安全回退默认值） */
+export const showcaseFormSpacingOf = (bodyFormId: string): ShowcaseFormSpacing =>
+    SHOWCASE_FORM_SPACING[bodyFormId] ?? DEFAULT_SHOWCASE_FORM_SPACING
 
 /** 展示角色模型缩放（放大便于观察关节细节） */
 export const ACTOR_SCALE = 1.3

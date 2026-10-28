@@ -66,7 +66,7 @@ describe('狼体形计划', () => {
         expect(isKnownWeaponId(Object.values(WOLF_BODY_FORM.defaultWeaponLoadout)[0]!)).toBe(true)
     })
 
-    it('装备槽覆盖爪 / 头 / 躯干 / 腿 / 尾与武器槽', () => {
+    it('装备槽覆盖爪 / 头 / 躯干 / 腿 / 尾肢体与爪 / 头 / 躯干 / 腿护甲与武器槽', () => {
         const has = (kind: string, bodyPart: string): boolean =>
             WOLF_BODY_FORM.equipSlots.some(slot => slot.kind === kind && slot.bodyPart === bodyPart)
         for (const part of ['claw', 'head', 'torso', 'legs']) {

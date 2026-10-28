@@ -4,6 +4,8 @@ import {bodyFormOf} from '../../entity/character/body_form/index.ts'
 import type {AnimationContext, CreatureModel} from '../../entity/character/appearance/types.ts'
 import type {AppearanceSystem} from '../../entity/character/appearance/types.ts'
 import {createActorDebug} from './actor_debug.ts'
+import type {EquipmentState} from '../../character/equipment/types.ts'
+import type {WeaponConfig} from '../../character/weapon/catalog.ts'
 import {ACTOR_JUMP_HEIGHT, ACTOR_SCALE, ACTOR_SPEED, DIMMED_OPACITY} from './constants.ts'
 import type {NameLabel} from './label.ts'
 import type {ShowcaseActorHandle, ShowcaseAction} from './actor_handle.ts'
@@ -28,6 +30,10 @@ export interface CreatureActorInit {
     readonly subtitle: string
     /** 体形 id（`BodyForm.id`，如 wolf / horse / wyvern） */
     readonly bodyFormId: string
+    /** 可选：全套护甲 / 肢体外观（按体形槽位挂载） */
+    readonly equipment?: EquipmentState
+    /** 可选：展示武器（挂体形主挂点；天然武器可带逐关节 mounts） */
+    readonly weapon?: WeaponConfig
 }
 
 /** 变暗前的材质状态快照（恢复时精确还原） */
@@ -55,6 +61,18 @@ export const createCreatureActor = (init: CreatureActorInit): CreatureShowcaseAc
         0,
     )
     const system: AppearanceSystem = form.animation.createSystem({})
+
+    /* 装备外观：护甲 / 肢体按体形 `equipSlots` 挂载；武器可带逐关节 mounts（如飞龙双翼爪） */
+    if (init.equipment !== undefined) model.equipEquipmentState?.(init.equipment)
+    if (init.weapon !== undefined) {
+        model.equipWeapon({
+            main: init.weapon.mesh,
+            ...(init.weapon.mountJointId !== undefined ? {mainMountJointId: init.weapon.mountJointId} : {}),
+            ...(init.weapon.mountRotation !== undefined ? {mainMountRotation: init.weapon.mountRotation} : {}),
+            mainMounts: init.weapon.mounts,
+            mainAttackBoxes: init.weapon.attackBoxes,
+        })
+    }
 
     const anchor = new Group()
     anchor.position.set(x, 0, z)

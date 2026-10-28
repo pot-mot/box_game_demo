@@ -74,3 +74,8 @@ export const HORSE_PARTS: readonly CreaturePartSpec[] = [
     ...hindleg('rlHip', 'rlKnee', 'rlHock', 'rlFoot'),
     ...hindleg('rrHip', 'rrKnee', 'rrHock', 'rrFoot'),
 ]
+
+/** 逐槽位肢体：马的皮肤 / 鬃尾按该槽位肢体颜色替换材质（不改变其它槽位） */
+export const HORSE_LIMB_TINT = {
+    materials: ['hide', 'mane'],
+} as const

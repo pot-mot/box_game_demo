@@ -38,9 +38,13 @@ export interface ArmorMeshConfig {
  * 肢体默认顶替对应人类肢体（`replace` 恒开启），无需 `hideBodyParts` 声明。
  */
 export interface LimbMeshConfig {
-    readonly race: LimbRace
-    /** 种族基色（骨骼 / 皮肤 / 躯体主色） */
+    /**
+     * 人形种族肢体外观（骷髅 / 兽人 / 精灵）。
+     * 非人形体形的「逐槽位肢体」不生成种族网格，省略此字段。
+     */
+    readonly race?: LimbRace
+    /** 基色（人形 = 种族主色；非人形 = 单个槽位肢体的皮毛 / 皮肤 / 鳞片材质色） */
     readonly color: number
-    /** 种族点缀色（缺省回退主色暗化） */
+    /** 点缀色（缺省回退主色暗化） */
     readonly accentColor?: number
 }

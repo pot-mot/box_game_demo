@@ -282,8 +282,10 @@ export type ArmorPieceConfig = EquipPieceConfig<string, ArmorMeshConfig>
 export type ArmorLoadout = Readonly<Record<string, string>>
 export type ResolvedArmorLoadout = Readonly<Record<string, ArmorPieceConfig>>
 
-/** 肢体组件：种族肢体（默认顶替对应人类肢体，颜色随阵营调色板） */
+/** 肢体组件：人形种族肢体（默认顶替对应人类肢体，颜色随阵营调色板） */
 export type LimbPieceConfig = EquipPieceConfig<string, LimbMeshConfig>
+/* 非人形体形：`LimbMeshConfig.race` 可省略，仅用 `color` 作为单个槽位的皮毛 / 皮肤 / 鳞片材质色，
+ * 由体形模型（`CreatureModelSpec.limbTint`）替换该槽位挂载关节子树内原始部件的材质，不叠加额外网格。 */
 export type LimbLoadout = Readonly<Record<string, string>>
 export type ResolvedLimbLoadout = Readonly<Record<string, LimbPieceConfig>>
 ```

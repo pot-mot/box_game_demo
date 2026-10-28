@@ -37,6 +37,12 @@ export type ArmorLoadout = Readonly<Record<string, string>>
 /** 已校验装备表：未知 id / 槽位不匹配的条目已被剔除 */
 export type ResolvedArmorLoadout = Readonly<Record<string, ArmorPieceConfig>>
 
+/** 护甲套装（展示 / 面板按整套预览）：套装名 + 各槽位护甲 id */
+export interface ArmorSetDefinition {
+    readonly nameKey: StringLocaleKey
+    readonly armor: ArmorLoadout
+}
+
 /** 单件肢体组件（种族肢体：默认顶替对应人类肢体，颜色随阵营调色板重着色） */
 export type LimbPieceConfig = EquipPieceConfig<string, LimbMeshConfig>
 

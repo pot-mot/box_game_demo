@@ -154,7 +154,9 @@ export const setupActorStage = (renderer: WebGLRenderer, options: ActorStageOpti
                 setFocus(null)
                 return
             }
-            setFocus(allActors.find(a => a.id === actorId) ?? null)
+            /* 只在当前 Tab 内反查：各 Tab 的角色 id 必须全局唯一，
+             * 但仍按活动 Tab 收窄，避免跨 Tab 同号角色把相机聚焦到隐藏模型上。 */
+            setFocus(tabDatas[activeTab]?.actors.find(actor => actor.id === actorId) ?? null)
         },
         onDebugToggle: (kind: ShowcaseDebugKind, on: boolean) => {
             debugState[kind] = on

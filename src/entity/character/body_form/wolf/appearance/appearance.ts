@@ -78,3 +78,8 @@ export const WOLF_PARTS: readonly CreaturePartSpec[] = [
     ...rearLeg('rlHip', 'rlKnee', 'rlFoot'),
     ...rearLeg('rrHip', 'rrKnee', 'rrFoot'),
 ]
+
+/** 逐槽位肢体：狼的皮毛 / 鬃毛 / 腹部按该槽位肢体颜色替换材质（不改变其它槽位） */
+export const WOLF_LIMB_TINT = {
+    materials: ['fur', 'mane', 'belly'],
+} as const

@@ -125,6 +125,8 @@ export interface BodyForm {
     /** 该体形可物品化的护甲 / 肢体预设（注册进跨体形目录；缺省 = 仅人形目录） */
     readonly armorPieces?: readonly import('../../../../character/armor/types.ts').ArmorPieceConfig[]
     readonly limbPieces?: readonly import('../../../../character/armor/types.ts').LimbPieceConfig[]
+    /** 护甲套装分组（可选；外观图鉴按整套预览；缺省 = 全部护甲视为一套） */
+    readonly armorSets?: readonly import('../../../../character/armor/types.ts').ArmorSetDefinition[]
 
     /** 该体形拥有的吐息模组（独立装备槽；缺省 = 无） */
     readonly breathModules?: readonly import('../../../../character/weapon/breath_module.ts').BreathModuleConfig[]

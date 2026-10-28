@@ -75,7 +75,7 @@
 ## BodyForm 字段（`common/types.ts`）
 
 `id` / `nameKey` / `base` / `createState` / `skeleton` / `assemble` / `palette?` / `createModel` / `animation` /
-`equipSlots` / `equipmentModules` / `armorPieces?` / `limbPieces?` / `weapons` / `defaultWeaponLoadout` /
+`equipSlots` / `equipmentModules` / `armorPieces?` / `limbPieces?` / `armorSets?` / `weapons` / `defaultWeaponLoadout` /
 `editor` / `breathModules?` / `rollSpinTurns?` / `uprightRoot?` / `onFrame?`。`uprightRoot` 缺省 `true`；狼 / 马 / 飞龙为 `false`，游泳 / 死亡 / 倒地 / 起身不再叠加向地面的根旋转。
 
 - `base`：`size` / `centerOffsetY` / `eyeHeight` / `baseHealth` / `baseDefense` / `baseAttack` /
@@ -98,6 +98,10 @@
     armor：`head / torso / legs / wing / tail`。
   - 马 limb：`head / torso / legs / tail`；weapon：`hooves`；armor：`hooves / head / torso / legs`。
   - 狼 limb：`claw / head / torso / legs / tail`；weapon：`claw / head`；armor：`claw / head / torso / legs`。
+- 非人形体形的基础部件在装配时按顶点法线做物体空间三向投影 UV（`CREATURE_SURFACE_TILE_SIZE`），使鳞片 / 毛发 / 皮肤花纹在大小不同、曲率不同的部件上保持相同世界密度与朝向。
+- 非人形体形的肢体是**逐槽位替换**：`limbPieces` 每件只声明一个槽位与 `mesh.color`，模型按 `limbTint` 替换该槽位挂载关节子树内基础部件的材质（不叠加额外网格、不影响其它槽位）；旧版按槽位叠加的肢体块已迁移为独立护甲套装。
+- 非人形护甲外观由 `appearance/equipment.ts` 的**低多边形锻造器**按槽位生成：分片护板、束带、背脊、尖刺 / 角冠 / 翼根甲 / 尾刃等均由 `creature_runtime/armor_kit.ts` 以低分段几何拼装，造型随体形解剖（狼 / 马 / 飞龙）区分。
+- `armorSets`：可选护甲套装分组，供外观图鉴按整套预览；每套引用的护甲 id 必须存在于 `armorPieces` 且部位匹配。
 - 每个槽位至少有一件可装备物品（缺失会由 `contracts.test.ts` 的模组校验发现）。
 
 ## 武器按体形分包

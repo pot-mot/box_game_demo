@@ -98,3 +98,9 @@ export const BLOCKING_POSE_PERIOD = 1.6
 
 /** 破防硬直姿态时长（秒；仅用于编辑器预览与基础 clip 烘焙） */
 export const GUARD_BROKEN_POSE_DURATION = 1.2
+
+/**
+ * 生物体形表面花纹的世界平铺尺寸（米）：部件 UV 按顶点法线做物体空间三向投影，
+ * 使鳞片 / 毛发 / 皮肤纹理在大小不同的部件、不同曲面上保持相同密度与朝向。
+ */
+export const CREATURE_SURFACE_TILE_SIZE = 0.5

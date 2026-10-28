@@ -2,7 +2,7 @@ import type {Group} from 'three'
 import type {BodyAppearance, BodyForm} from '../../body_form/common/types.ts'
 import {createCreatureAppearance, createCreatureModel} from '../common/creature_runtime/model.ts'
 import {WYVERN_ANIMATION} from './skeleton_animation/system.ts'
-import {WYVERN_PARTS} from './appearance/parts.ts'
+import {WYVERN_LIMB_TINT, WYVERN_PARTS} from './appearance/parts.ts'
 import {createWyvernEquipmentAppearance} from './appearance/equipment.ts'
 import {buildWyvernSkeleton, WYVERN_COLLIDER_LAYOUT} from './skeleton/skeleton.ts'
 import {WYVERN_HURT_BLOCKS} from './skeleton/hurt.ts'
@@ -12,7 +12,7 @@ import {WYVERN_EQUIPMENT_MODULES} from './equipment/modules.ts'
 import {WYVERN_EQUIP_SLOTS} from './state/equip_slots.ts'
 import {WYVERN_BASE} from './state/form_base.ts'
 import {createWyvernState} from './state/runtime.ts'
-import {WYVERN_ARMOR_PIECES} from './equipment/armor.ts'
+import {WYVERN_ARMOR_PIECES, WYVERN_ARMOR_SETS} from './equipment/armor.ts'
 import {WYVERN_LIMB_PIECES} from './equipment/limb.ts'
 
 export const WYVERN_BODY_FORM_ID = 'wyvern'
@@ -40,6 +40,7 @@ export const WYVERN_BODY_FORM: BodyForm = {
         colliderLayout: WYVERN_COLLIDER_LAYOUT,
         equipSlots: WYVERN_EQUIP_SLOTS,
         equipmentAppearance: createWyvernEquipmentAppearance,
+        limbTint: WYVERN_LIMB_TINT,
         scale: config.scale,
     }),
     animation: WYVERN_ANIMATION,
@@ -47,6 +48,7 @@ export const WYVERN_BODY_FORM: BodyForm = {
     equipmentModules: WYVERN_EQUIPMENT_MODULES,
     armorPieces: WYVERN_ARMOR_PIECES,
     limbPieces: WYVERN_LIMB_PIECES,
+    armorSets: WYVERN_ARMOR_SETS,
     weapons: WYVERN_WEAPONS,
     defaultWeaponLoadout: {wing_claw: 'wyvern_claw', breath: 'breath_natural'},
     editor: {weaponControl: true, handedness: false},

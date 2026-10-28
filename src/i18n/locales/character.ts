@@ -135,6 +135,52 @@ export type CharacterLocale = {
     'limb.wyvern_wing_guard': string
     'limb.wyvern_torso_plates': string
     'limb.wyvern_leg_guards': string
+    /* 非人形护甲套装 / 逐槽位肢体 */
+    'armor_set.wolf_leather': string
+    'armor_set.wolf_bone': string
+    'armor_set.horse_iron': string
+    'armor_set.horse_leather': string
+    'armor_set.wyvern_scale': string
+    'armor_set.wyvern_bone': string
+    'armor.wolf_bone_head': string
+    'armor.wolf_bone_torso': string
+    'armor.wolf_bone_legs': string
+    'armor.wolf_bone_claw': string
+    'armor.wolf_bone_tail': string
+    'armor.horse_leather_head': string
+    'armor.horse_leather_torso': string
+    'armor.horse_leather_legs': string
+    'armor.horse_leather_tail': string
+    'armor.wyvern_bone_wing_claw': string
+    'armor.wyvern_bone_head': string
+    'armor.wyvern_bone_tail': string
+    'armor.wyvern_bone_wing': string
+    'armor.wyvern_bone_torso': string
+    'armor.wyvern_bone_legs': string
+    'limb.wolf_limb_blue': string
+    'limb.wolf_limb_red': string
+    'limb.wolf_limb_white': string
+    'limb.horse_limb_white': string
+    'limb.horse_limb_black': string
+    'limb.horse_limb_yellow': string
+    'limb.wyvern_limb_white': string
+    'limb.wyvern_limb_black': string
+    'limb.wyvern_limb_red': string
+    'limb.wyvern_limb_yellow': string
+    'limb.wyvern_limb_purple': string
+    'limb.wyvern_limb_blue': string
+    'limb.wolf_blue': string
+    'limb.wolf_red': string
+    'limb.wolf_white': string
+    'limb.horse_white': string
+    'limb.horse_black': string
+    'limb.horse_yellow': string
+    'limb.wyvern_white': string
+    'limb.wyvern_black': string
+    'limb.wyvern_red': string
+    'limb.wyvern_yellow': string
+    'limb.wyvern_purple': string
+    'limb.wyvern_blue': string
 
     /* ── 角色面板 ── */
     'character.title': string
@@ -373,10 +419,10 @@ export const characterZh: CharacterLocale = {
     'limb.elf_arms': '精灵手臂',
     'limb.elf_body': '精灵身躯',
     'limb.elf_legs': '精灵腿脚',
-    'armor.wolf_head_guard': '狼首骨甲',
-    'armor.wolf_hide': '狼皮胸甲',
-    'armor.wolf_leg_wraps': '狼腿束带',
-    'armor.wolf_claw_guard': '狼爪护刃',
+    'armor.wolf_head_guard': '皮革护首',
+    'armor.wolf_hide': '皮革胸甲',
+    'armor.wolf_leg_wraps': '皮革护腿',
+    'armor.wolf_claw_guard': '皮革护爪',
     'limb.wolf_claw_wrap': '狼爪束甲',
     'limb.wolf_tail_guard': '狼尾护甲',
     'limb.wolf_torso_harness': '狼躯束具',
@@ -401,6 +447,52 @@ export const characterZh: CharacterLocale = {
     'limb.wyvern_wing_guard': '龙翼肢甲',
     'limb.wyvern_torso_plates': '龙躯腹甲',
     'limb.wyvern_leg_guards': '龙腿肢甲',
+    /* 非人形护甲套装 / 逐槽位肢体 */
+    'armor_set.wolf_leather': '皮革具装',
+    'armor_set.wolf_bone': '狼骨具装',
+    'armor_set.horse_iron': '马铁具装',
+    'armor_set.horse_leather': '马革具装',
+    'armor_set.wyvern_scale': '龙鳞具装',
+    'armor_set.wyvern_bone': '龙骸具装',
+    'armor.wolf_bone_head': '狼骨护首',
+    'armor.wolf_bone_torso': '狼骨护胸',
+    'armor.wolf_bone_legs': '狼骨护腿',
+    'armor.wolf_bone_claw': '狼骨护爪',
+    'armor.wolf_bone_tail': '狼骨护尾',
+    'armor.horse_leather_head': '马革护首',
+    'armor.horse_leather_torso': '马革护胸',
+    'armor.horse_leather_legs': '马革护腿',
+    'armor.horse_leather_tail': '马革护尾',
+    'armor.wyvern_bone_wing_claw': '龙骸护爪',
+    'armor.wyvern_bone_head': '龙骸护首',
+    'armor.wyvern_bone_tail': '龙骸护尾',
+    'armor.wyvern_bone_wing': '龙骸护翼',
+    'armor.wyvern_bone_torso': '龙骸护胸',
+    'armor.wyvern_bone_legs': '龙骸护腿',
+    'limb.wolf_limb_blue': '蓝毛狼肢',
+    'limb.wolf_limb_red': '赤毛狼肢',
+    'limb.wolf_limb_white': '白毛狼肢',
+    'limb.horse_limb_white': '白马皮',
+    'limb.horse_limb_black': '黑马皮',
+    'limb.horse_limb_yellow': '黄马皮',
+    'limb.wyvern_limb_white': '白龙鳞',
+    'limb.wyvern_limb_black': '黑龙鳞',
+    'limb.wyvern_limb_red': '赤龙鳞',
+    'limb.wyvern_limb_yellow': '黄龙鳞',
+    'limb.wyvern_limb_purple': '紫龙鳞',
+    'limb.wyvern_limb_blue': '蓝龙鳞',
+    'limb.wolf_blue': '蓝毛狼肢',
+    'limb.wolf_red': '赤毛狼肢',
+    'limb.wolf_white': '白毛狼肢',
+    'limb.horse_white': '白马皮',
+    'limb.horse_black': '黑马皮',
+    'limb.horse_yellow': '黄马皮',
+    'limb.wyvern_white': '白龙鳞',
+    'limb.wyvern_black': '黑龙鳞',
+    'limb.wyvern_red': '赤龙鳞',
+    'limb.wyvern_yellow': '黄龙鳞',
+    'limb.wyvern_purple': '紫龙鳞',
+    'limb.wyvern_blue': '蓝龙鳞',
 
     /* ── 角色面板 ── */
     'character.title': '角色控制',
@@ -636,10 +728,10 @@ export const characterEn: CharacterLocale = {
     'limb.elf_arms': 'Elf Arms',
     'limb.elf_body': 'Elf Torso',
     'limb.elf_legs': 'Elf Legs',
-    'armor.wolf_head_guard': 'Wolf Bone Helm',
-    'armor.wolf_hide': 'Wolf Hide Vest',
-    'armor.wolf_leg_wraps': 'Wolf Leg Wraps',
-    'armor.wolf_claw_guard': 'Wolf Claw Guards',
+    'armor.wolf_head_guard': 'Leather Headguard',
+    'armor.wolf_hide': 'Leather Chestguard',
+    'armor.wolf_leg_wraps': 'Leather Legguards',
+    'armor.wolf_claw_guard': 'Leather Clawguards',
     'limb.wolf_claw_wrap': 'Wolf Claw Wraps',
     'limb.wolf_tail_guard': 'Wolf Tail Guard',
     'limb.wolf_torso_harness': 'Wolf Torso Harness',
@@ -664,6 +756,52 @@ export const characterEn: CharacterLocale = {
     'limb.wyvern_wing_guard': 'Wyvern Wing Guards',
     'limb.wyvern_torso_plates': 'Wyvern Torso Plates',
     'limb.wyvern_leg_guards': 'Wyvern Leg Guards',
+    /* Non-humanoid armor sets / whole-body tint limbs */
+    'armor_set.wolf_leather': 'Leather Set',
+    'armor_set.wolf_bone': 'Wolf Bone Set',
+    'armor_set.horse_iron': 'Horse Iron Set',
+    'armor_set.horse_leather': 'Horse Leather Set',
+    'armor_set.wyvern_scale': 'Wyvern Scale Set',
+    'armor_set.wyvern_bone': 'Wyvern Bone Set',
+    'armor.wolf_bone_head': 'Wolf Bone Headguard',
+    'armor.wolf_bone_torso': 'Wolf Bone Chestguard',
+    'armor.wolf_bone_legs': 'Wolf Bone Legguards',
+    'armor.wolf_bone_claw': 'Wolf Bone Clawguards',
+    'armor.wolf_bone_tail': 'Wolf Bone Tailguard',
+    'armor.horse_leather_head': 'Horse Leather Headpiece',
+    'armor.horse_leather_torso': 'Horse Leather Chestpiece',
+    'armor.horse_leather_legs': 'Horse Leather Legguards',
+    'armor.horse_leather_tail': 'Horse Leather Tailguard',
+    'armor.wyvern_bone_wing_claw': 'Wyvern Bone Clawguards',
+    'armor.wyvern_bone_head': 'Wyvern Bone Headguard',
+    'armor.wyvern_bone_tail': 'Wyvern Bone Tailguard',
+    'armor.wyvern_bone_wing': 'Wyvern Bone Wingguards',
+    'armor.wyvern_bone_torso': 'Wyvern Bone Chestguard',
+    'armor.wyvern_bone_legs': 'Wyvern Bone Legguards',
+    'limb.wolf_limb_blue': 'Blue Wolf Fur',
+    'limb.wolf_limb_red': 'Red Wolf Fur',
+    'limb.wolf_limb_white': 'White Wolf Fur',
+    'limb.horse_limb_white': 'White Horse Hide',
+    'limb.horse_limb_black': 'Black Horse Hide',
+    'limb.horse_limb_yellow': 'Yellow Horse Hide',
+    'limb.wyvern_limb_white': 'White Wyvern Scales',
+    'limb.wyvern_limb_black': 'Black Wyvern Scales',
+    'limb.wyvern_limb_red': 'Red Wyvern Scales',
+    'limb.wyvern_limb_yellow': 'Yellow Wyvern Scales',
+    'limb.wyvern_limb_purple': 'Purple Wyvern Scales',
+    'limb.wyvern_limb_blue': 'Blue Wyvern Scales',
+    'limb.wolf_blue': 'Blue Wolf Fur',
+    'limb.wolf_red': 'Red Wolf Fur',
+    'limb.wolf_white': 'White Wolf Fur',
+    'limb.horse_white': 'White Horse Hide',
+    'limb.horse_black': 'Black Horse Hide',
+    'limb.horse_yellow': 'Yellow Horse Hide',
+    'limb.wyvern_white': 'White Wyvern Scales',
+    'limb.wyvern_black': 'Black Wyvern Scales',
+    'limb.wyvern_red': 'Red Wyvern Scales',
+    'limb.wyvern_yellow': 'Yellow Wyvern Scales',
+    'limb.wyvern_purple': 'Purple Wyvern Scales',
+    'limb.wyvern_blue': 'Blue Wyvern Scales',
 
     /* ── Character panel ── */
     'character.title': 'Character Control',

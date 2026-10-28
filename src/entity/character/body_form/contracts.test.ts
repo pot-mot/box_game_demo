@@ -109,6 +109,26 @@ describe('体形计划公共契约（全部注册体形）', () => {
                 }
             })
 
+            it('护甲套装引用的部位 / 护甲全部存在，且覆盖该体形全部护甲件', () => {
+                if (form.armorSets === undefined) return
+                const setPieceIds = new Set<string>()
+                for (const set of form.armorSets) {
+                    for (const [slot, id] of Object.entries(set.armor)) {
+                        const piece = form.armorPieces?.find(candidate => candidate.id === id)
+                        expect(piece, `${form.id}:${id}`).toBeDefined()
+                        expect(piece?.slot).toBe(slot)
+                        expect(
+                            form.equipSlots.some(candidate => candidate.kind === 'armor' && candidate.bodyPart === slot),
+                            `${form.id}:${slot}`,
+                        ).toBe(true)
+                        setPieceIds.add(id)
+                    }
+                }
+                for (const piece of form.armorPieces ?? []) {
+                    expect(setPieceIds.has(piece.id), `${form.id}:${piece.id}`).toBe(true)
+                }
+            })
+
             it('武器表非空且都归属该体形；每个武器槽默认武器为已知 id 且在该体形武器 / 吐息表内', () => {
                 expect(form.weapons.length).toBeGreaterThan(0)
                 for (const weapon of form.weapons) {
