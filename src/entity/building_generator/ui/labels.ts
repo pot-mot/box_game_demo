@@ -35,6 +35,7 @@ export const RECIPE_LABELS: Record<string, StringLocaleKey> = {
     bridge: 'recipe.bridge',
     great_hall: 'recipe.great_hall',
     keep: 'recipe.keep',
+    dungeon: 'recipe.dungeon',
 }
 
 /** 配方 id → 本地化显示名（未知配方回退原 id） */

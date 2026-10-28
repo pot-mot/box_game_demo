@@ -8,7 +8,7 @@ import {createIcon} from './icons/icon.ts'
 import type {OwnershipStore} from '../types/ownership_store.ts'
 
 /** 实体列表分组标识（与展示名解耦，展示名走本地化） */
-const ENTITY_GROUPS = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'diorama', 'other'] as const
+const ENTITY_GROUPS = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'diorama', 'slope', 'other'] as const
 type EntityGroup = typeof ENTITY_GROUPS[number]
 
 /** 实体类型 → 列表分组的映射 */
@@ -22,6 +22,7 @@ const TYPE_GROUPS: Record<EntityType, EntityGroup> = {
     'interactable': 'interactable',
     item: 'item',
     diorama: 'diorama',
+    slope_block: 'slope',
 }
 
 const GROUP_LABELS: Record<EntityGroup, StringLocaleKey> = {
@@ -34,6 +35,7 @@ const GROUP_LABELS: Record<EntityGroup, StringLocaleKey> = {
     interactable: 'element.group.interactable',
     item: 'element.group.item',
     diorama: 'element.group.diorama',
+    slope: 'element.group.slope',
     other: 'element.group.other',
 }
 
@@ -213,7 +215,7 @@ export const setupElementListPanel = (sources: EntityInfoSource[], options: Elem
     input.onActionDown('delete_entity', tryDeleteSelected)
 
     /** 需要按顺序渲染的分组 */
-    const GROUP_ORDER: EntityGroup[] = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'diorama']
+    const GROUP_ORDER: EntityGroup[] = ['character', 'box', 'area', 'terrain', 'building', 'fragment', 'interactable', 'item', 'diorama', 'slope']
     /** 分组容器 */
     const groupContainers = new Map<EntityGroup, HTMLElement>()
 

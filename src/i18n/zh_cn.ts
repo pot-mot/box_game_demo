@@ -69,6 +69,7 @@ export const localeZhCn: MainLocale = {
     'element.group.interactable': '交互物',
     'element.group.item': '道具',
     'element.group.diorama': '箱庭',
+    'element.group.slope': '预制块',
     'element.group.other': '其它',
 
     /* ── 生成类型选择 ── */
@@ -79,6 +80,7 @@ export const localeZhCn: MainLocale = {
     'spawn.building': '建筑',
     'spawn.interactable': '交互物',
     'spawn.diorama': '箱庭',
+    'spawn.slope_block': '斜面块',
 
     /* ── 箱庭 ── */
     'diorama.panel.recipe': '配方',
@@ -151,6 +153,7 @@ export const localeZhCn: MainLocale = {
     'diorama.panel.apply_json': '应用 JSON',
     'diorama.panel.invalid_json': '蓝图 JSON 非法',
     'diorama.recipe.fortress': '要塞庭院',
+    'diorama.recipe.dungeon': '地下城',
 
     /* ── 操作设置面板 ── */
     'input.operations_title': '操作设置',

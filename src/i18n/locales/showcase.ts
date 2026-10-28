@@ -112,6 +112,16 @@ export type ShowcaseLocale = {
     'showcase.terrain.generator': string
     'showcase.terrain.reseed': string
     'showcase.terrain.recipes': string
+    'showcase.terrain.building': string
+    'showcase.terrain.seed': string
+    'showcase.terrain.size': string
+    'showcase.terrain.ops_per_step': string
+    'showcase.terrain.regenerate': string
+    'showcase.terrain.step': string
+    'showcase.terrain.play': string
+    'showcase.terrain.pause': string
+    'showcase.terrain.reset': string
+    'showcase.terrain.progress': (done: string, total: string) => string
 
     /* ── 交互物交互效果 ── */
     'showcase.interact.title': string
@@ -240,10 +250,20 @@ export const showcaseZh: ShowcaseLocale = {
 
     /* ── 复杂地形与建筑 ── */
     'showcase.terrain.title': '复杂地形与建筑',
-    'showcase.terrain.subtitle': '切换地形生成器 / 随机重建，观察全部建筑配方',
+    'showcase.terrain.subtitle': '选择单个建筑，调整参数并单步观察体素生成过程',
     'showcase.terrain.generator': '地形生成器',
     'showcase.terrain.reseed': '随机重建',
     'showcase.terrain.recipes': '建筑配方',
+    'showcase.terrain.building': '建筑',
+    'showcase.terrain.seed': '种子',
+    'showcase.terrain.size': '尺寸',
+    'showcase.terrain.ops_per_step': '每步块数',
+    'showcase.terrain.regenerate': '重新生成',
+    'showcase.terrain.step': '单步',
+    'showcase.terrain.play': '播放',
+    'showcase.terrain.pause': '暂停',
+    'showcase.terrain.reset': '重置',
+    'showcase.terrain.progress': (done, total) => `生成进度 ${done} / ${total}`,
 
     /* ── 交互物交互效果 ── */
     'showcase.interact.title': '交互物交互效果',
@@ -372,10 +392,20 @@ export const showcaseEn: ShowcaseLocale = {
 
     /* ── Complex terrain & buildings ── */
     'showcase.terrain.title': 'Terrain & Buildings',
-    'showcase.terrain.subtitle': 'Switch terrain generator / reseed and inspect every building recipe',
+    'showcase.terrain.subtitle': 'Select a single building, tune parameters and step through voxel generation',
     'showcase.terrain.generator': 'Terrain generator',
     'showcase.terrain.reseed': 'Reseed',
     'showcase.terrain.recipes': 'Building recipes',
+    'showcase.terrain.building': 'Building',
+    'showcase.terrain.seed': 'Seed',
+    'showcase.terrain.size': 'Size',
+    'showcase.terrain.ops_per_step': 'Blocks per step',
+    'showcase.terrain.regenerate': 'Regenerate',
+    'showcase.terrain.step': 'Step',
+    'showcase.terrain.play': 'Play',
+    'showcase.terrain.pause': 'Pause',
+    'showcase.terrain.reset': 'Reset',
+    'showcase.terrain.progress': (done, total) => `Progress ${done} / ${total}`,
 
     /* ── Interactable effects ── */
     'showcase.interact.title': 'Interactable Effects',

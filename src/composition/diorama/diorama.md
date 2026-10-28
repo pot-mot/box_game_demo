@@ -36,7 +36,8 @@ composition/diorama/
 ├── world.ts            # DioramaContext（EntityInfoSource 实现）
 ├── recipes/
 │   ├── index.ts        # 配方注册表
-│   └── fortress.ts     # 首个示例配方
+│   ├── fortress.ts     # 示例配方：台地 + 平房 + 主楼 + 廊桥
+│   └── dungeon.ts      # 复杂地牢：不规则房间 / 多层 / 门闸 / 升降梯
 └── ui/panel.ts         # 箱庭属性面板
 ```
 
@@ -131,6 +132,8 @@ interface DioramaBlueprint {
 - `population.test.ts`：确定性、避让、数量上限。
 - `world.test.ts`：生成 / 重建 / 级联删除 / 存档往返不重复生成。
 - `fortress.test.ts`：示例配方经全部实体端口生成结构、小物件与归属；面板重建 / GUI 添加规则 / JSON 替换后旧产物清零；用户编辑的种子 / JSON 不被逐帧刷新覆盖；读档后重建仍清空旧子实体。
+- `recipes/dungeon.test.ts`：地牢蓝图结构校验、槽位可解析与交互物种类。
+- `dungeon_world.test.ts`：地牢配方经全部端口生成建筑、门闸、升降梯、开关与箱子。
 - `element_list_panel.test.ts`：箱庭子实体嵌套与归属失效回退。
 - `save_load/validation.test.ts`：箱庭元素、非法蓝图跳过、owner 校验、建筑世界 owner。
 - `modes/edit/spawn_alignment.test.ts`：生成对齐步长与边界。
@@ -138,9 +141,11 @@ interface DioramaBlueprint {
 ## 扩展指南
 
 1. **新增配方**：在 `recipes/` 实现 `(seed) => DioramaBlueprint` 并登记到 `recipes/index.ts`；在 i18n 增加 `diorama.recipe.<id>`。
-2. **新增节点类型**：更新 `types.ts` 判别联合 → `blueprint.ts` 校验 → `plan.ts` 变换 / 足迹 → `materialize.ts` 端口创建 → 存档 zod schema。
-3. **新增人口规则**：更新 `PopulationRule`、zod schema、`population.ts` 生成与 `materialize.ts` 创建。
-4. **新增实体端口**：不得直接操作实体内部；先扩展对应实体的公开上下文接口。
+2. **地牢配方**：房间 / 廊道 / 楼梯由 `entity/building_generator/generators/dungeon.ts` 写入体素；门 / 闸门 / 升降梯 / 开关通过 `generateDungeonLayout` 的锚点转换为人口规则，组合层不直接写交互物。
+3. **多层连接**：布局对重叠房间按种子选择旋转楼梯或升降梯 + 开关；电梯开关共享 channel。
+4. **新增节点类型**：更新 `types.ts` 判别联合 → `blueprint.ts` 校验 → `plan.ts` 变换 / 足迹 → `materialize.ts` 端口创建 → 存档 zod schema。
+5. **新增人口规则**：更新 `PopulationRule`、zod schema、`population.ts` 生成与 `materialize.ts` 创建。
+6. **新增实体端口**：不得直接操作实体内部；先扩展对应实体的公开上下文接口。
 
 ## 陷阱
 

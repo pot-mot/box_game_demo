@@ -1,5 +1,6 @@
 import type {DioramaBlueprint} from '../types.ts'
 import {createFortressBlueprint} from './fortress.ts'
+import {createDungeonBlueprint} from './dungeon.ts'
 
 export interface DioramaRecipe {
     readonly id: string
@@ -8,6 +9,7 @@ export interface DioramaRecipe {
 
 const RECIPES: readonly DioramaRecipe[] = [
     {id: 'fortress', build: createFortressBlueprint},
+    {id: 'dungeon', build: createDungeonBlueprint},
 ]
 
 export const DIORAMA_RECIPE_IDS: readonly string[] = RECIPES.map(recipe => recipe.id)

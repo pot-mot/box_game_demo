@@ -12,6 +12,7 @@ const ENTITY_TYPE_VALUES = [
     'interactable',
     'item',
     'diorama',
+    'slope_block',
 ] as const
 type EntityType = typeof ENTITY_TYPE_VALUES[number]
 

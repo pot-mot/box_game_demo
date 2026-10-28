@@ -55,7 +55,8 @@
 ## 四、生成器（`entity/building_generator/generators/`）
 
 - `rng.ts`：种子化 mulberry32，保证同配置生成确定性结果。
-- `structures.ts`：顶层配方 `house` / `tower` / `wall` / `platform` / `ruin` / `tree` / `stairs` / `spiral_stairs` / `bridge` / `great_hall` / `keep` 共 11 种，均以局部坐标经 `BlockWriter.set/clear` 写入。
+- `structures.ts`：顶层配方 `house` / `tower` / `wall` / `platform` / `ruin` / `tree` / `stairs` / `spiral_stairs` / `bridge` / `great_hall` / `keep` / `dungeon` 共 12 种，均以局部坐标经 `BlockWriter.set/clear` 写入。
+- `rooms.ts`：`house` / `tower` / `ruin` 共用的基础不规则房间布局——多个不重叠的闭合折线房间、每间随机地板高度、边界墙与天花板，支持正面门洞与废墟随机坍塌。
 - 配置 `BuildingConfig = {recipe, seed, sizeX, sizeY, sizeZ}`（见 `validation.ts`）。
 - 新增配方：在 `structures.ts` 实现 `GeneratorFn` 并登记到 `RECIPES`；未知配方回退 `house`。
 - **生成配方只用于创作期**；存档以显式体素数据为准（见第七节），与生成器代码版本解耦。
@@ -126,7 +127,9 @@
 | 文件 | 职责 |
 |------|------|
 | `entity/building_generator/world.ts` | 实体源：增删、选中、体素拾取、存读档、每帧视图更新 |
-| `entity/building_generator/generators/anchors.ts` | 按配方推导默认连接锚点（门 / 楼梯 / 桥端 / 角塔 / 室内 / 屋顶） |
+| `entity/building_generator/generators/rooms.ts` | 基础不规则房间布局（house / tower / ruin）与写入 |
+| `entity/building_generator/generators/anchors.ts` | 按配方推导默认连接锚点（门 / 楼梯 / 桥端 / 角塔 / 室内 / 屋顶 / 地牢房间与交互物） |
+| `entity/building_generator/generators/dungeon.ts` | 地牢布局求解与体素写入（不规则房间 / 连接 / 垂直交通） |
 | `entity/building_generator/edit/brush.ts` | 建造笔刷：体素拾取 → 放置 / 擦除 / 道具 / 区域填充 / 材质替换 / 预制体 |
 | `entity/building_generator/ui/brush_panel.ts` | 笔刷面板（工具 / 材质 / 道具 / 预制体参数 / 启用） |
 | `entity/building_generator/props/kinds.ts` | 自由道具种类常量 |
@@ -165,7 +168,8 @@
 在体素系统之上提供楼梯、旋转楼梯、斗拱、斜屋顶、走道/廊桥、支柱等可复用结构原语，供配方与笔刷预制体组合使用。
 
 - **结构原语**（`generators/architecture.ts`）：`BlockWriter` 只有轴对齐 `set/clear`，所有旋转/镜像在结构函数内部做坐标变换；统一辅助 `rotateQuarter(x, z, q)`（局部 (x,z) 绕原点顺时针 q×90°）。函数：`stairs`（每级 `rise=1`）、`spiralStairs`（极坐标逐格、半径随高增大）、`pillar`、`dougong`（柱顶交错木构）、`pitchedRoof`（双坡、檐口外扩 1 格成飞檐）、`corridor`（两点曼哈顿折线走道，跨沟壑自动补支柱至调用方给定地面高度）、`floorSlab`。
-- **配方**（`generators/structures.ts`，`generateBuilding` 未知配方回退 `house`）：顶层配方共 11 种，包含 `house` / `tower` / `wall` / `platform` / `ruin` / `tree` / `stairs` / `spiral_stairs` / `bridge` / `great_hall` / `keep`；新配方自动出现在编辑面板与笔刷下拉。
+- **配方**（`generators/structures.ts`，`generateBuilding` 未知配方回退 `house`）：顶层配方共 12 种，包含 `house` / `tower` / `wall` / `platform` / `ruin` / `tree` / `stairs` / `spiral_stairs` / `bridge` / `great_hall` / `keep` / `dungeon`；新配方自动出现在编辑面板与笔刷下拉。
+- **地牢配方**（`generators/dungeon.ts`）：程序化不规则房间 / 地板高度 / 墙体 / 天花板 / 廊道 / 楼梯 / 门洞 / 升降梯竖井 / 旋转楼梯；布局可由 `generateDungeonLayout(config)` 读取，供箱庭组合层生成交互物锚点。
 - **组合层端口**：`BuildingGeneratorContext` 提供 `add(..., yawQuarter?)`、声明式 `stampStructure(id, spec)`、按配方查询锚点 `getAnchors(id)`，以及返回 `BuildingWorld[]` 的 `loadSaveWorlds`。箱庭组合层只能经这些公开端口生成 / 变形建筑，不得直接操作 `ChunkStore` 或复制配方几何。
 - **性能**：大体量生成会让上千 chunk 变脏；渲染/物理每帧分别最多重建 4/2 个 chunk（摊还，生成后首次可见有数秒渐次构建）。生成器写入不走 `MAX_FILL_BLOCKS`（该限制仅交互式区域工具）。静态建筑不参与物理步进，可见性由 `updateView` 维护。
 - **存档解耦**：只存显式体素（palette + RLE），配方变更不影响旧档；交互物落点不随建筑存档保存，建筑加载后交互物以自身存档条目恢复。

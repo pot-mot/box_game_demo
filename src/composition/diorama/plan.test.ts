@@ -1,13 +1,16 @@
 import {describe, it, expect} from 'vitest'
 import {solveDioramaPlan} from './plan.ts'
+import {buildingAnchors} from '../../entity/building_generator/types/index.ts'
 import {DIORAMA_BLUEPRINT_VERSION, type DioramaBlueprint} from './types.ts'
+
+const HOUSE_CONFIG = {recipe: 'house' as const, seed: 1, sizeX: 8, sizeY: 5, sizeZ: 8}
 
 const houseNode = (nodeId: string, position: readonly [number, number, number], yawQuarter: number) => ({
     kind: 'building' as const,
     nodeId,
     position,
     yawQuarter,
-    config: {recipe: 'house' as const, seed: 1, sizeX: 8, sizeY: 5, sizeZ: 8},
+    config: HOUSE_CONFIG,
 })
 
 const blueprintWith = (nodes: DioramaBlueprint['nodes']): DioramaBlueprint => ({
@@ -23,8 +26,10 @@ describe('箱庭布局求解', () => {
         const plan = solveDioramaPlan(blueprintWith([houseNode('house', [0, 0, 0], 1)]))
         const door = plan.slots.get('house:door')
         expect(door).toBeDefined()
-        expect(door!.position[0]).toBeCloseTo(0)
-        expect(door!.position[2]).toBeCloseTo(4)
+        const local = buildingAnchors(HOUSE_CONFIG).find(anchor => anchor.id === 'door')
+        expect(local).toBeDefined()
+        expect(door!.position[0]).toBeCloseTo(-local!.position[2])
+        expect(door!.position[2]).toBeCloseTo(local!.position[0])
     })
 
     it('分组变换叠加到子节点', () => {
@@ -70,7 +75,8 @@ describe('箱庭布局求解', () => {
             },
         ]))
         expect(plan.connections.length).toBe(1)
-        expect(plan.connections[0].from.position[0]).toBe(4)
-        expect(plan.connections[0].to.position[0]).toBe(24)
+        const local = buildingAnchors(HOUSE_CONFIG).find(anchor => anchor.id === 'door')!
+        expect(plan.connections[0].from.position[0]).toBeCloseTo(local.position[0])
+        expect(plan.connections[0].to.position[0]).toBeCloseTo(20 + local.position[0])
     })
 })

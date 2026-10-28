@@ -21,6 +21,7 @@ import {setupAreas} from './entity/area/physics/world.ts'
 import {setupTerrain} from './entity/terrain/common/physics/world.ts'
 import {setupBuildingGenerator} from './entity/building_generator/world.ts'
 import {setupDioramas} from './composition/diorama/world.ts'
+import {setupSlopeBlocks} from './entity/slope_block/physics/world.ts'
 import {setupInteractables} from './entity/interactable/index.ts'
 import {setupItemEntities} from './entity/item/index.ts'
 import {setupHakoniwa} from './modes/play/hakoniwa.ts'
@@ -106,6 +107,7 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
     const characterSystem: CharacterEntitySystem = setupCharacterEntities(scene, shared)
     const boxes = setupBoxes(scene, shared, {fragmentCtx: fragments, velocitySnapshots, physicsEnv})
     const areas = setupAreas(scene, physicsEnv)
+    const slopeBlocks = setupSlopeBlocks(scene, shared)
     /** 箱庭 → 子实体 / 建筑世界归属索引（随世界清空与存档往返重建） */
     const ownership = createOwnershipStore()
     const dioramas = setupDioramas(scene, {
@@ -127,13 +129,14 @@ const startGame = async (mode: GameMode, saveData?: SaveData): Promise<void> => 
         () => terrainSource.getAll().map(e => e.body),
         () => interactables.getAll().map(e => e.body),
         () => itemEntities.getAll().map(e => e.body),
+        () => slopeBlocks.getAll().map(e => e.body),
     )
 
     /* 环境场通道：角色注册自己的环境累加器，area 场据此绕开状态机速度覆写影响角色 */
     physicsEnv.registerEnvironmentProvider((body) => characterSystem.getCharacterByBody(body)?.state.environment)
 
     // 按 type 索引
-    const systems: EntitySystem[] = [boxes, fragments, areas, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem, dioramas as EntitySystem]
+    const systems: EntitySystem[] = [boxes, fragments, areas, characterSystem as EntitySystem, terrainSource, building, interactables as EntitySystem, itemEntities as EntitySystem, dioramas as EntitySystem, slopeBlocks as EntitySystem]
     const systemsByType = new Map<string, EntityInfoSource>(
         systems.map(s => [s.type, s]),
     )

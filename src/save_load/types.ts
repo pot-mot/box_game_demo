@@ -14,6 +14,8 @@ import type {LockPointConfig} from '../character/lock_point.ts'
 import type {StaminaConfig} from '../character/stamina/types.ts'
 import type {DioramaOwner} from '../types/ownership_store.ts'
 import type {DioramaContext, DioramaBlueprint} from '../composition/diorama/types.ts'
+import type {SlopeBlockConfig} from '../entity/slope_block/validation.ts'
+import type {SlopeBlockContext} from '../entity/slope_block/types.ts'
 
 /** 当前存档格式版本：v3 起 character 的攻击配置由「技能槽 attackSlot」改为「武器 + 数值覆写 attack」；
  *  v4 起 character 增加基础防御 defense 与护甲装备 armor；
@@ -38,8 +40,9 @@ import type {DioramaContext, DioramaBlueprint} from '../composition/diorama/type
  *  缺失 / 非法武器槽加载时回填体形天然默认；不做旧 `holdMode` 语义迁移。
  * v20 起 character 增加飞行开关 flightEnabled 与体力基础配置 stamina（均可选，旧档安全回退默认）。
  * v21 起新增 diorama 实体（蓝图 + 根变换），可保存实体增加可选 owner，建筑世界存档增加可选 owner。
+ * v22 起新增 slope_block 预制斜面块实体。
  */
-export const SAVE_FORMAT_VERSION = 21
+export const SAVE_FORMAT_VERSION = 22
 
 /** JSON-safe 坐标三元组 */
 export type Vec3JSON = [number, number, number]
@@ -135,6 +138,15 @@ export interface SavableInteractable {
 }
 
 /** 掉落物：物品定义 id + 数量 + 世界变换 */
+export interface SavableSlopeBlock {
+    type: 'slope_block'
+    config: SlopeBlockConfig
+    position: Vec3JSON
+    quaternion: QuatJSON
+    /** 箱庭归属（可选） */
+    owner?: DioramaOwner
+}
+
 export interface SavableDiorama {
     type: 'diorama'
     dioramaId: string
@@ -157,7 +169,7 @@ export interface SavableItem {
 
 export type SavableEntity = SavableBox | SavableArea | SavableTerrain
     | SavableFragment | SavableBuildingGenerator | SavableInteractable | SavableItem | SavableCharacter
-    | SavableDiorama
+    | SavableDiorama | SavableSlopeBlock
 
 // ── 角色 ──
 
@@ -295,4 +307,5 @@ export type EntitySourceMap = {
     'interactable': InteractableContext
     'item': ItemEntityContext
     'diorama': DioramaContext
+    'slope_block': SlopeBlockContext
 }

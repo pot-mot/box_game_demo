@@ -365,3 +365,7 @@ export const BUILDING_GRID_SPACING = 18
 /** 地形 / 建筑展示相机默认距离（m）与目标高度（m） */
 export const TERRAIN_CAMERA_DISTANCE = 42
 export const TERRAIN_CAMERA_TARGET_Y = 3
+
+/* 建筑生成过程单步演示 */
+export const BUILDING_STEP_INTERVAL = 0.12
+export const BUILDING_DEFAULT_OPS_PER_STEP = 16

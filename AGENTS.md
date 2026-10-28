@@ -127,6 +127,7 @@ src/
 ├── i18n/                        # 国际化（强类型文案表 MainLocale + 领域片段 locales/）
 ├── character/                   # 角色领域模型：state / ai_strategy / interaction / weapon / combat / armor / state_machine / handedness
 ├── entity/
+│   ├── slope_block/             # 预制斜面块（整数边长三角柱，静态 trimesh）
 │   ├── character/               # 角色实体（body_form/common + 体形分包 / appearance / combat / projectile / physics / ai / combat_vfx / ui）
 │   ├── skeleton/                # 通用骨架实体与编辑可视化（人形无关，预设外部注入）
 │   ├── interactable/            # 交互物实体系统（行为 + 信号联动 + 可破坏 + 网格 + 编辑面板）
@@ -185,6 +186,7 @@ src/
 | 地形 | [`src/entity/terrain/terrain.md`](src/entity/terrain/terrain.md) | Trimesh 地形、雕刻 |
 | 背包 | [`src/inventory/inventory.md`](src/inventory/inventory.md) | 背包/装备 UI 与持久化 |
 | 箱庭组合层 | [`src/composition/diorama/diorama.md`](src/composition/diorama/diorama.md) | 蓝图 / 布局 / 人口 / 归属 / 编辑生成 |
+| 预制斜面块 | [`src/entity/slope_block/slope_block.md`](src/entity/slope_block/slope_block.md) | 斜面块几何 / 物理 / 编辑 / 存档 |
 | 操作方案 | [`src/modes/control/control.md`](src/modes/control/control.md) | 相机/移动、翻滚/加速 |
 | 游玩模式 | [`src/modes/play/play.md`](src/modes/play/play.md) | 第三人称、锁定、箱庭子系统 |
 | 编辑模式 | [`src/modes/edit/edit.md`](src/modes/edit/edit.md) | 指针、执行面板、雕刻 |

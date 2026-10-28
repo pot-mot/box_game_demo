@@ -1,4 +1,6 @@
 import type {BuildingConfig} from '../validation.ts'
+import {generateDungeonLayout} from './dungeon.ts'
+import {generateRoomBuildingLayout, HOUSE_ROOM_OPTIONS, TOWER_ROOM_OPTIONS, RUIN_ROOM_OPTIONS} from './rooms.ts'
 
 /** 世界局部坐标系中的连接锚点：位置 + 朝向 */
 export interface BuildingAnchor {
@@ -21,12 +23,11 @@ export const buildingAnchors = (config: BuildingConfig): BuildingAnchor[] => {
     const cz = center(sz)
     switch (config.recipe) {
         case 'house':
-            return [
-                {id: 'door', position: [cx, 0, 0], dir: '-z'},
-                {id: 'back', position: [cx, 0, sz - 1], dir: '+z'},
-                {id: 'interior', position: [cx, 1, cz], dir: '+z'},
-                {id: 'roof', position: [cx, Math.max(3, sy) - 1, cz], dir: '+z'},
-            ]
+            return generateRoomBuildingLayout(config, HOUSE_ROOM_OPTIONS).anchors.map(anchor => ({
+                id: anchor.id,
+                position: [anchor.position[0], anchor.position[1], anchor.position[2]],
+                dir: anchor.dir,
+            }))
         case 'great_hall':
             return [
                 {id: 'door', position: [cx, 0, 0], dir: '-z'},
@@ -45,12 +46,11 @@ export const buildingAnchors = (config: BuildingConfig): BuildingAnchor[] => {
                 {id: 'roof', position: [cx, Math.max(9, sy) - 1, cz], dir: '+z'},
             ]
         case 'tower':
-            return [
-                {id: 'front', position: [cx, 0, 0], dir: '-z'},
-                {id: 'back', position: [cx, 0, sz - 1], dir: '+z'},
-                {id: 'interior', position: [cx, 1, cz], dir: '+z'},
-                {id: 'roof', position: [cx, Math.max(4, sy) - 1, cz], dir: '+z'},
-            ]
+            return generateRoomBuildingLayout(config, TOWER_ROOM_OPTIONS).anchors.map(anchor => ({
+                id: anchor.id,
+                position: [anchor.position[0], anchor.position[1], anchor.position[2]],
+                dir: anchor.dir,
+            }))
         case 'wall':
             return [
                 {id: 'start', position: [0, 0, 0], dir: '-x'},
@@ -81,8 +81,19 @@ export const buildingAnchors = (config: BuildingConfig): BuildingAnchor[] => {
                 {id: 'corner_nw', position: [0, 0, 0], dir: '-x'},
                 {id: 'corner_se', position: [sx - 1, 0, sz - 1], dir: '+x'},
             ]
-        case 'tree':
+        case 'dungeon':
+            return generateDungeonLayout(config).anchors.map(anchor => ({
+                id: anchor.id,
+                position: [anchor.position[0], anchor.position[1], anchor.position[2]],
+                dir: anchor.dir,
+            }))
         case 'ruin':
+            return generateRoomBuildingLayout(config, RUIN_ROOM_OPTIONS).anchors.map(anchor => ({
+                id: anchor.id,
+                position: [anchor.position[0], anchor.position[1], anchor.position[2]],
+                dir: anchor.dir,
+            }))
+        case 'tree':
         default:
             return [
                 {id: 'center', position: [cx, 0, cz], dir: '+z'},

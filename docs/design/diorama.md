@@ -2,7 +2,7 @@
 
 > 状态：**阶段 A–D 基础版已实现**。当前实现见 [`src/composition/diorama/diorama.md`](../../src/composition/diorama/diorama.md)。
 >
-> 代码基线：2026-10-25 按当前代码校对；存档版本已推进到 **21**。
+> 代码基线：2026-10-25 按当前代码校对；存档版本已推进到 **22**。
 >
 > 本文档包含两部分：
 > 1. **箱庭完全重构**：把箱庭从 building 配方中拆出，建立支持复杂组合式生成的独立系统。
@@ -14,7 +14,7 @@
 
 | 核对项 | 当前实际 | 状态 |
 |---|---|---|
-| 存档版本 | `src/save_load/types.ts` 的 `SAVE_FORMAT_VERSION = 21` | 已完成 |
+| 存档版本 | `src/save_load/types.ts` 的 `SAVE_FORMAT_VERSION = 22` | 已完成 |
 | 组合层 | `src/composition/diorama/` | 已完成（基础版） |
 | 归属索引 | `src/types/ownership_store.ts` | 已完成 |
 | 生成对齐 | `src/modes/edit/spawn_alignment.ts` | 已完成 |
@@ -25,6 +25,8 @@
 | 归属粒度 | 按 `{type, runtimeId}` 记录；`building_generator` 使用运行时 world id | 已完成（实现采用简化键） |
 | 读档行为 | 箱庭以 `materialize=false` 恢复蓝图与根变换，子实体由自身条目恢复 | 已完成 |
 | 编辑模式 | 箱庭生成类型、整数格点、面板（配方 / 种子 / 重建 / 删除 / 诊断） | 已完成（基础版） |
+| 复杂地牢 | `dungeon` 配方：不规则房间 / 随机地板高度 / 墙 / 天花板 / 廊道 / 楼梯 / 门洞 / 多层升降梯与旋转楼梯 | 已完成（基础版） |
+| 预制斜面块 | `slope_block` 实体：整数边长 45° 直角三角柱，横向 / 竖向摆放 | 已完成 |
 | 种群 / 槽位高级能力 | 规则式人口、屋顶 / 室内默认锚点、结构化 GUI 编辑器、子实体嵌套列表 | 已完成（基础版） |
 | 根 `AGENTS.md` 索引 | 已加入模块文档与设计记录链接 | 已完成 |
 

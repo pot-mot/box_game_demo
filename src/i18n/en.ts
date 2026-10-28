@@ -69,6 +69,7 @@ export const localeEn: MainLocale = {
     'element.group.interactable': 'Interactable',
     'element.group.item': 'Item',
     'element.group.diorama': 'Diorama',
+    'element.group.slope': 'Prefab',
     'element.group.other': 'Other',
 
     /* ── Spawn mode selector ── */
@@ -79,6 +80,7 @@ export const localeEn: MainLocale = {
     'spawn.building': 'Building',
     'spawn.interactable': 'Interactable',
     'spawn.diorama': 'Diorama',
+    'spawn.slope_block': 'Slope Block',
 
     /* ── Diorama ── */
     'diorama.panel.recipe': 'Recipe',
@@ -151,6 +153,7 @@ export const localeEn: MainLocale = {
     'diorama.panel.apply_json': 'Apply JSON',
     'diorama.panel.invalid_json': 'Invalid blueprint JSON',
     'diorama.recipe.fortress': 'Fortress Courtyard',
+    'diorama.recipe.dungeon': 'Dungeon',
 
     /* ── Controls panel ── */
     'input.operations_title': 'Controls',

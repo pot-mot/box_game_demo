@@ -9,6 +9,7 @@ const SPAWN_MODES: SpawnMode[] = [
     'building_generator',
     'interactable',
     'diorama',
+    'slope_block',
 ]
 
 export const setupSpawnModeManager = (): {

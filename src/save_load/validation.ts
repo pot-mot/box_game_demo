@@ -10,6 +10,7 @@ import {SURFACE_MATERIAL_IDS} from '../render/materials/ids.ts'
 import {BUILDING_PROP_KINDS} from '../entity/building_generator/props/kinds.ts'
 import {BREAKABLE_SOURCES} from '../entity/interactable/kinds.ts'
 import {BuildingConfigSchema} from '../entity/building_generator/validation.ts'
+import {SlopeBlockConfigSchema} from '../entity/slope_block/validation.ts'
 import type {DioramaNode, DioramaBlueprint, PopulationRule} from '../composition/diorama/types.ts'
 
 const Vec3 = z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0])
@@ -420,6 +421,14 @@ const DioramaBlueprintSchema: z.ZodType<DioramaBlueprint> = z.object({
     population: z.array(PopulationRuleSchema).default([]),
 })
 
+const SavableSlopeBlock = z.object({
+    type: z.literal('slope_block'),
+    config: SlopeBlockConfigSchema,
+    position: Vec3,
+    quaternion: Quat,
+    owner: OwnerSchema,
+})
+
 const SavableDiorama = z.object({
     type: z.literal('diorama'),
     dioramaId: z.string().min(1),
@@ -440,6 +449,7 @@ const SavableEntity = z.discriminatedUnion('type', [
     SavableItem,
     SavableCharacter,
     SavableDiorama,
+    SavableSlopeBlock,
 ])
 
 const CameraInfo = z.object({

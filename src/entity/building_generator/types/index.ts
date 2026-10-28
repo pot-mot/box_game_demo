@@ -11,6 +11,8 @@ import type {BuildingAnchor} from '../generators/anchors.ts'
 export type {BuildingAnchor} from '../generators/anchors.ts'
 export {buildingAnchors} from '../generators/anchors.ts'
 export {BUILDING_RECIPE_IDS} from '../generators/structures.ts'
+export {generateDungeonLayout} from '../generators/dungeon.ts'
+export type {DungeonLayout, DungeonDoor, DungeonElevator, DungeonSwitch, DungeonSpiral, DungeonAnchor, DungeonDoorKind} from '../generators/dungeon.ts'
 
 export type {BuildingConfig} from '../validation.ts'
 export {BuildingConfigSchema} from '../validation.ts'

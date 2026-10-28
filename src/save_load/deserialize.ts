@@ -60,6 +60,7 @@ export const loadWorldFromData = (
     const itemEntities = getSource('item')
     const character = getSource('character')
     const diorama = getSource('diorama')
+    const slopeBlocks = getSource('slope_block')
     const terrain = terrainSources[0]
     /* v1 旧档：character 位置为身体中心，需下移半高迁移到脚底原点语义（v2 起即为脚底原点，不再迁移） */
     const legacyCharacterPos = (data.version ?? 1) < 2
@@ -132,6 +133,13 @@ export const loadWorldFromData = (
                 const added = areas?.add(entity.config, x, y, z, quat)
                 if (added !== undefined && entity.owner !== undefined) {
                     ownership?.set({type: 'area', runtimeId: added.id}, entity.owner)
+                }
+                break
+            }
+            case 'slope_block': {
+                const added = slopeBlocks?.add(entity.config, x, y, z, quat)
+                if (added !== undefined && entity.owner !== undefined) {
+                    ownership?.set({type: 'slope_block', runtimeId: added.id}, entity.owner)
                 }
                 break
             }

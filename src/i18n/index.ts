@@ -77,6 +77,7 @@ type CoreLocale = {
     'element.group.interactable': string
     'element.group.item': string
     'element.group.diorama': string
+    'element.group.slope': string
     'element.group.other': string
 
     /* ── 生成类型选择 ── */
@@ -87,6 +88,7 @@ type CoreLocale = {
     'spawn.building': string
     'spawn.interactable': string
     'spawn.diorama': string
+    'spawn.slope_block': string
 
     /* ── 箱庭 ── */
     'diorama.panel.recipe': string
@@ -159,6 +161,7 @@ type CoreLocale = {
     'diorama.panel.apply_json': string
     'diorama.panel.invalid_json': string
     'diorama.recipe.fortress': string
+    'diorama.recipe.dungeon': string
 
     /* ── 操作设置面板 ── */
     'input.operations_title': string

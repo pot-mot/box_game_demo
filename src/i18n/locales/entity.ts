@@ -11,6 +11,8 @@ export type EntityLocale = {
     'entity.water_area': string
     'entity.area_control': string
     'entity.diorama_control': string
+    'entity.slope_block_title': string
+    'entity.slope_axis': string
     'entity.field_float': string
     'entity.field_wind': string
     'entity.field_gravity': string
@@ -187,6 +189,7 @@ export type EntityLocale = {
     'recipe.bridge': string
     'recipe.great_hall': string
     'recipe.keep': string
+    'recipe.dungeon': string
 
     /* ── 地形生成器 ── */
     'terrain_gen.fbm': string
@@ -204,6 +207,8 @@ export const entityZh: EntityLocale = {
     'entity.water_area': '水体控制',
     'entity.area_control': '区域控制',
     'entity.diorama_control': '箱庭',
+    'entity.slope_block_title': '斜面块',
+    'entity.slope_axis': '坡向轴',
     'entity.field_float': '浮力场',
     'entity.field_wind': '风场',
     'entity.field_gravity': '重力场',
@@ -380,6 +385,7 @@ export const entityZh: EntityLocale = {
     'recipe.bridge': '廊桥',
     'recipe.great_hall': '大殿',
     'recipe.keep': '主楼',
+    'recipe.dungeon': '地下城',
 
     /* ── 地形生成器 ── */
     'terrain_gen.fbm': 'FBM 噪声',
@@ -397,6 +403,8 @@ export const entityEn: EntityLocale = {
     'entity.water_area': 'Water Area Control',
     'entity.area_control': 'Area Control',
     'entity.diorama_control': 'Diorama',
+    'entity.slope_block_title': 'Slope Block',
+    'entity.slope_axis': 'Slope Axis',
     'entity.field_float': 'Buoyancy Field',
     'entity.field_wind': 'Wind Field',
     'entity.field_gravity': 'Gravity Field',
@@ -573,6 +581,7 @@ export const entityEn: EntityLocale = {
     'recipe.bridge': 'Bridge',
     'recipe.great_hall': 'Great Hall',
     'recipe.keep': 'Keep',
+    'recipe.dungeon': 'Dungeon',
 
     /* ── Terrain generators ── */
     'terrain_gen.fbm': 'FBM Noise',

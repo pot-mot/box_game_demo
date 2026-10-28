@@ -182,6 +182,20 @@ export const collectWorldState = (
         }
     }
 
+    // 预制斜面块
+    const slopeBlocks = getSource('slope_block')
+    if (slopeBlocks?.getAll) {
+        for (const e of slopeBlocks.getAll()) {
+            entities.push({
+                type: 'slope_block',
+                config: e.config,
+                position: vec3ToTuple(e.mesh.position),
+                quaternion: quatToTuple(e.mesh.quaternion),
+                ...ownerField(ownership, {type: 'slope_block', runtimeId: e.id}),
+            })
+        }
+    }
+
     // 箱庭（蓝图 + 根变换；子实体由各系统显式保存）
     const diorama = getSource('diorama')
     if (diorama?.getAll) {

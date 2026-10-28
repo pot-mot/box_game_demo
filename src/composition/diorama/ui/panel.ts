@@ -21,6 +21,7 @@ import {createDioramaBlueprint, DIORAMA_RECIPE_IDS} from '../recipes/index.ts'
 
 const RECIPE_LABELS: Record<string, StringLocaleKey> = {
     fortress: 'diorama.recipe.fortress',
+    dungeon: 'diorama.recipe.dungeon',
 }
 
 const NODE_KIND_LABELS: Record<DioramaNode['kind'], StringLocaleKey> = {
